@@ -1,18 +1,16 @@
 import { setIcon } from "obsidian";
+import type { App } from "obsidian";
 import { t } from "../i18n";
-import { md2html } from "../editor/utils";
 import type { DraftQuestion } from "../editor/utils";
-import { mathifyElement } from "../engine/mathjax";
-import { questionText } from "./detail-io";
+import { renderQuizPreviewCard } from "../editor/question-preview";
 
 /* ══════════════════════════════════════════════════════════
    DETAIL QUESTION — panneau principal de la page « quiz »
 
    Deux états d'UNE même carte (contrat Excalidraw 2026-07-21) :
-   - CONSULTATION : l'énoncé puis les réponses en lignes neutres. La bonne
-     réponse n'est JAMAIS distinguée (demande explicite d'Ahmed : « je ne
-     veux pas que l'on voie la bonne réponse directement ») — la révéler
-     ici viderait le quiz de son intérêt.
+   - CONSULTATION : le VRAI rendu du quiz (editor/question-preview.ts,
+     mêmes classes que le moteur), à son état INITIAL — la bonne réponse
+     n'y est jamais distinguée (demande explicite d'Ahmed) ;
    - ÉDITION : énoncé éditable, puis une carte par réponse — VERTE pour la
      bonne, ROUGE pour les mauvaises, avec bascule et suppression.
 
@@ -26,76 +24,19 @@ export function isChoiceQuestion(q: DraftQuestion): boolean {
 	return q._type === "single" || q._type === "multi";
 }
 
-/** Lettre de rangée (A, B, C…) comme sur la référence. */
-function optionKey(i: number): string {
-	return String.fromCharCode(65 + i);
-}
-
-/** Énoncé rendu : markdown → HTML. Le LaTeX est traité en une passe sur tout
-    le panneau (renderQuestionView) — énoncé ET réponses en portent. */
-function renderPrompt(parent: HTMLElement, q: DraftQuestion): void {
-	const el = parent.createDiv({ cls: "qbd-qz-prompt" });
-	const text = questionText(q);
-	if (!text) {
-		el.addClass("is-empty");
-		el.setText(t("dashboard.quiz.promptEmpty"));
-		return;
-	}
-	el.innerHTML = q._promptHtml ? q._promptHtml : md2html(text);
-}
-
 /* ── Consultation ─────────────────────────────────────────── */
 
-export function renderQuestionView(parent: HTMLElement, q: DraftQuestion): void {
-	renderPrompt(parent, q);
-	paintOptions(parent, q);
-	// Règle maths du projet : le LaTeX $...$ se rend via MathJax, jamais en
-	// texte brut. Une seule passe sur le panneau entier — les réponses en
-	// portent autant que l'énoncé (« $x = 2$ » comme option).
-	void mathifyElement(parent);
-}
-
-function paintOptions(parent: HTMLElement, q: DraftQuestion): void {
-	// Indice AVANT la liste : il annonce comment répondre, il ne la commente pas.
-	if (q._type === "multi") {
-		parent.createDiv({ cls: "qbd-qz-hint", text: t("dashboard.quiz.multiHint") });
-	}
-	const list = parent.createDiv({ cls: "qbd-qz-options" });
-
-	if (isChoiceQuestion(q)) {
-		(q.options || []).forEach((opt, i) => {
-			const row = list.createDiv({ cls: "qbd-qz-option" });
-			row.createSpan({ cls: "qbd-qz-option-key", text: optionKey(i) });
-			row.createSpan({ cls: "qbd-qz-option-text", text: opt || t("dashboard.quiz.optionEmpty") });
-		});
-		return;
-	}
-
-	// ── Types non-QCM : montrer la FORME de la réponse attendue, jamais son
-	// contenu (les acceptedAnswers, correctOrder et correctMap SONT la
-	// solution). Même règle que la consultation d'un QCM. ──
-	if (q._type === "ordering") {
-		(q.possibilities || []).forEach((p, i) => {
-			const row = list.createDiv({ cls: "qbd-qz-option" });
-			row.createSpan({ cls: "qbd-qz-option-key", text: optionKey(i) });
-			row.createSpan({ cls: "qbd-qz-option-text", text: p || t("dashboard.quiz.optionEmpty") });
-		});
-		return;
-	}
-
-	if (q._type === "matching") {
-		(q.rows || []).forEach((r, i) => {
-			const row = list.createDiv({ cls: "qbd-qz-option" });
-			row.createSpan({ cls: "qbd-qz-option-key", text: optionKey(i) });
-			row.createSpan({ cls: "qbd-qz-option-text", text: r || t("dashboard.quiz.optionEmpty") });
-		});
-		return;
-	}
-
-	// text / cmd / powershell / bash : champ vide, non interactif.
-	const field = list.createDiv({ cls: "qbd-qz-answer-field" });
-	if (q.commandPrefix) field.createSpan({ cls: "qbd-qz-answer-prefix", text: q.commandPrefix });
-	field.createSpan({ cls: "qbd-qz-answer-placeholder", text: q.placeholder || t("dashboard.quiz.answerPlaceholder") });
+/** Le VRAI rendu du quiz (mêmes classes que le moteur), pas une imitation :
+    demande d'Ahmed 2026-07-21 « il faut que ça ressemble au vrai rendu des
+    quiz à droite ». Tout passe par editor/question-preview.ts, partagé avec
+    l'aperçu de l'éditeur — un seul markup à suivre si le moteur change. */
+export function renderQuestionView(parent: HTMLElement, q: DraftQuestion, app: App, index: number): void {
+	renderQuizPreviewCard(parent, q, {
+		app,
+		fallbackTitle: `Question ${index + 1}`,
+		// Pas de bouton d'indice ici : l'indice se lit en jouant, la page
+		// d'un quiz sert à relire et corriger.
+	});
 }
 
 /* ── Édition ──────────────────────────────────────────────── */

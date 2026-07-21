@@ -166,16 +166,25 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 			text: t(total === 1 ? "dashboard.common.questionsOfOne" : "dashboard.common.questionsOfOther", { done: stat.questionsDone, total }),
 		});
 
+		// Jamais joué : « Best score » et « Last played » n'auraient qu'un tiret
+		// à montrer — deux cases vides qui n'apprennent rien (demande d'Ahmed
+		// 2026-07-21). Elles apparaissent à la première tentative, avec le
+		// compteur de tentatives qui, lui, n'a de sens qu'à partir de 1.
+		const played = stat.attempts > 0;
 		const cells: Array<{ label: string; value: string; accent?: string }> = [
-			{
+			{ label: t("dashboard.detail.statType"), value: quizTypeLabel(quiz.quizType) },
+		];
+		if (played) {
+			cells.unshift({
 				label: t("dashboard.detail.statBest"),
 				value: stat.bestScore > 0 ? `${stat.bestScore}%` : "—",
 				accent: stat.bestScore >= 80 ? "var(--color-green)" : stat.bestScore >= 60 ? "var(--color-yellow)" : undefined,
-			},
-			{ label: t("dashboard.detail.statType"), value: quizTypeLabel(quiz.quizType) },
-			{ label: t("dashboard.detail.statLast"), value: ctx.statsStore ? ctx.statsStore.formatRelativeTime(stat.lastPlayed) : "—" },
-			{ label: t("dashboard.detail.statAttempts"), value: String(stat.attempts) },
-		];
+			});
+			cells.push(
+				{ label: t("dashboard.detail.statLast"), value: ctx.statsStore ? ctx.statsStore.formatRelativeTime(stat.lastPlayed) : "—" },
+				{ label: t("dashboard.detail.statAttempts"), value: String(stat.attempts) },
+			);
+		}
 		for (const c of cells) {
 			const cell = row.createDiv({ cls: "qbd-qz-stat" });
 			const body = cell.createDiv({ cls: "qbd-qz-stat-body" });
@@ -252,9 +261,9 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 			return;
 		}
 
-		const head = panel.createDiv({ cls: "qbd-qz-panel-head" });
-		head.createSpan({ cls: "qbd-qz-panel-step", text: t("dashboard.quiz.questionOf", { i: activeIdx + 1, n: draft.questions.length }) });
-
+		// Pas de bandeau « Question i / n » ici : le rendu réel affiche déjà le
+		// TITRE de la question (h2 du moteur) — deux titres l'un sur l'autre.
+		// La position vit entre les chevrons de navigation.
 		const content = panel.createDiv({ cls: "qbd-qz-panel-body" });
 		if (editing) {
 			renderQuestionEdit(content, q, {
@@ -271,16 +280,18 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 				},
 			});
 		} else {
-			renderQuestionView(content, q);
+			renderQuestionView(content, q, ctx.app, activeIdx);
 		}
 
-		// Navigation ‹ › (référence) — masquée s'il n'y a qu'une question.
+		// Navigation ‹ 3 / 9 › (référence) — masquée s'il n'y a qu'une question.
 		nav.empty();
 		if (draft.questions.length > 1) {
 			const prev = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.prev") } });
 			setIcon(prev, "chevron-left");
 			prev.disabled = activeIdx === 0;
 			prev.addEventListener("click", () => { activeIdx--; paint(listCol, panel, nav, quiz); });
+
+			nav.createSpan({ cls: "qbd-qz-nav-step", text: t("dashboard.quiz.questionOf", { i: activeIdx + 1, n: draft.questions.length }) });
 
 			const next = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.next") } });
 			setIcon(next, "chevron-right");

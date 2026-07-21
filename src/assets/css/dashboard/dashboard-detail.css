@@ -355,22 +355,6 @@
 	overflow-y: auto;
 }
 
-.qbd-qz-panel-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	flex-shrink: 0;
-}
-
-.qbd-qz-panel-step {
-	font-size: 10px;
-	font-weight: 600;
-	color: var(--text-faint);
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
-}
-
 .qbd-qz-panel-body {
 	flex: 1;
 	min-height: 0;
@@ -387,99 +371,6 @@
 	text-align: center;
 }
 
-/* Énoncé : grande taille, comme la référence (la question est le sujet de
-   l'écran, pas une ligne de formulaire). */
-.qbd-qz-prompt {
-	font-size: 21px;
-	font-weight: 700;
-	line-height: 1.35;
-	color: var(--text-normal);
-	letter-spacing: -0.01em;
-}
-
-.qbd-qz-prompt.is-empty {
-	color: var(--text-faint);
-	font-style: italic;
-	font-weight: 500;
-	font-size: 16px;
-}
-
-.qbd-qz-prompt p:first-child { margin-top: 0; }
-.qbd-qz-prompt p:last-child { margin-bottom: 0; }
-
-.qbd-qz-prompt img {
-	max-width: 100%;
-	height: auto;
-	border-radius: 8px;
-}
-
-.qbd-qz-hint {
-	font-size: 11px;
-	color: var(--text-muted);
-}
-
-/* ── Consultation : réponses NEUTRES ──
-   Aucune ne se distingue : la bonne réponse ne doit pas se lire ici
-   (demande d'Ahmed). Ne jamais introduire de variante « correcte » dans
-   ce bloc — ce serait rendre le quiz inutile. */
-.qbd-qz-options {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-
-.qbd-qz-option {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 12px 14px;
-	border-radius: var(--radius-m, 10px);
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
-	transition: border-color 0.14s ease;
-}
-
-.qbd-qz-option:hover {
-	border-color: var(--background-modifier-border-hover);
-}
-
-.qbd-qz-option-key {
-	flex-shrink: 0;
-	width: 20px;
-	font-size: 11px;
-	font-weight: 700;
-	color: var(--text-faint);
-	font-family: var(--font-monospace, monospace);
-}
-
-.qbd-qz-option-text {
-	font-size: 13px;
-	color: var(--text-normal);
-	line-height: 1.45;
-}
-
-/* Réponse libre : le champ est montré VIDE (sa forme suffit). */
-.qbd-qz-answer-field {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 14px;
-	border-radius: var(--radius-m, 10px);
-	background: var(--background-secondary);
-	border: 1px dashed var(--background-modifier-border);
-}
-
-.qbd-qz-answer-prefix {
-	font-family: var(--font-monospace, monospace);
-	font-size: 12px;
-	color: var(--interactive-accent);
-}
-
-.qbd-qz-answer-placeholder {
-	font-size: 13px;
-	color: var(--text-faint);
-}
-
 /* ── Navigation ‹ › ── */
 .qbd-qz-nav {
 	display: flex;
@@ -492,6 +383,15 @@
 /* Vide (question unique) : ne pas réserver la rangée. */
 .qbd-qz-nav:empty {
 	display: none;
+}
+
+.qbd-qz-nav-step {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--text-muted);
+	font-family: var(--font-monospace, monospace);
+	min-width: 84px;
+	text-align: center;
 }
 
 .qbd-root .qbd-qz-nav-btn {
@@ -745,10 +645,6 @@
 
 	.qbd-qz-panel {
 		padding: 18px 16px 14px;
-	}
-
-	.qbd-qz-prompt {
-		font-size: 18px;
 	}
 }
 

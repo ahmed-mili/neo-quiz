@@ -116,13 +116,14 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 
 	/* ── Header : fil d'Ariane, nom + chemin, Editor / Start ── */
 	function renderHeader(page: HTMLElement, quiz: QuizIndexEntry): void {
-		// Retour = LE bouton retour du dashboard, celui du drill-down d'un
-		// dossier : mêmes classes, donc même flèche, même survol, même place
-		// au-dessus du titre (unification demandée par Ahmed 2026-07-21).
+		const header = page.createDiv({ cls: "qbd-qz-header" });
+
+		// Flèche SUR LA LIGNE du titre, à sa gauche (capture StudySmarter
+		// 2026-07-21) — pas au-dessus. Mêmes classes que le retour du
+		// drill-down : un seul bouton retour dans tout le dashboard.
 		const target = ctx.view.previousView || "home";
-		const crumb = page.createDiv({ cls: "qbd-quizzes-breadcrumb" });
-		const back = crumb.createEl("button", {
-			cls: "qbd-quizzes-crumb-back",
+		const back = header.createEl("button", {
+			cls: "qbd-quizzes-crumb-back qbd-qz-back",
 			attr: { type: "button", "aria-label": t("dashboard.quiz.back") },
 		});
 		const backIcon = back.createSpan({ cls: "qbd-quizzes-crumb-icon" });
@@ -132,7 +133,6 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 			ctx.navigate(target);
 		});
 
-		const header = page.createDiv({ cls: "qbd-qz-header" });
 		const info = header.createDiv({ cls: "qbd-qz-headline" });
 		const titleRow = info.createDiv({ cls: "qbd-qz-title-row" });
 		titleRow.createEl("h2", { cls: "qbd-qz-title", text: quiz.title });

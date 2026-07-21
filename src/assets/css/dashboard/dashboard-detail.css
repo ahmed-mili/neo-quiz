@@ -20,18 +20,24 @@
 	min-height: 0;
 }
 
-/* Le retour est LE fil d'Ariane du dashboard (.qbd-quizzes-breadcrumb, cf.
-   dashboard-quizzes.css) : il se pose au-dessus du titre, collé à lui. */
-.qbd-qz > .qbd-quizzes-breadcrumb {
-	margin-bottom: -8px;
-}
-
-/* ── Header ── */
+/* ── Header ──
+   Rangée unique, comme la référence StudySmarter : flèche · titre · badge,
+   puis les actions à droite. La flèche s'aligne sur la LIGNE DU TITRE (le
+   chemin vit en dessous), d'où `align-items: flex-start` + le calage. */
 .qbd-qz-header {
 	display: flex;
-	align-items: center;
-	gap: 12px;
+	align-items: flex-start;
+	/* ~20px entre la flèche et le titre : le ratio de la référence
+	   (espace ≈ 1,15 × la hauteur du titre), rapporté à notre titre de 19px. */
+	gap: 20px;
 	flex-shrink: 0;
+}
+
+.qbd-root .qbd-qz-back {
+	flex-shrink: 0;
+	/* Cale l'axe de la flèche sur celui des capitales du titre (19px/1.2). */
+	margin-top: -3px;
+	margin-left: -6px;
 }
 
 .qbd-qz-headline {

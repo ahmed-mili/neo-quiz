@@ -89,10 +89,35 @@
 	flex-shrink: 0;
 }
 
-.qbd-root .qbd-qz-edit-btn.is-on {
-	background: var(--background-modifier-hover, rgba(255,255,255,0.06));
+/* Bouton « Edit » : même matière que le chip « Recent » (verre dense, liseré,
+   reflet haut) — demande Ahmed 2026-07-21. La GÉOMÉTRIE reste celle du
+   header : 36px de haut comme la pilule « Start » à côté, sinon les deux
+   boutons de la rangée ne s'alignent plus. */
+.qbd-root .qbd-qz-edit-btn {
+	height: 36px;
+	padding: 0 15px;
+	border-radius: var(--radius-m, 10px);
+	font-size: 13px;
+	font-weight: 600;
+	background: var(--qbd-glass-bg-dense);
+	border: 1px solid var(--qbd-glass-edge);
+	box-shadow: var(--qbd-glass-sheen);
+	backdrop-filter: var(--qbd-glass-blur-dense);
+	-webkit-backdrop-filter: var(--qbd-glass-blur-dense);
 	color: var(--text-normal);
-	border-color: var(--background-modifier-border-hover);
+}
+
+.qbd-root .qbd-qz-edit-btn:hover {
+	background: var(--qbd-glass-bg-dense);
+	border-color: color-mix(in srgb, var(--text-normal) 28%, var(--qbd-glass-edge));
+	color: var(--text-normal);
+}
+
+/* Mode édition actif : le liseré s'affirme, le fond ne change pas (une
+   surbrillance pleine ferait un troisième niveau de matière dans la rangée). */
+.qbd-root .qbd-qz-edit-btn.is-on {
+	border-color: color-mix(in srgb, var(--text-normal) 40%, var(--qbd-glass-edge));
+	color: var(--text-normal);
 }
 
 .qbd-qz-start .qbd-btn-icon {
@@ -374,11 +399,12 @@
 }
 
 /* ── Navigation ‹ › ── */
+/* Écart MESURÉ sur la capture StudySmarter : ~14px entre les deux cercles. */
 .qbd-qz-nav {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 12px;
+	gap: 14px;
 	flex-shrink: 0;
 }
 
@@ -387,45 +413,45 @@
 	display: none;
 }
 
-.qbd-qz-nav-step {
-	font-size: 11px;
-	font-weight: 600;
-	color: var(--text-muted);
-	font-family: var(--font-monospace, monospace);
-	min-width: 84px;
-	text-align: center;
-}
-
+/* Cercles nus de StudySmarter (capture Ahmed 2026-07-21), habillés de la
+   MÊME matière que le chip « Recent » de Mes quiz — la recette de verre
+   validée pour un petit contrôle : variantes DENSES des tokens (la recette
+   du panneau, à 50 % d'alpha, rend délavé à cette taille), liseré et reflet
+   haut. Theme-aware de bout en bout : rien n'est figé, tout dérive de
+   --background-secondary / --text-normal. */
 .qbd-root .qbd-qz-nav-btn {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 34px;
-	height: 34px;
+	width: 40px;
+	height: 40px;
 	padding: 0;
 	border-radius: 50%;
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
-	box-shadow: none;
+	background: var(--qbd-glass-bg-dense);
+	border: 1px solid var(--qbd-glass-edge);
+	box-shadow: var(--qbd-glass-sheen);
+	backdrop-filter: var(--qbd-glass-blur-dense);
+	-webkit-backdrop-filter: var(--qbd-glass-blur-dense);
 	color: var(--text-muted);
 	cursor: pointer;
 	transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
 
 .qbd-root .qbd-qz-nav-btn:hover:not(:disabled) {
-	background: var(--background-modifier-hover, rgba(255,255,255,0.06));
+	border-color: color-mix(in srgb, var(--text-normal) 28%, var(--qbd-glass-edge));
 	color: var(--text-normal);
-	border-color: var(--background-modifier-border-hover);
 }
 
 .qbd-root .qbd-qz-nav-btn:disabled {
-	opacity: 0.35;
+	opacity: 0.3;
 	cursor: default;
 }
 
 .qbd-qz-nav-btn svg {
-	width: 17px;
-	height: 17px;
+	width: 18px;
+	height: 18px;
+	/* Chevron délié comme sur la capture, pas le trait gras de Lucide (2). */
+	stroke-width: 1.8;
 }
 
 /* ── Édition ── */

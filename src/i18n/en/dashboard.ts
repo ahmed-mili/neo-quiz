@@ -190,7 +190,6 @@ export const EN_DASHBOARD = {
 	   place, sans onglets ni panneau Code. ── */
 	"dashboard.quiz.loading": "Loading…",
 	"dashboard.quiz.questionsTitle": "Questions ({n})",
-	"dashboard.quiz.questionOf": "Question {i} of {n}",
 	"dashboard.quiz.addQuestion": "Add a question",
 	"dashboard.quiz.deleteQuestion": "Delete this question",
 	"dashboard.quiz.prev": "Previous question",

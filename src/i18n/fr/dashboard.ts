@@ -171,7 +171,6 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	/* ── Page d'un quiz ── */
 	"dashboard.quiz.loading": "Chargement…",
 	"dashboard.quiz.questionsTitle": "Questions ({n})",
-	"dashboard.quiz.questionOf": "Question {i} sur {n}",
 	"dashboard.quiz.addQuestion": "Ajouter une question",
 	"dashboard.quiz.deleteQuestion": "Supprimer cette question",
 	"dashboard.quiz.prev": "Question précédente",

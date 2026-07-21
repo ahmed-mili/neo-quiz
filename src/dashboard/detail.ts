@@ -283,15 +283,15 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 			renderQuestionView(content, q, ctx.app, activeIdx);
 		}
 
-		// Navigation ‹ 3 / 9 › (référence) — masquée s'il n'y a qu'une question.
+		// Navigation ‹ › — deux cercles nus, comme StudySmarter : aucun compteur
+		// entre eux (la position se lit dans la liste de gauche). Masquée s'il
+		// n'y a qu'une question.
 		nav.empty();
 		if (draft.questions.length > 1) {
 			const prev = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.prev") } });
 			setIcon(prev, "chevron-left");
 			prev.disabled = activeIdx === 0;
 			prev.addEventListener("click", () => { activeIdx--; paint(listCol, panel, nav, quiz); });
-
-			nav.createSpan({ cls: "qbd-qz-nav-step", text: t("dashboard.quiz.questionOf", { i: activeIdx + 1, n: draft.questions.length }) });
 
 			const next = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.next") } });
 			setIcon(next, "chevron-right");

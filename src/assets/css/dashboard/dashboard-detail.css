@@ -424,6 +424,19 @@
 	box-sizing: border-box;
 }
 
+/* Calque de MESURE (detail-slide.ts reserveTallest) : hors flux et invisible,
+   mais bien mis en page — `visibility: hidden` calcule les hauteurs, là où
+   `display: none` les rendrait toutes nulles. Jamais peint, jamais cliquable. */
+.qbd-qz-measure {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	visibility: hidden;
+	pointer-events: none;
+	z-index: -1;
+}
+
 .qbd-qz-panel-body {
 	display: flex;
 	flex-direction: column;

@@ -8,7 +8,7 @@ import { openQuizForPlay, openQuizInEditor } from "./quiz-open";
 import { loadQuizDraft, saveQuizDraft, questionText } from "./detail-io";
 import type { QuizDraft } from "./detail-io";
 import { renderQuestionView, renderQuestionEdit } from "./detail-question";
-import { mountSlideHost, setSlide, slideTo, finish as finishSlide } from "./detail-slide";
+import { mountSlideHost, setSlide, slideTo, reserveTallest, growReserve, finish as finishSlide } from "./detail-slide";
 import type { SlideHost } from "./detail-slide";
 import { makeDefault } from "../editor/utils";
 import type { DraftQuestion } from "../editor/utils";
@@ -236,7 +236,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		const hops = Math.abs(clamped - activeIdx);
 		activeIdx = clamped;
 		const q = draft.questions[activeIdx];
-		slideTo(slideHost, (slide) => fillSlide(slide, q, listCol, panel, nav, quiz), dir, hops);
+		slideTo(slideHost, (slide) => fillSlide(slide, q, activeIdx, listCol, panel, nav, quiz), dir, hops);
 		paintList(listCol, panel, nav, quiz);
 		paintNav(listCol, panel, nav, quiz);
 	}
@@ -289,8 +289,10 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		});
 	}
 
-	/** Contenu d'UNE slide : la question, en consultation ou en édition. */
-	function fillSlide(slide: HTMLElement, q: DraftQuestion, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+	/** Contenu d'UNE slide : la question, en consultation ou en édition.
+	    `index` est celui de la question rendue (pas forcément la courante :
+	    la passe de mesure les rend toutes). */
+	function fillSlide(slide: HTMLElement, q: DraftQuestion, index: number, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
 		// Pas de bandeau « Question i / n » : le rendu réel affiche déjà le
 		// TITRE de la question (h2 du moteur) — deux titres l'un sur l'autre.
 		const content = slide.createDiv({ cls: "qbd-qz-panel-body" });
@@ -299,6 +301,10 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 				onChange: () => {
 					scheduleSave();
 					paintList(listCol, panel, nav, quiz);
+					// Une réponse plus longue peut dépasser la réserve : on
+					// l'étend, jamais on ne la réduit (les chevrons ne doivent
+					// pas remonter pendant la frappe).
+					if (slideHost) growReserve(slideHost, availableHeight(panel));
 				},
 				// Re-peindre le PANNEAU seul : la liste vient d'être refaite par
 				// onChange, et re-rendre tout volerait le focus de la frappe.
@@ -309,8 +315,17 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 				},
 			});
 		} else {
-			renderQuestionView(content, q, ctx.app, activeIdx);
+			renderQuestionView(content, q, ctx.app, index);
 		}
+	}
+
+	/** Place réellement disponible pour la question, chevrons compris : la
+	    réserve ne doit jamais les pousser hors de l'écran. */
+	function availableHeight(panel: HTMLElement): number {
+		const main = panel.parentElement;
+		if (!main) return 0;
+		// 40px de chevrons + 10px de gouttière + 8px de padding du panneau.
+		return Math.max(0, main.clientHeight - 58);
 	}
 
 	function paintPanel(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
@@ -326,8 +341,19 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		// Le panneau est une piste de carrousel : le changement de question y
 		// glisse comme dans le quiz (detail-slide.ts).
 		slideHost = mountSlideHost(panel);
-		setSlide(slideHost, (slide) => fillSlide(slide, q, listCol, panel, nav, quiz));
+		setSlide(slideHost, (slide) => fillSlide(slide, q, activeIdx, listCol, panel, nav, quiz));
 		paintNav(listCol, panel, nav, quiz);
+
+		// Les chevrons se posent à la hauteur de la question la PLUS HAUTE du
+		// quiz, une fois pour toutes : ils ne bougent plus d'une question à
+		// l'autre. Mesuré ici (et à chaque bascule de mode, dont le contenu
+		// n'a pas la même hauteur), pas à chaque navigation.
+		const questions = draft.questions;
+		reserveTallest(
+			slideHost,
+			questions.map((qq, i) => (slide: HTMLElement) => fillSlide(slide, qq, i, listCol, panel, nav, quiz)),
+			availableHeight(panel),
+		);
 	}
 
 	/** Navigation ‹ › — deux cercles nus, comme StudySmarter : aucun compteur

@@ -134,3 +134,41 @@ export function slideTo(host: SlideHost, fill: (slide: HTMLElement) => void, dir
 export function finish(host: SlideHost): void {
 	if (host.cleanup) host.cleanup();
 }
+
+/**
+ * Réserve la hauteur de la question la PLUS HAUTE du quiz.
+ *
+ * Sans elle, le viewport épouse la question courante et les chevrons
+ * remontent ou descendent à chaque navigation — ils doivent rester au même
+ * endroit (demande Ahmed 2026-07-21). Chaque question est donc rendue une
+ * fois dans un calque de mesure (hors flux, `visibility: hidden` : le layout
+ * est calculé, rien n'est peint), on garde la plus haute, et on la borne à la
+ * place réellement disponible pour que les chevrons ne sortent jamais de
+ * l'écran.
+ */
+export function reserveTallest(host: SlideHost, fills: Array<(slide: HTMLElement) => void>, available: number): void {
+	const probe = host.viewport.createDiv({ cls: "qbd-qz-measure" });
+	let tallest = 0;
+	for (const fill of fills) {
+		const slide = probe.createDiv({ cls: "qbd-qz-slide" });
+		try { fill(slide); } catch { /* une question illisible ne doit pas casser la mesure */ }
+		tallest = Math.max(tallest, slide.offsetHeight);
+		slide.remove();
+	}
+	probe.remove();
+	setReserve(host, tallest, available);
+}
+
+/** Étend la réserve si le contenu COURANT dépasse (une réponse ajoutée en
+    cours d'édition, un rendu MathJax plus haut que la mesure à froid). */
+export function growReserve(host: SlideHost, available: number): void {
+	const slide = host.track.firstElementChild as HTMLElement | null;
+	if (!slide) return;
+	const current = parseFloat(host.viewport.style.minHeight) || 0;
+	setReserve(host, Math.max(current, slide.offsetHeight), available);
+}
+
+function setReserve(host: SlideHost, wanted: number, available: number): void {
+	const h = available > 0 ? Math.min(wanted, available) : wanted;
+	host.viewport.style.minHeight = h > 0 ? `${Math.ceil(h)}px` : "";
+}

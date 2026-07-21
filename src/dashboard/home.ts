@@ -4,7 +4,7 @@ import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { renderQuizCard as renderSharedQuizCard } from "./quiz-card";
-import { isFolderArchived, isPaused } from "./quiz-menu";
+import { isFolderArchived } from "./quiz-menu";
 import { moduleForQuiz } from "./quiz-modules";
 import type { ModuleMap } from "./quiz-modules";
 
@@ -51,16 +51,11 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		}
 
 		// ── Classement des quiz par état (utilisé par le hero + les sections) ──
-		// Les quiz EN PAUSE (« Pause study reminders ») restent comptés dans les
-		// stats mais sortent du hero Reprendre et du « À faire » : c'est tout le
-		// sens de la pause. Ils réapparaissent dès la reprise (menu ⋯).
 		const inProgress = quizzes.filter(q => {
-			if (isPaused(ctx, q.path)) return false;
 			const s = stats[q.path];
 			return s && s.questionsDone > 0 && s.questionsDone < q.questions;
 		});
 		const notStarted = quizzes.filter(q => {
-			if (isPaused(ctx, q.path)) return false;
 			const s = stats[q.path];
 			return !s || s.questionsDone === 0;
 		});

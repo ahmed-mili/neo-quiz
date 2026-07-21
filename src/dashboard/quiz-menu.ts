@@ -13,31 +13,24 @@ import { QUIZ_BLOCK_RE } from "../quiz-utils";
 
 /* ══════════════════════════════════════════════════════════
    QUIZ MENU — contenu du menu ⋯ des cartes de « Mes quiz ».
-   Contrat = la capture StudySmarter d'Ahmed (Excalidraw, 2026-07-18) :
-   Share / Edit / Pause study reminders / Archive / Delete (rouge),
-   adaptés au plugin :
+   Dérivé de la capture StudySmarter d'Ahmed (Excalidraw, 2026-07-18) :
+   Share / Edit / Rename / Archive / Delete (rouge), adaptés au plugin :
    - Share    → copie le bloc ```quiz-blocks``` dans le presse-papier ;
-   - Pause    → sort le quiz du « To do » de l'accueil (toggle) ;
+   - Rename   → renomme la NOTE (le titre d'un quiz EST son basename,
+                cf. scanner.ts) — carte de quiz seulement, la carte de
+                module renomme déjà via « Edit » ;
    - Archive  → masque le quiz partout, revient via la pilule « Archivés » ;
    - Delete   → supprime le bloc de la note (corbeille si la note ne
                 contenait que lui) + ses stats, après confirmation.
+   (« Pause study reminders » retiré le 2026-07-21 à la demande d'Ahmed —
+   avec sa mécanique : sans entrée de menu, un quiz déjà suspendu serait
+   resté hors du « À faire » sans aucun moyen de le reprendre.)
 ══════════════════════════════════════════════════════════ */
 
-/* ── Listes persistées — même canal que quizzesExpandedFolders (quizzes.ts) :
-   l'échec d'écriture ne casse pas l'UI. La pause est PAR QUIZ (chemin de
-   note) ; l'archivage est PAR DOSSIER (clé `folder` de module) — jamais de
-   quiz archivé individuellement (décision Ahmed 2026-07-19). */
-
-function togglePaused(ctx: DashboardCtx, path: string, on: boolean): void {
-	const set = new Set(ctx.plugin.settings.quizzesPaused || []);
-	if (on) set.add(path); else set.delete(path);
-	ctx.plugin.settings.quizzesPaused = [...set];
-	ctx.plugin.saveSettings().catch(() => {});
-}
-
-export function isPaused(ctx: DashboardCtx, path: string): boolean {
-	return new Set(ctx.plugin.settings.quizzesPaused || []).has(path);
-}
+/* ── Liste persistée — même canal que quizzesExpandedFolders (quizzes.ts) :
+   l'échec d'écriture ne casse pas l'UI. L'archivage est PAR DOSSIER (clé
+   `folder` de module) — jamais de quiz archivé individuellement (décision
+   Ahmed 2026-07-19). */
 
 export function isFolderArchived(ctx: DashboardCtx, folder: string): boolean {
 	return new Set(ctx.plugin.settings.quizzesArchivedFolders || []).has(folder);
@@ -50,9 +43,8 @@ export function setFolderArchived(ctx: DashboardCtx, folder: string, on: boolean
 	ctx.plugin.saveSettings().catch(() => {});
 }
 
-/* ── Confirmations : la PAUSE confirme (contrat StudySmarter 2026-07-18),
-   l'ARCHIVAGE est direct dans les deux sens (demande Ahmed 2026-07-19),
-   Delete confirme en rouge. ── */
+/* ── Confirmations : l'ARCHIVAGE est direct dans les deux sens (demande
+   Ahmed 2026-07-19), Delete confirme en rouge. ── */
 
 interface ConfirmSpec {
 	title: string;
@@ -82,12 +74,64 @@ class ConfirmModal extends QbdModal {
 	}
 }
 
-function confirmPause(app: App, name: string, onConfirm: () => void): void {
-	new ConfirmModal(app, {
-		title: t("dashboard.quizzes.pauseConfirmTitle"),
-		body: t("dashboard.quizzes.pauseConfirmBody", { title: name }),
-		cta: t("dashboard.quizzes.pauseConfirmCta"),
-	}, onConfirm).open();
+/* ── Renommage d'un quiz ──
+   Le titre d'un quiz EST le basename de sa note (scanner.ts) : renommer =
+   renommer le fichier, via fileManager.renameFile — jamais vault.rename —
+   pour qu'Obsidian réécrive les liens entrants ([[ancien nom]]) tout seul.
+   Les stats suivent : stats-store écoute l'event vault "rename" (il couvre
+   donc AUSSI un renommage fait à la main dans l'explorateur). */
+class RenameQuizModal extends QbdModal {
+	private name: string;
+
+	constructor(private ctx: DashboardCtx, private quiz: QuizIndexEntry, private onDone: () => void) {
+		super(ctx.app);
+		this.name = quiz.basename;
+	}
+
+	onOpen(): void {
+		this.modalEl.addClass("qbd-medit-modal");
+		this.titleEl.setText(t("dashboard.quizzes.renameTitle"));
+		const c = this.contentEl;
+		c.createEl("p", { cls: "qbd-medit-label", text: t("dashboard.quizzes.renameLabel") });
+		const input = c.createEl("input", { type: "text", cls: "qbd-medit-input", value: this.name });
+		input.addEventListener("input", () => { this.name = input.value; });
+		// Sélection du nom entier : le cas courant est de tout retaper.
+		window.setTimeout(() => { input.focus(); input.select(); }, 0);
+
+		const save = c.createEl("button", { cls: "qbd-medit-save", text: t("dashboard.quizzes.renameCta") });
+		save.addEventListener("click", () => { void this.apply(); });
+		input.addEventListener("keydown", (e) => { if (e.key === "Enter") void this.apply(); });
+	}
+
+	private async apply(): Promise<void> {
+		// Mêmes caractères interdits que freeNotePath (folder-create.ts).
+		const name = this.name.trim().replace(/[\\/:*?"<>|]/g, "-");
+		if (!name || name === this.quiz.basename) { this.close(); return; }
+		const file = this.ctx.app.vault.getAbstractFileByPath(this.quiz.path);
+		if (!(file instanceof TFile)) {
+			new Notice(t("dashboard.detail.fileNotFound"));
+			this.close();
+			return;
+		}
+		const folder = file.parent && file.parent.path !== "/" ? `${file.parent.path}/` : "";
+		const target = `${folder}${name}.${file.extension}`;
+		if (this.ctx.app.vault.getAbstractFileByPath(target)) {
+			new Notice(t("dashboard.quizzes.renameExists", { name }));
+			return; // modal laissé ouvert : l'utilisateur corrige le nom
+		}
+		try {
+			await this.ctx.app.fileManager.renameFile(file, target);
+		} catch {
+			new Notice(t("dashboard.quizzes.renameError"));
+			return;
+		}
+		this.close();
+		this.onDone();
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
 }
 
 async function deleteQuiz(ctx: DashboardCtx, quiz: QuizIndexEntry): Promise<void> {
@@ -112,8 +156,6 @@ async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFi
 		await ctx.app.vault.modify(file, remaining);
 	}
 	ctx.statsStore?.deleteRecord(quiz.path);
-	// Purge de la liste pause : un chemin mort n'a rien à y rester.
-	togglePaused(ctx, quiz.path, false);
 }
 
 /** Delete d'un MODULE entier : chaque quiz passe par le même cœur. */
@@ -128,11 +170,11 @@ async function deleteModuleQuizzes(ctx: DashboardCtx, group: ModuleGroup): Promi
 /* ── Menus ── */
 
 /** Menu ⋯ d'une carte de quiz — l'ordre et la rangée rouge suivent la
-    référence StudySmarter. Bâti AU CLIC (l'état pause bouge). AUCUNE entrée
-    d'archivage : l'archivage n'existe qu'au niveau dossier (Ahmed 2026-07-19). */
+    référence StudySmarter. Bâti AU CLIC (le nom du quiz peut avoir changé).
+    AUCUNE entrée d'archivage : l'archivage n'existe qu'au niveau dossier
+    (Ahmed 2026-07-19). */
 export function buildQuizCardMenu(ctx: DashboardCtx, rerender: () => void): (quiz: QuizIndexEntry) => ActionMenuItem[] {
 	return (quiz) => {
-		const paused = isPaused(ctx, quiz.path);
 		return [
 			{
 				icon: "share-2",
@@ -148,13 +190,11 @@ export function buildQuizCardMenu(ctx: DashboardCtx, rerender: () => void): (qui
 				onClick: () => { void openQuizInEditor(ctx.app, quiz); },
 			},
 			{
-				icon: paused ? "circle-play" : "circle-pause",
-				label: t(paused ? "dashboard.quizzes.menuResume" : "dashboard.quizzes.menuPause"),
-				onClick: () => {
-					const apply = () => { togglePaused(ctx, quiz.path, !paused); rerender(); };
-					// Comme StudySmarter : la PAUSE confirme, la reprise est directe.
-					if (paused) apply(); else confirmPause(ctx.app, quiz.title, apply);
-				},
+				// « text-cursor-input » et non un crayon : « Edit » (pencil) ouvre
+				// déjà l'éditeur de questions — deux crayons se confondraient.
+				icon: "text-cursor-input",
+				label: t("dashboard.quizzes.menuRename"),
+				onClick: () => { new RenameQuizModal(ctx, quiz, rerender).open(); },
 			},
 			{
 				icon: "trash-2",
@@ -173,15 +213,15 @@ export function buildQuizCardMenu(ctx: DashboardCtx, rerender: () => void): (qui
 	};
 }
 
-/** Menu ⋯ d'une carte de module — mêmes 5 rangées que la carte de quiz
+/** Menu ⋯ d'une carte de module — mêmes rangées que la carte de quiz
     (demande Excalidraw 2026-07-18), adaptées au niveau module :
-    Share = zip des notes du module (envoyable sur Discord), Edit = la note
-    de correspondance, Pause sur tous les quiz, Archive = LE DOSSIER (flag
-    unique quizzesArchivedFolders — jamais par quiz), Delete = tous les
-    quiz du module (confirmation avec le compte). */
+    Share = zip des notes du module (envoyable sur Discord), Edit = nom /
+    UE / couleur du dossier (le renommage du module vit là, d'où l'absence
+    d'entrée « Rename » ici), Archive = LE DOSSIER (flag unique
+    quizzesArchivedFolders — jamais par quiz), Delete = tous les quiz du
+    module (confirmation avec le compte). */
 export function buildModuleCardMenu(ctx: DashboardCtx, rerender: () => void, map: ModuleMap): (g: ModuleGroup) => ActionMenuItem[] {
 	return (g) => {
-		const allPaused = g.quizzes.every(q => isPaused(ctx, q.path));
 		const archived = isFolderArchived(ctx, g.folder);
 		return [
 			{
@@ -196,17 +236,6 @@ export function buildModuleCardMenu(ctx: DashboardCtx, rerender: () => void, map
 				// couleur, sans le toggle public) — remplace l'ancienne ouverture
 				// de la note de correspondance, jugée non fonctionnelle.
 				onClick: () => { new ModuleEditModal(ctx, g, map, rerender).open(); },
-			},
-			{
-				icon: allPaused ? "circle-play" : "circle-pause",
-				label: t(allPaused ? "dashboard.quizzes.menuResume" : "dashboard.quizzes.menuPause"),
-				onClick: () => {
-					const apply = () => {
-						for (const q of g.quizzes) togglePaused(ctx, q.path, !allPaused);
-						rerender();
-					};
-					if (allPaused) apply(); else confirmPause(ctx.app, g.name, apply);
-				},
 			},
 			{
 				icon: "archive",

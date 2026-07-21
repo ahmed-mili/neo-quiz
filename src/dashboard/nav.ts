@@ -25,6 +25,16 @@ export interface NavHandlers {
 
 export function createNavHandlers(ctx: DashboardCtx): NavHandlers {
 	let activeNav: DashboardViewName = "home";
+	/* Boutons du rendu COURANT. setActive bascule la classe active sur ces
+	   nœuds VIVANTS au lieu de laisser la vue reconstruire le rail : sans ça
+	   le bouton cliqué est un élément neuf, né déjà actif — la transition
+	   fond/couleur du CSS n'a aucun état de départ à interpoler et la carte
+	   claire apparaît d'un coup. */
+	let buttons: { key: DashboardViewName; el: HTMLElement }[] = [];
+
+	function paintActive(): void {
+		for (const b of buttons) b.el.toggleClass("qbd-nav-item--active", b.key === activeNav);
+	}
 
 	const NAV_ITEMS: NavItem[] = [
 		{ key: "home", labelKey: "dashboard.nav.home", icon: "home" },
@@ -45,11 +55,13 @@ export function createNavHandlers(ctx: DashboardCtx): NavHandlers {
 
 		// Nav items
 		const navList = container.createDiv({ cls: "qbd-nav-items" });
+		buttons = [];
 
 		for (const item of NAV_ITEMS) {
 			const btn = navList.createEl("button", {
 				cls: `qbd-nav-item ${activeNav === item.key ? "qbd-nav-item--active" : ""}`
 			});
+			buttons.push({ key: item.key, el: btn });
 
 			const iconWrap = btn.createSpan({ cls: "qbd-nav-icon" });
 			setIcon(iconWrap, item.icon);
@@ -58,6 +70,7 @@ export function createNavHandlers(ctx: DashboardCtx): NavHandlers {
 
 			btn.addEventListener("click", () => {
 				activeNav = item.key;
+				paintActive();
 				ctx.navigate(item.key);
 			});
 		}
@@ -79,6 +92,9 @@ export function createNavHandlers(ctx: DashboardCtx): NavHandlers {
 
 	function setActive(key: DashboardViewName): void {
 		activeNav = key;
+		// Navigation qui ne vient PAS d'un clic du rail (historique souris,
+		// ouverture d'un détail, retour) : le rail doit suivre, en animant.
+		paintActive();
 	}
 
 	return { render, setActive };

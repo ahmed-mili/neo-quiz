@@ -1,220 +1,762 @@
 /* ═════════════════════════════════════════════════════════
-   DASHBOARD DETAIL VIEW
+   PAGE D'UN QUIZ (refonte 2026-07-21, contrat Excalidraw d'Ahmed)
+
+   Header d'une ligne (retour · nom + compte · Modifier / Start), rangée
+   de stats compacte, puis deux colonnes : liste des questions à gauche,
+   question courante à droite dans un panneau de VERRE (tokens
+   --qbd-glass-*, seule source autorisée pour une surface verre).
+
+   Aucune couleur figée : tout dérive des variables du thème Obsidian —
+   la page est lisible en clair comme en sombre. Le vert/rouge de
+   l'édition réutilise --quiz-success / --quiz-danger, les couleurs que
+   l'apprenant verra dans le quiz lui-même.
    ═════════════════════════════════════════════════════════ */
 
-.qbd-detail-topbar {
+.qbd-qz {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	height: 100%;
+	min-height: 0;
+}
+
+/* ── Header ── */
+.qbd-qz-header {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	padding: 0 0 16px;
-	margin-bottom: 20px;
-	border-bottom: 1px solid var(--background-modifier-border);
+	gap: 12px;
 	flex-shrink: 0;
 }
 
-.qbd-detail-topbar-info {
+.qbd-qz-back {
+	padding: 8px !important;
+	flex-shrink: 0;
+}
+
+.qbd-qz-headline {
 	flex: 1;
 	min-width: 0;
 }
 
-.qbd-detail-title {
-	font-size: 15px;
-	font-weight: 700;
-	color: var(--text-normal);
-	margin: 0 0 2px;
-	letter-spacing: -0.01em;
+.qbd-qz-title-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
 }
 
-.qbd-detail-path {
+.qbd-qz-title {
+	font-size: 19px;
+	font-weight: 700;
+	color: var(--text-normal);
+	margin: 0;
+	letter-spacing: -0.015em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Compteur de questions collé au titre (le « 96 » de la référence) :
+   pastille discrète, jamais un badge coloré. */
+.qbd-qz-count {
+	flex-shrink: 0;
+	min-width: 22px;
+	padding: 2px 7px;
+	border-radius: 999px;
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: 11px;
+	font-weight: 600;
+	text-align: center;
+	line-height: 1.5;
+}
+
+.qbd-qz-path {
 	font-size: 10px;
 	color: var(--text-faint);
 	font-family: var(--font-monospace, monospace);
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	margin: 0;
+	margin: 3px 0 0;
 	opacity: 0.8;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
-.qbd-detail-path svg {
-	width: 11px;
-	height: 11px;
-}
-
-/* ── Body ── */
-.qbd-detail-body {
-	flex: 1;
+.qbd-qz-actions {
 	display: flex;
-	gap: 24px;
-}
-
-/* ── Stats column ── */
-.qbd-detail-stats-col {
-	width: 180px;
-	flex-shrink: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-
-.qbd-detail-ring-card {
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-l, 12px);
-	padding: 20px 16px 16px;
-	display: flex;
-	flex-direction: column;
 	align-items: center;
-	gap: 10px;
+	gap: 8px;
+	flex-shrink: 0;
 }
 
-.qbd-detail-ring-card svg {
-	display: block;
-}
-
-.qbd-detail-ring-info {
-	text-align: center;
-}
-
-.qbd-detail-ring-pct {
-	font-size: 24px;
-	font-weight: 800;
-	color: var(--interactive-accent);
-	font-family: var(--font-monospace, monospace);
-	line-height: 1;
-	margin: 0;
-	letter-spacing: -0.03em;
-}
-
-.qbd-detail-ring-label {
-	font-size: 10px;
-	color: var(--text-muted);
-	margin: 4px 0 0;
-}
-
-.qbd-detail-stat-card {
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m, 8px);
-	padding: 11px 13px;
-	transition: border-color 0.15s ease;
-}
-
-.qbd-detail-stat-card:hover {
+.qbd-root .qbd-qz-edit-btn.is-on {
+	background: var(--background-modifier-hover, rgba(255,255,255,0.06));
+	color: var(--text-normal);
 	border-color: var(--background-modifier-border-hover);
 }
 
-.qbd-detail-stat-label {
+.qbd-qz-start .qbd-btn-icon {
+	display: flex;
+	align-items: center;
+}
+
+/* ── Rangée de stats (l'ancienne colonne de cartes, mise à plat) ── */
+.qbd-qz-stats {
+	display: flex;
+	align-items: stretch;
+	gap: 10px;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+}
+
+.qbd-qz-stat {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 14px;
+	border-radius: var(--radius-m, 10px);
+	background: var(--qbd-glass-bg);
+	border: 1px solid var(--qbd-glass-edge);
+	box-shadow: var(--qbd-glass-sheen);
+	backdrop-filter: var(--qbd-glass-blur);
+	-webkit-backdrop-filter: var(--qbd-glass-blur);
+}
+
+.qbd-qz-stat--progress {
+	padding-left: 10px;
+}
+
+.qbd-qz-stat-body {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.qbd-qz-stat-value {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-normal);
+	line-height: 1.2;
+}
+
+.qbd-qz-stat-pct {
+	font-size: 16px;
+	font-weight: 800;
+	color: var(--interactive-accent);
+	font-family: var(--font-monospace, monospace);
+	letter-spacing: -0.02em;
+}
+
+.qbd-qz-stat-label {
 	font-size: 9px;
 	color: var(--text-faint);
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
-	margin: 0 0 4px;
 	font-weight: 500;
+	white-space: nowrap;
 }
 
-.qbd-detail-stat-value {
-	font-size: 13px;
-	font-weight: 600;
-	margin: 0;
-	line-height: 1.2;
-}
-
-/* ── Questions column ── */
-.qbd-detail-questions-col {
+/* ── Corps : liste + panneau ── */
+.qbd-qz-body {
 	flex: 1;
-	min-width: 0;
+	min-height: 0;
+	display: flex;
+	gap: 16px;
+}
+
+.qbd-qz-list {
+	width: 290px;
+	flex-shrink: 0;
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
+	gap: 8px;
+	min-height: 0;
 }
 
-.qbd-detail-section-title {
+.qbd-qz-list-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 0 2px;
+	flex-shrink: 0;
+}
+
+.qbd-qz-list-title {
 	font-size: 11px;
 	font-weight: 600;
 	color: var(--text-muted);
 	text-transform: uppercase;
 	letter-spacing: 0.07em;
-	margin: 0 0 6px;
 }
 
-.qbd-detail-questions-list {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-
-.qbd-detail-question-item {
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m, 8px);
-	padding: 10px 13px;
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	transition: border-color 0.15s ease, background 0.12s ease;
-}
-
-.qbd-detail-question-item:hover {
-	border-color: var(--background-modifier-border-hover);
-	background: color-mix(in srgb, var(--background-modifier-hover) 30%, var(--background-secondary));
-}
-
-.qbd-detail-question-num {
-	width: 22px;
-	height: 22px;
-	border-radius: 6px;
-	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
+.qbd-root .qbd-qz-list-add {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 9px;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: 7px;
+	background: transparent;
+	box-shadow: none;
 	color: var(--text-muted);
-	font-family: var(--font-monospace, monospace);
-	flex-shrink: 0;
-	font-weight: 600;
+	cursor: pointer;
+	transition: background 0.14s ease, color 0.14s ease;
 }
 
-.qbd-detail-question-text {
-	font-size: 12px;
+.qbd-root .qbd-qz-list-add:hover {
+	background: var(--background-modifier-hover, rgba(255,255,255,0.06));
 	color: var(--text-normal);
+}
+
+.qbd-qz-list-add svg {
+	width: 15px;
+	height: 15px;
+}
+
+.qbd-qz-list-items {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding-right: 2px;
+}
+
+/* Carte de question — la vignette de la colonne gauche de la référence. */
+.qbd-qz-card {
+	position: relative;
+	display: flex;
+	gap: 10px;
+	padding: 11px 12px;
+	border-radius: var(--radius-m, 10px);
+	background: var(--qbd-glass-bg);
+	border: 1px solid var(--qbd-glass-edge);
+	box-shadow: var(--qbd-glass-sheen);
+	backdrop-filter: var(--qbd-glass-blur);
+	-webkit-backdrop-filter: var(--qbd-glass-blur);
+	cursor: pointer;
+	transition: border-color 0.14s ease, background 0.14s ease, transform 0.12s ease;
+}
+
+.qbd-qz-card:hover {
+	border-color: color-mix(in srgb, var(--interactive-accent) 35%, var(--qbd-glass-edge));
+}
+
+/* Sélection : liseré accent + fond légèrement teinté (référence : bordure
+   bleue franche sur la vignette active). */
+.qbd-qz-card.is-active {
+	border-color: var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 10%, var(--qbd-glass-bg));
+}
+
+.qbd-qz-card-num {
+	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
+	border-radius: 6px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: 9px;
+	font-weight: 600;
+	font-family: var(--font-monospace, monospace);
+}
+
+.qbd-qz-card.is-active .qbd-qz-card-num {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.qbd-qz-card-text {
 	flex: 1;
 	min-width: 0;
-	line-height: 1.4;
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--text-normal);
 	display: -webkit-box;
 	-webkit-line-clamp: 2;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
 }
 
-.qbd-detail-question-check {
-	color: var(--color-green, #4ade80);
+.qbd-qz-card-text.is-empty {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+/* Suppression : n'apparaît qu'au survol de SA carte — une croix permanente
+   sur chaque vignette transformerait la colonne en champ de mines. */
+.qbd-root .qbd-qz-card-del {
+	position: absolute;
+	top: 6px;
+	right: 6px;
 	display: flex;
 	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-faint);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+
+.qbd-qz-card:hover .qbd-qz-card-del {
+	opacity: 1;
+}
+
+.qbd-root .qbd-qz-card-del:hover {
+	background: color-mix(in srgb, var(--quiz-danger) 16%, transparent);
+	color: var(--quiz-danger);
+}
+
+.qbd-qz-card-del svg {
+	width: 13px;
+	height: 13px;
+}
+
+/* ── Panneau de la question courante ── */
+/* Colonne de droite : la carte de question, et SOUS elle la navigation. */
+.qbd-qz-main {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.qbd-qz-panel {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding: 22px 24px 18px;
+	border-radius: var(--radius-l, 16px);
+	background: var(--qbd-glass-bg);
+	border: 1px solid var(--qbd-glass-edge);
+	box-shadow: var(--qbd-glass-sheen), var(--qbd-glass-shadow);
+	backdrop-filter: var(--qbd-glass-blur);
+	-webkit-backdrop-filter: var(--qbd-glass-blur);
+	overflow-y: auto;
+}
+
+.qbd-qz-panel-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
 	flex-shrink: 0;
 }
 
-.qbd-detail-question-check svg {
-	width: 16px;
-	height: 16px;
+.qbd-qz-panel-step {
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--text-faint);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
 }
 
-.qbd-detail-more-btn {
-	padding: 10px;
-	border-radius: var(--radius-m, 8px);
+.qbd-qz-panel-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.qbd-qz-loading,
+.qbd-qz-error {
 	font-size: 12px;
-	background: transparent;
+	color: var(--text-muted);
+	margin: auto;
+	text-align: center;
+}
+
+/* Énoncé : grande taille, comme la référence (la question est le sujet de
+   l'écran, pas une ligne de formulaire). */
+.qbd-qz-prompt {
+	font-size: 21px;
+	font-weight: 700;
+	line-height: 1.35;
+	color: var(--text-normal);
+	letter-spacing: -0.01em;
+}
+
+.qbd-qz-prompt.is-empty {
+	color: var(--text-faint);
+	font-style: italic;
+	font-weight: 500;
+	font-size: 16px;
+}
+
+.qbd-qz-prompt p:first-child { margin-top: 0; }
+.qbd-qz-prompt p:last-child { margin-bottom: 0; }
+
+.qbd-qz-prompt img {
+	max-width: 100%;
+	height: auto;
+	border-radius: 8px;
+}
+
+.qbd-qz-hint {
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+/* ── Consultation : réponses NEUTRES ──
+   Aucune ne se distingue : la bonne réponse ne doit pas se lire ici
+   (demande d'Ahmed). Ne jamais introduire de variante « correcte » dans
+   ce bloc — ce serait rendre le quiz inutile. */
+.qbd-qz-options {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.qbd-qz-option {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 14px;
+	border-radius: var(--radius-m, 10px);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	transition: border-color 0.14s ease;
+}
+
+.qbd-qz-option:hover {
+	border-color: var(--background-modifier-border-hover);
+}
+
+.qbd-qz-option-key {
+	flex-shrink: 0;
+	width: 20px;
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--text-faint);
+	font-family: var(--font-monospace, monospace);
+}
+
+.qbd-qz-option-text {
+	font-size: 13px;
+	color: var(--text-normal);
+	line-height: 1.45;
+}
+
+/* Réponse libre : le champ est montré VIDE (sa forme suffit). */
+.qbd-qz-answer-field {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 14px;
+	border-radius: var(--radius-m, 10px);
+	background: var(--background-secondary);
 	border: 1px dashed var(--background-modifier-border);
+}
+
+.qbd-qz-answer-prefix {
+	font-family: var(--font-monospace, monospace);
+	font-size: 12px;
+	color: var(--interactive-accent);
+}
+
+.qbd-qz-answer-placeholder {
+	font-size: 13px;
+	color: var(--text-faint);
+}
+
+/* ── Navigation ‹ › ── */
+.qbd-qz-nav {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	flex-shrink: 0;
+}
+
+/* Vide (question unique) : ne pas réserver la rangée. */
+.qbd-qz-nav:empty {
+	display: none;
+}
+
+.qbd-root .qbd-qz-nav-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	border-radius: 50%;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.qbd-root .qbd-qz-nav-btn:hover:not(:disabled) {
+	background: var(--background-modifier-hover, rgba(255,255,255,0.06));
+	color: var(--text-normal);
+	border-color: var(--background-modifier-border-hover);
+}
+
+.qbd-root .qbd-qz-nav-btn:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.qbd-qz-nav-btn svg {
+	width: 17px;
+	height: 17px;
+}
+
+/* ── Édition ── */
+.qbd-qz-edit-card {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 14px;
+	border-radius: var(--radius-m, 12px);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+}
+
+.qbd-qz-edit-label {
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+/* box-shadow/background !important : le chrome natif d'Obsidian repeint
+   les textarea (et les assombrit au survol) par-dessus nos classes. */
+.qbd-qz-edit-textarea,
+.qbd-qz-answer-input {
+	width: 100%;
+	resize: none;
+	overflow: hidden;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: var(--background-primary) !important;
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: none !important;
+	color: var(--text-normal);
+	font-family: var(--font-interface, inherit);
+	font-size: 14px;
+	line-height: 1.45;
+	transition: border-color 0.14s ease;
+}
+
+.qbd-qz-edit-textarea:focus,
+.qbd-qz-answer-input:focus {
+	border-color: var(--interactive-accent);
+	outline: none;
+}
+
+.qbd-qz-edit-textarea {
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.qbd-qz-answers {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+/* Carte de réponse : verte si bonne, rouge sinon (référence image 4).
+   Les deux teintes sont MÊLÉES au fond du thème (color-mix) : franches
+   sur thème sombre, pastel sur thème clair, jamais un aplat criard. */
+.qbd-qz-answer {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 14px;
+	border-radius: var(--radius-m, 12px);
+	border: 1px solid transparent;
+	transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+/* Teintes MATES, pas des aplats vifs : la référence pose un vert/rouge
+   assombri sur lequel un texte clair reste lisible. Le mélange se fait avec
+   la surface du thème → pastel automatique en thème clair. */
+.qbd-qz-answer.is-good {
+	background: color-mix(in srgb, var(--quiz-success) 12%, var(--background-secondary));
+	border-color: color-mix(in srgb, var(--quiz-success) 34%, transparent);
+}
+
+.qbd-qz-answer.is-bad {
+	background: color-mix(in srgb, var(--quiz-danger) 10%, var(--background-secondary));
+	border-color: color-mix(in srgb, var(--quiz-danger) 28%, transparent);
+}
+
+.qbd-qz-answer-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.qbd-qz-answer-label {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+}
+
+.qbd-qz-answer.is-good .qbd-qz-answer-label {
+	color: color-mix(in srgb, var(--quiz-success) 75%, var(--text-normal));
+}
+
+.qbd-qz-answer.is-bad .qbd-qz-answer-label {
+	color: color-mix(in srgb, var(--quiz-danger) 70%, var(--text-normal));
+}
+
+/* Bascule bonne/mauvaise — la pastille de la référence : ronde, pleine,
+   à la couleur de l'état COURANT. */
+.qbd-root .qbd-qz-answer-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	box-shadow: none;
+	cursor: pointer;
+	color: var(--text-on-accent, #fff);
+	transition: background 0.16s ease, transform 0.1s ease;
+}
+
+.qbd-qz-answer.is-good .qbd-qz-answer-toggle { background: var(--quiz-success); }
+.qbd-qz-answer.is-bad .qbd-qz-answer-toggle { background: var(--quiz-danger); }
+.qbd-root .qbd-qz-answer-toggle:active { transform: scale(0.9); }
+
+.qbd-qz-answer-toggle-dot {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.qbd-qz-answer-toggle-dot svg {
+	width: 13px;
+	height: 13px;
+}
+
+.qbd-root .qbd-qz-answer-del {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	margin-left: auto;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	box-shadow: none;
 	color: var(--text-faint);
 	cursor: pointer;
-	font-family: var(--font-interface, inherit);
-	text-align: center;
-	transition: all 0.14s ease;
+	transition: background 0.14s ease, color 0.14s ease;
 }
 
-.qbd-detail-more-btn:hover {
+.qbd-root .qbd-qz-answer-del:hover {
+	background: color-mix(in srgb, var(--quiz-danger) 20%, transparent);
+	color: var(--quiz-danger);
+}
+
+.qbd-qz-answer-del svg {
+	width: 13px;
+	height: 13px;
+}
+
+.qbd-root .qbd-qz-add-answer {
+	display: inline-flex;
+	align-items: center;
+	align-self: flex-start;
+	gap: 7px;
+	padding: 8px 14px;
+	border-radius: 999px;
+	background: transparent;
+	border: 1px dashed var(--background-modifier-border);
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: 12px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+
+.qbd-root .qbd-qz-add-answer:hover {
 	border-color: var(--interactive-accent);
 	color: var(--interactive-accent);
-	background: color-mix(in srgb, var(--interactive-accent) 6%, transparent);
+	background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
+}
+
+.qbd-qz-add-answer-icon {
+	display: flex;
+	align-items: center;
+}
+
+.qbd-qz-add-answer-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.qbd-qz-edit-notice {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+	padding: 14px;
+	border-radius: var(--radius-m, 12px);
+	background: var(--background-secondary);
+	border: 1px dashed var(--background-modifier-border);
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+/* ── Étroit / mobile : la liste passe AU-DESSUS du panneau ── */
+@media (max-width: 900px) {
+	.qbd-qz-body {
+		flex-direction: column;
+	}
+
+	.qbd-qz-list {
+		width: 100%;
+		max-height: 220px;
+	}
+
+	.qbd-qz-panel {
+		padding: 18px 16px 14px;
+	}
+
+	.qbd-qz-prompt {
+		font-size: 18px;
+	}
+}
+
+.is-mobile .qbd-qz-header {
+	flex-wrap: wrap;
+}
+
+.is-mobile .qbd-qz-actions {
+	width: 100%;
+	justify-content: flex-end;
 }

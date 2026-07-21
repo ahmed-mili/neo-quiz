@@ -76,9 +76,6 @@ interface QuizBlocksSettings {
 	    linkpath (résolu comme un lien Obsidian), défaut « Dashboard ». Absente
 	    ou sans encadré → cartes au nom de dossier, sans UE (dégradation propre). */
 	quizzesModuleMapNote: string;
-	/** Chemins de notes dont le quiz est « en pause » (menu ⋯) : sorti du
-	    « To do » et du hero Reprendre de l'accueil, visible partout ailleurs. */
-	quizzesPaused: string[];
 	/** DOSSIERS (clé `folder` de module) archivés via le menu ⋯ d'une carte de
 	    dossier : leurs quiz sont masqués partout, le dossier ne revient que
 	    comme CARTE dans la section « Archivés » de « Mes quiz ». L'archivage
@@ -138,7 +135,6 @@ const DEFAULT_SETTINGS: QuizBlocksSettings = {
 	// « module » : le défaut prévisible — une carte par module, cf. spec.
 	quizzesGrouping: "module",
 	quizzesModuleMapNote: "Dashboard",
-	quizzesPaused: [],
 	quizzesArchivedFolders: [],
 	quizzesModuleOverrides: {},
 	// ── Saisie vocale (dictée locale whisper.cpp) — opt-in complet.

@@ -56,7 +56,10 @@
 	cursor: pointer;
 	text-align: center;
 	font-family: var(--font-interface, inherit);
-	transition: background 0.14s ease, color 0.14s ease;
+	/* Bascule de la carte active : le fond et le texte s'inversent en fondu.
+	   Ne joue que parce que nav.ts bascule la classe sur le bouton EXISTANT —
+	   un rail reconstruit à chaque clic n'aurait pas d'état de départ. */
+	transition: background 0.22s cubic-bezier(0.2, 0.7, 0.3, 1), color 0.22s cubic-bezier(0.2, 0.7, 0.3, 1);
 	position: relative;
 }
 
@@ -80,7 +83,10 @@
 	height: 22px;
 	flex-shrink: 0;
 	opacity: 0.7;
-	transition: opacity 0.14s ease;
+	/* `color` : l'icône s'inverse en même temps que le label (elle passe à
+	   --background-secondary en actif) — sans elle, l'icône claquerait
+	   pendant que le fond, lui, fond. */
+	transition: opacity 0.22s ease, color 0.22s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
 .qbd-nav-item:hover .qbd-nav-icon {
@@ -113,3 +119,10 @@
 }
 
 /* (Badge compteur retiré — demande Ahmed 2026-07-21.) */
+
+@media (prefers-reduced-motion: reduce) {
+	.qbd-nav-item,
+	.qbd-nav-icon {
+		transition: none;
+	}
+}

@@ -59,6 +59,13 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 	detail!: DetailHandlers;
 	ai!: AiHandlers;
 
+	/* Dernière vue effectivement PEINTE : distingue une ARRIVÉE (le rail
+	   change de page) d'un simple re-render de la même vue (scanner, changement
+	   de réglage). Seule l'arrivée joue une transition d'entrée. */
+	private lastPaintedView: DashboardViewName | null = null;
+	/** Défait la transition d'entrée en cours (classe + listener). */
+	private _enterCleanup: (() => void) | null = null;
+
 	private _unregisterScanner: (() => void) | null = null;
 	private _unregisterLeafChange: (() => void) | null = null;
 	private _hkHandlers?: KeymapEventHandler[];
@@ -212,17 +219,17 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 		// actif quand la vue est focalisée, même caret dans le textarea.
 		this.bindComposerHotkeys();
 
-		// Écouter les changements du scanner. La SIDEBAR aussi : le badge
-		// « Mes quiz » lit getQuizzes() au render — sans ça il reste figé
-		// sur le compte partiel du scan initial (badge « 1 » au démarrage).
-		// La vue « Générer » est exclue du re-render : elle n'affiche rien
-		// du scan, et un re-render intempestif (n'importe quel fichier du
-		// vault modifié) fermerait le popover d'options ou couperait la
-		// dictée en cours.
+		// Écouter les changements du scanner. Le RAIL n'est plus re-rendu :
+		// depuis le retrait du badge compteur (2026-07-21) il n'affiche rien
+		// du scan, et le reconstruire couperait la transition de sa carte
+		// active. Deux vues sont exclues du re-render car elles portent un
+		// état d'édition LOCAL qu'un rendu détruirait : « Générer » (popover
+		// d'options, dictée en cours) et la page d'un quiz — qui écrit
+		// elle-même dans la note, donc réveille le scanner et se ferait
+		// re-rendre sous les doigts à chaque frappe.
 		if (this.scanner) {
 			this._unregisterScanner = this.scanner.onChange(() => {
-				this.renderSidebar();
-				if (this.currentView !== "ai") this.renderCurrentView();
+				if (this.currentView !== "ai" && this.currentView !== "detail") this.renderCurrentView();
 			});
 		}
 
@@ -298,8 +305,11 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 			this.quizzes.resetDrilldown();
 		}
 		this.currentView = view;
+		// PAS de renderSidebar ici : reconstruire le rail à chaque navigation
+		// remplacerait les boutons par des nœuds neufs, et la transition
+		// fond/couleur de la carte active n'aurait rien à interpoler.
+		// setActive bascule la classe sur les boutons existants → ça anime.
 		this.nav.setActive(view);
-		this.renderSidebar();
 		this.renderCurrentView();
 	}
 
@@ -314,9 +324,14 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 		if (!contentEl) return;
 		contentEl.empty();
 
-		// La classe d'entrée de « Mes quiz » ne doit pas survivre sur une
-		// autre page (le contentEl est partagé par toutes les vues).
+		// Les classes d'entrée ne doivent pas survivre sur une autre page
+		// (le contentEl est partagé par toutes les vues) ; le cleanup retire
+		// aussi le listener d'une entrée encore en vol.
 		contentEl.removeClass("qbd-quizzes-enter");
+		if (this._enterCleanup) this._enterCleanup();
+
+		const entering = this.currentView !== this.lastPaintedView;
+		this.lastPaintedView = this.currentView;
 
 		switch (this.currentView) {
 			case "home":
@@ -334,10 +349,39 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 				}
 				break;
 			case "ai":
+				// Classe posée AVANT le render : les enfants naissent déjà
+				// animés (une pose après coup manquerait la première frame).
+				if (entering) this.playEnter(contentEl, "qbd-ai-enter", "qbd-ai-in");
 				this.ai.render(contentEl);
 				break;
 			default:
 				this.home.render(contentEl);
 		}
+	}
+
+	/* Joue une transition d'entrée puis RETIRE la classe : une CSSAnimation en
+	   fill both reste propriétaire des propriétés qu'elle anime même terminée
+	   (les transitions de hover ne partiraient plus), et un re-render interne
+	   ultérieur ne doit pas rejouer l'entrée. Même contrat que quizzes.ts.
+	   On n'attend QUE les animations d'entrée (`animName`) : la page peut
+	   porter des animations INFINIES (dots du loader, glide) — les compter
+	   laisserait la classe collée à vie. */
+	private playEnter(el: HTMLElement, cls: string, animName: string): void {
+		if (this._enterCleanup) this._enterCleanup();
+		el.addClass(cls);
+		const onEnd = (ev: AnimationEvent): void => {
+			if (ev.animationName !== animName) return;
+			const stillRunning = el.getAnimations({ subtree: true })
+				.some(a => a instanceof CSSAnimation && a.animationName === animName && a.playState === "running");
+			if (stillRunning) return;
+			cleanup();
+		};
+		const cleanup = (): void => {
+			el.removeClass(cls);
+			el.removeEventListener("animationend", onEnd);
+			this._enterCleanup = null;
+		};
+		this._enterCleanup = cleanup;
+		el.addEventListener("animationend", onEnd);
 	}
 }

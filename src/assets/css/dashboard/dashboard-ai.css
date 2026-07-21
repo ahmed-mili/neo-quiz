@@ -107,6 +107,46 @@
 	flex-direction: column;
 }
 
+/* ── Transition d'ENTRÉE — classe posée par dashboard.ts sur le contenant
+   quand on ARRIVE sur « Générer », jamais sur un re-render interne (choix
+   de fournisseur, envoi, ajout de pièce jointe) : hors de cette classe
+   aucun de ces éléments n'a d'animation, la scène ne clignote pas à chaque
+   frappe. La classe est retirée dès l'entrée jouée (playEnter).
+   PAS de transform dans `to` : avec fill-mode both il resterait figé et
+   l'animation garderait la main sur la propriété. */
+@keyframes qbd-ai-in {
+	from { opacity: 0; transform: translateY(10px); }
+	to { opacity: 1; }
+}
+
+.qbd-ai-enter .qbd-ai-title-row,
+.qbd-ai-enter .qbd-ai-result-zone {
+	animation: qbd-ai-in 0.34s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.qbd-ai-enter .qbd-ai-composer {
+	animation: qbd-ai-in 0.38s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+	animation-delay: 70ms;
+}
+
+.qbd-ai-enter .qbd-ai-model-hint,
+.qbd-ai-enter .qbd-ai-preview-loading,
+.qbd-ai-enter .qbd-ai-preview-error {
+	animation: qbd-ai-in 0.38s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+	animation-delay: 130ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.qbd-ai-enter .qbd-ai-title-row,
+	.qbd-ai-enter .qbd-ai-result-zone,
+	.qbd-ai-enter .qbd-ai-composer,
+	.qbd-ai-enter .qbd-ai-model-hint,
+	.qbd-ai-enter .qbd-ai-preview-loading,
+	.qbd-ai-enter .qbd-ai-preview-error {
+		animation: none;
+	}
+}
+
 /* ── Page header — échelle de la référence claude.ai (cap height ≈ 4,5 %
    de la largeur du composer ; 46px VALIDÉ par Ahmed sur banc — conservé
    tel quel lors de l'élargissement 732→800), serif régulière façon

@@ -104,20 +104,7 @@
 		grid-template-columns: 1fr !important;
 	}
 
-	.qbd-detail-body {
-		flex-direction: column !important;
-	}
-
-	.qbd-detail-stats-col {
-		width: 100% !important;
-		flex-direction: row;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
-
-	.qbd-detail-ring-card {
-		flex: 0 0 auto;
-	}
+	/* (La page d'un quiz porte son propre responsive — dashboard-detail.css.) */
 }
 
 /* ── Responsive mobile ── */
@@ -173,25 +160,10 @@
 		grid-template-columns: 1fr !important;
 	}
 
-	.qbd-detail-body {
-		flex-direction: column !important;
-	}
-
-	.qbd-detail-stats-col {
-		width: 100% !important;
-		flex-direction: column;
-	}
-
 	.qbd-home-header {
 		flex-direction: column;
 		gap: 10px;
 		align-items: flex-start;
-	}
-
-	.qbd-detail-topbar {
-		flex-wrap: wrap;
-		gap: 6px;
-		padding: 10px 12px;
 	}
 }
 
@@ -298,14 +270,14 @@
 	flex: 1 1 auto;
 }
 
-.is-mobile .qbd-detail-body {
+/* Page d'un quiz : liste des questions AU-DESSUS de la question courante. */
+.is-mobile .qbd-qz-body {
 	flex-direction: column;
 }
 
-.is-mobile .qbd-detail-stats-col {
+.is-mobile .qbd-qz-list {
 	width: 100%;
-	flex-direction: row;
-	flex-wrap: wrap;
+	max-height: 200px;
 }
 
 /* ── Cibles tactiles ≥ 40px en mobile ──

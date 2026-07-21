@@ -122,6 +122,27 @@ export function createStatsStore(plugin: StatsStorePlugin): StatsStore {
 		return t("dashboard.time.overYear");
 	}
 
+	/* ── Renommage : les stats suivent la note ──
+	   Le store indexe par CHEMIN. Sans cette migration, renommer un quiz
+	   (menu ⋯ « Rename », ou l'explorateur d'Obsidian) remettait sa
+	   progression à zéro en apparence, et l'ancienne clé restait orpheline
+	   dans data.json. Branché sur l'event du VAULT, pas sur l'action du menu :
+	   les deux chemins de renommage sont couverts d'un coup. Un DOSSIER
+	   renommé déplace aussi toutes les notes qu'il contient — d'où le préfixe.
+	   registerEvent : le plugin détache l'écouteur à son unload. */
+	plugin.registerEvent(plugin.app.vault.on("rename", (file, oldPath) => {
+		const prefix = oldPath + "/";
+		let moved = false;
+		for (const key of Object.keys(data)) {
+			if (key !== oldPath && !key.startsWith(prefix)) continue;
+			const rec = data[key];
+			delete data[key];
+			data[key === oldPath ? file.path : file.path + key.slice(oldPath.length)] = rec;
+			moved = true;
+		}
+		if (moved) scheduleSave();
+	}));
+
 	function destroy(): void {
 		if (saveTimer) {
 			clearTimeout(saveTimer);

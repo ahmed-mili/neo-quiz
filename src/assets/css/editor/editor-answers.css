@@ -16,13 +16,13 @@
 }
 
 .qb-answer-correct {
-	background: rgba(21, 128, 61, 0.25);
-	border: 1.5px solid rgba(34, 197, 94, 0.5);
+	background: color-mix(in srgb, var(--quiz-success) 16%, transparent);
+	border: 1.5px solid color-mix(in srgb, var(--quiz-success) 42%, transparent);
 }
 
 .qb-answer-wrong {
-	background: rgba(127, 29, 29, 0.3);
-	border: 1.5px solid rgba(239, 68, 68, 0.35);
+	background: color-mix(in srgb, var(--quiz-danger) 13%, transparent);
+	border: 1.5px solid color-mix(in srgb, var(--quiz-danger) 34%, transparent);
 }
 
 .qb-answer-badge {
@@ -37,11 +37,11 @@
 }
 
 .qb-answer-correct .qb-answer-badge {
-	color: #16a34a;
+	color: color-mix(in srgb, var(--quiz-success) 72%, var(--text-normal));
 }
 
 .qb-answer-wrong .qb-answer-badge {
-	color: #dc2626;
+	color: color-mix(in srgb, var(--quiz-danger) 68%, var(--text-normal));
 }
 
 .qb-answer-badge-icon {
@@ -55,21 +55,21 @@
 }
 
 .qb-answer-correct .qb-answer-badge-icon {
-	background: #16a34a;
+	background: var(--quiz-success);
 }
 
 .qb-answer-correct .qb-answer-badge-icon svg {
-	color: #fff;
+	color: var(--text-on-accent, #fff);
 	width: 12px;
 	height: 12px;
 }
 
 .qb-answer-wrong .qb-answer-badge-icon {
-	background: #dc2626;
+	background: var(--quiz-danger);
 }
 
 .qb-answer-wrong .qb-answer-badge-icon svg {
-	color: #fff;
+	color: var(--text-on-accent, #fff);
 	width: 12px;
 	height: 12px;
 }
@@ -108,7 +108,7 @@
 }
 
 .qb-answer-delete:hover {
-	color: #ef4444;
+	color: var(--quiz-danger);
 }
 
 .qb-answer-delete svg {
@@ -130,11 +130,11 @@
 }
 
 .qb-answer-correct .qb-answer-toggle-label {
-	color: #22c55e;
+	color: color-mix(in srgb, var(--quiz-success) 72%, var(--text-normal));
 }
 
 .qb-answer-wrong .qb-answer-toggle-label {
-	color: #ef4444;
+	color: color-mix(in srgb, var(--quiz-danger) 68%, var(--text-normal));
 }
 
 .qb-answer-toggle {
@@ -153,23 +153,23 @@
 }
 
 .qb-answer-wrong .qb-answer-toggle-track {
-	background: #dc2626;
+	background: var(--quiz-danger);
 }
 
 .qb-answer-correct .qb-answer-toggle-track {
-	background: #16a34a;
+	background: var(--quiz-success);
 }
 
 .qb-answer-toggle-track:hover {
-	box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-normal) 10%, transparent);
 }
 
 .qb-answer-correct .qb-answer-toggle-track:hover {
-	box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--quiz-success) 25%, transparent);
 }
 
 .qb-answer-wrong .qb-answer-toggle-track:hover {
-	box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--quiz-danger) 25%, transparent);
 }
 
 .qb-answer-toggle-thumb {
@@ -179,7 +179,7 @@
 	width: 20px;
 	height: 20px;
 	border-radius: 50%;
-	background: white;
+	background: var(--text-on-accent, #fff);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -203,11 +203,11 @@
 }
 
 .qb-answer-correct .qb-answer-toggle-thumb svg {
-	color: #16a34a;
+	color: var(--quiz-success);
 }
 
 .qb-answer-wrong .qb-answer-toggle-thumb svg {
-	color: #dc2626;
+	color: var(--quiz-danger);
 }
 
 /* Toggle bounce animation */
@@ -230,15 +230,15 @@
 
 /* Flash animations */
 @keyframes qb-flash-green {
-	0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
-	50% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
-	100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+	0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--quiz-success) 40%, transparent); }
+	50% { box-shadow: 0 0 0 8px transparent; }
+	100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 @keyframes qb-flash-red {
-	0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-	50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-	100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+	0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--quiz-danger) 40%, transparent); }
+	50% { box-shadow: 0 0 0 8px transparent; }
+	100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 .qb-answer-flash-green {
@@ -287,7 +287,7 @@
 }
 
 .qb-answer-image-preview .qb-answer-image-delete:hover {
-	background: rgba(239, 68, 68, 0.8);
+	background: color-mix(in srgb, var(--quiz-danger) 80%, transparent);
 }
 
 /* Bouton ajouter réponse */

@@ -129,7 +129,9 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		// n'ouvre pas un autre écran, il change le contenu de la carte).
 		const edit = actions.createEl("button", { cls: "qbd-btn qbd-btn--ghost qbd-qz-edit-btn" + (editing ? " is-on" : "") });
 		setIcon(edit.createSpan({ cls: "qbd-btn-icon" }), editing ? "check" : "square-pen");
-		edit.createSpan({ text: t(editing ? "dashboard.quiz.editDone" : "dashboard.detail.edit") });
+		// « Editor » (et non « Edit ») : le bouton ouvre un MODE, il ne
+		// déclenche pas une action — demande d'Ahmed 2026-07-21.
+		edit.createSpan({ text: t(editing ? "dashboard.quiz.editDone" : "dashboard.quiz.editor") });
 		edit.addEventListener("click", () => {
 			editing = !editing;
 			if (!editing) flushSave();

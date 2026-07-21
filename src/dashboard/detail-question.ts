@@ -51,12 +51,14 @@ export interface EditCallbacks {
 }
 
 export function renderQuestionEdit(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks): void {
-	// ── Énoncé ──
-	const promptCard = parent.createDiv({ cls: "qbd-qz-edit-card" });
-	promptCard.createDiv({ cls: "qbd-qz-edit-label", text: t("dashboard.quiz.editPrompt") });
-	const promptInput = promptCard.createEl("textarea", { cls: "qbd-qz-edit-textarea" });
+	// ── Énoncé : champ NU (label + zone de saisie), pas une carte dans une
+	// carte — le double cadre gris de la première version faisait lourd. ──
+	const promptField = parent.createDiv({ cls: "qbd-qz-field" });
+	promptField.createDiv({ cls: "qbd-qz-field-label", text: t("dashboard.quiz.editPrompt") });
+	const promptInput = promptField.createEl("textarea", { cls: "qbd-qz-field-input" });
 	promptInput.value = q.prompt || "";
 	promptInput.rows = 2;
+	promptInput.placeholder = t("dashboard.quiz.editPromptPlaceholder");
 	autoGrow(promptInput);
 	promptInput.addEventListener("input", () => {
 		q.prompt = promptInput.value;
@@ -77,44 +79,70 @@ export function renderQuestionEdit(parent: HTMLElement, q: DraftQuestion, cb: Ed
 	}
 
 	// ── Réponses ──
+	// MÊME composant que l'éditeur de quiz (classes qb-answer-*, cf.
+	// editor/editor-form.ts) : interrupteur qui glisse, carte qui vire du
+	// rouge au vert, flash à la bascule. Demande d'Ahmed 2026-07-21 « reprends
+	// le même truc que dans le quiz editor » — les classes sont réutilisées
+	// telles quelles, jamais recopiées sous d'autres noms.
 	const isMulti = q._type === "multi";
 	const options = q.options || (q.options = ["", ""]);
 	const isCorrect = (i: number): boolean => isMulti
 		? (q.correctIndices || []).includes(i)
 		: (q.correctIndex ?? 0) === i;
 
-	const answers = parent.createDiv({ cls: "qbd-qz-answers" });
+	const answers = parent.createDiv({ cls: "qb-answer-cards" });
 
 	options.forEach((opt, i) => {
 		const good = isCorrect(i);
-		const card = answers.createDiv({ cls: "qbd-qz-answer" + (good ? " is-good" : " is-bad") });
+		const card = answers.createDiv({ cls: `qb-answer-card ${good ? "qb-answer-correct" : "qb-answer-wrong"}` });
 
-		const head = card.createDiv({ cls: "qbd-qz-answer-head" });
-		head.createSpan({ cls: "qbd-qz-answer-label", text: t(good ? "dashboard.quiz.goodAnswer" : "dashboard.quiz.badAnswer") });
+		const row = card.createDiv({ cls: "qb-answer-toggle-row" });
+		row.createSpan({ cls: "qb-answer-toggle-label", text: t(good ? "dashboard.quiz.goodAnswer" : "dashboard.quiz.badAnswer") });
 
-		// Bascule bonne/mauvaise — en choix unique, cocher une réponse
-		// décoche l'ancienne (c'est la définition du type, pas un effet de
-		// bord) ; en choix multiple les états sont indépendants.
-		const toggle = head.createEl("button", { cls: "qbd-qz-answer-toggle", attr: { type: "button", "aria-pressed": String(good) } });
-		toggle.setAttribute("title", t(good ? "dashboard.quiz.markBad" : "dashboard.quiz.markGood"));
-		const dot = toggle.createSpan({ cls: "qbd-qz-answer-toggle-dot" });
-		setIcon(dot, good ? "check" : "x");
-		toggle.addEventListener("click", () => {
+		const toggle = row.createDiv({ cls: "qb-answer-toggle", attr: { role: "switch", tabindex: "0", "aria-checked": String(good) } });
+		toggle.setAttribute("aria-label", t(good ? "dashboard.quiz.markBad" : "dashboard.quiz.markGood"));
+		const track = toggle.createDiv({ cls: "qb-answer-toggle-track" });
+		const thumb = track.createDiv({ cls: "qb-answer-toggle-thumb" });
+		setIcon(thumb, good ? "check" : "x");
+
+		// Le flash joue AVANT le re-render : la carte flashée est celle qu'on
+		// vient de basculer, pas celle qui la remplace.
+		const flash = (toGood: boolean): void => {
+			card.classList.add(toGood ? "qb-answer-flash-green" : "qb-answer-flash-red");
+		};
+
+		const switchState = (): void => {
 			if (isMulti) {
 				const set = new Set(q.correctIndices || []);
-				if (set.has(i)) set.delete(i); else set.add(i);
+				if (set.has(i)) {
+					// Une question à choix multiple garde au moins une bonne réponse.
+					if (set.size <= 1) return;
+					set.delete(i);
+					flash(false);
+				} else {
+					set.add(i);
+					flash(true);
+				}
 				q.correctIndices = [...set].sort((a, b) => a - b);
 			} else {
-				if (good) return; // une question à choix unique garde une bonne réponse
+				// Choix unique : cocher une réponse décoche l'ancienne (c'est la
+				// définition du type). Décocher la bonne n'a pas de sens.
+				if (good) return;
 				q.correctIndex = i;
+				flash(true);
 			}
 			cb.onChange();
 			cb.onStructureChange();
+		};
+
+		toggle.addEventListener("click", switchState);
+		toggle.addEventListener("keydown", (e: KeyboardEvent) => {
+			if (e.key === "Enter" || e.key === " ") { e.preventDefault(); switchState(); }
 		});
 
 		// Suppression : jamais en dessous de 2 réponses (le moteur exige un choix).
 		if (options.length > 2) {
-			const del = head.createEl("button", { cls: "qbd-qz-answer-del", attr: { type: "button", "aria-label": t("dashboard.quiz.deleteAnswer") } });
+			const del = card.createEl("button", { cls: "qb-answer-delete", attr: { type: "button", "aria-label": t("dashboard.quiz.deleteAnswer") } });
 			setIcon(del, "x");
 			del.addEventListener("click", () => {
 				options.splice(i, 1);
@@ -124,9 +152,10 @@ export function renderQuestionEdit(parent: HTMLElement, q: DraftQuestion, cb: Ed
 			});
 		}
 
-		const input = card.createEl("textarea", { cls: "qbd-qz-answer-input" });
+		const input = card.createEl("textarea", { cls: "qb-answer-input" });
 		input.value = opt;
 		input.rows = 1;
+		input.placeholder = t("dashboard.quiz.answerPlaceholder");
 		autoGrow(input);
 		input.addEventListener("input", () => {
 			options[i] = input.value;
@@ -135,7 +164,9 @@ export function renderQuestionEdit(parent: HTMLElement, q: DraftQuestion, cb: Ed
 		});
 	});
 
-	const add = parent.createEl("button", { cls: "qbd-qz-add-answer", attr: { type: "button" } });
+	// Même bouton d'ajout que l'éditeur (.qb-answer-add) : la rangée en
+	// pointillés qui ferme la pile de cartes.
+	const add = parent.createEl("button", { cls: "qb-answer-add", attr: { type: "button" } });
 	const addIcon = add.createSpan({ cls: "qbd-qz-add-answer-icon" });
 	setIcon(addIcon, "plus");
 	add.createSpan({ text: t("dashboard.quiz.addAnswer") });

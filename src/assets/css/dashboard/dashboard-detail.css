@@ -338,6 +338,11 @@
 	gap: 10px;
 }
 
+/* Fond TRANSPARENT (demande Ahmed 2026-07-21) : dans une note, le quiz est
+   posé à même le fond du thème — l'enfermer dans une carte de verre ne
+   ressemblait plus au vrai rendu. Les options gardent, elles, le fond opaque
+   que leur donne le moteur. Aucune bordure, aucune ombre : le panneau n'est
+   qu'une zone de mise en page. */
 .qbd-qz-panel {
 	flex: 1;
 	min-width: 0;
@@ -345,13 +350,10 @@
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
-	padding: 22px 24px 18px;
-	border-radius: var(--radius-l, 16px);
-	background: var(--qbd-glass-bg);
-	border: 1px solid var(--qbd-glass-edge);
-	box-shadow: var(--qbd-glass-sheen), var(--qbd-glass-shadow);
-	backdrop-filter: var(--qbd-glass-blur);
-	-webkit-backdrop-filter: var(--qbd-glass-blur);
+	padding: 4px 6px;
+	background: transparent;
+	border: none;
+	box-shadow: none;
 	overflow-y: auto;
 }
 
@@ -644,7 +646,7 @@
 	}
 
 	.qbd-qz-panel {
-		padding: 18px 16px 14px;
+		padding: 4px 2px;
 	}
 }
 

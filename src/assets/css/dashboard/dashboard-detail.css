@@ -368,8 +368,14 @@
    ressemblait plus au vrai rendu. Les options gardent, elles, le fond opaque
    que leur donne le moteur. Aucune bordure, aucune ombre : le panneau n'est
    qu'une zone de mise en page. */
+/* `flex: 0 1 auto` et non `1` : le panneau prend la hauteur de SON contenu,
+   il ne s'étire pas jusqu'en bas — sinon la navigation était repoussée tout
+   en bas de la fenêtre, séparée de la question par un grand vide (demande
+   Ahmed 2026-07-21 « mets les plus haut ces boutons »). Le panneau garde son
+   `overflow-y: auto` : une question longue scrolle dans la place restante et
+   la navigation reprend sa position basse, sans jamais sortir de l'écran. */
 .qbd-qz-panel {
-	flex: 1;
+	flex: 0 1 auto;
 	min-width: 0;
 	min-height: 0;
 	display: flex;
@@ -399,13 +405,16 @@
 }
 
 /* ── Navigation ‹ › ── */
-/* Écart MESURÉ sur la capture StudySmarter : ~14px entre les deux cercles. */
+/* Écart MESURÉ sur la capture StudySmarter : ~14px entre les deux cercles.
+   `margin-bottom: auto` pousse la rangée juste SOUS la question (l'espace
+   restant tombe en dessous d'elle, pas au-dessus). */
 .qbd-qz-nav {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	gap: 14px;
 	flex-shrink: 0;
+	margin: 4px 0 auto;
 }
 
 /* Vide (question unique) : ne pas réserver la rangée. */

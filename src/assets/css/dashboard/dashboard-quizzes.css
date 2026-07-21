@@ -608,17 +608,35 @@
 /* `.qbd-root` préfixe : c'est un `button`, sinon `button:not(.clickable-icon)`
    d'Obsidian (spécificité 0,1,1) regrise le fond et recentre le contenu —
    même piège que `.qbd-quizzes-search-input` plus haut dans ce fichier. */
+/* Flèche SEULE, plus grande que l'ancien chevron (capture Ahmed
+   2026-07-21) : cible carrée de 32px, trait délié. C'est LE bouton retour
+   du dashboard — la page d'un quiz réutilise ces mêmes classes. */
 .qbd-root .qbd-quizzes-crumb-back {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
 	background: transparent;
 	border: none;
 	box-shadow: none;
-	padding: 4px 6px;
-	border-radius: var(--radius-s, 6px);
+	padding: 0;
+	border-radius: var(--radius-s, 8px);
 	color: var(--text-muted);
 	cursor: pointer;
+	transition: background 0.14s ease, color 0.14s ease;
+}
+
+.qbd-quizzes-crumb-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.qbd-quizzes-crumb-icon svg {
+	width: 21px;
+	height: 21px;
+	stroke-width: 1.7;
 }
 
 .qbd-quizzes-folder-hero .qbd-quizzes-crumb-back {

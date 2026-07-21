@@ -20,16 +20,17 @@
 	min-height: 0;
 }
 
+/* Le retour est LE fil d'Ariane du dashboard (.qbd-quizzes-breadcrumb, cf.
+   dashboard-quizzes.css) : il se pose au-dessus du titre, collé à lui. */
+.qbd-qz > .qbd-quizzes-breadcrumb {
+	margin-bottom: -8px;
+}
+
 /* ── Header ── */
 .qbd-qz-header {
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	flex-shrink: 0;
-}
-
-.qbd-qz-back {
-	padding: 8px !important;
 	flex-shrink: 0;
 }
 

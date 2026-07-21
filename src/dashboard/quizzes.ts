@@ -245,11 +245,15 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 		// le header devient le vrai titre du dossier. ──
 		if (openModuleFolder !== null) {
 			const crumb = headerParent.createDiv({ cls: "qbd-quizzes-breadcrumb" });
-			const back = crumb.createEl("button", { cls: "qbd-quizzes-crumb-back" });
-			back.type = "button";
+			// Flèche SEULE, sans libellé (unification des retours du dashboard,
+			// demande Ahmed 2026-07-21) : le libellé nommait la destination, la
+			// flèche suffit — un seul geste de retour dans toute l'app.
+			const back = crumb.createEl("button", {
+				cls: "qbd-quizzes-crumb-back",
+				attr: { type: "button", "aria-label": t("dashboard.quizzes.backToModules") },
+			});
 			const backIcon = back.createSpan({ cls: "qbd-quizzes-crumb-icon" });
-			setIcon(backIcon, "chevron-left");
-			back.createSpan({ text: t("dashboard.quizzes.backToModules") });
+			setIcon(backIcon, "arrow-left");
 			back.addEventListener("click", () => {
 				ctx.recordNav();
 				openModuleFolder = null;

@@ -114,17 +114,25 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		});
 	}
 
-	/* ── Header : retour, nom + chemin, Modifier / Start ── */
+	/* ── Header : fil d'Ariane, nom + chemin, Editor / Start ── */
 	function renderHeader(page: HTMLElement, quiz: QuizIndexEntry): void {
-		const header = page.createDiv({ cls: "qbd-qz-header" });
-
-		const back = header.createEl("button", { cls: "qbd-btn qbd-btn--subtle qbd-qz-back" });
-		setIcon(back.createSpan({ cls: "qbd-btn-icon" }), "arrow-left");
+		// Retour = LE bouton retour du dashboard, celui du drill-down d'un
+		// dossier : mêmes classes, donc même flèche, même survol, même place
+		// au-dessus du titre (unification demandée par Ahmed 2026-07-21).
+		const target = ctx.view.previousView || "home";
+		const crumb = page.createDiv({ cls: "qbd-quizzes-breadcrumb" });
+		const back = crumb.createEl("button", {
+			cls: "qbd-quizzes-crumb-back",
+			attr: { type: "button", "aria-label": t("dashboard.quiz.back") },
+		});
+		const backIcon = back.createSpan({ cls: "qbd-quizzes-crumb-icon" });
+		setIcon(backIcon, "arrow-left");
 		back.addEventListener("click", () => {
 			flushSave();
-			ctx.navigate(ctx.view.previousView || "home");
+			ctx.navigate(target);
 		});
 
+		const header = page.createDiv({ cls: "qbd-qz-header" });
 		const info = header.createDiv({ cls: "qbd-qz-headline" });
 		const titleRow = info.createDiv({ cls: "qbd-qz-title-row" });
 		titleRow.createEl("h2", { cls: "qbd-qz-title", text: quiz.title });

@@ -8,7 +8,10 @@ import { openQuizForPlay, openQuizInEditor } from "./quiz-open";
 import { loadQuizDraft, saveQuizDraft, questionText } from "./detail-io";
 import type { QuizDraft } from "./detail-io";
 import { renderQuestionView, renderQuestionEdit } from "./detail-question";
+import { mountSlideHost, setSlide, slideTo, finish as finishSlide } from "./detail-slide";
+import type { SlideHost } from "./detail-slide";
 import { makeDefault } from "../editor/utils";
+import type { DraftQuestion } from "../editor/utils";
 
 /* ══════════════════════════════════════════════════════════
    QUIZ PAGE — ce qu'on voit en cliquant un quiz (refonte 2026-07-21,
@@ -43,6 +46,8 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 	let activeIdx = 0;
 	let editing = false;
 	let saveTimer: number | null = null;
+	/** Piste du carrousel du panneau — recréée à chaque paintPanel. */
+	let slideHost: SlideHost | null = null;
 
 	function scheduleSave(): void {
 		if (!draft) return;
@@ -57,6 +62,10 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 	}
 
 	function render(container: HTMLElement, quiz: QuizIndexEntry): void {
+		// Un glissement encore en vol vise des nœuds que container.empty() va
+		// détruire : le terminer d'abord évite un timer orphelin qui écrirait
+		// dans un DOM mort.
+		if (slideHost) { finishSlide(slideHost); slideHost = null; }
 		container.empty();
 		if (quiz.path !== currentPath) {
 			currentPath = quiz.path;
@@ -203,6 +212,22 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		paintPanel(listCol, panel, nav, quiz);
 	}
 
+	/** Change de question EN GLISSANT (carrousel du moteur), puis repeint la
+	    liste et la navigation. `activeIdx` bouge ici et nulle part ailleurs :
+	    la direction du glissement se déduit de l'écart. */
+	function goToQuestion(target: number, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+		if (!draft || !slideHost) return;
+		const clamped = Math.max(0, Math.min(target, draft.questions.length - 1));
+		if (clamped === activeIdx) return;
+		const dir: 1 | -1 = clamped > activeIdx ? 1 : -1;
+		const hops = Math.abs(clamped - activeIdx);
+		activeIdx = clamped;
+		const q = draft.questions[activeIdx];
+		slideTo(slideHost, (slide) => fillSlide(slide, q, listCol, panel, nav, quiz), dir, hops);
+		paintList(listCol, panel, nav, quiz);
+		paintNav(listCol, panel, nav, quiz);
+	}
+
 	function paintList(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
 		if (!draft) return;
 		listCol.empty();
@@ -232,10 +257,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 			num.setAttribute("aria-hidden", "true");
 			const text = questionText(q);
 			card.createSpan({ cls: "qbd-qz-card-text" + (text ? "" : " is-empty"), text: text || t("dashboard.quiz.promptEmpty") });
-			card.addEventListener("click", () => {
-				activeIdx = i;
-				paint(listCol, panel, nav, quiz);
-			});
+			card.addEventListener("click", () => goToQuestion(i, listCol, panel, nav, quiz));
 
 			// Suppression : en édition seulement, et jamais la dernière (un
 			// bloc quiz-blocks vide ne se relit pas).
@@ -254,19 +276,11 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		});
 	}
 
-	function paintPanel(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
-		if (!draft) return;
-		panel.empty();
-		const q = draft.questions[activeIdx];
-		if (!q) {
-			panel.createDiv({ cls: "qbd-qz-error", text: t("dashboard.detail.noBlock") });
-			return;
-		}
-
-		// Pas de bandeau « Question i / n » ici : le rendu réel affiche déjà le
+	/** Contenu d'UNE slide : la question, en consultation ou en édition. */
+	function fillSlide(slide: HTMLElement, q: DraftQuestion, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+		// Pas de bandeau « Question i / n » : le rendu réel affiche déjà le
 		// TITRE de la question (h2 du moteur) — deux titres l'un sur l'autre.
-		// La position vit entre les chevrons de navigation.
-		const content = panel.createDiv({ cls: "qbd-qz-panel-body" });
+		const content = slide.createDiv({ cls: "qbd-qz-panel-body" });
 		if (editing) {
 			renderQuestionEdit(content, q, {
 				onChange: () => {
@@ -284,22 +298,42 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		} else {
 			renderQuestionView(content, q, ctx.app, activeIdx);
 		}
+	}
 
-		// Navigation ‹ › — deux cercles nus, comme StudySmarter : aucun compteur
-		// entre eux (la position se lit dans la liste de gauche). Masquée s'il
-		// n'y a qu'une question.
-		nav.empty();
-		if (draft.questions.length > 1) {
-			const prev = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.prev") } });
-			setIcon(prev, "chevron-left");
-			prev.disabled = activeIdx === 0;
-			prev.addEventListener("click", () => { activeIdx--; paint(listCol, panel, nav, quiz); });
-
-			const next = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.next") } });
-			setIcon(next, "chevron-right");
-			next.disabled = activeIdx >= draft.questions.length - 1;
-			next.addEventListener("click", () => { activeIdx++; paint(listCol, panel, nav, quiz); });
+	function paintPanel(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+		if (!draft) return;
+		panel.empty();
+		slideHost = null;
+		const q = draft.questions[activeIdx];
+		if (!q) {
+			panel.createDiv({ cls: "qbd-qz-error", text: t("dashboard.detail.noBlock") });
+			return;
 		}
+
+		// Le panneau est une piste de carrousel : le changement de question y
+		// glisse comme dans le quiz (detail-slide.ts).
+		slideHost = mountSlideHost(panel);
+		setSlide(slideHost, (slide) => fillSlide(slide, q, listCol, panel, nav, quiz));
+		paintNav(listCol, panel, nav, quiz);
+	}
+
+	/** Navigation ‹ › — deux cercles nus, comme StudySmarter : aucun compteur
+	    entre eux (la position se lit dans la liste de gauche). Repeinte seule
+	    à chaque glissement, pour que l'état désactivé suive sans reconstruire
+	    la question. */
+	function paintNav(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+		nav.empty();
+		if (!draft || draft.questions.length <= 1) return;
+
+		const prev = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.prev") } });
+		setIcon(prev, "chevron-left");
+		prev.disabled = activeIdx === 0;
+		prev.addEventListener("click", () => goToQuestion(activeIdx - 1, listCol, panel, nav, quiz));
+
+		const next = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.next") } });
+		setIcon(next, "chevron-right");
+		next.disabled = activeIdx >= draft.questions.length - 1;
+		next.addEventListener("click", () => goToQuestion(activeIdx + 1, listCol, panel, nav, quiz));
 	}
 
 	/** Écrit MAINTENANT ce qui est en attente (sortie de page, lancement). */

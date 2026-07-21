@@ -388,9 +388,36 @@
 	overflow-y: auto;
 }
 
+/* ── Carrousel du panneau (detail-slide.ts) ──
+   Même ossature que la piste du moteur : un viewport qui masque le
+   débordement horizontal, une piste en ligne dont chaque slide occupe
+   toute la largeur. La hauteur est verrouillée en JS pendant le glissement,
+   d'où le `height` laissé libre ici. */
+.qbd-qz-viewport {
+	position: relative;
+	overflow-x: hidden;
+	overflow-y: hidden;
+	/* Sans lui, l'ombre/le halo d'une slide voisine dépasserait du cadre. */
+	contain: layout style;
+}
+
+.qbd-qz-track {
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: flex-start;
+	will-change: transform;
+	backface-visibility: hidden;
+}
+
+.qbd-qz-slide {
+	flex: 0 0 100%;
+	width: 100%;
+	min-width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
 .qbd-qz-panel-body {
-	flex: 1;
-	min-height: 0;
 	display: flex;
 	flex-direction: column;
 	gap: 14px;

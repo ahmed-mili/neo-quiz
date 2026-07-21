@@ -48,6 +48,8 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 	let saveTimer: number | null = null;
 	/** Piste du carrousel du panneau — recréée à chaque paintPanel. */
 	let slideHost: SlideHost | null = null;
+	/** Détache l'écoute clavier de la page précédente. */
+	let keyCleanup: (() => void) | null = null;
 
 	function scheduleSave(): void {
 		if (!draft) return;
@@ -86,6 +88,8 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		const main = body.createDiv({ cls: "qbd-qz-main" });
 		const panel = main.createDiv({ cls: "qbd-qz-panel" });
 		const nav = main.createDiv({ cls: "qbd-qz-nav" });
+
+		bindArrowKeys(page, listCol, panel, nav, quiz);
 
 		if (draft) {
 			paint(listCol, panel, nav, quiz);
@@ -317,6 +321,37 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		} else {
 			renderQuestionView(content, q, ctx.app, index);
 		}
+	}
+
+	/* ── Flèches ← / → : passer d'une question à l'autre ──
+	   Écoute posée sur le DOCUMENT (une page sans focus ne reçoit aucune
+	   touche), mais strictement gardée : seulement sur la page d'un quiz,
+	   jamais quand la frappe va dans un champ (l'édition d'une réponse a
+	   besoin de ses propres flèches), et jamais avec un modificateur (les
+	   raccourcis d'Obsidian gardent la priorité). Le premier événement reçu
+	   après la mort du DOM se détache tout seul : la page n'a pas de hook de
+	   démontage à qui confier ce nettoyage. */
+	function bindArrowKeys(page: HTMLElement, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+		if (keyCleanup) keyCleanup();
+		const doc = page.ownerDocument;
+		const onKey = (e: KeyboardEvent): void => {
+			if (!page.isConnected) { detach(); return; }
+			if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+			if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+			if (ctx.view.currentView !== "detail") return;
+			// `instanceof Element` et non un cast : la cible d'un keydown remonté
+			// au document peut être le Document lui-même, qui n'a pas closest().
+			const target = e.target;
+			if (target instanceof Element && target.closest("input, textarea, select, [contenteditable='true']")) return;
+			e.preventDefault();
+			goToQuestion(activeIdx + (e.key === "ArrowRight" ? 1 : -1), listCol, panel, nav, quiz);
+		};
+		const detach = (): void => {
+			doc.removeEventListener("keydown", onKey);
+			if (keyCleanup === detach) keyCleanup = null;
+		};
+		doc.addEventListener("keydown", onKey);
+		keyCleanup = detach;
 	}
 
 	/** Place réellement disponible pour la question, chevrons compris : la

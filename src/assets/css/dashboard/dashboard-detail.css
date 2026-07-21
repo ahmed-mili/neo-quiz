@@ -64,12 +64,14 @@
 }
 
 /* Compteur de questions collé au titre (le « 96 » de la référence) :
-   pastille discrète, jamais un badge coloré. */
+   pastille discrète, jamais un badge coloré. Rectangle à coins ARRONDIS et
+   non pilule (demande Ahmed 2026-07-21) — le radius suit celui des petites
+   surfaces du dashboard. */
 .qbd-qz-count {
 	flex-shrink: 0;
-	min-width: 22px;
-	padding: 2px 7px;
-	border-radius: 999px;
+	min-width: 24px;
+	padding: 3px 7px;
+	border-radius: var(--radius-s, 6px);
 	background: var(--background-modifier-border);
 	color: var(--text-muted);
 	font-size: 11px;

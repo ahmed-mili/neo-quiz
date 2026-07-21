@@ -62,12 +62,15 @@ export function setSlide(host: SlideHost, fill: (slide: HTMLElement) => void): H
  * @param hops nombre de questions franchies (allonge la durée, comme le moteur).
  */
 export function slideTo(host: SlideHost, fill: (slide: HTMLElement) => void, dir: 1 | -1, hops: number): void {
+	// Terminer AVANT de lire la slide courante : un glissement encore en vol
+	// tient DEUX slides, et sa conclusion en retire une. Lire `old` d'abord
+	// désignait celle qui allait disparaître — la nouvelle restait alors dans
+	// la piste, et le panneau affichait la question précédente (bug 2026-07-21,
+	// deux clics rapides sur ‹ ›).
+	finish(host);
 	const old = host.track.firstElementChild as HTMLElement | null;
 	if (!old || prefersReducedMotion()) { setSlide(host, fill); return; }
 
-	// Une animation encore en vol est terminée d'abord : sinon deux pistes se
-	// disputent le transform et l'ancienne slide reste collée à l'écran.
-	finish(host);
 	const token = ++host.token;
 
 	const next = document.createElement("div");
@@ -101,7 +104,12 @@ export function slideTo(host: SlideHost, fill: (slide: HTMLElement) => void, dir
 
 	const done = (): void => {
 		if (token !== host.token) return;
-		old.remove();
+		// Ne garder QUE la slide d'arrivée, au lieu de retirer `old` nommément :
+		// la piste finit à une seule slide quoi qu'il soit arrivé avant (clics
+		// enchaînés, re-render au milieu d'un glissement).
+		for (const child of [...host.track.children]) {
+			if (child !== next) child.remove();
+		}
 		host.track.style.transition = "none";
 		host.track.style.transform = "translate3d(0,0,0)";
 		host.track.style.willChange = "";

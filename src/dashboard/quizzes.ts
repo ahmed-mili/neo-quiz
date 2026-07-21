@@ -37,6 +37,11 @@ export interface QuizzesHandlers {
 	    code qu'un clic de carte (openModule) — le recordNav interne est
 	    neutralisé par la garde isRestoringNav de la vue. */
 	openFolder(folder: string): void;
+	/** Ouvre le dossier CONTENANT ce quiz. Sortir d'un quiz doit ramener dans
+	    son dossier, pas à la racine de « Mes quiz » (demande Ahmed
+	    2026-07-21) — et la correspondance chemin → dossier de module vit ici,
+	    avec la note de correspondance et les overrides. */
+	openFolderOfQuiz(quizPath: string): void;
 }
 
 export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
@@ -240,16 +245,18 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 			headerParent = hero.createDiv({ cls: "qbd-quizzes-folder-hero-inner" });
 		}
 
-		// ── Fil d'Ariane (drill-down uniquement) — remonté AU-DESSUS du header
-		// (design claude.ai, capture 2026-07-20) : « ← All quizzes » en petit,
-		// le header devient le vrai titre du dossier. ──
+		// ── Header ──
+		// Racine : AUCUN header — le titre vit dans le rail et la pilule
+		// « + New folder » sur la ligne du regroupement (demande Ahmed
+		// 2026-07-20), même ligne que le chip UE/Recent.
 		if (openModuleFolder !== null) {
-			const crumb = headerParent.createDiv({ cls: "qbd-quizzes-breadcrumb" });
-			// Flèche SEULE, sans libellé (unification des retours du dashboard,
-			// demande Ahmed 2026-07-21) : le libellé nommait la destination, la
-			// flèche suffit — un seul geste de retour dans toute l'app.
-			const back = crumb.createEl("button", {
-				cls: "qbd-quizzes-crumb-back",
+			const header = headerParent.createDiv({ cls: "qbd-quizzes-header" });
+
+			// Retour SUR LA LIGNE du titre, à sa gauche (comme la page d'un
+			// quiz) : une flèche seule au-dessus du titre faisait un étage de
+			// plus pour rien. Un seul bouton retour dans tout le dashboard.
+			const back = header.createEl("button", {
+				cls: "qbd-quizzes-crumb-back qbd-quizzes-header-back",
 				attr: { type: "button", "aria-label": t("dashboard.quizzes.backToModules") },
 			});
 			const backIcon = back.createSpan({ cls: "qbd-quizzes-crumb-icon" });
@@ -259,14 +266,6 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 				openModuleFolder = null;
 				if (containerRef) render(containerRef);
 			});
-		}
-
-		// ── Header ──
-		// Racine : AUCUN header — le titre vit dans le rail et la pilule
-		// « + New folder » sur la ligne du regroupement (demande Ahmed
-		// 2026-07-20), même ligne que le chip UE/Recent.
-		if (openModuleFolder !== null) {
-			const header = headerParent.createDiv({ cls: "qbd-quizzes-header" });
 			// Dans un dossier : le header EST le titre du dossier — icône + nom du
 			// module, teinte à l'accent du dossier (comme sa carte). Le nom n'est
 			// donc plus répété dans le fil d'Ariane (cf. quizzes-render.ts).
@@ -351,5 +350,11 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 		resetDrilldown() { openModuleFolder = null; lastPaintedView = null; },
 		getOpenFolder() { return openModuleFolder; },
 		openFolder(folder: string) { openModule(folder); },
+		openFolderOfQuiz(quizPath: string) {
+			// Dossier inconnu (quiz à la racine du vault) → on reste sur la
+			// grille plutôt que d'ouvrir un dossier fantôme.
+			const folder = moduleForQuiz(quizPath, effectiveMap()).folder;
+			if (folder) openModule(folder);
+		},
 	};
 }

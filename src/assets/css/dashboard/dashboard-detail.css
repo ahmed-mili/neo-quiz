@@ -27,9 +27,9 @@
 .qbd-qz-header {
 	display: flex;
 	align-items: flex-start;
-	/* ~20px entre la flèche et le titre : le ratio de la référence
-	   (espace ≈ 1,15 × la hauteur du titre), rapporté à notre titre de 19px. */
-	gap: 20px;
+	/* Resserré à 12px (retour Ahmed 2026-07-21) : la flèche appartient au
+	   titre, un écart plus large la faisait flotter toute seule. */
+	gap: 12px;
 	flex-shrink: 0;
 }
 

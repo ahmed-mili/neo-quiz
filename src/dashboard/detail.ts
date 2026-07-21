@@ -131,6 +131,11 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		back.addEventListener("click", () => {
 			flushSave();
 			ctx.navigate(target);
+			// Retour vers « Mes quiz » : on rouvre le DOSSIER du quiz, pas la
+			// grille racine — sortir d'un quiz doit rendre à son contexte
+			// (demande Ahmed 2026-07-21). navigate() vient de refermer le
+			// drill (resetDrilldown), d'où la réouverture juste après.
+			if (target === "quizzes") ctx.view.quizzes?.openFolderOfQuiz(quiz.path);
 		});
 
 		const info = header.createDiv({ cls: "qbd-qz-headline" });

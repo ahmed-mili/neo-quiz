@@ -2,11 +2,18 @@
    DASHBOARD QUIZZES VIEW
    ═════════════════════════════════════════════════════════ */
 
+/* `gap` explicite plutôt que `space-between` : depuis que le bouton retour
+   vit dans cette rangée, space-between distribuait l'espace libre ENTRE la
+   flèche et le titre (24px parasites). Le bloc titre a flex: 1 1 auto, il
+   pousse donc déjà les actions à droite tout seul. */
 .qbd-quizzes-header {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	gap: 12px;
 	margin-bottom: 16px;
+	/* Le hero pose --accent : le halo du dossier doit passer DERRIÈRE le
+	   bouton retour, qui vit maintenant dans cette rangée. */
+	position: relative;
 }
 
 .qbd-quizzes-title {
@@ -595,22 +602,13 @@
 	margin-top: 0;
 }
 
-/* ── Fil d'Ariane du drill-down (« Tous les quiz » › nom du module) ── */
-.qbd-quizzes-breadcrumb {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-bottom: 10px;
-	font-family: var(--font-monospace, monospace);
-	font-size: 12px;
-}
-
-/* `.qbd-root` préfixe : c'est un `button`, sinon `button:not(.clickable-icon)`
+/* ── Bouton retour du dashboard ──
+   `.qbd-root` préfixe : c'est un `button`, sinon `button:not(.clickable-icon)`
    d'Obsidian (spécificité 0,1,1) regrise le fond et recentre le contenu —
-   même piège que `.qbd-quizzes-search-input` plus haut dans ce fichier. */
-/* Flèche SEULE, plus grande que l'ancien chevron (capture Ahmed
-   2026-07-21) : cible carrée de 32px, trait délié. C'est LE bouton retour
-   du dashboard — la page d'un quiz réutilise ces mêmes classes. */
+   même piège que `.qbd-quizzes-search-input` plus haut dans ce fichier.
+   Flèche SEULE, plus grande que l'ancien chevron (capture Ahmed
+   2026-07-21) : cible carrée de 32px, trait délié. Un seul bouton retour
+   pour tout le dashboard — la page d'un quiz réutilise ces mêmes classes. */
 .qbd-root .qbd-quizzes-crumb-back {
 	display: inline-flex;
 	align-items: center;
@@ -639,8 +637,22 @@
 	stroke-width: 1.7;
 }
 
-.qbd-quizzes-folder-hero .qbd-quizzes-crumb-back {
-	padding: 0;
+/* Dans le header d'un dossier : la flèche est SUR la ligne du titre, calée
+   sur l'axe de l'icône du module (titre 28px). Elle reste NEUTRE au repos —
+   l'accent du dossier appartient au titre et à son soulignement ; une
+   deuxième flèche colorée ferait rivaliser deux éléments. Elle prend cet
+   accent AU SURVOL : la couleur signale l'interaction, pas l'état. */
+.qbd-root .qbd-quizzes-header-back {
+	flex: 0 0 auto;
+	margin-left: -6px;
+	align-self: flex-start;
+	/* Cale l'axe de la flèche sur celui de l'icône du module (46px de haut). */
+	margin-top: 6px;
+}
+
+.qbd-root .qbd-quizzes-header-back:hover {
+	color: var(--accent, var(--text-normal));
+	background: color-mix(in srgb, var(--accent, var(--text-normal)) 12%, transparent);
 }
 
 /* ══════════════════════════════════════════════════════════

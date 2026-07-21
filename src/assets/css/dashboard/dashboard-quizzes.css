@@ -647,10 +647,13 @@
 }
 
 /* Dans le header d'un dossier : la flèche est SUR la ligne du titre, calée
-   sur l'axe de l'icône du module (titre 28px). Elle reste NEUTRE au repos —
-   l'accent du dossier appartient au titre et à son soulignement ; une
-   deuxième flèche colorée ferait rivaliser deux éléments. Elle prend cet
-   accent AU SURVOL : la couleur signale l'interaction, pas l'état. */
+   sur l'axe de l'icône du module (titre 28px).
+   COULEUR (essai comparatif in-app 2026-07-21) : l'accent PLEIN se noyait
+   dans le halo du dossier — flèche verte sur lueur verte, illisible, et deux
+   éléments colorés qui se disputent l'œil. Le neutre, lui, ignorait le
+   dossier. Retenu : l'accent MÊLÉ au gris de texte — on reconnaît la teinte
+   du dossier, le titre reste le seul élément pleinement coloré. Le survol
+   passe à l'accent plein : la couleur y signale l'interaction. */
 .qbd-root .qbd-quizzes-header-back {
 	flex: 0 0 auto;
 	/* -6px : le bouton fait 32px pour une flèche de 21px ; ce retrait aligne
@@ -661,6 +664,7 @@
 	align-self: flex-start;
 	/* Cale l'axe de la flèche sur celui de l'icône du module (46px de haut). */
 	margin-top: 6px;
+	color: color-mix(in srgb, var(--accent, var(--text-muted)) 55%, var(--text-muted));
 }
 
 .qbd-root .qbd-quizzes-header-back:hover {

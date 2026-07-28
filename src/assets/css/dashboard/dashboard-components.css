@@ -196,18 +196,6 @@
 	transition-duration: 60ms;
 }
 
-/* Épaissi à 4px (StudySmarter : barre nette, pas un filet) ; le
-   `border-radius` ici ne sert qu'à éviter une arête vive à l'anti-aliasing,
-   le clip réel des coins vient de `overflow: hidden` + `border-radius` sur
-   `.qbd-quiz-card` — la marge négative égale au padding (16px) fait déjà
-   courir la barre sur toute la largeur intérieure de la carte. */
-.qbd-quiz-card-accent {
-	height: 4px;
-	background: var(--interactive-accent);
-	border-radius: 4px 4px 0 0;
-	margin: -16px -16px 14px;
-}
-
 .qbd-quiz-card-body {
 	display: flex;
 	flex-direction: column;
@@ -246,26 +234,6 @@
 	width: 10px;
 	height: 10px;
 	flex-shrink: 0;
-}
-
-.qbd-quiz-card-progress-wrap {
-	height: 3px;
-	background: var(--background-modifier-border);
-	border-radius: 2px;
-	overflow: hidden;
-	margin-bottom: 10px;
-}
-
-.qbd-quiz-card-progress-bg {
-	height: 100%;
-	position: relative;
-}
-
-.qbd-quiz-card-progress-fill {
-	height: 100%;
-	background: var(--interactive-accent);
-	border-radius: 2px;
-	transition: width 0.4s ease;
 }
 
 /* Filet de séparation avant le pied (StudySmarter) : thémable via la variable
@@ -635,34 +603,12 @@
 	line-height: 1.3;
 }
 
-.qbd-quiz-card-score-value {
-	font-size: 10px;
-	font-weight: 600;
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	line-height: 1;
-}
-
-.qbd-quiz-card-score-value svg {
-	width: 12px;
-	height: 12px;
-}
-
-/* ── Accent coloré par état ── */
-.qbd-quiz-card-accent--mastered { background: var(--color-green, #4ade80); }
-.qbd-quiz-card-accent--progress { background: var(--interactive-accent); }
-.qbd-quiz-card-accent--review   { background: var(--color-yellow, #facc15); }
-.qbd-quiz-card-accent--fresh    { background: var(--background-modifier-border); }
 
 /* ── Carte quiz TEINTÉE par son DOSSIER PARENT (handoff « cartes quiz teintées »
-   2026-07-18) : quand --accent du dossier est posé (.qbd-quiz-card--tinted), la
-   barre supérieure, le bouton play et le badge de type reprennent cette couleur
-   — le quiz hérite l'identité de son dossier. Base sombre #181d2b (hex du
-   handoff, cohérent avec les cartes dossier). L'état reste porté par la pastille. ── */
-.qbd-quiz-card--tinted .qbd-quiz-card-accent {
-	background: var(--accent);
-}
+   2026-07-18) : quand --accent du dossier est posé (.qbd-quiz-card--tinted), le
+   bouton play et le badge de type reprennent cette couleur — le quiz hérite
+   l'identité de son dossier. Base sombre #181d2b (hex du handoff, cohérent avec
+   les cartes dossier). L'état reste porté par la pastille. ── */
 .qbd-root .qbd-quiz-card--tinted .qbd-quiz-card-play {
 	background: color-mix(in oklab, var(--accent) 20%, #181d2b);
 	color: var(--accent);
@@ -727,30 +673,8 @@
 	background: var(--background-modifier-hover, rgba(255,255,255,0.05));
 }
 
-/* Chevron ornemental — comportement HISTORIQUE, encore utilisé par l'accueil
-   (home.ts) quand `opts.onPlay` n'est pas fourni à renderQuizCard. */
-.qbd-quiz-card-open {
-	display: inline-flex;
-	align-items: center;
-	flex-shrink: 0;
-	color: var(--text-faint);
-	opacity: 0;
-	transform: translateX(-3px);
-	transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.qbd-quiz-card-open svg {
-	width: 15px;
-	height: 15px;
-}
-
-.qbd-quiz-card:hover .qbd-quiz-card-open {
-	opacity: 1;
-	transform: translateX(0);
-}
-
-/* Bouton lecture rond — remplace le chevron dans « Mes quiz » (quizzes.ts,
-   `opts.onPlay` fourni). `.qbd-root` préfixe pour passer devant le chrome
+/* Bouton lecture rond — présent dès que l'appelant fournit `opts.onPlay`
+   (accueil ET « Mes quiz »). `.qbd-root` préfixe pour passer devant le chrome
    natif `button:not(.clickable-icon){background:var(--interactive-normal)}`
    d'Obsidian (spécificité 0,1,1 > 0,1,0 d'une classe seule) — sinon un
    rectangle gris remplace le cercle transparent voulu. Toujours visible

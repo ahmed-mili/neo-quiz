@@ -356,7 +356,6 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			onPlay: (q) => openQuizForPlay(ctx.app, q),
 			menu: buildQuizCardMenu(ctx, () => { if (containerRef) render(containerRef); }),
 			accent: accentOf(quiz, map),
-			variant: "folder",
 			entryIndex: index,
 		});
 	}

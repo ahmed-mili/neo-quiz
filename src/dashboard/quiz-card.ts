@@ -53,26 +53,25 @@ export function renderQuizCard(
 	/* menu (opt-in, même patron que onPlay) : items du menu ⋯ façon
 	   StudySmarter, bâtis par l'appelant AU CLIC (les stats peuvent avoir
 	   changé depuis le rendu de la carte). Non fourni = pas de bouton ⋯. */
-	/* accent : couleur du DOSSIER PARENT. `variant: "folder"` active l'anatomie
-	   du handoff 7a uniquement dans le drill-down, sans modifier les cartes de
-	   l'accueil. `entryIndex` pilote la cascade d'entrée de cette variante. */
+	/* accent : couleur du DOSSIER PARENT. `entryIndex` pilote la cascade
+	   d'entrée (la vue qui l'anime pose `.qbd-quizzes-enter`). */
 	opts?: {
 		showPath?: boolean;
 		onPlay?: (quiz: QuizIndexEntry) => void;
 		menu?: (quiz: QuizIndexEntry) => ActionMenuItem[];
 		accent?: string;
-		variant?: "folder";
 		entryIndex?: number;
 	}
 ): HTMLDivElement {
-	const card = container.createDiv({ cls: "qbd-quiz-card" });
-	const isFolderDrill = opts?.variant === "folder";
+	/* Anatomie UNIQUE depuis le contrat visuel du 2026-07-28 : l'accueil et
+	   « Mes quiz » rendent la même carte (handoff 7a). `--folder` reste le nom
+	   du hook CSS — historique, il désignait la variante du dossier ouvert
+	   quand l'accueil en avait une autre ; renommer toucherait ~40 règles pour
+	   zéro pixel de différence. */
+	const card = container.createDiv({ cls: "qbd-quiz-card qbd-quiz-card--folder" });
 	card.dataset.path = quiz.path;
 	if (opts?.accent) { card.style.setProperty("--accent", opts.accent); card.addClass("qbd-quiz-card--tinted"); }
-	if (isFolderDrill) {
-		card.addClass("qbd-quiz-card--folder");
-		card.style.setProperty("--qbd-card-delay", `${100 + (opts.entryIndex ?? 0) * 45}ms`);
-	}
+	card.style.setProperty("--qbd-card-delay", `${100 + (opts?.entryIndex ?? 0) * 45}ms`);
 
 	// ── État du quiz (calcul partagé quiz-mastery.ts) ──
 	// `state` reste un identifiant (suffixe de classe CSS) ; seul `stateLabel`
@@ -87,25 +86,14 @@ export function renderQuizCard(
 		default: stateLabel = t("dashboard.card.fresh"); stateIcon = "circle-play";
 	}
 
-	// La barre historique reste utile ailleurs ; le handoff du dossier ouvert
-	// n'en possède aucune, donc elle n'existe pas dans cette variante.
-	if (!isFolderDrill) {
-		card.createDiv({ cls: `qbd-quiz-card-accent qbd-quiz-card-accent--${state}` });
-	}
-
 	const body = card.createDiv({ cls: "qbd-quiz-card-body" });
 
-	// En-tête : pastille d'état + chevron (ou bouton lecture, cf. plus bas)
+	// En-tête : pastille d'état + bouton lecture
 	const head = body.createDiv({ cls: "qbd-quiz-card-head" });
 	const pill = head.createDiv({ cls: `qbd-quiz-card-status qbd-quiz-card-status--${state}` });
 	const sIcon = pill.createSpan({ cls: "qbd-quiz-card-status-icon" });
 	setIcon(sIcon, stateIcon);
 	pill.createSpan({ text: stateLabel });
-	// opts.onPlay non fourni = comportement HISTORIQUE strictement inchangé :
-	// chevron ornemental révélé au survol (même patron que `showPath` — un
-	// appelant opte, l'autre ne bouge pas). Périmètre actuel (Ahmed,
-	// 2026-07-17) : seul « Mes quiz » (quizzes.ts) passe `onPlay` ; l'accueil
-	// (home.ts) garde le chevron, le bouton lecture viendra plus tard.
 	if (opts?.onPlay) {
 		const onPlay = opts.onPlay;
 		// Bouton lecture rond — lance le quiz directement, sans passer par la
@@ -115,16 +103,13 @@ export function renderQuizCard(
 		const playBtn = head.createEl("button", { cls: "qbd-quiz-card-play" });
 		playBtn.type = "button";
 		playBtn.title = t("dashboard.detail.play");
-		setIcon(playBtn, isFolderDrill ? "circle-play" : "play");
+		setIcon(playBtn, "circle-play");
 		playBtn.addEventListener("click", (e) => {
 			// Empêche le clic de remonter à la carte : sinon on lancerait le
 			// quiz ET on ouvrirait la fiche (deux actions pour un seul clic).
 			e.stopPropagation();
 			onPlay(quiz);
 		});
-	} else {
-		const openEl = head.createSpan({ cls: "qbd-quiz-card-open" });
-		setIcon(openEl, "chevron-right");
 	}
 
 	// Titre
@@ -147,15 +132,10 @@ export function renderQuizCard(
 		}
 	}
 
-	// Barre de progression — seulement quand c'est en cours (sinon bruit)
-	if (state === "progress" && !isFolderDrill) {
-		const progressWrapper = body.createDiv({ cls: "qbd-quiz-card-progress-wrap" });
-		const progressBg = progressWrapper.createDiv({ cls: "qbd-quiz-card-progress-bg" });
-		const progressFill = progressBg.createDiv({ cls: "qbd-quiz-card-progress-fill" });
-		progressFill.style.width = `${pct}%`;
-	}
+	// Aucune barre de progression : la pastille d'état porte déjà le
+	// pourcentage (« In progress · 20% »), et la carte du handoff n'en a pas.
 
-	// Meta : nombre de questions + type + meilleur score (si joué)
+	// Meta : nombre de questions + type
 	const meta = body.createDiv({ cls: "qbd-quiz-card-meta" });
 	meta.createEl("span", {
 		cls: "qbd-quiz-card-meta-item",
@@ -163,15 +143,6 @@ export function renderQuizCard(
 	});
 	const badge = meta.createEl("span", { cls: "qbd-quiz-card-badge" });
 	badge.textContent = quizTypeLabel(quiz.quizType);
-
-	if (stats && best > 0 && !isFolderDrill) {
-		const scoreColor = best >= 80 ? "var(--color-green, #4ade80)"
-			: best >= 60 ? "var(--color-yellow, #facc15)"
-			: "var(--color-red, #f87171)";
-		const scoreSpan = meta.createEl("span", { cls: "qbd-quiz-card-score-value" });
-		scoreSpan.style.color = scoreColor;
-		scoreSpan.textContent = t("dashboard.card.best", { score: best });
-	}
 
 	// Bouton ⋯ en bout de ligne meta (position StudySmarter : coin bas droit).
 	// stopPropagation : ouvrir le menu ne doit PAS aussi ouvrir la fiche.

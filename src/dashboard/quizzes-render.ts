@@ -175,7 +175,6 @@ export function renderModuleDrill(
 			onPlay: (q) => openQuizForPlay(ctx.app, q),
 			menu: buildQuizCardMenu(ctx, rerender),
 			accent,
-			variant: "folder",
 			entryIndex: index,
 		});
 	}

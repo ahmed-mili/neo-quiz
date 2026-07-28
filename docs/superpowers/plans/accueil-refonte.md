@@ -16,22 +16,22 @@ Vocabulaire de référence, déjà présent dans le code (à RÉUTILISER, jamais
 
 ## Écarts constatés (ordre d'attaque)
 
-- [ ] **E1 — Tuiles de stats opaques.** `.qbd-stat-card` = `--background-secondary`
+- [x] **E1 — Tuiles de stats opaques.** `.qbd-stat-card` = `--background-secondary`
   plein + radius 12. Cible : verre `--qbd-glass-bg`, `backdrop-filter`, sheen +
   ombre, radius 10, filet `--qbd-glass-edge`.
-- [ ] **E2 — Bandeau « Pick up where you left off » plein.** Dégradé d'accent +
+- [x] **E2 — Bandeau « Pick up where you left off » plein.** Dégradé d'accent +
   bordure accentuée. Cible : verre, filet discret, l'accent ne survit que sur le
   label et la barre de progression.
-- [ ] **E3 — Cartes de la grille TO DO / Complétés.** `.qbd-quiz-card` opaque
+- [x] **E3 — Cartes de la grille TO DO / Complétés.** `.qbd-quiz-card` opaque
   (`--background-primary`) + barre d'accent supérieure. Cible : variante
   `variant: "folder"` déjà validée, teintée par l'accent du module parent
   (`moduleAccent`), avec bouton lecture et menu ⋯ comme dans « Mes quiz ».
-- [ ] **E4 — Header.** Titre 20px/800 sans-serif + sous-titre + bouton bleu
+- [x] **E4 — Header.** Titre 20px/800 sans-serif + sous-titre + bouton bleu
   `.qbd-btn--primary`. Cible : grammaire de la barre « Recent / New folder »
   (pilule claire `.qbd-btn--create`, typo/hauteur de la référence).
-- [ ] **E5 — En-têtes de section.** `TO DO` / `Completed` en micro-caps 10px.
+- [x] **E5 — En-têtes de section.** `TO DO` / `Completed` en micro-caps 10px.
   Cible : rangée 52px, chevron animé, libellé 16px/500, badge compteur, repli.
-- [ ] **E6 — Revue d'états.** Thème clair, `.is-mobile`, survols, page vide
+- [x] **E6 — Revue d'états.** Thème clair, `.is-mobile`, survols, page vide
   (onboarding), grille 2 vs 3 colonnes.
 
 ## Journal
@@ -41,5 +41,24 @@ Vocabulaire de référence, déjà présent dans le code (à RÉUTILISER, jamais
   variante `folder` teintée par le dossier (play + menu ⋯ comme « Mes quiz »).
 - fe355aa — E4 + E5 faits : titre serif 28px + pilule claire ; en-têtes de
   section repliables partagés (`dashboard/collapsible.ts`).
-- Reste : E6 (thème clair, `.is-mobile`, survols, onboarding), passe
-  `css-layout-check`, et une revue design via Claude (extension Chrome).
+- 3b989b5 — E6a : teintes de la carte rendues thémables (le titre disparaissait
+  en thème clair, vérifié en capture avant/après ; rendu sombre identique).
+- 3f547d4 — E6b : pilule d'action pleine largeur quand le header s'empile
+  (mesuré à 390px sous émulation, aucun débordement horizontal).
+- 5a8b158 — Revue design Claude (projet « Design de plugin Obsidian », fichier
+  « Vue Accueil v2 ») : héros teinté par son dossier, titre 20px, bouton verre
+  au lieu du bleu, grille plafonnée à 6, « Complétés » replié.
+  **Écarté de la revue** (contredit le contrat d'Ahmed) : dé-encadrer les
+  tuiles de stats, et déclasser « Generate a quiz » en bouton fantôme.
+- c824dd7 — E6c : état premier usage (vault vide) passé au verre.
+
+## Reste à faire
+
+- **Code mort** : les deux appelants de `renderQuizCard` passent désormais
+  `variant: "folder"`. La branche historique (barre d'accent, barre de
+  progression, meilleur score, chevron) et son CSS ne sont plus atteignables ;
+  à supprimer, ou à promouvoir en défaut (la classe `--folder` perd son sens).
+- **Thème clair de la carte de MODULE** (`.qbd-module-card`) : ses hex du
+  handoff restent figés sombre (sous-titre #8b93a7, stats #9aa3b8…). Même
+  défaut que celui corrigé sur la carte de quiz, mais il touche la page de
+  référence — non modifié sans arbitrage d'Ahmed.

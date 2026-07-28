@@ -275,8 +275,9 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			text: t("dashboard.onboarding.lead")
 		});
 
-		// Action primaire évidente
-		const primary = wrap.createEl("button", { cls: "qbd-btn qbd-btn--primary qbd-btn--lg" });
+		// Action primaire évidente — MÊME pilule claire que l'accueil peuplé et
+		// que « + New folder » : une seule grammaire d'action primaire.
+		const primary = wrap.createEl("button", { cls: "qbd-btn--create qbd-onboarding-cta" });
 		const pIcon = primary.createSpan({ cls: "qbd-btn-icon" });
 		setIcon(pIcon, "sparkles");
 		primary.createSpan({ text: t("dashboard.onboarding.generate") });

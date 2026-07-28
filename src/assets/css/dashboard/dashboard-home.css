@@ -106,11 +106,13 @@
 	height: 28px;
 }
 
+/* Même famille display que le titre de l'accueil peuplé (.qbd-home-title). */
 .qbd-onboarding-title {
-	font-size: 22px;
-	font-weight: 800;
+	font-family: Constantia, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+	font-size: 28px;
+	font-weight: 700;
 	color: var(--text-normal);
-	letter-spacing: -0.03em;
+	letter-spacing: -0.02em;
 	margin: 0 0 8px;
 }
 
@@ -143,12 +145,18 @@
 	background: var(--background-modifier-border);
 }
 
+/* Premier usage = l'accueil d'un vault vide : même verre que le reste de la
+   page, sinon le seul écran que voit un nouvel utilisateur est le seul qui ne
+   parle pas la langue du plugin. */
 .qbd-onboarding-manual {
 	width: 100%;
 	text-align: left;
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-l, 12px);
+	background: var(--qbd-glass-bg);
+	backdrop-filter: var(--qbd-glass-blur);
+	-webkit-backdrop-filter: var(--qbd-glass-blur);
+	border: 1px solid var(--qbd-glass-edge);
+	border-radius: 18px;
+	box-shadow: var(--qbd-glass-sheen), var(--qbd-glass-shadow);
 	padding: 16px 18px;
 }
 
@@ -183,10 +191,12 @@
 	position: relative;
 }
 
+/* Le bloc de code reste la surface la plus dense (lisibilité du monospace) :
+   variante dense des tokens verre, pas un fond de thème opaque. */
 .qbd-onboarding-code {
-	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m, 8px);
+	background: var(--qbd-glass-bg-dense);
+	border: 1px solid var(--qbd-glass-edge);
+	border-radius: 10px;
 	padding: 12px 40px 12px 14px;
 	margin: 0;
 	overflow-x: auto;
@@ -202,7 +212,7 @@
 	padding: 0;
 }
 
-.qbd-onboarding-copy {
+.qbd-root .qbd-onboarding-copy {
 	position: absolute;
 	top: 8px;
 	right: 8px;
@@ -220,7 +230,7 @@
 	transition: background 0.14s ease, color 0.14s ease;
 }
 
-.qbd-onboarding-copy:hover {
+.qbd-root .qbd-onboarding-copy:hover {
 	background: var(--background-modifier-hover);
 	color: var(--text-normal);
 }

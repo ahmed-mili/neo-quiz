@@ -10,6 +10,7 @@ import type { ModuleMap } from "./quiz-modules";
 import { moduleAccent } from "./module-color";
 import { openQuizForPlay } from "./quiz-open";
 import { renderCollapsibleSection } from "./collapsible";
+import { markViewEnter } from "./view-enter";
 
 /* ══════════════════════════════════════════════════════════
    HOME VIEW — Dashboard
@@ -38,10 +39,27 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 	/* Dernier conteneur peint : le menu ⋯ d'une carte (archivage, reset de
 	   stats) doit pouvoir repeindre l'accueil sans repasser par la navigation. */
 	let containerRef: HTMLElement | null = null;
+	/* Vrai le temps d'un re-render DÉCLENCHÉ PAR LA PAGE (menu ⋯) : lui seul
+	   distingue « on revient sur l'accueil » (l'entrée se joue) de « la page se
+	   repeint sous nos pieds » (elle ne doit surtout pas clignoter). */
+	let internalRerender = false;
+
+	/** Re-render sans rejouer la transition d'entrée. */
+	function rerender(): void {
+		internalRerender = true;
+		if (containerRef) render(containerRef);
+	}
 
 	function render(container: HTMLElement): void {
 		containerRef = container;
+		markViewEnter(container, !internalRerender, "qbd-home-enter");
+		internalRerender = false;
 		container.empty();
+
+		// Cascade d'entrée : UN seul compteur pour toute la page (tuiles de
+		// stats, en-têtes de section, cartes) — même formule que « Mes quiz ».
+		let entryIndex = 0;
+		const entryDelay = (): string => `${100 + entryIndex++ * 45}ms`;
 
 		// Les quiz des DOSSIERS ARCHIVÉS (menu ⋯ d'une carte de dossier de
 		// « Mes quiz ») n'existent plus pour l'accueil : ni stats, ni sections.
@@ -137,6 +155,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 
 		for (const card of statCards) {
 			const el = statsGrid.createDiv({ cls: `qbd-stat-card${card.highlight ? " qbd-stat-card--highlight" : ""}` });
+			el.style.setProperty("--qbd-card-delay", entryDelay());
 			const head = el.createDiv({ cls: "qbd-stat-head" });
 			const icon = head.createSpan({ cls: "qbd-stat-icon" });
 			setIcon(icon, card.icon);
@@ -174,6 +193,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			// lui-même un <button> (un bouton dans un bouton est invalide).
 			const body = renderCollapsibleSection(collapse, section, "home:todo", t("dashboard.home.todo"), todo.length, {
 				rowClass: "qbd-home-node-row",
+				entryDelay,
 				headRow: (row) => {
 					const seeAll = row.createEl("button", { cls: "qbd-btn qbd-btn--subtle" });
 					seeAll.type = "button";
@@ -189,8 +209,9 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			});
 
 			const grid = body.createDiv({ cls: "qbd-home-grid" });
-			for (const [index, quiz] of shown.entries()) {
-				renderQuizCard(grid, quiz, stats[quiz.path], map, index);
+			for (const quiz of shown) {
+				renderQuizCard(grid, quiz, stats[quiz.path], map).style
+					.setProperty("--qbd-card-delay", entryDelay());
 			}
 		}
 
@@ -201,12 +222,14 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			const section = container.createDiv({ cls: "qbd-home-section" });
 			const body = renderCollapsibleSection(collapse, section, "home:completed", t("dashboard.home.completed"), completed.length, {
 				rowClass: "qbd-home-node-row",
+				entryDelay,
 				defaultOpen: false,
 			});
 
 			const grid = body.createDiv({ cls: "qbd-home-grid" });
-			for (const [index, quiz] of shown.entries()) {
-				renderQuizCard(grid, quiz, stats[quiz.path], map, index);
+			for (const quiz of shown) {
+				renderQuizCard(grid, quiz, stats[quiz.path], map).style
+					.setProperty("--qbd-card-delay", entryDelay());
 			}
 		}
 
@@ -335,28 +358,27 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		});
 	}
 
-	/* Carte de quiz — MÊME anatomie que « Mes quiz » (variante `folder` du
-	   handoff 7a) : verre, teinte du dossier parent, bouton lecture et menu ⋯.
-	   L'accueil et « Mes quiz » ne parlaient pas la même langue visuelle ;
-	   depuis le contrat 2026-07-28, une carte de quiz a UNE seule apparence. */
 	/** Accent du DOSSIER d'un quiz — même source que « Mes quiz ». */
 	function accentOf(quiz: QuizIndexEntry, map: ModuleMap): string {
 		const folder = moduleForQuiz(quiz.path, map).folder;
 		return moduleAccent(map.byFolder.get(folder) ?? { folder });
 	}
 
+	/* Carte de quiz — MÊME anatomie que « Mes quiz » : verre, teinte du dossier
+	   parent, bouton lecture et menu ⋯. L'accueil et « Mes quiz » ne parlaient
+	   pas la même langue visuelle ; depuis le contrat 2026-07-28, une carte de
+	   quiz a UNE seule apparence. Le cran de cascade est posé par l'appelant :
+	   il continue le compteur de la page (stats et en-têtes l'ont déjà avancé). */
 	function renderQuizCard(
 		container: HTMLElement,
 		quiz: QuizIndexEntry,
 		stats: QuizStatRecord | null | undefined,
-		map: ModuleMap,
-		index: number
+		map: ModuleMap
 	): HTMLDivElement {
 		return renderSharedQuizCard(container, quiz, stats, (q) => ctx.navigate("detail", { quiz: q }), {
 			onPlay: (q) => openQuizForPlay(ctx.app, q),
-			menu: buildQuizCardMenu(ctx, () => { if (containerRef) render(containerRef); }),
+			menu: buildQuizCardMenu(ctx, rerender),
 			accent: accentOf(quiz, map),
-			entryIndex: index,
 		});
 	}
 

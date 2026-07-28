@@ -13,6 +13,7 @@ import { CreateFolderModal, CreateQuizModal } from "./folder-create";
 import { renderQuizGrid, renderModuleDrill } from "./quizzes-render";
 import type { GroupingKey } from "./quizzes-render";
 import { moduleAccent } from "./module-color";
+import { markViewEnter } from "./view-enter";
 import { DEFAULT_MODULE_ICON } from "./icon-picker";
 
 /* ══════════════════════════════════════════════════════════
@@ -192,28 +193,12 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 		containerRef = container;
 		container.empty();
 
-		// Transition d'entrée (spec 2026-07-20) : classe posée SEULEMENT quand
-		// la vue change. toggle(force) la retire sur un re-render interne —
-		// jamais de replay, jamais de classe résiduelle.
+		// Transition d'entrée (spec 2026-07-20) : classe posée SEULEMENT quand la
+		// vue change — mécanisme partagé avec l'accueil (view-enter.ts).
 		const viewKey = openModuleFolder ?? "root";
 		const entering = viewKey !== lastPaintedView;
 		lastPaintedView = viewKey;
-		container.classList.toggle("qbd-quizzes-enter", entering);
-		// La classe DOIT tomber une fois l'entrée jouée : une CSSAnimation en
-		// fill both dont un keyframe contient `transform` reste propriétaire de
-		// la propriété même finie → les transitions de transform (hover-lift des
-		// cartes) ne se déclenchent plus et la surélévation saute sans animation.
-		if (entering) {
-			const onEnd = (ev: AnimationEvent): void => {
-				if (!ev.animationName.startsWith("qbd-")) return;
-				const stillRunning = container.getAnimations({ subtree: true })
-					.some(a => a instanceof CSSAnimation && a.playState === "running");
-				if (stillRunning) return;
-				container.classList.remove("qbd-quizzes-enter");
-				container.removeEventListener("animationend", onEnd);
-			};
-			container.addEventListener("animationend", onEnd);
-		}
+		markViewEnter(container, entering, "qbd-quizzes-enter");
 
 		const quizzes: QuizIndexEntry[] = ctx.scanner ? ctx.scanner.getQuizzes() : [];
 		const stats: Record<string, QuizStatRecord> = ctx.statsStore ? ctx.statsStore.getAll() : {};

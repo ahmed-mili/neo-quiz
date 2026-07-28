@@ -40,6 +40,38 @@
 	margin-bottom: 28px;
 }
 
+/* ══════════════════════════════════════════════════════════
+   TRANSITION D'ENTRÉE — même grammaire que « Mes quiz » (keyframes
+   qbd-folder-hero-in / qbd-folder-card-in, dashboard-quizzes.css).
+   La classe .qbd-home-enter n'est posée qu'à l'ARRIVÉE sur la page et
+   retirée dès l'animation finie (view-enter.ts) : un re-render interne
+   ne clignote pas, et aucune animation en fill: both ne confisque
+   `transform` au lift des cartes.
+   ═════════════════════════════════════════════════════════ */
+.qbd-home-enter .qbd-home-header,
+.qbd-home-enter .qbd-resume-hero,
+.qbd-home-enter .qbd-onboarding {
+	animation: qbd-folder-hero-in 0.35s ease both;
+}
+
+.qbd-home-enter .qbd-stat-card,
+.qbd-home-enter .qbd-quizzes-node-head,
+.qbd-home-enter .qbd-quiz-card {
+	animation: qbd-folder-card-in 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+	animation-delay: var(--qbd-card-delay, 100ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.qbd-home-enter .qbd-home-header,
+	.qbd-home-enter .qbd-resume-hero,
+	.qbd-home-enter .qbd-onboarding,
+	.qbd-home-enter .qbd-stat-card,
+	.qbd-home-enter .qbd-quizzes-node-head,
+	.qbd-home-enter .qbd-quiz-card {
+		animation: none;
+	}
+}
+
 /* ── Sections ──
    Les en-têtes sont ceux de « Mes quiz » (.qbd-quizzes-node-*, rangée 52px,
    chevron animé, badge compteur). Seule la rangée est propre à l'accueil :

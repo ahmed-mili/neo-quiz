@@ -95,18 +95,19 @@
 	height: 12px;
 }
 
-/* ── Stat cards ── */
+/* ── Stat cards ──
+   Même anatomie que la carte de dossier de « Mes quiz » (.qbd-module-card,
+   contrat visuel Ahmed 2026-07-28) : surface VERRE par les tokens communs,
+   filet 1px, radius 10, reflet + ombre. Aucun état de survol : ces tuiles
+   ne sont pas cliquables — un lift sur une surface inerte ment sur l'affordance. */
 .qbd-stat-card {
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-l, 12px);
-	padding: 16px 18px 14px;
-	transition: border-color 0.15s ease, box-shadow 0.2s ease;
-}
-
-.qbd-stat-card:hover {
-	border-color: var(--background-modifier-border-hover);
-	box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+	background: var(--qbd-glass-bg);
+	backdrop-filter: var(--qbd-glass-blur);
+	-webkit-backdrop-filter: var(--qbd-glass-blur);
+	border: 1px solid var(--qbd-glass-edge);
+	border-radius: 10px;
+	padding: 14px 16px 12px;
+	box-shadow: var(--qbd-glass-sheen), var(--qbd-glass-shadow);
 }
 
 .qbd-stat-value {
@@ -147,30 +148,19 @@
 	font-weight: 600;
 }
 
+/* Légende séparée par le MÊME filet que le pied des cartes de dossier
+   (--background-modifier-border, thémable, visible clair et sombre). */
 .qbd-stat-sub {
 	font-size: 10px;
 	color: var(--text-faint);
-	margin: 6px 0 0;
+	margin: 11px 0 0;
+	padding-top: 9px;
+	border-top: 1px solid var(--background-modifier-border);
 	opacity: 0.7;
 }
 
-.qbd-stat-meter {
-	height: 4px;
-	border-radius: 2px;
-	background: var(--background-modifier-border);
-	overflow: hidden;
-	margin: 10px 0 0;
-}
-
-.qbd-stat-meter-fill {
-	height: 100%;
-	border-radius: 2px;
-	background: var(--color-green, #4ade80);
-	transition: width 0.4s ease;
-}
-
 .qbd-stat-card--highlight {
-	border-color: color-mix(in srgb, var(--color-green, #4ade80) 30%, var(--background-modifier-border));
+	border-color: color-mix(in srgb, var(--color-green, #4ade80) 30%, var(--qbd-glass-edge));
 }
 
 .qbd-stat-card--highlight .qbd-stat-icon {

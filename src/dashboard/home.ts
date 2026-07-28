@@ -20,7 +20,6 @@ interface StatCard {
 	sub: string;
 	icon: string;
 	highlight?: boolean;
-	meter?: number;
 }
 
 export interface HomeHandlers {
@@ -110,8 +109,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			{ label: t("dashboard.home.statQuestions"), value: String(totalQuestions), sub: t("dashboard.home.statQuestionsSub"), icon: "list" },
 			{
 				label: t("dashboard.home.statMastered"), value: `${mastered}/${quizzes.length}`, sub: t("dashboard.home.statMasteredSub"),
-				icon: "award", highlight: true,
-				meter: quizzes.length > 0 ? mastered / quizzes.length : 0
+				icon: "award", highlight: true
 			}
 		];
 
@@ -122,11 +120,9 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			setIcon(icon, card.icon);
 			head.createEl("p", { cls: "qbd-stat-label", text: card.label });
 			el.createEl("p", { cls: "qbd-stat-value", text: card.value });
-			if (typeof card.meter === "number") {
-				const meter = el.createDiv({ cls: "qbd-stat-meter" });
-				const fill = meter.createDiv({ cls: "qbd-stat-meter-fill" });
-				fill.style.width = `${Math.round(card.meter * 100)}%`;
-			}
+			// Aucune barre de progression sur une tuile de stats : même règle que
+			// les cartes de dossier (contrat visuel « Mes quiz »), le chiffre porte
+			// déjà l'information.
 			el.createEl("p", { cls: "qbd-stat-sub", text: card.sub });
 		}
 

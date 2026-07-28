@@ -31,7 +31,12 @@ interface StatCard {
 }
 
 export interface HomeHandlers {
-	render(container: HTMLElement): void;
+	/** `entering` = on ARRIVE sur la page (la transition d'entrée se joue).
+	    L'hôte le sait : c'est lui qui compare la vue peinte à la vue demandée
+	    (dashboard.ts). Un re-render déclenché par le scanner du vault ou par le
+	    menu ⋯ d'une carte passe `false` — sinon la page clignote à chaque
+	    sauvegarde de note. */
+	render(container: HTMLElement, entering?: boolean): void;
 }
 
 export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
@@ -39,21 +44,15 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 	/* Dernier conteneur peint : le menu ⋯ d'une carte (archivage, reset de
 	   stats) doit pouvoir repeindre l'accueil sans repasser par la navigation. */
 	let containerRef: HTMLElement | null = null;
-	/* Vrai le temps d'un re-render DÉCLENCHÉ PAR LA PAGE (menu ⋯) : lui seul
-	   distingue « on revient sur l'accueil » (l'entrée se joue) de « la page se
-	   repeint sous nos pieds » (elle ne doit surtout pas clignoter). */
-	let internalRerender = false;
 
-	/** Re-render sans rejouer la transition d'entrée. */
+	/** Re-render déclenché par la page elle-même (menu ⋯) : jamais d'entrée. */
 	function rerender(): void {
-		internalRerender = true;
-		if (containerRef) render(containerRef);
+		if (containerRef) render(containerRef, false);
 	}
 
-	function render(container: HTMLElement): void {
+	function render(container: HTMLElement, entering = true): void {
 		containerRef = container;
-		markViewEnter(container, !internalRerender, "qbd-home-enter");
-		internalRerender = false;
+		markViewEnter(container, entering, "qbd-home-enter");
 		container.empty();
 
 		// Cascade d'entrée : UN seul compteur pour toute la page (tuiles de

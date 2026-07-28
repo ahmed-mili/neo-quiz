@@ -328,6 +328,7 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 		// (le contentEl est partagé par toutes les vues) ; le cleanup retire
 		// aussi le listener d'une entrée encore en vol.
 		contentEl.removeClass("qbd-quizzes-enter");
+		contentEl.removeClass("qbd-home-enter");
 		if (this._enterCleanup) this._enterCleanup();
 
 		const entering = this.currentView !== this.lastPaintedView;
@@ -335,7 +336,7 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 
 		switch (this.currentView) {
 			case "home":
-				this.home.render(contentEl);
+				this.home.render(contentEl, entering);
 				break;
 			case "quizzes":
 				this.quizzes.render(contentEl);
@@ -345,7 +346,7 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 					this.detail.render(contentEl, this.selectedQuiz);
 				} else {
 					this.currentView = "home";
-					this.home.render(contentEl);
+					this.home.render(contentEl, entering);
 				}
 				break;
 			case "ai":
@@ -355,7 +356,7 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 				this.ai.render(contentEl);
 				break;
 			default:
-				this.home.render(contentEl);
+				this.home.render(contentEl, entering);
 		}
 	}
 

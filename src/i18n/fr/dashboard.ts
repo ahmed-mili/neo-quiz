@@ -26,6 +26,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.home.statMasteredSub": "score ≥ 80%",
 	"dashboard.home.todo": "À faire",
 	"dashboard.home.seeAll": "Voir tout",
+	"dashboard.home.seeAllCount": "Voir les {count}",
 	"dashboard.home.completed": "Complétés",
 	"dashboard.home.resumeLabel": "Reprendre là où vous en étiez",
 	"dashboard.home.resumeProgress": "{questions} · {pct}%",

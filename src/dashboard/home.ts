@@ -16,6 +16,10 @@ import { renderCollapsibleSection } from "./collapsible";
    Header + stats grid + sections "À reprendre" / "Complétés"
 ══════════════════════════════════════════════════════════ */
 
+/** Cartes affichées par section : 2 rangées de 3 sur large, ni plus (l'accueil
+    n'est pas « Mes quiz »), ni moins (une seule rangée ne relance pas assez). */
+const HOME_GRID_MAX = 6;
+
 /** Carte de la grille de stats (statCards ci-dessous). */
 interface StatCard {
 	label: string;
@@ -108,7 +112,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 				return lb - la;
 			})[0];
 		if (resumeQuiz) {
-			renderResumeHero(container, resumeQuiz, stats[resumeQuiz.path]);
+			renderResumeHero(container, resumeQuiz, stats[resumeQuiz.path], accentOf(resumeQuiz, map));
 		}
 
 		// ── Stats grid ──
@@ -158,9 +162,13 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			},
 		};
 
-		// À faire (en cours + à commencer)
+		// À faire (en cours + à commencer). La grille est PLAFONNÉE (revue design
+		// 2026-07-28) : 54 cartes faisaient de l'accueil un doublon de « Mes
+		// quiz ». Deux rangées de trois suffisent à reprendre le travail ; le
+		// reste vit derrière « See all », qui affiche le total resté dehors.
 		const todo = [...inProgress, ...notStarted];
 		if (todo.length > 0) {
+			const shown = todo.slice(0, HOME_GRID_MAX);
 			const section = container.createDiv({ cls: "qbd-home-section" });
 			// « See all » vit à CÔTÉ de l'en-tête, jamais dedans : l'en-tête est
 			// lui-même un <button> (un bouton dans un bouton est invalide).
@@ -169,7 +177,11 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 				headRow: (row) => {
 					const seeAll = row.createEl("button", { cls: "qbd-btn qbd-btn--subtle" });
 					seeAll.type = "button";
-					seeAll.createSpan({ text: t("dashboard.home.seeAll") });
+					seeAll.createSpan({
+						text: todo.length > shown.length
+							? t("dashboard.home.seeAllCount", { count: todo.length })
+							: t("dashboard.home.seeAll")
+					});
 					const chevron = seeAll.createSpan({ cls: "qbd-btn-icon qbd-btn-icon--sm" });
 					setIcon(chevron, "chevron-right");
 					seeAll.addEventListener("click", () => ctx.navigate("quizzes"));
@@ -177,34 +189,47 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			});
 
 			const grid = body.createDiv({ cls: "qbd-home-grid" });
-			for (const [index, quiz] of todo.entries()) {
+			for (const [index, quiz] of shown.entries()) {
 				renderQuizCard(grid, quiz, stats[quiz.path], map, index);
 			}
 		}
 
-		// Complétés
+		// Complétés — repliés par défaut : le badge dit combien, la grille ne
+		// repousse plus « À faire » hors de l'écran.
 		if (completed.length > 0) {
+			const shown = completed.slice(0, HOME_GRID_MAX);
 			const section = container.createDiv({ cls: "qbd-home-section" });
 			const body = renderCollapsibleSection(collapse, section, "home:completed", t("dashboard.home.completed"), completed.length, {
 				rowClass: "qbd-home-node-row",
+				defaultOpen: false,
 			});
 
 			const grid = body.createDiv({ cls: "qbd-home-grid" });
-			for (const [index, quiz] of completed.entries()) {
+			for (const [index, quiz] of shown.entries()) {
 				renderQuizCard(grid, quiz, stats[quiz.path], map, index);
 			}
 		}
 
 	}
 
-	function renderResumeHero(container: HTMLElement, quiz: QuizIndexEntry, stats: QuizStatRecord | null | undefined): void {
+	/* Héros « Reprendre » — teinté par l'accent du DOSSIER du quiz, comme sa
+	   carte (revue design 2026-07-28) : liseré vertical, halo, label, barre et
+	   bouton en dérivent. C'est ce qui règle la concurrence d'accents : la
+	   pilule claire reste l'action de page (« Generate a quiz »), le héros parle
+	   la couleur de son module au lieu du bleu d'interface. */
+	function renderResumeHero(container: HTMLElement, quiz: QuizIndexEntry, stats: QuizStatRecord | null | undefined, accent: string): void {
 		const total = quiz.questions || (stats && stats.totalQuestions) || 0;
 		const done = stats ? stats.questionsDone : 0;
 		const pct = total > 0 ? Math.round(done / total * 100) : 0;
 
 		const hero = container.createDiv({ cls: "qbd-resume-hero" });
+		hero.style.setProperty("--accent", accent);
 		const open = () => ctx.navigate("detail", { quiz });
 		hero.addEventListener("click", open);
+
+		// Halo derrière le contenu : boîte propre, entièrement contenue (une
+		// ellipse qui dépasserait se ferait couper net par un ancêtre à scroll).
+		hero.createDiv({ cls: "qbd-resume-halo" });
 
 		const info = hero.createDiv({ cls: "qbd-resume-info" });
 
@@ -215,6 +240,13 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 
 		info.createEl("p", { cls: "qbd-resume-title", text: quiz.title });
 
+		// Dossier parent, même source que la ligne des cartes : le héros dit d'où
+		// vient le quiz, sinon sa couleur d'accent n'a aucun référent à l'écran.
+		const segs = quiz.path.split("/").slice(0, -1).filter(Boolean);
+		if (segs.length > 0) {
+			info.createEl("p", { cls: "qbd-resume-path", text: segs[segs.length - 1] });
+		}
+
 		const progress = info.createDiv({ cls: "qbd-resume-progress" });
 		const bar = progress.createDiv({ cls: "qbd-resume-bar" });
 		const fill = bar.createDiv({ cls: "qbd-resume-bar-fill" });
@@ -224,7 +256,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		const questions = t(total === 1 ? "dashboard.common.questionsOfOne" : "dashboard.common.questionsOfOther", { done, total });
 		progress.createEl("span", { cls: "qbd-resume-progress-text", text: t("dashboard.home.resumeProgress", { questions, pct }) });
 
-		const btn = hero.createEl("button", { cls: "qbd-btn qbd-btn--primary qbd-resume-btn" });
+		const btn = hero.createEl("button", { cls: "qbd-btn qbd-resume-btn" });
 		const btnIcon = btn.createSpan({ cls: "qbd-btn-icon" });
 		setIcon(btnIcon, "play");
 		btn.createSpan({ text: t("dashboard.home.resumeBtn") });
@@ -306,6 +338,12 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 	   handoff 7a) : verre, teinte du dossier parent, bouton lecture et menu ⋯.
 	   L'accueil et « Mes quiz » ne parlaient pas la même langue visuelle ;
 	   depuis le contrat 2026-07-28, une carte de quiz a UNE seule apparence. */
+	/** Accent du DOSSIER d'un quiz — même source que « Mes quiz ». */
+	function accentOf(quiz: QuizIndexEntry, map: ModuleMap): string {
+		const folder = moduleForQuiz(quiz.path, map).folder;
+		return moduleAccent(map.byFolder.get(folder) ?? { folder });
+	}
+
 	function renderQuizCard(
 		container: HTMLElement,
 		quiz: QuizIndexEntry,
@@ -313,12 +351,10 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		map: ModuleMap,
 		index: number
 	): HTMLDivElement {
-		const folder = moduleForQuiz(quiz.path, map).folder;
-		const info = map.byFolder.get(folder) ?? { folder };
 		return renderSharedQuizCard(container, quiz, stats, (q) => ctx.navigate("detail", { quiz: q }), {
 			onPlay: (q) => openQuizForPlay(ctx.app, q),
 			menu: buildQuizCardMenu(ctx, () => { if (containerRef) render(containerRef); }),
-			accent: moduleAccent(info),
+			accent: accentOf(quiz, map),
 			variant: "folder",
 			entryIndex: index,
 		});

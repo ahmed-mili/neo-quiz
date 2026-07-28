@@ -29,6 +29,9 @@ export const EN_DASHBOARD = {
 	"dashboard.home.statMasteredSub": "score ≥ 80%",
 	"dashboard.home.todo": "To do",
 	"dashboard.home.seeAll": "See all",
+	// Affiché quand la grille de l'accueil est plafonnée : {count} = TOTAL de la
+	// section, pas le reste caché.
+	"dashboard.home.seeAllCount": "See all {count}",
 	"dashboard.home.completed": "Completed",
 	"dashboard.home.resumeLabel": "Pick up where you left off",
 	"dashboard.home.resumeProgress": "{questions} · {pct}%",

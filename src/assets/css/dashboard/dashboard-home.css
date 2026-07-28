@@ -239,6 +239,11 @@
    teinte d'accent ne survit que sur le label et la barre de progression, et
    le survol reprend le lift des cartes (translateY(-3px) + halo). */
 .qbd-resume-hero {
+	/* --accent = couleur du dossier du quiz (posée par home.ts) ; repli sur
+	   l'accent d'interface si le héros est rendu sans dossier parent. */
+	--accent: var(--interactive-accent);
+	position: relative;
+	overflow: hidden;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -258,11 +263,40 @@
 }
 
 .qbd-resume-hero:hover {
-	border-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--qbd-glass-edge));
+	border-color: color-mix(in srgb, var(--accent) 45%, var(--qbd-glass-edge));
 	box-shadow: var(--qbd-glass-sheen),
-		0 14px 30px -12px color-mix(in srgb, var(--interactive-accent) 45%, transparent),
+		0 14px 30px -12px color-mix(in srgb, var(--accent) 45%, transparent),
 		0 0 0 1px var(--qbd-glass-edge);
 	transform: translateY(-3px);
+}
+
+/* Liseré vertical à gauche : la signature « accent du dossier » du héros.
+   Dégradé vers la transparence pour ne pas dessiner un trait dur sur toute la
+   hauteur ; halo doux à côté. */
+.qbd-resume-hero::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 3px;
+	background: linear-gradient(180deg,
+		var(--accent),
+		color-mix(in srgb, var(--accent) 20%, transparent));
+	box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 55%, transparent);
+	pointer-events: none;
+}
+
+/* Halo : l'ellipse tient ENTIÈREMENT dans la boîte (centre ± rayon dans
+   [0,100%]), donc l'alpha atteint zéro avant tout bord — aucune arête de coupe
+   possible (même contrainte que le halo de la bannière de dossier). */
+.qbd-resume-halo {
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(340px 130px at 8% 50%,
+		color-mix(in srgb, var(--accent) 16%, transparent) 0%,
+		transparent 70%);
+	pointer-events: none;
 }
 
 .qbd-resume-hero:active {
@@ -273,6 +307,7 @@
 .qbd-resume-info {
 	min-width: 0;
 	flex: 1;
+	position: relative;
 }
 
 .qbd-resume-label {
@@ -283,7 +318,7 @@
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
-	color: var(--interactive-accent);
+	color: var(--accent);
 	margin-bottom: 6px;
 }
 
@@ -297,11 +332,13 @@
 	height: 13px;
 }
 
+/* 20px : le héros doit gagner contre les titres de cartes (14.5px) — à 16px
+   il se lisait comme une carte de plus (revue design 2026-07-28). */
 .qbd-resume-title {
-	font-size: 16px;
-	font-weight: 700;
+	font-size: 20px;
+	font-weight: 650;
 	color: var(--text-normal);
-	margin: 0 0 10px;
+	margin: 0 0 4px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -326,7 +363,7 @@
 .qbd-resume-bar-fill {
 	height: 100%;
 	border-radius: 3px;
-	background: var(--interactive-accent);
+	background: var(--accent);
 	transition: width 0.4s ease;
 }
 
@@ -337,8 +374,38 @@
 	white-space: nowrap;
 }
 
-.qbd-resume-btn {
+/* Dossier parent, même vocabulaire que la ligne des cartes (mono, discret),
+   teinté vers l'accent pour relier la couleur du héros à son module. */
+.qbd-resume-path {
+	font-size: 11.5px;
+	font-family: var(--font-monospace, monospace);
+	color: color-mix(in srgb, var(--accent) 55%, var(--text-muted));
+	margin: 0 0 10px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Action du héros : verre TEINTÉ à l'accent du dossier, pas la pilule claire
+   (réservée à « Generate a quiz », l'action de page) ni le bleu d'interface —
+   deux accents pleins se disputaient l'oeil (revue design 2026-07-28). */
+.qbd-root .qbd-resume-btn {
 	flex-shrink: 0;
+	padding: 10px 18px;
+	border-radius: 11px;
+	font-size: 13.5px;
+	font-weight: 600;
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+	border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+	color: var(--accent);
+	backdrop-filter: var(--qbd-glass-blur-dense);
+	-webkit-backdrop-filter: var(--qbd-glass-blur-dense);
+}
+
+.qbd-root .qbd-resume-btn:hover {
+	background: color-mix(in srgb, var(--accent) 26%, transparent);
+	border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+	box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* Header EMPILÉ (mobile réel .is-mobile, ou fenêtre étroite) : l'action

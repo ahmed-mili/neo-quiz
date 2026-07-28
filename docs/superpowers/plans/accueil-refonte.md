@@ -72,9 +72,18 @@ Vocabulaire de référence, déjà présent dans le code (à RÉUTILISER, jamais
 | UI française | `settings.language = "fr"` | aucune chaîne anglaise |
 | Console | `dev:errors` | « No errors captured » |
 | Non-régression « Mes quiz » | captures racine + drill | identiques à la référence |
+| Rythme et densité | mesures `getBoundingClientRect` des deux pages | grille 1082px/gap 16 comme la référence |
+| Section « Complétés » | stats simulées en mémoire (8 quiz finis) | badge 8, repliée, pastilles Mastered / To review |
+| Vault sans quiz en cours | même simulation | pas de héros, sous-titre bascule |
+| Actions | clics réels : See all, Generate, menu ⋯, bouton lecture | naviguent / ouvrent le quiz |
 
 ## Reste à faire
 
 - Rien de bloquant. Piste si Ahmed veut aller plus loin : la revue Claude
   proposait aussi une ligne de stats SANS cadre (chiffres + séparateurs, zéro
   surface) — écartée ici parce que la consigne demandait l'inverse.
+- **Hors périmètre, constaté au passage** : lancer un quiz contenant des maths
+  fait râler MathLive dans la console (« Can't use relative paths to specify
+  assets location »). Antérieur à cette refonte (moteur, pas dashboard) : les
+  fontes sont inlinées en data-URI mais MathLive cherche quand même un dossier
+  d'assets. Sans effet visible sur le rendu.

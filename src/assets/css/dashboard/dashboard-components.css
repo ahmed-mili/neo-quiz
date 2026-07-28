@@ -167,33 +167,16 @@
 	color: var(--color-green, #4ade80);
 }
 
-/* ── Quiz Card ── */
+/* ── Quiz Card ──
+   La BOÎTE (fond, filet, radius, padding, transitions, survol, appui) est
+   définie une seule fois, plus bas, par `.qbd-quiz-card--folder` : toute carte
+   la porte depuis l'unification du 2026-07-28. Ne restent ici que les
+   propriétés que la variante ne redéclare pas — les déclarations doublées
+   n'avaient plus aucun effet et laissaient croire à deux apparences. */
 .qbd-quiz-card {
-	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-l, 12px);
-	padding: 16px;
 	cursor: pointer;
-	/* Lift : transform et box-shadow sur la MÊME durée/courbe, sinon l'ombre
-	   traîne derrière la carte et le survol paraît saccadé. */
-	transition: background 0.15s ease, border-color 0.15s ease,
-		box-shadow 0.2s cubic-bezier(0.2, 0.7, 0.3, 1),
-		transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1);
 	position: relative;
 	overflow: hidden;
-}
-
-.qbd-quiz-card:hover {
-	background: var(--background-secondary);
-	border-color: var(--background-modifier-border-hover);
-	box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.28);
-	transform: translateY(-3px);
-}
-
-/* Press : retombée quasi immédiate (60ms), sinon le clic semble mou. */
-.qbd-quiz-card:active {
-	transform: translateY(-1px) scale(0.985);
-	transition-duration: 60ms;
 }
 
 .qbd-quiz-card-body {

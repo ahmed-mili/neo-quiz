@@ -1041,3 +1041,40 @@
 	background: var(--background-modifier-hover);
 	color: var(--text-normal);
 }
+
+/* ══════════════════════════════════════════════════════════
+   THÈME CLAIR — la carte de module garde les hex du handoff (rendu SOMBRE
+   validé par Ahmed : ce sont eux la référence). Ils ne sont corrigés QUE sous
+   .theme-light, où un sous-titre #8b93a7 et une base de mélange #181d2b
+   donnaient du gris clair sur verre clair, illisible. Aucun pixel du thème
+   sombre n'est touché — c'est la condition pour toucher à la page de référence.
+   ═════════════════════════════════════════════════════════ */
+.theme-light .qbd-module-card {
+	--card-mix-base: var(--background-secondary);
+	--border-c:    color-mix(in oklab, var(--accent) 55%, var(--background-modifier-border));
+	--border-soft: color-mix(in oklab, var(--accent) 25%, var(--background-modifier-border));
+}
+
+.theme-light .qbd-module-card__subtitle,
+.theme-light .qbd-module-card__stats {
+	color: var(--text-muted);
+}
+
+.theme-light .qbd-module-card__stats strong {
+	color: var(--text-normal);
+}
+
+.theme-light .qbd-module-card__menu {
+	color: var(--text-muted) !important;
+}
+
+.theme-light .qbd-module-card__menu:hover {
+	background: var(--background-modifier-hover) !important;
+	color: var(--text-normal) !important;
+}
+
+/* Même traitement pour les deux surfaces du drill restées en rgba blanc :
+   invisibles sur fond clair. */
+.theme-light .qbd-progress-panel {
+	--qbd-progress-neutral: color-mix(in srgb, var(--text-normal) 14%, transparent);
+}

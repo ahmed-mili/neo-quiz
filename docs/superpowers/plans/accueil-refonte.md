@@ -76,6 +76,23 @@ Vocabulaire de référence, déjà présent dans le code (à RÉUTILISER, jamais
 | Section « Complétés » | stats simulées en mémoire (8 quiz finis) | badge 8, repliée, pastilles Mastered / To review |
 | Vault sans quiz en cours | même simulation | pas de héros, sous-titre bascule |
 | Actions | clics réels : See all, Generate, menu ⋯, bouton lecture | naviguent / ouvrent le quiz |
+| Re-render du scanner | `renderCurrentView()` à froid | l'entrée ne rejoue pas |
+| Entrée de « Mes quiz » | après extraction du mécanisme | classe posée, 9 animations, retirée |
+| Style de carte après nettoyage | `getComputedStyle` avant / après | identique champ par champ |
+
+## Défauts trouvés en revue (et corrigés)
+
+Aucun n'était visible à l'écran ; tous auraient fini par se voir.
+
+1. La cascade d'entrée rejouait à **chaque sauvegarde d'une note à quiz** (le
+   scanner repeint la vue) — l'hôte passe maintenant son `entering`.
+2. `qbd-home-enter` pouvait rester sur le conteneur PARTAGÉ et animer les
+   cartes de « Mes quiz » si l'on quittait la page en pleine transition.
+3. L'accueil n'appliquait que les overrides de dossier, pas la note de
+   correspondance : un quiz en sous-dossier changeait de couleur d'une page à
+   l'autre, et échappait au filtre d'archivage.
+4. La section « Complétés » plafonnait à 6 sans porter « See all ».
+5. Le drill de « Mes quiz » héritait du plafond de 1082px destiné à l'accueil.
 
 ## Reste à faire
 

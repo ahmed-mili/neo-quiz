@@ -36,4 +36,10 @@ Vocabulaire de référence, déjà présent dans le code (à RÉUTILISER, jamais
 
 ## Journal
 
-(une ligne par itération)
+- ca60222 — E1 fait : tuiles de stats en verre, jauge « mastered » supprimée.
+- be934a6 — E2 + E3 faits : bandeau Reprendre en verre ; cartes de quiz en
+  variante `folder` teintée par le dossier (play + menu ⋯ comme « Mes quiz »).
+- fe355aa — E4 + E5 faits : titre serif 28px + pilule claire ; en-têtes de
+  section repliables partagés (`dashboard/collapsible.ts`).
+- Reste : E6 (thème clair, `.is-mobile`, survols, onboarding), passe
+  `css-layout-check`, et une revue design via Claude (extension Chrome).

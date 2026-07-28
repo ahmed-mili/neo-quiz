@@ -52,13 +52,29 @@ Vocabulaire de référence, déjà présent dans le code (à RÉUTILISER, jamais
   tuiles de stats, et déclasser « Generate a quiz » en bouton fantôme.
 - c824dd7 — E6c : état premier usage (vault vide) passé au verre.
 
+- 1cd1df6 — Code mort supprimé : une seule anatomie de carte (l'option
+  `variant`, la barre d'accent, la barre de progression, le meilleur score et
+  le chevron ne s'exécutaient plus ; 76 lignes de CSS orphelines avec eux).
+- 373264f — Transition d'entrée de l'accueil, mécanisme partagé
+  (`dashboard/view-enter.ts`), cascade continue sur toute la page.
+- c0d0554 — Carte de dossier lisible en thème clair (correctifs sous
+  `.theme-light` seulement ; sombre prouvé inchangé par `getComputedStyle`).
+
+## Vérifications passées
+
+| Quoi | Comment | Résultat |
+| --- | --- | --- |
+| Thème sombre / clair | bascule `app.changeTheme`, captures | OK des deux côtés |
+| Mobile 390px | `dev:mobile on` + `setDeviceMetricsOverride` | 1 colonne, 0 débordement |
+| Fenêtre 1000px | override CDP | 2 colonnes, 0 débordement |
+| Survol des cartes | `Input.dispatchMouseEvent` + computed style | lift -3px, filet accent |
+| Repli des sections | clic réel + état persisté | replie, rouvre, persiste |
+| UI française | `settings.language = "fr"` | aucune chaîne anglaise |
+| Console | `dev:errors` | « No errors captured » |
+| Non-régression « Mes quiz » | captures racine + drill | identiques à la référence |
+
 ## Reste à faire
 
-- **Code mort** : les deux appelants de `renderQuizCard` passent désormais
-  `variant: "folder"`. La branche historique (barre d'accent, barre de
-  progression, meilleur score, chevron) et son CSS ne sont plus atteignables ;
-  à supprimer, ou à promouvoir en défaut (la classe `--folder` perd son sens).
-- **Thème clair de la carte de MODULE** (`.qbd-module-card`) : ses hex du
-  handoff restent figés sombre (sous-titre #8b93a7, stats #9aa3b8…). Même
-  défaut que celui corrigé sur la carte de quiz, mais il touche la page de
-  référence — non modifié sans arbitrage d'Ahmed.
+- Rien de bloquant. Piste si Ahmed veut aller plus loin : la revue Claude
+  proposait aussi une ligne de stats SANS cadre (chiffres + séparateurs, zéro
+  surface) — écartée ici parce que la consigne demandait l'inverse.

@@ -4,9 +4,11 @@ import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { renderQuizCard as renderSharedQuizCard } from "./quiz-card";
-import { isFolderArchived } from "./quiz-menu";
-import { moduleForQuiz } from "./quiz-modules";
+import { isFolderArchived, buildQuizCardMenu } from "./quiz-menu";
+import { moduleForQuiz, applyModuleOverrides } from "./quiz-modules";
 import type { ModuleMap } from "./quiz-modules";
+import { moduleAccent } from "./module-color";
+import { openQuizForPlay } from "./quiz-open";
 
 /* ══════════════════════════════════════════════════════════
    HOME VIEW — Dashboard
@@ -28,7 +30,12 @@ export interface HomeHandlers {
 
 export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 
+	/* Dernier conteneur peint : le menu ⋯ d'une carte (archivage, reset de
+	   stats) doit pouvoir repeindre l'accueil sans repasser par la navigation. */
+	let containerRef: HTMLElement | null = null;
+
 	function render(container: HTMLElement): void {
+		containerRef = container;
 		container.empty();
 
 		// Les quiz des DOSSIERS ARCHIVÉS (menu ⋯ d'une carte de dossier de
@@ -38,9 +45,17 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		// moduleForQuiz retombe alors sur le dossier parent direct, qui est la
 		// clé `folder` réelle dans la quasi-totalité des vaults (les quiz
 		// vivent directement dans le dossier de leur module).
-		const emptyMap: ModuleMap = { byFolder: new Map(), ueOrder: [] };
+		// La note de correspondance ne porte QUE noms et UE ; l'accent d'un
+		// dossier vient soit du modal « Modifier dossier » (overrides des
+		// réglages, appliqués ici), soit du hash de son nom — donc les cartes
+		// de l'accueil retombent exactement sur les couleurs de « Mes quiz »
+		// sans avoir à relire la note (lecture async, render synchrone).
+		const map: ModuleMap = applyModuleOverrides(
+			{ byFolder: new Map(), ueOrder: [] },
+			ctx.plugin.settings.quizzesModuleOverrides || {}
+		);
 		const allQuizzes: QuizIndexEntry[] = ctx.scanner ? ctx.scanner.getQuizzes() : [];
-		const quizzes = allQuizzes.filter(q => !isFolderArchived(ctx, moduleForQuiz(q.path, emptyMap).folder));
+		const quizzes = allQuizzes.filter(q => !isFolderArchived(ctx, moduleForQuiz(q.path, map).folder));
 		const stats: Record<string, QuizStatRecord> = ctx.statsStore ? ctx.statsStore.getAll() : {};
 
 		// ── Premier usage : aucun quiz → onboarding guidé ──
@@ -143,8 +158,8 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			seeAll.addEventListener("click", () => ctx.navigate("quizzes"));
 
 			const grid = section.createDiv({ cls: "qbd-home-grid" });
-			for (const quiz of [...inProgress, ...notStarted]) {
-				renderQuizCard(grid, quiz, stats[quiz.path]);
+			for (const [index, quiz] of [...inProgress, ...notStarted].entries()) {
+				renderQuizCard(grid, quiz, stats[quiz.path], map, index);
 			}
 		}
 
@@ -157,8 +172,8 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			doneTitle.createSpan({ text: t("dashboard.home.completed") });
 
 			const grid = section.createDiv({ cls: "qbd-home-grid" });
-			for (const quiz of completed) {
-				renderQuizCard(grid, quiz, stats[quiz.path]);
+			for (const [index, quiz] of completed.entries()) {
+				renderQuizCard(grid, quiz, stats[quiz.path], map, index);
 			}
 		}
 
@@ -269,8 +284,26 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		});
 	}
 
-	function renderQuizCard(container: HTMLElement, quiz: QuizIndexEntry, stats: QuizStatRecord | null | undefined): HTMLDivElement {
-		return renderSharedQuizCard(container, quiz, stats, (q) => ctx.navigate("detail", { quiz: q }));
+	/* Carte de quiz — MÊME anatomie que « Mes quiz » (variante `folder` du
+	   handoff 7a) : verre, teinte du dossier parent, bouton lecture et menu ⋯.
+	   L'accueil et « Mes quiz » ne parlaient pas la même langue visuelle ;
+	   depuis le contrat 2026-07-28, une carte de quiz a UNE seule apparence. */
+	function renderQuizCard(
+		container: HTMLElement,
+		quiz: QuizIndexEntry,
+		stats: QuizStatRecord | null | undefined,
+		map: ModuleMap,
+		index: number
+	): HTMLDivElement {
+		const folder = moduleForQuiz(quiz.path, map).folder;
+		const info = map.byFolder.get(folder) ?? { folder };
+		return renderSharedQuizCard(container, quiz, stats, (q) => ctx.navigate("detail", { quiz: q }), {
+			onPlay: (q) => openQuizForPlay(ctx.app, q),
+			menu: buildQuizCardMenu(ctx, () => { if (containerRef) render(containerRef); }),
+			accent: moduleAccent(info),
+			variant: "folder",
+			entryIndex: index,
+		});
 	}
 
 	return { render };

@@ -240,28 +240,36 @@
 /* ═════════════════════════════════════════════════════════
    HERO "REPRENDRE" — dernier quiz en cours (returning user)
    ═════════════════════════════════════════════════════════ */
+/* Surface VERRE, même recette que le panneau « Progrès » du drill
+   (.qbd-progress-panel : tokens --qbd-glass-*, radius 18, filet 1px) — contrat
+   visuel « Mes quiz », 2026-07-28. Le dégradé d'accent plein a disparu : la
+   teinte d'accent ne survit que sur le label et la barre de progression, et
+   le survol reprend le lift des cartes (translateY(-3px) + halo). */
 .qbd-resume-hero {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 20px;
-	padding: 18px 20px;
+	padding: 18px 22px;
 	margin-bottom: 22px;
-	border-radius: var(--radius-l, 14px);
+	border-radius: 18px;
 	cursor: pointer;
-	border: 1px solid color-mix(in srgb, var(--interactive-accent) 30%, var(--background-modifier-border));
-	background: linear-gradient(135deg,
-		color-mix(in srgb, var(--interactive-accent) 12%, transparent),
-		color-mix(in srgb, var(--interactive-accent) 4%, transparent));
+	border: 1px solid var(--qbd-glass-edge);
+	background: var(--qbd-glass-bg);
+	backdrop-filter: var(--qbd-glass-blur);
+	-webkit-backdrop-filter: var(--qbd-glass-blur);
+	box-shadow: var(--qbd-glass-sheen), var(--qbd-glass-shadow);
 	transition: border-color 0.15s ease,
 		box-shadow 0.2s cubic-bezier(0.2, 0.7, 0.3, 1),
 		transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
 .qbd-resume-hero:hover {
-	border-color: color-mix(in srgb, var(--interactive-accent) 50%, transparent);
-	box-shadow: 0 6px 20px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
-	transform: translateY(-2px);
+	border-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--qbd-glass-edge));
+	box-shadow: var(--qbd-glass-sheen),
+		0 14px 30px -12px color-mix(in srgb, var(--interactive-accent) 45%, transparent),
+		0 0 0 1px var(--qbd-glass-edge);
+	transform: translateY(-3px);
 }
 
 .qbd-resume-hero:active {

@@ -341,7 +341,32 @@
 	flex-shrink: 0;
 }
 
+/* Header EMPILÉ (mobile réel .is-mobile, ou fenêtre étroite) : l'action
+   s'étire sous le titre. Centrée, la pilule flottait sans rapport avec la
+   colonne de texte ; pleine largeur, elle offre la même cible tactile que le
+   bouton « Resume » du bandeau. Ces règles vivent ICI parce que le fichier est
+   importé APRÈS dashboard-base.css : à spécificité égale, c'est le dernier qui
+   gagne — d'où l'`align-items: center` du repos qui l'emportait sur la media
+   query de base (mesuré in-app le 2026-07-28). */
+.is-mobile .qbd-home-header {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+}
+
+.is-mobile .qbd-home-header .qbd-btn--create {
+	justify-content: center;
+}
+
 @media (max-width: 600px) {
+	.qbd-home-header {
+		align-items: stretch;
+	}
+
+	.qbd-home-header .qbd-btn--create {
+		justify-content: center;
+	}
+
 	.qbd-resume-hero {
 		flex-direction: column;
 		align-items: stretch;

@@ -185,21 +185,24 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		// 2026-07-28) : 54 cartes faisaient de l'accueil un doublon de « Mes
 		// quiz ». Deux rangées de trois suffisent à reprendre le travail ; le
 		// reste vit derrière « See all », qui affiche le total resté dehors.
-		const todo = [...inProgress, ...notStarted];
-		if (todo.length > 0) {
-			const shown = todo.slice(0, HOME_GRID_MAX);
+		/* Une section = en-tête repliable + grille plafonnée + « See all » vers
+		   « Mes quiz ». TOUTE section plafonnée porte ce lien : sans lui, les
+		   quiz au-delà du 6e n'auraient aucune sortie depuis l'accueil. */
+		const renderSection = (key: string, label: string, list: QuizIndexEntry[], defaultOpen: boolean): void => {
+			const shown = list.slice(0, HOME_GRID_MAX);
 			const section = container.createDiv({ cls: "qbd-home-section" });
-			// « See all » vit à CÔTÉ de l'en-tête, jamais dedans : l'en-tête est
-			// lui-même un <button> (un bouton dans un bouton est invalide).
-			const body = renderCollapsibleSection(collapse, section, "home:todo", t("dashboard.home.todo"), todo.length, {
+			const body = renderCollapsibleSection(collapse, section, key, label, list.length, {
 				rowClass: "qbd-home-node-row",
 				entryDelay,
+				defaultOpen,
+				// « See all » vit à CÔTÉ de l'en-tête, jamais dedans : l'en-tête
+				// est lui-même un <button> (un bouton dans un bouton est invalide).
 				headRow: (row) => {
 					const seeAll = row.createEl("button", { cls: "qbd-btn qbd-btn--subtle" });
 					seeAll.type = "button";
 					seeAll.createSpan({
-						text: todo.length > shown.length
-							? t("dashboard.home.seeAllCount", { count: todo.length })
+						text: list.length > shown.length
+							? t("dashboard.home.seeAllCount", { count: list.length })
 							: t("dashboard.home.seeAll")
 					});
 					const chevron = seeAll.createSpan({ cls: "qbd-btn-icon qbd-btn-icon--sm" });
@@ -213,24 +216,21 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 				renderQuizCard(grid, quiz, stats[quiz.path], map).style
 					.setProperty("--qbd-card-delay", entryDelay());
 			}
+		};
+
+		// À faire (en cours + à commencer). La grille est PLAFONNÉE (revue design
+		// 2026-07-28) : 54 cartes faisaient de l'accueil un doublon de « Mes
+		// quiz ». Deux rangées de trois suffisent à reprendre le travail ; le
+		// reste vit derrière « See all », qui affiche le total resté dehors.
+		const todo = [...inProgress, ...notStarted];
+		if (todo.length > 0) {
+			renderSection("home:todo", t("dashboard.home.todo"), todo, true);
 		}
 
 		// Complétés — repliés par défaut : le badge dit combien, la grille ne
 		// repousse plus « À faire » hors de l'écran.
 		if (completed.length > 0) {
-			const shown = completed.slice(0, HOME_GRID_MAX);
-			const section = container.createDiv({ cls: "qbd-home-section" });
-			const body = renderCollapsibleSection(collapse, section, "home:completed", t("dashboard.home.completed"), completed.length, {
-				rowClass: "qbd-home-node-row",
-				entryDelay,
-				defaultOpen: false,
-			});
-
-			const grid = body.createDiv({ cls: "qbd-home-grid" });
-			for (const quiz of shown) {
-				renderQuizCard(grid, quiz, stats[quiz.path], map).style
-					.setProperty("--qbd-card-delay", entryDelay());
-			}
+			renderSection("home:completed", t("dashboard.home.completed"), completed, false);
 		}
 
 	}

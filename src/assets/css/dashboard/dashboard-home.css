@@ -13,12 +13,16 @@
 	min-width: 0;
 }
 
+/* Même famille display que les autres titres de page (.qbd-quizzes-title du
+   dossier ouvert, .qbd-ai-title de « Générer ») : Constantia, échelle 28px du
+   drill — le sans-serif 20px/800 était le dernier vestige d'un autre système. */
 .qbd-home-title {
-	font-size: 20px;
-	font-weight: 800;
+	font-family: Constantia, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+	font-size: 28px;
+	font-weight: 700;
 	color: var(--text-normal);
-	margin: 0 0 3px;
-	letter-spacing: -0.03em;
+	margin: 0 0 4px;
+	letter-spacing: -0.02em;
 }
 
 .qbd-home-subtitle {
@@ -36,38 +40,27 @@
 	margin-bottom: 28px;
 }
 
-/* ── Sections ── */
+/* ── Sections ──
+   Les en-têtes sont ceux de « Mes quiz » (.qbd-quizzes-node-*, rangée 52px,
+   chevron animé, badge compteur). Seule la rangée est propre à l'accueil :
+   l'action « See all » se cale à droite, à côté du bouton d'en-tête (elle ne
+   peut pas vivre dedans — bouton imbriqué). */
 .qbd-home-section {
 	margin-bottom: 24px;
 }
 
-.qbd-home-section-header {
+.qbd-home-node-row {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 12px;
+	gap: 12px;
 }
 
-.qbd-home-section-title {
-	font-size: 10px;
-	font-weight: 600;
-	color: var(--text-faint);
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
-	margin: 0;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-}
-
-.qbd-home-section-title-icon {
-	display: inline-flex;
-	align-items: center;
-}
-
-.qbd-home-section-title-icon svg {
-	width: 13px;
-	height: 13px;
+/* L'en-tête ne prend plus toute la largeur : il pousse « See all » à droite,
+   mais la zone cliquable s'arrête là où le contenu s'arrête. */
+.qbd-root .qbd-home-node-row .qbd-quizzes-node-head {
+	width: auto;
+	flex: 1 1 auto;
+	min-width: 0;
 }
 
 /* ── Grid ── */

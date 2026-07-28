@@ -9,6 +9,7 @@ import { moduleForQuiz, applyModuleOverrides } from "./quiz-modules";
 import type { ModuleMap } from "./quiz-modules";
 import { moduleAccent } from "./module-color";
 import { openQuizForPlay } from "./quiz-open";
+import { renderCollapsibleSection } from "./collapsible";
 
 /* ══════════════════════════════════════════════════════════
    HOME VIEW — Dashboard
@@ -90,7 +91,9 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			: t("dashboard.home.subtitleStart");
 		headerLeft.createEl("p", { cls: "qbd-home-subtitle", text: subtitle });
 
-		const genBtn = header.createEl("button", { cls: "qbd-btn qbd-btn--primary" });
+		// Pilule claire IDENTIQUE à « + New folder » de « Mes quiz » : une seule
+		// grammaire d'action primaire dans le dashboard (contrat 2026-07-28).
+		const genBtn = header.createEl("button", { cls: "qbd-btn--create" });
 		const genIcon = genBtn.createSpan({ cls: "qbd-btn-icon" });
 		setIcon(genIcon, "sparkles");
 		genBtn.createSpan({ text: t("dashboard.home.generate") });
@@ -142,23 +145,39 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		}
 
 		// ── Sections de quiz ──
+		// Mêmes en-têtes que « Mes quiz » : rangée 52px, chevron animé, libellé
+		// 16px, badge compteur, repli persisté (contrat visuel 2026-07-28). Les
+		// micro-capitales 10px, propres à l'accueil, ont disparu avec eux.
+		const collapse = {
+			isExpanded: (key: string) => new Set(ctx.plugin.settings.quizzesExpandedFolders || []).has(key),
+			toggleExpanded: (key: string) => {
+				const set = new Set(ctx.plugin.settings.quizzesExpandedFolders || []);
+				if (set.has(key)) set.delete(key); else set.add(key);
+				ctx.plugin.settings.quizzesExpandedFolders = [...set];
+				ctx.plugin.saveSettings().catch(() => {});
+			},
+		};
+
 		// À faire (en cours + à commencer)
-		if (inProgress.length > 0 || notStarted.length > 0) {
+		const todo = [...inProgress, ...notStarted];
+		if (todo.length > 0) {
 			const section = container.createDiv({ cls: "qbd-home-section" });
-			const sectionHeader = section.createDiv({ cls: "qbd-home-section-header" });
-			const todoTitle = sectionHeader.createEl("p", { cls: "qbd-home-section-title" });
-			const todoIcon = todoTitle.createSpan({ cls: "qbd-home-section-title-icon" });
-			setIcon(todoIcon, "list-todo");
-			todoTitle.createSpan({ text: t("dashboard.home.todo") });
+			// « See all » vit à CÔTÉ de l'en-tête, jamais dedans : l'en-tête est
+			// lui-même un <button> (un bouton dans un bouton est invalide).
+			const body = renderCollapsibleSection(collapse, section, "home:todo", t("dashboard.home.todo"), todo.length, {
+				rowClass: "qbd-home-node-row",
+				headRow: (row) => {
+					const seeAll = row.createEl("button", { cls: "qbd-btn qbd-btn--subtle" });
+					seeAll.type = "button";
+					seeAll.createSpan({ text: t("dashboard.home.seeAll") });
+					const chevron = seeAll.createSpan({ cls: "qbd-btn-icon qbd-btn-icon--sm" });
+					setIcon(chevron, "chevron-right");
+					seeAll.addEventListener("click", () => ctx.navigate("quizzes"));
+				},
+			});
 
-			const seeAll = sectionHeader.createEl("button", { cls: "qbd-btn qbd-btn--subtle" });
-			seeAll.createSpan({ text: t("dashboard.home.seeAll") });
-			const chevron = seeAll.createSpan({ cls: "qbd-btn-icon qbd-btn-icon--sm" });
-			setIcon(chevron, "chevron-right");
-			seeAll.addEventListener("click", () => ctx.navigate("quizzes"));
-
-			const grid = section.createDiv({ cls: "qbd-home-grid" });
-			for (const [index, quiz] of [...inProgress, ...notStarted].entries()) {
+			const grid = body.createDiv({ cls: "qbd-home-grid" });
+			for (const [index, quiz] of todo.entries()) {
 				renderQuizCard(grid, quiz, stats[quiz.path], map, index);
 			}
 		}
@@ -166,12 +185,11 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		// Complétés
 		if (completed.length > 0) {
 			const section = container.createDiv({ cls: "qbd-home-section" });
-			const doneTitle = section.createEl("p", { cls: "qbd-home-section-title" });
-			const doneIcon = doneTitle.createSpan({ cls: "qbd-home-section-title-icon" });
-			setIcon(doneIcon, "circle-check");
-			doneTitle.createSpan({ text: t("dashboard.home.completed") });
+			const body = renderCollapsibleSection(collapse, section, "home:completed", t("dashboard.home.completed"), completed.length, {
+				rowClass: "qbd-home-node-row",
+			});
 
-			const grid = section.createDiv({ cls: "qbd-home-grid" });
+			const grid = body.createDiv({ cls: "qbd-home-grid" });
 			for (const [index, quiz] of completed.entries()) {
 				renderQuizCard(grid, quiz, stats[quiz.path], map, index);
 			}

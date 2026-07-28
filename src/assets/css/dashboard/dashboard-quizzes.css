@@ -828,6 +828,11 @@
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 14px;
 	min-width: 0;
+	/* Le drill partage la classe .qbd-home-grid, désormais plafonnée à 1082px
+	   pour l'accueil : ici la grille doit au contraire remplir toute la colonne
+	   restante à gauche du panneau « Progrès », quelle que soit la largeur de
+	   la fenêtre. */
+	max-width: none;
 }
 
 .qbd-progress-panel {

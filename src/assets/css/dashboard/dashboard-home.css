@@ -32,12 +32,20 @@
 	line-height: 1.5;
 }
 
-/* ── Stats grid ── */
+/* ── Stats grid ──
+   Gap et marge basse calés sur la référence : 16px entre surfaces d'une même
+   rangée, 24px avant l'en-tête de section suivant (comme la barre « Recent »
+   → première section de « Mes quiz »). */
+/* Bandeau et tuiles gardent la LARGEUR DE COLONNE (comme la barre « Recent /
+   New folder » et les en-têtes de section de la référence) : seule la grille
+   de cartes est plafonnée. `.qbd-content > *` centre déjà la colonne — une
+   max-width ici décalerait ces surfaces de 50px vers la droite par rapport à
+   la grille (mesuré in-app). */
 .qbd-home-stats {
 	display: grid;
 	grid-template-columns: repeat(3, 1fr);
-	gap: 10px;
-	margin-bottom: 28px;
+	gap: 16px;
+	margin-bottom: 24px;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -77,8 +85,12 @@
    chevron animé, badge compteur). Seule la rangée est propre à l'accueil :
    l'action « See all » se cale à droite, à côté du bouton d'en-tête (elle ne
    peut pas vivre dedans — bouton imbriqué). */
-.qbd-home-section {
-	margin-bottom: 24px;
+/* Rythme inter-sections de la référence : 16px au-dessus de chaque section
+   suivante, rien en bas de la dernière (.qbd-quizzes-node + .qbd-quizzes-node,
+   dashboard-quizzes.css). L'ancien margin-bottom de 24px s'ajoutait en plus
+   sous la dernière section. */
+.qbd-home-section + .qbd-home-section {
+	margin-top: 16px;
 }
 
 .qbd-home-node-row {
@@ -95,17 +107,22 @@
 	min-width: 0;
 }
 
-/* ── Grid ── */
+/* ── Grid ──
+   MÊME géométrie que la grille de cartes de « Mes quiz » (.qbd-module-grid,
+   mesurée in-app le 2026-07-28) : rangée plafonnée à 1082px = 3 × 350 + 2 × 16,
+   gap 16. Sans le plafond, les cartes de l'accueil s'étiraient à 386px de large
+   — plus grosses que toutes celles de la page de référence, donc une densité
+   différente à surface égale. Le drill-down garde sa propre géométrie
+   (.qbd-quizzes-drill-grid : colonnes plus étroites, le panneau Progrès occupe
+   300px à droite). */
 .qbd-home-grid {
 	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: 12px;
-}
-
-@media (min-width: 1200px) {
-	.qbd-home-grid {
-		grid-template-columns: repeat(3, 1fr);
-	}
+	max-width: 1082px;
+	grid-template-columns: repeat(
+		auto-fill,
+		minmax(max(300px, calc((100% - 2 * 16px) / 3)), 1fr)
+	);
+	gap: 16px;
 }
 
 /* ═════════════════════════════════════════════════════════

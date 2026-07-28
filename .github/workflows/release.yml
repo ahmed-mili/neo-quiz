@@ -61,6 +61,11 @@ jobs:
         with:
           name: "${{ steps.version.outputs.tag }}"
           body: "Release ${{ steps.version.outputs.tag }}"
+          # Pré-version dès que le tag porte un suffixe semver (v2.0.0-beta,
+          # -rc.1, -alpha…) : c'est la définition même de semver, donc une
+          # future v2.1.0 sans suffixe sortira en release normale sans qu'on
+          # ait à repasser ici.
+          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
           files: |
             release/main.js
             release/manifest.json

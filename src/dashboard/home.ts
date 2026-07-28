@@ -5,7 +5,7 @@ import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { renderQuizCard as renderSharedQuizCard } from "./quiz-card";
 import { isFolderArchived, buildQuizCardMenu } from "./quiz-menu";
-import { moduleForQuiz, applyModuleOverrides } from "./quiz-modules";
+import { moduleForQuiz, applyModuleOverrides, parseModuleMap } from "./quiz-modules";
 import type { ModuleMap } from "./quiz-modules";
 import { moduleAccent } from "./module-color";
 import { openQuizForPlay } from "./quiz-open";
@@ -44,6 +44,35 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 	/* Dernier conteneur peint : le menu ⋯ d'une carte (archivage, reset de
 	   stats) doit pouvoir repeindre l'accueil sans repasser par la navigation. */
 	let containerRef: HTMLElement | null = null;
+	/* Valeur d'`entering` du dernier rendu : quand la table des modules arrive
+	   (lecture async) et déclenche un repeint, il doit REJOUER l'entrée si le
+	   rendu interrompu en était une — sinon la cascade se coupe net à peine
+	   commencée (même piège que quizzes.ts). */
+	let lastEntering = true;
+
+	/* Table des modules lue dans la note de correspondance, comme « Mes quiz ».
+	   Sans elle, un quiz rangé dans un SOUS-dossier de son module se voyait
+	   attribuer l'accent (et le dossier d'archivage) du sous-dossier ici, celui
+	   du module là-bas : deux couleurs pour un même quiz selon la page. */
+	let moduleMap: ModuleMap | null = null;
+	let moduleMapLoaded = false;
+
+	async function loadModuleMap(): Promise<void> {
+		moduleMapLoaded = true;
+		// Cède TOUJOURS avant de poursuivre : sans ce yield, la branche « note
+		// absente » ne traverse aucun await réel et re-rendrait DEPUIS le render()
+		// en cours, qui peindrait ensuite une seconde copie par-dessus (piège
+		// documenté au long dans quizzes.ts).
+		await Promise.resolve();
+		try {
+			const name = ctx.plugin.settings.quizzesModuleMapNote || "Dashboard";
+			const file = ctx.app.metadataCache.getFirstLinkpathDest(name, "");
+			moduleMap = file ? parseModuleMap(await ctx.app.vault.cachedRead(file)) : { byFolder: new Map(), ueOrder: [] };
+		} catch {
+			moduleMap = { byFolder: new Map(), ueOrder: [] };
+		}
+		if (containerRef) render(containerRef, lastEntering);
+	}
 
 	/** Re-render déclenché par la page elle-même (menu ⋯) : jamais d'entrée. */
 	function rerender(): void {
@@ -52,6 +81,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 
 	function render(container: HTMLElement, entering = true): void {
 		containerRef = container;
+		lastEntering = entering;
 		markViewEnter(container, entering, "qbd-home-enter");
 		container.empty();
 
@@ -63,17 +93,12 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		// Les quiz des DOSSIERS ARCHIVÉS (menu ⋯ d'une carte de dossier de
 		// « Mes quiz ») n'existent plus pour l'accueil : ni stats, ni sections.
 		// Ils ne reviennent que sous la section « Archivés » de « Mes quiz ».
-		// Map vide : le home n'a pas la note de correspondance sous la main —
-		// moduleForQuiz retombe alors sur le dossier parent direct, qui est la
-		// clé `folder` réelle dans la quasi-totalité des vaults (les quiz
-		// vivent directement dans le dossier de leur module).
-		// La note de correspondance ne porte QUE noms et UE ; l'accent d'un
-		// dossier vient soit du modal « Modifier dossier » (overrides des
-		// réglages, appliqués ici), soit du hash de son nom — donc les cartes
-		// de l'accueil retombent exactement sur les couleurs de « Mes quiz »
-		// sans avoir à relire la note (lecture async, render synchrone).
+		// Même table effective que « Mes quiz » : la note (chargée en tâche de
+		// fond au premier rendu) recouverte par les overrides du modal
+		// « Modifier dossier », relus à chaque rendu.
+		if (!moduleMapLoaded) { void loadModuleMap(); }
 		const map: ModuleMap = applyModuleOverrides(
-			{ byFolder: new Map(), ueOrder: [] },
+			moduleMap ?? { byFolder: new Map(), ueOrder: [] },
 			ctx.plugin.settings.quizzesModuleOverrides || {}
 		);
 		const allQuizzes: QuizIndexEntry[] = ctx.scanner ? ctx.scanner.getQuizzes() : [];

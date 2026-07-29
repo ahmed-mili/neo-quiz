@@ -66,6 +66,7 @@ import type { TerminalHandlers } from "../engine/terminal";
 import type { InteractionHandlers } from "../engine/interactions";
 import type { StateHandlers } from "../engine/state";
 import type { ResultsSaverHandlers } from "../engine/results-save";
+import type { PassageHandlers } from "../engine/passage";
 
 /**
  * Mode du quiz (engine.js ctx.quizMode / originalQuizMode). Miroir du type
@@ -183,6 +184,7 @@ export interface EngineCtx {
 	hint: HintHandlers;
 	questions: QuestionHandlers;
 	resultsSaver: ResultsSaverHandlers;
+	passage: PassageHandlers;
 
 	/* ════════════════════════════════════════════════
 	   Méthodes APLATIES issues des sous-modules (1er Object.assign, :156-219).

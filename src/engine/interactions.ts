@@ -322,6 +322,8 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			if (isMatch) bindMatchingQuestion(trackItem, qi, q as MatchingQuestion);
 		}
 
+		ctx.passage.bindPassage(trackItem, qi);
+
 		const hintBtn = trackItem.querySelector(".quiz-hint-btn");
 		if (hintBtn) {
 			hintBtn.addEventListener("click", e => {

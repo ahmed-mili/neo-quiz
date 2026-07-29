@@ -30,6 +30,16 @@ export const FR_EDITOR: Record<keyof typeof EN_EDITOR, string> = {
 	"editor.save.allSaved": "Toutes les modifications sont sauvegardées",
 	"editor.save.clickToSave": "Cliquez pour sauvegarder les modifications",
 
+	/* ── Support de compréhension ── */
+	"editor.passage.section": "Document",
+	"editor.passage.help": "Un texte à lire avant de répondre. Donnez la même clé de partage à plusieurs questions : elles afficheront toutes ce même document.",
+	"editor.passage.textLabel": "Texte",
+	"editor.passage.textPlaceholder": "Collez ou écrivez le texte, l'étude de cas, le scénario ou l'extrait de code…",
+	"editor.passage.titleLabel": "Titre",
+	"editor.passage.titlePlaceholder": "Texte : L'effet de serre",
+	"editor.passage.idLabel": "Clé de partage",
+	"editor.passage.idPlaceholder": "doc1",
+
 	/* ── Mode examen ── */
 	"editor.exam.title": "Mode Examen",
 	"editor.exam.duration": "Durée",

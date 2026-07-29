@@ -1,0 +1,187 @@
+/* =========================================================
+   SUPPORT DE COMPRÉHENSION — document lu avant de répondre
+   (engine/passage.ts). Encastré en tête de carte, repliable.
+
+   Registre visuel volontairement DISTINCT de .quiz-learn-section :
+   la leçon enseigne (teinte primaire, elle appartient au quiz), le
+   document est une pièce du sujet — surface neutre encastrée, comme
+   une feuille agrafée à l'énoncé.
+   ========================================================= */
+
+.quiz-passage{
+  margin: 0 0 18px;
+  border-radius: 12px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+
+/* ── En-tête ── */
+
+.quiz-passage-head{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 10px 14px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: color-mix(in srgb, var(--background-primary) 45%, transparent);
+}
+
+.quiz-passage.is-collapsed .quiz-passage-head{
+  border-bottom-color: transparent;
+}
+
+.quiz-passage-icon{
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.quiz-passage-icon svg{
+  width: 16px;
+  height: 16px;
+}
+
+.quiz-passage-title{
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.85em;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Portée du document (« questions 2 à 4 ») : l'information qui manque le plus
+   sur un sujet à support partagé — combien de questions en dépendent. */
+.quiz-passage-scope{
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  font-size: 0.72em;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.quiz-passage-toggle{
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--quiz-dur-fast) var(--quiz-ease-smooth),
+              color var(--quiz-dur-fast) var(--quiz-ease-smooth),
+              border-color var(--quiz-dur-fast) var(--quiz-ease-smooth);
+}
+
+.quiz-passage-toggle:hover,
+.quiz-passage-toggle:focus-visible{
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+  color: var(--text-normal);
+}
+
+.quiz-passage-toggle svg{
+  width: 15px;
+  height: 15px;
+  transition: transform var(--quiz-dur-fast) var(--quiz-ease-smooth);
+}
+
+.quiz-passage.is-collapsed .quiz-passage-toggle svg{
+  transform: rotate(-90deg);
+}
+
+/* ── Corps ──
+   Repli en display:none, JAMAIS une animation de hauteur : la piste du quiz
+   est une surface translatée (translateX), et un collapse animé y laisse des
+   pixels fantômes du compositeur. Le moteur resynchronise la hauteur de slide
+   après le clic (passage.ts). */
+.quiz-passage.is-collapsed .quiz-passage-body{
+  display: none;
+}
+
+.quiz-passage-content{
+  /* Un document long ne doit pas étirer la carte à l'infini : il défile chez
+     lui. Le plafond suit la fenêtre pour rester lisible sur grand écran. */
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px;
+  font-size: 0.94em;
+  line-height: 1.72;
+  color: var(--text-normal);
+  /* Registre « texte à lire » : la lecture prime sur la densité. */
+  text-align: left;
+  overflow-wrap: anywhere;
+  /* Les sauts de ligne du support sont déjà des <br> ; ce qui se perdait, ce
+     sont les ESPACES CONSÉCUTIFS — donc toute l'indentation d'un extrait de
+     code collé en document. `break-spaces` les conserve tout en laissant les
+     lignes se replier (contrairement à `pre`, qui déborderait). */
+  white-space: break-spaces;
+  tab-size: 2;
+}
+
+.quiz-passage-content code{
+  background: var(--code-background);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+}
+
+/* Le code garde ses lignes longues et défile chez lui — jamais de scroll
+   horizontal sur la carte. */
+.quiz-passage-content pre{
+  background: var(--code-background);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 10px 0;
+  max-width: 100%;
+  overflow-x: auto;
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+
+.quiz-passage-content pre code{
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  font-size: inherit;
+}
+
+.quiz-passage-embed-wrap{
+  margin: 10px 0;
+  text-align: center;
+}
+
+.quiz-passage-embed{
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+/* ── Mobile : le document mange l'écran, on lui donne moins de hauteur ── */
+
+.is-mobile .quiz-passage-content{
+  max-height: min(38vh, 300px);
+  padding: 12px 13px;
+  font-size: 0.9em;
+}
+
+.is-mobile .quiz-passage-scope{
+  display: none;
+}

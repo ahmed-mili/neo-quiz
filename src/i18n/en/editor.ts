@@ -31,6 +31,16 @@ export const EN_EDITOR = {
 	"editor.save.allSaved": "All changes are saved",
 	"editor.save.clickToSave": "Click to save your changes",
 
+	/* ── Support de compréhension ── */
+	"editor.passage.section": "Document",
+	"editor.passage.help": "A text to read before answering. Give the same sharing key to several questions and they all show this one document.",
+	"editor.passage.textLabel": "Text",
+	"editor.passage.textPlaceholder": "Paste or write the passage, case study, scenario or code sample…",
+	"editor.passage.titleLabel": "Title",
+	"editor.passage.titlePlaceholder": "Text: The greenhouse effect",
+	"editor.passage.idLabel": "Sharing key",
+	"editor.passage.idPlaceholder": "doc1",
+
 	/* ── Mode examen ── */
 	"editor.exam.title": "Exam mode",
 	"editor.exam.duration": "Duration",

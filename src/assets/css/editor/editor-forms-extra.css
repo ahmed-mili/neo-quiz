@@ -2,6 +2,15 @@
    QUIZ EDITOR - Additional Styles for Reference Alignment
    ========================================================= */
 
+/* Note d'aide sous un en-tête de section (ex. « Document » : explique le
+   partage par passageId, que rien d'autre dans l'UI ne peut dire). */
+.qb-field-help {
+  margin: 0 0 10px;
+  font-size: 0.82em;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 /* Editor Container */
 .qb-editor-container {
   padding: 16px;

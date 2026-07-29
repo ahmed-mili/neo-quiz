@@ -16,6 +16,7 @@ import { createHintHandlers } from "./engine/hint";
 import { createQuestionHandlers } from "./engine/questions";
 import { createTextOnlyHandlers } from "./engine/text-only";
 import { createResultsSaver } from "./engine/results-save";
+import { createPassageHandlers } from "./engine/passage";
 import { mathifyElement } from "./engine/mathjax";
 import { t } from "./i18n";
 
@@ -184,6 +185,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	const hint = createHintHandlers(ctx);
 	const questions = createQuestionHandlers(ctx);
 	const resultsSaver = createResultsSaver(ctx);
+	const passage = createPassageHandlers(ctx);
 
 	// Fonctions utilitaires seront définies après les constantes SLIDE_* pour éviter TDZ
 
@@ -208,6 +210,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		hint,
 		questions,
 		resultsSaver,
+		passage,
 		// Fonctions exposées directement
 		escapeHtmlText: sanitizer.escapeHtmlText,
 		escapeHtmlAttr: sanitizer.escapeHtmlAttr,

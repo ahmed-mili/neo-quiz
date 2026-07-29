@@ -53,6 +53,8 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 			onEdit();
 		});
 
+		_passageSection(wrap, q);
+
 		_resourceSection(wrap, q);
 
 		const box = wrap.createDiv({ cls: "qb-section-box" });
@@ -82,6 +84,46 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 			delete q._explainHtml;
 			onEdit();
 		});
+	}
+
+	/* ── Section « Document » (support de compréhension) ──
+	   Les trois champs vivent dans `_extraFields` : c'est le canal que l'éditeur
+	   utilise déjà pour tout champ hors de son formulaire fixe, et l'export les
+	   réémet tels quels (editor/export.ts). Une chaîne vide SUPPRIME la clé
+	   plutôt que d'écrire `passage: ''` dans la note — un champ vide n'est pas
+	   une donnée. */
+	function _passageSection(parent: HTMLElement, q: DraftQuestion): void {
+		const extras = (q._extraFields ||= {});
+		const read = (key: string): string => {
+			const v = extras[key];
+			return typeof v === "string" ? v : "";
+		};
+		const write = (key: string, value: string): void => {
+			const v = value.trim();
+			if (v) extras[key] = value; else delete extras[key];
+			onEdit();
+		};
+
+		// Ouverte d'emblée si la question porte déjà un document : on ne cache pas
+		// à l'auteur le texte sur lequel porte sa question.
+		const hasPassage = !!(read("passage") || read("passageId"));
+		const section = parent.createEl("details", {
+			cls: "qb-section-collapsible",
+			attr: hasPassage ? { open: "" } : {}
+		});
+		const summary = section.createEl("summary", { cls: "qb-section-header" });
+		ctx._setIcon(summary, "book-open-text");
+		summary.createSpan({ text: t("editor.passage.section") });
+		const content = section.createDiv({ cls: "qb-section-content" });
+
+		content.createDiv({ cls: "qb-field-help", text: t("editor.passage.help") });
+
+		_field(content, t("editor.passage.textLabel"), read("passage"), t("editor.passage.textPlaceholder"), true,
+			v => write("passage", v));
+		_field(content, t("editor.passage.titleLabel"), read("passageTitle"), t("editor.passage.titlePlaceholder"), false,
+			v => write("passageTitle", v));
+		_field(content, t("editor.passage.idLabel"), read("passageId"), t("editor.passage.idPlaceholder"), false,
+			v => write("passageId", v));
 	}
 
 	// ── Entités pour la toolbar ──

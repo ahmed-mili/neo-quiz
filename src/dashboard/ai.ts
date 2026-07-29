@@ -183,8 +183,8 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	// « Mixte »/« Choix unique »… pour construire le prompt), et un LIBELLÉ
 	// traduit, seul affiché. Traduire la valeur casserait la génération dès que
 	// l'UI passe en anglais. Les deux listes restent parallèles (même ordre).
-	const TYPE_VALUES = ["Mixte", "Choix unique", "Choix multiple", "Texte libre"];
-	const TYPE_KEYS: TransKey[] = ["ai.type.mixed", "ai.type.single", "ai.type.multiple", "ai.type.text"];
+	const TYPE_VALUES = ["Mixte", "Choix unique", "Choix multiple", "Texte libre", "Compréhension"];
+	const TYPE_KEYS: TransKey[] = ["ai.type.mixed", "ai.type.single", "ai.type.multiple", "ai.type.text", "ai.type.comprehension"];
 	// Libellés recalculés à chaque usage (menu, tooltip) : jamais figés dans la
 	// langue du chargement.
 	const typeLabels = (): string[] => TYPE_KEYS.map(k => t(k));

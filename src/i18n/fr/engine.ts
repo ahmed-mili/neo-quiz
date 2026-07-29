@@ -7,6 +7,13 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 	/* ── Erreurs du bloc ── */
 	"engine.error.noQuestions": "⚠️ Aucune question fournie au moteur de quiz.",
 
+	/* ── Support de compréhension (document lu avant de répondre) ── */
+	"engine.passage.defaultTitle": "Document",
+	"engine.passage.scopeRange": "questions {first} à {last}",
+	"engine.passage.scopeCount": "{count} questions",
+	"engine.passage.collapse": "Masquer le document",
+	"engine.passage.expand": "Afficher le document",
+
 	/* ── Navigation ── */
 	"engine.nav.results": "Résultats",
 	"engine.nav.prevQuestion": "Question précédente",

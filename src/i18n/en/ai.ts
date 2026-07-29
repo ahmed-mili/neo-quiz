@@ -38,6 +38,7 @@ export const EN_AI = {
 	"ai.type.single": "Single choice",
 	"ai.type.multiple": "Multiple choice",
 	"ai.type.text": "Free text",
+	"ai.type.comprehension": "Comprehension",
 
 	/* ── Fournisseurs (sous-titres du menu) ── */
 	"ai.provider.choose": "Choose a provider",

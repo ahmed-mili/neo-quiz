@@ -14,6 +14,13 @@ export const EN_ENGINE = {
 	/* ── Erreurs du bloc ── */
 	"engine.error.noQuestions": "⚠️ No questions were given to the quiz engine.",
 
+	/* ── Support de compréhension (document lu avant de répondre) ── */
+	"engine.passage.defaultTitle": "Document",
+	"engine.passage.scopeRange": "questions {first} to {last}",
+	"engine.passage.scopeCount": "{count} questions",
+	"engine.passage.collapse": "Hide the document",
+	"engine.passage.expand": "Show the document",
+
 	/* ── Navigation ── */
 	"engine.nav.results": "Results",
 	"engine.nav.prevQuestion": "Previous question",

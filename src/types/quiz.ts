@@ -54,6 +54,24 @@ export interface QuestionBase {
 	learnHtml?: string;
 	_learnHtml?: string;
 	resourceButton?: ResourceButton | null;
+	/**
+	 * SUPPORT DE COMPRÉHENSION — document à lire avant de répondre (texte,
+	 * énoncé de cas, extrait de code, image `![[…]]`). Affiché en tête de carte,
+	 * repliable, AVANT le titre de la question (engine/passage.ts).
+	 *
+	 * Partage : plusieurs questions portant le même `passageId` affichent le
+	 * MÊME support — une seule d'entre elles a besoin de porter le texte, les
+	 * autres n'écrivent que `passageId`. C'est le pattern d'un vrai sujet
+	 * d'examen (un texte, N questions de compréhension dessus).
+	 */
+	passage?: string;
+	/** Support HTML pré-rendu, prioritaire sur `passage` (même relation que promptHtml/prompt). */
+	passageHtml?: string;
+	_passageHtml?: string;
+	/** Clé de partage du support entre questions ; absente ⇒ support privé à cette question. */
+	passageId?: string;
+	/** Titre affiché dans l'en-tête du support (défaut : libellé « Document » traduit). */
+	passageTitle?: string;
 }
 
 /** Question à choix unique (engine.js: multiSelect absent/false ⇒ q.correctIndex). */

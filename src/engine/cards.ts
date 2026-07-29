@@ -423,8 +423,13 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			? ` id="${ctx.escapeHtmlAttr(q.id)}"`
 			: "";
 
+		// Le support de compréhension précède le titre : on lit le document AVANT
+		// de savoir ce qu'on nous en demande, comme sur un sujet d'examen papier.
+		const passageSection = ctx.passage.passageHtml(qi);
+
 		return `<div class="quiz-track-item" data-slide-kind="question" data-qi="${qi}">
 			<section class="quiz-card"${sectionIdAttr}>
+				${passageSection}
 				<h2>${ctx.escapeHtmlText(q.title)}</h2>
 				${ctx.sanitize.resourceButtonHtml(q)}
 				<div class="quiz-question">${renderQuizPromptHtml(q)}</div>

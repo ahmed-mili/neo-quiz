@@ -24,6 +24,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.type.single": "Choix unique",
 	"ai.type.multiple": "Choix multiple",
 	"ai.type.text": "Texte libre",
+	"ai.type.comprehension": "Compréhension",
 
 	/* ── Fournisseurs (sous-titres du menu) ── */
 	"ai.provider.choose": "Choisir un fournisseur",

@@ -142,6 +142,16 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 			? "single-choice questions (exactly one correct answer)"
 			: type === "Choix multiple"
 			? "multiple-choice questions (several correct answers)"
+			: type === "Compréhension"
+			// Le type qui manquait : un vrai sujet d'examen a une partie
+			// compréhension, où UN document porte plusieurs questions. Le
+			// contrat est explicite (un seul groupe, id partagé, aucune
+			// question hors document) parce que les modèles produisent sinon
+			// un support par question — ce qui n'est plus de la compréhension.
+			? `COMPREHENSION questions, ALL of them based on ONE source document that you write yourself.
+	Write a substantial passage (250-450 words: an article extract, a case study, a scenario, a piece of code — whatever suits the topic) and put it in the "passage" field of the FIRST question, together with "passageId": "doc1" and a "passageTitle" naming the document.
+	EVERY other question repeats ONLY "passageId": "doc1" (no "passage", no "passageTitle" — the engine shares the document automatically).
+	The questions must be ANSWERABLE FROM THE DOCUMENT ALONE and test understanding — main idea, inference, meaning in context, cause and effect, the author's intent, what can or cannot be concluded — NOT recall of outside knowledge. Mix single-choice, multiple-choice and free-text among them`
 			: "free-text questions";
 
 		const systemPrompt = `You are a quiz generator. Generate exactly ${count} quiz questions as a JSON5 array. Each question must have:
@@ -156,6 +166,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	- mathInput: true for a text question whose answer is a mathematical expression (the learner answers in a visual EQUATION EDITOR)
 	- answerTemplate: a LaTeX template pre-filled in the answer field of a mathInput question, with \\\\placeholder{} for each blank to fill (e.g. 'x = \\\\placeholder{}' ; two solutions: 'x_1 = \\\\placeholder{},\\\\; x_2 = \\\\placeholder{}'). RULES for mathInput: the question text NEVER gives answer-format instructions (no "as a fraction", "comma-separated", "e.g. 1/2") — the equation editor makes all of that pointless; prefer an answerTemplate that guides instead; acceptedAnswers are the COMPLETE content of the field once the template is filled, in LaTeX (e.g. 'x_1 = \\\\frac{1}{2},\\\\; x_2 = 3'), and add variants where relevant (solutions in reverse order)
 	- learn: a short lesson paragraph teaching the concept before the question (optional but recommended for educational quizzes)
+	- passage / passageId / passageTitle: a SOURCE DOCUMENT to read before answering (comprehension). "passage" holds the full text, "passageTitle" names it, and "passageId" is a shared key: every question carrying the SAME passageId shows the SAME document, so write the text ONCE on the first question of the group and give the others only their passageId. Use this whenever several questions probe one text, case, scenario or code sample
 
 	LANGUAGE — THIS IS A HARD RULE: write ALL the content you produce (title, prompt, options, answer, learn, explain) in THE SAME LANGUAGE AS THE USER REQUEST BELOW. If the request is in French, write the quiz in French; in Arabic, in Arabic; in English, in English. When the request provides source material (a text, a note, images), follow the language of that material. NEVER translate the content into English just because these instructions are in English. The FIELD NAMES (title, prompt, options…) and the JSON5 structure always stay exactly as specified above, in English.
 
@@ -672,7 +683,10 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 										multiSelect: { type: "boolean" },
 										type: { type: "string" },
 										answer: { type: "string" },
-									learn: { type: "string" }
+										learn: { type: "string" },
+										passage: { type: "string" },
+										passageId: { type: "string" },
+										passageTitle: { type: "string" }
 									},
 									required: ["title", "prompt"]
 								}

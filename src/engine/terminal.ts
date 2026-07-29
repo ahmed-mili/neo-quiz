@@ -1,6 +1,8 @@
 import type { EngineCtx } from "../types/engine-ctx";
 import type { QuizQuestion, TextQuestion } from "../types/quiz";
 import { isMathQuestion, matchesMathAnswer, createMathField } from "./math-input";
+import { isNumericQuestion, matchesNumericAnswer, isPurelyNumeric, parseNumericValue } from "./numeric";
+import type { NumericQuestion } from "./numeric";
 import { t } from "../i18n";
 
 export interface TerminalVisualTokens {
@@ -209,6 +211,17 @@ export function createTerminalHandlers(ctx: EngineCtx): TerminalHandlers {
 			.replace(/\s+/g, " ")
 			.trim();
 
+		/* Une réponse entièrement numérique est ramenée à sa valeur : « 3,14 »
+		   et « 3.14 » sont la MÊME écriture à la virgule décimale près, et un
+		   élève francophone tape la virgule. Ne s'applique QU'AUX chaînes
+		   purement numériques — un texte contenant une virgule n'est pas
+		   touché. Aucune tolérance n'est introduite ici : ce n'est pas le mode
+		   numérique, juste la fin d'un faux négatif de locale. */
+		if (isPurelyNumeric(out)) {
+			const parsed = parseNumericValue(out);
+			if (parsed) return String(parsed.value);
+		}
+
 		if (!caseSensitive) out = out.toLowerCase();
 		return out;
 	}
@@ -221,6 +234,10 @@ export function createTerminalHandlers(ctx: EngineCtx): TerminalHandlers {
 
 		const accepted = getTextAcceptedAnswers(q);
 		if (!accepted.length) return false;
+
+		// Question numérique DÉCLARÉE : la réponse est un nombre, comparé en
+		// valeur à la marge près, l'unité acceptée en suffixe.
+		if (isNumericQuestion(q)) return matchesNumericAnswer(q as NumericQuestion, accepted, value);
 
 		return accepted.some(expected =>
 			normalizeTextAnswer(expected, { caseSensitive: !!q.caseSensitive }) ===

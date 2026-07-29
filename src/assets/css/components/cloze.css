@@ -1,0 +1,116 @@
+/* =========================================================
+   TEXTE À TROUS (engine/cloze.ts)
+   Le texte reste du texte : les cases s'insèrent dans le flux de lecture
+   et se replient avec lui — jamais une grille de champs détachée de la
+   phrase, qui obligerait à faire l'aller-retour entre les deux.
+   ========================================================= */
+
+.quiz-cloze{
+  margin: 6px 0 4px;
+  font-size: 1.02em;
+  /* Interligne large : les cases dépassent la hauteur d'une ligne de texte,
+     et des lignes serrées les feraient se chevaucher. */
+  line-height: 2.35;
+  color: var(--text-normal);
+  text-align: left;
+}
+
+.quiz-cloze-slot{
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  /* Le slot suit le flux du texte et se replie avec lui. */
+  vertical-align: baseline;
+}
+
+.quiz-cloze-input{
+  /* Largeur UNIFORME, posée en style inline par le moteur : une case
+     dimensionnée sur sa réponse donnerait la longueur du mot cherché. */
+  padding: 2px 8px;
+  border: none;
+  border-bottom: 2px solid var(--background-modifier-border-hover);
+  border-radius: 4px 4px 0 0;
+  background: color-mix(in srgb, var(--background-secondary) 70%, transparent);
+  color: var(--text-normal);
+  font-family: inherit;
+  font-size: 0.95em;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  transition: border-color var(--quiz-dur-fast) var(--quiz-ease-smooth),
+              background var(--quiz-dur-fast) var(--quiz-ease-smooth),
+              box-shadow var(--quiz-dur-fast) var(--quiz-ease-smooth);
+}
+
+.quiz-cloze-input::placeholder{
+  color: var(--text-faint);
+}
+
+.quiz-cloze-input:hover:not(:disabled){
+  border-bottom-color: var(--quiz-primary);
+  background: color-mix(in srgb, var(--background-secondary) 90%, transparent);
+}
+
+.quiz-cloze-input:focus{
+  outline: none;
+  border-bottom-color: var(--quiz-primary);
+  background: color-mix(in srgb, var(--quiz-primary) 8%, var(--background-secondary));
+  box-shadow: 0 0 0 1.5px var(--quiz-primary-ring-16);
+}
+
+/* ── Après correction ── */
+
+.quiz-cloze-input.correct{
+  border-bottom-color: var(--quiz-success);
+  background: color-mix(in srgb, var(--quiz-success) 12%, transparent);
+  color: var(--text-normal);
+  -webkit-text-fill-color: var(--text-normal);   /* Chromium grise les champs désactivés */
+  opacity: 1;
+}
+
+.quiz-cloze-input.wrong{
+  border-bottom-color: var(--quiz-danger);
+  background: color-mix(in srgb, var(--quiz-danger) 12%, transparent);
+  color: var(--text-normal);
+  -webkit-text-fill-color: var(--text-normal);
+  opacity: 1;
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--quiz-danger) 70%, transparent);
+}
+
+/* La bonne réponse, à côté du seul trou raté. */
+.quiz-cloze-expected{
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--quiz-success) 16%, transparent);
+  color: var(--quiz-success);
+  font-size: 0.9em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.quiz-cloze-embed-wrap{
+  display: block;
+  margin: 10px 0;
+  text-align: center;
+}
+
+.quiz-cloze-embed{
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+/* ── Mobile : le clavier occupe la moitié de l'écran, on resserre ── */
+
+.is-mobile .quiz-cloze{
+  font-size: 0.98em;
+  line-height: 2.2;
+}
+
+.is-mobile .quiz-cloze-input{
+  /* 16 px minimum : en dessous, iOS zoome sur le champ au focus et casse
+     la mise en page de la carte. */
+  font-size: 16px;
+  padding: 2px 6px;
+}

@@ -30,6 +30,8 @@ export interface MathQuestionInput {
 	acceptableAnswers?: unknown[];
 	answer?: unknown;
 	caseSensitive?: boolean;
+	/** Réponse NUMÉRIQUE déclarée (engine/numeric.ts) — prime sur l'auto-détection math. */
+	numeric?: boolean;
 }
 
 export interface CreateMathFieldOptions {
@@ -58,6 +60,13 @@ interface ElectronLike {
    son énoncé / une réponse acceptée contient un segment $...$. */
 function isMathQuestion(q: MathQuestionInput | null | undefined): boolean {
 	if (!q || (q.type !== "text" && q._type !== "text")) return false;
+	/* `numeric: true` est une DÉCLARATION de l'auteur sur la nature de la
+	   réponse ; l'auto-détection ci-dessous n'est qu'une devinette sur la
+	   présence de $...$. Une question « valeur de $\pi$ ? » attend un nombre,
+	   pas un éditeur d'équations — et sans cette garde elle en ouvrait un,
+	   tout en perdant sa tolérance (la vérification math passe avant la
+	   numérique dans terminal.ts). */
+	if (q.numeric === true) return false;
 	// Le flag vit à la racine (moteur, JSON5 brut) ou dans _extraFields
 	// (objet normalisé de l'éditeur — clé inconnue préservée).
 	const flag = q.mathInput ?? (q._extraFields && q._extraFields.mathInput);

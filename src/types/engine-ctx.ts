@@ -48,6 +48,7 @@ import type {
 	OrderingQuestion,
 	MatchingQuestion,
 	TextQuestion,
+	ClozeQuestion,
 } from "./quiz";
 import type { SanitizerHandlers } from "../engine/sanitizer";
 import type { QuestionHandlers } from "../engine/questions";
@@ -67,6 +68,7 @@ import type { InteractionHandlers } from "../engine/interactions";
 import type { StateHandlers } from "../engine/state";
 import type { ResultsSaverHandlers } from "../engine/results-save";
 import type { PassageHandlers } from "../engine/passage";
+import type { ClozeHandlers } from "../engine/cloze";
 
 /**
  * Mode du quiz (engine.js ctx.quizMode / originalQuizMode). Miroir du type
@@ -137,6 +139,8 @@ export interface EngineCtx {
 	isMatchingQuestion(q: QuizQuestion): q is MatchingQuestion;
 	/** Prédicat de variante (engine.js:87 ; tolère aussi le legacy `q.text === true`). */
 	isTextQuestion(q: QuizQuestion): q is TextQuestion;
+	/** Prédicat de variante — présence d'un gabarit `cloze` non vide (engine.ts). */
+	isClozeQuestion(q: QuizQuestion): q is ClozeQuestion;
 
 	/* ── État runtime & carte des slides (engine.js:295-299) ── */
 	quizState: QuizState;
@@ -185,6 +189,7 @@ export interface EngineCtx {
 	questions: QuestionHandlers;
 	resultsSaver: ResultsSaverHandlers;
 	passage: PassageHandlers;
+	cloze: ClozeHandlers;
 
 	/* ════════════════════════════════════════════════
 	   Méthodes APLATIES issues des sous-modules (1er Object.assign, :156-219).

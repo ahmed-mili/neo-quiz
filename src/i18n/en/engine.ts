@@ -14,6 +14,10 @@ export const EN_ENGINE = {
 	/* ── Erreurs du bloc ── */
 	"engine.error.noQuestions": "⚠️ No questions were given to the quiz engine.",
 
+	/* ── Texte à trous ── */
+	"engine.cloze.instructions": "Fill in the {count} blanks",
+	"engine.cloze.blankAria": "Blank {n}",
+
 	/* ── Support de compréhension (document lu avant de répondre) ── */
 	"engine.passage.defaultTitle": "Document",
 	"engine.passage.scopeRange": "questions {first} to {last}",

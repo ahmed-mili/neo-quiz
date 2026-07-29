@@ -16,6 +16,17 @@ export interface QuestionHandlers {
 }
 
 export function createQuestionHandlers(ctx: EngineCtx): QuestionHandlers {
+	/* Sélection d'une question à EMPLACEMENTS (classement, association) : un
+	   tableau d'indices, jamais de chaînes. Le texte à trous a élargi
+	   `QuestionSelection` avec `string[]`, que `Array.isArray` ne distingue pas
+	   de celui-ci — mais toutes les fonctions de ce module sont appelées sous
+	   garde `isOrderingQuestion`/`isMatchingQuestion`. Ce helper nomme cet
+	   invariant une fois plutôt que de le caster à chaque accès. */
+	function slotSelection(qi: number): Array<number | null> | null {
+		const sel = ctx.quizState.selections[qi];
+		return Array.isArray(sel) ? (sel as Array<number | null>) : null;
+	}
+
 	function getOrderingItems(q: OrderingQuestion): string[] {
 		const nestedItems = q.ordering !== true ? q.ordering.items : undefined;
 		return firstArray(q.possibilities, q.orderingItems, nestedItems, q.options);
@@ -47,18 +58,18 @@ export function createQuestionHandlers(ctx: EngineCtx): QuestionHandlers {
 	}
 
 	const orderingSelectionIncludes = (qi: number, origIdx: number): boolean => {
-		const sel = ctx.quizState.selections[qi];
-		return Array.isArray(sel) ? sel.includes(origIdx) : false;
+		const sel = slotSelection(qi);
+		return sel ? sel.includes(origIdx) : false;
 	};
 
 	function removeOrderingItemFromSlot(qi: number, slotIndex: number): void {
-		const sel = ctx.quizState.selections[qi];
-		if (Array.isArray(sel) && slotIndex >= 0 && slotIndex < sel.length) sel[slotIndex] = null;
+		const sel = slotSelection(qi);
+		if (sel && slotIndex >= 0 && slotIndex < sel.length) sel[slotIndex] = null;
 	}
 
 	function placeOrderingItemInSlot(qi: number, slotIndex: number, origIdx: number): void {
-		const sel = ctx.quizState.selections[qi];
-		if (!Array.isArray(sel) || slotIndex < 0 || slotIndex >= sel.length) return;
+		const sel = slotSelection(qi);
+		if (!sel || slotIndex < 0 || slotIndex >= sel.length) return;
 		const existingSlot = sel.indexOf(origIdx);
 		const currentAtTarget = sel[slotIndex];
 		if (existingSlot === slotIndex) return;
@@ -68,8 +79,8 @@ export function createQuestionHandlers(ctx: EngineCtx): QuestionHandlers {
 	}
 
 	const matchingSelectionIncludes = (qi: number, choiceIdx: number): boolean => {
-		const sel = ctx.quizState.selections[qi];
-		return Array.isArray(sel) ? sel.includes(choiceIdx) : false;
+		const sel = slotSelection(qi);
+		return sel ? sel.includes(choiceIdx) : false;
 	};
 
 	return {

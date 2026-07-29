@@ -17,6 +17,7 @@ import { createQuestionHandlers } from "./engine/questions";
 import { createTextOnlyHandlers } from "./engine/text-only";
 import { createResultsSaver } from "./engine/results-save";
 import { createPassageHandlers } from "./engine/passage";
+import { createClozeHandlers } from "./engine/cloze";
 import { mathifyElement } from "./engine/mathjax";
 import { t } from "./i18n";
 
@@ -31,6 +32,7 @@ import type {
 	OrderingQuestion,
 	MatchingQuestion,
 	TextQuestion,
+	ClozeQuestion,
 } from "./types/quiz";
 
 /**
@@ -123,6 +125,10 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		!!(q && ((q as { matching?: unknown }).matching === true || typeof (q as { matching?: unknown }).matching === "object"));
 	const isTextQuestion = (q: QuizQuestion): q is TextQuestion =>
 		!!(q && ((q as { type?: unknown }).type === "text" || (q as { text?: unknown }).text === true));
+	// Le gabarit EST le discriminant : une question qui porte un `cloze` non
+	// vide est un texte à trous, quels que soient ses autres champs.
+	const isClozeQuestion = (q: QuizQuestion): q is ClozeQuestion =>
+		!!(q && typeof (q as { cloze?: unknown }).cloze === "string" && (q as { cloze: string }).cloze.trim().length > 0);
 
 	// Créer le contexte partagé (ctx) pour injection de dépendances
 	const originalQuizMode = quizMode;
@@ -164,7 +170,8 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		clamp,
 		isOrderingQuestion,
 		isMatchingQuestion,
-		isTextQuestion
+		isTextQuestion,
+		isClozeQuestion
 	} as EngineCtx;
 
 	// Instancier tous les modules avec ctx injecté
@@ -186,6 +193,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	const questions = createQuestionHandlers(ctx);
 	const resultsSaver = createResultsSaver(ctx);
 	const passage = createPassageHandlers(ctx);
+	const cloze = createClozeHandlers(ctx);
 
 	// Fonctions utilitaires seront définies après les constantes SLIDE_* pour éviter TDZ
 
@@ -211,6 +219,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		questions,
 		resultsSaver,
 		passage,
+		cloze,
 		// Fonctions exposées directement
 		escapeHtmlText: sanitizer.escapeHtmlText,
 		escapeHtmlAttr: sanitizer.escapeHtmlAttr,
@@ -270,6 +279,8 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	function buildShuffleMap(): QuestionShuffleEntry[] {
 		return quiz.map(q => {
 			if (isTextQuestion(q)) return null;
+			// Un texte à trous se lit dans l'ordre où il est écrit : rien à mélanger.
+			if (isClozeQuestion(q)) return null;
 
 			if (isOrderingQuestion(q)) {
 				return shuffleArray([...Array(questions.getOrderingItems(q).length).keys()]);
@@ -289,6 +300,10 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	function initSelections(): QuestionSelection[] {
 		return quiz.map(q => {
 			if (isTextQuestion(q)) return "";
+			// Une case de saisie par trou, vides — jamais `null` : le rendu lit
+			// ces valeurs à chaque frappe et un trou absent ferait un `undefined`
+			// dans la valeur de l'input.
+			if (isClozeQuestion(q)) return new Array<string>(cloze.getBlanks(q).length).fill("");
 			if (isOrderingQuestion(q)) return new Array<number | null>(questions.getOrderingItems(q).length).fill(null);
 			if (isMatchingQuestion(q)) return new Array<number | null>(questions.getMatchRows(q).length).fill(null);
 			if (q.multiSelect) return new Set<number>();

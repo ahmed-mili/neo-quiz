@@ -5,6 +5,7 @@ import type {
 	QcmQuestion,
 	MultiSelectQuestion,
 	TextQuestion,
+	ClozeQuestion,
 	OrderingQuestion,
 	MatchingQuestion,
 } from "../types/quiz";
@@ -119,6 +120,7 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 	}
 
 	function getQuestionKind(q: QuizQuestion): string {
+		if (ctx.isClozeQuestion(q)) return "cloze";
 		if (ctx.isTextQuestion(q)) return "text";
 		if (ctx.isOrderingQuestion(q)) return "ordering";
 		if (ctx.isMatchingQuestion(q)) return "matching";
@@ -172,10 +174,29 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 		};
 	}
 
-	function buildOrderingResult(q: OrderingQuestion, qi: number) {
-		const items = ctx.getOrderingItems(q);
+	/* Texte à trous : la correction est trou par trou — un « faux » global ne
+	   dit pas lequel a manqué, ce que l'élève relit d'abord. */
+	function buildClozeResult(q: ClozeQuestion, qi: number) {
 		const selRaw = ctx.quizState.selections?.[qi];
 		const selected = Array.isArray(selRaw) ? selRaw : [];
+		const blanks = ctx.cloze.getBlanks(q);
+		return {
+			blanks: blanks.map((blank, index) => ({
+				index,
+				userAnswer: String(selected[index] ?? ""),
+				acceptedAnswers: blank.answers,
+				isCorrect: ctx.cloze.isBlankCorrect(q, index, selected[index])
+			})),
+			isCorrect: !!ctx.isCorrect?.(qi)
+		};
+	}
+
+	function buildOrderingResult(q: OrderingQuestion, qi: number) {
+		const items = ctx.getOrderingItems(q);
+		// Variante garantie par l'appelant (buildQcmAnswer) ⇒ sélection à
+		// emplacements : des indices, jamais les chaînes du texte à trous.
+		const selRaw = ctx.quizState.selections?.[qi];
+		const selected: Array<number | null> = Array.isArray(selRaw) ? (selRaw as Array<number | null>) : [];
 		const correctOrder = ctx.getOrderingCorrectOrder(q);
 		return {
 			userOrder: selected.map(index => ({
@@ -194,8 +215,9 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 	function buildMatchingResult(q: MatchingQuestion, qi: number) {
 		const rows = ctx.getMatchRows(q);
 		const choices = ctx.getMatchChoices(q);
+		// Idem buildOrderingResult : indices d'emplacements.
 		const selRaw = ctx.quizState.selections?.[qi];
-		const selected = Array.isArray(selRaw) ? selRaw : [];
+		const selected: Array<number | null> = Array.isArray(selRaw) ? (selRaw as Array<number | null>) : [];
 		const correctMap = ctx.getMatchCorrectMap(q);
 		return {
 			userMatches: rows.map((row, i) => {
@@ -239,6 +261,7 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 	}
 
 	function buildQcmAnswer(q: QuizQuestion, qi: number) {
+		if (ctx.isClozeQuestion(q)) return buildClozeResult(q, qi);
 		if (ctx.isTextQuestion(q)) return buildTextQuestionResult(q, qi);
 		if (ctx.isOrderingQuestion(q)) return buildOrderingResult(q, qi);
 		if (ctx.isMatchingQuestion(q)) return buildMatchingResult(q, qi);
@@ -260,6 +283,12 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 	}
 
 	function buildExpectedAnswers(q: QuizQuestion): unknown {
+		if (ctx.isClozeQuestion(q)) {
+			// Une entrée par TROU, dans l'ordre du gabarit : une correction de
+			// texte à trous se lit trou par trou, pas comme une réponse unique.
+			return ctx.cloze.getClozeAnswers(q).map((text, index) => ({ index, text }));
+		}
+
 		if (ctx.isTextQuestion(q)) {
 			const acceptedAnswers = ctx.terminal?.getTextAcceptedAnswers?.(q) || [];
 			return acceptedAnswers.map((text, index) => ({ index, text: String(text) }));

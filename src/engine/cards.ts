@@ -6,6 +6,7 @@ import type {
 	OrderingQuestion,
 	MatchingQuestion,
 	TextQuestion,
+	ClozeQuestion,
 } from "../types/quiz";
 import { mathifyElement } from "./mathjax";
 import { t, type TransKey } from "../i18n";
@@ -163,7 +164,10 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 
 	function orderingCardHtml(q: OrderingQuestion, qi: number): string {
 		const items = ctx.getOrderingItems(q);
-		const sel = ctx.quizState.selections[qi];
+		// Question de classement ⇒ sélection à emplacements (indices). Le cast
+		// nomme cet invariant : `Array.isArray` ne sépare plus `number[]` de
+		// `string[]` depuis l'arrivée du texte à trous.
+		const sel = ctx.quizState.selections[qi] as Array<number | null> | undefined;
 		const slotLabels = ctx.getOrderingSlotLabels(q);
 		const correctOrder = ctx.getOrderingCorrectOrder(q);
 		// QCM/ordering → number[] (buildShuffleMap) ; cast erasé, runtime `|| []` intact.
@@ -208,7 +212,8 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		const rows = ctx.getMatchRows(q);
 		const choices = ctx.getMatchChoices(q);
 		const correctMap = ctx.getMatchCorrectMap(q);
-		const sel = ctx.quizState.selections[qi];
+		// Idem orderingCardHtml : question d'association ⇒ indices.
+		const sel = ctx.quizState.selections[qi] as Array<number | null> | undefined;
 		// Matching → { rows, choices } (buildShuffleMap) ; cast erasé, runtime `|| {}` intact.
 		const shuffleData = (ctx.quizState.shuffleMap[qi] || {}) as { rows?: number[]; choices?: number[] };
 		const shuffledRows = Array.isArray(shuffleData.rows) ? shuffleData.rows : [...Array(rows.length).keys()];
@@ -369,6 +374,7 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		const q = ctx.quiz[qi];
 		const isTextOnly = ctx.textOnly?.isTextOnlyMode?.();
 		const isTxt = ctx.isTextQuestion(q);
+		const isCloze = ctx.isClozeQuestion(q);
 		const isOrd = ctx.isOrderingQuestion(q);
 		const isMatch = ctx.isMatchingQuestion(q);
 		// q.multiSelect n'existe que sur QCM/choix multiple : lecture uniforme via
@@ -382,6 +388,9 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		}
 		// Casts guidés par les prédicats isTxt/isOrd/isMatch (évalués en amont,
 		// iso-fonctionnels) : la branche garantit la variante, le cast la nomme.
+		else if (isCloze) {
+			body = ctx.cloze.clozeCardHtml(q as ClozeQuestion, qi);
+		}
 		else if (isTxt) {
 			body = ctx.terminal.textQuestionCardHtml(q as TextQuestion, qi);
 		}

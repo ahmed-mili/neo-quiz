@@ -110,6 +110,18 @@ export interface TextQuestion extends QuestionBase {
 	answer?: string;
 	/** Question "math" : réponse saisie dans un éditeur d'équations MathLive (engine/math-input.js isMathQuestion). */
 	mathInput?: boolean;
+	/**
+	 * RÉPONSE NUMÉRIQUE (engine/numeric.ts) — la réponse est un nombre, comparé
+	 * en VALEUR et non en texte. Déclaré par l'auteur, jamais déduit : « 007 »
+	 * est une chaîne, pas l'entier 7.
+	 */
+	numeric?: boolean;
+	/** Marge absolue acceptée autour de la valeur attendue. */
+	tolerance?: number;
+	/** Marge relative acceptée, en pourcentage de la valeur attendue. */
+	tolerancePercent?: number;
+	/** Unité attendue (« m/s ») — acceptée en suffixe de la saisie, jamais exigée. */
+	unit?: string;
 	/** Gabarit guidé optionnel de l'éditeur math, ex. "x = ▯" (engine/terminal.js bindMathQuestion). */
 	answerTemplate?: string;
 	/** Variante terminal (engine/terminal.js getTerminalTextVariant, normalizeTerminalVariantName). */
@@ -133,6 +145,19 @@ export interface TextQuestion extends QuestionBase {
 	commandMaxLength?: number;
 	terminalMaxLength?: number;
 	spellcheck?: boolean;
+}
+
+/**
+ * TEXTE À TROUS (engine/cloze.ts). Le gabarit vit dans `cloze` : le texte
+ * complet, chaque trou entre doubles accolades, variantes séparées par « | ».
+ *   cloze: "La capitale est {{Paris}}, la monnaie {{l'euro|euro}}."
+ * `prompt` reste la consigne ; c'est la PRÉSENCE de `cloze` qui discrimine la
+ * variante (engine.ts isClozeQuestion).
+ */
+export interface ClozeQuestion extends QuestionBase {
+	cloze: string;
+	/** Comparaison sensible à la casse (défaut : non, comme les réponses libres). */
+	caseSensitive?: boolean;
 }
 
 /** Forme imbriquée alternative de `ordering`, lue en fallback (engine/questions.js: q?.ordering?.items/correctOrder/slotLabels). */
@@ -195,6 +220,7 @@ export type QuizQuestion =
 	| QcmQuestion
 	| MultiSelectQuestion
 	| TextQuestion
+	| ClozeQuestion
 	| OrderingQuestion
 	| MatchingQuestion;
 
@@ -208,13 +234,20 @@ export type TextOnlyRating = "understood" | "partial" | "review";
  * Sélection courante pour une question, selon sa variante
  * (engine.js initSelections) :
  *   - TextQuestion            → string (réponse libre saisie, "" au départ)
+ *   - ClozeQuestion           → string[] (une saisie par trou, "" au départ)
  *   - OrderingQuestion/
  *     MatchingQuestion        → Array<number | null> (slot → index original, ou vide)
  *   - MultiSelectQuestion     → Set<number> (indices sélectionnés)
  *   - QcmQuestion             → number | null (index sélectionné, ou aucune réponse)
+ *
+ * Deux variantes tableau cohabitent (string[] et Array<number | null>) : elles
+ * ne sont jamais confondues au runtime parce que la lecture est toujours gardée
+ * par le PRÉDICAT DE QUESTION (isClozeQuestion, isOrderingQuestion…), jamais par
+ * la forme de la sélection.
  */
 export type QuestionSelection =
 	| string
+	| string[]
 	| Array<number | null>
 	| Set<number>
 	| number

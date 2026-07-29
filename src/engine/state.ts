@@ -44,6 +44,12 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 			return typeof sel === "string" && sel.trim().length > 0;
 		}
 
+		// Texte à trous : un seul trou rempli suffit à dire que l'élève a
+		// commencé (à distinguer d'`isComplete`, qui les exige tous).
+		if (ctx.isClozeQuestion(q)) {
+			return Array.isArray(sel) && sel.some(v => String(v ?? "").trim().length > 0);
+		}
+
 		if (ctx.isOrderingQuestion(q) || ctx.isMatchingQuestion(q)) {
 			return Array.isArray(sel) && sel.some(v => v !== null);
 		}
@@ -61,6 +67,10 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 
 		if (ctx.isTextQuestion(q)) {
 			return typeof sel === "string" && sel.trim().length > 0;
+		}
+
+		if (ctx.isClozeQuestion(q)) {
+			return Array.isArray(sel) && sel.length > 0 && sel.every(v => String(v ?? "").trim().length > 0);
 		}
 
 		if (ctx.isOrderingQuestion(q) || ctx.isMatchingQuestion(q)) {
@@ -86,6 +96,13 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 
 		if (ctx.isTextQuestion(q)) {
 			return ctx.terminal.isTextAnswerCorrect(q, sel);
+		}
+
+		// Tout ou rien : un texte à trous n'est juste que si TOUS ses trous
+		// le sont — un barème partiel serait une autre décision, à prendre
+		// explicitement plutôt qu'à hériter par défaut.
+		if (ctx.isClozeQuestion(q)) {
+			return ctx.cloze.isClozeCorrect(q, sel);
 		}
 
 		if (ctx.isOrderingQuestion(q)) {

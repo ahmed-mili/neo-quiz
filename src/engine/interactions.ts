@@ -65,10 +65,20 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		});
 	}
 
+	/* Sélection d'une question à EMPLACEMENTS (classement, association) : des
+	   indices, jamais des chaînes. Depuis le texte à trous, `QuestionSelection`
+	   admet aussi `string[]` et `Array.isArray` ne suffit plus à distinguer les
+	   deux — mais bindOrderingQuestion/bindMatchingQuestion ne sont appelées que
+	   sous garde de variante. Le helper nomme cet invariant une fois. */
+	function slotSelection(qi: number): Array<number | null> | null {
+		const sel = ctx.quizState.selections[qi];
+		return Array.isArray(sel) ? (sel as Array<number | null>) : null;
+	}
+
 	function bindOrderingQuestion(trackItem: HTMLElement, qi: number, q: OrderingQuestion): void {
 		const qItems = ctx.getOrderingItems(q);
-		const selInit = ctx.quizState.selections[qi];
-		if (!Array.isArray(selInit) || selInit.length !== qItems.length) {
+		const selInit = slotSelection(qi);
+		if (!selInit || selInit.length !== qItems.length) {
 			ctx.quizState.selections[qi] = new Array<number | null>(qItems.length).fill(null);
 		}
 
@@ -127,8 +137,8 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			});
 			el.addEventListener("dragstart", e => {
 				if (ctx.quizState.isSliding || ctx.quizState.locked) return void e.preventDefault();
-				const sel = ctx.quizState.selections[qi];
-				if (!Array.isArray(sel)) return void e.preventDefault();
+				const sel = slotSelection(qi);
+				if (!sel) return void e.preventDefault();
 				const oi = sel[si];
 				if (oi === null || oi === undefined) return void e.preventDefault();
 				if (e.dataTransfer) {
@@ -145,9 +155,9 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			el.addEventListener("dragover", e => {
 				if (ctx.quizState.isSliding || ctx.quizState.locked) return;
 				e.preventDefault();
-				const sel = ctx.quizState.selections[qi];
+				const sel = slotSelection(qi);
 				el.classList.add("dragover");
-				if (Array.isArray(sel) && sel[si] !== null) el.classList.add("swap-target");
+				if (sel && sel[si] !== null) el.classList.add("swap-target");
 				else el.classList.remove("swap-target");
 			});
 			el.addEventListener("dragleave", () => el.classList.remove("dragover", "swap-target"));
@@ -155,8 +165,8 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 				e.preventDefault();
 				el.classList.remove("dragover", "swap-target");
 				if (ctx.quizState.locked || ctx.quizState.isSliding) return;
-				const sel = ctx.quizState.selections[qi];
-				if (!Array.isArray(sel)) return;
+				const sel = slotSelection(qi);
+				if (!sel) return;
 				const raw = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
 				if (!raw) return;
 				let payload: DragPayload | null = null;
@@ -185,8 +195,8 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 
 	function bindMatchingQuestion(trackItem: HTMLElement, qi: number, q: MatchingQuestion): void {
 		const rows = ctx.getMatchRows(q);
-		const selInit = ctx.quizState.selections[qi];
-		if (!Array.isArray(selInit) || selInit.length !== rows.length) {
+		const selInit = slotSelection(qi);
+		if (!selInit || selInit.length !== rows.length) {
 			ctx.quizState.selections[qi] = new Array<number | null>(rows.length).fill(null);
 		}
 
@@ -224,8 +234,8 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			const actOnSlot = () => {
 				if (ctx.quizState.isSliding || ctx.quizState.locked) return;
 				const picked = ctx.quizState.matchPick[qi];
-				const sel = ctx.quizState.selections[qi];
-				if (!Array.isArray(sel)) return;
+				const sel = slotSelection(qi);
+				if (!sel) return;
 				if (picked !== null) {
 					sel[si] = picked;
 					ctx.quizState.matchPick[qi] = null;
@@ -245,8 +255,8 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			});
 			el.addEventListener("dragstart", e => {
 				if (ctx.quizState.isSliding || ctx.quizState.locked) return void e.preventDefault();
-				const sel = ctx.quizState.selections[qi];
-				if (!Array.isArray(sel)) return void e.preventDefault();
+				const sel = slotSelection(qi);
+				if (!sel) return void e.preventDefault();
 				const ci = sel[si];
 				if (ci === null || ci === undefined) return void e.preventDefault();
 				if (e.dataTransfer) {
@@ -263,9 +273,9 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			el.addEventListener("dragover", e => {
 				if (ctx.quizState.isSliding || ctx.quizState.locked) return;
 				e.preventDefault();
-				const sel = ctx.quizState.selections[qi];
+				const sel = slotSelection(qi);
 				el.classList.add("dragover");
-				if (Array.isArray(sel) && sel[si] !== null) el.classList.add("swap-target");
+				if (sel && sel[si] !== null) el.classList.add("swap-target");
 				else el.classList.remove("swap-target");
 			});
 			el.addEventListener("dragleave", () => el.classList.remove("dragover", "swap-target"));
@@ -273,8 +283,8 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 				e.preventDefault();
 				el.classList.remove("dragover", "swap-target");
 				if (ctx.quizState.locked || ctx.quizState.isSliding) return;
-				const sel = ctx.quizState.selections[qi];
-				if (!Array.isArray(sel)) return;
+				const sel = slotSelection(qi);
+				if (!sel) return;
 				const raw = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
 				if (!raw) return;
 				let payload: DragPayload | null = null;
@@ -308,6 +318,7 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 
 		const q = ctx.quiz[qi];
 		const isTxt = ctx.isTextQuestion(q);
+		const isCloze = ctx.isClozeQuestion(q);
 		const isOrd = ctx.isOrderingQuestion(q);
 		const isMatch = ctx.isMatchingQuestion(q);
 		const isMulti = !!(q as { multiSelect?: boolean }).multiSelect;
@@ -316,8 +327,9 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			ctx.textOnly.bindTextOnlyQuestion(trackItem, qi);
 		} else {
 			// isTxt/isOrd/isMatch garantissent la variante ⇒ casts documentés.
-			if (isTxt) ctx.terminal.bindTextQuestion(trackItem, qi);
-			if (!isTxt && !isOrd && !isMatch) bindBinaryQuestion(trackItem, qi, isMulti);
+			if (isCloze) ctx.cloze.bindClozeQuestion(trackItem, qi);
+			if (isTxt && !isCloze) ctx.terminal.bindTextQuestion(trackItem, qi);
+			if (!isTxt && !isCloze && !isOrd && !isMatch) bindBinaryQuestion(trackItem, qi, isMulti);
 			if (isOrd) bindOrderingQuestion(trackItem, qi, q as OrderingQuestion);
 			if (isMatch) bindMatchingQuestion(trackItem, qi, q as MatchingQuestion);
 		}

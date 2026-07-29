@@ -23,9 +23,16 @@
   vertical-align: baseline;
 }
 
-.quiz-cloze-input{
-  /* Largeur UNIFORME, posée en style inline par le moteur : une case
-     dimensionnée sur sa réponse donnerait la longueur du mot cherché. */
+/* Sélecteur DESCENDANT (.quiz-cloze .quiz-cloze-input) et non la seule classe :
+   Obsidian pose `.is-mobile input[type="text"] { width: 100% }`, de
+   spécificité (0,2,1) — une règle à une classe, même plus tardive, perd, et
+   toutes les cases s'étalaient sur la largeur de la carte sur téléphone.
+   Deux classes ici, trois dans la variante mobile : la cascade est gagnée par
+   la structure, jamais par un !important. */
+.quiz-cloze .quiz-cloze-input{
+  /* Largeur UNIFORME pour TOUTES les cases : une case dimensionnée sur sa
+     réponse donnerait la longueur du mot cherché. */
+  width: 12ch;
   padding: 2px 8px;
   border: none;
   border-bottom: 2px solid var(--background-modifier-border-hover);
@@ -42,16 +49,16 @@
               box-shadow var(--quiz-dur-fast) var(--quiz-ease-smooth);
 }
 
-.quiz-cloze-input::placeholder{
+.quiz-cloze .quiz-cloze-input::placeholder{
   color: var(--text-faint);
 }
 
-.quiz-cloze-input:hover:not(:disabled){
+.quiz-cloze .quiz-cloze-input:hover:not(:disabled){
   border-bottom-color: var(--quiz-primary);
   background: color-mix(in srgb, var(--background-secondary) 90%, transparent);
 }
 
-.quiz-cloze-input:focus{
+.quiz-cloze .quiz-cloze-input:focus{
   outline: none;
   border-bottom-color: var(--quiz-primary);
   background: color-mix(in srgb, var(--quiz-primary) 8%, var(--background-secondary));
@@ -60,7 +67,7 @@
 
 /* ── Après correction ── */
 
-.quiz-cloze-input.correct{
+.quiz-cloze .quiz-cloze-input.correct{
   border-bottom-color: var(--quiz-success);
   background: color-mix(in srgb, var(--quiz-success) 12%, transparent);
   color: var(--text-normal);
@@ -68,7 +75,7 @@
   opacity: 1;
 }
 
-.quiz-cloze-input.wrong{
+.quiz-cloze .quiz-cloze-input.wrong{
   border-bottom-color: var(--quiz-danger);
   background: color-mix(in srgb, var(--quiz-danger) 12%, transparent);
   color: var(--text-normal);
@@ -108,9 +115,11 @@
   line-height: 2.2;
 }
 
-.is-mobile .quiz-cloze-input{
+.is-mobile .quiz-cloze .quiz-cloze-input{
   /* 16 px minimum : en dessous, iOS zoome sur le champ au focus et casse
-     la mise en page de la carte. */
+     la mise en page de la carte. Cases plus courtes en compensation — à
+     12ch et 16px, une case mangeait le tiers d'une ligne de téléphone. */
+  width: 9ch;
   font-size: 16px;
   padding: 2px 6px;
 }

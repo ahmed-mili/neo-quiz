@@ -46,8 +46,10 @@ export interface ClozeHandlers {
 	getClozeAnswers(q: ClozeQuestion): string[];
 }
 
-/** Un trou vide ne doit pas trahir la longueur du mot : largeur uniforme. */
-const BLANK_WIDTH_CH = 12;
+/* La largeur des cases est UNIFORME et vit dans le CSS (.quiz-cloze-input),
+   pas ici : une largeur en style inline ne se surcharge pas, et l'écran étroit
+   d'un téléphone en demande une plus petite. Le moteur dit qu'il y a un trou,
+   la feuille de style dit quelle place il prend. */
 
 export function createClozeHandlers(ctx: EngineCtx): ClozeHandlers {
 	const BLANK_RE = /\{\{([^{}]*)\}\}/g;
@@ -136,7 +138,7 @@ export function createClozeHandlers(ctx: EngineCtx): ClozeHandlers {
 
 			return `<span class="quiz-cloze-slot"><input class="${cls}" type="text" `
 				+ `data-cloze="${seg.index}" value="${ctx.escapeHtmlAttr(value)}" `
-				+ `style="width:${BLANK_WIDTH_CH}ch" autocomplete="off" autocapitalize="off" spellcheck="false" `
+				+ `autocomplete="off" autocapitalize="off" spellcheck="false" `
 				+ `aria-label="${ctx.escapeHtmlAttr(t("engine.cloze.blankAria", { n: seg.index + 1 }))}"`
 				+ `${locked ? " disabled" : ""}>${expected}</span>`;
 		}).join("");

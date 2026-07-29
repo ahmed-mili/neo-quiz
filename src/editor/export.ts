@@ -53,15 +53,21 @@ function exportQuestion(q: DraftQuestion, idx: number): string {
 		if (q.caseSensitive) L.push("\t\tcaseSensitive: true,");
 		L.push(`\t\tacceptedAnswers: [\n${(q.acceptedAnswers || []).filter(Boolean).map(a => `\t\t\t'${e(a)}',`).join("\n")}\n\t\t],`);
 	}
+	/* Virgule SYSTÉMATIQUE, y compris sur le dernier champ écrit : JSON5
+	   autorise la virgule traînante, et la conditionner à « y a-t-il un champ
+	   après ? » n'a jamais tenu. `hint` et `explainHtml` se croyaient derniers
+	   et s'écrivaient sans virgule — mais `_extraFields` en écrit d'autres
+	   ensuite (learn, passage, mathInput, numeric…). Une question portant une
+	   explication ET un de ces champs produisait un bloc JSON5 INVALIDE, que le
+	   moteur refusait de parser (« invalid character 'p' »). */
 	if (q.hint) {
-		const hasExplain = q.explain || q._explainHtml;
-		L.push(`\t\thint: '${e(q.hint)}'${hasExplain ? ',' : ''}`);
+		L.push(`\t\thint: '${e(q.hint)}',`);
 	}
 	// Priorité à explain modifié par l'utilisateur
 	if (q.explain) {
-		L.push(`\t\texplainHtml: '${e(md2html(q.explain))}'`);
+		L.push(`\t\texplainHtml: '${e(md2html(q.explain))}',`);
 	} else if (q._explainHtml) {
-		L.push(`\t\texplainHtml: '${e(q._explainHtml)}'`);
+		L.push(`\t\texplainHtml: '${e(q._explainHtml)}',`);
 	}
 
 	if (q._extraFields && Object.keys(q._extraFields).length > 0) {

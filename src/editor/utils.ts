@@ -2,7 +2,7 @@ import { setIcon } from "obsidian";
 import { t } from "../i18n";
 import type { ResourceButton } from "../types/quiz";
 
-export type QuestionTypeKey = "single" | "multi" | "ordering" | "matching" | "text" | "cmd" | "powershell" | "bash";
+export type QuestionTypeKey = "single" | "multi" | "ordering" | "matching" | "cloze" | "numeric" | "text" | "cmd" | "powershell" | "bash";
 
 interface QuizTypeDef {
 	key: QuestionTypeKey;
@@ -22,6 +22,8 @@ const Q_TYPES: QuizTypeDef[] = [
 	{ key: "multi", lucide: "check-square", get label() { return t("editor.type.multi.label"); }, get desc() { return t("editor.type.multi.desc"); } },
 	{ key: "ordering", lucide: "arrow-up-down", get label() { return t("editor.type.ordering.label"); }, get desc() { return t("editor.type.ordering.desc"); } },
 	{ key: "matching", lucide: "link", get label() { return t("editor.type.matching.label"); }, get desc() { return t("editor.type.matching.desc"); } },
+	{ key: "cloze", lucide: "text-cursor-input", get label() { return t("editor.type.cloze.label"); }, get desc() { return t("editor.type.cloze.desc"); } },
+	{ key: "numeric", lucide: "calculator", get label() { return t("editor.type.numeric.label"); }, get desc() { return t("editor.type.numeric.desc"); } },
 	{ key: "text", lucide: "type", get label() { return t("editor.type.text.label"); }, get desc() { return t("editor.type.text.desc"); } },
 	{ key: "cmd", lucide: "terminal", get label() { return t("editor.type.cmd.label"); }, get desc() { return t("editor.type.cmd.desc"); } },
 	{ key: "powershell", lucide: "terminal-square", get label() { return t("editor.type.powershell.label"); }, get desc() { return t("editor.type.powershell.desc"); } },
@@ -75,6 +77,12 @@ export interface DraftQuestion {
 	_extraFields?: Record<string, unknown>;
 	/** Gabarit guidé de l'éditeur math (miroir de TextQuestion.answerTemplate). */
 	answerTemplate?: string;
+	/** Gabarit du texte à trous — trous entre doubles accolades (engine/cloze.ts). */
+	cloze?: string;
+	/** Réponse numérique : marge absolue, marge relative, unité (engine/numeric.ts). */
+	tolerance?: number;
+	tolerancePercent?: number;
+	unit?: string;
 }
 
 /* Libellés de slots par défaut (« Étape 1 »…) : contenu de DÉPART écrit ensuite
@@ -92,6 +100,10 @@ function makeDefault(type: QuestionTypeKey): DraftQuestion {
 		case "multi": return { ...b, options: ["", ""], correctIndices: [] };
 		case "ordering": return { ...b, slots: defaultSlots(), possibilities: ["", ""], correctOrder: [0, 1] };
 		case "matching": return { ...b, rows: ["", ""], choices: ["", ""], correctMap: [0, 0] };
+		// Gabarit d'exemple : un texte à trous vide n'apprend pas sa syntaxe, et
+		// les doubles accolades ne s'inventent pas.
+		case "cloze": return { ...b, cloze: t("editor.cloze.defaultTemplate"), caseSensitive: false };
+		case "numeric": return { ...b, placeholder: "", acceptedAnswers: [""], caseSensitive: false, unit: "" };
 		case "text": return { ...b, placeholder: t("editor.text.defaultPlaceholder"), acceptedAnswers: [""], caseSensitive: false };
 		case "cmd": return { ...b, placeholder: "", acceptedAnswers: [""], caseSensitive: false, commandPrefix: "C:\\>" };
 		case "powershell": return { ...b, placeholder: "", acceptedAnswers: [""], caseSensitive: false, commandPrefix: "PS>" };

@@ -43,7 +43,13 @@ function exportQuestion(q: DraftQuestion, idx: number): string {
 		L.push(`\t\tchoices: [\n${(q.choices || []).map(c => `\t\t\t'${e(c)}',`).join("\n")}\n\t\t],`);
 		L.push(`\t\tcorrectMap: [${(q.correctMap || []).join(", ")}],`);
 	}
-	if (["text", "cmd", "powershell", "bash"].includes(t)) {
+	if (t === "cloze") {
+		// Le gabarit porte à lui seul l'énoncé ET les réponses : rien d'autre
+		// à écrire, et `type` reste absent (le moteur discrimine sur `cloze`).
+		L.push(`\t\tcloze: '${e(q.cloze || "")}',`);
+		if (q.caseSensitive) L.push("\t\tcaseSensitive: true,");
+	}
+	if (["numeric", "text", "cmd", "powershell", "bash"].includes(t)) {
 		L.push("\t\ttype: 'text',");
 		if (t === "cmd") L.push("\t\tterminalVariant: 'cmd',");
 		if (t === "powershell") L.push("\t\ttextVariant: 'powershell',");
@@ -51,6 +57,14 @@ function exportQuestion(q: DraftQuestion, idx: number): string {
 		if (q.commandPrefix && (t === "cmd" || t === "powershell")) L.push(`\t\tcommandPrefix: '${e(q.commandPrefix)}',`);
 		if (q.placeholder) L.push(`\t\tplaceholder: '${e(q.placeholder)}',`);
 		if (q.caseSensitive) L.push("\t\tcaseSensitive: true,");
+		if (t === "numeric") {
+			L.push("\t\tnumeric: true,");
+			if (q.unit && q.unit.trim()) L.push(`\t\tunit: '${e(q.unit)}',`);
+			// Marges mutuellement exclusives (cf. formulaire) : au plus une des
+			// deux est définie, jamais les deux.
+			if (typeof q.tolerance === "number") L.push(`\t\ttolerance: ${q.tolerance},`);
+			if (typeof q.tolerancePercent === "number") L.push(`\t\ttolerancePercent: ${q.tolerancePercent},`);
+		}
 		L.push(`\t\tacceptedAnswers: [\n${(q.acceptedAnswers || []).filter(Boolean).map(a => `\t\t\t'${e(a)}',`).join("\n")}\n\t\t],`);
 	}
 	/* Virgule SYSTÉMATIQUE, y compris sur le dernier champ écrit : JSON5
@@ -78,7 +92,7 @@ function exportQuestion(q: DraftQuestion, idx: number): string {
 			'correctOrder', 'matching', 'rows', 'choices', 'correctMap', 'type',
 			'terminalVariant', 'textVariant', 'commandPrefix', 'placeholder',
 			'caseSensitive', 'acceptedAnswers', 'hint', 'explainHtml',
-			'resourceButton'
+			'resourceButton', 'cloze', 'numeric', 'tolerance', 'tolerancePercent', 'unit'
 		]);
 		for (const [key, val] of Object.entries(q._extraFields)) {
 			if (exportedKeys.has(key)) continue; // Skip already exported keys

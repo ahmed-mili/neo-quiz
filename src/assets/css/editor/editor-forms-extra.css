@@ -343,3 +343,9 @@
 	cursor: not-allowed !important;
 	opacity: 0.6;
 }
+/* Aide qui signale un problème plutôt qu'elle n'informe (gabarit sans trou :
+   la syntaxe n'a pas été comprise). */
+.qb-field-help--warn {
+  color: var(--quiz-hint-text, var(--text-warning));
+  font-weight: 600;
+}

@@ -461,6 +461,53 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 			});
 		}
 
+		if (qType === "cloze") {
+			// Le gabarit EST la question : un seul champ, multiligne, avec la
+			// syntaxe rappelée au-dessus — personne ne devine les doubles accolades.
+			box.createDiv({ cls: "qb-field-help", text: t("editor.cloze.help") });
+			_field(box, t("editor.cloze.templateLabel"), q.cloze, t("editor.cloze.templatePlaceholder"), true,
+				v => { q.cloze = v; rerender(); });
+
+			// Compte des trous : la seule vérification qui compte, et elle dit
+			// aussi si la syntaxe a été comprise (0 trou = accolades ratées).
+			const blanks = (String(q.cloze || "").match(/\{\{[^{}]*\}\}/g) || []).length;
+			box.createDiv({
+				cls: "qb-field-help" + (blanks === 0 ? " qb-field-help--warn" : ""),
+				text: t(blanks === 0 ? "editor.cloze.noBlank" : "editor.cloze.blankCount", { n: blanks })
+			});
+
+			const czWrap = box.createDiv({ cls: "qb-toggle-wrap" });
+			const czTrack = czWrap.createDiv({ cls: `qb-toggle-track ${q.caseSensitive ? "on" : ""}` });
+			czTrack.createDiv({ cls: "qb-toggle-thumb" });
+			czWrap.appendChild(document.createTextNode(t("editor.text.caseSensitive")));
+			czWrap.addEventListener("click", () => { q.caseSensitive = !q.caseSensitive; view.render(); view.scheduleSave?.(); });
+		}
+
+		if (qType === "numeric") {
+			box.createDiv({ cls: "qb-field-help", text: t("editor.numeric.help") });
+			_arrayEditor(box, t("editor.numeric.answers"), q.acceptedAnswers!, rerender, t("editor.numeric.answerPlaceholder"), t("editor.action.add"));
+			_field(box, t("editor.numeric.unit"), q.unit, t("editor.numeric.unitPlaceholder"), false,
+				v => { q.unit = v; rerender(); });
+			/* Les deux marges s'EXCLUENT : renseigner l'une efface l'autre.
+			   Les cumuler n'aurait pas de sens (numeric.ts applique l'absolue en
+			   priorité), et laisser l'ancienne valeur en place ferait mentir
+			   l'écran sur ce qui est réellement toléré. */
+			_field(box, t("editor.numeric.tolerance"), q.tolerance != null ? String(q.tolerance) : "", "0.05", false, v => {
+				const n = Number(v.replace(",", "."));
+				q.tolerance = v.trim() && Number.isFinite(n) ? n : undefined;
+				if (q.tolerance != null) q.tolerancePercent = undefined;
+				rerender();
+			});
+			_field(box, t("editor.numeric.tolerancePercent"), q.tolerancePercent != null ? String(q.tolerancePercent) : "", "2", false, v => {
+				const n = Number(v.replace(",", "."));
+				q.tolerancePercent = v.trim() && Number.isFinite(n) ? n : undefined;
+				if (q.tolerancePercent != null) q.tolerance = undefined;
+				rerender();
+			});
+			_field(box, t("editor.text.placeholderLabel"), q.placeholder, t("editor.text.placeholderHint"), false,
+				v => { q.placeholder = v; rerender(); });
+		}
+
 		if (["text", "cmd", "powershell", "bash"].includes(qType)) {
 			// "C:\>" / "PS>" : invites de commandes réelles, pas de l'UI.
 			if (qType === "cmd" || qType === "powershell")

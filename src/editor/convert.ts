@@ -17,6 +17,19 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	let type: QuestionTypeKey = "single";
 	if (q.ordering) type = "ordering";
 	else if (q.matching) type = "matching";
+	// Le gabarit discrimine avant tout le reste (même règle que le moteur,
+	// engine.ts isClozeQuestion) : une question qui porte un `cloze` non vide
+	// est un texte à trous, quels que soient ses autres champs.
+	else if (typeof q.cloze === "string" && q.cloze.trim()) type = "cloze";
+	/* MÊME critère que le moteur (engine/numeric.ts isNumericQuestion) : une
+	   marge ou une unité suffisent à déclarer une réponse numérique. Une
+	   détection plus étroite ici classerait la question en « texte », et
+	   l'export perdrait `unit`/`tolerance` — ces clés ne transitent plus par
+	   _extraFields depuis qu'elles ont leur propre branche. */
+	else if (q.numeric === true
+		|| typeof q.tolerance === "number"
+		|| typeof q.tolerancePercent === "number"
+		|| (typeof q.unit === "string" && q.unit.trim().length > 0)) type = "numeric";
 	else if (q.multiSelect) type = "multi";
 	else if (q.type === "text") {
 		if (q.terminalVariant === "cmd") type = "cmd";
@@ -76,7 +89,12 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		question.correctMap = q.correctMap || [0, 0];
 	}
 
-	if (["text", "cmd", "powershell", "bash"].includes(type)) {
+	if (type === "cloze") {
+		question.cloze = String(q.cloze ?? "");
+		question.caseSensitive = q.caseSensitive || false;
+	}
+
+	if (["numeric", "text", "cmd", "powershell", "bash"].includes(type)) {
 		let accepted = (q.acceptedAnswers || q.acceptableAnswers || [""]).slice();
 		// `answer`/`correctText` : formats émis par la génération IA et
 		// UNIONNÉS aux acceptedAnswers par le moteur (terminal.js:166-170)
@@ -100,9 +118,14 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		if (type === "cmd" || type === "powershell") {
 			question.commandPrefix = q.commandPrefix || (type === "cmd" ? "C:\\>" : "PS>");
 		}
+		if (type === "numeric") {
+			question.unit = typeof q.unit === "string" ? q.unit : "";
+			if (typeof q.tolerance === "number") question.tolerance = q.tolerance;
+			if (typeof q.tolerancePercent === "number") question.tolerancePercent = q.tolerancePercent;
+		}
 	}
 
-	const knownKeys = new Set(['id','title','prompt','promptHtml','options','correctIndex','multiSelect','correctIndices','ordering','slots','possibilities','correctOrder','matching','rows','choices','correctMap','type','terminalVariant','textVariant','commandPrefix','placeholder','caseSensitive','acceptedAnswers','acceptableAnswers','correctText','answer','hint','explain','explainHtml','resourceButton','examMode','examDurationMinutes','examAutoSubmit','examShowTimer']);
+	const knownKeys = new Set(['id','title','prompt','promptHtml','options','correctIndex','multiSelect','correctIndices','ordering','slots','possibilities','correctOrder','matching','rows','choices','correctMap','type','terminalVariant','textVariant','commandPrefix','placeholder','caseSensitive','acceptedAnswers','acceptableAnswers','correctText','answer','hint','explain','explainHtml','resourceButton','examMode','examDurationMinutes','examAutoSubmit','examShowTimer','cloze','numeric','tolerance','tolerancePercent','unit']);
 	const extraFields: Record<string, unknown> = {};
 	for (const key of Object.keys(q)) {
 		if (!knownKeys.has(key)) extraFields[key] = q[key];

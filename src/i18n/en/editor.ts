@@ -31,6 +31,27 @@ export const EN_EDITOR = {
 	"editor.save.allSaved": "All changes are saved",
 	"editor.save.clickToSave": "Click to save your changes",
 
+	/* ── Texte à trous ── */
+	"editor.type.cloze.label": "Fill in the blanks",
+	"editor.type.cloze.desc": "Complete a text",
+	"editor.cloze.help": "Write the whole text and wrap each blank in double braces. Separate accepted variants with a pipe: {{Paris}}, {{the euro|euro}}.",
+	"editor.cloze.templateLabel": "Text with blanks",
+	"editor.cloze.templatePlaceholder": "The capital of France is {{Paris}}.",
+	"editor.cloze.defaultTemplate": "The capital of France is {{Paris}}.",
+	"editor.cloze.blankCount": "{n} blanks detected",
+	"editor.cloze.noBlank": "No blank yet — wrap a word in double braces, like {{this}}",
+
+	/* ── Réponse numérique ── */
+	"editor.type.numeric.label": "Numeric",
+	"editor.type.numeric.desc": "A value, with a tolerance",
+	"editor.numeric.help": "The answer is compared as a NUMBER: 3.14, 3,14 and 3.140 all pass. Add a margin when the expected value is a measurement or a rounded result.",
+	"editor.numeric.answers": "Expected value",
+	"editor.numeric.answerPlaceholder": "9.81",
+	"editor.numeric.unit": "Unit (optional)",
+	"editor.numeric.unitPlaceholder": "m/s²",
+	"editor.numeric.tolerance": "Absolute margin",
+	"editor.numeric.tolerancePercent": "Relative margin (%)",
+
 	/* ── Support de compréhension ── */
 	"editor.passage.section": "Document",
 	"editor.passage.help": "A text to read before answering. Give the same sharing key to several questions and they all show this one document.",

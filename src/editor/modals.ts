@@ -46,6 +46,13 @@ export interface ParsedQuizItem {
 	rows?: string[];
 	choices?: string[];
 	correctMap?: number[];
+	/** Gabarit du texte à trous (engine/cloze.ts). */
+	cloze?: string;
+	/** Réponse numérique et ses marges (engine/numeric.ts). */
+	numeric?: boolean;
+	tolerance?: number;
+	tolerancePercent?: number;
+	unit?: string;
 	acceptedAnswers?: string[];
 	acceptableAnswers?: string[];
 	correctText?: unknown;

@@ -30,6 +30,27 @@ export const FR_EDITOR: Record<keyof typeof EN_EDITOR, string> = {
 	"editor.save.allSaved": "Toutes les modifications sont sauvegardées",
 	"editor.save.clickToSave": "Cliquez pour sauvegarder les modifications",
 
+	/* ── Texte à trous ── */
+	"editor.type.cloze.label": "Texte à trous",
+	"editor.type.cloze.desc": "Compléter un texte",
+	"editor.cloze.help": "Écrivez le texte entier et encadrez chaque trou de doubles accolades. Séparez les variantes acceptées par une barre verticale : {{Paris}}, {{l'euro|euro}}.",
+	"editor.cloze.templateLabel": "Texte à trous",
+	"editor.cloze.templatePlaceholder": "La capitale de la France est {{Paris}}.",
+	"editor.cloze.defaultTemplate": "La capitale de la France est {{Paris}}.",
+	"editor.cloze.blankCount": "{n} trous détectés",
+	"editor.cloze.noBlank": "Aucun trou pour l'instant — encadrez un mot de doubles accolades, comme {{ceci}}",
+
+	/* ── Réponse numérique ── */
+	"editor.type.numeric.label": "Numérique",
+	"editor.type.numeric.desc": "Une valeur, avec une marge",
+	"editor.numeric.help": "La réponse est comparée comme un NOMBRE : 3.14, 3,14 et 3,140 passent toutes. Ajoutez une marge quand la valeur attendue est une mesure ou un résultat arrondi.",
+	"editor.numeric.answers": "Valeur attendue",
+	"editor.numeric.answerPlaceholder": "9,81",
+	"editor.numeric.unit": "Unité (facultatif)",
+	"editor.numeric.unitPlaceholder": "m/s²",
+	"editor.numeric.tolerance": "Marge absolue",
+	"editor.numeric.tolerancePercent": "Marge relative (%)",
+
 	/* ── Support de compréhension ── */
 	"editor.passage.section": "Document",
 	"editor.passage.help": "Un texte à lire avant de répondre. Donnez la même clé de partage à plusieurs questions : elles afficheront toutes ce même document.",

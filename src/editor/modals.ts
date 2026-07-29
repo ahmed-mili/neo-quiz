@@ -16,6 +16,10 @@ import type { ResourceButton } from "../types/quiz";
 export interface ParsedQuizItem {
 	[key: string]: unknown;
 	examMode?: boolean;
+	/** Raccourci du mode learn, équivalent à `mode: "learn"` (quiz-utils.ts). */
+	learnMode?: boolean;
+	/** Mode du bloc : « quiz » | « learn » | « exam ». Marqueur de l'objet de configuration. */
+	mode?: string;
 	examDurationMinutes?: number;
 	examAutoSubmit?: boolean;
 	examShowTimer?: boolean;

@@ -172,10 +172,30 @@ export function attachQuizEditorCore(view: EditorHostView, host: HTMLElement, ap
 			const questions: DraftQuestion[] = [];
 			let examOptions: EditorExamOptions | null = null;
 
+			/* Objet de CONFIGURATION du bloc, pas une question — même critère que
+			   le moteur (quiz-utils.ts extractExamOptions) : aucun énoncé, et un
+			   des marqueurs de mode. L'éditeur ne reconnaissait que
+			   `examMode: true` et convertissait un `{ mode: "learn" }` en
+			   question vide (« Question N », deux options vides). La génération
+			   IA produit précisément cette forme-là. */
+			const isModeConfig = (q: ParsedQuizItem): boolean =>
+				!!q && typeof q === "object" && !q.prompt
+				&& (q.examMode === true || q.learnMode === true || typeof q.mode === "string");
+
 			for (const q of parsed) {
-				if (q.examMode) {
+				if (isModeConfig(q)) {
+					const mode: "quiz" | "learn" | "exam" =
+						typeof q.mode === "string" && (q.mode === "learn" || q.mode === "exam" || q.mode === "quiz")
+							? q.mode
+							: q.examMode === true ? "exam"
+							: q.learnMode === true ? "learn"
+							: "quiz";
 					examOptions = {
-						enabled: true,
+						mode,
+						// Le chrono n'est « activé » que pour un vrai mode examen ;
+						// un mode learn peut en porter un (« Passer l'examen »),
+						// auquel cas il annonce une durée.
+						enabled: mode === "exam" || (mode === "learn" && q.examDurationMinutes != null),
 						durationMinutes: q.examDurationMinutes || 10,
 						autoSubmit: q.examAutoSubmit ?? false,
 						showTimer: q.examShowTimer ?? true

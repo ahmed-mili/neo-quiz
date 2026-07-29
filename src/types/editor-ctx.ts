@@ -52,6 +52,14 @@ import type { ParsedQuizItem } from "../editor/modals";
  */
 export interface EditorExamOptions extends ExamOptions {
 	enabled: boolean;
+	/**
+	 * Mode du quiz, tel qu'il était écrit dans le bloc importé. L'éditeur ne
+	 * connaissait que `examMode: true` et prenait un `{ mode: "learn" }` pour
+	 * une QUESTION — d'où une « Question N » vide dans la liste, et la perte du
+	 * mode dès que l'utilisateur la remplissait. Mémorisé ici pour être réémis
+	 * à l'identique (editor/export.ts).
+	 */
+	mode?: "quiz" | "learn" | "exam";
 }
 
 /** Visibilité des 4 panneaux de l'éditeur (view.panels, editor.js:33). */

@@ -101,8 +101,19 @@ function exportQuestion(q: DraftQuestion, idx: number): string {
 
 function exportAll(questions: DraftQuestion[], examOptions: EditorExamOptions | null = null): string {
 	const parts = questions.map((q, i) => exportQuestion(q, i));
-	if (examOptions && examOptions.enabled) {
-		parts.push(`\t// Options mode examen\n\t{\n\t\texamMode: true,\n\t\texamDurationMinutes: ${examOptions.durationMinutes},\n\t\texamAutoSubmit: ${examOptions.autoSubmit},\n\t\texamShowTimer: ${examOptions.showTimer}\n\t}`);
+
+	/* L'objet de mode est réémis SOUS SA FORME D'ORIGINE. Un quiz importé en
+	   mode learn ressortait en mode examen (ou perdait son mode), parce que
+	   l'export ne savait écrire que `examMode: true`. */
+	const mode = examOptions?.mode;
+	const timing = examOptions
+		? `\t\texamDurationMinutes: ${examOptions.durationMinutes},\n\t\texamAutoSubmit: ${examOptions.autoSubmit},\n\t\texamShowTimer: ${examOptions.showTimer},\n`
+		: "";
+	if (mode === "learn") {
+		// Mode learn AVEC examen (« Passer l'examen ») ou sans, selon le chrono.
+		parts.push(`\t// Mode learn\n\t{\n\t\tmode: 'learn',\n${examOptions?.enabled ? timing : ""}\t}`);
+	} else if (examOptions && examOptions.enabled) {
+		parts.push(`\t// Options mode examen\n\t{\n\t\texamMode: true,\n${timing}\t}`);
 	}
 	return "[\n" + parts.join(",\n\n") + "\n]";
 }

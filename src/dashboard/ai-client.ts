@@ -11,6 +11,7 @@ import {
 	buildChildEnv,
 	isOllamaCloudModel,
 } from "./ai-providers";
+import type { AiUsage } from "./ai-usage";
 import { t } from "../i18n";
 
 /* ══════════════════════════════════════════════════════════
@@ -41,6 +42,9 @@ export interface GenerateOptions {
 export interface AiClient {
 	generate(prompt: string, options?: GenerateOptions): Promise<unknown[]>;
 	abort(): void;
+	/** Consommation de la DERNIÈRE génération réussie ; null si le fournisseur
+	    n'a rien publié (cf. ai-usage.ts : on n'estime jamais un compteur absent). */
+	lastUsage: AiUsage | null;
 }
 
 /** Erreur d'exécution CLI enrichie (child_process.exec). */
@@ -81,6 +85,20 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	let abortCurrent: (() => void) | null = null;
 	let aborted = false;
 
+	/* ── Compteurs de la génération en cours ──
+	   Chaque `callX` dépose ici ce que SON fournisseur a publié ; generate()
+	   complète avec ce qu'il est seul à savoir (fournisseur, modèle, durée) et
+	   scelle le tout dans `lastUsage`. Ce qu'un fournisseur ne publie pas reste
+	   à 0 / null — jamais estimé (cf. ai-usage.ts). */
+	let pendingUsage: Partial<AiUsage> | null = null;
+	let lastUsage: AiUsage | null = null;
+
+	/* Lecture par FONCTION, jamais directement : `pendingUsage` est rempli
+	   depuis une closure appelée derrière un `await`, ce que l'analyse de flux
+	   de TypeScript ne voit pas — un `if (pendingUsage)` posé après l'await
+	   narrowerait la variable à `never` sur la foi du `= null` initial. */
+	const takePendingUsage = (): Partial<AiUsage> | null => pendingUsage;
+
 	function killTree(child: ChildProcess): void {
 		// Windows : taskkill /T /F sur le PID précis tue tout l'arbre
 		// (codex/claude spawnent des enfants) ; ailleurs SIGTERM suffit.
@@ -95,8 +113,25 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 
 	async function generate(prompt: string, options: GenerateOptions = {}): Promise<unknown[]> {
 		aborted = false;
+		pendingUsage = null;
+		lastUsage = null;
+		const startedAt = Date.now();
 		try {
-			return await generateInner(prompt, options);
+			const questions = await generateInner(prompt, options);
+			const u = takePendingUsage();
+			if (u) {
+				lastUsage = {
+					provider: u.provider || plugin.settings.aiProvider || "",
+					model: u.model || plugin.settings.aiModel || "",
+					inputTokens: u.inputTokens || 0,
+					outputTokens: u.outputTokens || 0,
+					cachedInputTokens: u.cachedInputTokens || 0,
+					costUsd: u.costUsd ?? null,
+					durationMs: Date.now() - startedAt,
+					sessionId: u.sessionId
+				};
+			}
+			return questions;
 		} catch (err) {
 			if (aborted) {
 				const e = new Error("Génération annulée") as Error & { aborted?: boolean };
@@ -300,11 +335,42 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 			}
 		}
 
-		let data: { is_error?: boolean; result?: string };
+		/* `--output-format json` publie l'usage RÉEL de l'appel : tokens (dont
+		   ceux servis par le cache) et coût en dollars — Claude Code est le seul
+		   des quatre à chiffrer la requête. */
+		interface ClaudeResult {
+			is_error?: boolean;
+			result?: string;
+			session_id?: string;
+			total_cost_usd?: number;
+			usage?: {
+				input_tokens?: number;
+				output_tokens?: number;
+				cache_read_input_tokens?: number;
+				cache_creation_input_tokens?: number;
+			};
+		}
+		let data: ClaudeResult;
 		try {
 			data = JSON.parse(stdout);
 		} catch (e) {
 			throw new Error(t("ai.err.claudeUnreadable"));
+		}
+
+		const u = data.usage;
+		if (u) {
+			// L'entrée facturée = tokens frais + écriture de cache + lecture de
+			// cache : les trois traversent le modèle, les trois se paient.
+			const cacheRead = u.cache_read_input_tokens || 0;
+			pendingUsage = {
+				provider: "claude-code",
+				model,
+				inputTokens: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + cacheRead,
+				outputTokens: u.output_tokens || 0,
+				cachedInputTokens: cacheRead,
+				costUsd: typeof data.total_cost_usd === "number" ? data.total_cost_usd : null,
+				sessionId: data.session_id
+			};
 		}
 
 		if (data.is_error) {
@@ -364,7 +430,11 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		}
 
 		const fullPrompt = systemPrompt + "\n\n" + userPrompt;
-		const cmd = "codex exec -m " + model +
+		// `--json` : stdout devient un flux d'events JSONL, seul endroit où le CLI
+		// publie les tokens consommés (`turn.completed.usage`) et l'identifiant de
+		// thread qui mène à ses quotas. La réponse finale, elle, continue d'être
+		// lue dans le fichier -o.
+		const cmd = "codex exec --json -m " + model +
 			" -c model_reasoning_effort=" + effortVal +
 			// Fast (1.5x speed, more usage) : service tier « priority » — la
 			// valeur vient de models_cache.json (service_tiers[].id).
@@ -396,8 +466,11 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 				child.stdin!.write(fullPrompt);
 				child.stdin!.end();
 			});
-			// Le fichier -o contient la réponse finale nette ; fallback stdout.
-			raw = fs.existsSync(outFile) ? fs.readFileSync(outFile, "utf8") : (stdout || "");
+			readCodexEvents(stdout, model);
+			// Le fichier -o contient la réponse finale nette ; à défaut, elle se
+			// reconstitue depuis les events (stdout est du JSONL depuis --json,
+			// et le donner brut au parseur JSON5 serait illisible).
+			raw = fs.existsSync(outFile) ? fs.readFileSync(outFile, "utf8") : extractCodexText(stdout);
 		} catch (err) {
 			const e = err as ExecError;
 			console.error("[quiz-blocks] Codex error:", e.message, e.stderr || "");
@@ -424,6 +497,60 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		}
 		console.log("[quiz-blocks] Codex success - response length:", raw.length);
 		return parseQuizResponse(raw);
+	}
+
+	/* Events `codex exec --json` : une ligne = un objet. Deux seulement nous
+	   intéressent — `thread.started` (l'identifiant qui mène au fichier de
+	   session, donc aux quotas du compte) et `turn.completed` (les tokens). */
+	interface CodexTurnUsage {
+		input_tokens?: number;
+		cached_input_tokens?: number;
+		output_tokens?: number;
+		reasoning_output_tokens?: number;
+	}
+
+	function readCodexEvents(stdout: string, model: string): void {
+		let threadId = "";
+		let usage: CodexTurnUsage | null = null;
+
+		for (const line of String(stdout || "").split("\n")) {
+			const trimmed = line.trim();
+			if (!trimmed.startsWith("{")) continue;
+			let evt: { type?: string; thread_id?: string; usage?: CodexTurnUsage };
+			try { evt = JSON.parse(trimmed); } catch (e) { continue; }
+			if (evt.type === "thread.started" && typeof evt.thread_id === "string") threadId = evt.thread_id;
+			if (evt.type === "turn.completed" && evt.usage) usage = evt.usage;
+		}
+		if (!usage) return;
+
+		pendingUsage = {
+			provider: "codex",
+			model,
+			// `input_tokens` inclut déjà les tokens servis par le cache.
+			inputTokens: usage.input_tokens || 0,
+			// Le raisonnement est facturé en sortie : l'omettre sous-estimerait
+			// d'autant un modèle à effort élevé.
+			outputTokens: (usage.output_tokens || 0) + (usage.reasoning_output_tokens || 0),
+			cachedInputTokens: usage.cached_input_tokens || 0,
+			// Abonnement ChatGPT : aucun prix par requête n'est publié.
+			costUsd: null,
+			sessionId: threadId
+		};
+	}
+
+	/** Réponse finale reconstituée depuis les events (secours si le fichier -o manque). */
+	function extractCodexText(stdout: string): string {
+		const parts: string[] = [];
+		for (const line of String(stdout || "").split("\n")) {
+			const trimmed = line.trim();
+			if (!trimmed.startsWith("{")) continue;
+			try {
+				const evt = JSON.parse(trimmed) as { type?: string; item?: { type?: string; text?: unknown } };
+				if (evt.type !== "item.completed" || evt.item?.type !== "agent_message") continue;
+				if (typeof evt.item.text === "string") parts.push(evt.item.text);
+			} catch (e) { /* ligne non-JSON → ignorée */ }
+		}
+		return parts.join("\n");
 	}
 
 	/* ── Kimi via le Kimi Code CLI (abonnement Kimi) ──
@@ -653,7 +780,15 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 			...(images.length > 0 ? { images: images.map(img => img.base64) } : {})
 		};
 
-		let data: { error?: unknown; message?: { content?: string } };
+		let data: {
+			error?: unknown;
+			message?: { content?: string };
+			/* Compteurs Ollama : tokens du prompt évalués et tokens générés.
+			   Aucun coût — le modèle tourne en local (ou sur le forfait cloud,
+			   qui ne chiffre pas la requête). */
+			prompt_eval_count?: number;
+			eval_count?: number;
+		};
 		try {
 			const resp = await fetch(`${ollamaUrl}/api/chat`, {
 				method: "POST",
@@ -739,6 +874,17 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		const content = data?.message?.content || "";
 		if (!content.trim()) {
 			throw new Error(t("ai.err.ollamaEmpty"));
+		}
+
+		if (typeof data.prompt_eval_count === "number" || typeof data.eval_count === "number") {
+			pendingUsage = {
+				provider: "ollama",
+				model,
+				inputTokens: data.prompt_eval_count || 0,
+				outputTokens: data.eval_count || 0,
+				cachedInputTokens: 0,
+				costUsd: null
+			};
 		}
 
 		console.log("[quiz-blocks] Ollama response length:", content.length);
@@ -831,5 +977,12 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		return parsed;
 	}
 
-	return { generate, abort: () => { if (abortCurrent) abortCurrent(); } };
+	/* Kimi Code n'est pas dans cette liste : son `--output-format stream-json`
+	   ne publie aucun compteur de tokens (CLI 0.26.0, vérifié). Plutôt que
+	   d'estimer, l'écran d'usage dira que ce fournisseur ne les fournit pas. */
+	return {
+		generate,
+		abort: () => { if (abortCurrent) abortCurrent(); },
+		get lastUsage() { return lastUsage; }
+	};
 }

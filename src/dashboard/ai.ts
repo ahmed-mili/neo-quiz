@@ -10,6 +10,11 @@ import * as voiceInput from "./voice-input";
 import { attachMentionPicker } from "./mention-picker";
 import type { MentionPickerHandle } from "./mention-picker";
 import type { AiClient, ImagePayload } from "./ai-client";
+import {
+	recordUsage, readUsageLog, summarize, startOfToday, fetchLimits,
+	formatTokens, formatCost, formatDuration, formatResetIn, totalTokens
+} from "./ai-usage";
+import type { AiUsage, AiLimit, UsagePlugin } from "./ai-usage";
 import { t } from "../i18n";
 import type { TransKey } from "../i18n";
 
@@ -177,6 +182,11 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	let generatedQuestions: unknown[] = [];
 	let errorMessage = "";
 	let containerRef: HTMLElement | null = null;
+	/* Ce que la DERNIÈRE génération a consommé — null quand le fournisseur ne
+	   publie aucun compteur (Kimi Code), auquel cas l'écran le dit. */
+	let lastUsage: AiUsage | null = null;
+	let lastLimits: AiLimit[] = [];
+	let usageDetailOpen = false;
 
 	// Le type de questions a DEUX faces, à ne jamais confondre : une VALEUR
 	// canonique, envoyée telle quelle au modèle (ai-client la compare à
@@ -1566,6 +1576,98 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		});
 	}
 
+	/* ── Ce que la génération a coûté ──
+	   Badge compact dans la barre de résultat, détail au clic. Un fournisseur
+	   qui ne publie pas ses compteurs le DIT (il n'affiche pas « 0 ») : c'est
+	   la seule façon de distinguer « rien consommé » de « rien mesuré ». */
+	function renderUsageBadge(host: HTMLElement): void {
+		if (!lastUsage) {
+			host.createSpan({ cls: "qbd-ai-usage-badge is-muted", text: t("ai.usage.tokensUnavailable") });
+			return;
+		}
+		const usage = lastUsage;
+
+		const badge = host.createEl("button", {
+			cls: "qbd-ai-usage-badge" + (usageDetailOpen ? " is-open" : ""),
+			attr: { type: "button", "aria-expanded": usageDetailOpen ? "true" : "false" }
+		});
+		const gaugeIcon = badge.createSpan({ cls: "qbd-ai-usage-icon" });
+		setIcon(gaugeIcon, "gauge");
+		badge.createSpan({ text: t("ai.usage.badge", { tokens: formatTokens(totalTokens(usage)) }) });
+
+		const cost = formatCost(usage.costUsd);
+		if (cost) badge.createSpan({ cls: "qbd-ai-usage-sep", text: cost });
+		const dur = formatDuration(usage.durationMs);
+		if (dur) badge.createSpan({ cls: "qbd-ai-usage-sep", text: dur });
+
+		badge.addEventListener("click", () => {
+			usageDetailOpen = !usageDetailOpen;
+			render(containerRef);
+		});
+	}
+
+	/** Panneau de détail : cette génération, la journée, le total, et l'état du
+	    forfait quand le fournisseur le publie. */
+	function renderUsageDetail(container: HTMLElement): void {
+		if (!usageDetailOpen || !lastUsage) return;
+		const usage = lastUsage;
+		const now = Date.now();
+		const panel = container.createDiv({ cls: "qbd-ai-usage-panel" });
+
+		const row = (parent: HTMLElement, label: string, value: string): void => {
+			const r = parent.createDiv({ cls: "qbd-ai-usage-row" });
+			r.createSpan({ cls: "qbd-ai-usage-label", text: label });
+			r.createSpan({ cls: "qbd-ai-usage-value", text: value });
+		};
+
+		// ── Cette génération ──
+		const runBox = panel.createDiv({ cls: "qbd-ai-usage-box" });
+		runBox.createDiv({ cls: "qbd-ai-usage-box-title", text: t("ai.usage.thisRun") });
+		runBox.createDiv({ cls: "qbd-ai-usage-model", text: usage.model || usage.provider });
+		row(runBox, t("ai.usage.input"), formatTokens(usage.inputTokens)
+			+ (usage.cachedInputTokens > 0 ? ` (${t("ai.usage.cached")} ${formatTokens(usage.cachedInputTokens)})` : ""));
+		row(runBox, t("ai.usage.output"), formatTokens(usage.outputTokens));
+		row(runBox, t("ai.usage.cost"), formatCost(usage.costUsd) ?? t("ai.usage.costUnavailable"));
+		row(runBox, t("ai.usage.duration"), formatDuration(usage.durationMs));
+
+		// ── Cumuls ──
+		const log = readUsageLog(ctx.plugin as unknown as UsagePlugin);
+		const today = summarize(log, startOfToday(now));
+		const all = summarize(log);
+		const cumulBox = panel.createDiv({ cls: "qbd-ai-usage-box" });
+		cumulBox.createDiv({ cls: "qbd-ai-usage-box-title", text: t("ai.usage.today") });
+		row(cumulBox, t("ai.usage.generations", { n: today.generations }), formatTokens(today.inputTokens + today.outputTokens));
+		if (today.costUsd != null) row(cumulBox, t("ai.usage.cost"), formatCost(today.costUsd) ?? "");
+		cumulBox.createDiv({ cls: "qbd-ai-usage-box-title", text: t("ai.usage.allTime") });
+		row(cumulBox, t("ai.usage.generations", { n: all.generations }), formatTokens(all.inputTokens + all.outputTokens));
+		row(cumulBox, t("ai.usage.questions", { n: all.questions }), all.costUsd != null ? (formatCost(all.costUsd) ?? "") : "");
+
+		// ── Forfait ──
+		const planBox = panel.createDiv({ cls: "qbd-ai-usage-box" });
+		planBox.createDiv({ cls: "qbd-ai-usage-box-title", text: t("ai.usage.plan") });
+		if (!ctx.plugin.settings.aiUsageLimitsEnabled) {
+			planBox.createDiv({ cls: "qbd-ai-usage-note", text: t("ai.usage.planOff") });
+		} else if (lastLimits.length === 0) {
+			planBox.createDiv({ cls: "qbd-ai-usage-note", text: t("ai.usage.planUnavailable") });
+		} else {
+			for (const limit of lastLimits) {
+				const g = planBox.createDiv({ cls: "qbd-ai-usage-gauge" });
+				const head = g.createDiv({ cls: "qbd-ai-usage-gauge-head" });
+				head.createSpan({ cls: "qbd-ai-usage-label", text: limit.label });
+				head.createSpan({ cls: "qbd-ai-usage-value", text: Math.round(limit.usedPercent) + " %" });
+				const barEl = g.createDiv({ cls: "qbd-ai-usage-gauge-bar" });
+				const fill = barEl.createDiv({ cls: "qbd-ai-usage-gauge-fill" });
+				// Le remplissage est plafonné à 100 % : une barre qui déborde de
+				// son rail est un bug visuel, pas une information de plus.
+				fill.style.width = Math.max(0, Math.min(100, limit.usedPercent)) + "%";
+				if (limit.usedPercent >= 90) fill.classList.add("is-critical");
+				else if (limit.usedPercent >= 70) fill.classList.add("is-warning");
+				const resetIn = formatResetIn(limit.resetsAt, now);
+				if (resetIn) g.createDiv({ cls: "qbd-ai-usage-note", text: resetIn });
+			}
+		}
+	}
+
 	/* Zone résultat (pleine page, composer en bas) : barre compacte +
 	   l'ÉDITEUR DE QUIZ COMPLET embarqué — exigence explicite, pas une
 	   liste simplifiée. */
@@ -1576,6 +1678,8 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		const checkIcon = countWrap.createSpan({ cls: "qbd-ai-result-check" });
 		setIcon(checkIcon, "check-circle");
 		countWrap.createSpan({ cls: "qbd-ai-result-count", text: t("ai.result.count", { count: generatedQuestions.length }) });
+
+		renderUsageBadge(countWrap);
 
 		const insertBtn = bar.createEl("button", {
 			cls: "qbd-btn qbd-btn--primary",
@@ -1613,6 +1717,8 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			images = [];
 			render(containerRef);
 		});
+
+		renderUsageDetail(container);
 
 		// ── L'ÉDITEUR COMPLET, embarqué pleine page (composer en bas) ──
 		const host = container.createDiv({ cls: "qbd-ai-editor-embed qb-root" });
@@ -1748,6 +1854,26 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				source,
 				images: imageData
 			});
+
+			/* Coût de CE qui vient d'être produit. Le journal et la lecture des
+			   quotas sont accessoires : ils ne doivent jamais faire échouer une
+			   génération qui, elle, a réussi. */
+			lastUsage = client.lastUsage;
+			lastLimits = [];
+			usageDetailOpen = false;
+			if (lastUsage) {
+				const usagePlugin = ctx.plugin as unknown as UsagePlugin;
+				try {
+					await recordUsage(usagePlugin, {
+						...lastUsage,
+						at: Date.now(),
+						questionCount: generatedQuestions.length
+					});
+					lastLimits = await fetchLimits(usagePlugin, lastUsage);
+				} catch (e) {
+					console.warn("[quiz-blocks] usage non enregistré:", e);
+				}
+			}
 		} catch (err) {
 			const e = err as Error & { aborted?: boolean };
 			if (e && e.aborted) {

@@ -33,6 +33,7 @@ import type { VoiceSettings } from "../dashboard/voice-install";
 import type { Hotkey } from "../hotkey-format";
 import type { OllamaCatalogEntry } from "../dashboard/ai-providers";
 import type { AiClient } from "../dashboard/ai-client";
+import type { AiUsageEntry } from "../dashboard/ai-usage";
 import type { AiHandlers } from "../dashboard/ai";
 import type { ModuleOverride } from "../dashboard/quiz-modules";
 
@@ -66,6 +67,10 @@ export interface AiSettings extends VoiceSettings {
 	// (plugin.ts DEFAULT_SETTINGS) ; les helpers ollama la traitent comme « unset ».
 	aiOllamaModels?: string[] | null;
 	aiOllamaCatalog?: OllamaCatalogEntry[] | null;
+	/** Journal des générations IA (dashboard/ai-usage.ts). */
+	aiUsageLog?: AiUsageEntry[];
+	/** Lecture opt-in de l'usage de l'abonnement du fournisseur. */
+	aiUsageLimitsEnabled?: boolean;
 	hotkeyAddFiles?: Hotkey | null;
 	hotkeyAddNotes?: Hotkey | null;
 	aiMentionExtraFolders?: string[];

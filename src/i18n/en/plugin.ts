@@ -32,6 +32,8 @@ export const EN_PLUGIN = {
 	/* ── Génération IA : fournisseur et modèle ── */
 	"plugin.ai.heading": "AI generation",
 	"plugin.ai.intro": "Set up your AI provider to generate quizzes automatically.",
+	"plugin.ai.usageLimits.name": "Show subscription usage",
+	"plugin.ai.usageLimits.desc": "After each generation, read how much of your plan is left from the provider's CLI installed on this computer (Claude Code, Codex). Token counts are always shown; this only adds the plan gauge. Off by default.",
 	"plugin.ai.provider.name": "AI provider",
 	"plugin.ai.provider.desc": "Choose the provider used to generate quizzes",
 	"plugin.ai.provider.none": "None (pick one)",

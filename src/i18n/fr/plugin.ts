@@ -31,6 +31,8 @@ export const FR_PLUGIN: Record<keyof typeof EN_PLUGIN, string> = {
 	/* ── Génération IA : fournisseur et modèle ── */
 	"plugin.ai.heading": "Génération IA",
 	"plugin.ai.intro": "Configurez votre fournisseur IA pour générer des quiz automatiquement.",
+	"plugin.ai.usageLimits.name": "Afficher l'usage de l'abonnement",
+	"plugin.ai.usageLimits.desc": "Après chaque génération, lit ce qu'il reste de votre forfait auprès du CLI du fournisseur installé sur cet ordinateur (Claude Code, Codex). Les tokens sont toujours affichés ; ce réglage n'ajoute que la jauge de forfait. Désactivé par défaut.",
 	"plugin.ai.provider.name": "Fournisseur IA",
 	"plugin.ai.provider.desc": "Choisissez le fournisseur pour la génération de quiz",
 	"plugin.ai.provider.none": "Aucun (à choisir)",

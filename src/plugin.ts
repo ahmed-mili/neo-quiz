@@ -29,6 +29,7 @@ import * as voiceInstall from "./dashboard/voice-install";
 import type { VoiceBackend, VoiceModelId, VoiceLang } from "./dashboard/voice-install";
 import * as aiProviders from "./dashboard/ai-providers";
 import type { OllamaCatalogEntry } from "./dashboard/ai-providers";
+import type { AiUsageEntry } from "./dashboard/ai-usage";
 import { formatHotkey, eventToHotkey } from "./hotkey-format";
 import type { Hotkey } from "./hotkey-format";
 import { closeAllSelects } from "./dashboard/ui-select";
@@ -58,6 +59,10 @@ interface QuizBlocksSettings {
 	// null → sélection/repli par défaut (sentinelle runtime, cf. resolveOllamaSelection / getOllamaCatalog).
 	aiOllamaModels: string[] | null;
 	aiOllamaCatalog: OllamaCatalogEntry[] | null;
+	/** Journal des générations IA (tokens, coût, durée) — cf. dashboard/ai-usage.ts. */
+	aiUsageLog: AiUsageEntry[];
+	/** Lire l'usage de l'ABONNEMENT auprès du CLI/compte du fournisseur (opt-in). */
+	aiUsageLimitsEnabled: boolean;
 	hotkeyAddFiles: Hotkey;
 	hotkeyAddNotes: Hotkey;
 	/** Dossiers hors vault proposés par le picker « @ » (desktop uniquement). */
@@ -119,6 +124,11 @@ const DEFAULT_SETTINGS: QuizBlocksSettings = {
 	// Cache du catalogue cloud récupéré de ollama.com ([{value,label}]) : liste
 	// des modèles récents proposés à l'ajout. null → repli embarqué.
 	aiOllamaCatalog: null,
+	// Journal d'usage : purement informatif, borné à 300 entrées (ai-usage.ts).
+	aiUsageLog: [],
+	// Désactivé par défaut : lire les quotas du compte suppose d'ouvrir le
+	// fichier de session du CLI installé — jamais sans demande explicite.
+	aiUsageLimitsEnabled: false,
 	// ── Raccourcis du composer IA (menu « + ») — actifs quand la vue
 	// dashboard a le focus, affichés en hint dans le menu, modifiables
 	// dans les réglages (demande Ahmed, maquette 2026-07-11 231626).
@@ -535,6 +545,23 @@ class QuizBlocksSettingTab extends PluginSettingTab {
 		});
 
 		const TUTORIALS = buildTutorials();
+
+		/* Usage de l'ABONNEMENT — opt-in explicite.
+		   Les tokens d'une génération sont toujours comptés (le fournisseur les
+		   renvoie avec sa réponse) ; ce réglage-ci n'ouvre QUE la lecture des
+		   quotas du compte, qui suppose d'aller chercher la session du CLI
+		   installé. Desktop uniquement : sans accès fichier, rien à lire. */
+		if (Platform.isDesktopApp) {
+			new Setting(containerEl)
+				.setName(t("plugin.ai.usageLimits.name"))
+				.setDesc(t("plugin.ai.usageLimits.desc"))
+				.addToggle(toggle => toggle
+					.setValue(!!this.plugin.settings.aiUsageLimitsEnabled)
+					.onChange(async (value) => {
+						this.plugin.settings.aiUsageLimitsEnabled = value;
+						await this.plugin.saveSettings();
+					}));
+		}
 
 		// Provider dropdown
 		new Setting(containerEl)

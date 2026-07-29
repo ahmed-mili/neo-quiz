@@ -40,6 +40,73 @@ Three variants available: **CMD**, **PowerShell**, and **Bash**.
 
 <img src=".github/demo-matching.png" width="430" alt="Matching demo" />
 
+### Fill in the Blanks — complete a text
+
+Write the whole sentence in `cloze` and wrap each blank in double braces.
+Separate accepted variants with `|`:
+
+```json5
+{
+  title: 'Networking',
+  prompt: 'Complete the text below.',
+  cloze: 'The {{DHCP}} protocol assigns an IP address, while {{DNS}} resolves names on port {{53}}.',
+}
+```
+
+Every blank has the same width — a box sized to its answer would give away
+the length of the word. Each blank is marked right or wrong on its own, and
+the expected answer appears next to the ones that were missed.
+
+### Numeric — a value, with a tolerance
+
+`3.14`, `3,14` and `3.140` are the same number, and a measurement is rarely
+exact. Declare `numeric` and the answer is compared as a value:
+
+```json5
+{
+  title: 'Physics',
+  prompt: 'What is the acceleration due to gravity at the surface of the Earth?',
+  type: 'text',
+  numeric: true,
+  tolerance: 0.05,     // or tolerancePercent: 2
+  unit: 'm/s²',        // accepted as a suffix, never required
+  answer: '9.81',
+}
+```
+
+Fractions (`1/2`), thousands separators, scientific notation and the typographic
+minus sign are all understood.
+
+## Comprehension — one document, several questions
+
+A real exam is not only recall questions: it has a reading part, where one
+document carries several questions. Give the questions the same `passageId`
+and they all show the same document — only the first one carries the text:
+
+```json5
+[
+  {
+    passageId: 'doc1',
+    passageTitle: 'Text: the greenhouse effect',
+    passage: 'Long text to read before answering…',
+    title: 'Main idea',
+    prompt: 'What is the author arguing?',
+    options: ['…', '…'],
+    correctIndex: 0,
+  },
+  {
+    passageId: 'doc1',        // same document, no need to repeat it
+    title: 'Inference',
+    prompt: 'What can be concluded from the third paragraph?',
+    options: ['…', '…'],
+    correctIndex: 1,
+  },
+]
+```
+
+The document sits at the top of the card, above the question title, and can be
+folded away once read — folding it on one question folds it on all the others.
+
 ---
 
 ## Exam Mode
@@ -80,6 +147,20 @@ Generation runs through the **AI tools you already have installed locally** — 
 The model list of each provider is read from the CLI itself, so new models show up on their own, without a plugin update. The plugin detects each tool and tells you what is missing (not installed, server stopped, not signed in) with the exact command to fix it.
 
 Quizzes are generated **in the language of your prompt**: ask in French, get a French quiz; ask in Arabic, get an Arabic one. This is independent of the plugin's interface language.
+
+### What a generation costs you
+
+Every generation reports what it consumed — tokens in and out, and the price in
+dollars when the provider publishes one. Claude Code returns a real cost per
+request; the others run on a flat-rate plan and have no per-request price, so
+the panel says so instead of showing a misleading `$0.00`. Kimi Code reports no
+token counts at all, and the panel says that too. Nothing is ever estimated.
+
+Turn on **Show subscription usage** in the settings and the panel also reads how
+much of your plan is left, from the CLI already installed on your machine — the
+5-hour and 7-day windows for Claude, the plan window for Codex. It is off by
+default, and reachable from the Generate page before you start, so you can check
+what is left without spending anything to find out.
 
 ---
 

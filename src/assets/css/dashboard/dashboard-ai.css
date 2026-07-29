@@ -1899,3 +1899,24 @@
 .qbd-ai-usage-gauge-fill.is-critical {
   background: var(--quiz-danger);
 }
+
+/* Ligne « Usage » de l'écran d'accueil de la page Générer : consultation du
+   forfait AVANT de dépenser. Discrète — c'est une information de contrôle,
+   pas une action mise en avant. */
+.qbd-ai-usage-opener {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: -4px 0 14px;
+}
+
+.qbd-ai-usage-opener .qbd-ai-usage-badge {
+  margin-left: 0;
+}
+
+.qbd-ai-usage-opener .qbd-ai-usage-panel {
+  width: 100%;
+  max-width: 720px;
+  margin-bottom: 0;
+}

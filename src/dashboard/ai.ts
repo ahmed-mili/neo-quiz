@@ -11,7 +11,7 @@ import { attachMentionPicker } from "./mention-picker";
 import type { MentionPickerHandle } from "./mention-picker";
 import type { AiClient, ImagePayload } from "./ai-client";
 import {
-	recordUsage, readUsageLog, summarize, startOfToday, fetchLimits,
+	recordUsage, readUsageLog, summarize, startOfToday, fetchLimits, fetchLimitsForProvider,
 	formatTokens, formatCost, formatDuration, formatResetIn, totalTokens
 } from "./ai-usage";
 import type { AiUsage, AiLimit, UsagePlugin } from "./ai-usage";
@@ -252,6 +252,11 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			// claude.ai — « sparkles » retenu sur planche comparative (2026-07-16).
 			setIcon(titleIcon, "sparkles");
 			titleRow.createEl("h2", { cls: "qbd-ai-title", text: t("ai.page.title") });
+
+			/* Consultation de l'usage AVANT de lancer quoi que ce soit : savoir
+			   ce qu'il reste du forfait n'a d'intérêt que si on peut le
+			   demander sans dépenser. */
+			if (phase === "idle") renderUsageOpener(formCol);
 		}
 
 		// Zone du loader de génération : AU-DESSUS du composer (demande
@@ -1576,6 +1581,48 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		});
 	}
 
+	/** Ligne « Usage » de l'écran d'accueil : ouvre le récapitulatif, et charge
+	    les quotas du fournisseur courant la première fois qu'on le demande. */
+	function renderUsageOpener(parent: HTMLElement): void {
+		const log = readUsageLog(ctx.plugin as unknown as UsagePlugin);
+		// Rien enregistré et aucun quota à montrer : pas de commande vide.
+		if (log.length === 0 && !ctx.plugin.settings.aiUsageLimitsEnabled) return;
+
+		const row = parent.createDiv({ cls: "qbd-ai-usage-opener" });
+		const btn = row.createEl("button", {
+			cls: "qbd-ai-usage-badge" + (usageDetailOpen ? " is-open" : ""),
+			attr: { type: "button", "aria-expanded": usageDetailOpen ? "true" : "false" }
+		});
+		const icon = btn.createSpan({ cls: "qbd-ai-usage-icon" });
+		setIcon(icon, "gauge");
+		btn.createSpan({ text: t("ai.usage.title") });
+
+		// Résumé en ligne : la jauge la plus contrainte, celle qui décide s'il
+		// reste de la marge — pas la première de la liste.
+		const tightest = lastLimits.slice().sort((a, b) => b.usedPercent - a.usedPercent)[0];
+		if (tightest) {
+			btn.createSpan({
+				cls: "qbd-ai-usage-sep",
+				text: `${tightest.label} ${Math.round(tightest.usedPercent)} %`
+			});
+		}
+
+		btn.addEventListener("click", async () => {
+			usageDetailOpen = !usageDetailOpen;
+			if (usageDetailOpen && lastLimits.length === 0) {
+				const provider = ctx.plugin.settings.aiProvider || "";
+				try {
+					lastLimits = await fetchLimitsForProvider(ctx.plugin as unknown as UsagePlugin, provider);
+				} catch (e) {
+					console.warn("[quiz-blocks] quotas illisibles:", e);
+				}
+			}
+			render(containerRef);
+		});
+
+		renderUsageDetail(row);
+	}
+
 	/* ── Ce que la génération a coûté ──
 	   Badge compact dans la barre de résultat, détail au clic. Un fournisseur
 	   qui ne publie pas ses compteurs le DIT (il n'affiche pas « 0 ») : c'est
@@ -1606,10 +1653,10 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		});
 	}
 
-	/** Panneau de détail : cette génération, la journée, le total, et l'état du
-	    forfait quand le fournisseur le publie. */
+	/** Panneau de détail : cette génération (si elle a eu lieu), la journée, le
+	    total, et l'état du forfait quand le fournisseur le publie. */
 	function renderUsageDetail(container: HTMLElement): void {
-		if (!usageDetailOpen || !lastUsage) return;
+		if (!usageDetailOpen) return;
 		const usage = lastUsage;
 		const now = Date.now();
 		const panel = container.createDiv({ cls: "qbd-ai-usage-panel" });
@@ -1620,15 +1667,18 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			r.createSpan({ cls: "qbd-ai-usage-value", text: value });
 		};
 
-		// ── Cette génération ──
-		const runBox = panel.createDiv({ cls: "qbd-ai-usage-box" });
-		runBox.createDiv({ cls: "qbd-ai-usage-box-title", text: t("ai.usage.thisRun") });
-		runBox.createDiv({ cls: "qbd-ai-usage-model", text: usage.model || usage.provider });
-		row(runBox, t("ai.usage.input"), formatTokens(usage.inputTokens)
-			+ (usage.cachedInputTokens > 0 ? ` (${t("ai.usage.cached")} ${formatTokens(usage.cachedInputTokens)})` : ""));
-		row(runBox, t("ai.usage.output"), formatTokens(usage.outputTokens));
-		row(runBox, t("ai.usage.cost"), formatCost(usage.costUsd) ?? t("ai.usage.costUnavailable"));
-		row(runBox, t("ai.usage.duration"), formatDuration(usage.durationMs));
+		// ── Cette génération ── (absente quand on consulte l'usage sans avoir
+		// encore rien généré : le reste du panneau, lui, reste pertinent)
+		if (usage) {
+			const runBox = panel.createDiv({ cls: "qbd-ai-usage-box" });
+			runBox.createDiv({ cls: "qbd-ai-usage-box-title", text: t("ai.usage.thisRun") });
+			runBox.createDiv({ cls: "qbd-ai-usage-model", text: usage.model || usage.provider });
+			row(runBox, t("ai.usage.input"), formatTokens(usage.inputTokens)
+				+ (usage.cachedInputTokens > 0 ? ` (${t("ai.usage.cached")} ${formatTokens(usage.cachedInputTokens)})` : ""));
+			row(runBox, t("ai.usage.output"), formatTokens(usage.outputTokens));
+			row(runBox, t("ai.usage.cost"), formatCost(usage.costUsd) ?? t("ai.usage.costUnavailable"));
+			row(runBox, t("ai.usage.duration"), formatDuration(usage.durationMs));
+		}
 
 		// ── Cumuls ──
 		const log = readUsageLog(ctx.plugin as unknown as UsagePlugin);

@@ -231,7 +231,7 @@ interface CodexRateLimitWindow { used_percent?: number; window_minutes?: number;
  * aucune requête n'est émise ici.
  */
 export function readCodexLimits(threadId: string): AiLimit[] {
-	if (!Platform.isDesktopApp || !threadId) return [];
+	if (!Platform.isDesktopApp) return [];
 	try {
 		const os = require("os") as typeof import("os");
 		const path = require("path") as typeof import("path");
@@ -251,10 +251,15 @@ export function readCodexLimits(threadId: string): AiLimit[] {
 			return last ? path.join(dir, last) : null;
 		};
 
+		/* Sans identifiant de session (consultation hors génération), le rollout
+		   le PLUS RÉCENT fait l'affaire : les quotas sont ceux du compte, pas
+		   d'une conversation. */
 		let found: string | null = null;
-		// Profondeur exacte de l'arborescence : année / mois / jour.
 		for (const dayDir of candidateDayDirs(root, newestDir)) {
-			const hit = fs.readdirSync(dayDir).find((f: string) => f.includes(threadId) && f.endsWith(".jsonl"));
+			const files = fs.readdirSync(dayDir).filter((f: string) => f.endsWith(".jsonl"));
+			const hit = threadId
+				? files.find((f: string) => f.includes(threadId))
+				: files.sort().pop();
 			if (hit) { found = path.join(dayDir, hit); break; }
 		}
 		if (!found) return [];
@@ -313,12 +318,21 @@ function candidateDayDirs(root: string, newestDir: (dir: string) => string | nul
 	return out;
 }
 
-/** Quotas du fournisseur qui vient de répondre ; [] si ce fournisseur n'en publie pas. */
-export async function fetchLimits(plugin: UsagePlugin, usage: AiUsage): Promise<AiLimit[]> {
+/**
+ * Quotas d'un fournisseur donné ; [] s'il n'en publie pas.
+ * `sessionId` cible la session qui vient de tourner ; sans lui, la lecture
+ * porte sur l'état le plus récent du compte — ce qu'on veut quand on consulte
+ * son forfait AVANT de lancer une génération.
+ */
+export async function fetchLimitsForProvider(plugin: UsagePlugin, provider: string, sessionId = ""): Promise<AiLimit[]> {
 	if (!plugin.settings.aiUsageLimitsEnabled) return [];
-	if (usage.provider === "claude-code") return fetchClaudeLimits();
-	if (usage.provider === "codex") return readCodexLimits(usage.sessionId || "");
+	if (provider === "claude-code") return fetchClaudeLimits();
+	if (provider === "codex") return readCodexLimits(sessionId);
 	// Ollama (local ou cloud) et Kimi Code ne publient aucun quota lisible
 	// localement — l'écran le dit plutôt que d'afficher un zéro trompeur.
 	return [];
 }
+
+/** Quotas du fournisseur qui vient de répondre. */
+export const fetchLimits = (plugin: UsagePlugin, usage: AiUsage): Promise<AiLimit[]> =>
+	fetchLimitsForProvider(plugin, usage.provider, usage.sessionId || "");

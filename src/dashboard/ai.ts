@@ -71,6 +71,16 @@ interface ComposerImage {
 /** Éditeur embarqué + marqueur de génération (invalidation entre générations). */
 type EmbedEditor = EditorHostView & { _genId?: number };
 
+/** Message PARTI — ce que le composer contenait au moment de l'envoi.
+    Le composer se vide à l'envoi (référence claude.ai) : sans cette copie,
+    la demande serait perdue de vue pendant la génération, et une annulation
+    n'aurait rien à rendre à l'utilisateur. */
+interface SentMessage {
+	text: string;
+	notes: NoteAttachment[];
+	images: ComposerImage[];
+}
+
 /** Option du sélecteur de fournisseur (logo + sous-titre). */
 interface ProviderSelectOption extends SelectOption {
 	logo: string;
@@ -172,6 +182,12 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	// déconnecté et recréé à chaque render (composer recréé) — cf. layoutChipsRow.
 	let composerResizeObserver: ResizeObserver | null = null;
 	let phase: Phase = "idle"; // idle | loading | result | error
+	/* Demande PARTIE (bulle façon claude.ai). Non nulle dès l'envoi, remise à
+	   null quand la demande retourne dans le composer (annulation) ou qu'on
+	   recommence à zéro. */
+	let sentMessage: SentMessage | null = null;
+	/** L'entrée de la bulle reste à jouer (posée à l'envoi, consommée au rendu). */
+	let sentAnimPending = false;
 	// Client IA de la génération en cours — permet au bouton stop (et à
 	// la touche Esc) d'annuler réellement (kill du CLI / abort du fetch).
 	let activeClient: AiClient | null = null;
@@ -256,6 +272,13 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			setIcon(titleIcon, "sparkles");
 			titleRow.createEl("h2", { cls: "qbd-ai-title", text: t("ai.page.title") });
 		}
+
+		// ── La demande PARTIE, en bulle (référence claude.ai) ──
+		// Elle n'apparaît que si le composer s'est vidé : c'est ce couple
+		// (bulle qui monte / champ vide) qui fait « sentir » l'envoi. En
+		// résultat, la page du quiz occupe l'écran et porte son propre
+		// en-tête — une bulle de plus n'y ajouterait que du bruit.
+		if (sentMessage && (phase === "loading" || phase === "error")) renderSentMessage(stage);
 
 		// Zone du loader de génération : AU-DESSUS du composer (demande
 		// 2026-07-10 — le loader préfigure le résultat, qui vit en haut).
@@ -1552,6 +1575,82 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		});
 	}
 
+	/* ── Bulle de la demande envoyée (référence claude.ai) ──
+	   Lecture seule, alignée à droite : une fois partie, la demande ne se
+	   remodifie plus et ne se renvoie plus depuis là (retour Ahmed
+	   2026-07-31 — le composer qui gardait le texte donnait l'impression
+	   que rien n'était parti). Pour la reprendre : annuler la génération,
+	   elle retourne alors dans le composer. */
+	function renderSentMessage(host: HTMLElement): void {
+		const msg = sentMessage;
+		if (!msg) return;
+		const bubble = host.createDiv({ cls: "qbd-ai-sent" });
+		// L'entrée ne joue qu'au PREMIER rendu qui suit l'envoi : pendant la
+		// génération, la page se re-rend (statuts de fournisseur, quotas) et
+		// une bulle qui rebondit à chaque fois ferait clignoter la scène.
+		if (sentAnimPending) {
+			sentAnimPending = false;
+			bubble.addClass("qbd-ai-sent--in");
+		}
+
+		if (msg.images.length > 0) {
+			const row = bubble.createDiv({ cls: "qbd-ai-sent-images" });
+			for (const img of msg.images) {
+				const thumb = row.createDiv({ cls: "qbd-ai-image-thumb" });
+				thumb.createEl("img", { cls: "qbd-ai-image-thumb-img" }).src = img.url;
+			}
+		}
+
+		if (msg.notes.length > 0) {
+			const chips = bubble.createDiv({ cls: "qbd-ai-sent-chips" });
+			for (const note of msg.notes) {
+				const chip = chips.createDiv({ cls: "qbd-ai-note-chip" });
+				setIcon(chip.createSpan({ cls: "qbd-ai-note-chip-icon" }), "file-text");
+				const name = chip.createSpan({ cls: "qbd-ai-note-chip-name", text: note.name });
+				name.title = note.path || note.name;
+			}
+		}
+
+		if (msg.text.trim()) bubble.createDiv({ cls: "qbd-ai-sent-text", text: msg.text.trim() });
+	}
+
+	/** Vide le composer au profit de la bulle « envoyé ». Les URL d'objet des
+	    images NE sont PAS révoquées : la bulle les affiche encore. */
+	function takeComposerMessage(): SentMessage {
+		// Une demande précédente encore affichée (erreur non réessayée) cède la
+		// place : ses vignettes ne seront plus jamais rendues, leurs URL d'objet
+		// se libèrent ici — sinon chaque envoi en fuiterait une de plus.
+		dropSentMessage();
+		const msg: SentMessage = { text: composerText, notes: noteAttachments, images };
+		composerText = "";
+		composerCaret = null;
+		noteAttachments = [];
+		images = [];
+		sentMessage = msg;
+		sentAnimPending = true;
+		return msg;
+	}
+
+	/** Remet la demande partie dans le composer (annulation, réessai) et
+	    referme la bulle — le contraire exact de takeComposerMessage. */
+	function restoreComposerMessage(): void {
+		if (!sentMessage) return;
+		composerText = sentMessage.text;
+		noteAttachments = sentMessage.notes;
+		images = sentMessage.images;
+		sentMessage = null;
+		sentAnimPending = false;
+	}
+
+	/** Abandonne la demande partie : c'est le seul endroit où les URL d'objet
+	    des images envoyées se révoquent (plus personne ne les affichera). */
+	function dropSentMessage(): void {
+		if (!sentMessage) return;
+		for (const img of sentMessage.images) URL.revokeObjectURL(img.url);
+		sentMessage = null;
+		sentAnimPending = false;
+	}
+
 	/* Loader de génération — l'ANIMATION VALIDÉE (balayage qbd-glide,
 	   icône sparkles, dots pulsants) est reprise à l'identique : mêmes
 	   classes, mêmes keyframes. Seul le conteneur change (carte centrée
@@ -1579,9 +1678,13 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			cls: "qbd-btn qbd-btn--ghost qbd-ai-error-retry",
 			text: t("ai.error.retry")
 		});
+		// Réessayer = RENVOYER la même demande (référence claude.ai), pas la
+		// rendre au composer : le passage par restore/take garde un seul
+		// chemin d'envoi (startGeneration reprend le message tel quel).
 		retryBtn.addEventListener("click", () => {
-			phase = "idle";
-			render(containerRef);
+			if (!sentMessage) { phase = "idle"; render(containerRef); return; }
+			restoreComposerMessage();
+			void startGeneration(containerRef);
 		});
 	}
 
@@ -1671,6 +1774,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			phase = "idle";
 			generatedQuestions = [];
 			embedEditor = null;
+			dropSentMessage();
 			composerText = "";
 			noteAttachments = [];
 			images = [];
@@ -1817,10 +1921,17 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	}
 
 	async function startGeneration(container: HTMLElement | null): Promise<void> {
-		/* AVANT le passage en « loading » : les chips apparaissent dans le
-		   composer, l'utilisateur voit ce qui part avec sa demande. */
+		/* Les chemins écrits dans le prompt deviennent des pièces jointes AVANT
+		   la capture : elles doivent partir avec la demande, et apparaître dans
+		   la bulle « envoyé » — c'est là que l'utilisateur voit désormais ce
+		   qui est parti, le composer étant vidé juste après. */
 		await attachPromptPaths();
 
+		// Le composer se vide MAINTENANT, avant le premier rendu de la phase
+		// « loading » : la demande passe en bulle et le champ redevient neuf.
+		// Tout ce qui suit lit `msg`, jamais l'état du composer — qui n'est
+		// plus la demande en vol dès cette ligne.
+		const msg = takeComposerMessage();
 		phase = "loading";
 		errorMessage = "";
 		render(container);
@@ -1840,23 +1951,23 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			// images → vision ; notes/fichiers attachés → texte source ;
 			// sinon sujet. Chaque source texte est délimitée par son nom
 			// (l'IA distingue les documents d'un envoi multi-notes).
-			const source = images.length > 0 ? "image" : noteAttachments.length > 0 ? "text" : "topic";
-			const notesBlock = noteAttachments
-				.map(n => (noteAttachments.length > 1 ? "--- " + n.name + " ---\n" : "") + n.content)
+			const source = msg.images.length > 0 ? "image" : msg.notes.length > 0 ? "text" : "topic";
+			const notesBlock = msg.notes
+				.map(n => (msg.notes.length > 1 ? "--- " + n.name + " ---\n" : "") + n.content)
 				.join("\n\n");
 			// Repli quand des images sont envoyées SANS consigne : instruction au
 			// modèle (pas de l'UI) → anglais, et surtout « dans leur langue »,
 			// sinon des images françaises donneraient un quiz anglais.
 			const prompt = source === "image"
-				? (composerText.trim() || "Analyze the provided images and build the quiz in their language")
+				? (msg.text.trim() || "Analyze the provided images and build the quiz in their language")
 				: source === "text"
-				? (composerText.trim() ? composerText.trim() + "\n\n" : "") + notesBlock
-				: composerText.trim();
+				? (msg.text.trim() ? msg.text.trim() + "\n\n" : "") + notesBlock
+				: msg.text.trim();
 
 			// Convert image files to base64 for vision API
 			let imageData: ImagePayload[] = [];
-			if (images.length > 0) {
-				imageData = await Promise.all(images.map(async (img) => {
+			if (msg.images.length > 0) {
+				imageData = await Promise.all(msg.images.map(async (img) => {
 					const buffer = await img.file.arrayBuffer();
 					const bytes = new Uint8Array(buffer);
 					let binary = "";
@@ -1900,10 +2011,13 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			const e = err as Error & { aborted?: boolean };
 			if (e && e.aborted) {
 				// Annulation volontaire (bouton stop / Esc) → retour à l'état
-				// initial, sans écran d'erreur.
+				// initial, sans écran d'erreur. La demande RETOURNE dans le
+				// composer : annuler, c'est défaire l'envoi — sinon le texte
+				// (et les pièces jointes) seraient perdus.
 				document.removeEventListener("keydown", onEsc);
 				activeClient = null;
 				generatedQuestions = [];
+				restoreComposerMessage();
 				phase = "idle";
 				render(container);
 				return;

@@ -42,7 +42,13 @@ body{
 
   --quiz-accent-text: #ffffff;
 
-  --quiz-max-width: 9000px;
+  /* Colonne de LECTURE, centrée — un quiz étalé sur toute la largeur d'un
+     écran large est illisible (retour Ahmed 2026-07-31 : « c'est désagréable
+     à lire »). 880px : un peu plus large que la « readable line length »
+     d'Obsidian (700px), qui étoufferait les grilles d'appariement et les
+     options en deux colonnes, mais assez court pour garder ~95 caractères
+     par ligne. Le centrage lui-même vient du `margin: auto` de layout.css. */
+  --quiz-max-width: 880px;
   --quiz-side-gap: clamp(8px, 2.5vw, 18px);
   --quiz-option-side-gap: clamp(2px, 1vw, 8px);
 

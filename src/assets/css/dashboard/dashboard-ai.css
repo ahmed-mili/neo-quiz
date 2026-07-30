@@ -78,6 +78,71 @@
 	text-align: left;
 }
 
+/* ── Demande ENVOYÉE (bulle claude.ai) ──
+   Alignée à DROITE et posée au-dessus du loader : le composer se vide, la
+   demande « monte » — c'est ce couple qui fait sentir l'envoi. Surface verre
+   dense (petit élément flottant, cf. échelle de --qbd-glass-*). */
+.qbd-ai-sent {
+	flex: none;
+	width: min(732px, 100%);
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 6px;
+	text-align: left;
+}
+
+.qbd-ai-sent-text {
+	max-width: 100%;
+	padding: 10px 15px;
+	/* Coin bas-droit rabattu : la bulle « sort » du composer, qui est en bas
+	   à droite (bouton d'envoi). */
+	border-radius: 16px 16px 5px 16px;
+	background: var(--qbd-glass-bg-dense);
+	backdrop-filter: var(--qbd-glass-blur-dense);
+	-webkit-backdrop-filter: var(--qbd-glass-blur-dense);
+	border: 1px solid var(--qbd-glass-edge);
+	box-shadow: var(--qbd-glass-sheen);
+	color: var(--text-normal);
+	font-size: 14px;
+	line-height: 1.55;
+	/* La demande garde sa mise en forme (retours à la ligne) et ne provoque
+	   jamais de scroll horizontal, même avec un chemin ou une URL très long. */
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.qbd-ai-sent-images,
+.qbd-ai-sent-chips {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
+	max-width: 100%;
+}
+
+/* Pièces jointes en lecture seule : la croix de retrait du composer n'a plus
+   de sens une fois la demande partie. */
+.qbd-ai-sent-chips .qbd-ai-note-chip {
+	cursor: default;
+}
+
+/* Entrée jouée UNE fois, à l'envoi (classe posée par renderSentMessage au
+   premier rendu seulement) : un re-render pendant la génération — statut de
+   fournisseur, quota — ne doit pas rejouer la bulle. */
+@keyframes qbd-ai-sent-in {
+	from { opacity: 0; transform: translateY(14px) scale(0.97); }
+	to { opacity: 1; transform: none; }
+}
+
+.qbd-ai-sent--in {
+	animation: qbd-ai-sent-in 0.34s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.qbd-ai-sent--in { animation: none; }
+}
+
 /* Loader (AU-DESSUS du composer) / erreur (dessous) : cartes centrées —
    l'animation de génération (qbd-glide + dots) est inchangée, seul le
    cadre l'est. La zone du loader est transparente au layout (contents)

@@ -616,17 +616,184 @@
 	height: 15px;
 }
 
-.qbd-qz-edit-notice {
+/* Titre de la question : une seule ligne, moins haut que l'énoncé — il ne
+   doit pas peser autant que la question elle-même. */
+.qbd-qz-field-input--single {
+	font-size: 14px;
+	font-weight: 600;
+	padding: 9px 14px;
+}
+
+/* Les champs propres au TYPE viennent du formulaire de l'éditeur (classes
+   qb-*, cf. detail-form-bridge) : on ne règle ici que leur insertion dans
+   la colonne, jamais leur apparence — elle est partagée. */
+.qbd-qz-type-box {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin-top: 14px;
+}
+
+.qbd-qz-panel .qbd-qz-type-box > .qb-section-box {
+	margin: 0;
+	padding: 0;
+	background: none;
+	border: none;
+}
+
+/* ── Sections optionnelles (document, ressource, indice, explication) ──
+   Repliables, animées dans les DEUX sens : hauteur par grid-template-rows
+   (une hauteur inconnue ne s'anime pas), chevron tourné par CSS. Le clip
+   n'est posé QUE replié ou pendant l'animation — à l'état ouvert stable il
+   rognerait les menus et survols qui débordent légitimement. */
+.qbd-qz-section {
+	margin-top: 10px;
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: 10px;
+}
+
+.qbd-qz-section-head {
 	display: flex;
 	align-items: center;
-	gap: 12px;
-	flex-wrap: wrap;
-	padding: 14px;
-	border-radius: var(--radius-m, 12px);
-	background: var(--background-secondary);
-	border: 1px dashed var(--background-modifier-border);
+	gap: 8px;
+	width: 100%;
+	padding: 6px 4px;
+	/* Obsidian repeint tout <button> (.theme-dark button, 0,1,1) : sans ces
+	   trois-là, la ligne d'en-tête redeviendrait une pilule grise. */
+	background: transparent !important;
+	box-shadow: none !important;
+	color: var(--text-muted) !important;
+	border: none;
+	border-radius: 8px;
 	font-size: 12px;
-	color: var(--text-muted);
+	font-weight: 600;
+	text-align: left;
+	cursor: pointer;
+	transition: color 0.14s ease, background 0.14s ease;
+}
+
+.qbd-qz-section-head:hover {
+	background: var(--background-modifier-hover) !important;
+	color: var(--text-normal) !important;
+}
+
+.qbd-qz-section-chevron,
+.qbd-qz-section-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+}
+
+.qbd-qz-section-chevron svg { width: 13px; height: 13px; }
+.qbd-qz-section-icon svg { width: 14px; height: 14px; }
+
+.qbd-qz-section-chevron {
+	transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qbd-qz-section:not(.is-collapsed) .qbd-qz-section-chevron {
+	transform: rotate(90deg);
+}
+
+.qbd-qz-section-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qbd-qz-section-body {
+	display: grid;
+	grid-template-rows: 1fr;
+	transition: grid-template-rows 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qbd-qz-section-body > * {
+	min-height: 0;
+}
+
+.qbd-qz-section.is-collapsed .qbd-qz-section-body {
+	grid-template-rows: 0fr;
+}
+
+.qbd-qz-section.is-collapsed .qbd-qz-section-body > *,
+.qbd-qz-section.is-animating .qbd-qz-section-body > * {
+	overflow: hidden;
+}
+
+/* Le contenu replié reste MONTÉ (sans quoi il n'y aurait rien à révéler) :
+   `visibility` le retire du rendu et de la tabulation, et le layer forcé
+   pendant l'animation empêche les pixels orphelins du compositeur de
+   survivre au repli (cf. obsidian:plugin-dev §6 ter). */
+.qbd-qz-section.is-collapsed:not(.is-animating) .qbd-qz-section-body > * {
+	visibility: hidden;
+}
+
+.qbd-qz-section.is-animating .qbd-qz-section-body > * {
+	will-change: transform;
+}
+
+.qbd-qz-section-inner {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 6px 4px 10px;
+}
+
+.qbd-qz-section-help {
+	font-size: 11px;
+	line-height: 1.5;
+	color: var(--text-faint);
+}
+
+/* Interrupteur d'activation (ressource) : dans l'en-tête, à droite. */
+.qbd-qz-section-toggle {
+	display: inline-flex;
+	align-items: center;
+	margin-left: auto;
+	padding: 3px !important;
+	background: transparent !important;
+	box-shadow: none !important;
+	border: none;
+	cursor: pointer;
+}
+
+.qbd-qz-section-toggle-dot {
+	width: 26px;
+	height: 15px;
+	border-radius: 999px;
+	background: var(--background-modifier-border);
+	position: relative;
+	transition: background 0.18s ease;
+}
+
+.qbd-qz-section-toggle-dot::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 11px;
+	height: 11px;
+	border-radius: 50%;
+	background: var(--text-on-accent, #fff);
+	transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qbd-qz-section-toggle.is-on .qbd-qz-section-toggle-dot {
+	background: var(--interactive-accent);
+}
+
+.qbd-qz-section-toggle.is-on .qbd-qz-section-toggle-dot::after {
+	transform: translateX(11px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.qbd-qz-section-body,
+	.qbd-qz-section-chevron,
+	.qbd-qz-section-toggle-dot,
+	.qbd-qz-section-toggle-dot::after {
+		transition: none;
+	}
 }
 
 /* ── Étroit / mobile : la liste passe AU-DESSUS du panneau ── */

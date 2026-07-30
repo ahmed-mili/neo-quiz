@@ -6,7 +6,7 @@ import { Q_TYPES, loadReact, _setIcon, _iconSpan, makeDefault, md2html, escHtml,
 import type { DraftQuestion } from "./editor/utils";
 import { exportQuestion, exportAll, exportAllWithFence } from "./editor/export";
 import { ConfirmModal, TypePickerModal, ImportQuizModal, QuizFileSuggestModal, ImportFromNoteModal } from "./editor/modals";
-import { convertParsedToInternal } from "./editor/convert";
+import { convertParsedToInternal, isModeConfig, readModeConfig } from "./editor/convert";
 import type { ParsedQuizItem } from "./editor/modals";
 
 // C1 (plan) : les 6 factories des sous-modules editor/* sont désormais des
@@ -172,34 +172,14 @@ export function attachQuizEditorCore(view: EditorHostView, host: HTMLElement, ap
 			const questions: DraftQuestion[] = [];
 			let examOptions: EditorExamOptions | null = null;
 
-			/* Objet de CONFIGURATION du bloc, pas une question — même critère que
-			   le moteur (quiz-utils.ts extractExamOptions) : aucun énoncé, et un
-			   des marqueurs de mode. L'éditeur ne reconnaissait que
-			   `examMode: true` et convertissait un `{ mode: "learn" }` en
-			   question vide (« Question N », deux options vides). La génération
-			   IA produit précisément cette forme-là. */
-			const isModeConfig = (q: ParsedQuizItem): boolean =>
-				!!q && typeof q === "object" && !q.prompt
-				&& (q.examMode === true || q.learnMode === true || typeof q.mode === "string");
-
+			/* Détection de l'objet de mode : partagée avec la page « quiz »
+			   (editor/convert.ts). Une seule règle, sans quoi les deux
+			   surfaces d'édition finissent par écrire des .md incompatibles —
+			   c'est exactement ce qui est arrivé, la page important un
+			   `{ mode: 'learn' }` comme une question vide. */
 			for (const q of parsed) {
 				if (isModeConfig(q)) {
-					const mode: "quiz" | "learn" | "exam" =
-						typeof q.mode === "string" && (q.mode === "learn" || q.mode === "exam" || q.mode === "quiz")
-							? q.mode
-							: q.examMode === true ? "exam"
-							: q.learnMode === true ? "learn"
-							: "quiz";
-					examOptions = {
-						mode,
-						// Le chrono n'est « activé » que pour un vrai mode examen ;
-						// un mode learn peut en porter un (« Passer l'examen »),
-						// auquel cas il annonce une durée.
-						enabled: mode === "exam" || (mode === "learn" && q.examDurationMinutes != null),
-						durationMinutes: q.examDurationMinutes || 10,
-						autoSubmit: q.examAutoSubmit ?? false,
-						showTimer: q.examShowTimer ?? true
-					};
+					examOptions = readModeConfig(q);
 					continue;
 				}
 

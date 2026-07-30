@@ -1,7 +1,7 @@
 import { TFile } from "obsidian";
 import type { App } from "obsidian";
 import { parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-utils";
-import { convertParsedToInternal } from "../editor/convert";
+import { convertParsedToInternal, isModeConfig, readModeConfig } from "../editor/convert";
 import { exportAll } from "../editor/export";
 import type { DraftQuestion } from "../editor/utils";
 import type { ParsedQuizItem } from "../editor/modals";
@@ -46,13 +46,12 @@ export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft |
 		const questions: DraftQuestion[] = [];
 		let examOptions: EditorExamOptions | null = null;
 		for (const item of parsed) {
-			if (item.examMode) {
-				examOptions = {
-					enabled: true,
-					durationMinutes: item.examDurationMinutes || 10,
-					autoSubmit: item.examAutoSubmit ?? false,
-					showTimer: item.examShowTimer ?? true,
-				};
+			// Objet de mode (examen OU learn) : c'est la configuration du bloc,
+			// jamais une question. Le reconnaître au seul `examMode` faisait
+			// entrer un `{ mode: 'learn' }` dans la liste comme une question
+			// vide — et la première réécriture la matérialisait dans la note.
+			if (isModeConfig(item)) {
+				examOptions = readModeConfig(item);
 				continue;
 			}
 			questions.push(convertParsedToInternal(item));

@@ -2,6 +2,7 @@ import { makeDefault, defaultSlots } from "./utils";
 import type { DraftQuestion, QuestionTypeKey } from "./utils";
 import { _htmlToText } from "./modals";
 import type { ParsedQuizItem } from "./modals";
+import type { EditorExamOptions } from "../types/editor-ctx";
 
 /* ══════════════════════════════════════════════════════════
    CONVERT — item JSON5 brut → DraftQuestion (forme d'édition)
@@ -12,6 +13,37 @@ import type { ParsedQuizItem } from "./modals";
    d'un même bloc quiz-blocks finiraient par écrire des .md incompatibles.
    Corps repris à l'identique.
 ══════════════════════════════════════════════════════════ */
+
+/* Objet de CONFIGURATION du bloc, pas une question — même critère que le
+   moteur (quiz-utils.ts extractExamOptions) : aucun énoncé, et l'un des
+   marqueurs de mode. Vit ici pour que TOUTE lecture du bloc partage la même
+   règle : la page « quiz » ne reconnaissait que `examMode` et importait un
+   `{ mode: 'learn' }` comme une sixième question vide — qu'une simple
+   correction de faute de frappe réécrivait ensuite dans la note. */
+export function isModeConfig(q: ParsedQuizItem): boolean {
+	return !!q && typeof q === "object" && !q.prompt
+		&& (q.examMode === true || q.learnMode === true || typeof q.mode === "string");
+}
+
+/** Options du bloc lues depuis un objet de mode (cf. isModeConfig). */
+export function readModeConfig(q: ParsedQuizItem): EditorExamOptions {
+	const mode: "quiz" | "learn" | "exam" =
+		typeof q.mode === "string" && (q.mode === "learn" || q.mode === "exam" || q.mode === "quiz")
+			? q.mode
+			: q.examMode === true ? "exam"
+			: q.learnMode === true ? "learn"
+			: "quiz";
+	return {
+		mode,
+		// Le chrono n'est « activé » que pour un vrai mode examen ; un mode
+		// learn peut en porter un (« Passer l'examen »), auquel cas il annonce
+		// une durée.
+		enabled: mode === "exam" || (mode === "learn" && q.examDurationMinutes != null),
+		durationMinutes: q.examDurationMinutes || 10,
+		autoSubmit: q.examAutoSubmit ?? false,
+		showTimer: q.examShowTimer ?? true,
+	};
+}
 
 export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	let type: QuestionTypeKey = "single";

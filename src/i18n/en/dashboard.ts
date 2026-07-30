@@ -201,6 +201,8 @@ export const EN_DASHBOARD = {
 	"dashboard.quiz.back": "Back",
 	"dashboard.quiz.editor": "Editor",
 	"dashboard.quiz.editDone": "Done",
+	"dashboard.quiz.editTitle": "Title",
+	"dashboard.quiz.editTitlePlaceholder": "Name this question…",
 	"dashboard.quiz.editPrompt": "Question",
 	"dashboard.quiz.editPromptPlaceholder": "Type your question…",
 	"dashboard.quiz.answerPlaceholder": "Type an answer…",

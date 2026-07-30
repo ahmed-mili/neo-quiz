@@ -4,7 +4,8 @@ import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { quizTypeLabel } from "./quiz-card";
-import { openQuizForPlay, openQuizInEditor } from "./quiz-open";
+import { openQuizForPlay } from "./quiz-open";
+import { TypePickerModal } from "../editor/modals";
 import { loadQuizDraft, saveQuizDraft, questionText } from "./detail-io";
 import type { QuizDraft } from "./detail-io";
 import { renderQuestionView, renderQuestionEdit } from "./detail-question";
@@ -254,16 +255,24 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		if (editing) {
 			const add = head.createEl("button", { cls: "qbd-qz-list-add", attr: { type: "button", "aria-label": t("dashboard.quiz.addQuestion") } });
 			setIcon(add, "plus");
+			// Le TYPE se choisit à la création, comme dans l'éditeur : une
+			// question ajoutée d'office en « choix unique » puis reconvertie
+			// perdrait ses réponses au passage.
 			add.addEventListener("click", () => {
-				if (!draft) return;
-				const q = makeDefault("single");
-				// « Question N » non traduit : motif du titre auto écrit dans
-				// le .md et relu par l'éditeur (cf. editor/ui.ts).
-				q.title = `Question ${draft.questions.length + 1}`;
-				draft.questions.push(q);
-				activeIdx = draft.questions.length - 1;
-				scheduleSave();
-				paint(listCol, panel, nav, quiz);
+				new TypePickerModal(ctx.app, (key) => {
+					if (!draft) return;
+					const q = makeDefault(key);
+					// « Question N » non traduit : motif du titre auto écrit dans
+					// le .md et relu par l'éditeur (cf. editor/ui.ts).
+					q.title = `Question ${draft.questions.length + 1}`;
+					draft.questions.push(q);
+					activeIdx = draft.questions.length - 1;
+					// Le mode ÉDITION s'ouvre avec la question : on vient de la
+					// créer vide, la relire n'apprendrait rien.
+					editing = true;
+					scheduleSave();
+					ctx.view.renderCurrentView();
+				}).open();
 			});
 		}
 
@@ -302,6 +311,8 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		const content = slide.createDiv({ cls: "qbd-qz-panel-body" });
 		if (editing) {
 			renderQuestionEdit(content, q, {
+				app: ctx.app,
+				plugin: ctx.plugin,
 				onChange: () => {
 					scheduleSave();
 					paintList(listCol, panel, nav, quiz);
@@ -313,10 +324,6 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 				// Re-peindre le PANNEAU seul : la liste vient d'être refaite par
 				// onChange, et re-rendre tout volerait le focus de la frappe.
 				onStructureChange: () => paintPanel(listCol, panel, nav, quiz),
-				onOpenFullEditor: () => {
-					flushSave();
-					void openQuizInEditor(ctx.app, quiz);
-				},
 			});
 		} else {
 			renderQuestionView(content, q, ctx.app, index);

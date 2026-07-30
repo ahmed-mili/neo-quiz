@@ -180,6 +180,8 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.quiz.back": "Retour",
 	"dashboard.quiz.editor": "Éditeur",
 	"dashboard.quiz.editDone": "Terminé",
+	"dashboard.quiz.editTitle": "Titre",
+	"dashboard.quiz.editTitlePlaceholder": "Nommez cette question…",
 	"dashboard.quiz.editPrompt": "Question",
 	"dashboard.quiz.editPromptPlaceholder": "Saisissez votre question…",
 	"dashboard.quiz.answerPlaceholder": "Saisissez une réponse…",

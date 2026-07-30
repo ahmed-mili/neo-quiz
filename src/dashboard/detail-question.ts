@@ -100,6 +100,10 @@ function renderPromptField(parent: HTMLElement, q: DraftQuestion, cb: EditCallba
 	input.rows = 2;
 	input.placeholder = t("dashboard.quiz.editPromptPlaceholder");
 	autoGrow(input);
+	// Deuxieme passe apres layout : au premier appel la largeur du panneau
+	// n'est pas encore arretee, scrollHeight vaut celui d'une ligne et
+	// l'enonce se retrouve coupe.
+	requestAnimationFrame(() => autoGrow(input));
 	input.addEventListener("input", () => {
 		q.prompt = input.value;
 		// L'énoncé redevient du texte : le HTML pré-rendu d'un import

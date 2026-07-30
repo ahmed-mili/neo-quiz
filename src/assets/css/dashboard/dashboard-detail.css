@@ -327,10 +327,60 @@
 
 /* Suppression : n'apparaît qu'au survol de SA carte — une croix permanente
    sur chaque vignette transformerait la colonne en champ de mines. */
-.qbd-root .qbd-qz-card-del {
+/* Rangée d'actions d'une carte (édition) : réordonner, supprimer. Révélée
+   au survol de la carte — au repos, la liste reste une liste. */
+.qbd-qz-card-acts {
 	position: absolute;
-	top: 6px;
-	right: 6px;
+	top: 5px;
+	right: 5px;
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	opacity: 0;
+	transition: opacity 0.14s ease;
+}
+
+.qbd-qz-card:hover .qbd-qz-card-acts,
+.qbd-qz-card-acts:focus-within {
+	opacity: 1;
+}
+
+.qbd-root .qbd-qz-card-act {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	/* Obsidian repeint tout <button> (0,1,1) : sans ces deux-là, chaque
+	   flèche redeviendrait une pilule grise sur la carte. */
+	background: transparent !important;
+	box-shadow: none !important;
+	color: var(--text-faint);
+	cursor: pointer;
+	transition: color 0.14s ease, background 0.14s ease;
+}
+
+.qbd-root .qbd-qz-card-act:hover:not(:disabled) {
+	background: var(--background-modifier-hover) !important;
+	color: var(--text-normal);
+}
+
+/* Aux extrémités la flèche reste VISIBLE mais inerte : une rangée qui
+   change de largeur d'une carte à l'autre ferait sautiller la liste. */
+.qbd-root .qbd-qz-card-act:disabled {
+	opacity: 0.3;
+	cursor: default;
+}
+
+.qbd-qz-card-act svg {
+	width: 13px;
+	height: 13px;
+}
+
+.qbd-root .qbd-qz-card-del {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -345,10 +395,6 @@
 	cursor: pointer;
 	opacity: 0;
 	transition: opacity 0.14s ease, color 0.14s ease, background 0.14s ease;
-}
-
-.qbd-qz-card:hover .qbd-qz-card-del {
-	opacity: 1;
 }
 
 .qbd-root .qbd-qz-card-del:hover {
@@ -819,4 +865,62 @@
 .is-mobile .qbd-qz-actions {
 	width: 100%;
 	justify-content: flex-end;
+}
+
+
+/* ── Mode du quiz (colonne de gauche, édition seulement) ── */
+.qbd-qz-exam {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	margin-top: 14px;
+	padding: 12px;
+	border-radius: var(--radius-m, 12px);
+	background: var(--qbd-glass-bg);
+	border: 1px solid var(--qbd-glass-edge);
+	box-shadow: var(--qbd-glass-sheen);
+	backdrop-filter: var(--qbd-glass-blur);
+	-webkit-backdrop-filter: var(--qbd-glass-blur);
+}
+
+.qbd-qz-exam-head {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	color: var(--text-muted);
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.qbd-qz-exam-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.qbd-qz-exam-help {
+	font-size: 11px;
+	line-height: 1.5;
+	color: var(--text-faint);
+}
+
+.qbd-qz-exam-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.qbd-qz-exam-check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.qbd-qz-exam-check input {
+	flex-shrink: 0;
+	margin: 0;
 }

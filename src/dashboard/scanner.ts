@@ -1,6 +1,8 @@
 import { TFile } from "obsidian";
 import type { App, EventRef } from "obsidian";
 import JSON5 from "json5";
+import { isModeConfig } from "../editor/convert";
+import type { ParsedQuizItem } from "../editor/modals";
 
 /* ══════════════════════════════════════════════════════════
    QUIZ SCANNER — Indexeur de vault
@@ -90,10 +92,13 @@ export function createScanner(app: App): Scanner {
 			const parsed: unknown = JSON5.parse(source);
 			if (!Array.isArray(parsed)) return null;
 
-			// Ignorer l'objet examMode final s'il existe
+			// Ignorer l'objet de mode final (examen OU learn) : c'est la
+			// configuration du bloc, pas une question. Le filtrer sur le seul
+			// `examMode` faisait compter une question de plus à tout quiz en
+			// mode learn — « 0/6 » sur un quiz qui en montre 5.
 			const questions = parsed.filter((q): q is RawQuizItem => {
 				if (!q || typeof q !== "object") return false;
-				return !(q as RawQuizItem).examMode;
+				return !isModeConfig(q as ParsedQuizItem);
 			});
 
 			if (questions.length === 0) return null;

@@ -9,6 +9,7 @@ import { TypePickerModal } from "../editor/modals";
 import { loadQuizDraft, saveQuizDraft, questionText } from "./detail-io";
 import type { QuizDraft } from "./detail-io";
 import { renderQuestionView, renderQuestionEdit } from "./detail-question";
+import { renderExamPanel } from "./detail-exam";
 import { mountSlideHost, setSlide, slideTo, reserveTallest, growReserve, finish as finishSlide } from "./detail-slide";
 import type { SlideHost } from "./detail-slide";
 import { makeDefault } from "../editor/utils";
@@ -285,10 +286,42 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 			card.createSpan({ cls: "qbd-qz-card-text" + (text ? "" : " is-empty"), text: text || t("dashboard.quiz.promptEmpty") });
 			card.addEventListener("click", () => goToQuestion(i, listCol, panel, nav, quiz));
 
-			// Suppression : en édition seulement, et jamais la dernière (un
-			// bloc quiz-blocks vide ne se relit pas).
-			if (editing && draft && draft.questions.length > 1) {
-				const del = card.createEl("button", { cls: "qbd-qz-card-del", attr: { type: "button", "aria-label": t("dashboard.quiz.deleteQuestion") } });
+			if (!editing || !draft) return;
+
+			const acts = card.createDiv({ cls: "qbd-qz-card-acts" });
+
+			// Réordonnancement : l'ordre des questions EST le déroulé du quiz.
+			// Les flèches restent visibles (grisées) aux extrémités plutôt que
+			// de disparaître — une rangée d'actions qui change de largeur d'une
+			// carte à l'autre fait sautiller la liste.
+			const move = (dir: -1 | 1, icon: string, aria: string): void => {
+				const btn = acts.createEl("button", { cls: "qbd-qz-card-act", attr: { type: "button", "aria-label": aria } });
+				setIcon(btn, icon);
+				const target = i + dir;
+				btn.disabled = target < 0 || target >= draft!.questions.length;
+				btn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					if (!draft || btn.disabled) return;
+					const qs = draft.questions;
+					[qs[i], qs[target]] = [qs[target], qs[i]];
+					// Les titres AUTOMATIQUES suivent le nouvel ordre ; ceux que
+					// l'auteur a écrits ne bougent pas (même règle que l'éditeur).
+					qs.forEach((qq, idx) => {
+						if (!qq._userModifiedTitle && /^Question \d+$/.test(qq.title || "")) qq.title = `Question ${idx + 1}`;
+					});
+					if (activeIdx === i) activeIdx = target;
+					else if (activeIdx === target) activeIdx = i;
+					scheduleSave();
+					paint(listCol, panel, nav, quiz);
+				});
+			};
+			move(-1, "chevron-up", t("dashboard.quiz.moveUp"));
+			move(1, "chevron-down", t("dashboard.quiz.moveDown"));
+
+			// Suppression : jamais la dernière (un bloc quiz-blocks vide ne se
+			// relit pas).
+			if (draft.questions.length > 1) {
+				const del = acts.createEl("button", { cls: "qbd-qz-card-act qbd-qz-card-del", attr: { type: "button", "aria-label": t("dashboard.quiz.deleteQuestion") } });
 				setIcon(del, "trash-2");
 				del.addEventListener("click", (e) => {
 					e.stopPropagation();
@@ -299,6 +332,15 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 					paint(listCol, panel, nav, quiz);
 				});
 			}
+		});
+
+		// ── Mode du quiz (édition seulement) ──
+		if (!editing) return;
+		renderExamPanel(listCol, {
+			get: () => draft?.examOptions ?? null,
+			set: (value) => { if (draft) draft.examOptions = value; },
+			onChange: () => scheduleSave(),
+			onStructureChange: () => paintList(listCol, panel, nav, quiz),
 		});
 	}
 

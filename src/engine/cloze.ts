@@ -123,7 +123,10 @@ export function createClozeHandlers(ctx: EngineCtx): ClozeHandlers {
 			}
 
 			const value = String(values[seg.index] ?? "");
-			let cls = "quiz-cloze-input";
+			// Un trou REMPLI se distingue des trous encore vides sans attendre
+			// la correction (demande Ahmed 2026-07-31) : la classe porte cet
+			// état, le CSS lui donne son fond et sa bordure pleine.
+			let cls = "quiz-cloze-input" + (value.trim() ? " is-filled" : "");
 			let expected = "";
 			if (locked) {
 				const ok = isBlankCorrect(q, seg.index, value);
@@ -132,7 +135,7 @@ export function createClozeHandlers(ctx: EngineCtx): ClozeHandlers {
 				// rappeler partout noierait la correction.
 				if (!ok) {
 					const answer = blanks[seg.index]?.answers[0] ?? "";
-					expected = `<span class="quiz-cloze-expected">${ctx.escapeHtmlText(answer)}</span>`;
+					expected = `<span class="quiz-cloze-expected">${ctx.sanitize.renderInlineText(answer)}</span>`;
 				}
 			}
 
@@ -145,6 +148,21 @@ export function createClozeHandlers(ctx: EngineCtx): ClozeHandlers {
 
 		return `<div class="quiz-multi-indicator">${t("engine.cloze.instructions", { count: blanks.length })}</div>
 		<div class="quiz-cloze">${body}</div>`;
+	}
+
+	/** Bascule l'état « rempli » d'un trou, et n'anime QUE la transition
+	    vide → rempli : rejouer le pop à chaque frappe ferait sautiller la
+	    case pendant qu'on tape. Le retrait/reflow/ajout relance l'animation
+	    quand un trou est vidé puis re-rempli (une classe déjà posée ne
+	    redéclenche rien). */
+	function markFilled(input: HTMLInputElement): void {
+		const filled = input.value.trim().length > 0;
+		if (filled === input.classList.contains("is-filled")) return;
+		input.classList.toggle("is-filled", filled);
+		if (!filled) return;
+		input.classList.remove("quiz-cloze-pop");
+		void input.offsetWidth;
+		input.classList.add("quiz-cloze-pop");
 	}
 
 	function bindClozeQuestion(trackItem: HTMLElement, qi: number): void {
@@ -169,6 +187,7 @@ export function createClozeHandlers(ctx: EngineCtx): ClozeHandlers {
 				if (!Array.isArray(current)) return;
 				ctx.invalidateSavedResults?.();
 				(current as unknown as string[])[bi] = input.value;
+				markFilled(input);
 				ctx.updateNavHighlight();
 				ctx.refreshMetaSlides();
 			});

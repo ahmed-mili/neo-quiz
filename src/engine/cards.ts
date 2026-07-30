@@ -184,7 +184,7 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 
 			return `<div class="${cls}" data-order-slot="${si}" role="button" tabindex="0" ${(!ctx.quizState.locked && filled) ? `draggable="true" data-slot-item="${oi}"` : ""}>
 				<div class="quiz-slot-label">${slotLabels[si] ?? String(si + 1)}</div>
-				<div class="quiz-slot-value">${filled ? ctx.escapeHtmlText(items[oi]) : t("engine.ordering.dropHere")}</div>
+				<div class="quiz-slot-value">${filled ? ctx.sanitize.renderInlineText(items[oi]) : t("engine.ordering.dropHere")}</div>
 			</div>`;
 		}).join("");
 
@@ -196,7 +196,7 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			if (picked) cls += " selected-pick";
 
 			return `<div class="${cls}" data-order-item="${oi}" role="button" tabindex="0" ${(!used && !ctx.quizState.locked) ? `draggable="true"` : ""}>
-				${ctx.escapeHtmlText(items[oi])}
+				${ctx.sanitize.renderInlineText(items[oi])}
 			</div>`;
 		}).join("");
 
@@ -231,8 +231,8 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			}
 
 			return `<div class="${cls}" data-match-slot="${rowIndex}" role="button" tabindex="0" ${(!ctx.quizState.locked && filled) ? `draggable="true" data-slot-choice="${chosen}"` : ""}>
-				<div class="quiz-slot-label">${ctx.escapeHtmlText(rows[rowIndex])}</div>
-				<div class="quiz-slot-value">${filled ? ctx.escapeHtmlText(choices[chosen] ?? t("engine.matching.unknownChoice")) : t("engine.matching.dropHere")}</div>
+				<div class="quiz-slot-label">${ctx.sanitize.renderInlineText(rows[rowIndex])}</div>
+				<div class="quiz-slot-value">${filled ? ctx.sanitize.renderInlineText(choices[chosen] ?? t("engine.matching.unknownChoice")) : t("engine.matching.dropHere")}</div>
 			</div>`;
 		}).join("");
 
@@ -242,7 +242,7 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			if (picked) cls += " selected-pick";
 
 			return `<div class="${cls}" data-match-choice="${ci}" role="button" tabindex="0" ${!ctx.quizState.locked ? `draggable="true"` : ""}>
-				${ctx.escapeHtmlText(choices[ci])}
+				${ctx.sanitize.renderInlineText(choices[ci])}
 			</div>`;
 		}).join("");
 
@@ -439,7 +439,7 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		return `<div class="quiz-track-item" data-slide-kind="question" data-qi="${qi}">
 			<section class="quiz-card"${sectionIdAttr}>
 				${passageSection}
-				<h2>${ctx.escapeHtmlText(q.title)}</h2>
+				<h2>${ctx.sanitize.renderInlineText(q.title)}</h2>
 				${ctx.sanitize.resourceButtonHtml(q)}
 				<div class="quiz-question">${renderQuizPromptHtml(q)}</div>
 				${body}

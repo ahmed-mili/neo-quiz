@@ -28,11 +28,19 @@ export interface SanitizerHandlers {
 	parseObsidianEmbedSpec(spec: unknown): ParsedEmbedSpec;
 	buildEmbedImgHtml(embedSpec: unknown, opts?: EmbedClassOptions): string;
 	restoreAllowedInlineTags(html: unknown): string;
+	renderInlineText(raw: unknown): string;
 	renderTextWithEmbeds(raw: unknown, opts?: EmbedClassOptions): string;
 	renderHintWithCodeAndEmbeds(raw: unknown): string;
 	renderRawHtmlWithEmbeds(raw: unknown, opts?: EmbedClassOptions): string;
 	replaceObsidianEmbedsInHtml(html: unknown, opts?: EmbedClassOptions): string;
 }
+
+/** Balise de mise à l'abri de `inlineMarkdown` (maths, code) : U+0000, un
+    caractère de contrôle qu'aucun texte de quiz réel ne contient. Un
+    placeholder fait de lettres finirait, lui, par apparaître dans une
+    question qui en parle. Construit par code — un NUL littéral dans une
+    source TypeScript ne survit pas à un outil de formatage. */
+const MD_MARK = String.fromCharCode(0);
 
 export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 	const QUIZ_HTML_ALLOWED_TAGS = new Set([
@@ -269,6 +277,53 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 		return `<code>${escapeHtmlText(`![[${embedSpec}]]`)}</code>`;
 	}
 
+	/* ── Markdown INLINE des champs texte ────────────────────────────────
+	   Un quiz écrit à la main — ou généré par un modèle — contient du
+	   markdown : `**gras**`, `*italique*`, `` `code` ``. Sans cette passe,
+	   les étoiles et les accents graves s'affichaient TELS QUELS dans les
+	   énoncés, les options, l'explication et surtout la leçon du mode learn
+	   (constat Ahmed 2026-07-31). Le champ n'a pas d'équivalent HTML
+	   (`learn`, `cloze`… passent en texte brut) : c'est ici, au rendu, que
+	   ça se joue — pas à l'export, qui doit garder la source lisible.
+
+	   Entrée : du texte DÉJÀ échappé (escapeHtmlText) où les quelques
+	   balises inline autorisées ont été restaurées. On n'introduit donc
+	   jamais de HTML venu de l'utilisateur : uniquement les balises que
+	   cette fonction écrit elle-même.
+
+	   Ce qui est mis à l'abri AVANT toute substitution :
+	   - les formules LaTeX ($…$, $$…$$) — MathJax lit la source telle
+	     quelle, et un `*` ou un `_` y appartient à la formule ;
+	   - les <code> déjà présents — leur contenu est littéral par nature. */
+	function inlineMarkdown(escaped: string): string {
+		const stash: string[] = [];
+		const keep = (html: string): string => MD_MARK + (stash.push(html) - 1) + MD_MARK;
+
+		let out = escaped
+			.replace(/\$\$[\s\S]*?\$\$|\$[^$\n]+\$/g, m => keep(m))
+			.replace(/<code>[\s\S]*?<\/code>/g, m => keep(m))
+			.replace(/`([^`\n]+)`/g, (_m, code: string) => keep(`<code>${code}</code>`));
+
+		// Gras AVANT italique (sinon `**x**` se lirait comme deux italiques
+		// vides). Le `(?=\S)` et le `\S` final imposent des délimiteurs collés
+		// au texte : une multiplication écrite « 3 * 4 * 5 » n'est pas de
+		// l'italique, et c'est précisément le cas qui casse un quiz de maths.
+		out = out
+			.replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "<strong>$1</strong>")
+			.replace(/(^|[^*])\*(?=\S)([^*]*?\S)\*(?!\*)/g, "$1<em>$2</em>")
+			.replace(/~~(?=\S)([\s\S]*?\S)~~/g, "<del>$1</del>");
+
+		return out.replace(new RegExp(MD_MARK + "(\\d+)" + MD_MARK, "g"), (_m, i: string) => stash[Number(i)]);
+	}
+
+	/** Texte d'affichage : échappé, puis markdown inline. Le pendant de
+	    `escapeHtmlText` pour tout ce que l'apprenant LIT (libellés de
+	    classement, d'appariement, titres, réponses attendues) — mais jamais
+	    pour ce qu'il ÉCRIT (valeur d'un textarea) ni pour un attribut. */
+	function renderInlineText(raw: unknown): string {
+		return inlineMarkdown(restoreAllowedInlineTags(escapeHtmlText(raw)));
+	}
+
 	function restoreAllowedInlineTags(html: unknown): string {
 		return String(html ?? "")
 			.replace(/\&lt;br\s*\/?\&gt;/gi, "<br>")
@@ -288,9 +343,9 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 			const before = text.slice(lastIndex, match.index);
 
 			if (before) {
-				html += restoreAllowedInlineTags(
+				html += inlineMarkdown(restoreAllowedInlineTags(
 					escapeHtmlText(before).replace(/\n/g, "<br>")
-				);
+				));
 			}
 
 			html += buildEmbedImgHtml(match[1], { wrapClass, imgClass });
@@ -300,9 +355,9 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 		const tail = text.slice(lastIndex);
 
 		if (tail) {
-			html += restoreAllowedInlineTags(
+			html += inlineMarkdown(restoreAllowedInlineTags(
 				escapeHtmlText(tail).replace(/\n/g, "<br>")
-			);
+			));
 		}
 
 		return html;
@@ -340,6 +395,7 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 		parseObsidianEmbedSpec,
 		buildEmbedImgHtml,
 		restoreAllowedInlineTags,
+		renderInlineText,
 		renderTextWithEmbeds,
 		renderHintWithCodeAndEmbeds,
 		renderRawHtmlWithEmbeds,

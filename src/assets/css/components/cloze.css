@@ -33,11 +33,15 @@
   /* Largeur UNIFORME pour TOUTES les cases : une case dimensionnée sur sa
      réponse donnerait la longueur du mot cherché. */
   width: 12ch;
-  padding: 2px 8px;
-  border: none;
-  border-bottom: 2px solid var(--background-modifier-border-hover);
-  border-radius: 4px 4px 0 0;
-  background: color-mix(in srgb, var(--background-secondary) 70%, transparent);
+  padding: 3px 10px;
+  /* Soulignement TIRETÉ tant que la case est vide : c'est le trait de la
+     ligne à compléter d'un exercice papier — il dit « à remplir » sans
+     texte d'aide, et son passage au plein signale ensuite que c'est fait. */
+  border: 1px solid transparent;
+  border-bottom: 2px dashed color-mix(in srgb, var(--text-muted) 50%, transparent);
+  border-radius: 7px 7px 3px 3px;
+  background: color-mix(in srgb, var(--background-secondary) 55%, transparent);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, #000 12%, transparent);
   color: var(--text-normal);
   font-family: inherit;
   font-size: 0.95em;
@@ -46,6 +50,7 @@
   text-align: center;
   transition: border-color var(--quiz-dur-fast) var(--quiz-ease-smooth),
               background var(--quiz-dur-fast) var(--quiz-ease-smooth),
+              color var(--quiz-dur-fast) var(--quiz-ease-smooth),
               box-shadow var(--quiz-dur-fast) var(--quiz-ease-smooth);
 }
 
@@ -55,19 +60,52 @@
 
 .quiz-cloze .quiz-cloze-input:hover:not(:disabled){
   border-bottom-color: var(--quiz-primary);
-  background: color-mix(in srgb, var(--background-secondary) 90%, transparent);
+  background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
 }
 
 .quiz-cloze .quiz-cloze-input:focus{
   outline: none;
+  border-bottom-style: solid;
   border-bottom-color: var(--quiz-primary);
   background: color-mix(in srgb, var(--quiz-primary) 8%, var(--background-secondary));
-  box-shadow: 0 0 0 1.5px var(--quiz-primary-ring-16);
+  box-shadow: 0 0 0 2px var(--quiz-primary-ring-16);
+}
+
+/* ── Trou REMPLI, avant toute correction ──
+   Distinguer d'un coup d'œil ce qui reste à faire (demande Ahmed
+   2026-07-31) : le tireté devient plein, le fond prend la teinte d'accent
+   et le texte passe en pleine couleur. Aucune indication de justesse ici —
+   la correction, elle, vient plus bas (.correct / .wrong). */
+.quiz-cloze .quiz-cloze-input.is-filled{
+  border-bottom-style: solid;
+  border-bottom-color: var(--quiz-primary);
+  background: color-mix(in srgb, var(--quiz-primary) 13%, var(--background-secondary));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, #000 10%, transparent),
+              0 1px 0 var(--quiz-primary-ring-12);
+}
+
+/* Le trou qu'on vient de remplir « prend » : une pulsation courte, jouée
+   sur la seule transition vide → rempli (cf. markFilled dans cloze.ts). */
+@keyframes quiz-cloze-pop{
+  0%   { transform: none; }
+  38%  { transform: translateY(-2px) scale(1.045); }
+  100% { transform: none; }
+}
+
+.quiz-cloze .quiz-cloze-input.quiz-cloze-pop{
+  animation: quiz-cloze-pop 260ms var(--quiz-ease-smooth);
+}
+
+@media (prefers-reduced-motion: reduce){
+  .quiz-cloze .quiz-cloze-input.quiz-cloze-pop{ animation: none; }
 }
 
 /* ── Après correction ── */
 
 .quiz-cloze .quiz-cloze-input.correct{
+  /* `solid` explicite : la case vide est TIRETÉE, et un trou raté laissé en
+     pointillés se lirait encore comme « à remplir ». */
+  border-bottom-style: solid;
   border-bottom-color: var(--quiz-success);
   background: color-mix(in srgb, var(--quiz-success) 12%, transparent);
   color: var(--text-normal);
@@ -76,6 +114,7 @@
 }
 
 .quiz-cloze .quiz-cloze-input.wrong{
+  border-bottom-style: solid;
   border-bottom-color: var(--quiz-danger);
   background: color-mix(in srgb, var(--quiz-danger) 12%, transparent);
   color: var(--text-normal);

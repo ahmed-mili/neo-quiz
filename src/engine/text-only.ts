@@ -135,14 +135,14 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 		// variante non-texte il renvoie [] — cast documenté.
 		const accepted = ctx.terminal?.getTextAcceptedAnswers?.(q as TextQuestion) || [];
 		if (accepted.length > 0) {
-			return `<div class="quiz-textonly-expected-item">${ctx.escapeHtmlText(accepted[0])}</div>`;
+			return `<div class="quiz-textonly-expected-item">${ctx.sanitize.renderInlineText(accepted[0])}</div>`;
 		}
 
 		if (ctx.isOrderingQuestion(q)) {
 			const items = ctx.getOrderingItems(q);
 			const order = ctx.getOrderingCorrectOrder(q);
 			const answer = order.map(i => items[i]).filter(v => v !== undefined).join(" -> ");
-			if (answer) return `<div class="quiz-textonly-expected-item">${ctx.escapeHtmlText(answer)}</div>`;
+			if (answer) return `<div class="quiz-textonly-expected-item">${ctx.sanitize.renderInlineText(answer)}</div>`;
 		}
 
 		if (ctx.isMatchingQuestion(q)) {
@@ -152,7 +152,7 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 			if (Array.isArray(map) && map.length === rows.length) {
 				const rowsHtml = rows.map((row, i) => {
 					const choice = choices[map[i]] ?? "";
-					return `<div class="quiz-textonly-expected-pair"><strong>${ctx.escapeHtmlText(row)}</strong><span>${ctx.escapeHtmlText(choice)}</span></div>`;
+					return `<div class="quiz-textonly-expected-pair"><strong>${ctx.sanitize.renderInlineText(row)}</strong><span>${ctx.sanitize.renderInlineText(choice)}</span></div>`;
 				}).join("");
 				return `<div class="quiz-textonly-expected-list">${rowsHtml}</div>`;
 			}

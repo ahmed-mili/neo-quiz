@@ -21,13 +21,36 @@ import { t } from "../i18n";
    absent de l'écran.
 ══════════════════════════════════════════════════════════ */
 
-/** Une limite de forfait telle que le fournisseur la publie (fenêtre + taux). */
-export interface AiLimit {
-	/** Libellé de la fenêtre, déjà traduit (« 5 h », « 7 j »). */
-	label: string;
+/**
+ * Une limite de forfait telle que le fournisseur la publie.
+ *
+ * `kind` porte le SENS de la ligne, jamais son libellé : traduire ici figerait
+ * le texte dans la langue du moment de la lecture, alors que l'écran est
+ * redessiné (et la langue peut changer) longtemps après. Le nom de modèle,
+ * lui, est une donnée de l'API — il ne se traduit pas.
+ */
+export interface UsageRow {
+	kind: "session" | "weekly-all" | "weekly-model" | "window";
+	/** kind « weekly-model » : nom publié par l'API (« Fable », « Opus »). */
+	modelName?: string;
+	/** kind « window » (Codex) : durée de la fenêtre, mise en mots au rendu. */
+	windowMinutes?: number;
 	usedPercent: number;
 	/** Fin de la fenêtre courante, en ms epoch ; null si le fournisseur ne la donne pas. */
 	resetsAt: number | null;
+}
+
+/** État du forfait à un instant donné : ce qui remplit le modal d'usage. */
+export interface PlanUsage {
+	/** Forfait avec son palier (« Max (5x) »), pour le titre de l'écran.
+	    null si le fournisseur ne le publie pas. */
+	plan: string | null;
+	/** Le même sans palier (« Max »), pour la PROSE : « inclus dans votre
+	    forfait Max » — l'écran officiel n'y répète pas le multiplicateur. */
+	planName: string | null;
+	rows: UsageRow[];
+	/** Instant de la LECTURE — « Dernière mise à jour : … » en dépend. */
+	fetchedAt: number;
 }
 
 /** Consommation d'UNE génération. */
@@ -86,16 +109,46 @@ export function formatDuration(ms: number): string {
 	return m + " min " + Math.round(s - m * 60) + " s";
 }
 
-/** Temps restant avant réarmement d'une fenêtre de quota, formulé court. */
-export function formatResetIn(resetsAt: number | null, now: number): string | null {
+/** Temps restant avant réarmement, à la minute près (« 4 h 31 min ») : c'est la
+    précision de claude.ai, et arrondir à l'heure ferait mentir un compte à
+    rebours qu'on regarde justement quand il touche à sa fin. */
+export function formatCountdown(resetsAt: number | null, now: number): string | null {
 	if (resetsAt == null) return null;
 	const ms = resetsAt - now;
 	if (ms <= 0) return null;
-	const minutes = Math.round(ms / 60000);
-	if (minutes < 60) return t("ai.usage.resetInMinutes", { n: minutes });
-	const hours = Math.round(minutes / 60);
-	if (hours < 48) return t("ai.usage.resetInHours", { n: hours });
-	return t("ai.usage.resetInDays", { n: Math.round(hours / 24) });
+	const minutes = Math.floor(ms / 60000);
+	const days = Math.floor(minutes / 1440);
+	if (days >= 1) return t("ai.usage.durationDays", { n: days });
+	const hours = Math.floor(minutes / 60);
+	if (hours >= 1) return t("ai.usage.durationHoursMinutes", { h: hours, m: minutes - hours * 60 });
+	return t("ai.usage.durationMinutes", { m: Math.max(1, minutes) });
+}
+
+/** Moment absolu du réarmement (« mer. 07:00 ») — ce que claude.ai affiche pour
+    les fenêtres longues, où un « dans 5 j » ne dit pas quand on est débloqué.
+    Formaté par Intl dans la langue de l'UI, pas par une table de jours maison. */
+export function formatResetMoment(resetsAt: number | null, lang: string): string | null {
+	if (resetsAt == null) return null;
+	try {
+		/* ARRONDI À LA MINUTE : l'API renvoie un instant à la seconde près, qui
+		   dérive d'un appel à l'autre (…06:59:34 pour une fenêtre qui rouvre à
+		   07:00). Tronquer afficherait « 06:59 » là où l'écran officiel dit
+		   « 07:00 » — un décalage d'une minute qui se lit comme un bug. */
+		const minute = Math.round(resetsAt / 60000) * 60000;
+		return new Intl.DateTimeFormat(lang, {
+			weekday: "short", hour: "numeric", minute: "2-digit"
+		}).format(new Date(minute));
+	} catch {
+		return null;
+	}
+}
+
+/** « à l'instant » / « il y a 3 min » — fraîcheur de la lecture affichée. */
+export function formatAge(fetchedAt: number, now: number): string {
+	const minutes = Math.floor(Math.max(0, now - fetchedAt) / 60000);
+	if (minutes < 1) return t("ai.usage.justNow");
+	if (minutes < 60) return t("ai.usage.minutesAgo", { n: minutes });
+	return t("ai.usage.hoursAgo", { n: Math.floor(minutes / 60) });
 }
 
 export function readUsageLog(plugin: UsagePlugin): AiUsageEntry[] {
@@ -160,10 +213,62 @@ const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_OAUTH_BETA = "oauth-2025-04-20";
 
 interface ClaudeUsageWindow { utilization?: number; resets_at?: string }
+/** Ligne moderne de `limits[]` : la forme que l'écran de claude.ai reproduit. */
+interface ClaudeUsageLimit {
+	kind?: string;
+	percent?: number;
+	resets_at?: string;
+	scope?: { model?: { display_name?: string } | null } | null;
+}
 interface ClaudeUsageResponse {
+	limits?: ClaudeUsageLimit[] | null;
+	/* Champs historiques, conservés en repli : un compte qui ne renverrait pas
+	   encore `limits` doit continuer d'afficher ses jauges. */
 	five_hour?: ClaudeUsageWindow | null;
 	seven_day?: ClaudeUsageWindow | null;
 	seven_day_opus?: ClaudeUsageWindow | null;
+}
+
+/** Jeton + forfait du CLI Claude Code local, en UNE lecture du trousseau. */
+function readClaudeCredentials(): { token: string | null; plan: PlanName | null } {
+	if (!Platform.isDesktopApp) return { token: null, plan: null };
+	try {
+		const os = require("os") as typeof import("os");
+		const path = require("path") as typeof import("path");
+		const fs = require("fs") as typeof import("fs");
+
+		const credPath = path.join(os.homedir(), ".claude", ".credentials.json");
+		if (!fs.existsSync(credPath)) return { token: null, plan: null };
+		const cred = JSON.parse(fs.readFileSync(credPath, "utf8")) as {
+			claudeAiOauth?: { accessToken?: string; subscriptionType?: string; rateLimitTier?: string };
+		};
+		const oauth = cred?.claudeAiOauth;
+		return { token: oauth?.accessToken || null, plan: formatPlanName(oauth) };
+	} catch (e) {
+		console.warn("[quiz-blocks] trousseau Claude illisible:", e);
+		return { token: null, plan: emptyPlan };
+	}
+}
+
+/** Nom du forfait sous ses deux formes. Nom de produit : jamais traduit,
+    jamais deviné — sans `subscriptionType`, pas de nom affiché du tout. */
+export interface PlanName { label: string; name: string }
+const emptyPlan: PlanName | null = null;
+
+/** « max » + « default_claude_max_5x » → { label: « Max (5x) », name: « Max » }. */
+function formatPlanName(oauth?: { subscriptionType?: string; rateLimitTier?: string }): PlanName | null {
+	const type = oauth?.subscriptionType;
+	if (!type) return null;
+	const name = type.charAt(0).toUpperCase() + type.slice(1);
+	// Le multiplicateur ne vit que dans le palier (« …_max_5x ») : absent pour
+	// les forfaits qui n'en ont pas, et on n'en invente pas un « (1x) ».
+	const multiplier = /_(\d+)x\b/.exec(oauth?.rateLimitTier || "");
+	return { label: multiplier ? `${name} (${multiplier[1]}x)` : name, name };
+}
+
+/** Forfait Claude détecté localement, sans aucun appel réseau. */
+export function readClaudePlan(): PlanName | null {
+	return readClaudeCredentials().plan;
 }
 
 /**
@@ -173,21 +278,10 @@ interface ClaudeUsageResponse {
  * ce soit manque — CLI absent, session expirée, réseau : une lecture de confort
  * ne fait jamais échouer quoi que ce soit.
  */
-export async function fetchClaudeLimits(): Promise<AiLimit[]> {
-	if (!Platform.isDesktopApp) return [];
+export async function fetchClaudeUsage(): Promise<UsageRow[]> {
+	const { token } = readClaudeCredentials();
+	if (!token) return [];
 	try {
-		const os = require("os") as typeof import("os");
-		const path = require("path") as typeof import("path");
-		const fs = require("fs") as typeof import("fs");
-
-		const credPath = path.join(os.homedir(), ".claude", ".credentials.json");
-		if (!fs.existsSync(credPath)) return [];
-		const cred = JSON.parse(fs.readFileSync(credPath, "utf8")) as {
-			claudeAiOauth?: { accessToken?: string };
-		};
-		const token = cred?.claudeAiOauth?.accessToken;
-		if (!token) return [];
-
 		/* `requestUrl` et NON `fetch` : le renderer d'Obsidian applique la
 		   politique d'origine du navigateur et un fetch vers api.anthropic.com
 		   échoue en « Failed to fetch » (vérifié). requestUrl passe par le
@@ -205,17 +299,42 @@ export async function fetchClaudeLimits(): Promise<AiLimit[]> {
 		if (resp.status < 200 || resp.status >= 300) return [];
 		const data = resp.json as ClaudeUsageResponse;
 
-		const toLimit = (w: ClaudeUsageWindow | null | undefined, label: string): AiLimit | null => {
-			if (!w || typeof w.utilization !== "number") return null;
-			const resets = w.resets_at ? Date.parse(w.resets_at) : NaN;
-			return { label, usedPercent: w.utilization, resetsAt: Number.isFinite(resets) ? resets : null };
+		const at = (iso?: string): number | null => {
+			const ms = iso ? Date.parse(iso) : NaN;
+			return Number.isFinite(ms) ? ms : null;
 		};
 
+		/* `limits[]` d'abord : c'est la source de l'écran officiel, elle nomme
+		   elle-même ses lignes (session, hebdo global, hebdo par modèle). */
+		const rows: UsageRow[] = [];
+		for (const limit of data.limits || []) {
+			if (!limit || typeof limit.percent !== "number") continue;
+			const resetsAt = at(limit.resets_at);
+			if (limit.kind === "session") {
+				rows.push({ kind: "session", usedPercent: limit.percent, resetsAt });
+			} else if (limit.kind === "weekly_all") {
+				rows.push({ kind: "weekly-all", usedPercent: limit.percent, resetsAt });
+			} else {
+				// Toute autre limite portée par un modèle (weekly_scoped
+				// aujourd'hui, d'autres demain) reste affichable tant qu'elle
+				// dit de QUI elle parle ; sans nom, on ne devine pas.
+				const modelName = limit.scope?.model?.display_name;
+				if (modelName) rows.push({ kind: "weekly-model", modelName, usedPercent: limit.percent, resetsAt });
+			}
+		}
+		if (rows.length) return rows;
+
+		// Repli sur les champs historiques.
+		const legacy = (w: ClaudeUsageWindow | null | undefined, row: Omit<UsageRow, "usedPercent" | "resetsAt">): UsageRow | null =>
+			!w || typeof w.utilization !== "number"
+				? null
+				: { ...row, usedPercent: w.utilization, resetsAt: at(w.resets_at) };
+
 		return [
-			toLimit(data.five_hour, t("ai.usage.window5h")),
-			toLimit(data.seven_day, t("ai.usage.window7d")),
-			toLimit(data.seven_day_opus, t("ai.usage.window7dOpus"))
-		].filter((l): l is AiLimit => l !== null);
+			legacy(data.five_hour, { kind: "session" }),
+			legacy(data.seven_day, { kind: "weekly-all" }),
+			legacy(data.seven_day_opus, { kind: "weekly-model", modelName: "Opus" })
+		].filter((r): r is UsageRow => r !== null);
 	} catch (e) {
 		console.warn("[quiz-blocks] quotas Claude illisibles:", e);
 		return [];
@@ -230,7 +349,7 @@ interface CodexRateLimitWindow { used_percent?: number; window_minutes?: number;
  * `token_count` → `rate_limits`). C'est le CLI lui-même qui les enregistre :
  * aucune requête n'est émise ici.
  */
-export function readCodexLimits(threadId: string): AiLimit[] {
+export function readCodexUsage(threadId: string): UsageRow[] {
 	if (!Platform.isDesktopApp) return [];
 	try {
 		const os = require("os") as typeof import("os");
@@ -274,22 +393,17 @@ export function readCodexLimits(threadId: string): AiLimit[] {
 			const rl = parsed?.payload?.rate_limits;
 			if (!rl) continue;
 
-			const toLimit = (w: CodexRateLimitWindow | undefined): AiLimit | null => {
+			const toRow = (w: CodexRateLimitWindow | undefined): UsageRow | null => {
 				if (!w || typeof w.used_percent !== "number") return null;
-				const mins = typeof w.window_minutes === "number" ? w.window_minutes : 0;
-				// Le libellé vient de la FENÊTRE annoncée par le CLI, jamais d'un
-				// nom de plan supposé : « 10080 min » se dit « 7 j ».
-				const label = mins >= 1440
-					? t("ai.usage.windowDays", { n: Math.round(mins / 1440) })
-					: mins > 0
-					? t("ai.usage.windowHours", { n: Math.max(1, Math.round(mins / 60)) })
-					: t("ai.usage.windowPlan");
+				// La ligne est nommée par la FENÊTRE annoncée par le CLI, jamais
+				// par un nom de plan supposé : « 10080 min » se dira « 7 j ».
+				const windowMinutes = typeof w.window_minutes === "number" ? w.window_minutes : 0;
 				// `resets_at` est en SECONDES epoch dans les rollouts Codex.
 				const resets = typeof w.resets_at === "number" ? w.resets_at * 1000 : null;
-				return { label, usedPercent: w.used_percent, resetsAt: resets };
+				return { kind: "window", windowMinutes, usedPercent: w.used_percent, resetsAt: resets };
 			};
 
-			return [toLimit(rl.primary), toLimit(rl.secondary)].filter((l): l is AiLimit => l !== null);
+			return [toRow(rl.primary), toRow(rl.secondary)].filter((r): r is UsageRow => r !== null);
 		}
 		return [];
 	} catch (e) {
@@ -319,20 +433,33 @@ function candidateDayDirs(root: string, newestDir: (dir: string) => string | nul
 }
 
 /**
- * Quotas d'un fournisseur donné ; [] s'il n'en publie pas.
+ * État du forfait d'un fournisseur ; `rows` vide s'il n'en publie pas.
  * `sessionId` cible la session qui vient de tourner ; sans lui, la lecture
  * porte sur l'état le plus récent du compte — ce qu'on veut quand on consulte
  * son forfait AVANT de lancer une génération.
  */
-export async function fetchLimitsForProvider(plugin: UsagePlugin, provider: string, sessionId = ""): Promise<AiLimit[]> {
-	if (!plugin.settings.aiUsageLimitsEnabled) return [];
-	if (provider === "claude-code") return fetchClaudeLimits();
-	if (provider === "codex") return readCodexLimits(sessionId);
+export async function fetchPlanUsage(plugin: UsagePlugin, provider: string, sessionId = ""): Promise<PlanUsage> {
+	const empty: PlanUsage = { plan: null, planName: null, rows: [], fetchedAt: Date.now() };
+	if (!plugin.settings.aiUsageLimitsEnabled) return empty;
+	if (provider === "claude-code") {
+		const plan = readClaudePlan();
+		return {
+			plan: plan?.label ?? null,
+			planName: plan?.name ?? null,
+			rows: await fetchClaudeUsage(),
+			fetchedAt: Date.now()
+		};
+	}
+	if (provider === "codex") {
+		// Le forfait ChatGPT n'est écrit nulle part dans les rollouts : pas de
+		// nom affiché plutôt qu'un « Plus » supposé.
+		return { ...empty, rows: readCodexUsage(sessionId), fetchedAt: Date.now() };
+	}
 	// Ollama (local ou cloud) et Kimi Code ne publient aucun quota lisible
 	// localement — l'écran le dit plutôt que d'afficher un zéro trompeur.
-	return [];
+	return empty;
 }
 
-/** Quotas du fournisseur qui vient de répondre. */
-export const fetchLimits = (plugin: UsagePlugin, usage: AiUsage): Promise<AiLimit[]> =>
-	fetchLimitsForProvider(plugin, usage.provider, usage.sessionId || "");
+/** État du forfait du fournisseur qui vient de répondre. */
+export const fetchPlanUsageFor = (plugin: UsagePlugin, usage: AiUsage): Promise<PlanUsage> =>
+	fetchPlanUsage(plugin, usage.provider, usage.sessionId || "");

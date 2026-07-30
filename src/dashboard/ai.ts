@@ -11,10 +11,11 @@ import { attachMentionPicker } from "./mention-picker";
 import type { MentionPickerHandle } from "./mention-picker";
 import type { AiClient, ImagePayload } from "./ai-client";
 import {
-	recordUsage, readUsageLog, summarize, startOfToday, fetchLimits, fetchLimitsForProvider,
-	formatTokens, formatCost, formatDuration, formatResetIn, totalTokens
+	recordUsage, readUsageLog, fetchPlanUsageFor,
+	formatTokens, formatCost, formatDuration, totalTokens
 } from "./ai-usage";
-import type { AiUsage, AiLimit, UsagePlugin } from "./ai-usage";
+import type { AiUsage, PlanUsage, UsagePlugin } from "./ai-usage";
+import { openUsageModal, tightestRow, usageRowLabel } from "./usage-modal";
 import { t } from "../i18n";
 import type { TransKey } from "../i18n";
 
@@ -185,8 +186,10 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	/* Ce que la DERNIÈRE génération a consommé — null quand le fournisseur ne
 	   publie aucun compteur (Kimi Code), auquel cas l'écran le dit. */
 	let lastUsage: AiUsage | null = null;
-	let lastLimits: AiLimit[] = [];
-	let usageDetailOpen = false;
+	/* Dernier état de forfait CONNU — sert au seul survol du bouton d'usage :
+	   passer la souris ne déclenche jamais de lecture réseau, c'est le modal
+	   qui va chercher des chiffres frais quand on l'ouvre. */
+	let lastPlan: PlanUsage | null = null;
 
 	// Le type de questions a DEUX faces, à ne jamais confondre : une VALEUR
 	// canonique, envoyée telle quelle au modèle (ai-client la compare à
@@ -252,11 +255,6 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			// claude.ai — « sparkles » retenu sur planche comparative (2026-07-16).
 			setIcon(titleIcon, "sparkles");
 			titleRow.createEl("h2", { cls: "qbd-ai-title", text: t("ai.page.title") });
-
-			/* Consultation de l'usage AVANT de lancer quoi que ce soit : savoir
-			   ce qu'il reste du forfait n'a d'intérêt que si on peut le
-			   demander sans dépenser. */
-			if (phase === "idle") renderUsageOpener(formCol);
 		}
 
 		// Zone du loader de génération : AU-DESSUS du composer (demande
@@ -846,26 +844,32 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			});
 		});
 		// Tooltip au survol : l'état courant (« 5 questions · Mixte »),
-		// relu à chaque hover — pattern attachStopTip.
-		{
-			let tip: HTMLElement | null = null;
-			const hide = () => { if (tip) { tip.remove(); tip = null; } };
-			optsBtn.addEventListener("mouseenter", () => {
-				if (tip) return;
-				tip = document.body.createDiv({ cls: "qbd-hover-tip" });
-				tip.createDiv({ cls: "qbd-hover-tip-title", text: t("ai.options.tooltip", { count: questionCount, type: typeLabel(questionType) }) });
-				const r = optsBtn.getBoundingClientRect();
-				tip.style.visibility = "hidden";
-				const tr = tip.getBoundingClientRect();
-				const left = Math.min(Math.max(8, r.left + r.width / 2 - tr.width / 2), window.innerWidth - tr.width - 8);
-				let top = r.top - tr.height - 8;
-				if (top < 8) top = r.bottom + 8;
-				tip.style.left = left + "px";
-				tip.style.top = top + "px";
-				tip.style.visibility = "";
+		// relu à chaque hover — pattern attachHoverTip.
+		attachHoverTip(optsBtn, (tip) => {
+			tip.createDiv({ cls: "qbd-hover-tip-title", text: t("ai.options.tooltip", { count: questionCount, type: typeLabel(questionType) }) });
+		});
+
+		/* Consultation du forfait, à sa place de contrôle : dans le composer,
+		   avec le « + » et les options (référence Ahmed 2026-07-30). Savoir ce
+		   qu'il reste n'a d'intérêt que si on peut le demander SANS dépenser,
+		   d'où un bouton toujours accessible plutôt qu'un badge d'après-coup.
+		   Réservé aux fournisseurs qui publient réellement un forfait. */
+		if (Platform.isDesktopApp && providerPublishesPlan(ctx.plugin.settings.aiProvider || "")) {
+			const usageBtn = composerBottom.createEl("button", { cls: "qbd-ai-composer-usage" });
+			usageBtn.type = "button";
+			usageBtn.setAttribute("aria-label", t("ai.usage.title"));
+			setIcon(usageBtn, "gauge");
+			attachHoverTip(usageBtn, (tip) => {
+				tip.createDiv({ cls: "qbd-hover-tip-title", text: t("ai.usage.title") });
+				const tightest = tightestRow(lastPlan?.rows || []);
+				if (tightest) {
+					tip.createDiv({
+						cls: "qbd-hover-tip-body",
+						text: `${usageRowLabel(tightest)} · ${t("ai.usage.usedPercent", { n: Math.round(tightest.usedPercent) })}`
+					});
+				}
 			});
-			optsBtn.addEventListener("mouseleave", hide);
-			optsBtn.addEventListener("click", hide);
+			usageBtn.addEventListener("click", () => openUsage());
 		}
 
 		// Groupe droite : logo fournisseur, sélecteur modèle + effort, puis
@@ -1581,52 +1585,30 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		});
 	}
 
-	/** Ligne « Usage » de l'écran d'accueil : ouvre le récapitulatif, et charge
-	    les quotas du fournisseur courant la première fois qu'on le demande. */
-	function renderUsageOpener(parent: HTMLElement): void {
-		const log = readUsageLog(ctx.plugin as unknown as UsagePlugin);
-		// Rien enregistré et aucun quota à montrer : pas de commande vide.
-		if (log.length === 0 && !ctx.plugin.settings.aiUsageLimitsEnabled) return;
+	/** Fournisseurs dont le forfait est réellement lisible sur cette machine.
+	    Ailleurs (Ollama en local, Kimi Code), il n'y a rien à consulter : mieux
+	    vaut pas de bouton qu'un bouton qui ouvre un écran vide. */
+	function providerPublishesPlan(provider: string): boolean {
+		return provider === "claude-code" || provider === "codex";
+	}
 
-		const row = parent.createDiv({ cls: "qbd-ai-usage-opener" });
-		const btn = row.createEl("button", {
-			cls: "qbd-ai-usage-badge" + (usageDetailOpen ? " is-open" : ""),
-			attr: { type: "button", "aria-expanded": usageDetailOpen ? "true" : "false" }
+	/** Ouvre l'écran d'usage et retient ce qu'il a lu, pour que le survol du
+	    bouton puisse le résumer sans relire quoi que ce soit. */
+	function openUsage(): void {
+		const plugin = ctx.plugin as unknown as UsagePlugin;
+		openUsageModal(ctx.app, {
+			plugin,
+			provider: ctx.plugin.settings.aiProvider || "",
+			usage: lastUsage,
+			onData: (data) => { lastPlan = data; }
 		});
-		const icon = btn.createSpan({ cls: "qbd-ai-usage-icon" });
-		setIcon(icon, "gauge");
-		btn.createSpan({ text: t("ai.usage.title") });
-
-		// Résumé en ligne : la jauge la plus contrainte, celle qui décide s'il
-		// reste de la marge — pas la première de la liste.
-		const tightest = lastLimits.slice().sort((a, b) => b.usedPercent - a.usedPercent)[0];
-		if (tightest) {
-			btn.createSpan({
-				cls: "qbd-ai-usage-sep",
-				text: `${tightest.label} ${Math.round(tightest.usedPercent)} %`
-			});
-		}
-
-		btn.addEventListener("click", async () => {
-			usageDetailOpen = !usageDetailOpen;
-			if (usageDetailOpen && lastLimits.length === 0) {
-				const provider = ctx.plugin.settings.aiProvider || "";
-				try {
-					lastLimits = await fetchLimitsForProvider(ctx.plugin as unknown as UsagePlugin, provider);
-				} catch (e) {
-					console.warn("[quiz-blocks] quotas illisibles:", e);
-				}
-			}
-			render(containerRef);
-		});
-
-		renderUsageDetail(row);
 	}
 
 	/* ── Ce que la génération a coûté ──
-	   Badge compact dans la barre de résultat, détail au clic. Un fournisseur
-	   qui ne publie pas ses compteurs le DIT (il n'affiche pas « 0 ») : c'est
-	   la seule façon de distinguer « rien consommé » de « rien mesuré ». */
+	   Badge compact dans la barre de résultat ; le détail complet vit dans
+	   l'écran d'usage. Un fournisseur qui ne publie pas ses compteurs le DIT
+	   (il n'affiche pas « 0 ») : c'est la seule façon de distinguer « rien
+	   consommé » de « rien mesuré ». */
 	function renderUsageBadge(host: HTMLElement): void {
 		if (!lastUsage) {
 			host.createSpan({ cls: "qbd-ai-usage-badge is-muted", text: t("ai.usage.tokensUnavailable") });
@@ -1635,8 +1617,8 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		const usage = lastUsage;
 
 		const badge = host.createEl("button", {
-			cls: "qbd-ai-usage-badge" + (usageDetailOpen ? " is-open" : ""),
-			attr: { type: "button", "aria-expanded": usageDetailOpen ? "true" : "false" }
+			cls: "qbd-ai-usage-badge",
+			attr: { type: "button" }
 		});
 		const gaugeIcon = badge.createSpan({ cls: "qbd-ai-usage-icon" });
 		setIcon(gaugeIcon, "gauge");
@@ -1647,75 +1629,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		const dur = formatDuration(usage.durationMs);
 		if (dur) badge.createSpan({ cls: "qbd-ai-usage-sep", text: dur });
 
-		badge.addEventListener("click", () => {
-			usageDetailOpen = !usageDetailOpen;
-			render(containerRef);
-		});
-	}
-
-	/** Panneau de détail : cette génération (si elle a eu lieu), la journée, le
-	    total, et l'état du forfait quand le fournisseur le publie. */
-	function renderUsageDetail(container: HTMLElement): void {
-		if (!usageDetailOpen) return;
-		const usage = lastUsage;
-		const now = Date.now();
-		const panel = container.createDiv({ cls: "qbd-ai-usage-panel" });
-
-		const row = (parent: HTMLElement, label: string, value: string): void => {
-			const r = parent.createDiv({ cls: "qbd-ai-usage-row" });
-			r.createSpan({ cls: "qbd-ai-usage-label", text: label });
-			r.createSpan({ cls: "qbd-ai-usage-value", text: value });
-		};
-
-		// ── Cette génération ── (absente quand on consulte l'usage sans avoir
-		// encore rien généré : le reste du panneau, lui, reste pertinent)
-		if (usage) {
-			const runBox = panel.createDiv({ cls: "qbd-ai-usage-box" });
-			runBox.createDiv({ cls: "qbd-ai-usage-box-title", text: t("ai.usage.thisRun") });
-			runBox.createDiv({ cls: "qbd-ai-usage-model", text: usage.model || usage.provider });
-			row(runBox, t("ai.usage.input"), formatTokens(usage.inputTokens)
-				+ (usage.cachedInputTokens > 0 ? ` (${t("ai.usage.cached")} ${formatTokens(usage.cachedInputTokens)})` : ""));
-			row(runBox, t("ai.usage.output"), formatTokens(usage.outputTokens));
-			row(runBox, t("ai.usage.cost"), formatCost(usage.costUsd) ?? t("ai.usage.costUnavailable"));
-			row(runBox, t("ai.usage.duration"), formatDuration(usage.durationMs));
-		}
-
-		// ── Cumuls ──
-		const log = readUsageLog(ctx.plugin as unknown as UsagePlugin);
-		const today = summarize(log, startOfToday(now));
-		const all = summarize(log);
-		const cumulBox = panel.createDiv({ cls: "qbd-ai-usage-box" });
-		cumulBox.createDiv({ cls: "qbd-ai-usage-box-title", text: t("ai.usage.today") });
-		row(cumulBox, t("ai.usage.generations", { n: today.generations }), formatTokens(today.inputTokens + today.outputTokens));
-		if (today.costUsd != null) row(cumulBox, t("ai.usage.cost"), formatCost(today.costUsd) ?? "");
-		cumulBox.createDiv({ cls: "qbd-ai-usage-box-title", text: t("ai.usage.allTime") });
-		row(cumulBox, t("ai.usage.generations", { n: all.generations }), formatTokens(all.inputTokens + all.outputTokens));
-		row(cumulBox, t("ai.usage.questions", { n: all.questions }), all.costUsd != null ? (formatCost(all.costUsd) ?? "") : "");
-
-		// ── Forfait ──
-		const planBox = panel.createDiv({ cls: "qbd-ai-usage-box" });
-		planBox.createDiv({ cls: "qbd-ai-usage-box-title", text: t("ai.usage.plan") });
-		if (!ctx.plugin.settings.aiUsageLimitsEnabled) {
-			planBox.createDiv({ cls: "qbd-ai-usage-note", text: t("ai.usage.planOff") });
-		} else if (lastLimits.length === 0) {
-			planBox.createDiv({ cls: "qbd-ai-usage-note", text: t("ai.usage.planUnavailable") });
-		} else {
-			for (const limit of lastLimits) {
-				const g = planBox.createDiv({ cls: "qbd-ai-usage-gauge" });
-				const head = g.createDiv({ cls: "qbd-ai-usage-gauge-head" });
-				head.createSpan({ cls: "qbd-ai-usage-label", text: limit.label });
-				head.createSpan({ cls: "qbd-ai-usage-value", text: Math.round(limit.usedPercent) + " %" });
-				const barEl = g.createDiv({ cls: "qbd-ai-usage-gauge-bar" });
-				const fill = barEl.createDiv({ cls: "qbd-ai-usage-gauge-fill" });
-				// Le remplissage est plafonné à 100 % : une barre qui déborde de
-				// son rail est un bug visuel, pas une information de plus.
-				fill.style.width = Math.max(0, Math.min(100, limit.usedPercent)) + "%";
-				if (limit.usedPercent >= 90) fill.classList.add("is-critical");
-				else if (limit.usedPercent >= 70) fill.classList.add("is-warning");
-				const resetIn = formatResetIn(limit.resetsAt, now);
-				if (resetIn) g.createDiv({ cls: "qbd-ai-usage-note", text: resetIn });
-			}
-		}
+		badge.addEventListener("click", () => openUsage());
 	}
 
 	/* Zone résultat (pleine page, composer en bas) : barre compacte +
@@ -1767,8 +1681,6 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			images = [];
 			render(containerRef);
 		});
-
-		renderUsageDetail(container);
 
 		// ── L'ÉDITEUR COMPLET, embarqué pleine page (composer en bas) ──
 		const host = container.createDiv({ cls: "qbd-ai-editor-embed qb-root" });
@@ -1825,17 +1737,19 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		btn.classList.toggle("qbd-ai-composer-send--disabled", !loading && !canGen);
 	}
 
-	/* Tooltip du bouton stop (référence Claude Code : « Arrêter  Esc »),
-	   au survol uniquement. */
-	function attachStopTip(btn: HTMLElement): void {
+	/* Bulle au survol d'un bouton du composer. Le CONTENU est reconstruit à
+	   chaque survol (`fill`), jamais mémorisé : ces bulles affichent un état
+	   vivant (options courantes, usage du forfait) qu'un texte figé à la
+	   construction ferait mentir. Portalée au <body> — le composer clippe.
+	   Note : ces boutons ne portent PAS d'attribut `title`, qui empilerait la
+	   bulle native de Chromium par-dessus celle-ci. */
+	function attachHoverTip(btn: HTMLElement, fill: (tip: HTMLElement) => void): void {
 		let tip: HTMLElement | null = null;
 		const hide = () => { if (tip) { tip.remove(); tip = null; } };
 		btn.addEventListener("mouseenter", () => {
 			if (tip) return;
 			tip = document.body.createDiv({ cls: "qbd-hover-tip" });
-			const row = tip.createDiv({ cls: "qbd-hover-tip-row" });
-			row.createSpan({ cls: "qbd-hover-tip-title", text: t("ai.composer.stop") });
-			row.createSpan({ cls: "qbd-hover-tip-esc", text: "Esc" });
+			fill(tip);
 			const r = btn.getBoundingClientRect();
 			tip.style.visibility = "hidden";
 			const tr = tip.getBoundingClientRect();
@@ -1848,6 +1762,15 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		});
 		btn.addEventListener("mouseleave", hide);
 		btn.addEventListener("click", hide);
+	}
+
+	/* Tooltip du bouton stop (référence Claude Code : « Arrêter  Esc »). */
+	function attachStopTip(btn: HTMLElement): void {
+		attachHoverTip(btn, (tip) => {
+			const row = tip.createDiv({ cls: "qbd-hover-tip-row" });
+			row.createSpan({ cls: "qbd-hover-tip-title", text: t("ai.composer.stop") });
+			row.createSpan({ cls: "qbd-hover-tip-esc", text: "Esc" });
+		});
 	}
 
 	async function startGeneration(container: HTMLElement | null): Promise<void> {
@@ -1909,8 +1832,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			   quotas sont accessoires : ils ne doivent jamais faire échouer une
 			   génération qui, elle, a réussi. */
 			lastUsage = client.lastUsage;
-			lastLimits = [];
-			usageDetailOpen = false;
+			lastPlan = null;
 			if (lastUsage) {
 				const usagePlugin = ctx.plugin as unknown as UsagePlugin;
 				try {
@@ -1919,7 +1841,10 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 						at: Date.now(),
 						questionCount: generatedQuestions.length
 					});
-					lastLimits = await fetchLimits(usagePlugin, lastUsage);
+					// La génération vient de consommer du forfait : relire tout de
+					// suite garde le survol du bouton d'usage juste, sans attendre
+					// que l'écran soit ouvert.
+					lastPlan = await fetchPlanUsageFor(usagePlugin, lastUsage);
 				} catch (e) {
 					console.warn("[quiz-blocks] usage non enregistré:", e);
 				}

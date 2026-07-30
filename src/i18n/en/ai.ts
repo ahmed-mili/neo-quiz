@@ -47,18 +47,39 @@ export const EN_AI = {
 	"ai.usage.questions": "{n} questions",
 	"ai.usage.costUnavailable": "Flat-rate plan — no per-request price",
 	"ai.usage.tokensUnavailable": "This CLI does not report token counts",
-	"ai.usage.plan": "Subscription",
 	"ai.usage.planOff": "Turn on subscription usage in the settings to see how much of your plan is left.",
 	"ai.usage.planUnavailable": "This provider does not publish plan usage",
-	"ai.usage.window5h": "5 h",
-	"ai.usage.window7d": "7 d",
-	"ai.usage.window7dOpus": "7 d Opus",
 	"ai.usage.windowHours": "{n} h",
 	"ai.usage.windowDays": "{n} d",
 	"ai.usage.windowPlan": "Plan",
-	"ai.usage.resetInMinutes": "resets in {n} min",
-	"ai.usage.resetInHours": "resets in {n} h",
-	"ai.usage.resetInDays": "resets in {n} d",
+
+	/* ── Écran « Limites d'utilisation » (dashboard/usage-modal.ts) ──
+	   Mêmes intitulés que l'écran d'usage de Claude Code, dont il est la
+	   reproduction : un utilisateur qui connaît l'un lit l'autre sans
+	   traduction mentale. */
+	"ai.usage.planTitle": "Plan usage limits",
+	"ai.usage.sessionCurrent": "Current session",
+	"ai.usage.weeklyTitle": "Weekly limits",
+	"ai.usage.allModels": "All models",
+	// Sans espace avant le %, contrairement au français : c'est la typographie
+	// de chaque langue, pas une incohérence.
+	"ai.usage.usedPercent": "{n}% used",
+	// Fenêtre courte : compte à rebours. Fenêtre longue : moment absolu, seul
+	// à dire QUAND on est débloqué.
+	"ai.usage.resetsIn": "Resets in {duration}",
+	"ai.usage.resetsAt": "Resets {when}",
+	"ai.usage.durationHoursMinutes": "{h} h {m} min",
+	"ai.usage.durationMinutes": "{m} min",
+	"ai.usage.durationDays": "{n} d",
+	"ai.usage.lastUpdated": "Last updated: {when}",
+	"ai.usage.loading": "Reading your plan…",
+	"ai.usage.justNow": "just now",
+	"ai.usage.minutesAgo": "{n} min ago",
+	"ai.usage.hoursAgo": "{n} h ago",
+	"ai.usage.refresh": "Refresh",
+	"ai.usage.fableIncluded": "{model} is still included in your {plan} plan.",
+	"ai.usage.fableIncludedNote": "If a message asks you to set up usage credits, restart Claude Code.",
+	"ai.usage.learnMore": "Learn more about usage limits",
 
 	/* ── Options de génération ── */
 	"ai.options.tooltip": "{count} questions · {type}",

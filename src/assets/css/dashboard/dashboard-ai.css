@@ -1184,7 +1184,10 @@
 
 /* ── Options : bouton du composer + popover (remplacent l'ancienne
    carte « Options » du formulaire) ── */
-.qbd-ai-composer-opts {
+/* Boutons icône du pied de composer (options, usage) : même gabarit que le
+   « + », d'où le groupement — trois copies de la même règle divergeraient. */
+.qbd-ai-composer-opts,
+.qbd-ai-composer-usage {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -1201,12 +1204,14 @@
 	transition: color 0.14s ease, background 0.14s ease;
 }
 
-.qbd-ai-composer-opts:hover {
+.qbd-ai-composer-opts:hover,
+.qbd-ai-composer-usage:hover {
 	color: var(--text-normal);
 	background: var(--background-modifier-hover) !important;
 }
 
-.qbd-ai-composer-opts svg {
+.qbd-ai-composer-opts svg,
+.qbd-ai-composer-usage svg {
 	width: 18px;
 	height: 18px;
 }
@@ -1765,8 +1770,7 @@
   transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 
-.qbd-ai-usage-badge:hover,
-.qbd-ai-usage-badge.is-open {
+.qbd-ai-usage-badge:hover {
   color: var(--text-normal);
   border-color: color-mix(in srgb, var(--text-normal) 26%, transparent);
 }
@@ -1793,18 +1797,6 @@
   content: "·";
   margin: 0 5px 0 1px;
   opacity: 0.55;
-}
-
-.qbd-ai-usage-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--qbd-glass-edge);
-  background: var(--qbd-glass-bg);
-  box-shadow: var(--qbd-glass-sheen);
 }
 
 .qbd-ai-usage-box {
@@ -1863,19 +1855,6 @@
 
 /* ── Jauge de forfait ── */
 
-.qbd-ai-usage-gauge {
-  margin-bottom: 10px;
-}
-
-.qbd-ai-usage-gauge-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 5px;
-  font-size: 0.82em;
-}
-
 .qbd-ai-usage-gauge-bar {
   height: 6px;
   border-radius: 999px;
@@ -1900,23 +1879,194 @@
   background: var(--quiz-danger);
 }
 
-/* Ligne « Usage » de l'écran d'accueil de la page Générer : consultation du
-   forfait AVANT de dépenser. Discrète — c'est une information de contrôle,
-   pas une action mise en avant. */
-.qbd-ai-usage-opener {
+/* =========================================================
+   ÉCRAN « LIMITES D'UTILISATION » (dashboard/usage-modal.ts)
+   Reproduction de l'écran d'usage de Claude Code : une ligne = un libellé
+   (avec son réarmement en dessous), une barre, un pourcentage.
+   ========================================================= */
+
+.qbd-usage-modal .modal-content {
+  max-width: 640px;
+}
+
+.qbd-usage-head {
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.qbd-usage-title {
+  font-size: 1.05em;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+/* Le forfait accompagne le titre sans le concurrencer : c'est une précision
+   sur ce qu'on regarde, pas un second titre. */
+.qbd-usage-plan {
+  font-size: 0.92em;
+  color: var(--text-muted);
+}
+
+.qbd-usage-section {
+  margin: 22px 0 12px;
+  font-size: 0.95em;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+/* Trois colonnes alignées sur la PREMIÈRE ligne de texte : le réarmement,
+   posé sous le libellé, ne doit pas décaler la barre ni le pourcentage.
+   La première colonne est dimensionnée pour que « Réinitialisation dans
+   3 h 8 min » tienne sur UNE ligne — mesuré au rendu, pas estimé. */
+.qbd-usage-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(0, 1.5fr) auto;
+  align-items: start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.qbd-usage-row-info {
+  min-width: 0;
+}
+
+.qbd-usage-row-label {
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--text-normal);
+  overflow-wrap: anywhere;
+}
+
+.qbd-usage-row-reset {
+  margin-top: 3px;
+  font-size: 0.8em;
+  color: var(--text-muted);
+}
+
+/* Calé sur la ligne de base du libellé (hauteur de ligne / 2 - épaisseur / 2). */
+.qbd-usage-bar {
+  margin-top: 7px;
+}
+
+.qbd-usage-row-pct {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.qbd-usage-note {
+  margin: 10px 0;
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.qbd-usage-info {
+  display: flex;
   gap: 10px;
-  margin: -4px 0 14px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--qbd-glass-edge);
+  background: var(--qbd-glass-bg);
 }
 
-.qbd-ai-usage-opener .qbd-ai-usage-badge {
-  margin-left: 0;
+.qbd-usage-info-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--text-muted);
 }
 
-.qbd-ai-usage-opener .qbd-ai-usage-panel {
-  width: 100%;
-  max-width: 720px;
-  margin-bottom: 0;
+.qbd-usage-info-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.qbd-usage-info-title {
+  font-size: 0.88em;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.qbd-usage-info-text {
+  margin-top: 2px;
+  font-size: 0.88em;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.qbd-usage-link {
+  display: inline-block;
+  margin: 4px 0 18px;
+  font-size: 0.88em;
+  color: var(--text-accent);
+  text-decoration: underline;
+}
+
+.qbd-usage-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.qbd-usage-updated {
+  font-size: 0.82em;
+  color: var(--text-muted);
+}
+
+.qbd-usage-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease;
+}
+
+.qbd-usage-refresh:hover:not(:disabled) {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover) !important;
+}
+
+.qbd-usage-refresh svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* La rotation DIT que la lecture est en cours — sans elle, un clic sur une
+   valeur inchangée ne se distingue pas d'un bouton mort. */
+.qbd-usage-refresh.is-spinning svg {
+  animation: qbd-usage-spin 900ms linear infinite;
+}
+
+@keyframes qbd-usage-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qbd-usage-refresh.is-spinning svg { animation: none; }
+}
+
+/* Comptage propre au plugin (tokens des générations de ce vault) : hors du
+   périmètre de l'écran officiel, donc séparé de lui par un vrai filet. */
+.qbd-usage-accounting {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--background-modifier-border);
 }

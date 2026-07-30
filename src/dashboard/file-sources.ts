@@ -20,7 +20,11 @@ export interface FileEntry {
    Tout le reste est masqué : ne jamais proposer ce qu'on refusera. */
 const TEXT_EXT = ["md", "txt", "csv", "json", "yaml", "yml", "xml", "html", "css", "js", "ts"];
 const IMAGE_EXT = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
-const ATTACHABLE_EXT = new Set([...TEXT_EXT, ...IMAGE_EXT, "pdf"]);
+/* Exporté : `prompt-paths.ts` en dérive sa détection d'extensions dans le
+   texte du composer. Une seule liste, sinon un format attachable ici
+   resterait invisible là-bas (et l'utilisateur verrait son chemin ignoré
+   sans savoir pourquoi). */
+export const ATTACHABLE_EXT = new Set([...TEXT_EXT, ...IMAGE_EXT, "pdf"]);
 
 export function isAttachable(name: string): boolean {
 	const i = name.lastIndexOf(".");

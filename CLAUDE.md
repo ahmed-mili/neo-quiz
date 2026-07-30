@@ -117,6 +117,12 @@ sortie JSON ; `taskkill /T /F` sous Windows pour l'annulation). Les **modèles s
 dynamiquement** (cache des CLIs, catalogue `ollama.com`), **jamais codés en dur** — voir
 mémoire projet `codex-models-dynamic` et `ollama-latest-version-only`.
 
+Le CLI est lancé **sans aucun outil** : le modèle ne peut ouvrir aucun fichier. C'est
+le PLUGIN qui lit les sources — `dashboard/prompt-paths.ts` résout les chemins écrits
+dans le composer (vault, chemin absolu, racine externe configurée) et
+`startGeneration` les attache via les mêmes fonctions que le picker « @ ». Un chemin
+introuvable ou ambigu est signalé par une Notice, jamais ignoré en silence.
+
 ## Composants UI (règles)
 
 - **Dropdowns** : `dashboard/ui-select.ts` est le **seul** dropdown autorisé (portalé au

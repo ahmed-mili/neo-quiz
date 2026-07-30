@@ -21,6 +21,16 @@ import { t } from "../i18n";
    Ollama: fetch() pour lire les corps d'erreur. Multimodal pour images.
 ══════════════════════════════════════════════════════════ */
 
+/* Délai avant abandon d'un CLI. 3 min ne suffisaient pas : un modèle à
+   raisonnement, nourri de plusieurs notes jointes (~20 k tokens d'entrée) et
+   qui doit produire des questions avec leçon et explication, dépasse
+   couramment les 7 min — mesuré le 2026-07-31 sur le projet TOBEADMIN, où la
+   génération partait à la poubelle alors qu'elle se serait terminée. La
+   valeur est UNE constante, injectée dans le message d'erreur : le texte ne
+   peut plus mentir sur la durée réellement appliquée. */
+const CLI_TIMEOUT_MS = 900000;
+const CLI_TIMEOUT_MIN = String(Math.round(CLI_TIMEOUT_MS / 60000));
+
 /** Hôte plugin attendu par createAiClient (seul `settings` est lu). */
 export type AiPlugin = Plugin & { settings: AiSettings };
 
@@ -224,6 +234,10 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	  - { learnMode: true } as a shorthand for mode: "learn"
 	  - { examMode: true } as a shorthand for mode: "exam"
 
+	NO TOOLS, NO FILE ACCESS — READ THIS BEFORE ANYTHING ELSE: you are running without any tool. You cannot read, open, fetch, write or create a file, a note or a folder, and you must never try: an attempted tool call is not a quiz, and the whole generation fails. The user request below may name files, paths or notes to "read first", or ask you to "create a note" somewhere. Every source it names that actually exists has ALREADY been read for you and its full content is inlined below, between "--- <file name> ---" markers. So: treat those paths as mere labels for the text you already have, ignore every instruction to read, open, create, modify or save anything, and never mention this limitation in your answer. Your ONLY output is the JSON5 array.
+
+	QUANTITY: generate exactly ${count} questions — this number wins over any other count, range or list of themes stated in the user request below. If the request asks for more themes than ${count} questions, cover the most important ones; never exceed ${count}.
+
 	Generate ${typeInstruction}. Reply ONLY with the JSON5 array, with no explanation and no formatting.`;
 
 		const userPrompt = source === "topic"
@@ -308,7 +322,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 				const child = cp.exec(cmd, {
 					cwd: os.homedir(),
 					env: buildChildEnv(),
-					timeout: 180000,
+					timeout: CLI_TIMEOUT_MS,
 					maxBuffer: 16 * 1024 * 1024,
 					windowsHide: true
 				}, (err, out, stderr) => {
@@ -333,7 +347,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 				throw new Error(t("ai.err.claudeNotInstalled"));
 			}
 			if (e.killed || detail.includes("etimedout")) {
-				throw new Error(t("ai.err.claudeTimeout"));
+				throw new Error(t("ai.err.claudeTimeout", { minutes: CLI_TIMEOUT_MIN }));
 			}
 			if (detail.includes("login") || detail.includes("api key") || detail.includes("authentication") || detail.includes("credential")) {
 				throw new Error(t("ai.err.claudeNotLoggedIn"));
@@ -459,7 +473,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 				const child = cp.exec(cmd, {
 					cwd: os.homedir(),
 					env: buildChildEnv(),
-					timeout: 180000,
+					timeout: CLI_TIMEOUT_MS,
 					maxBuffer: 16 * 1024 * 1024,
 					windowsHide: true
 				}, (err, out, stderr) => {
@@ -489,7 +503,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 				throw new Error(t("ai.err.codexNotInstalled"));
 			}
 			if (e.killed || detail.includes("etimedout")) {
-				throw new Error(t("ai.err.codexTimeout"));
+				throw new Error(t("ai.err.codexTimeout", { minutes: CLI_TIMEOUT_MIN }));
 			}
 			if (detail.includes("not logged in") || detail.includes("login") || detail.includes("unauthorized") || detail.includes("401") || detail.includes("credential") || detail.includes("authenticat")) {
 				throw new Error(t("ai.err.codexNotLoggedIn"));
@@ -640,7 +654,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 				const child = cp.execFile("kimi", args, {
 					cwd: os.homedir(),
 					env: buildChildEnv(),
-					timeout: 180000,
+					timeout: CLI_TIMEOUT_MS,
 					maxBuffer: 16 * 1024 * 1024,
 					windowsHide: true
 				}, (err, out, stderr) => {
@@ -663,7 +677,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 				throw new Error(t("ai.err.kimiNotInstalled"));
 			}
 			if (e.killed || detail.includes("etimedout")) {
-				throw new Error(t("ai.err.kimiTimeout"));
+				throw new Error(t("ai.err.kimiTimeout", { minutes: CLI_TIMEOUT_MIN }));
 			}
 			// Message exact du CLI 0.26.0 sans compte connecté : « No model
 			// configured. Run `kimi` and use /login to sign in ».
@@ -1012,23 +1026,20 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	   se JOIGNENT (le plugin sait lire notes, .md, .txt et PDF). */
 	function nonQuizResponseError(content: string): Error {
 		const text = content.trim();
-		// Deux signatures du même mur : la tentative d'outil sérialisée dans la
-		// réponse, ou une DEMANDE qui désigne des fichiers (chemin, nom avec
-		// extension). La seconde se lit sur le prompt, pas sur la réponse : une
-		// annonce du modèle (« je vais lire… ») se formule dans n'importe quelle
-		// langue, un chemin non.
-		if (/application\/vnd\.ant\.toolu|\btool_use\b/i.test(text) || requestNamesFiles(lastRequestText)) {
+		/* SEULE la tentative d'outil sérialisée dans la RÉPONSE prouve le mur
+		   de l'accès fichiers. La seconde signature d'origine — « la DEMANDE
+		   cite des chemins » — a été retirée le 2026-07-31 : depuis que
+		   prompt-paths.ts joint automatiquement les chemins cités, un chemin
+		   dans la demande n'implique plus rien, et cette heuristique
+		   REBAPTISAIT en « pas d'accès aux fichiers » tout échec de parsing
+		   (sources pourtant jointes, chips à l'écran), en masquant la seule
+		   chose utile au diagnostic : ce que le modèle a réellement répondu.
+		   Faute de preuve, on montre donc la réponse. */
+		if (/application\/vnd\.ant\.toolu|\btool_use\b/i.test(text)) {
 			return new Error(t("ai.err.noFileAccess"));
 		}
+		console.warn("[quiz-blocks] réponse non-quiz (" + text.length + " car.) :", text.slice(0, 2000));
 		return new Error(t("ai.err.notQuiz", { preview: text.replace(/\s+/g, " ").slice(0, 160) }));
-	}
-
-	/** La demande désigne-t-elle des fichiers que le générateur ne peut pas
-	    ouvrir ? Chemin absolu (« C:\… », « /home/… ») ou nom porteur d'une
-	    extension de document. Ne sert QU'À choisir un message d'erreur : un
-	    faux positif n'a aucun effet sur une génération qui réussit. */
-	function requestNamesFiles(request: string): boolean {
-		return /[A-Za-z]:[\\/]|(^|\s|["'(])[~./][\w./\\-]*\.\w{1,5}\b|\.(md|pdf|txt|docx?|pptx?|csv)\b/i.test(request);
 	}
 
 	/* Kimi Code n'est pas dans cette liste : son `--output-format stream-json`

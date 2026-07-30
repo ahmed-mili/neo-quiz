@@ -1776,7 +1776,51 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		});
 	}
 
+	/* Les chemins écrits dans le prompt sont attachés AVANT l'envoi : le
+	   modèle n'a aucun accès disque, mais le plugin sait lire ces fichiers
+	   (mêmes fonctions que le picker « @ » → mêmes formats, même
+	   dédoublonnage, mêmes chips). Sans ça, « d'après Cours/TD3.md »
+	   partait sans sa source et revenait en ai.err.noFileAccess. */
+	async function attachPromptPaths(): Promise<void> {
+		const text = composerText.trim();
+		if (!text) return;
+		const { scanPromptPaths, MAX_PROMPT_PATHS } = require("./prompt-paths") as typeof import("./prompt-paths");
+		const roots = ctx.plugin.settings.aiMentionExtraFolders || [];
+		const { refs, unresolved, ambiguous, truncated } = scanPromptPaths(ctx.app, roots, text);
+
+		// Déjà joint (via « @ » ou « + ») : on ne le redit pas. Le passer à
+		// attach*Path afficherait « déjà attachée » pour un doublon que
+		// l'utilisateur n'a jamais demandé deux fois.
+		const fresh = refs.filter(r => {
+			const key = attachmentKey({ source: r.kind, path: r.path, name: r.name });
+			return !noteAttachments.some(n => attachmentKey(n) === key)
+				&& !images.some(i => i.file.name === r.name);
+		});
+		for (const r of fresh) {
+			if (r.kind === "vault") await attachVaultPath(r.path);
+			else await attachExternalPath(r.path);
+		}
+		if (fresh.length) {
+			new Notice(t("ai.notice.pathsAttached", {
+				files: fresh.map(r => r.name).join(", ")
+			}));
+		}
+		if (truncated) {
+			new Notice(t("ai.notice.pathsTooMany", { max: String(MAX_PROMPT_PATHS) }));
+		}
+		for (const a of ambiguous) {
+			new Notice(t("ai.notice.pathsAmbiguous", { file: a.text, count: String(a.count) }));
+		}
+		if (unresolved.length) {
+			new Notice(t("ai.notice.pathsUnresolved", { files: unresolved.join(", ") }));
+		}
+	}
+
 	async function startGeneration(container: HTMLElement | null): Promise<void> {
+		/* AVANT le passage en « loading » : les chips apparaissent dans le
+		   composer, l'utilisateur voit ce qui part avec sa demande. */
+		await attachPromptPaths();
+
 		phase = "loading";
 		errorMessage = "";
 		render(container);

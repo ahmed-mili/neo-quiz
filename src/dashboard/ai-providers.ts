@@ -155,11 +155,17 @@ export function getProvider(id: string): Provider {
 }
 
 /* ── Modèles par provider ── */
-/* Mêmes noms que le sélecteur /model de Claude Code ; les values
-   sont les alias CLI stables (suivent les derniers modèles du compte). */
+/* Mêmes noms que le sélecteur /model de Claude Code ; les values sont les
+   alias CLI, qui désignent « le DERNIER modèle » de leur famille (`claude
+   --help` : « Provide an alias for the latest model (e.g. 'fable', 'opus',
+   or 'sonnet') »). Un alias ne change donc jamais, mais le modèle derrière
+   lui — et son numéro de version — change à chaque sortie : ces libellés ne
+   sont qu'un DERNIER RECOURS, périmé par construction (relevé le 2026-07-30).
+   Le libellé réellement affiché est appris de ce que le CLI a servi, cf.
+   learnedClaudeLabels() plus bas. */
 export const CLAUDE_CODE_MODELS: ModelDef[] = [
 	{ value: "fable", label: "Fable 5", get hint() { return t("ai.modelHint.mostPowerful"); }, get desc() { return t("ai.modelDesc.fable"); }, get badge() { return t("ai.badge.included"); } },
-	{ value: "opus", label: "Opus 4.8", get hint() { return t("ai.modelHint.recommended"); }, get desc() { return t("ai.modelDesc.opus"); } },
+	{ value: "opus", label: "Opus 5", get hint() { return t("ai.modelHint.recommended"); }, get desc() { return t("ai.modelDesc.opus"); } },
 	{ value: "sonnet", label: "Sonnet 5", get hint() { return t("ai.modelHint.everyday"); }, get desc() { return t("ai.modelDesc.sonnet"); } },
 	{ value: "haiku", label: "Haiku 4.5", get hint() { return t("ai.modelHint.fastest"); }, get desc() { return t("ai.modelDesc.haiku"); } }
 ];
@@ -398,7 +404,10 @@ export function getEffortLabel(value: string | undefined, providerId: string): s
    un libellé : le badge est fabriqué au rendu par fableBadge(). Sans ça, le
    cache TTL figerait le badge dans la langue du moment où il a été rempli. */
 type FableInfo = { offered: boolean; through?: { month: string; day: string } };
-let fableInfoCache: { at: number; info: FableInfo } | null = null;
+/** Ce que ~/.claude.json apprend en UNE lecture : la promo Fable et le nom des
+    modèles réellement servis. Même fichier, même TTL — une seule lecture. */
+type ClaudeCliInfo = { fable: FableInfo; labels: Record<string, string> };
+let claudeCliCache: { at: number; info: ClaudeCliInfo } | null = null;
 const FABLE_CACHE_TTL = 60000;
 
 /* Mois anglais du cache CLI → clé i18n (jamais un libellé : table évaluée au
@@ -443,14 +452,79 @@ function fableBadge(info: FableInfo): string {
 	});
 }
 
-/* Lit ~/.claude.json (cache TTL, desktop) : Fable proposé ? + date de fin de
-   promo (le libellé du badge, lui, est fabriqué au rendu par fableBadge). */
-function readFableInfo(): FableInfo {
-	if (!Platform.isDesktopApp) return { offered: false };
-	if (fableInfoCache && Date.now() - fableInfoCache.at < FABLE_CACHE_TTL) {
-		return fableInfoCache.info;
+/* ── Libellés de modèles APPRIS (« Opus 5 », pas « Opus 4.8 ») ──
+   Un alias (`opus`) pointe toujours vers le dernier modèle de sa famille : le
+   NUMÉRO affiché à côté périme donc tout seul, sans que rien ne change dans le
+   plugin (vécu le 2026-07-30 : Opus 5 sorti, menu bloqué sur « Opus 4.8 »).
+   Le CLI, lui, enregistre dans ~/.claude.json ce qu'il a RÉELLEMENT consommé
+   (`projects[*].lastModelUsage`, clés « claude-opus-5 », « claude-haiku-4-5-
+   20251001 »…). On en déduit, par famille, la version la plus haute déjà vue —
+   une donnée mesurée, jamais devinée. Un modèle jamais utilisé garde le
+   libellé de repli, qui reste le seul endroit à corriger à la main. */
+
+/** Version d'un identifiant de modèle, en segments comparables :
+    « claude-opus-4-7 » → [4, 7] ; « claude-haiku-4-5-20251001 » → [4, 5]
+    (le suffixe de date, 8 chiffres, n'est pas un numéro de version). */
+function modelVersionParts(segments: string[]): number[] {
+	return segments
+		.filter(s => /^\d+$/.test(s) && s.length < 8)
+		.map(s => parseInt(s, 10));
+}
+
+/** a est-il une version STRICTEMENT plus récente que b ? ([5] > [4, 7]). */
+function isNewerVersion(a: number[], b: number[]): boolean {
+	for (let i = 0; i < Math.max(a.length, b.length); i++) {
+		const x = a[i] ?? 0, y = b[i] ?? 0;
+		if (x !== y) return x > y;
 	}
-	let info: FableInfo = { offered: false };
+	return false;
+}
+
+/** « claude-opus-5[1m] » → { family: "opus", version: [5] }. null pour tout ce
+    qui n'est pas un modèle Claude first-party (Ollama, alias inconnus). */
+function parseClaudeModelId(id: string): { family: string; version: number[] } | null {
+	// Le suffixe de contexte étendu ([1m]) qualifie la fenêtre, pas le modèle.
+	const bare = id.replace(/\[[^\]]*\]\s*$/, "").trim().toLowerCase();
+	const segments = bare.split("-");
+	if (segments.shift() !== "claude") return null;
+	const family = segments.shift();
+	if (!family || !/^[a-z]+$/.test(family)) return null;
+	const version = modelVersionParts(segments);
+	return version.length ? { family, version } : null;
+}
+
+/** Libellés par famille, déduits des modèles que le CLI a effectivement servis
+    (« opus » → « Opus 5 »). Table vide si le fichier ne dit rien : on n'invente
+    aucun numéro. */
+function labelsFromModelUsage(projects: unknown): Record<string, string> {
+	if (!projects || typeof projects !== "object") return {};
+	const best = new Map<string, number[]>();
+	for (const project of Object.values(projects as Record<string, unknown>)) {
+		const usage = (project as { lastModelUsage?: unknown } | null)?.lastModelUsage;
+		if (!usage || typeof usage !== "object") continue;
+		for (const id of Object.keys(usage as Record<string, unknown>)) {
+			const parsed = parseClaudeModelId(id);
+			if (!parsed) continue;
+			const known = best.get(parsed.family);
+			if (!known || isNewerVersion(parsed.version, known)) best.set(parsed.family, parsed.version);
+		}
+	}
+	const labels: Record<string, string> = {};
+	for (const [family, version] of best) {
+		labels[family] = family.charAt(0).toUpperCase() + family.slice(1) + " " + version.join(".");
+	}
+	return labels;
+}
+
+/* Lit ~/.claude.json (cache TTL, desktop) : Fable proposé ? + date de fin de
+   promo (le libellé du badge, lui, est fabriqué au rendu par fableBadge) +
+   libellés de modèles appris. UNE lecture pour les deux usages. */
+function readClaudeCliInfo(): ClaudeCliInfo {
+	if (!Platform.isDesktopApp) return { fable: { offered: false }, labels: {} };
+	if (claudeCliCache && Date.now() - claudeCliCache.at < FABLE_CACHE_TTL) {
+		return claudeCliCache.info;
+	}
+	let info: ClaudeCliInfo = { fable: { offered: false }, labels: {} };
 	try {
 		const fs = require("fs") as typeof import("fs");
 		const os = require("os") as typeof import("os");
@@ -458,31 +532,39 @@ function readFableInfo(): FableInfo {
 		const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude.json"), "utf8")) as {
 			additionalModelOptionsCache?: unknown;
 			cachedGrowthBookFeatures?: { tengu_startup_announcements?: unknown };
+			projects?: unknown;
 		};
 		const cache = cfg.additionalModelOptionsCache;
 		const offered = Array.isArray(cache) ? cache.some(cacheEntryIsFable) : cacheEntryIsFable(cache);
 		info = {
-			offered,
-			through: offered ? fableThroughFromAnnouncements(cfg.cachedGrowthBookFeatures?.tengu_startup_announcements) : undefined
+			fable: {
+				offered,
+				through: offered ? fableThroughFromAnnouncements(cfg.cachedGrowthBookFeatures?.tengu_startup_announcements) : undefined
+			},
+			labels: labelsFromModelUsage(cfg.projects)
 		};
 	} catch {
-		info = { offered: false }; // ~/.claude.json absent/illisible → masquer
+		info = { fable: { offered: false }, labels: {} }; // absent/illisible → repli
 	}
-	fableInfoCache = { at: Date.now(), info };
+	claudeCliCache = { at: Date.now(), info };
 	return info;
 }
 
 /* Fable est-il actuellement proposé par le CLI Claude Code ? */
 export function isFableOffered(): boolean {
-	return readFableInfo().offered;
+	return readClaudeCliInfo().fable.offered;
 }
 
-/* Liste des modèles Claude visibles maintenant : Fable inclus seulement s'il est
-   proposé par le CLI, avec son badge daté (« Inclus jusqu'au <date> »). */
+/* Liste des modèles Claude visibles maintenant : libellés à jour de ce que le
+   CLI a servi, et Fable inclus seulement s'il est proposé, avec son badge daté
+   (« Inclus jusqu'au <date> »). */
 export function getClaudeModels(): ModelDef[] {
-	const info = readFableInfo();
-	if (!info.offered) return CLAUDE_CODE_MODELS.filter(m => m.value !== "fable");
-	return CLAUDE_CODE_MODELS.map(m => m.value === "fable" ? { ...m, badge: fableBadge(info) } : m);
+	const { fable, labels } = readClaudeCliInfo();
+	const models = fable.offered
+		? CLAUDE_CODE_MODELS.map(m => m.value === "fable" ? { ...m, badge: fableBadge(fable) } : m)
+		: CLAUDE_CODE_MODELS.filter(m => m.value !== "fable");
+	// L'alias EST le nom de famille (« opus ») : un libellé appris le remplace.
+	return models.map(m => labels[m.value] ? { ...m, label: labels[m.value] } : m);
 }
 
 /* Modèle Claude effectif : si le modèle choisi n'est plus visible

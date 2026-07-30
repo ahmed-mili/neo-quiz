@@ -4,10 +4,10 @@ import { QbdModal } from "../modal-base";
 import { t, currentLang } from "../i18n";
 import { isFableOffered, getClaudeModels } from "./ai-providers";
 import {
-	fetchPlanUsage, readUsageLog, summarize, startOfToday,
+	fetchPlanUsage, readUsageLog, summarize, startOfToday, providerPublishesPlan,
 	formatTokens, formatCost, formatDuration, formatCountdown, formatResetMoment, formatAge
 } from "./ai-usage";
-import type { AiUsage, PlanUsage, UsagePlugin, UsageRow } from "./ai-usage";
+import type { AiUsage, PlanUsage, UsagePlugin, UsageRow, UsageReadError } from "./ai-usage";
 
 /* ══════════════════════════════════════════════════════════
    MODAL D'USAGE — l'écran « Limites d'utilisation » du forfait
@@ -32,14 +32,25 @@ export interface UsageModalOptions {
 	provider: string;
 	/** Dernière génération de la session d'écran, si l'appelant en a une. */
 	usage: AiUsage | null;
+	/** Dernière lecture réussie que l'appelant a sous la main : l'écran s'ouvre
+	    rempli, et n'appelle l'endpoint que si elle a vieilli. */
+	known?: PlanUsage | null;
 	/** Chaque lecture réussie est rendue à l'appelant : l'écran qui a ouvert le
 	    modal peut ainsi résumer le forfait (survol du bouton) sans relire. */
 	onData?: (data: PlanUsage) => void;
 }
 
+/** Au-delà, une lecture est trop vieille pour être resservie à l'ouverture.
+    L'endpoint d'usage borne lui-même la fréquence des lectures (429) : rouvrir
+    l'écran trois fois d'affilée ne doit pas coûter trois appels. */
+const FRESH_ENOUGH_MS = 60000;
+
 class UsageModal extends QbdModal {
 	private readonly options: UsageModalOptions;
+	/** Dernière lecture RÉUSSIE — une lecture ratée ne l'écrase jamais : des
+	    chiffres justes datés valent mieux qu'un écran vidé. */
 	private data: PlanUsage | null = null;
+	private error: UsageReadError | null = null;
 	private loading = false;
 	/** Une lecture qui revient après la fermeture ne doit pas toucher au DOM. */
 	private closed = false;
@@ -48,11 +59,14 @@ class UsageModal extends QbdModal {
 		super(app);
 		this.options = options;
 		this.modalEl.addClass("qbd-usage-modal");
+		// Repart de ce que l'appelant sait déjà : l'écran s'ouvre rempli.
+		if (options.known && !options.known.error) this.data = options.known;
 	}
 
 	onOpen(): void {
 		this.render();
-		void this.refresh();
+		const age = this.data ? Date.now() - this.data.fetchedAt : Infinity;
+		if (age > FRESH_ENOUGH_MS) void this.refresh();
 	}
 
 	onClose(): void {
@@ -69,13 +83,18 @@ class UsageModal extends QbdModal {
 		this.render();
 		try {
 			const data = await fetchPlanUsage(this.options.plugin, this.options.provider);
-			// Remonté même si le modal vient de se fermer : la lecture est
-			// valide, et l'écran appelant s'en servira au prochain survol.
-			this.options.onData?.(data);
+			// Remontée seulement si la lecture a abouti : l'écran appelant s'en
+			// servira au prochain survol, et ne doit pas hériter d'un échec.
+			if (!data.error) this.options.onData?.(data);
 			if (this.closed) return;
-			this.data = data;
+			this.error = data.error;
+			// Un échec conserve la dernière lecture réussie ; sans lecture
+			// antérieure, on garde quand même le nom du forfait (lu localement,
+			// donc valide même quand l'appel réseau échoue).
+			if (!data.error || !this.data) this.data = data;
 		} catch (e) {
 			console.warn("[quiz-blocks] usage du forfait illisible:", e);
+			if (!this.closed) this.error = { kind: "unavailable" };
 		} finally {
 			this.loading = false;
 			if (!this.closed) this.render();
@@ -120,9 +139,20 @@ class UsageModal extends QbdModal {
 			this.renderLearnMore(parent);
 		}
 
-		// Ni jauge ni lecture en cours : le fournisseur ne publie rien.
-		if (!rows.length && !this.loading) {
-			parent.createDiv({ cls: "qbd-usage-note", text: t("ai.usage.planUnavailable") });
+		/* Rien à montrer : dire POURQUOI. Un échec de lecture n'est pas un
+		   fournisseur muet — les confondre affiche une contre-vérité (« ce
+		   fournisseur ne publie pas son forfait ») juste après avoir affiché
+		   ses chiffres. */
+		if (!rows.length && !this.loading && !this.error) {
+			parent.createDiv({
+				cls: "qbd-usage-note",
+				text: providerPublishesPlan(this.options.provider)
+					? t("ai.usage.noReading")
+					: t("ai.usage.planUnavailable")
+			});
+		}
+		if (this.error) {
+			parent.createDiv({ cls: "qbd-usage-error", text: readErrorText(this.error) });
 		}
 	}
 
@@ -264,6 +294,19 @@ function rowReset(row: UsageRow): string | null {
 	}
 	const countdown = formatCountdown(row.resetsAt, Date.now());
 	return countdown ? t("ai.usage.resetsIn", { duration: countdown }) : null;
+}
+
+/** Ce qui s'est passé, en une phrase honnête. Le quota de LECTURE (429) est un
+    délai, pas une panne : on dit combien de temps, puisque l'endpoint le dit. */
+function readErrorText(error: UsageReadError): string {
+	if (error.kind === "unauthenticated") return t("ai.usage.readUnauthenticated");
+	if (error.kind === "unavailable") return t("ai.usage.readUnavailable");
+	const seconds = error.retryAfterSec;
+	if (seconds == null) return t("ai.usage.readRateLimited");
+	const duration = seconds < 60
+		? t("ai.usage.durationSeconds", { n: seconds })
+		: t("ai.usage.durationMinutes", { m: Math.ceil(seconds / 60) });
+	return t("ai.usage.readRateLimitedIn", { duration });
 }
 
 /** Résumé d'un coup d'œil pour le survol du bouton : la jauge la plus

@@ -70,7 +70,16 @@ export const EN_AI = {
 	"ai.usage.resetsAt": "Resets {when}",
 	"ai.usage.durationHoursMinutes": "{h} h {m} min",
 	"ai.usage.durationMinutes": "{m} min",
+	"ai.usage.durationSeconds": "{n} s",
 	"ai.usage.durationDays": "{n} d",
+	/* ── Lecture impossible ──
+	   Distinguées de « ce fournisseur ne publie rien » : un échec annoncé comme
+	   une absence de données est une contre-vérité. */
+	"ai.usage.noReading": "No reading available yet",
+	"ai.usage.readRateLimited": "Too many reads in a row — try again in a moment.",
+	"ai.usage.readRateLimitedIn": "Too many reads in a row — try again in {duration}.",
+	"ai.usage.readUnauthenticated": "No Claude Code session to read: sign in with “/login”, then try again.",
+	"ai.usage.readUnavailable": "Couldn't read your plan usage. The figures above are the last known ones.",
 	"ai.usage.lastUpdated": "Last updated: {when}",
 	"ai.usage.loading": "Reading your plan…",
 	"ai.usage.justNow": "just now",

@@ -40,6 +40,36 @@ export interface UsageRow {
 	resetsAt: number | null;
 }
 
+/**
+ * Pourquoi une lecture n'a rien rapporté.
+ *
+ * Sans cette distinction, TOUT échec (jeton absent, quota de lecture atteint,
+ * réseau) retombe sur « aucune ligne » — que l'écran ne peut lire que comme
+ * « ce fournisseur ne publie pas son forfait ». C'est faux, et c'est
+ * exactement l'inverse de la règle de ce module : ce qu'on ne sait pas reste
+ * absent, mais on ne raconte jamais à sa place.
+ */
+export type UsageReadError =
+	/** L'endpoint d'usage limite lui-même la fréquence des lectures (429). */
+	| { kind: "rate-limited"; retryAfterSec: number | null }
+	/** Pas de session CLI exploitable (jeton absent, expiré, refusé). */
+	| { kind: "unauthenticated" }
+	/** Injoignable ou réponse inattendue. */
+	| { kind: "unavailable" };
+
+/** Résultat brut d'une lecture : des lignes, ou la raison de leur absence. */
+export interface UsageRead {
+	rows: UsageRow[];
+	error: UsageReadError | null;
+}
+
+/** Fournisseurs dont le forfait est réellement lisible sur cette machine.
+    Ailleurs (Ollama en local, Kimi Code), il n'y a rien à consulter — et le
+    dire est une information, pas un échec. */
+export function providerPublishesPlan(provider: string): boolean {
+	return provider === "claude-code" || provider === "codex";
+}
+
 /** État du forfait à un instant donné : ce qui remplit le modal d'usage. */
 export interface PlanUsage {
 	/** Forfait avec son palier (« Max (5x) »), pour le titre de l'écran.
@@ -51,6 +81,8 @@ export interface PlanUsage {
 	rows: UsageRow[];
 	/** Instant de la LECTURE — « Dernière mise à jour : … » en dépend. */
 	fetchedAt: number;
+	/** null quand la lecture a abouti (même sans ligne à montrer). */
+	error: UsageReadError | null;
 }
 
 /** Consommation d'UNE génération. */
@@ -278,9 +310,9 @@ export function readClaudePlan(): PlanName | null {
  * ce soit manque — CLI absent, session expirée, réseau : une lecture de confort
  * ne fait jamais échouer quoi que ce soit.
  */
-export async function fetchClaudeUsage(): Promise<UsageRow[]> {
+export async function fetchClaudeUsage(): Promise<UsageRead> {
 	const { token } = readClaudeCredentials();
-	if (!token) return [];
+	if (!token) return { rows: [], error: { kind: "unauthenticated" } };
 	try {
 		/* `requestUrl` et NON `fetch` : le renderer d'Obsidian applique la
 		   politique d'origine du navigateur et un fetch vers api.anthropic.com
@@ -296,7 +328,9 @@ export async function fetchClaudeUsage(): Promise<UsageRow[]> {
 			},
 			throw: false
 		});
-		if (resp.status < 200 || resp.status >= 300) return [];
+		if (resp.status < 200 || resp.status >= 300) {
+			return { rows: [], error: readErrorFromStatus(resp.status, resp.headers) };
+		}
 		const data = resp.json as ClaudeUsageResponse;
 
 		const at = (iso?: string): number | null => {
@@ -322,7 +356,7 @@ export async function fetchClaudeUsage(): Promise<UsageRow[]> {
 				if (modelName) rows.push({ kind: "weekly-model", modelName, usedPercent: limit.percent, resetsAt });
 			}
 		}
-		if (rows.length) return rows;
+		if (rows.length) return { rows, error: null };
 
 		// Repli sur les champs historiques.
 		const legacy = (w: ClaudeUsageWindow | null | undefined, row: Omit<UsageRow, "usedPercent" | "resetsAt">): UsageRow | null =>
@@ -330,15 +364,31 @@ export async function fetchClaudeUsage(): Promise<UsageRow[]> {
 				? null
 				: { ...row, usedPercent: w.utilization, resetsAt: at(w.resets_at) };
 
-		return [
-			legacy(data.five_hour, { kind: "session" }),
-			legacy(data.seven_day, { kind: "weekly-all" }),
-			legacy(data.seven_day_opus, { kind: "weekly-model", modelName: "Opus" })
-		].filter((r): r is UsageRow => r !== null);
+		return {
+			rows: [
+				legacy(data.five_hour, { kind: "session" }),
+				legacy(data.seven_day, { kind: "weekly-all" }),
+				legacy(data.seven_day_opus, { kind: "weekly-model", modelName: "Opus" })
+			].filter((r): r is UsageRow => r !== null),
+			error: null
+		};
 	} catch (e) {
 		console.warn("[quiz-blocks] quotas Claude illisibles:", e);
-		return [];
+		return { rows: [], error: { kind: "unavailable" } };
 	}
+}
+
+/** Traduit un statut HTTP en raison affichable. Le 429 vient de l'endpoint
+    lui-même, qui borne la fréquence des lectures : c'est une attente, pas une
+    panne, et son en-tête `Retry-After` dit combien de temps. */
+function readErrorFromStatus(status: number, headers?: Record<string, string>): UsageReadError {
+	if (status === 429) {
+		const raw = headers?.["retry-after"] ?? headers?.["Retry-After"];
+		const seconds = raw ? parseInt(raw, 10) : NaN;
+		return { kind: "rate-limited", retryAfterSec: Number.isFinite(seconds) ? seconds : null };
+	}
+	if (status === 401 || status === 403) return { kind: "unauthenticated" };
+	return { kind: "unavailable" };
 }
 
 interface CodexRateLimitWindow { used_percent?: number; window_minutes?: number; resets_at?: number }
@@ -439,15 +489,17 @@ function candidateDayDirs(root: string, newestDir: (dir: string) => string | nul
  * son forfait AVANT de lancer une génération.
  */
 export async function fetchPlanUsage(plugin: UsagePlugin, provider: string, sessionId = ""): Promise<PlanUsage> {
-	const empty: PlanUsage = { plan: null, planName: null, rows: [], fetchedAt: Date.now() };
+	const empty: PlanUsage = { plan: null, planName: null, rows: [], fetchedAt: Date.now(), error: null };
 	if (!plugin.settings.aiUsageLimitsEnabled) return empty;
 	if (provider === "claude-code") {
 		const plan = readClaudePlan();
+		const read = await fetchClaudeUsage();
 		return {
 			plan: plan?.label ?? null,
 			planName: plan?.name ?? null,
-			rows: await fetchClaudeUsage(),
-			fetchedAt: Date.now()
+			rows: read.rows,
+			fetchedAt: Date.now(),
+			error: read.error
 		};
 	}
 	if (provider === "codex") {

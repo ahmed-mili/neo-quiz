@@ -108,7 +108,30 @@ dernier modèle ». Les générations tournaient donc DÉJÀ sur Opus 5 (sonde :
   Sonnet 5, Haiku 4.5 — il ne sert que pour une famille jamais utilisée.
 - Hors périmètre : descriptions (`ai.modelDesc.*`) restent statiques.
 
-### 4. Ce qui s'ajoute sous l'écran officiel
+### 4. Échecs de lecture (corrigé le 2026-07-30, après signalement)
+
+L'endpoint d'usage **borne lui-même la fréquence des lectures** : quelques
+rafraîchissements d'affilée renvoient **429** avec un en-tête `Retry-After`
+(127 s observé). La première version repliait tout échec sur « aucune ligne »,
+ce que l'écran ne pouvait lire que comme « ce fournisseur ne publie pas son
+forfait » — un mensonge affiché juste après avoir montré les vrais chiffres,
+qu'il effaçait au passage.
+
+- `fetchClaudeUsage()` renvoie désormais `{ rows, error }`, `error` distinguant
+  `rate-limited` (avec le délai), `unauthenticated` (401/403, jeton absent) et
+  `unavailable`.
+- Le modal garde la dernière lecture RÉUSSIE : un échec n'efface jamais des
+  chiffres justes, il ajoute une ligne qui dit ce qui s'est passé.
+- « Aucune ligne » sans erreur se dit `noReading` pour un fournisseur qui
+  publie normalement, `planUnavailable` seulement pour ceux qui ne publient
+  rien (Ollama, Kimi).
+- L'ouverture réutilise une lecture de moins de 60 s au lieu de rappeler
+  l'endpoint — rouvrir l'écran ne consomme plus de quota de lecture.
+
+Vérifié en conditions réelles : au 5ᵉ rafraîchissement consécutif, les trois
+jauges restent affichées et le message indique « réessayez dans 5 min ».
+
+### 5. Ce qui s'ajoute sous l'écran officiel
 
 L'écran de claude.ai ignore ce vault : il ne dit rien des tokens consommés par
 les générations du plugin. Cette comptabilité (« Cette génération »,

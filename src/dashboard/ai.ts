@@ -11,7 +11,7 @@ import { attachMentionPicker } from "./mention-picker";
 import type { MentionPickerHandle } from "./mention-picker";
 import type { AiClient, ImagePayload } from "./ai-client";
 import {
-	recordUsage, readUsageLog, fetchPlanUsageFor,
+	recordUsage, readUsageLog, fetchPlanUsageFor, providerPublishesPlan,
 	formatTokens, formatCost, formatDuration, totalTokens
 } from "./ai-usage";
 import type { AiUsage, PlanUsage, UsagePlugin } from "./ai-usage";
@@ -831,8 +831,8 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// demande, tooltip d'état.
 		const optsBtn = composerBottom.createEl("button", { cls: "qbd-ai-composer-opts" });
 		optsBtn.type = "button";
-		optsBtn.setAttribute("aria-label", t("ai.composer.quizOptions"));
 		setIcon(optsBtn, "sliders-horizontal");
+		labelIconButton(optsBtn, t("ai.composer.quizOptions"));
 		optsBtn.addEventListener("click", () => {
 			// Le menu ne connaît que des libellés : on traduit à l'aller et on
 			// retraduit la sélection en valeur canonique au retour.
@@ -857,8 +857,8 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		if (Platform.isDesktopApp && providerPublishesPlan(ctx.plugin.settings.aiProvider || "")) {
 			const usageBtn = composerBottom.createEl("button", { cls: "qbd-ai-composer-usage" });
 			usageBtn.type = "button";
-			usageBtn.setAttribute("aria-label", t("ai.usage.title"));
 			setIcon(usageBtn, "gauge");
+			labelIconButton(usageBtn, t("ai.usage.title"));
 			attachHoverTip(usageBtn, (tip) => {
 				tip.createDiv({ cls: "qbd-hover-tip-title", text: t("ai.usage.title") });
 				const tightest = tightestRow(lastPlan?.rows || []);
@@ -1585,21 +1585,16 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		});
 	}
 
-	/** Fournisseurs dont le forfait est réellement lisible sur cette machine.
-	    Ailleurs (Ollama en local, Kimi Code), il n'y a rien à consulter : mieux
-	    vaut pas de bouton qu'un bouton qui ouvre un écran vide. */
-	function providerPublishesPlan(provider: string): boolean {
-		return provider === "claude-code" || provider === "codex";
-	}
-
-	/** Ouvre l'écran d'usage et retient ce qu'il a lu, pour que le survol du
-	    bouton puisse le résumer sans relire quoi que ce soit. */
+	/** Ouvre l'écran d'usage en lui passant la dernière lecture connue (il ne
+	    rappellera l'endpoint que si elle a vieilli) et retient ce qu'il lit,
+	    pour que le survol du bouton puisse le résumer sans relire. */
 	function openUsage(): void {
 		const plugin = ctx.plugin as unknown as UsagePlugin;
 		openUsageModal(ctx.app, {
 			plugin,
 			provider: ctx.plugin.settings.aiProvider || "",
 			usage: lastUsage,
+			known: lastPlan,
 			onData: (data) => { lastPlan = data; }
 		});
 	}
@@ -1737,12 +1732,20 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		btn.classList.toggle("qbd-ai-composer-send--disabled", !loading && !canGen);
 	}
 
+	/* Nomme un bouton-icône SANS déclencher de seconde bulle. `aria-label` (et
+	   `title`) fait afficher à Obsidian sa PROPRE infobulle : sur un bouton qui
+	   porte déjà une bulle maison, les deux s'empilent et répètent le même mot
+	   (constaté 2026-07-30 sur le bouton d'usage). Le nom accessible passe donc
+	   par un texte hors écran, lu par les lecteurs d'écran, invisible à la
+	   souris. À appeler APRÈS setIcon, qui réécrit le contenu du bouton. */
+	function labelIconButton(btn: HTMLElement, label: string): void {
+		btn.createSpan({ cls: "qbd-sr-only", text: label });
+	}
+
 	/* Bulle au survol d'un bouton du composer. Le CONTENU est reconstruit à
 	   chaque survol (`fill`), jamais mémorisé : ces bulles affichent un état
 	   vivant (options courantes, usage du forfait) qu'un texte figé à la
-	   construction ferait mentir. Portalée au <body> — le composer clippe.
-	   Note : ces boutons ne portent PAS d'attribut `title`, qui empilerait la
-	   bulle native de Chromium par-dessus celle-ci. */
+	   construction ferait mentir. Portalée au <body> — le composer clippe. */
 	function attachHoverTip(btn: HTMLElement, fill: (tip: HTMLElement) => void): void {
 		let tip: HTMLElement | null = null;
 		const hide = () => { if (tip) { tip.remove(); tip = null; } };

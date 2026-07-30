@@ -21,7 +21,10 @@ import type { EditorExamOptions } from "../types/editor-ctx";
 ══════════════════════════════════════════════════════════ */
 
 export interface QuizDraft {
-	file: TFile;
+	/** `null` pour un quiz qui n'a pas (encore) de note — le résultat d'une
+	    génération vit en mémoire jusqu'à son insertion. `saveQuizDraft` le
+	    refuse alors, plutôt que d'inventer un fichier. */
+	file: TFile | null;
 	questions: DraftQuestion[];
 	examOptions: EditorExamOptions | null;
 }
@@ -64,8 +67,10 @@ export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft |
 
 /** Réécrit le bloc de la note. Renvoie false si rien n'a pu être écrit. */
 export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean> {
+	if (!draft.file) return false;
+	const file = draft.file;
 	try {
-		const content = await app.vault.read(draft.file);
+		const content = await app.vault.read(file);
 		const source = exportAll(draft.questions, draft.examOptions);
 		// Garde-fou de l'éditeur, conservé : on ne réécrit JAMAIS un bloc dont
 		// le JSON5 généré ne se relit pas — la note vaut mieux que la frappe.
@@ -77,14 +82,23 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 		// source entière à sa place, `$'` tout le reste de la note).
 		const block = "```quiz-blocks\n" + source + "\n```";
 		const updated = content.replace(QUIZ_BLOCK_RE, () => block);
-		if (updated !== content) await app.vault.modify(draft.file, updated);
+		if (updated !== content) await app.vault.modify(file, updated);
 		return true;
 	} catch {
 		return false;
 	}
 }
 
-/** Énoncé affichable d'une question (l'éditeur autorise un prompt vide). */
+/** Énoncé affichable d'une question, en UNE ligne de texte nu (l'éditeur
+    autorise un prompt vide). Les marqueurs markdown sont retirés : la
+    vignette de la liste est du texte brut, et « **exactes** » s'y lisait
+    avec ses étoiles. Le contenu, lui, n'est pas touché — seul l'affichage. */
 export function questionText(q: DraftQuestion): string {
-	return (q.prompt || q.title || "").trim();
+	return (q.prompt || q.title || "")
+		.replace(/`{1,3}/g, "")
+		.replace(/\*{1,2}/g, "")
+		.replace(/~~/g, "")
+		.replace(/^\s*#{1,6}\s+/gm, "")
+		.replace(/\s+/g, " ")
+		.trim();
 }

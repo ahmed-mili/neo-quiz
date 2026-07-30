@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import { md2html, _setIcon } from "./utils";
 import type { DraftQuestion } from "./utils";
 import { mathifyElement } from "../engine/mathjax";
+import { parseCloze } from "../engine/cloze";
 
 /* ══════════════════════════════════════════════════════════
    QUESTION PREVIEW — la question telle que l'apprenant la verra
@@ -117,6 +118,42 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		});
 		const pool = matchWrap.createDiv({ cls: "quiz-ordering-pool" });
 		(q.choices || []).forEach(c => pool.createSpan({ cls: "quiz-pool-item", text: c }));
+	}
+
+	if (type === "cloze") {
+		// Le gabarit, avec ses trous VIDES : mêmes classes que le moteur
+		// (engine/cloze.ts clozeCardHtml), donc mêmes cases tiretées. Sans
+		// cette branche, un texte à trous n'affichait que son énoncé — la
+		// question elle-même restait invisible dans l'aperçu.
+		const { segments, blanks } = parseCloze(q.cloze);
+		card.createDiv({ cls: "quiz-multi-indicator", text: t("engine.cloze.instructions", { count: blanks.length }) });
+		const body = card.createDiv({ cls: "quiz-cloze" });
+		for (const seg of segments) {
+			if (seg.type === "text") {
+				const span = body.createSpan();
+				span.innerHTML = resolveImagesInHtml(app, md2html(seg.value).replace(/^<p>|<\/p>$/g, ""));
+				continue;
+			}
+			const slot = body.createSpan({ cls: "quiz-cloze-slot" });
+			const input = slot.createEl("input", {
+				cls: "quiz-cloze-input",
+				type: "text",
+				attr: { readonly: true, "aria-label": t("engine.cloze.blankAria", { n: seg.index + 1 }) },
+			});
+			input.value = "";
+		}
+	}
+
+	if (type === "numeric") {
+		// Champ nu + unité, comme le moteur : la marge de tolérance et les
+		// réponses acceptées SONT la solution — elles n'ont rien à faire ici.
+		const wrap = card.createDiv({ cls: "qcm-options quiz-text-wrap" });
+		const ta = wrap.createEl("textarea", {
+			cls: "quiz-textarea",
+			attr: { readonly: true, "aria-readonly": "true", rows: "1", placeholder: q.placeholder || "" },
+		});
+		ta.value = "";
+		if (q.unit && q.unit.trim()) wrap.createSpan({ cls: "quiz-numeric-unit", text: q.unit });
 	}
 
 	if (type === "text") {

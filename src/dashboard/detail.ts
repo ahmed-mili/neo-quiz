@@ -1,4 +1,5 @@
 import { setIcon, Notice } from "obsidian";
+import type { App, Plugin } from "obsidian";
 import { t } from "../i18n";
 import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
@@ -7,7 +8,7 @@ import { quizTypeLabel } from "./quiz-card";
 import { openQuizForPlay } from "./quiz-open";
 import { TypePickerModal } from "../editor/modals";
 import { loadQuizDraft, saveQuizDraft, questionText } from "./detail-io";
-import type { QuizDraft } from "./detail-io";
+import type { QuizDraft, QuizLoadError } from "./detail-io";
 import { renderQuestionView, renderQuestionEdit } from "./detail-question";
 import { renderExamPanel } from "./detail-exam";
 import { mountSlideHost, setSlide, slideTo, reserveTallest, growReserve, finish as finishSlide } from "./detail-slide";
@@ -34,11 +35,96 @@ import type { DraftQuestion } from "../editor/utils";
 
 const SAVE_DEBOUNCE_MS = 600;
 
+/** Ce qu'une page « quiz » a besoin de savoir de son quiz. Un quiz du vault
+    et un quiz FRAÎCHEMENT GÉNÉRÉ (encore en mémoire, sans note) s'y décrivent
+    de la même façon : c'est ce qui permet à la page « Générer » d'afficher la
+    page de travail complète au lieu d'un éditeur à part. */
+export interface QuizPageSpec {
+	/** Identité de la page : changer de clé remet son état à zéro. */
+	key: string;
+	title: string;
+	/** Ligne sous le titre (chemin de la note). Vide → ligne masquée. */
+	subtitle: string;
+	/** Compte ANNONCÉ, le temps du chargement (badge du header). */
+	questionCount: number;
+	load(): Promise<QuizDraft | QuizLoadError>;
+	/** Écrit les modifications. Absent : quiz en mémoire, rien à persister. */
+	save?(draft: QuizDraft): Promise<boolean>;
+	/** Entrée du scanner, pour la rangée de stats. Absente : pas de rangée —
+	    un quiz qui n'existe pas encore n'a ni score ni tentative. */
+	stats?: QuizIndexEntry;
+	/** Flèche retour : le SEUL chemin de sortie de la page. */
+	onBack(): void;
+	/** Bouton principal à droite. Absent → masqué. */
+	start?: { label: string; icon: string; onClick(): void };
+	/** Actions supplémentaires, posées avant le bouton principal. */
+	actions?: Array<{ label: string; icon: string; onClick(el: HTMLElement): void }>;
+	/** Vrai quand la page n'est plus celle qu'on regarde (vue changée) : les
+	    flèches ← → cessent alors de lui répondre. */
+	isStale?(): boolean;
+}
+
+/** Dépendances d'une page « quiz », indépendantes du dashboard. */
+export interface QuizPageDeps {
+	app: App;
+	plugin: Plugin;
+	statsStore?: DashboardCtx["statsStore"];
+}
+
+export interface QuizPageHandlers {
+	render(container: HTMLElement, spec: QuizPageSpec): void;
+	/** Écrit sur-le-champ ce qui est en attente (sortie de vue, fermeture). */
+	flush(): void;
+}
+
 export interface DetailHandlers {
 	render(container: HTMLElement, quiz: QuizIndexEntry): void;
 }
 
+/* ── La page « quiz » du dashboard : UNE instance, sur un quiz du vault. La
+   page « Générer » en crée une autre, sur son quiz en mémoire — d'où la
+   séparation entre createQuizPage (le composant) et ce wrapper (la vue). ── */
 export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
+	const page = createQuizPage({ app: ctx.app, plugin: ctx.plugin, statsStore: ctx.statsStore });
+
+	return {
+		render(container: HTMLElement, quiz: QuizIndexEntry): void {
+			// La cible du retour est fixée à l'ARRIVÉE sur la page : lue au clic,
+			// elle aurait déjà été écrasée par une navigation intermédiaire.
+			const target = ctx.view.previousView || "home";
+			page.render(container, {
+				key: quiz.path,
+				title: quiz.title,
+				subtitle: quiz.path,
+				questionCount: quiz.questions,
+				stats: quiz,
+				load: () => loadQuizDraft(ctx.app, quiz.path),
+				save: (draft) => saveQuizDraft(ctx.app, draft),
+				onBack: () => {
+					ctx.navigate(target);
+					// Retour vers « Mes quiz » : on rouvre le DOSSIER du quiz, pas
+					// la grille racine — sortir d'un quiz doit rendre à son
+					// contexte (demande Ahmed 2026-07-21). navigate() vient de
+					// refermer le drill (resetDrilldown), d'où la réouverture.
+					if (target === "quizzes") ctx.view.quizzes?.openFolderOfQuiz(quiz.path);
+				},
+				start: {
+					label: t("dashboard.detail.play"),
+					icon: "play",
+					onClick: () => void openQuizForPlay(ctx.app, quiz),
+				},
+				isStale: () => ctx.view.currentView !== "detail",
+			});
+		},
+	};
+}
+
+export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
+	/* Spécification et conteneur du DERNIER rendu : la page se repeint
+	   elle-même (bascule du mode édition) sans passer par son hôte — c'est
+	   ce qui rend la transition possible et ce qui la rend réutilisable. */
+	let currentSpec: QuizPageSpec | null = null;
+	let currentContainer: HTMLElement | null = null;
 	/* État de la page, gardé ENTRE deux rendus du même quiz : le dashboard
 	   re-rend la vue sur des événements externes (changement de réglage), et
 	   repartir à la question 1 en mode consultation à chaque fois rendrait
@@ -54,33 +140,44 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 	let keyCleanup: (() => void) | null = null;
 
 	function scheduleSave(): void {
-		if (!draft) return;
+		// Pas de `save` : le quiz n'existe qu'en mémoire (résultat d'une
+		// génération). Ses retouches vivent dans le brouillon jusqu'à
+		// l'insertion dans une note — il n'y a rien à écrire d'ici là.
+		if (!draft || !currentSpec?.save) return;
 		if (saveTimer) window.clearTimeout(saveTimer);
 		saveTimer = window.setTimeout(() => {
 			saveTimer = null;
-			if (!draft) return;
-			void saveQuizDraft(ctx.app, draft).then(ok => {
+			if (!draft || !currentSpec?.save) return;
+			void currentSpec.save(draft).then(ok => {
 				if (!ok) new Notice(t("dashboard.quiz.saveError"));
 			});
 		}, SAVE_DEBOUNCE_MS);
 	}
 
-	function render(container: HTMLElement, quiz: QuizIndexEntry): void {
+	/** Repeint la page telle qu'elle est — sans repasser par l'hôte, qui
+	    reconstruirait toute la vue (et, sur la page « Générer », le composer). */
+	function repaint(): void {
+		if (currentContainer && currentSpec) render(currentContainer, currentSpec);
+	}
+
+	function render(container: HTMLElement, spec: QuizPageSpec): void {
 		// Un glissement encore en vol vise des nœuds que container.empty() va
 		// détruire : le terminer d'abord évite un timer orphelin qui écrirait
 		// dans un DOM mort.
 		if (slideHost) { finishSlide(slideHost); slideHost = null; }
 		container.empty();
-		if (quiz.path !== currentPath) {
-			currentPath = quiz.path;
+		currentContainer = container;
+		currentSpec = spec;
+		if (spec.key !== currentPath) {
+			currentPath = spec.key;
 			draft = null;
 			activeIdx = 0;
 			editing = false;
 		}
 
 		const page = container.createDiv({ cls: "qbd-qz" });
-		renderHeader(page, quiz);
-		renderStats(page, quiz);
+		renderHeader(page, spec);
+		renderStats(page, spec);
 
 		const body = page.createDiv({ cls: "qbd-qz-body" });
 		const listCol = body.createDiv({ cls: "qbd-qz-list" });
@@ -91,18 +188,18 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		const panel = main.createDiv({ cls: "qbd-qz-panel" });
 		const nav = main.createDiv({ cls: "qbd-qz-nav" });
 
-		bindArrowKeys(page, listCol, panel, nav, quiz);
+		bindArrowKeys(page, listCol, panel, nav, spec);
 
 		if (draft) {
-			paint(listCol, panel, nav, quiz);
+			paint(listCol, panel, nav, spec);
 			return;
 		}
 
 		panel.createDiv({ cls: "qbd-qz-loading", text: t("dashboard.quiz.loading") });
-		void loadQuizDraft(ctx.app, quiz.path).then(result => {
+		void spec.load().then(result => {
 			// La page a pu être quittée (ou un autre quiz ouvert) pendant la
 			// lecture du fichier : ne peindre que si le DOM est encore vivant.
-			if (!panel.isConnected || quiz.path !== currentPath) return;
+			if (!panel.isConnected || spec.key !== currentPath) return;
 			panel.empty();
 			if (typeof result === "string") {
 				// Clés énumérées, pas concaténées : t() est typé sur l'union des
@@ -116,18 +213,17 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 			}
 			draft = result;
 			activeIdx = Math.min(activeIdx, Math.max(0, draft.questions.length - 1));
-			paint(listCol, panel, nav, quiz);
+			paint(listCol, panel, nav, spec);
 		});
 	}
 
 	/* ── Header : fil d'Ariane, nom + chemin, Editor / Start ── */
-	function renderHeader(page: HTMLElement, quiz: QuizIndexEntry): void {
+	function renderHeader(page: HTMLElement, spec: QuizPageSpec): void {
 		const header = page.createDiv({ cls: "qbd-qz-header" });
 
 		// Flèche SUR LA LIGNE du titre, à sa gauche (capture StudySmarter
 		// 2026-07-21) — pas au-dessus. Mêmes classes que le retour du
 		// drill-down : un seul bouton retour dans tout le dashboard.
-		const target = ctx.view.previousView || "home";
 		const back = header.createEl("button", {
 			cls: "qbd-quizzes-crumb-back qbd-qz-back",
 			attr: { type: "button", "aria-label": t("dashboard.quiz.back") },
@@ -136,20 +232,15 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		setIcon(backIcon, "arrow-left");
 		back.addEventListener("click", () => {
 			flushSave();
-			ctx.navigate(target);
-			// Retour vers « Mes quiz » : on rouvre le DOSSIER du quiz, pas la
-			// grille racine — sortir d'un quiz doit rendre à son contexte
-			// (demande Ahmed 2026-07-21). navigate() vient de refermer le
-			// drill (resetDrilldown), d'où la réouverture juste après.
-			if (target === "quizzes") ctx.view.quizzes?.openFolderOfQuiz(quiz.path);
+			spec.onBack();
 		});
 
 		const info = header.createDiv({ cls: "qbd-qz-headline" });
 		const titleRow = info.createDiv({ cls: "qbd-qz-title-row" });
-		titleRow.createEl("h2", { cls: "qbd-qz-title", text: quiz.title });
-		const count = draft ? draft.questions.length : quiz.questions;
+		titleRow.createEl("h2", { cls: "qbd-qz-title", text: spec.title });
+		const count = draft ? draft.questions.length : spec.questionCount;
 		titleRow.createSpan({ cls: "qbd-qz-count", text: String(count) });
-		info.createEl("p", { cls: "qbd-qz-path", text: quiz.path });
+		if (spec.subtitle) info.createEl("p", { cls: "qbd-qz-path", text: spec.subtitle });
 
 		const actions = header.createDiv({ cls: "qbd-qz-actions" });
 
@@ -160,26 +251,62 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		// « Editor » (et non « Edit ») : le bouton ouvre un MODE, il ne
 		// déclenche pas une action — demande d'Ahmed 2026-07-21.
 		edit.createSpan({ text: t(editing ? "dashboard.quiz.editDone" : "dashboard.quiz.editor") });
-		edit.addEventListener("click", () => {
-			editing = !editing;
-			if (!editing) flushSave();
-			ctx.view.renderCurrentView();
-		});
+		edit.addEventListener("click", () => toggleEditing(page));
+
+		for (const action of spec.actions || []) {
+			const btn = actions.createEl("button", { cls: "qbd-btn qbd-btn--ghost" });
+			setIcon(btn.createSpan({ cls: "qbd-btn-icon" }), action.icon);
+			btn.createSpan({ text: action.label });
+			btn.addEventListener("click", () => {
+				flushSave();
+				action.onClick(btn);
+			});
+		}
 
 		// Pilule INVERSÉE (blanche sur thème sombre) : le même bouton que
 		// « Nouveau dossier » — demande d'Ahmed « mets Start en blanc comme
 		// nos autres boutons ». Jamais l'accent bleu.
-		const start = actions.createEl("button", { cls: "qbd-btn--create qbd-qz-start" });
-		setIcon(start.createSpan({ cls: "qbd-btn-icon" }), "play");
-		start.createSpan({ text: t("dashboard.detail.play") });
-		start.addEventListener("click", () => {
-			flushSave();
-			void openQuizForPlay(ctx.app, quiz);
-		});
+		const startSpec = spec.start;
+		if (startSpec) {
+			const start = actions.createEl("button", { cls: "qbd-btn--create qbd-qz-start" });
+			setIcon(start.createSpan({ cls: "qbd-btn-icon" }), startSpec.icon);
+			start.createSpan({ text: startSpec.label });
+			start.addEventListener("click", () => {
+				flushSave();
+				startSpec.onClick();
+			});
+		}
 	}
 
-	/* ── Stats : la colonne de cartes d'avant, compactée en une rangée ── */
-	function renderStats(page: HTMLElement, quiz: QuizIndexEntry): void {
+	/** Bascule consultation ⇄ édition AVEC transition : le corps s'estompe et
+	    glisse légèrement, puis la page se repeint dans l'autre mode et entre.
+	    Sans ce délai, la bascule est un saut sec — et c'est le bouton sur
+	    lequel on revient le plus souvent. */
+	function toggleEditing(page: HTMLElement): void {
+		editing = !editing;
+		if (!editing) flushSave();
+
+		const body = page.querySelector(".qbd-qz-body");
+		if (!body || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+			repaint();
+			return;
+		}
+
+		body.classList.add("qbd-qz-body--leaving");
+		// La sortie est plus courte que l'entrée : la page repeinte doit
+		// arriver, pas se faire attendre.
+		window.setTimeout(() => {
+			repaint();
+			currentContainer?.querySelector(".qbd-qz-body")?.classList.add("qbd-qz-body--entering");
+		}, 130);
+	}
+
+	/* ── Stats : la colonne de cartes d'avant, compactée en une rangée ──
+	   Absente pour un quiz qui n'existe pas encore (résultat d'une
+	   génération) : ni score, ni tentative, ni date — quatre cases vides. */
+	function renderStats(page: HTMLElement, spec: QuizPageSpec): void {
+		const quiz = spec.stats;
+		if (!quiz) return;
 		const rec = ctx.statsStore ? ctx.statsStore.getRecord(quiz.path) : null;
 		const stat: QuizStatRecord = rec || { bestScore: 0, questionsDone: 0, totalQuestions: quiz.questions, lastPlayed: 0, attempts: 0 };
 		const total = stat.totalQuestions || quiz.questions;
@@ -225,16 +352,16 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 	}
 
 	/* ── Corps : liste des questions + question courante ── */
-	function paint(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+	function paint(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		if (!draft) return;
-		paintList(listCol, panel, nav, quiz);
-		paintPanel(listCol, panel, nav, quiz);
+		paintList(listCol, panel, nav, spec);
+		paintPanel(listCol, panel, nav, spec);
 	}
 
 	/** Change de question EN GLISSANT (carrousel du moteur), puis repeint la
 	    liste et la navigation. `activeIdx` bouge ici et nulle part ailleurs :
 	    la direction du glissement se déduit de l'écart. */
-	function goToQuestion(target: number, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+	function goToQuestion(target: number, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		if (!draft || !slideHost) return;
 		const clamped = Math.max(0, Math.min(target, draft.questions.length - 1));
 		if (clamped === activeIdx) return;
@@ -242,12 +369,12 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		const hops = Math.abs(clamped - activeIdx);
 		activeIdx = clamped;
 		const q = draft.questions[activeIdx];
-		slideTo(slideHost, (slide) => fillSlide(slide, q, activeIdx, listCol, panel, nav, quiz), dir, hops);
-		paintList(listCol, panel, nav, quiz);
-		paintNav(listCol, panel, nav, quiz);
+		slideTo(slideHost, (slide) => fillSlide(slide, q, activeIdx, listCol, panel, nav, spec), dir, hops);
+		paintList(listCol, panel, nav, spec);
+		paintNav(listCol, panel, nav, spec);
 	}
 
-	function paintList(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+	function paintList(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		if (!draft) return;
 		listCol.empty();
 
@@ -272,7 +399,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 					// créer vide, la relire n'apprendrait rien.
 					editing = true;
 					scheduleSave();
-					ctx.view.renderCurrentView();
+					repaint();
 				}).open();
 			});
 		}
@@ -284,7 +411,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 			num.setAttribute("aria-hidden", "true");
 			const text = questionText(q);
 			card.createSpan({ cls: "qbd-qz-card-text" + (text ? "" : " is-empty"), text: text || t("dashboard.quiz.promptEmpty") });
-			card.addEventListener("click", () => goToQuestion(i, listCol, panel, nav, quiz));
+			card.addEventListener("click", () => goToQuestion(i, listCol, panel, nav, spec));
 
 			if (!editing || !draft) return;
 
@@ -312,7 +439,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 					if (activeIdx === i) activeIdx = target;
 					else if (activeIdx === target) activeIdx = i;
 					scheduleSave();
-					paint(listCol, panel, nav, quiz);
+					paint(listCol, panel, nav, spec);
 				});
 			};
 			move(-1, "chevron-up", t("dashboard.quiz.moveUp"));
@@ -329,7 +456,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 					draft.questions.splice(i, 1);
 					if (activeIdx >= draft.questions.length) activeIdx = draft.questions.length - 1;
 					scheduleSave();
-					paint(listCol, panel, nav, quiz);
+					paint(listCol, panel, nav, spec);
 				});
 			}
 		});
@@ -340,14 +467,14 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 			get: () => draft?.examOptions ?? null,
 			set: (value) => { if (draft) draft.examOptions = value; },
 			onChange: () => scheduleSave(),
-			onStructureChange: () => paintList(listCol, panel, nav, quiz),
+			onStructureChange: () => paintList(listCol, panel, nav, spec),
 		});
 	}
 
 	/** Contenu d'UNE slide : la question, en consultation ou en édition.
 	    `index` est celui de la question rendue (pas forcément la courante :
 	    la passe de mesure les rend toutes). */
-	function fillSlide(slide: HTMLElement, q: DraftQuestion, index: number, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+	function fillSlide(slide: HTMLElement, q: DraftQuestion, index: number, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		// Pas de bandeau « Question i / n » : le rendu réel affiche déjà le
 		// TITRE de la question (h2 du moteur) — deux titres l'un sur l'autre.
 		const content = slide.createDiv({ cls: "qbd-qz-panel-body" });
@@ -357,7 +484,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 				plugin: ctx.plugin,
 				onChange: () => {
 					scheduleSave();
-					paintList(listCol, panel, nav, quiz);
+					paintList(listCol, panel, nav, spec);
 					// Une réponse plus longue peut dépasser la réserve : on
 					// l'étend, jamais on ne la réduit (les chevrons ne doivent
 					// pas remonter pendant la frappe).
@@ -365,7 +492,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 				},
 				// Re-peindre le PANNEAU seul : la liste vient d'être refaite par
 				// onChange, et re-rendre tout volerait le focus de la frappe.
-				onStructureChange: () => paintPanel(listCol, panel, nav, quiz),
+				onStructureChange: () => paintPanel(listCol, panel, nav, spec),
 			});
 		} else {
 			renderQuestionView(content, q, ctx.app, index);
@@ -380,20 +507,20 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 	   raccourcis d'Obsidian gardent la priorité). Le premier événement reçu
 	   après la mort du DOM se détache tout seul : la page n'a pas de hook de
 	   démontage à qui confier ce nettoyage. */
-	function bindArrowKeys(page: HTMLElement, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+	function bindArrowKeys(page: HTMLElement, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		if (keyCleanup) keyCleanup();
 		const doc = page.ownerDocument;
 		const onKey = (e: KeyboardEvent): void => {
 			if (!page.isConnected) { detach(); return; }
 			if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
 			if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-			if (ctx.view.currentView !== "detail") return;
+			if (spec.isStale?.()) return;
 			// `instanceof Element` et non un cast : la cible d'un keydown remonté
 			// au document peut être le Document lui-même, qui n'a pas closest().
 			const target = e.target;
 			if (target instanceof Element && target.closest("input, textarea, select, [contenteditable='true']")) return;
 			e.preventDefault();
-			goToQuestion(activeIdx + (e.key === "ArrowRight" ? 1 : -1), listCol, panel, nav, quiz);
+			goToQuestion(activeIdx + (e.key === "ArrowRight" ? 1 : -1), listCol, panel, nav, spec);
 		};
 		const detach = (): void => {
 			doc.removeEventListener("keydown", onKey);
@@ -412,7 +539,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		return Math.max(0, main.clientHeight - 58);
 	}
 
-	function paintPanel(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+	function paintPanel(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		if (!draft) return;
 		panel.empty();
 		slideHost = null;
@@ -425,8 +552,8 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		// Le panneau est une piste de carrousel : le changement de question y
 		// glisse comme dans le quiz (detail-slide.ts).
 		slideHost = mountSlideHost(panel);
-		setSlide(slideHost, (slide) => fillSlide(slide, q, activeIdx, listCol, panel, nav, quiz));
-		paintNav(listCol, panel, nav, quiz);
+		setSlide(slideHost, (slide) => fillSlide(slide, q, activeIdx, listCol, panel, nav, spec));
+		paintNav(listCol, panel, nav, spec);
 
 		// Les chevrons se posent à la hauteur de la question la PLUS HAUTE du
 		// quiz, une fois pour toutes : ils ne bougent plus d'une question à
@@ -435,7 +562,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		const questions = draft.questions;
 		reserveTallest(
 			slideHost,
-			questions.map((qq, i) => (slide: HTMLElement) => fillSlide(slide, qq, i, listCol, panel, nav, quiz)),
+			questions.map((qq, i) => (slide: HTMLElement) => fillSlide(slide, qq, i, listCol, panel, nav, spec)),
 			availableHeight(panel),
 		);
 	}
@@ -444,27 +571,27 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 	    entre eux (la position se lit dans la liste de gauche). Repeinte seule
 	    à chaque glissement, pour que l'état désactivé suive sans reconstruire
 	    la question. */
-	function paintNav(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, quiz: QuizIndexEntry): void {
+	function paintNav(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		nav.empty();
 		if (!draft || draft.questions.length <= 1) return;
 
 		const prev = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.prev") } });
 		setIcon(prev, "chevron-left");
 		prev.disabled = activeIdx === 0;
-		prev.addEventListener("click", () => goToQuestion(activeIdx - 1, listCol, panel, nav, quiz));
+		prev.addEventListener("click", () => goToQuestion(activeIdx - 1, listCol, panel, nav, spec));
 
 		const next = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.next") } });
 		setIcon(next, "chevron-right");
 		next.disabled = activeIdx >= draft.questions.length - 1;
-		next.addEventListener("click", () => goToQuestion(activeIdx + 1, listCol, panel, nav, quiz));
+		next.addEventListener("click", () => goToQuestion(activeIdx + 1, listCol, panel, nav, spec));
 	}
 
 	/** Écrit MAINTENANT ce qui est en attente (sortie de page, lancement). */
 	function flushSave(): void {
-		if (!saveTimer || !draft) return;
+		if (!saveTimer || !draft || !currentSpec?.save) return;
 		window.clearTimeout(saveTimer);
 		saveTimer = null;
-		void saveQuizDraft(ctx.app, draft);
+		void currentSpec.save(draft);
 	}
 
 	function createRingSVG(pct: number, color: string, size: number, sw: number): SVGSVGElement {
@@ -493,5 +620,5 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 		return svg;
 	}
 
-	return { render };
+	return { render, flush: flushSave };
 }

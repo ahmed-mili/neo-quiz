@@ -194,6 +194,7 @@ export const EN_AI = {
 	"ai.error.retry": "Try again",
 	"ai.error.checkSettings": "Check your AI settings in the plugin settings.",
 	"ai.result.count": "{count} questions generated",
+	"ai.result.untitled": "Generated quiz",
 	"ai.result.insert": "Insert into a note",
 	"ai.result.restart": "Start over",
 

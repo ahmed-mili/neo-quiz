@@ -51,39 +51,43 @@ export interface ClozeHandlers {
    d'un téléphone en demande une plus petite. Le moteur dit qu'il y a un trou,
    la feuille de style dit quelle place il prend. */
 
-export function createClozeHandlers(ctx: EngineCtx): ClozeHandlers {
-	const BLANK_RE = /\{\{([^{}]*)\}\}/g;
+const BLANK_RE = /\{\{([^{}]*)\}\}/g;
 
-	function parseCloze(template: unknown): ParsedCloze {
-		const raw = String(template ?? "");
-		const segments: ClozeSegment[] = [];
-		const blanks: ClozeBlank[] = [];
+/* Découpe du gabarit — hors de la factory : l'APERÇU d'une question (page
+   d'un quiz, éditeur) doit montrer les trous, et il n'a pas de moteur sous
+   la main. Une seconde lecture maison finirait par diverger de celle-ci. */
+export function parseCloze(template: unknown): ParsedCloze {
+	const raw = String(template ?? "");
+	const segments: ClozeSegment[] = [];
+	const blanks: ClozeBlank[] = [];
 
-		let lastIndex = 0;
-		let match: RegExpExecArray | null;
-		BLANK_RE.lastIndex = 0;
-		while ((match = BLANK_RE.exec(raw)) !== null) {
-			if (match.index > lastIndex) {
-				segments.push({ type: "text", value: raw.slice(lastIndex, match.index) });
-			}
-			const answers = String(match[1] ?? "")
-				.split("|")
-				.map(a => a.trim())
-				.filter(a => a.length > 0);
-			// Un trou sans aucune réponse ({{}}) n'est pas un trou : il ne
-			// pourrait jamais être juste. Rendu comme du texte littéral.
-			if (answers.length === 0) {
-				segments.push({ type: "text", value: match[0] });
-			} else {
-				segments.push({ type: "blank", index: blanks.length });
-				blanks.push({ answers });
-			}
-			lastIndex = match.index + match[0].length;
+	let lastIndex = 0;
+	let match: RegExpExecArray | null;
+	BLANK_RE.lastIndex = 0;
+	while ((match = BLANK_RE.exec(raw)) !== null) {
+		if (match.index > lastIndex) {
+			segments.push({ type: "text", value: raw.slice(lastIndex, match.index) });
 		}
-		if (lastIndex < raw.length) segments.push({ type: "text", value: raw.slice(lastIndex) });
-
-		return { segments, blanks };
+		const answers = String(match[1] ?? "")
+			.split("|")
+			.map(a => a.trim())
+			.filter(a => a.length > 0);
+		// Un trou sans aucune réponse ({{}}) n'est pas un trou : il ne
+		// pourrait jamais être juste. Rendu comme du texte littéral.
+		if (answers.length === 0) {
+			segments.push({ type: "text", value: match[0] });
+		} else {
+			segments.push({ type: "blank", index: blanks.length });
+			blanks.push({ answers });
+		}
+		lastIndex = match.index + match[0].length;
 	}
+	if (lastIndex < raw.length) segments.push({ type: "text", value: raw.slice(lastIndex) });
+
+	return { segments, blanks };
+}
+
+export function createClozeHandlers(ctx: EngineCtx): ClozeHandlers {
 
 	const getBlanks = (q: ClozeQuestion): ClozeBlank[] => parseCloze(q?.cloze).blanks;
 

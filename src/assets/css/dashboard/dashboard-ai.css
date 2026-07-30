@@ -1033,45 +1033,24 @@
 	color: var(--text-faint);
 }
 
-/* ── Éditeur de quiz EMBARQUÉ après génération (référence : l'éditeur
-   complet remplace l'aperçu, dans la page — pas de nouvel onglet) ── */
-.qbd-ai-embed-bar {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin-bottom: 10px;
-}
-
-.qbd-ai-embed-bar .qbd-ai-result-count-wrap {
-	flex: 1;
-	min-width: 0;
-}
-
-.qbd-ai-editor-embed {
+/* ── Page « quiz » de la zone résultat ──
+   Depuis 2026-07-31 le résultat d'une génération n'est plus un éditeur à
+   part : c'est la MÊME page qu'un quiz du vault (dashboard-detail.css). Il
+   ne reste ici qu'à lui donner la hauteur de la zone — tout le reste est
+   déjà stylé là-bas, et doit le rester (une seule anatomie de page). */
+.qbd-ai-quiz-page {
 	flex: 1;
 	min-height: 0;
-	position: relative;
-	overflow: hidden;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 12px;
-	/* Zone aperçu SANS fond (demande 2026-07-11) : le wallpaper du vault
-	   reste visible derrière le quiz. ATTENTION : le host porte les DEUX
-	   classes (qbd-ai-editor-embed ET qb-root, même élément) — il faut le
-	   sélecteur COMPOSÉ à 0,2,0 pour battre `.qb-root { background:
-	   --background-primary }`, déclaré plus tard dans le bundle (editor/
-	   après dashboard/). Les panneaux à fond propre (header, sidebar,
-	   code : background-secondary) ne changent pas ; le panneau Éditeur —
-	   qui héritait du fond du root — récupère explicitement le sien.
-	   Vue builder standalone : inchangée. */
+	display: flex;
+	flex-direction: column;
+	/* Le wallpaper du vault reste visible derrière (demande 2026-07-11) :
+	   la page ne pose aucune surface pleine, ses cartes le font. */
 	background: transparent;
 }
 
-.qbd-ai-editor-embed.qb-root {
-	background: transparent;
-}
-
-.qbd-ai-editor-embed .qb-editor {
-	background: var(--background-primary);
+.qbd-ai-quiz-page > .qbd-qz {
+	flex: 1;
+	min-height: 0;
 }
 
 /* Attachements dans le composer — vignettes d'images (rangée normale,

@@ -1,7 +1,7 @@
 import { setIcon, Notice, loadPdfJs, Platform, MarkdownRenderer, TFile } from "obsidian";
 import type { App, View } from "obsidian";
 import type { DashboardCtx } from "../types/dashboard-ctx";
-import type { EditorHostView } from "../types/editor-ctx";
+import type { EditorExamOptions } from "../types/editor-ctx";
 import * as aiProviders from "./ai-providers";
 import { createSelect, closeAllSelects, openActionMenu, openModelMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
 import type { SelectHandle, SelectOption } from "./ui-select";
@@ -16,6 +16,11 @@ import {
 } from "./ai-usage";
 import type { AiUsage, PlanUsage, UsagePlugin } from "./ai-usage";
 import { openUsageModal, tightestRow, usageRowLabel } from "./usage-modal";
+import { createQuizPage } from "./detail";
+import type { QuizPageHandlers } from "./detail";
+import type { QuizDraft } from "./detail-io";
+import type { DraftQuestion } from "../editor/utils";
+import type { ParsedQuizItem } from "../editor/modals";
 import { t } from "../i18n";
 import type { TransKey } from "../i18n";
 
@@ -67,9 +72,6 @@ interface ComposerImage {
 	file: File;
 	url: string;
 }
-
-/** Éditeur embarqué + marqueur de génération (invalidation entre générations). */
-type EmbedEditor = EditorHostView & { _genId?: number };
 
 /** Message PARTI — ce que le composer contenait au moment de l'envoi.
     Le composer se vide à l'envoi (référence claude.ai) : sans cette copie,
@@ -191,10 +193,13 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	// Client IA de la génération en cours — permet au bouton stop (et à
 	// la touche Esc) d'annuler réellement (kill du CLI / abort du fetch).
 	let activeClient: AiClient | null = null;
-	// Éditeur de quiz EMBARQUÉ pleine page après génération (référence :
-	// l'éditeur complet, pas de nouvel onglet ; composer en bas).
-	// generationId invalide l'instance à chaque nouvelle génération.
-	let embedEditor: EmbedEditor | null = null;
+	/* Page « quiz » de la zone résultat — la MÊME que celle d'un quiz du
+	   vault. Créée à la première génération, réutilisée ensuite : elle garde
+	   son état (question courante, mode) tant que la clé ne change pas.
+	   generationId invalide le brouillon à chaque nouvelle génération. */
+	let resultPage: QuizPageHandlers | null = null;
+	/** Brouillon éditable du quiz généré, lié à SA génération. */
+	let generatedDraft: { genId: number; draft: QuizDraft } | null = null;
 	let generationId = 0;
 	let generatedQuestions: unknown[] = [];
 	let errorMessage = "";
@@ -263,8 +268,12 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		const resultZone = phase === "result" ? stage.createDiv({ cls: "qbd-ai-result-zone" }) : null;
 		const formCol = stage;
 
-		// ── Page header (absent en résultat : la barre du quiz suffit) ──
-		if (phase !== "result") {
+		// ── Page header ──
+		// Absent en résultat (la page du quiz porte son propre titre) et dès
+		// qu'une demande est partie : sur claude.ai le hero d'accueil cède la
+		// place à la conversation à la seconde où l'on envoie. Le garder
+		// au-dessus de la bulle donnerait l'impression de n'être jamais parti.
+		if (phase !== "result" && !sentMessage) {
 			const titleRow = formCol.createDiv({ cls: "qbd-ai-title-row" });
 			const titleIcon = titleRow.createSpan({ cls: "qbd-ai-title-icon" });
 			// Glyphe de marque NU à côté du titre serif, comme l'astérisque de
@@ -1734,92 +1743,110 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	   l'ÉDITEUR DE QUIZ COMPLET embarqué — exigence explicite, pas une
 	   liste simplifiée. */
 	function renderResult(container: HTMLElement): void {
-		// ── Barre compacte : compte + Insérer dans une note + Recommencer ──
-		const bar = container.createDiv({ cls: "qbd-ai-embed-bar" });
-		const countWrap = bar.createDiv({ cls: "qbd-ai-result-count-wrap" });
-		const checkIcon = countWrap.createSpan({ cls: "qbd-ai-result-check" });
-		setIcon(checkIcon, "check-circle");
-		countWrap.createSpan({ cls: "qbd-ai-result-count", text: t("ai.result.count", { count: generatedQuestions.length }) });
+		// La MÊME page qu'un quiz du vault (dashboard/detail.ts) : liste des
+		// questions à gauche, question courante à droite, bouton « Editor »
+		// qui bascule le mode. L'éditeur en trois colonnes qui vivait ici
+		// n'était pas assez simple (retour Ahmed 2026-07-31) — et il n'avait
+		// aucune raison d'être un écran différent de celui d'un quiz existant.
+		const host = container.createDiv({ cls: "qbd-ai-quiz-page" });
+		if (!resultPage) resultPage = createQuizPage({ app: ctx.app, plugin: ctx.plugin, statsStore: ctx.statsStore });
 
-		renderUsageBadge(countWrap);
-
-		const insertBtn = bar.createEl("button", {
-			cls: "qbd-btn qbd-btn--primary",
-			text: t("ai.result.insert")
+		resultPage.render(host, {
+			// La clé change à chaque génération : la page repart alors de la
+			// question 1, en consultation. Un re-render de la scène (statut de
+			// fournisseur, quota) garde la même clé, donc l'édition en cours.
+			key: "generated:" + generationId,
+			title: generatedTitle(),
+			// Ligne discrète du header : ce que la génération a coûté, là où
+			// un quiz du vault affiche son chemin.
+			subtitle: usageLine(),
+			// Compté sur le BROUILLON, pas sur la réponse brute : celle-ci
+			// contient aussi l'objet de mode, qui n'est pas une question.
+			questionCount: loadGeneratedDraft().questions.length,
+			load: () => Promise.resolve(loadGeneratedDraft()),
+			// Pas de `save` : le quiz n'a pas encore de note. Les retouches
+			// vivent dans le brouillon jusqu'à « Insérer dans une note ».
+			onBack: () => restartGeneration(),
+			start: {
+				label: t("ai.result.insert"),
+				icon: "plus",
+				onClick: () => openInsertPicker(host),
+			},
+			isStale: () => phase !== "result",
 		});
-		const insertIcon = insertBtn.createSpan({ cls: "qbd-btn-icon" });
-		setIcon(insertIcon, "plus");
-		insertBtn.prepend(insertIcon);
-		// Picker : notes OUVERTES en tête + recherche dans tout le vault.
-		insertBtn.addEventListener("click", () => {
-			const seen = new Set<string>();
-			const openFiles: TFile[] = [];
-			for (const leaf of ctx.app.workspace.getLeavesOfType("markdown")) {
-				const view = leaf.view as View & { file?: TFile | null };
-				const f = view && view.file;
-				if (f && !seen.has(f.path)) { seen.add(f.path); openFiles.push(f); }
-			}
-			openNotePicker(insertBtn, {
-				openFiles,
-				allFiles: ctx.app.vault.getMarkdownFiles(),
-				onPick: (file) => insertIntoNote(file)
-			});
-		});
-
-		const restartBtn = bar.createEl("button", { cls: "qbd-btn qbd-btn--ghost" });
-		const restartIcon = restartBtn.createSpan({ cls: "qbd-btn-icon" });
-		setIcon(restartIcon, "rotate-ccw");
-		restartBtn.createSpan({ text: t("ai.result.restart") });
-		restartBtn.addEventListener("click", () => {
-			phase = "idle";
-			generatedQuestions = [];
-			embedEditor = null;
-			dropSentMessage();
-			composerText = "";
-			noteAttachments = [];
-			images = [];
-			render(containerRef);
-		});
-
-		// ── L'ÉDITEUR COMPLET, embarqué pleine page (composer en bas) ──
-		const host = container.createDiv({ cls: "qbd-ai-editor-embed qb-root" });
-		mountEmbedEditor(host);
 	}
 
-	/* Monte l'éditeur de quiz complet dans `host` (zone résultat pleine
-	   page). L'instance survit aux re-renders de la page : les questions en
-	   cours d'édition sont reprises tant que la génération n'a pas changé. */
-	function mountEmbedEditor(host: HTMLElement): void {
-		const { attachQuizEditorCore } = require("../editor") as typeof import("../editor");
-		const prev = embedEditor;
-		const inst = attachQuizEditorCore({} as unknown as EditorHostView, host, ctx.app, ctx.plugin) as EmbedEditor;
-		// Panneau Éditeur FERMÉ par défaut après génération (demande
-		// 2026-07-11) : ouvert, il révèle immédiatement les réponses.
-		// Questions + Aperçu suffisent pour relire le quiz ; un re-render
-		// conserve les choix de panneaux de l'utilisateur.
-		inst.panels.editor = prev && prev._genId === generationId
-			? prev.panels.editor : false;
-		if (prev && prev._genId === generationId) {
-			inst.panels.sidebar = prev.panels.sidebar;
-			inst.panels.preview = prev.panels.preview;
-			inst.panels.code = prev.panels.code;
+	/** Titre de la page d'un quiz fraîchement généré : la DEMANDE, abrégée.
+	    Elle dit de quoi parle le quiz mieux que « Nouveau quiz », et c'est ce
+	    que l'utilisateur vient d'écrire — il le reconnaît. */
+	function generatedTitle(): string {
+		const raw = (sentMessage?.text || "").trim().split("\n")[0].trim();
+		if (!raw) return t("ai.result.untitled");
+		return raw.length > 60 ? raw.slice(0, 60).trimEnd() + "…" : raw;
+	}
+
+	/** « 6 questions · 54k tokens · $0.73 · 2 min 33 s » — la ligne du header,
+	    à la place du chemin de note qu'un quiz du vault y affiche. */
+	function usageLine(): string {
+		const parts = [t("ai.result.count", { count: loadGeneratedDraft().questions.length })];
+		if (lastUsage) {
+			parts.push(t("ai.usage.badge", { tokens: formatTokens(totalTokens(lastUsage)) }));
+			const cost = formatCost(lastUsage.costUsd);
+			if (cost) parts.push(cost);
+			const dur = formatDuration(lastUsage.durationMs);
+			if (dur) parts.push(dur);
 		}
-		inst.buildUI();
-		if (prev && prev._genId === generationId) {
-			// Re-render de la page → reprendre l'édition en cours, en place.
-			inst.questions.length = 0;
-			prev.questions.forEach(q => inst.questions.push(q));
-			Object.assign(inst.examOptions, prev.examOptions);
-			inst.render();
-		} else {
-			inst.render();
-			const JSON5 = require("json5") as typeof import("json5");
-			// silent : pas de Notice d'import à chaque montage. Pas de
-			// sourceFile → aucune sauvegarde automatique vers une note.
-			inst.importQuizSource(JSON5.stringify(generatedQuestions, null, 2), null, { silent: true });
+		return parts.join("  ·  ");
+	}
+
+	/** Brouillon éditable à partir des questions générées. Passe par la MÊME
+	    conversion que la lecture d'une note (editor/convert.ts) : un quiz
+	    généré et un quiz relu d'un .md doivent être le même objet. */
+	function loadGeneratedDraft(): QuizDraft {
+		if (generatedDraft && generatedDraft.genId === generationId) return generatedDraft.draft;
+		const { convertParsedToInternal, isModeConfig, readModeConfig } =
+			require("../editor/convert") as typeof import("../editor/convert");
+		const questions: DraftQuestion[] = [];
+		let examOptions: EditorExamOptions | null = null;
+		for (const raw of generatedQuestions as ParsedQuizItem[]) {
+			if (isModeConfig(raw)) { examOptions = readModeConfig(raw); continue; }
+			questions.push(convertParsedToInternal(raw));
 		}
-		inst._genId = generationId;
-		embedEditor = inst;
+		// `file: null` : ce quiz n'a pas de note. C'est ce qui distingue un
+		// brouillon généré d'un brouillon lu — et pourquoi la page n'a pas
+		// de `save`.
+		const draft: QuizDraft = { file: null, questions, examOptions };
+		generatedDraft = { genId: generationId, draft };
+		return draft;
+	}
+
+	/** Picker d'insertion : notes OUVERTES en tête + recherche dans tout le vault. */
+	function openInsertPicker(anchor: HTMLElement): void {
+		const seen = new Set<string>();
+		const openFiles: TFile[] = [];
+		for (const leaf of ctx.app.workspace.getLeavesOfType("markdown")) {
+			const view = leaf.view as View & { file?: TFile | null };
+			const f = view && view.file;
+			if (f && !seen.has(f.path)) { seen.add(f.path); openFiles.push(f); }
+		}
+		openNotePicker(anchor, {
+			openFiles,
+			allFiles: ctx.app.vault.getMarkdownFiles(),
+			onPick: (file) => insertIntoNote(file)
+		});
+	}
+
+	/** « Recommencer » — désormais la FLÈCHE RETOUR de la page (demande Ahmed
+	    2026-07-31) : sortir du quiz généré, c'est revenir au composer vide. */
+	function restartGeneration(): void {
+		phase = "idle";
+		generatedQuestions = [];
+		generatedDraft = null;
+		dropSentMessage();
+		composerText = "";
+		noteAttachments = [];
+		images = [];
+		render(containerRef);
 	}
 
 	function updateGenerateBtn(btn: HTMLButtonElement | null): void {
@@ -2032,7 +2059,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			// Nouvelle génération → l'éditeur embarqué repart des questions
 			// fraîches (renderResult le monte pleine page).
 			generationId++;
-			embedEditor = null;
+			generatedDraft = null;
 			phase = "result";
 		} else {
 			phase = "error";
@@ -2046,9 +2073,12 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	async function insertIntoNote(file: TFile): Promise<void> {
 		if (!file) return;
 		let quizJson: string;
-		if (embedEditor && embedEditor.questions.length) {
+		// L'état ÉDITÉ prime sur les questions générées brutes : les retouches
+		// faites dans la page (réponses, ordre, mode) sont ce qu'on insère.
+		const draft = generatedDraft && generatedDraft.genId === generationId ? generatedDraft.draft : null;
+		if (draft && draft.questions.length) {
 			const { exportAll } = require("../editor/export") as typeof import("../editor/export");
-			quizJson = exportAll(embedEditor.questions, embedEditor.examOptions);
+			quizJson = exportAll(draft.questions, draft.examOptions);
 		} else if (generatedQuestions.length) {
 			quizJson = (require("json5") as typeof import("json5")).stringify(generatedQuestions, null, 2);
 		} else {

@@ -93,6 +93,11 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	let pendingUsage: Partial<AiUsage> | null = null;
 	let lastUsage: AiUsage | null = null;
 
+	/* Demande en cours, retenue POUR LE SEUL diagnostic d'un échec de parsing
+	   (cf. nonQuizResponseError) : le parseur ne voit que la réponse, or la
+	   cause d'une réponse hors-sujet se lit souvent dans la question. */
+	let lastRequestText = "";
+
 	/* Lecture par FONCTION, jamais directement : `pendingUsage` est rempli
 	   depuis une closure appelée derrière un `await`, ce que l'analyse de flux
 	   de TypeScript ne voit pas — un `if (pendingUsage)` posé après l'await
@@ -146,6 +151,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 
 	async function generateInner(prompt: string, options: GenerateOptions = {}): Promise<unknown[]> {
 		const { count = 5, type = "Mixte", source = "topic", images = [] } = options;
+		lastRequestText = prompt;
 		const provider = plugin.settings.aiProvider || "claude-code";
 		let model = plugin.settings.aiModel || DEFAULT_MODELS[provider];
 		// Fable 5 masqué si la promo n'est plus proposée → retombe sur le défaut Claude
@@ -970,13 +976,57 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		cleaned = repairLatexBackslashes(cleaned);
 
 		const JSON5 = require("json5") as typeof import("json5");
-		const parsed: unknown = JSON5.parse(cleaned);
+		let parsed: unknown;
+		try {
+			parsed = JSON5.parse(cleaned);
+		} catch (err) {
+			/* Un quiz MAL FORMÉ garde l'erreur du parseur : elle situe le défaut
+			   (ligne, colonne), ce qu'aucune paraphrase ne ferait mieux. Une
+			   réponse qui n'est pas un quiz du tout, elle, mérite qu'on dise ce
+			   qu'elle est — sinon l'utilisateur reçoit « invalid character '\'
+			   at 1:2 » pour une phrase en français (vécu le 2026-07-30). Le
+			   discriminant est la présence de champs de question, pas le premier
+			   caractère : de la prose peut commencer par « [ » (lien markdown,
+			   ponctuation échappée). */
+			const looksLikeQuiz = /["']?(prompt|title|options|correctIndex|answer)["']?\s*:/.test(cleaned);
+			if (looksLikeQuiz) throw err;
+			throw nonQuizResponseError(content);
+		}
 
 		if (!Array.isArray(parsed)) {
 			throw new Error(t("ai.err.notAnArray"));
 		}
 
 		return parsed;
+	}
+
+	/* Le modèle a répondu autre chose qu'un quiz : nommer QUOI, et surtout
+	   pourquoi, quand la cause est structurelle.
+	   Cas vécu (2026-07-30) : une demande qui suppose l'accès aux fichiers
+	   (« lis ce PDF », « d'après cette note ») — le CLI est lancé SANS aucun
+	   outil, le modèle tente quand même un appel, et sa tentative ressort
+	   sérialisée en texte. Rien n'est réparable côté parseur : ce qu'il faut
+	   dire, c'est que le générateur ne voit que le composer, et que les sources
+	   se JOIGNENT (le plugin sait lire notes, .md, .txt et PDF). */
+	function nonQuizResponseError(content: string): Error {
+		const text = content.trim();
+		// Deux signatures du même mur : la tentative d'outil sérialisée dans la
+		// réponse, ou une DEMANDE qui désigne des fichiers (chemin, nom avec
+		// extension). La seconde se lit sur le prompt, pas sur la réponse : une
+		// annonce du modèle (« je vais lire… ») se formule dans n'importe quelle
+		// langue, un chemin non.
+		if (/application\/vnd\.ant\.toolu|\btool_use\b/i.test(text) || requestNamesFiles(lastRequestText)) {
+			return new Error(t("ai.err.noFileAccess"));
+		}
+		return new Error(t("ai.err.notQuiz", { preview: text.replace(/\s+/g, " ").slice(0, 160) }));
+	}
+
+	/** La demande désigne-t-elle des fichiers que le générateur ne peut pas
+	    ouvrir ? Chemin absolu (« C:\… », « /home/… ») ou nom porteur d'une
+	    extension de document. Ne sert QU'À choisir un message d'erreur : un
+	    faux positif n'a aucun effet sur une génération qui réussit. */
+	function requestNamesFiles(request: string): boolean {
+		return /[A-Za-z]:[\\/]|(^|\s|["'(])[~./][\w./\\-]*\.\w{1,5}\b|\.(md|pdf|txt|docx?|pptx?|csv)\b/i.test(request);
 	}
 
 	/* Kimi Code n'est pas dans cette liste : son `--output-format stream-json`

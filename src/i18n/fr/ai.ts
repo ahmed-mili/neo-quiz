@@ -177,6 +177,8 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	/* ── Erreurs de génération (affichées dans l'écran d'erreur) ── */
 	"ai.err.unknown": "Erreur inconnue",
 	"ai.err.notAnArray": "La réponse IA n'est pas un tableau de questions.",
+	"ai.err.noFileAccess": "Le générateur de quiz n'a pas accès à vos fichiers — il ne voit que le contenu du composer. Joignez les notes ou documents avec « + » ou « @ », ou collez leur contenu, au lieu d'indiquer leurs chemins.",
+	"ai.err.notQuiz": "Le modèle a répondu par du texte au lieu d'un quiz : « {preview}… »",
 	"ai.err.invalidModelClaude": "Nom de modèle Claude invalide : {model}",
 	"ai.err.claudeNotInstalled": "Claude Code n'est pas installé. Installez-le depuis claude.com/claude-code puis connectez-vous avec /login.",
 	"ai.err.claudeTimeout": "Claude n'a pas répondu dans le délai imparti (3 min). Réessayez.",

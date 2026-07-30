@@ -209,6 +209,10 @@ export const EN_AI = {
 	/* ── Erreurs de génération (affichées dans l'écran d'erreur) ── */
 	"ai.err.unknown": "Unknown error",
 	"ai.err.notAnArray": "The AI response is not an array of questions.",
+	/* Le modèle a répondu autre chose qu'un quiz. Ces deux messages remplacent
+	   l'erreur brute du parseur JSON5, incompréhensible sur de la prose. */
+	"ai.err.noFileAccess": "The quiz generator has no access to your files — it only sees what is in the composer. Attach the notes or documents with “+” or “@”, or paste their content, instead of giving their paths.",
+	"ai.err.notQuiz": "The model replied with text instead of a quiz: “{preview}…”",
 	"ai.err.invalidModelClaude": "Invalid Claude model name: {model}",
 	"ai.err.claudeNotInstalled": "Claude Code is not installed. Install it from claude.com/claude-code, then sign in with /login.",
 	"ai.err.claudeTimeout": "Claude did not answer within the time limit (3 min). Try again.",

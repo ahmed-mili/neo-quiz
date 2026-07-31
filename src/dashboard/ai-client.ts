@@ -340,6 +340,13 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 				child.stdin!.end();
 			});
 		} catch (err) {
+			/* Une ANNULATION n'est pas une erreur. `killTree` fait sortir le
+			   processus en echec — souvent avec `killed`, que la branche
+			   ci-dessous prendrait pour un depassement de delai — et le journal
+			   se remplissait d'erreurs a chaque clic sur Stop. `generate()`
+			   traduit ensuite ce rejet en erreur `aborted`, que l'UI traite
+			   comme un retour a l'etat initial. */
+			if (aborted) throw err;
 			const e = err as ExecError;
 			console.error("[quiz-blocks] Claude Code error:", e.message, e.stderr || "");
 			const detail = ((e.stderr || "") + " " + (e.stdout || "") + " " + e.message).toLowerCase();
@@ -496,6 +503,13 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 			// et le donner brut au parseur JSON5 serait illisible).
 			raw = fs.existsSync(outFile) ? fs.readFileSync(outFile, "utf8") : extractCodexText(stdout);
 		} catch (err) {
+			/* Une ANNULATION n'est pas une erreur. `killTree` fait sortir le
+			   processus en echec — souvent avec `killed`, que la branche
+			   ci-dessous prendrait pour un depassement de delai — et le journal
+			   se remplissait d'erreurs a chaque clic sur Stop. `generate()`
+			   traduit ensuite ce rejet en erreur `aborted`, que l'UI traite
+			   comme un retour a l'etat initial. */
+			if (aborted) throw err;
 			const e = err as ExecError;
 			console.error("[quiz-blocks] Codex error:", e.message, e.stderr || "");
 			const detail = ((e.stderr || "") + " " + (e.stdout || "") + " " + e.message).toLowerCase();
@@ -670,6 +684,13 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 				abortCurrent = () => { aborted = true; killTree(child); };
 			});
 		} catch (err) {
+			/* Une ANNULATION n'est pas une erreur. `killTree` fait sortir le
+			   processus en echec — souvent avec `killed`, que la branche
+			   ci-dessous prendrait pour un depassement de delai — et le journal
+			   se remplissait d'erreurs a chaque clic sur Stop. `generate()`
+			   traduit ensuite ce rejet en erreur `aborted`, que l'UI traite
+			   comme un retour a l'etat initial. */
+			if (aborted) throw err;
 			const e = err as ExecError;
 			console.error("[quiz-blocks] Kimi Code error:", e.message, e.stderr || "");
 			const detail = ((e.stderr || "") + " " + (e.stdout || "") + " " + e.message).toLowerCase();

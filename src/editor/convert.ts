@@ -46,7 +46,20 @@ export function readModeConfig(q: ParsedQuizItem): EditorExamOptions {
 		durationMinutes: Math.max(1, Math.min(180, Number(q.examDurationMinutes) || 10)),
 		autoSubmit: q.examAutoSubmit !== false,
 		showTimer: q.examShowTimer !== false,
+		_extra: extraModeFields(q),
 	};
+}
+
+/** Les clés de l'objet de mode que le plugin ne connaît pas. Même principe que
+    `_extraFields` sur une question : ce qu'on ne comprend pas, on le rend. */
+function extraModeFields(q: ParsedQuizItem): Record<string, unknown> | undefined {
+	const connues = new Set(["mode", "examMode", "learnMode",
+		"examDurationMinutes", "examAutoSubmit", "examShowTimer"]);
+	const extra: Record<string, unknown> = {};
+	for (const cle of Object.keys(q)) {
+		if (!connues.has(cle)) extra[cle] = (q as Record<string, unknown>)[cle];
+	}
+	return Object.keys(extra).length ? extra : undefined;
 }
 
 /** La variante de terminal telle qu'elle est ÉCRITE dans le bloc : sa clé et sa
@@ -65,7 +78,12 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	// Le gabarit discrimine avant tout le reste (même règle que le moteur,
 	// engine.ts isClozeQuestion) : une question qui porte un `cloze` non vide
 	// est un texte à trous, quels que soient ses autres champs.
-	else if (typeof q.cloze === "string" && q.cloze.trim()) type = "cloze";
+	/* `!= null` et non « non vide » : un gabarit VIDE reste une question à
+	   trous, en attente d'être écrite. Exiger du contenu la reclassait en
+	   choix unique, et la sauvegarde suivante remplaçait `cloze` par des
+	   options fantômes (revue codex 2026-07-31). Le MOTEUR, lui, a raison
+	   d'exiger du contenu : il ne peut rien afficher d'un gabarit vide. */
+	else if (typeof q.cloze === "string") type = "cloze";
 	/* MÊME critère que le moteur (engine/numeric.ts isNumericQuestion) : une
 	   marge ou une unité suffisent à déclarer une réponse numérique. Une
 	   détection plus étroite ici classerait la question en « texte », et

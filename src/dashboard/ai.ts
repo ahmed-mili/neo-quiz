@@ -2146,18 +2146,25 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		}
 
 		try {
-			let content = await ctx.app.vault.read(file);
-
 			const quizBlock = "```quiz-blocks\n" + quizJson + "\n```";
-
-			// Vérifier s'il y a déjà un bloc quiz-blocks
-			if (content.includes("```quiz-blocks")) {
+			/* `vault.process` et non `read` + `modify` : entre les deux, une
+			   modification faite ailleurs (éditeur markdown, synchro) était
+			   écrasée — et l'insertion annonçait quand même « Quiz inséré ».
+			   Ici la lecture et l'écriture sont indivisibles, et le contenu
+			   ajouté l'est à ce qui EST dans le fichier, pas à ce qu'on avait lu.
+			   La détection d'un bloc existant se fait dans le même passage : la
+			   tester avant laissait la place à un bloc arrivé entre-temps. */
+			let dejaUnBloc = false;
+			await ctx.app.vault.process(file, (content) => {
+				// Le rappel peut être rejoué : repartir de zéro à chaque essai.
+				dejaUnBloc = content.includes("```quiz-blocks");
+				if (dejaUnBloc) return content;
+				return content + "\n\n" + quizBlock;
+			});
+			if (dejaUnBloc) {
 				new Notice(t("ai.notice.blockExists", { name: file.basename }));
 				return;
 			}
-
-			content += "\n\n" + quizBlock;
-			await ctx.app.vault.modify(file, content);
 			new Notice(t("ai.notice.quizInserted", { name: file.basename }));
 
 			/* Le quiz a maintenant une NOTE : on va sur sa page, celle qui écrit

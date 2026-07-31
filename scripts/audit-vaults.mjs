@@ -189,9 +189,14 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts", "src/quiz-
 				console.error("ILLISIBLE  " + f + "\n           " + e.message);
 				continue;
 			}
-			// Le mode réémet un objet de configuration ; le compte doit suivre.
-			const attendu = qs.length
-				+ (examOptions && (examOptions.mode === "learn" || examOptions.enabled) ? 1 : 0);
+			/* Le mode réémet un objet de configuration ; le compte doit suivre.
+			   Même règle que l'export (editor/export.ts exportAll) : un mode
+			   `learn`, un examen actif, un mode `quiz` ÉCRIT, ou des clés
+			   personnalisées à rendre. */
+			const emetConfig = !!examOptions && (examOptions.mode === "learn"
+				|| examOptions.enabled || examOptions.mode === "quiz"
+				|| !!examOptions._extra);
+			const attendu = qs.length + (emetConfig ? 1 : 0);
 			if (relu.length !== attendu) {
 				divergents++;
 				console.error("COMPTE     " + f + "\n           " + relu.length + " éléments au lieu de " + attendu);

@@ -104,8 +104,21 @@ export function normalizeQuizMode(value: unknown): QuizMode | null {
 function isStrictQuizModeConfig(item: unknown): boolean {
 	if (!isQuizModeConfig(item)) return false;
 	const q = item as Record<string, unknown>;
-	return !q.options && !q.cloze && !q.ordering && !q.matching && !q.type
-		&& q.correctIndex == null && q.correctIndices == null;
+	/* Les marqueurs VIDES ne comptent pas. C'est ce qui permet d'appliquer la
+	   règle stricte PARTOUT, dernière position comprise : les deux lignes
+	   héritées du bug de la question fantôme portent `options: ['', '']` et
+	   `correctIndex: 0` — des coquilles sans contenu — là où une vraie question
+	   a des réponses écrites. Sans cette nuance il fallait relâcher le critère
+	   en fin de tableau, et une question réelle portant un champ `mode` y
+	   disparaissait (revue codex 2026-07-31). */
+	const rempli = (v: unknown): boolean => Array.isArray(v)
+		? v.some(x => typeof x === "string" ? x.trim() !== "" : x != null)
+		: typeof v === "string" ? v.trim() !== "" : v != null && v !== false;
+	if (rempli(q.options) || rempli(q.cloze) || rempli(q.ordering)
+		|| rempli(q.matching) || rempli(q.type)) return false;
+	// Un index de bonne réponse ne compte que s'il DÉSIGNE quelque chose.
+	if (rempli(q.options) && (q.correctIndex != null || q.correctIndices != null)) return false;
+	return true;
 }
 
 /**
@@ -118,8 +131,13 @@ function isStrictQuizModeConfig(item: unknown): boolean {
  */
 export function findQuizModeConfigIndex(items: readonly unknown[]): number {
 	if (!Array.isArray(items) || items.length === 0) return -1;
+	/* La MÊME règle partout, y compris en dernière position. Elle y a un temps
+	   été relâchée pour ne pas faire réapparaître deux lignes vides de notes
+	   réelles ; excuser les marqueurs VIDES (cf. `isStrictQuizModeConfig`)
+	   obtient le même résultat sans le prix — une question réelle portant un
+	   champ `mode` ne disparaît plus, où qu'elle soit. */
 	const dernier = items.length - 1;
-	if (isQuizModeConfig(items[dernier])) return dernier;
+	if (isStrictQuizModeConfig(items[dernier])) return dernier;
 	return items.findIndex(isStrictQuizModeConfig);
 }
 

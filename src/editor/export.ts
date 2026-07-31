@@ -82,7 +82,12 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 	L.push("\t{");
 	L.push(`\t\tid: '${e(id)}',`);
 	L.push(`\t\ttitle: '${e(q.title || `Question ${idx + 1}`)}',`);
-	if (q.resourceButton) L.push(`\t\tresourceButton: {\n\t\t\tlabel: '${e(q.resourceButton.label)}',\n\t\t\tfileName: '${e(q.resourceButton.fileName)}'\n\t\t},`);
+	/* `json5Value` et non deux champs en dur : le bouton de ressource est un
+	   objet libre dans la note, et le reconstruire à partir de `label` et
+	   `fileName` seuls effaçait tout le reste — les autres champs personnalisés
+	   d'une question sont préservés, celui-ci ne faisait pas exception par
+	   choix (revue codex 2026-07-31). */
+	if (q.resourceButton) L.push(`\t\tresourceButton: ${json5Value(q.resourceButton)},`);
 	// Priorité au prompt modifié par l'utilisateur, _promptHtml est fallback
 	if (q._useHtmlPrompt && q._promptHtml) {
 		// Si l'utilisateur édite en mode HTML, utiliser directement _promptHtml
@@ -283,11 +288,24 @@ function exportAll(questions: DraftQuestion[], examOptions: EditorExamOptions | 
 	const timing = examOptions
 		? `\t\texamDurationMinutes: ${examOptions.durationMinutes},\n\t\texamAutoSubmit: ${examOptions.autoSubmit},\n\t\texamShowTimer: ${examOptions.showTimer},\n`
 		: "";
+	/* Les clés que le plugin ne comprend pas sont RENDUES, comme sur une
+	   question : un bloc écrit à la main perdait sinon ses annotations
+	   personnelles à la première sauvegarde. */
+	const extra = Object.entries(examOptions?._extra || {})
+		.map(([k, v]) => `\t\t${json5Key(k)}: ${json5Value(v)},\n`).join("");
 	if (mode === "learn") {
 		// Mode learn AVEC examen (« Passer l'examen ») ou sans, selon le chrono.
-		parts.push(`\t// Mode learn\n\t{\n\t\tmode: 'learn',\n${examOptions?.enabled ? timing : ""}\t}`);
+		parts.push(`\t// Mode learn\n\t{\n\t\tmode: 'learn',\n${examOptions?.enabled ? timing : ""}${extra}\t}`);
 	} else if (examOptions && examOptions.enabled) {
-		parts.push(`\t// Options mode examen\n\t{\n\t\texamMode: true,\n${timing}\t}`);
+		parts.push(`\t// Options mode examen\n\t{\n\t\texamMode: true,\n${timing}${extra}\t}`);
+	} else if (mode === "quiz") {
+		/* Le mode `quiz` est le comportement par défaut, mais s'il est ÉCRIT
+		   dans la note c'est un choix : le taire faisait disparaître l'objet de
+		   configuration entier — et ses clés personnalisées avec. */
+		parts.push(`\t// Mode quiz\n\t{\n\t\tmode: 'quiz',\n${extra}\t}`);
+	} else if (extra) {
+		// Un objet de mode sans mode reconnaissable, mais porteur de contenu.
+		parts.push(`\t{\n${extra}\t}`);
 	}
 	return "[\n" + parts.join(",\n\n") + "\n]";
 }

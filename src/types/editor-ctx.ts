@@ -37,6 +37,13 @@ export interface EditorExamOptions extends ExamOptions {
 	 * mode learn ressortait en mode examen, ou perdait son mode.
 	 */
 	mode?: "quiz" | "learn" | "exam";
+	/**
+	 * Clés de l'objet de mode que le plugin ne connaît pas, gardées telles
+	 * quelles pour être réémises. Sans elles, un bloc écrit à la main perdait
+	 * ses annotations personnelles à la première sauvegarde — même traitement
+	 * que `_extraFields` sur une question.
+	 */
+	_extra?: Record<string, unknown>;
 }
 
 /**

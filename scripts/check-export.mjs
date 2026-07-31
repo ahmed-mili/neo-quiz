@@ -155,6 +155,14 @@ await withSrcModule(["src/quiz-utils.ts", "src/editor/convert.ts"], (qu, convert
 	// question, meme s'il porte un mode valide.
 	r.check("question a reponses en tete n'est pas une config",
 		idx([{ title: "x", mode: "learn", options: ["a", "b"], correctIndex: 0 }, q]), -1);
+	// Une VRAIE question en derniere position, portant un champ `mode` : elle
+	// disparaissait entierement — identifiant, titre, options et reponse.
+	r.check("question reelle en dernier avec un mode",
+		idx([q, { id: "q2", title: "Sans enonce", options: ["oui", "non"], correctIndex: 1, mode: "learn" }]), -1);
+	// La ligne vide heritee du bug de la question fantome, elle, reste une
+	// configuration : ses options sont des coquilles.
+	r.check("ligne vide finale reconnue comme configuration",
+		idx([q, { id: "q6", title: "Question 6", options: ["", ""], correctIndex: 0, mode: "learn" }]), 1);
 	r.check("bloc sans configuration", idx([q, q]), -1);
 	r.check("bloc vide", idx([]), -1);
 

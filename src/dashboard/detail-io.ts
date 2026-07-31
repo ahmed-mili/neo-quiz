@@ -104,7 +104,6 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 		// Garde-fou de l'éditeur, conservé : on ne réécrit JAMAIS un bloc dont
 		// le JSON5 généré ne se relit pas — la note vaut mieux que la frappe.
 		parseQuizSource(source);
-		const block = "```quiz-blocks\n" + source + "\n```";
 
 		let ecrit = false;
 		/* `vault.process` et non `read` + `modify` : Obsidian garantit qu'aucune
@@ -124,6 +123,16 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 			   un succès. Ici la seconde repart bredouille, et le dit. */
 			if (draft.blockSource !== undefined && actuel[1] !== draft.blockSource) return content;
 			ecrit = true;
+			/* Les CLÔTURES telles qu'elles sont écrites : la ligne d'ouverture
+			   peut porter des attributs après le nom du langage, et la fermante
+			   peut être indentée. Les réécrire en forme canonique effaçait un
+			   ` ```quiz-blocks data-owner=alice ` sans que personne ne l'ait
+			   demandé, et le compare-and-swap ne pouvait pas s'en apercevoir : il
+			   ne compare que le JSON5 (revue codex 2026-07-31). */
+			const lignes = actuel[0].split("\n");
+			const ouverture = lignes[0];
+			const fermeture = lignes[lignes.length - 1];
+			const block = ouverture + "\n" + source + "\n" + fermeture;
 			// Remplacement par FONCTION, jamais par chaîne : dans une chaîne de
 			// remplacement, `$1`, `$&`, `` $` `` et `$'` sont des motifs
 			// spéciaux — et un quiz de maths est plein de `$…$` (« $1$ » aurait

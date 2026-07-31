@@ -8,6 +8,7 @@ import { quizTypeLabel } from "./quiz-card";
 import { openQuizForPlay } from "./quiz-open";
 import { TypePickerModal, ConfirmModal } from "../editor/modals";
 import { closeAllSelects } from "./ui-select";
+import { mathifyElement } from "../engine/mathjax";
 import { loadQuizDraft, saveQuizDraft, questionText, draftIsStale } from "./detail-io";
 import type { QuizDraft, QuizLoadError } from "./detail-io";
 import { renderQuestionView, renderQuestionEdit } from "./detail-question";
@@ -456,7 +457,11 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			const num = card.createSpan({ cls: "qbd-qz-card-num", text: String(i + 1) });
 			num.setAttribute("aria-hidden", "true");
 			const text = questionText(q);
-			card.createSpan({ cls: "qbd-qz-card-text" + (text ? "" : " is-empty"), text: text || t("dashboard.quiz.promptEmpty") });
+			const label = card.createSpan({ cls: "qbd-qz-card-text" + (text ? "" : " is-empty"), text: text || t("dashboard.quiz.promptEmpty") });
+			// LaTeX $…$ de la vignette : rendu comme dans la liste de l'éditeur
+			// (qui le faisait déjà). Sans ça, une question de maths s'y lisait
+			// avec ses dollars bruts.
+			if (text.includes("$")) void mathifyElement(label);
 			card.addEventListener("click", () => goToQuestion(i, listCol, panel, nav, spec));
 
 			if (!editing || !draft) return;
@@ -540,6 +545,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			const text = questionText(q);
 			el.textContent = text || t("dashboard.quiz.promptEmpty");
 			el.classList.toggle("is-empty", !text);
+			if (text.includes("$")) void mathifyElement(el);
 		});
 	}
 

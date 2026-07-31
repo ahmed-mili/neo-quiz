@@ -102,7 +102,10 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 
 	renderPassage(card, q, app);
 
-	card.createEl("h2", { text: q.title || fallbackTitle });
+	// Le TITRE aussi rend son markdown : le moteur le fait (engine/cards.ts),
+	// et un titre de question technique cite volontiers une commande entre
+	// accents graves — ils s'affichaient bruts dans l'aperçu.
+	inlineInto(card.createEl("h2"), app, q.title || fallbackTitle);
 
 	if (q.resourceButton) {
 		const rbtn = card.createEl("button", { cls: "quiz-resource-btn" });

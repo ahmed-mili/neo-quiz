@@ -6,7 +6,7 @@ Render ` ```quiz-blocks ` code blocks into fully interactive quizzes directly in
 
 ## How it works
 
-You describe a quiz using a JSON5 code block. The plugin transforms it into a rich interactive form with multiple question types, a visual editor, exam mode, and more. There is a **Check** button that highlights right, wrong, and missed answers, with optional `hint` and `explanation` commentary. Great for self-education, certification prep, and learning notes.
+You describe a quiz using a JSON5 code block. The plugin transforms it into a rich interactive form with multiple question types, a visual quiz page you can edit in place, exam mode, and more. There is a **Check** button that highlights right, wrong, and missed answers, with optional `hint` and `explanation` commentary. Great for self-education, certification prep, and learning notes.
 
 ---
 
@@ -117,17 +117,20 @@ Add an exam configuration object anywhere in your quiz array to enable timed ses
 
 ---
 
-## Visual Editor
+## The quiz page
 
-<img src=".github/demo-editor.png" width="430" alt="Visual editor demo" />
+<img src=".github/demo-editor.png" width="430" alt="The quiz page, with the question list on the left and the current question on the right" />
 
-Press `Ctrl+Shift+E` (or click the 🎓 icon in the ribbon) to open the **Quiz Editor** — build and edit quizzes without writing any code.
+Click a quiz in the Dashboard — or press `Ctrl+Shift+E` on a note that contains one — and you get its **page**: the question list on the left, the current question on the right, exactly as a learner will see it.
 
-- ➕ Add questions via the **"+"** button
-- 🎨 Choose from all supported question types
-- ✏️ Edit content visually
-- ↕️ Reorder questions with drag & drop
-- 💾 Auto-saves changes directly to your note
+The **Editor** button turns that same page into an edit view, in place. No second screen, no panels to arrange.
+
+- ➕ Add a question, choosing its type
+- ✏️ Edit every type: choices, ordering, matching, fill-in-the-blanks, numeric, terminal
+- 📎 Attach a document, a resource, a hint, an explanation
+- ↕️ Reorder questions
+- 🎓 Set the quiz mode — quiz, learn or exam — and its timer
+- 💾 Saves straight to your note as you type
 
 ---
 
@@ -191,7 +194,7 @@ BRAT will notify you whenever a new version is available and update with one cli
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+Shift+E` | Open Quiz Editor |
+| `Ctrl+Shift+E` | Open the quiz of the current note |
 | `Ctrl+Shift+Q` | Open quiz from active note |
 | `↑` / `↓` | Navigate between questions |
 | `Space` / `Enter` | Select highlighted answer |
@@ -203,7 +206,6 @@ BRAT will notify you whenever a new version is available and update with one cli
 This plugin is in active beta development — bugs are possible. Feel free to [open an issue](https://github.com/ahmed-mili/obsidian-quiz-blocks/issues/new) and share feedback.
 
 - Answers are not persisted between sessions
-- The visual editor requires the note to be in edit mode
 - The `esbuild.config.mjs` build path is configured for a local Obsidian vault — adjust it for your setup
 
 ---

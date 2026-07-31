@@ -850,11 +850,41 @@
 
 	.qbd-qz-list {
 		width: 100%;
-		max-height: 220px;
+		/* En hauteur d'écran plutôt qu'en pixels : la colonne porte aussi, en
+		   mode édition, le bloc « Mode du quiz » — à 220px fixes il débordait
+		   sous le panneau. Elle défile en entier plutôt que de comprimer ce
+		   qu'elle contient. */
+		max-height: 45vh;
+		overflow-y: auto;
+	}
+
+	/* La liste défile déjà en entier : un second ascenseur imbriqué sur les
+	   seules vignettes rendrait le bloc du bas inatteignable au doigt. */
+	.qbd-qz-list-items {
+		flex: none;
+		overflow: visible;
+	}
+
+	/* La page DÉFILE au lieu de tout faire tenir dans la hauteur d'écran :
+	   sur un téléphone, la question se retrouvait dans un couloir de 150px
+	   entre la liste et les chevrons. Ici c'est le contenu qui commande, et
+	   le pouce fait le reste. */
+	.qbd-qz {
+		height: auto;
+		min-height: 100%;
+	}
+
+	.qbd-qz-body {
+		flex: none;
+	}
+
+	.qbd-qz-main {
+		min-height: 60vh;
 	}
 
 	.qbd-qz-panel {
 		padding: 4px 2px;
+		overflow: visible;
 	}
 }
 

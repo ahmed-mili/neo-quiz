@@ -76,17 +76,26 @@ function hasBlockMarkdown(texte: string): boolean {
 }
 
 /**
- * Le texte porte-t-il une balise inline AVEC des attributs (`<strong data-x>`) ?
+ * Le texte porte-t-il une balise inline ATTRIBUÉE dont la fermante est présente
+ * — `Use <strong data-x="1">bold</strong>` ?
  *
  * Le rendu du texte ne restaure que les balises inline NUES
- * (engine/sanitizer.ts restoreAllowedInlineTags) : sur `Use <strong data-x="1">
- * bold</strong>`, l'ouvrante resterait échappée et la fermante deviendrait
- * réelle — un fragment coupé en deux à l'écran. `md2html` échappe les deux, ce
- * qui affiche le littéral tel qu'il est écrit ; c'est donc lui qu'il faut, pour
- * ce cas-là seulement.
+ * (engine/sanitizer.ts restoreAllowedInlineTags) : l'ouvrante resterait donc
+ * échappée et la fermante deviendrait réelle, soit un fragment coupé en deux à
+ * l'écran. `md2html` échappe les deux et affiche le littéral tel qu'il est
+ * écrit ; c'est donc lui qu'il faut, pour ce cas-là seulement.
+ *
+ * La FERMANTE est exigée : sans elle, « 3 <x et y> 4 » — de la prose — partait
+ * inutilement vers `md2html`, avec le risque de corruption que tout le reste
+ * de cette fonction cherche justement à éviter. Mesuré : zéro champ des deux
+ * vaults contient une balise attribuée, ce garde-fou ne protège donc que
+ * l'avenir — raison de plus pour qu'il ne se déclenche pas à tort.
  */
 function contientBaliseAttribuee(texte: string): boolean {
-	return /<[a-z][a-z0-9]*\s[^>]*>/i.test(texte);
+	for (const m of texte.matchAll(/<([a-z][a-z0-9]*)\s[^>]*>/gi)) {
+		if (new RegExp("</" + m[1] + "\\s*>", "i").test(texte)) return true;
+	}
+	return false;
 }
 
 function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string {

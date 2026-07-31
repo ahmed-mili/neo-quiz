@@ -212,10 +212,14 @@ export function isRichHtml(html: string | undefined): boolean {
 	   ne perd rien). */
 	const stripped = html.replace(/<\/?p>|<br\s*\/?>/gi, "");
 	if (/<[a-z][a-z0-9]*\b[^>]*>/i.test(stripped)) return true;
-	/* Une balise ÉCHAPPÉE (`&lt;strong&gt;`) compte aussi. Aplatie par
+	/* Une balise ÉCHAPPÉE et NUE (`&lt;strong&gt;`) compte aussi. Aplatie par
 	   `_htmlToText`, elle redevient un vrai `<strong>` — que le rendu du texte
 	   restaure ensuite en gras : un exemple de code affiché à l'apprenant se
 	   transformait en mise en forme (revue codex 2026-07-31). Traitée comme
-	   riche, elle reste dans `_explainHtml`, où elle est rendue littéralement. */
-	return /&lt;\/?[a-z][a-z0-9]*\b[^&]*&gt;/i.test(html);
+	   riche, elle reste dans `_explainHtml`, où elle est rendue littéralement.
+
+	   NUE, exactement comme la règle de restauration : « a &lt;b et c&gt; d »
+	   est de la prose, que le rendu ne transforme pas — la déclarer riche
+	   ferait basculer l'édition en mode HTML pour une simple phrase. */
+	return /&lt;\/?[a-z][a-z0-9]*&gt;/i.test(html);
 }

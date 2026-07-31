@@ -262,6 +262,15 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
 	const vide = tour({ ...base, prompt: "P", cloze: "", caseSensitive: true });
 	r.check("gabarit vide reste un cloze", [vide.cloze, vide.caseSensitive], ["", true]);
 
+	// PROSE qui ressemble a du HTML : elle ne doit PAS partir vers md2html,
+	// sinon on rouvre la corruption que tout le reste evite.
+	const prose = tour({ ...base, prompt: "Ici 3 <x et y> 4 et 3*4*5 aussi.", options: ["a", "b"], correctIndex: 0 });
+	r.check("prose a chevrons laissee en texte", prose.prompt, "Ici 3 <x et y> 4 et 3*4*5 aussi.");
+	// Une balise ATTRIBUEE avec sa fermante, elle, a besoin du chemin HTML :
+	// le rendu ne restaure que les balises nues et couperait le fragment.
+	const attr = tour({ ...base, prompt: 'Use <strong data-x="1">bold</strong> ici', options: ["a", "b"], correctIndex: 0 });
+	r.check("balise attribuee passee en HTML", typeof attr.promptHtml, "string");
+
 	// Une cle `__proto__` est une cle comme une autre.
 	const proto = tour({ ...base, prompt: "P", options: ["a", "b"], correctIndex: 0, ["__proto__"]: { garde: 1 } });
 	r.check("cle __proto__ conservee",

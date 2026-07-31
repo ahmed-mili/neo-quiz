@@ -7,6 +7,7 @@ import type { QuizStatRecord } from "./stats-store";
 import { quizTypeLabel } from "./quiz-card";
 import { openQuizForPlay } from "./quiz-open";
 import { TypePickerModal, ConfirmModal } from "../editor/modals";
+import { closeAllSelects } from "./ui-select";
 import { loadQuizDraft, saveQuizDraft, questionText, draftIsStale } from "./detail-io";
 import type { QuizDraft, QuizLoadError } from "./detail-io";
 import { renderQuestionView, renderQuestionEdit } from "./detail-question";
@@ -192,6 +193,9 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		// détruire : le terminer d'abord évite un timer orphelin qui écrirait
 		// dans un DOM mort.
 		if (slideHost) { finishSlide(slideHost); slideHost = null; }
+		// Un menu portalé au <body> survivrait à la destruction de son ancre :
+		// il resterait ouvert au-dessus d'une page qui n'existe plus.
+		closeAllSelects();
 		container.empty();
 		currentContainer = container;
 		currentSpec = spec;
@@ -586,6 +590,11 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			if (!page.isConnected) { detach(); return; }
 			if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
 			if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+			// Page HORS ÉCRAN (onglet en arrière-plan, autre vue du dashboard) :
+			// son DOM existe encore et son écoute est toujours posée sur le
+			// document. Sans ce garde, une flèche pressée ailleurs faisait aussi
+			// naviguer les pages invisibles — trois hôtes, trois écoutes.
+			if (!page.offsetParent && page.style.display !== "contents") return;
 			if (spec.isStale?.()) return;
 			// `instanceof Element` et non un cast : la cible d'un keydown remonté
 			// au document peut être le Document lui-même, qui n'a pas closest().

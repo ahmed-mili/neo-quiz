@@ -363,6 +363,13 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			return;
 		}
 
+		/* L'ENTRÉE d'abord retirée : les deux classes portent chacune un
+		   `animation … both`, et `--entering` est déclarée plus bas dans la
+		   feuille — présente toutes les deux, c'est elle qui gagne, et la
+		   sortie ne joue tout simplement pas. Comme `--entering` reste posée
+		   après son animation, le défaut frappait dès la DEUXIÈME bascule :
+		   Ahmed voyait un clignotement au lieu du fondu qu'il a demandé. */
+		body.classList.remove("qbd-qz-body--entering");
 		body.classList.add("qbd-qz-body--leaving");
 		// La sortie est plus courte que l'entrée : la page repeinte doit
 		// arriver, pas se faire attendre.
@@ -373,7 +380,15 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			// écraserait la destination avec l'ancien quiz.
 			if (!page.isConnected || currentSpec !== target) return;
 			repaint();
-			currentContainer?.querySelector(".qbd-qz-body")?.classList.add("qbd-qz-body--entering");
+			const neuf = currentContainer?.querySelector(".qbd-qz-body");
+			if (!neuf) return;
+			neuf.classList.add("qbd-qz-body--entering");
+			/* Et retirée dès la fin : une classe d'état qui survit à son
+			   animation finit toujours par croiser la suivante. `once` — le
+			   nœud est jeté au repeint suivant, l'écouteur avec lui. */
+			neuf.addEventListener("animationend", () => {
+				neuf.classList.remove("qbd-qz-body--entering");
+			}, { once: true });
 		}, 130);
 	}
 

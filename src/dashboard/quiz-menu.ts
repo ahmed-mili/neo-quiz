@@ -139,20 +139,34 @@ async function deleteQuiz(ctx: DashboardCtx, quiz: QuizIndexEntry): Promise<void
 		new Notice(t("dashboard.detail.fileNotFound"));
 		return;
 	}
-	const content = await ctx.app.vault.read(file);
-	await deleteQuizCore(ctx, quiz, file, content);
+	await deleteQuizCore(ctx, quiz, file);
 	new Notice(t("dashboard.quizzes.deleted"));
 }
 
-/** Cœur du delete, sans Notice (partagé quiz seul / module entier). */
-async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFile, content: string): Promise<void> {
-	const remaining = content.replace(QUIZ_BLOCK_RE, "");
-	if (remaining.trim().length === 0) {
+/**
+ * Cœur du delete, sans Notice (partagé quiz seul / module entier).
+ *
+ * `vault.process` et non `read` + `modify` : entre les deux, ce que
+ * l'utilisateur venait d'écrire ailleurs dans la note était écrasé — et si ce
+ * qu'il avait écrit était la seule chose qui restait, la note partait À LA
+ * CORBEILLE sur la foi d'une lecture périmée (revue codex 2026-07-31). La
+ * décision « il ne reste rien » se prend donc sur le contenu RÉEL au moment de
+ * l'écriture, et la mise à la corbeille n'a lieu qu'après.
+ */
+async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFile): Promise<void> {
+	let videApresRetrait = false;
+	await ctx.app.vault.process(file, (content) => {
+		// Le rappel peut être rejoué : repartir de zéro à chaque essai.
+		const remaining = content.replace(QUIZ_BLOCK_RE, "");
+		videApresRetrait = remaining.trim().length === 0;
+		// Rien d'autre dans la note : on ne la vide pas pour la jeter juste
+		// après — on la laisse telle quelle et c'est la corbeille qui l'emporte.
+		return videApresRetrait ? content : remaining;
+	});
+	if (videApresRetrait) {
 		// La note ne contenait que le quiz : corbeille (récupérable), jamais
 		// de suppression définitive.
 		await ctx.app.fileManager.trashFile(file);
-	} else {
-		await ctx.app.vault.modify(file, remaining);
 	}
 	ctx.statsStore?.deleteRecord(quiz.path);
 }
@@ -161,7 +175,7 @@ async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFi
 async function deleteModuleQuizzes(ctx: DashboardCtx, group: ModuleGroup): Promise<void> {
 	for (const q of group.quizzes) {
 		const file = ctx.app.vault.getAbstractFileByPath(q.path);
-		if (file instanceof TFile) await deleteQuizCore(ctx, q, file, await ctx.app.vault.read(file));
+		if (file instanceof TFile) await deleteQuizCore(ctx, q, file);
 	}
 	new Notice(t("dashboard.quizzes.deleted"));
 }

@@ -121,8 +121,18 @@ function isStrictQuizModeConfig(item: unknown): boolean {
 	   2026-07-31). */
 	const MARQUEURS = ["options", "optionHtml", "cloze", "ordering", "matching",
 		"promptHtml", "answer", "acceptedAnswers", "acceptableAnswers",
-		"correctText", "correctAnswers", "numeric", "text"];
+		"correctText", "correctAnswers", "numeric",
+		// `tolerance`, `tolerancePercent` et `unit` suffisent au moteur à
+		// déclarer une réponse numérique (engine/numeric.ts isNumericQuestion) :
+		// les omettre faisait passer une vraie question pour la configuration.
+		"tolerance", "tolerancePercent", "unit"];
 	if (MARQUEURS.some(cle => rempli(q[cle]))) return false;
+	/* `text` compte seulement s'il vaut EXACTEMENT `true` — c'est la règle du
+	   moteur (engine.ts isTextQuestion). Un `text: { variant: 'bash' }` est une
+	   forme imbriquée que le moteur ne lit QUE sur une question déjà déclarée
+	   texte ; le traiter comme un marqueur transformait une configuration
+	   légitime en question. */
+	if (q.text === true) return false;
 	/* `type` ne compte que s'il nomme un type de QUESTION. Une configuration a
 	   le droit de porter une clé `type` personnalisée (« teacher-profile ») —
 	   la traiter comme un marqueur en faisait une question fantôme. */

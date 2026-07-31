@@ -55,7 +55,9 @@ export function readModeConfig(q: ParsedQuizItem): EditorExamOptions {
 function extraModeFields(q: ParsedQuizItem): Record<string, unknown> | undefined {
 	const connues = new Set(["mode", "examMode", "learnMode",
 		"examDurationMinutes", "examAutoSubmit", "examShowTimer"]);
-	const extra: Record<string, unknown> = {};
+	// `Object.create(null)`, comme `_extraFields` : un objet ordinaire absorbe
+	// une clé nommée `__proto__` au lieu de la stocker.
+	const extra: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
 	for (const cle of Object.keys(q)) {
 		if (!connues.has(cle)) extra[cle] = (q as Record<string, unknown>)[cle];
 	}
@@ -68,6 +70,16 @@ function extraModeFields(q: ParsedQuizItem): Record<string, unknown> | undefined
 function variantSource(q: ParsedQuizItem): { cle: string | null; valeur: unknown } {
 	if (q.terminalVariant != null) return { cle: "terminalVariant", valeur: q.terminalVariant };
 	if (q.textVariant != null) return { cle: "textVariant", valeur: q.textVariant };
+	/* Formes IMBRIQUÉES, que le moteur consulte aussi. Sans elles, un
+	   `text: { variant: 'bash' }` n'était pas vu comme un terminal et la
+	   question perdait son invite à la sauvegarde. La clé est `null` : ces
+	   formes ne sont pas réémises telles quelles (l'export n'écrit que les deux
+	   clés plates), mais le TYPE est correct, donc l'invite est conservée. */
+	const sousObjet = (v: unknown): unknown =>
+		v && typeof v === "object" && !Array.isArray(v)
+			? (v as { variant?: unknown }).variant : undefined;
+	const imbriquee = sousObjet(q.text) ?? sousObjet(q.terminal);
+	if (imbriquee != null) return { cle: null, valeur: imbriquee };
 	return { cle: null, valeur: null };
 }
 
@@ -161,16 +173,36 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		}
 	}
 
+	/* Les formes IMBRIQUÉES sont lues en repli, comme le moteur le fait
+	   (engine/questions.ts) : un bloc écrit à la main dit volontiers
+	   `ordering: { items, correctOrder, slotLabels }`, et l'ignorer remplaçait
+	   ses données par les valeurs par défaut à la première sauvegarde — deux
+	   éléments vides et un ordre inventé (revue codex 2026-07-31). */
+	const sousChamp = (conteneur: unknown, cle: string): unknown =>
+		conteneur && typeof conteneur === "object" && !Array.isArray(conteneur)
+			? (conteneur as Record<string, unknown>)[cle] : undefined;
+	/** Première liste de chaînes non vide parmi les candidats. */
+	const listeTexte = (...cands: unknown[]): string[] | null => {
+		for (const c of cands) if (Array.isArray(c) && c.length) return c.map(v => String(v ?? ""));
+		return null;
+	};
+	/** Première liste de nombres non vide parmi les candidats. */
+	const listeNombre = (...cands: unknown[]): number[] | null => {
+		for (const c of cands) if (Array.isArray(c) && c.length) return c.map(v => Number(v));
+		return null;
+	};
+
 	if (type === "ordering") {
-		question.slots = q.slots || defaultSlots();
-		question.possibilities = q.possibilities || ["", ""];
-		question.correctOrder = q.correctOrder || [0, 1];
+		question.slots = listeTexte(q.slots, q.slotLabels, sousChamp(q.ordering, "slotLabels")) || defaultSlots();
+		question.possibilities = listeTexte(q.possibilities, q.orderingItems,
+			sousChamp(q.ordering, "items"), q.options) || ["", ""];
+		question.correctOrder = listeNombre(q.correctOrder, sousChamp(q.ordering, "correctOrder")) || [0, 1];
 	}
 
 	if (type === "matching") {
-		question.rows = q.rows || ["", ""];
-		question.choices = q.choices || ["", ""];
-		question.correctMap = q.correctMap || [0, 0];
+		question.rows = listeTexte(q.rows, sousChamp(q.matching, "rows")) || ["", ""];
+		question.choices = listeTexte(q.choices, sousChamp(q.matching, "choices")) || ["", ""];
+		question.correctMap = listeNombre(q.correctMap, sousChamp(q.matching, "correctMap")) || [0, 0];
 	}
 
 	if (type === "cloze") {
@@ -179,7 +211,16 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	}
 
 	if (["numeric", "text", "cmd", "powershell", "bash"].includes(type)) {
-		let accepted = (q.acceptedAnswers || q.acceptableAnswers || [""]).slice();
+		/* UNION, pas alternative : le moteur agrège les cinq champs
+		   (engine/terminal.ts getTextAcceptedAnswers). Les traiter comme
+		   exclusifs faisait cesser d'accepter « yes » sur une question qui
+		   portait `acceptedAnswers: ['oui']` ET `acceptableAnswers: ['yes']`. */
+		let accepted = [
+			...(Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : []),
+			...(Array.isArray(q.acceptableAnswers) ? q.acceptableAnswers : []),
+			...(Array.isArray(q.correctAnswers) ? q.correctAnswers : []),
+		];
+		if (accepted.length === 0) accepted = [""];
 		// `answer`/`correctText` : formats émis par la génération IA et
 		// UNIONNÉS aux acceptedAnswers par le moteur (terminal.js:166-170)
 		// — les fusionner pareil ici, sinon le round-trip éditeur→export

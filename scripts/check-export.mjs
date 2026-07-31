@@ -170,6 +170,13 @@ await withSrcModule(["src/quiz-utils.ts", "src/editor/convert.ts"], (qu, convert
 	// ... et une question HISTORIQUE complete ne doit pas etre avalee.
 	r.check("question historique avec mode",
 		idx([q, { mode: "learn", promptHtml: "<p>2 + 2 ?</p>", text: true, answer: "4" }]), -1);
+	// Les marqueurs suivent EXACTEMENT les predicats du moteur.
+	r.check("marge numerique = question, pas configuration",
+		idx([q, { mode: "learn", tolerance: 0.25, unit: "kg" }]), -1);
+	r.check("`text` imbrique n'est pas un marqueur",
+		idx([q, { mode: "learn", text: { variant: "bash" }, owner: "alice" }]), 1);
+	r.check("`text: true` est un marqueur",
+		idx([q, { mode: "learn", text: true, answer: "4" }]), -1);
 	r.check("bloc sans configuration", idx([q, q]), -1);
 	r.check("bloc vide", idx([]), -1);
 
@@ -261,6 +268,23 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
 	// Un gabarit de trous VIDE reste une question a trous.
 	const vide = tour({ ...base, prompt: "P", cloze: "", caseSensitive: true });
 	r.check("gabarit vide reste un cloze", [vide.cloze, vide.caseSensitive], ["", true]);
+
+	// Formes IMBRIQUEES, que le moteur lit en repli.
+	const ord = tour({ ...base, prompt: "P",
+		ordering: { items: ["A", "B"], correctOrder: [1, 0], slotLabels: ["Premier", "Second"] } });
+	r.check("classement imbrique conserve",
+		[ord.possibilities, ord.correctOrder, ord.slots],
+		[["A", "B"], [1, 0], ["Premier", "Second"]]);
+	const mat = tour({ ...base, prompt: "P",
+		matching: { rows: ["22", "80"], choices: ["SSH", "HTTP"], correctMap: [1, 0] } });
+	r.check("association imbriquee conservee",
+		[mat.rows, mat.choices, mat.correctMap], [["22", "80"], ["SSH", "HTTP"], [1, 0]]);
+	// Les cinq champs de reponse sont UNIONNES par le moteur.
+	const deuxRep = tour({ ...base, type: "text", acceptedAnswers: ["oui"], acceptableAnswers: ["yes"] });
+	r.check("reponses unionnees", deuxRep.acceptedAnswers, ["oui", "yes"]);
+	// Variante imbriquee : le TYPE doit etre terminal, donc l'invite survit.
+	const imb = tour({ ...base, type: "text", text: { variant: "bash" }, commandPrefix: "srv$ ", answer: "ls" });
+	r.check("invite d'une variante imbriquee conservee", imb.commandPrefix, "srv$ ");
 
 	// PROSE qui ressemble a du HTML : elle ne doit PAS partir vers md2html,
 	// sinon on rouvre la corruption que tout le reste evite.

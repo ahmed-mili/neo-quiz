@@ -183,15 +183,17 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 	}
 
 	if (type === "numeric") {
-		// Champ nu + unité, comme le moteur : la marge de tolérance et les
-		// réponses acceptées SONT la solution — elles n'ont rien à faire ici.
+		/* Un champ nu, comme le moteur — et RIEN d'autre. L'unité n'est pas un
+		   décor : c'est un suffixe ACCEPTÉ à la correction (engine/numeric.ts),
+		   au même titre que la marge de tolérance et les réponses. L'afficher
+		   ici montrerait à l'auteur un élément que l'apprenant ne voit pas, et
+		   soufflerait la forme attendue de la réponse. */
 		const wrap = card.createDiv({ cls: "qcm-options quiz-text-wrap" });
 		const ta = wrap.createEl("textarea", {
 			cls: "quiz-textarea",
 			attr: { readonly: true, "aria-readonly": "true", rows: "1", placeholder: q.placeholder || "" },
 		});
 		ta.value = "";
-		if (q.unit && q.unit.trim()) wrap.createSpan({ cls: "quiz-numeric-unit", text: q.unit });
 	}
 
 	if (type === "text") {

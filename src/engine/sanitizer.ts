@@ -54,10 +54,13 @@ const MD_MARK = String.fromCharCode(0);
  * `\S`) : « 3 * 4 * 5 », espacé, n'est pas non plus de l'emphase.
  */
 function FLANK(delim: string): RegExp {
+	// `\p{L}\p{N}` et non `0-9A-Za-zÀ-ÿ` : une multiplication écrite avec des
+	// variables grecques, arabes ou chinoises (`α*β*γ`, `甲*乙*丙`) est une
+	// multiplication elle aussi — la classe ASCII la rendait en italique.
 	return new RegExp(
-		"(^|[^0-9A-Za-zÀ-ÿ\\\\" + delim.replace(/\\/g, "") + "])"
+		"(^|[^\\p{L}\\p{N}\\\\" + delim.replace(/\\/g, "") + "])"
 		+ delim + "(?=\\S)((?:(?!" + delim + ")[\\s\\S])*?\\S)" + delim,
-		"g",
+		"gu",
 	);
 }
 
@@ -111,6 +114,11 @@ function inlineMarkdown(escaped: string): string {
 		.replace(/`([^`\n]+)`/g, (_m, code: string) => keep(`<code>${code}</code>`));
 
 	out = out
+		// Une suite de QUATRE étoiles ou plus n'est pas de l'emphase : aucune
+		// combinaison de gras et d'italique ne s'écrit ainsi, et la laisser
+		// passer faisait produire des balises croisées. Mise à l'abri telle
+		// quelle, comme le ferait un lecteur markdown.
+		.replace(/\*{4,}/g, m => keep(m))
 		// Triple AVANT double avant simple : `***x***` traité en une passe,
 		// sinon les balises se croisent (<strong><em>…</strong></em>).
 		.replace(FLANK("\\*\\*\\*"), "$1<strong><em>$2</em></strong>")

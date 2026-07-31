@@ -21,7 +21,7 @@ export const FR_PLUGIN: Record<keyof typeof EN_PLUGIN, string> = {
 	/* ── Commandes (palette + tableau récapitulatif des réglages) ── */
 	"plugin.commands.heading": "Commandes et raccourcis clavier (par défaut)",
 	"plugin.command.openDashboard.name": "Ouvrir le Dashboard",
-	"plugin.command.openEditor.name": "Ouvrir le Quiz Editor",
+	"plugin.command.openEditor.name": "Ouvrir le quiz de la note courante (ou mes quiz)",
 	"plugin.command.openEditor.desc": "Ouvre un nouvel onglet avec le Quiz Editor vide",
 	"plugin.command.openFromNote.name": "Ouvrir le quiz de la note active",
 	"plugin.command.openFromNote.desc": "Ouvre l'éditeur et charge le quiz de la note active",

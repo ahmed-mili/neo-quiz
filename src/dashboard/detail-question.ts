@@ -94,12 +94,18 @@ function renderTitleField(parent: HTMLElement, q: DraftQuestion, cb: EditCallbac
 	});
 }
 
-/** Un énoncé importé peut porter du HTML de STRUCTURE (tableau, liste, bloc
-    de code, image) que le texte brut ne sait pas exprimer. Le repérer décide
-    lequel des deux champs éditer — sans quoi corriger une faute de frappe
-    aplatissait le tableau. */
-function hasBlockHtml(html: string | undefined): boolean {
-	return !!html && /<(table|thead|tbody|tr|td|th|pre|ul|ol|li|img|div|h[1-6]|blockquote)\b/i.test(html);
+/** Un champ importé peut porter du HTML que le texte brut ne sait pas
+    exprimer — un tableau, mais aussi un simple `<strong>`. Le repérer décide
+    lequel des deux champs éditer : sans quoi corriger une faute de frappe
+    aplatissait la mise en forme.
+
+    Les enveloppes NEUTRES ne comptent pas : `<p>…</p>` et `<br>` sont ce que
+    md2html produit pour du texte ordinaire, et basculer en édition HTML pour
+    ça imposerait des balises à qui écrit une phrase. */
+function isRichHtml(html: string | undefined): boolean {
+	if (!html) return false;
+	const stripped = html.replace(/<\/?p>|<br\s*\/?>/gi, "");
+	return /<[a-z][a-z0-9]*\b[^>]*>/i.test(stripped);
 }
 
 function renderPromptField(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, bridge: FormBridge): void {
@@ -108,7 +114,7 @@ function renderPromptField(parent: HTMLElement, q: DraftQuestion, cb: EditCallba
 	// du formulaire de l'éditeur : elle apporte la barre d'entités HTML, le
 	// raccourci ``` + Entrée et le collage d'image vers le vault — trois
 	// capacités que la version maison n'avait pas.
-	const rich = hasBlockHtml(q._promptHtml);
+	const rich = isRichHtml(q._promptHtml);
 	const field = parent.createDiv({ cls: "qbd-qz-field qbd-qz-field--rich" });
 	field.createDiv({
 		cls: "qbd-qz-field-label",
@@ -178,14 +184,27 @@ function renderExtras(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, 
 	});
 
 	// ── Explication (après correction) ──
+	// Même règle que l'énoncé : une explication qui porte du HTML s'édite en
+	// HTML, sinon la première correction l'aplatirait.
+	const richExplain = isRichHtml(q._explainHtml);
 	const explain = section(parent, "book-open", t("editor.form.explainSection"), !!(q.explain || q._explainHtml));
-	bridge.field(explain, "", (q.explain || "").replace(/<br\s*\/?>/gi, "\n"), t("editor.form.explainPlaceholder"), true, v => {
-		q.explain = v;
-		// Le HTML pré-rendu d'un import cède la main au texte fraîchement
-		// saisi — sinon l'export réémettrait l'ancien (cf. export.ts).
-		delete q._explainHtml;
+	const explainValue = (richExplain ? (q._explainHtml || "") : (q.explain || ""))
+		.replace(/<br\s*\/?>/gi, "\n");
+	bridge.field(explain, "", explainValue, t("editor.form.explainPlaceholder"), true, v => {
+		if (richExplain) {
+			// L'export préfère `explain` (texte) à `_explainHtml` : le vider est
+			// ce qui donne la main au HTML qu'on édite ici.
+			q._explainHtml = v;
+			q.explain = "";
+		} else {
+			q.explain = v;
+			// Le HTML pré-rendu d'un import cède la main au texte fraîchement
+			// saisi — sinon l'export réémettrait l'ancien (cf. export.ts).
+			delete q._explainHtml;
+		}
 		cb.onChange();
 	});
+	if (richExplain) explain.createDiv({ cls: "qbd-qz-section-help", text: t("dashboard.quiz.editPromptHtmlHint") });
 }
 
 /** Le bouton « ressource » n'existe que s'il est activé : son interrupteur

@@ -1262,19 +1262,34 @@ export default class InteractiveQuizPlugin extends Plugin {
 			callback: () => { void this.openDashboard(); },
 		});
 
+		/* L'ancien « Ouvrir le Quiz Editor » ouvrait un onglet VIDE — l'éditeur
+		   autonome qui n'existe plus depuis le 2026-07-31. La commande garde
+		   son `id` (les raccourcis de l'utilisateur y sont attachés) mais mène
+		   désormais là où il y a quelque chose à faire : le quiz de la note
+		   courante s'il y en a un, la liste des quiz sinon. */
 		this.addCommand({
 			id: "open-quiz-builder",
 			name: t("plugin.command.openEditor.name"),
 			hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: "e" }],
 			callback: async () => {
-				const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE);
+				const activeFile = this.app.workspace.getActiveFile();
+				if (activeFile && activeFile.path.endsWith(".md")) {
+					const content = await this.app.vault.read(activeFile);
+					if (QUIZ_BLOCK_RE.test(content)) {
+						const { openQuizPathInEditor } = require("./dashboard/quiz-open") as typeof import("./dashboard/quiz-open");
+						await openQuizPathInEditor(this.app, activeFile.path);
+						return;
+					}
+				}
+				// Un onglet déjà ouvert sur un quiz vaut mieux que le dashboard :
+				// c'est probablement celui qu'on cherchait.
+				const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE)
+					.filter(l => (l.view as { sourceFile?: unknown }).sourceFile);
 				if (existing.length > 0) {
 					this.app.workspace.revealLeaf(existing[0]);
 					return;
 				}
-				const leaf = this.app.workspace.getLeaf("tab");
-				await leaf.setViewState({ type: VIEW_TYPE, active: true });
-				this.app.workspace.revealLeaf(leaf);
+				await this.openDashboard();
 			},
 		});
 

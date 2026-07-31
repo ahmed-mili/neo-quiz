@@ -2152,6 +2152,12 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	}
 
 	function dispose(): void {
+		// Une génération en vol survivrait à la vue : son CLI continuerait de
+		// tourner, son écoute Escape resterait posée sur le document, et sa
+		// complétion irait repeindre un conteneur détaché.
+		activeClient?.abort();
+		activeClient = null;
+		closeAllSelects();
 		if (composerResizeObserver) { composerResizeObserver.disconnect(); composerResizeObserver = null; }
 		if (__focusRecheck) { window.removeEventListener("focus", __focusRecheck); __focusRecheck = null; }
 		resultPage?.dispose();

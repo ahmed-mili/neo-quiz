@@ -80,6 +80,11 @@ export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft |
 export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean> {
 	if (!draft.file) return false;
 	const file = draft.file;
+	/* Dernière vérification AVANT d'écrire, pas seulement au rendu : la même
+	   note peut être ouverte dans deux pages (dashboard + onglet), chacune avec
+	   son brouillon. Sans ce garde, la seconde à écrire réécrit le bloc ENTIER
+	   depuis son état d'avant et annule la correction de la première. */
+	if (draftIsStale(draft)) return false;
 	try {
 		const content = await app.vault.read(file);
 		const source = exportAll(draft.questions, draft.examOptions);

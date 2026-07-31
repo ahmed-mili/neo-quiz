@@ -53,10 +53,14 @@ export function createFormBridge(opts: FormBridgeOptions): FormBridge {
 		app: opts.app,
 		plugin: opts.plugin,
 		editorInnerEl: document.createElement("div"),
-		// Pas de panneau « Code » ni d'aperçu séparé dans la page : la question
-		// s'y relit en consultation, à un clic.
+		/* Les quatre crochets mènent tous à la persistance, sauf `renderCode`
+		   qui n'a plus de panneau à rafraîchir. `schedulePreview` en fait
+		   partie : c'est le SEUL signal émis quand une image est collée dans
+		   un champ (le fichier est écrit dans le vault et un wikilien inséré).
+		   Le laisser inerte perdait le lien à la fermeture et laissait la
+		   pièce jointe orpheline. */
 		renderCode: () => { /* pas de panneau Code */ },
-		schedulePreview: () => { /* l'aperçu est le mode consultation */ },
+		schedulePreview: () => opts.onChange(),
 		scheduleSave: () => opts.onChange(),
 		render: () => opts.onStructureChange(),
 	};

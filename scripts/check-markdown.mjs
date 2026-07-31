@@ -60,6 +60,13 @@ const CAS = [
 		"<strong>séparer les services d&#39;un même domaine</strong> (le A)"],
 	["flèche unicode", "*nom → adresse IPv4*", "<em>nom → adresse IPv4</em>"],
 	["chaîne vide", "", ""],
+
+	// Constats de la revue codex du 2026-07-31.
+	["multiplication en lettres grecques", "on calcule α*β*γ ici", "on calcule α*β*γ ici"],
+	["multiplication en ideogrammes", "produit 甲*乙*丙 final", "produit 甲*乙*丙 final"],
+	["multiplication en arabe", "resultat س*ص*ع voila", "resultat س*ص*ع voila"],
+	["quatre etoiles ne sont pas de l emphase", "voir ****ceci**** ici", "voir ****ceci**** ici"],
+	["emphase imbriquee", "**fort *italique* ici**", "<strong>fort <em>italique</em> ici</strong>"],
 ];
 
 const dir = mkdtempSync(join(tmpdir(), "quiz-md-"));

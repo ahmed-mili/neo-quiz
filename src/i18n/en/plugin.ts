@@ -22,7 +22,7 @@ export const EN_PLUGIN = {
 	/* ── Commandes (palette + tableau récapitulatif des réglages) ── */
 	"plugin.commands.heading": "Commands and default hotkeys",
 	"plugin.command.openDashboard.name": "Open the dashboard",
-	"plugin.command.openEditor.name": "Open the quiz editor",
+	"plugin.command.openEditor.name": "Open the quiz of the current note (or my quizzes)",
 	"plugin.command.openEditor.desc": "Opens a new tab with an empty quiz editor",
 	"plugin.command.openFromNote.name": "Open the quiz from the active note",
 	"plugin.command.openFromNote.desc": "Opens the editor and loads the quiz from the active note",

@@ -2,13 +2,8 @@ import { escHtml, esc5, md2html } from "./utils";
 import type { DraftQuestion } from "./utils";
 import type { EditorExamOptions } from "../types/editor-ctx";
 
-function exportQuestion(q: DraftQuestion, idx: number): string {
-	/* L'identifiant ÉCRIT dans la note prime : il sert d'ancre HTML à la
-	   question et figure dans les résultats déjà sauvegardés. Le dériver du
-	   titre à chaque écriture le faisait changer à la moindre retouche. Il
-	   n'est dérivé que pour une question qui n'en avait pas. */
-	const id = q._sourceId
-		|| (q.title ? q.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20) : `q${idx + 1}`);
+function exportQuestion(q: DraftQuestion, idx: number, usedIds?: Set<string>): string {
+	const id = questionId(q, idx, usedIds);
 	const e = esc5;
 	const L: string[] = [];
 	L.push("\t{");
@@ -103,13 +98,22 @@ function exportQuestion(q: DraftQuestion, idx: number): string {
 			if (exportedKeys.has(key)) continue; // Skip already exported keys
 			if (typeof val === 'string') {
 				L.push(`\t\t${key}: '${e(val)}',`);
-			} else if (typeof val === 'number') {
+			} else if (typeof val === 'number' || typeof val === 'boolean') {
 				L.push(`\t\t${key}: ${val},`);
-			} else if (typeof val === 'boolean') {
-				L.push(`\t\t${key}: ${val},`);
-			} else if (Array.isArray(val)) {
-				const items = (val as unknown[]).map(v => typeof v === 'string' ? `'${e(v)}'` : v).join(", ");
-				L.push(`\t\t${key}: [${items}],`);
+			} else {
+				/* Tout le reste — `null`, un objet, un tableau d'objets — passe
+				   par JSON. Les branches d'origine ne savaient écrire que des
+				   scalaires et des tableaux de scalaires : un objet imbriqué
+				   sortait en `[object Object]` (JSON5 invalide, donc écriture
+				   refusée en silence) et un `null` disparaissait purement. Ces
+				   clés viennent d'un bloc écrit à la main : on les rend telles
+				   qu'on les a lues, quelle que soit leur forme. */
+				try {
+					L.push(`\t\t${key}: ${JSON.stringify(val)},`);
+				} catch {
+					// Structure circulaire : la clé est perdue de toute façon,
+					// mais elle ne doit pas emporter le bloc entier avec elle.
+				}
 			}
 		}
 	}
@@ -118,8 +122,36 @@ function exportQuestion(q: DraftQuestion, idx: number): string {
 	return L.join("\n");
 }
 
+/**
+ * Identifiant d'une question dans la note.
+ *
+ * Celui qui y était ÉCRIT prime : il sert d'ancre HTML à la question
+ * (engine/cards.ts) et figure dans les résultats déjà sauvegardés. Le dériver
+ * du titre à chaque écriture le faisait changer à la moindre retouche.
+ *
+ * Pour une question qui n'en avait pas, le titre donne un slug — mais un slug
+ * ASCII : un titre en grec, en arabe ou fait de ponctuation le vide
+ * entièrement, d'où le repli sur `qN`. Et deux questions de MÊME titre
+ * produisaient le même identifiant, donc deux ancres `id` identiques dans la
+ * page ; `usedIds` les départage.
+ */
+function questionId(q: DraftQuestion, idx: number, usedIds?: Set<string>): string {
+	if (q._sourceId) return q._sourceId;
+	const slug = (q.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20);
+	let id = slug || `q${idx + 1}`;
+	if (usedIds) {
+		let n = 2;
+		while (usedIds.has(id)) id = `${slug || "q"}-${n++}`;
+		usedIds.add(id);
+	}
+	return id;
+}
+
 function exportAll(questions: DraftQuestion[], examOptions: EditorExamOptions | null = null): string {
-	const parts = questions.map((q, i) => exportQuestion(q, i));
+	// Les identifiants déjà posés dans CETTE écriture : deux questions de même
+	// titre ne peuvent pas se retrouver avec la même ancre.
+	const usedIds = new Set<string>();
+	const parts = questions.map((q, i) => exportQuestion(q, i, usedIds));
 
 	/* L'objet de mode est réémis SOUS SA FORME D'ORIGINE. Un quiz importé en
 	   mode learn ressortait en mode examen (ou perdait son mode), parce que

@@ -595,6 +595,13 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			// document. Sans ce garde, une flèche pressée ailleurs faisait aussi
 			// naviguer les pages invisibles — trois hôtes, trois écoutes.
 			if (!page.offsetParent && page.style.display !== "contents") return;
+			/* Deux pages VISIBLES à la fois (vue partagée) avancent ensemble.
+			   Le garde évident — n'accepter que le leaf `mod-active` — a été
+			   essayé puis retiré : Obsidian ne pose cette classe qu'au leaf
+			   FOCALISÉ, et regarder une page sans y avoir cliqué (on vient de
+			   l'explorateur de fichiers) suffisait à ce que les flèches ne
+			   répondent plus du tout. Casser le cas courant pour réparer le cas
+			   rare n'en vaut pas la peine. */
 			if (spec.isStale?.()) return;
 			// `instanceof Element` et non un cast : la cible d'un keydown remonté
 			// au document peut être le Document lui-même, qui n'a pas closest().
@@ -622,6 +629,10 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 
 	function paintPanel(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		if (!draft) return;
+		// Un glissement en vol tient un timer et un listener `transitionend` sur
+		// une piste que `panel.empty()` va détacher : le conclure d'abord, sinon
+		// ils survivent jusqu'à leur échéance en visant un DOM mort.
+		if (slideHost) finishSlide(slideHost);
 		panel.empty();
 		slideHost = null;
 		const q = draft.questions[activeIdx];
@@ -680,7 +691,11 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		saveTimer = null;
 		const { draft: pending, save } = pendingSave;
 		pendingSave = null;
-		void save(pending);
+		// Même alerte que le chemin débouncé : une écriture ratée au moment où
+		// l'on QUITTE la page est précisément celle qu'il faut signaler.
+		void save(pending).then(ok => {
+			if (!ok) new Notice(t("dashboard.quiz.saveError"));
+		});
 	}
 
 	/** Les titres AUTOMATIQUES suivent l'ordre de la liste ; ceux que l'auteur
@@ -721,6 +736,9 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 
 	function dispose(): void {
 		flushSave();
+		// Un menu portalé au <body> n'est pas dans le conteneur de la page : sans
+		// ça il resterait affiché par-dessus Obsidian, écoutes comprises.
+		closeAllSelects();
 		if (keyCleanup) keyCleanup();
 		if (slideHost) { finishSlide(slideHost); slideHost = null; }
 		draft = null;

@@ -66,12 +66,41 @@ function inlineInto(el: HTMLElement, app: App, raw: string): void {
 	el.innerHTML = resolveImagesInHtml(app, md2html(raw).replace(/^<p>|<\/p>$/g, ""));
 }
 
+/** Le SUPPORT de compréhension, au-dessus de la question — mêmes classes que
+    le moteur (engine/passage.ts). Sans lui, une question de compréhension
+    s'affichait dans l'aperçu sans le texte sur lequel elle porte : l'auteur ne
+    pouvait pas la relire. Toujours déplié ici (l'aperçu n'a pas d'état) et
+    sans le compte « questions 2 à 4 », qui demanderait de connaître tout le
+    quiz alors que la carte ne voit qu'une question. */
+function renderPassage(card: HTMLElement, q: DraftQuestion, app: App): void {
+	const extras = q._extraFields || {};
+	const text = typeof extras.passage === "string" ? extras.passage : "";
+	const html = typeof extras.passageHtml === "string" ? extras.passageHtml : "";
+	if (!text && !html) return;
+
+	const title = typeof extras.passageTitle === "string" && extras.passageTitle.trim()
+		? extras.passageTitle
+		: t("editor.passage.section");
+
+	const wrap = card.createDiv({ cls: "quiz-passage" });
+	const head = wrap.createDiv({ cls: "quiz-passage-head" });
+	const icon = head.createSpan({ cls: "quiz-passage-icon" });
+	icon.setAttribute("aria-hidden", "true");
+	_setIcon(icon, "book-open-text");
+	head.createSpan({ cls: "quiz-passage-title", text: title });
+	const body = wrap.createDiv({ cls: "quiz-passage-body" });
+	const content = body.createDiv({ cls: "quiz-passage-content" });
+	content.innerHTML = resolveImagesInHtml(app, html || md2html(text));
+}
+
 /** Construit la carte de question dans `host` et la renvoie. */
 export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts: QuizPreviewOptions): HTMLElement {
 	const { app, fallbackTitle } = opts;
 	const type = q._type;
 	const wrap = host.createDiv({ cls: "quiz-blocks-host" });
 	const card = wrap.createEl("section", { cls: "quiz-card" });
+
+	renderPassage(card, q, app);
 
 	card.createEl("h2", { text: q.title || fallbackTitle });
 

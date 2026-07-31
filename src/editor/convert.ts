@@ -3,7 +3,6 @@ import type { DraftQuestion, QuestionTypeKey } from "./utils";
 import { _htmlToText } from "./modals";
 import type { ParsedQuizItem } from "./modals";
 import type { EditorExamOptions } from "../types/editor-ctx";
-import { isQuizModeConfig } from "../quiz-utils";
 
 /* ══════════════════════════════════════════════════════════
    CONVERT — item JSON5 brut → DraftQuestion (forme d'édition)
@@ -15,17 +14,13 @@ import { isQuizModeConfig } from "../quiz-utils";
    Corps repris à l'identique.
 ══════════════════════════════════════════════════════════ */
 
-/* Objet de CONFIGURATION du bloc, pas une question — LE critère vit dans
-   quiz-utils.ts, avec le reste de la lecture d'un bloc. Réexporté sous ce nom
-   parce que la page « quiz », le scanner et la génération IA l'appellent ainsi :
-   la page ne reconnaissait que `examMode` et importait un `{ mode: 'learn' }`
-   comme une sixième question vide — qu'une simple correction de faute de frappe
-   réécrivait ensuite dans la note. */
-export function isModeConfig(q: ParsedQuizItem): boolean {
-	return isQuizModeConfig(q);
-}
+/* L'objet de CONFIGURATION du bloc se repère par son INDEX, jamais par un test
+   sur l'élément seul : le critère dépend de sa POSITION dans le tableau
+   (quiz-utils.ts `findQuizModeConfigIndex`). Le prédicat par élément a vécu ici
+   sous le nom `isModeConfig` ; il a été retiré pour qu'un appelant ne puisse
+   plus le prendre pour la règle complète. */
 
-/** Options du bloc lues depuis un objet de mode (cf. isModeConfig). */
+/** Options du bloc lues depuis l'objet de mode. */
 export function readModeConfig(q: ParsedQuizItem): EditorExamOptions {
 	const mode: "quiz" | "learn" | "exam" =
 		typeof q.mode === "string" && (q.mode === "learn" || q.mode === "exam" || q.mode === "quiz")

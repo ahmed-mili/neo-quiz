@@ -6,6 +6,7 @@ import * as aiProviders from "./ai-providers";
 import { createSelect, closeAllSelects, openActionMenu, openModelMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
 import type { SelectHandle, SelectOption } from "./ui-select";
 import { formatHotkey } from "../hotkey-format";
+import { findQuizModeConfigIndex } from "../quiz-utils";
 import * as voiceInput from "./voice-input";
 import { attachMentionPicker } from "./mention-picker";
 import type { MentionPickerHandle } from "./mention-picker";
@@ -1841,14 +1842,17 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	    généré et un quiz relu d'un .md doivent être le même objet. */
 	function loadGeneratedDraft(): QuizDraft {
 		if (generatedDraft && generatedDraft.genId === generationId) return generatedDraft.draft;
-		const { convertParsedToInternal, isModeConfig, readModeConfig } =
+		const { convertParsedToInternal, readModeConfig } =
 			require("../editor/convert") as typeof import("../editor/convert");
 		const questions: DraftQuestion[] = [];
 		let examOptions: EditorExamOptions | null = null;
-		for (const raw of generatedQuestions as ParsedQuizItem[]) {
-			if (isModeConfig(raw)) { examOptions = readModeConfig(raw); continue; }
+		// Par son INDEX : le critère dépend de la POSITION dans le bloc
+		// (quiz-utils.ts), un test élément par élément ne peut pas le savoir.
+		const configIdx = findQuizModeConfigIndex(generatedQuestions as ParsedQuizItem[]);
+		(generatedQuestions as ParsedQuizItem[]).forEach((raw, i) => {
+			if (i === configIdx) { examOptions = readModeConfig(raw); return; }
 			questions.push(convertParsedToInternal(raw));
-		}
+		});
 		// `file: null` : ce quiz n'a pas de note. C'est ce qui distingue un
 		// brouillon généré d'un brouillon lu — et pourquoi la page n'a pas
 		// de `save`.

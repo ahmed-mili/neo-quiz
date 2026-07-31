@@ -1,7 +1,8 @@
 import { TFile } from "obsidian";
 import type { App } from "obsidian";
 import { parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-utils";
-import { convertParsedToInternal, isModeConfig, readModeConfig } from "../editor/convert";
+import { convertParsedToInternal, readModeConfig } from "../editor/convert";
+import { findQuizModeConfigIndex } from "../quiz-utils";
 import { stripInlineMarkdown } from "../engine/sanitizer";
 import { exportAll } from "../editor/export";
 import type { DraftQuestion } from "../editor/utils";
@@ -66,17 +67,20 @@ export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft |
 		const parsed = parseQuizSource(match[1]) as unknown as ParsedQuizItem[];
 		const questions: DraftQuestion[] = [];
 		let examOptions: EditorExamOptions | null = null;
-		for (const item of parsed) {
-			// Objet de mode (examen OU learn) : c'est la configuration du bloc,
-			// jamais une question. Le reconnaître au seul `examMode` faisait
-			// entrer un `{ mode: 'learn' }` dans la liste comme une question
-			// vide — et la première réécriture la matérialisait dans la note.
-			if (isModeConfig(item)) {
+		/* Objet de mode (examen OU learn) : c'est la configuration du bloc,
+		   jamais une question. Le reconnaître au seul `examMode` faisait entrer
+		   un `{ mode: 'learn' }` dans la liste comme une question vide — et la
+		   première réécriture la matérialisait dans la note. Repéré par son
+		   INDEX : le critère dépend de la POSITION dans le bloc (quiz-utils.ts),
+		   un test élément par élément ne peut pas le savoir. */
+		const configIdx = findQuizModeConfigIndex(parsed);
+		parsed.forEach((item, i) => {
+			if (i === configIdx) {
 				examOptions = readModeConfig(item);
-				continue;
+				return;
 			}
 			questions.push(convertParsedToInternal(item));
-		}
+		});
 		return { file, questions, examOptions, mtime: file.stat?.mtime ?? 0, blockSource: match[1] };
 	} catch {
 		return "loadError";

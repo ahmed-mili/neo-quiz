@@ -52,15 +52,51 @@ function parseQuizSource(source?: string | null): QuizQuestion[] {
  * Cet élément est-il l'objet de CONFIGURATION du bloc plutôt qu'une question ?
  * Aucun énoncé, et l'un des marqueurs de mode.
  *
- * LA règle, pour toutes les lectures d'un bloc quiz-blocks : le moteur ici, et
- * `editor/convert.ts` qui la réexporte pour la page « quiz », le scanner et la
- * génération IA. Deux copies d'un critère pareil finissent par diverger, et
- * l'écart se paie en questions fantômes — chaque lecteur comptant les siennes.
+ * INTERNE. Le point d'entrée est `findQuizModeConfigIndex` : ce prédicat seul
+ * ne suffit pas à décider, il dépend de la position (cf. plus bas). Il a
+ * longtemps été exporté sous le nom `isModeConfig`, et chaque lecteur du bloc
+ * l'appelait élément par élément — c'est cette forme-là qui laissait la
+ * question fantôme entrer, chaque lecteur comptant les siennes.
  */
-export function isQuizModeConfig(item: unknown): boolean {
+function isQuizModeConfig(item: unknown): boolean {
 	const q = item as (QuizQuestion & QuizModeConfig) | null | undefined;
 	return !!q && typeof q === "object" && !Array.isArray(q) && !q.prompt
 		&& (q.examMode === true || q.learnMode === true || typeof q.mode === "string");
+}
+
+/**
+ * Le même élément, mais SANS le moindre signe de question. Utilisé pour
+ * reconnaître une configuration ailleurs qu'en dernière position, où l'on n'a
+ * pas le droit de se tromper : mal juger le dernier élément ne coûte qu'un
+ * mode, mal juger un élément du milieu ferait DISPARAÎTRE une question.
+ *
+ * Mesuré sur les deux vaults avant d'écrire ceci : 1194 éléments, dont 240 sans
+ * énoncé, et exactement 2 qui satisfont `isQuizModeConfig` — deux lignes vides
+ * héritées du bug de la question fantôme, toutes deux en DERNIÈRE position, et
+ * qui portent le vrai mode de leur quiz. Les exclure les ferait réapparaître
+ * comme des questions vides dans deux notes réelles ; c'est pourquoi la règle
+ * stricte ne s'applique qu'ailleurs qu'à la fin.
+ */
+function isStrictQuizModeConfig(item: unknown): boolean {
+	if (!isQuizModeConfig(item)) return false;
+	const q = item as Record<string, unknown>;
+	return !q.options && !q.cloze && !q.ordering && !q.matching && !q.type
+		&& q.correctIndex == null && q.correctIndices == null;
+}
+
+/**
+ * INDEX de l'objet de configuration dans un bloc, ou -1. C'est la seule façon
+ * correcte de le repérer : le critère dépend de la POSITION (cf.
+ * `isStrictQuizModeConfig`), et un test élément par élément ne peut pas le
+ * savoir. Toutes les lectures du bloc passent par ici — le moteur
+ * (`extractExamOptions`), la page « quiz », le scanner et la génération IA —
+ * pour qu'aucune ne compte ses questions autrement que les autres.
+ */
+export function findQuizModeConfigIndex(items: readonly unknown[]): number {
+	if (!Array.isArray(items) || items.length === 0) return -1;
+	const dernier = items.length - 1;
+	if (isQuizModeConfig(items[dernier])) return dernier;
+	return items.findIndex(isStrictQuizModeConfig);
 }
 
 function extractExamOptions(quizArray: QuizQuestion[]): {
@@ -76,8 +112,13 @@ function extractExamOptions(quizArray: QuizQuestion[]): {
 	   par un modèle — la place volontiers en tête. Le moteur affichait alors
 	   une première carte VIDE et comptait une question de plus, là où la page
 	   « quiz » et le scanner, eux, la reconnaissaient déjà partout : « 0/11 »
-	   pour un quiz de dix questions. */
-	const configIdx = quizArray.findIndex(isQuizModeConfig);
+	   pour un quiz de dix questions.
+
+	   La DERNIÈRE position garde le critère large (c'est là que l'export écrit,
+	   et deux notes réelles y ont une ligne vide qui porte leur mode) ; partout
+	   ailleurs, le critère STRICT — ailleurs qu'à la fin, se tromper ne coûte
+	   pas un mode mais une question. */
+	const configIdx = findQuizModeConfigIndex(quizArray);
 	const lastItem = configIdx >= 0 ? quizArray[configIdx] as QuizQuestion & QuizModeConfig : undefined;
 
 	if (lastItem) {

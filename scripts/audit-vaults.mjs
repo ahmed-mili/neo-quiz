@@ -66,7 +66,7 @@ console.log(fichiers.length + " notes examinées dans " + racines.length + " vau
    sautait en silence des blocs que le plugin, lui, charge — un audit vert ne
    disait alors rien de ces quiz-là (revue codex 2026-07-31). */
 await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts", "src/quiz-utils.ts"],
-	(convert, exp, { QUIZ_BLOCK_RE }) => {
+	(convert, exp, { QUIZ_BLOCK_RE, findQuizModeConfigIndex }) => {
 		let quiz = 0, questions = 0, casses = 0, divergents = 0;
 
 		for (const f of fichiers) {
@@ -80,10 +80,13 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts", "src/quiz-
 
 			const qs = [];
 			let examOptions = null;
-			for (const item of parsed) {
-				if (convert.isModeConfig(item)) { examOptions = convert.readModeConfig(item); continue; }
+			// Par son INDEX : le critère dépend de la POSITION dans le bloc
+			// (quiz-utils.ts), un test élément par élément ne peut pas le savoir.
+			const configIdx = findQuizModeConfigIndex(parsed);
+			parsed.forEach((item, i) => {
+				if (i === configIdx) { examOptions = convert.readModeConfig(item); return; }
 				qs.push(convert.convertParsedToInternal(item));
-			}
+			});
 			questions += qs.length;
 
 			const source = exp.exportAll(qs, examOptions);

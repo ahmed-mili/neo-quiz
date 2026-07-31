@@ -384,11 +384,17 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			if (!neuf) return;
 			neuf.classList.add("qbd-qz-body--entering");
 			/* Et retirée dès la fin : une classe d'état qui survit à son
-			   animation finit toujours par croiser la suivante. `once` — le
-			   nœud est jeté au repeint suivant, l'écouteur avec lui. */
-			neuf.addEventListener("animationend", () => {
+			   animation finit toujours par croiser la suivante.
+			   `e.target === neuf` : les événements d'animation BOUILLONNENT, et
+			   le corps est plein d'enfants qui ont les leurs (la pulsation de
+			   l'icône du bouton, l'entrée des cartes). Sans ce test, la première
+			   animation d'un enfant retirait la classe et coupait le fondu. */
+			const fini = (e: Event): void => {
+				if (e.target !== neuf) return;
 				neuf.classList.remove("qbd-qz-body--entering");
-			}, { once: true });
+				neuf.removeEventListener("animationend", fini);
+			};
+			neuf.addEventListener("animationend", fini);
 		}, 130);
 	}
 

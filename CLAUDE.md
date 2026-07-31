@@ -37,29 +37,38 @@ communautaire d'Obsidian.
 ## Commandes
 
 - `npm run check` — typecheck (`tsc --noEmit`). Toujours lancer après une modif TS.
-- `npm run check:md` et `npm run check:export` — **les deux seuls jeux de cas du
-  projet**, sur les deux logiques qu'une relecture n'arrive pas à juger : le rendu
-  markdown des champs texte (`renderInlineText`) et l'écriture d'un bloc quiz-blocks
-  (`exportAll`). Ils chargent le CODE RÉEL via esbuild (`scripts/lib/load-src.mjs`),
-  jamais une réplique. Ils existent parce que ces deux-là ont déjà régressé plusieurs
-  fois en silence : `3*4*5` rendu en italique, un objet imbriqué écrit
-  `[object Object]` (bloc illisible, sauvegarde refusée sans un mot). **Pas de
-  framework de test au-delà** ; ne pas en ajouter pour du code qu'une lecture suffit
-  à juger.
+- `npm run check:md` et `npm run check:export` — **les seuls jeux de cas du projet**,
+  sur les deux logiques qu'une relecture n'arrive pas à juger : le rendu markdown des
+  champs texte (`renderInlineText`, `stripInlineMarkdown`) et l'écriture d'un bloc
+  quiz-blocks (`exportAll`). Ils chargent le CODE RÉEL via esbuild
+  (`scripts/lib/load-src.mjs`), jamais une réplique. Ils existent parce que ces
+  deux-là ont déjà régressé plusieurs fois en silence : `3*4*5` rendu en italique, un
+  objet imbriqué écrit `[object Object]` (bloc illisible, sauvegarde refusée sans un
+  mot). **Pas de framework de test au-delà** ; ne pas en ajouter pour du code qu'une
+  lecture suffit à juger.
+- `npm run check:markers` — passe chaque champ TEXTE de chaque quiz des vaults par la
+  vraie fonction de rendu et cherche le markdown qui n'a PAS été traduit (8570 champs
+  au 2026-07-31, zéro fuite). Il éprouve la GRAMMAIRE, pas le CÂBLAGE : un champ que
+  le moteur affiche sans appeler le rendu du tout y passe pour sain — c'est ce qui
+  était arrivé au libellé d'emplacement d'un classement. Le seul filet contre ça est
+  de lire le DOM RENDU dans Obsidian ; la commande est dans l'en-tête du script.
 - `node scripts/audit-vaults.mjs "<vault>" […]` — **avant une release**, ou après
   toute retouche de `convertParsedToInternal` / `exportAll` : fait l'aller-retour
-  lecture → écriture → lecture sur TOUS les quiz de vrais vaults (63 quiz, 1157
+  lecture → écriture → lecture sur TOUS les quiz de vrais vaults (65 quiz, 1169
   questions au 2026-07-31). Un bloc qui ne se relit pas est une sauvegarde qui
   échoue EN SILENCE chez l'utilisateur — la page refuse d'écrire un JSON5 invalide
   et le travail reste en mémoire. Aucun fichier n'est modifié.
+- Ces scripts appellent `process.exitCode`, **jamais `process.exit()`** : la pile doit
+  se dérouler pour que `withSrcModule` retire son dossier temporaire.
 - `npm run dev` — esbuild en watch : rebuild + redéploiement à chaque save (JS et CSS).
 - `npm run build` — build production → `dist/` + déploiement dans les vaults.
 - **Release** : bumper la version dans `src/assets/manifest.json`, créer un tag
   `git tag vX.Y.Z`, `git push` du tag → le workflow `release.yml` build et publie.
   (Ne pas utiliser `npm run release` : il pointe vers un `scripts\release.bat` absent.)
 
-Vérification d'un changement = `npm run check`, plus `check:md` / `check:export` si
-le rendu ou l'écriture sont touchés, **puis** test manuel dans Obsidian.
+Vérification d'un changement = `npm run check`, plus `check:md` / `check:export` /
+`check:markers` si le rendu ou l'écriture sont touchés, **puis** test manuel dans
+Obsidian.
 
 ## Build & déploiement (`esbuild.config.mjs`)
 
@@ -155,6 +164,36 @@ introuvable ou ambigu est signalé par une Notice, jamais ignoré en silence.
   MathLive (`engine/math-input.ts`).
 - **Dictée** : `dashboard/voice-install.ts` + `dashboard/voice-input.ts` (whisper.cpp
   local, Windows, opt-in).
+
+## Texte et HTML d'un quiz : quatre portes, jamais une cinquième
+
+Tout ce qu'un quiz affiche passe par `src/engine/sanitizer.ts`. Le choix se fait sur
+la NATURE de la destination, pas sur la confiance qu'on accorde à la donnée :
+
+| Destination | Fonction |
+|---|---|
+| du texte, dans du HTML (énoncés, options, libellés) | `renderInlineText` — échappe, puis rend le markdown inline |
+| du texte, dans un ATTRIBUT ou un composant sans HTML (`placeholder`, `aria-label`, vignette) | `stripInlineMarkdown` — même grammaire, marqueurs RETIRÉS ; sa sortie est du texte, à ré-échapper |
+| un champ `*Html` pré-rendu (`promptHtml`, `explainHtml`, `learnHtml`, `passageHtml`, `optionHtml`) | `sanitizeQuizHtml` — liste blanche de balises/attributs |
+| du texte + des images `![[…]]` | `renderTextWithEmbeds` / `replaceObsidianEmbedsInHtml` (qui assainit déjà) |
+
+Deux règles qui ont chacune coûté un bug :
+
+- **Le HTML d'un quiz n'est pas forcément celui de l'utilisateur** : un quiz PARTAGÉ
+  arrive avec les `explainHtml` de son auteur, et le bloc est traité par ce plugin,
+  donc hors de portée du filtre d'Obsidian. Une interpolation brute y exécute du code
+  avec les droits d'Obsidian. C'est arrivé aux six chemins `*Html` à la fois, et au
+  libellé d'emplacement d'un classement (`quiz-slot-label`).
+- **Pour lire du HTML sans l'exécuter, `<template>`, jamais un `<div>` détaché** : un
+  `<img src=x onerror=…>` se charge dans un `<div>` même hors de l'arbre affiché. Le
+  contenu d'un `<template>` a un document propriétaire inerte.
+
+La liste blanche vit au niveau du MODULE (hors de `createSanitizer`) parce que
+l'aperçu de l'éditeur l'appelle aussi. Deux surfaces qui affichent le même
+`explainHtml` ne peuvent pas en avoir chacune la sienne.
+
+`style` n'est pas supprimé mais RÉDUIT à une liste blanche de propriétés : l'attribut
+entier aurait décoloré 594 fragments des quiz d'Ahmed. Mesurer avant de trancher.
 
 ## Conventions & pièges
 

@@ -54,10 +54,18 @@ communautaire d'Obsidian.
   de lire le DOM RENDU dans Obsidian ; la commande est dans l'en-tête du script.
 - `node scripts/audit-vaults.mjs "<vault>" […]` — **avant une release**, ou après
   toute retouche de `convertParsedToInternal` / `exportAll` : fait l'aller-retour
-  lecture → écriture → lecture sur TOUS les quiz de vrais vaults (65 quiz, 1169
-  questions au 2026-07-31). Un bloc qui ne se relit pas est une sauvegarde qui
-  échoue EN SILENCE chez l'utilisateur — la page refuse d'écrire un JSON5 invalide
-  et le travail reste en mémoire. Aucun fichier n'est modifié.
+  lecture → écriture → lecture sur TOUS les quiz de vrais vaults (67 quiz, 1176
+  questions au 2026-07-31). Deux garanties, pas une :
+  1. le bloc réécrit **se relit** — sinon la sauvegarde échoue EN SILENCE chez
+     l'utilisateur (la page refuse d'écrire un JSON5 invalide, et le travail reste
+     en mémoire jusqu'à la fermeture d'Obsidian) ;
+  2. **aucun champ ne disparaît**, comparé un à un. C'est ce deuxième contrôle qui
+     a trouvé le pire défaut de la refonte : `textVariant: 'command'` n'était pas
+     reconnu par l'éditeur, et éditer un quiz Cisco effaçait ses 23 invites de
+     terminal. Les équivalences admises (`prompt` → `promptHtml`, `answer` fondu
+     dans `acceptedAnswers`…) sont **justifiées une par une** dans le script ;
+     n'y ajouter une exclusion qu'après avoir prouvé qu'il n'y a rien à perdre.
+  Aucun fichier n'est modifié.
 - Ces scripts appellent `process.exitCode`, **jamais `process.exit()`** : la pile doit
   se dérouler pour que `withSrcModule` retire son dossier temporaire.
 - `npm run dev` — esbuild en watch : rebuild + redéploiement à chaque save (JS et CSS).

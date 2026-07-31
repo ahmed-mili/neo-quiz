@@ -5,6 +5,7 @@
 export const EN_EDITOR = {
 	/* ── Vue & ossature (editor.ts, editor/ui.ts) ── */
 	"editor.empty.hint": "Open a note that contains a quiz-blocks block, then run « Open quiz from the current note ».",
+	"editor.paste.imageFailed": "Could not paste the image",
 	"editor.view.title": "Quiz Editor",
 
 	/* ── Actions communes ── */

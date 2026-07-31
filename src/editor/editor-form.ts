@@ -1,3 +1,4 @@
+import { Notice } from "obsidian";
 import { t } from "../i18n";
 import { reserveFreePath } from "../unique-path";
 import type { EditorCtx } from "../types/editor-ctx";
@@ -249,14 +250,23 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 						e.preventDefault();
 						const file = item.getAsFile();
 						if (!file) continue;
-						const ext = item.type.split("/")[1] || "png";
-						const vault = ctx.plugin.app.vault as unknown as EditorVault;
-						const { fileName, filePath } = await nomImageLibre(vault, ext);
-						const buffer = await file.arrayBuffer();
-						await vault.adapter.writeBinary(filePath, new Uint8Array(buffer));
-						_insertAt(ta, `![[${fileName}]]`, onChange);
-						_autoResize(ta);
-						view.schedulePreview();
+						/* Un rejet dans un gestionnaire d'événement `async` ne
+						   remonte NULLE PART : sans ce `try`, une image qui ne
+						   pouvait pas s'écrire disparaissait en silence — le
+						   coller ne faisait simplement rien. */
+						try {
+							const ext = item.type.split("/")[1] || "png";
+							const vault = ctx.plugin.app.vault as unknown as EditorVault;
+							const { fileName, filePath } = await nomImageLibre(vault, ext);
+							const buffer = await file.arrayBuffer();
+							await vault.adapter.writeBinary(filePath, new Uint8Array(buffer));
+							_insertAt(ta, `![[${fileName}]]`, onChange);
+							_autoResize(ta);
+							view.schedulePreview();
+						} catch (err) {
+							console.error("[quiz-blocks] collage d'image impossible :", err);
+							new Notice(t("editor.paste.imageFailed"));
+						}
 						break;
 					}
 				}
@@ -404,7 +414,8 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 									view.schedulePreview();
 									view.renderCode();
 								} catch (err) {
-									console.error("Failed to paste image:", err);
+									console.error("[quiz-blocks] collage d'image impossible :", err);
+									new Notice(t("editor.paste.imageFailed"));
 								}
 								break;
 							}

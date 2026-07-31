@@ -92,6 +92,18 @@ export function quizShareSource(ctx: DashboardCtx, quiz: QuizIndexEntry): ShareS
 /* ── « Enregistrer » : Téléchargements (desktop, révélé) / racine (mobile). ── */
 
 async function saveShared(ctx: DashboardCtx, source: ShareSource): Promise<void> {
+	try {
+		await saveSharedInner(ctx, source);
+	} catch (e) {
+		/* Appelé en `void` depuis un gestionnaire de clic : un rejet n'y remonte
+		   NULLE PART, et l'utilisateur voyait la fenêtre se fermer sans fichier
+		   ni message. */
+		console.error("[quiz-blocks] enregistrement du partage impossible :", e);
+		new Notice(t("dashboard.quizzes.shareSaveError"));
+	}
+}
+
+async function saveSharedInner(ctx: DashboardCtx, source: ShareSource): Promise<void> {
 	const payload = await source.build();
 	if (!payload) return;
 	/* Un fichier du MÊME nom ne se fait pas écraser : sur mobile la

@@ -123,6 +123,7 @@ export const EN_DASHBOARD = {
 	"dashboard.quizzes.renameExists": "“{name}” already exists in this folder.",
 	"dashboard.quizzes.renameError": "Could not rename this quiz",
 	"dashboard.quizzes.deleted": "Quiz deleted",
+	"dashboard.quizzes.shareSaveError": "Could not save the shared file",
 	"dashboard.quizzes.deletedPartial": "Quiz deleted — {count} could not be removed",
 	"dashboard.quizzes.deleteConfirmTitle": "Delete quiz",
 	"dashboard.quizzes.deleteConfirmBody": "Remove “{title}” and its stats from the note ? This cannot be undone.",

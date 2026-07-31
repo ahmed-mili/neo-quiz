@@ -63,7 +63,7 @@ Vérification d'un changement = `npm run check` **puis** test manuel dans Obsidi
 
 `build` **déploie** `main.js` (« Reload without saving » ne suffit pas toujours) :
 - CSS → désactiver/réactiver le plugin.
-- Vue JS (dashboard, éditeur) → refermer/rouvrir la vue.
+- Vue JS (dashboard, onglet d'un quiz) → refermer/rouvrir la vue.
 - Sûr → redémarrage complet d'Obsidian, ou recharger via le CLI Obsidian
   (`obsidian plugin:reload id=quiz-blocks`).
 
@@ -71,9 +71,10 @@ Vérification d'un changement = `npm run check` **puis** test manuel dans Obsidi
 
 Point d'entrée : `src/main.ts` → `src/plugin.ts` (`InteractiveQuizPlugin extends Plugin`).
 `plugin.ts` porte le `SettingTab`, les settings persistés + leurs migrations, et
-enregistre : le processeur de bloc `quiz-blocks` (→ moteur), la vue dashboard, la vue éditeur.
+enregistre : le processeur de bloc `quiz-blocks` (→ moteur), la vue dashboard, la vue
+onglet d'un quiz (`quiz-blocks-builder`).
 
-Les **trois sous-systèmes** suivent tous le **même pattern** : une factory
+Les **deux sous-systèmes** suivent le **même pattern** : une factory
 `createXHandlers(ctx)` par module, et un **god-object `ctx` typé**, assemblé en
 plusieurs passes puis injecté dans toutes les factories (référence croisée). Le param
 d'appel externe est nommé `context`, le god-object interne `ctx` — jamais confondus
@@ -98,10 +99,18 @@ d'appel externe est nommé `context`, le god-object interne `ctx` — jamais con
    (`this`), pas sur `ctx`. `types/dashboard-ctx.ts` scinde donc `DashboardCtx` (le
    littéral) et `DashboardView` (l'hôte `this`).
 
-3. **Éditeur** — `src/editor.ts` + `src/editor/*.ts`. `attachQuizEditorCore(view, host,
-   app, plugin)` monte l'état + le `ctx` (`EditorCtx`) + 6 handlers sur `view`. Réutilisé
-   par la vue onglet (`QuizBuilderView`) **et** par l'éditeur embarqué dans la page
-   « Générer » du dashboard.
+**La page « quiz » est UNIQUE** (`dashboard/detail.ts`, `createQuizPage(deps)`) :
+questions à gauche, question courante à droite, bouton « Editor » qui bascule
+consultation ⇄ édition **sur place**. Décrite par une `QuizPageSpec` (titre,
+`load()`, `save?()`, retour, bouton principal), elle sert **trois hôtes** : la vue
+détail du dashboard, la page « Générer » (quiz encore en mémoire, `save` absent,
+`QuizDraft.file === null`) et l'onglet `quiz-blocks-builder` (`src/editor.ts`).
+L'**éditeur en trois colonnes a été supprimé** le 2026-07-31 (« pas assez
+intuitif ») : il ne reste de `src/editor/` que ce que la page consomme —
+`editor-form.ts` (les champs par type, atteints via `dashboard/detail-form-bridge.ts`),
+`convert.ts`, `export.ts`, `question-preview.ts`, `utils.ts`, `modals.ts`.
+`types/editor-ctx.ts` ne décrit donc plus qu'un contrat étroit (7 champs) — **ne pas
+l'élargir**, c'est cette étroitesse qui rend le formulaire réutilisable.
 
 **Données partagées** : `dashboard/scanner.ts` (index des quiz du vault, avec
 `onChange`) et `dashboard/stats-store.ts` (stats + accès aux settings). Types métier

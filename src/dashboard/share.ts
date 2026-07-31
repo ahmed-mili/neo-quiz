@@ -273,14 +273,16 @@ if ($h -ne [IntPtr]::Zero) {
    l'expose pas, vérifié) → repli desktop = presse-papier + Discord au premier
    plan (Ctrl+V + Entrée). Dernier repli : enregistrer le fichier. ── */
 
-async function shareViaDiscord(ctx: DashboardCtx, source: ShareSource): Promise<void> {
+async function shareViaDiscord(ctx: DashboardCtx, source: ShareSource): Promise<boolean> {
 	try {
 		await shareViaDiscordInner(ctx, source);
+		return true;
 	} catch (e) {
 		// Appelé en `void` depuis un gestionnaire de clic : sans ce filet, un
 		// échec fermait la fenêtre sans rien envoyer ni rien dire.
 		console.error("[quiz-blocks] partage Discord impossible :", e);
 		new Notice(t("dashboard.quizzes.shareSaveError"));
+		return false;
 	}
 }
 
@@ -360,7 +362,12 @@ export class ShareModal extends QbdModal {
 		}
 		discord.createSpan({ cls: "qbd-share-app-label", text: "Discord" });
 		discord.addEventListener("click", () => {
-			void shareViaDiscord(this.ctx, this.source);
+			/* La confirmation ATTEND le résultat : l'afficher avant faisait
+			   cohabiter un « Copié » vert et le message d'échec qui suivait
+			   (revue codex 2026-07-31). `shareViaDiscord` attrape déjà tout et
+			   prévient lui-même — ici on ne fête que ce qui a marché. */
+			void shareViaDiscord(this.ctx, this.source).then((ok) => {
+			if (ok === false) return;
 			if (Platform.isDesktopApp) {
 				// Confirmation « copié » : le badge passe au vert (is-copied) + une
 				// ligne message sous les apps, puis fermeture douce.
@@ -375,6 +382,7 @@ export class ShareModal extends QbdModal {
 			} else {
 				this.close();
 			}
+			});
 		});
 
 		// ── Enregistrer le fichier ──

@@ -267,7 +267,13 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		}
 	}
 
-	const knownKeys = new Set(['id','title','prompt','promptHtml','options','correctIndex','multiSelect','correctIndices','ordering','slots','possibilities','correctOrder','matching','rows','choices','correctMap','type','terminalVariant','textVariant','commandPrefix','placeholder','caseSensitive','acceptedAnswers','acceptableAnswers','correctAnswers','correctText','answer','hint','explain','explainHtml','resourceButton','examMode','examDurationMinutes','examAutoSubmit','examShowTimer','cloze','numeric','tolerance','tolerancePercent','unit']);
+	/* Les quatre champs d'EXAMEN ne sont PAS dans cette liste : sur une
+	   question, ce sont des clés inconnues comme les autres, et les déclarer
+	   connues les faisait disparaître — l'export ne les écrit que pour l'objet
+	   de configuration, jamais pour une question (revue codex 2026-07-31).
+	   L'objet de configuration, lui, ne passe pas par ici : il est repéré par
+	   son index et lu par `readModeConfig`. */
+	const knownKeys = new Set(['id','title','prompt','promptHtml','options','correctIndex','multiSelect','correctIndices','ordering','slots','possibilities','correctOrder','matching','rows','choices','correctMap','type','terminalVariant','textVariant','commandPrefix','placeholder','caseSensitive','acceptedAnswers','acceptableAnswers','correctAnswers','correctText','answer','hint','explain','explainHtml','resourceButton','cloze','numeric','tolerance','tolerancePercent','unit']);
 	/* `Object.create(null)` : un objet ordinaire ABSORBE une clé nommée
 	   `__proto__` au lieu de la stocker, et le champ personnalisé
 	   disparaissait sans un mot. */

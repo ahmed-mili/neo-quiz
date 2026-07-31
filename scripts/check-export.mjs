@@ -296,6 +296,14 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
 	const trois = tour({ ...base, type: "text", acceptedAnswers: ["a"], correctAnswers: ["b"] });
 	r.check("correctAnswers fondu", [trois.acceptedAnswers, trois.correctAnswers], [["a", "b"], undefined]);
 
+	// Les champs d'EXAMEN portes par une QUESTION sont des cles inconnues
+	// comme les autres : l'export ne les ecrit que pour l'objet de
+	// configuration, donc les declarer connues les faisait disparaitre.
+	const exam = tour({ ...base, prompt: "P", options: ["a", "b"], correctIndex: 0,
+		examDurationMinutes: 37, examAutoSubmit: false });
+	r.check("champs d'examen d'une question conserves",
+		[exam.examDurationMinutes, exam.examAutoSubmit], [37, false]);
+
 	// PROSE qui ressemble a du HTML : elle ne doit PAS partir vers md2html,
 	// sinon on rouvre la corruption que tout le reste evite.
 	const prose = tour({ ...base, prompt: "Ici 3 <x et y> 4 et 3*4*5 aussi.", options: ["a", "b"], correctIndex: 0 });

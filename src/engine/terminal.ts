@@ -30,6 +30,55 @@ export interface TerminalHandlers {
 	bindTextQuestion(trackItem: HTMLElement, qi: number): void;
 }
 
+/**
+ * Nom de variante de terminal, ramené à sa forme canonique.
+ *
+ * Vit au niveau du MODULE, et EXPORTÉ, parce que l'éditeur en a besoin autant
+ * que le moteur : `editor/convert.ts` ne reconnaissait que `terminalVariant:
+ * 'cmd'`, `textVariant: 'powershell'` et `textVariant: 'bash'` — trois formes
+ * exactes. Les 22 questions Cisco d'Ahmed écrivent `textVariant: 'command'`,
+ * que le moteur affiche bien en terminal `cmd` mais que l'éditeur prenait pour
+ * du texte ordinaire : la première sauvegarde effaçait la variante ET son
+ * invite (`Town-Hall#`, `Router>`…). Une seule table d'alias, deux lecteurs.
+ */
+export function normalizeTerminalVariantName(value: unknown): string | null {
+	const raw = String(value ?? "").trim().toLowerCase();
+	if (!raw) return null;
+
+	if ([
+		"command",
+		"cmd",
+		"windows-cmd",
+		"windows cmd",
+		"invite-de-commandes",
+		"invite de commandes"
+	].includes(raw)) return "cmd";
+
+	if ([
+		"powershell",
+		"ps",
+		"pwsh",
+		"windows-powershell",
+		"windows powershell",
+		"power-shell",
+		"power shell"
+	].includes(raw)) return "powershell";
+
+	if ([
+		"bash",
+		"shell",
+		"sh",
+		"zsh",
+		"terminal",
+		"linux"
+	].includes(raw)) {
+		return (raw === "terminal" || raw === "linux") ? "bash" : raw;
+	}
+
+	return raw.replace(/\s+/g, "-");
+}
+
+
 export function createTerminalHandlers(ctx: EngineCtx): TerminalHandlers {
 	// Variable locale au module (conservée à l'identique du JS ; jamais relue).
 	let __quizTextQuestionCleanup: (() => void) | null = null;
@@ -37,43 +86,6 @@ export function createTerminalHandlers(ctx: EngineCtx): TerminalHandlers {
 	// ═══════════════════════════════════════════════════════
 	// FONCTIONS PURES (sans dépendances externes)
 	// ═══════════════════════════════════════════════════════
-
-	function normalizeTerminalVariantName(value: unknown): string | null {
-		const raw = String(value ?? "").trim().toLowerCase();
-		if (!raw) return null;
-
-		if ([
-			"command",
-			"cmd",
-			"windows-cmd",
-			"windows cmd",
-			"invite-de-commandes",
-			"invite de commandes"
-		].includes(raw)) return "cmd";
-
-		if ([
-			"powershell",
-			"ps",
-			"pwsh",
-			"windows-powershell",
-			"windows powershell",
-			"power-shell",
-			"power shell"
-		].includes(raw)) return "powershell";
-
-		if ([
-			"bash",
-			"shell",
-			"sh",
-			"zsh",
-			"terminal",
-			"linux"
-		].includes(raw)) {
-			return (raw === "terminal" || raw === "linux") ? "bash" : raw;
-		}
-
-		return raw.replace(/\s+/g, "-");
-	}
 
 	function getTerminalTextVariant(q: QuizQuestion): string | null {
 		if (!ctx.isTextQuestion(q)) return null;

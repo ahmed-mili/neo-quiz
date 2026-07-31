@@ -81,6 +81,17 @@ export interface DraftQuestion {
 	    première retouche. Absent quand la note n'en portait pas : on n'écrit
 	    pas un identifiant que personne n'a choisi. */
 	_sourceId?: string;
+	/**
+	 * Variante de terminal telle qu'elle était ÉCRITE dans le bloc : la clé
+	 * (`terminalVariant` ou `textVariant`) et sa valeur exacte. Réémises
+	 * telles quelles, parce que l'éditeur n'a que trois types de terminal là
+	 * où le moteur accepte une douzaine d'alias : réécrire
+	 * `textVariant: 'command'` en `terminalVariant: 'cmd'` changerait la note
+	 * sans que personne ne l'ait demandé — et ne pas les mémoriser du tout
+	 * effaçait la variante et son invite (22 questions Cisco réelles).
+	 */
+	_variantKey?: string;
+	_variantValue?: string;
 	/** Clés inconnues préservées au round-trip import→export (editor/modals.js convertToInternalFormat). */
 	_extraFields?: Record<string, unknown>;
 	/** Gabarit guidé de l'éditeur math (miroir de TextQuestion.answerTemplate). */

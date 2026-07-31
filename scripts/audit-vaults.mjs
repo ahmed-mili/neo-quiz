@@ -67,7 +67,47 @@ console.log(fichiers.length + " notes examinées dans " + racines.length + " vau
    disait alors rien de ces quiz-là (revue codex 2026-07-31). */
 await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts", "src/quiz-utils.ts"],
 	(convert, exp, { QUIZ_BLOCK_RE, findQuizModeConfigIndex }) => {
-		let quiz = 0, questions = 0, casses = 0, divergents = 0;
+		let quiz = 0, questions = 0, casses = 0, divergents = 0, perdus = 0;
+
+		/* Champs que l'aller-retour REMPLACE légitimement par un équivalent :
+		   `prompt` devient `promptHtml` dès qu'il contient du markdown, et
+		   réciproquement pour l'explication, la leçon, le support et les
+		   options. Tout le reste doit survivre à l'identique — un champ qui
+		   disparaît est du travail perdu chez l'utilisateur, en silence, et
+		   c'est la seule chose que ni le typage ni la relecture n'attrapent. */
+		const EQUIVALENTS = {
+			prompt: ["prompt", "promptHtml"], promptHtml: ["prompt", "promptHtml"],
+			explain: ["explain", "explainHtml"], explainHtml: ["explain", "explainHtml"],
+			learn: ["learn", "learnHtml"], learnHtml: ["learn", "learnHtml"],
+			passage: ["passage", "passageHtml"], passageHtml: ["passage", "passageHtml"],
+			options: ["options", "optionHtml"], optionHtml: ["options", "optionHtml"],
+			terminalVariant: ["terminalVariant", "textVariant"],
+			textVariant: ["terminalVariant", "textVariant"],
+		};
+		/* Les quatre formes de réponse libre que le moteur agrège
+		   (engine/terminal.ts getTextAcceptedAnswers) : l'export les fond dans
+		   `acceptedAnswers`. Ce n'est une perte que si la VALEUR n'y est plus —
+		   d'où la comparaison sur le contenu et non sur le nom du champ. */
+		const FONDUS = ["answer", "correctText", "acceptableAnswers", "correctAnswers"];
+		/** Une valeur vide n'a rien à perdre : `placeholder: ''`, `caseSensitive:
+		    false`, `options: []` disparaissent sans que personne n'y perde. */
+		const vide = (v) => v === "" || v === false || v === null || v === undefined
+			|| (Array.isArray(v) && v.every(x => x === "" || x === null || x === undefined));
+
+		const survit = (cle, avant, apres) => {
+			if (vide(avant[cle])) return true;
+			/* Un index de bonne réponse SANS options n'en désigne aucune : c'est
+			   un vestige d'un squelette de QCM que la génération IA laisse sur
+			   une question devenue texte à trous. Le perdre ne perd rien. */
+			if ((cle === "correctIndex" || cle === "correctIndices")
+				&& !apres.options && !apres.optionHtml) return true;
+			if (FONDUS.includes(cle)) {
+				const attendus = [].concat(avant[cle]).map(String);
+				const obtenus = (apres.acceptedAnswers || []).map(String);
+				return attendus.every(a => obtenus.includes(a));
+			}
+			return (EQUIVALENTS[cle] || [cle]).some(k => apres[k] !== undefined);
+		};
 
 		for (const f of fichiers) {
 			const contenu = readFileSync(f, "utf8");
@@ -104,12 +144,31 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts", "src/quiz-
 			if (relu.length !== attendu) {
 				divergents++;
 				console.error("COMPTE     " + f + "\n           " + relu.length + " éléments au lieu de " + attendu);
+				continue;
 			}
+
+			/* CHAMP PAR CHAMP : un bloc qui se relit peut quand même avoir perdu
+			   une explication ou un indice en route — et c'est la perte la plus
+			   silencieuse qui soit, puisque rien n'échoue. On compare les
+			   questions dans l'ordre, l'objet de mode retiré des deux côtés. */
+			const entree = parsed.filter((_, i) => i !== configIdx);
+			const sortie = relu.filter((_, i) => i !== findQuizModeConfigIndex(relu));
+			entree.forEach((avant, i) => {
+				const apres = sortie[i];
+				if (!avant || typeof avant !== "object" || Array.isArray(avant) || !apres) return;
+				for (const cle of Object.keys(avant)) {
+					if (survit(cle, avant, apres)) continue;
+					perdus++;
+					console.error("PERDU      " + f + "\n           question " + (i + 1)
+						+ " : le champ `" + cle + "` a disparu");
+				}
+			});
 		}
 
 		console.log("\nquiz : " + quiz + " | questions : " + questions
-			+ " | blocs illisibles : " + casses + " | comptes divergents : " + divergents);
+			+ " | blocs illisibles : " + casses + " | comptes divergents : " + divergents
+			+ " | champs perdus : " + perdus);
 		// `exitCode` et non `exit()` : la pile doit se dérouler pour que
 		// `withSrcModule` retire son dossier temporaire.
-		if (casses || divergents) process.exitCode = 1;
+		if (casses || divergents || perdus) process.exitCode = 1;
 	});

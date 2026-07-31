@@ -111,10 +111,21 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 	}
 	if (["numeric", "text", "cmd", "powershell", "bash"].includes(t)) {
 		L.push("\t\ttype: 'text',");
-		if (t === "cmd") L.push("\t\tterminalVariant: 'cmd',");
-		if (t === "powershell") L.push("\t\ttextVariant: 'powershell',");
-		if (t === "bash") L.push("\t\ttextVariant: 'bash',");
-		if (q.commandPrefix && (t === "cmd" || t === "powershell")) L.push(`\t\tcommandPrefix: '${e(q.commandPrefix)}',`);
+		/* La variante telle qu'elle était écrite, si on l'a lue quelque part :
+		   le moteur accepte une douzaine d'alias (`command`, `shell`, `zsh`…)
+		   que l'éditeur ramène à trois types. Réémettre la forme canonique
+		   réécrirait la note sans qu'on l'ait demandé — et les trois formes
+		   exactes d'avant en effaçaient purement 22 (revue 2026-07-31). */
+		if (q._variantKey && q._variantValue) {
+			L.push(`\t\t${json5Key(q._variantKey)}: '${e(q._variantValue)}',`);
+		} else if (t === "cmd") L.push("\t\tterminalVariant: 'cmd',");
+		else if (t === "powershell") L.push("\t\ttextVariant: 'powershell',");
+		else if (t === "bash") L.push("\t\ttextVariant: 'bash',");
+		// L'invite vaut pour TOUTES les variantes de terminal, bash compris
+		// (engine/terminal.ts getTerminalPromptPrefix).
+		if (q.commandPrefix && (t === "cmd" || t === "powershell" || t === "bash")) {
+			L.push(`\t\tcommandPrefix: '${e(q.commandPrefix)}',`);
+		}
 		if (q.placeholder) L.push(`\t\tplaceholder: '${e(q.placeholder)}',`);
 		if (q.caseSensitive) L.push("\t\tcaseSensitive: true,");
 		if (t === "numeric") {

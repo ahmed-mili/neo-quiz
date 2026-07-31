@@ -163,3 +163,38 @@ await withSrcModule(["src/quiz-utils.ts", "src/editor/convert.ts"], (qu, convert
 
 	r.done();
 });
+
+/* VARIANTES DE TERMINAL : l'editeur n'en connait que trois, le moteur une
+   douzaine d'alias. La forme ECRITE doit ressortir telle quelle — la reduire
+   a la forme canonique reecrirait la note, et ne pas la reconnaitre du tout
+   effacait la variante ET son invite (22 questions Cisco reelles). */
+await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert, exp) => {
+	const r = makeReporter("Variantes de terminal");
+	const tour = (brut) => {
+		const q = convert.convertParsedToInternal(brut);
+		return JSON5.parse(exp.exportAll([q], null))[0];
+	};
+	const base = { id: "x", title: "T", prompt: "Ecris la commande", type: "text", acceptedAnswers: ["enable"] };
+
+	const cisco = tour({ ...base, textVariant: "command", commandPrefix: "Town-Hall#" });
+	r.check("alias `command` reconnu et reemis", cisco.textVariant, "command");
+	r.check("invite Cisco conservee", cisco.commandPrefix, "Town-Hall#");
+
+	const bash = tour({ ...base, terminalVariant: "bash", commandPrefix: "user@srv:~$ " });
+	r.check("invite bash conservee", bash.commandPrefix, "user@srv:~$ ");
+	r.check("cle d'origine conservee", bash.terminalVariant, "bash");
+	r.check("pas de cle concurrente ajoutee", bash.textVariant, undefined);
+
+	const zsh = tour({ ...base, textVariant: "zsh" });
+	r.check("alias `zsh` conserve", zsh.textVariant, "zsh");
+
+	const ps = tour({ ...base, textVariant: "PowerShell", commandPrefix: "PS C:\>" });
+	r.check("casse d'origine conservee", ps.textVariant, "PowerShell");
+	r.check("invite PowerShell conservee", ps.commandPrefix, "PS C:\>");
+
+	// Une question texte SANS variante ne doit pas en gagner une.
+	const nu = tour({ ...base });
+	r.check("pas de variante inventee", [nu.textVariant, nu.terminalVariant], [undefined, undefined]);
+
+	r.done();
+});

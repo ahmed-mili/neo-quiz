@@ -4,6 +4,7 @@ import { _htmlToText } from "./modals";
 import type { ParsedQuizItem } from "./modals";
 import type { EditorExamOptions } from "../types/editor-ctx";
 import { normalizeQuizMode } from "../quiz-utils";
+import { normalizeTerminalVariantName } from "../engine/terminal";
 
 /* ══════════════════════════════════════════════════════════
    CONVERT — item JSON5 brut → DraftQuestion (forme d'édition)
@@ -48,6 +49,15 @@ export function readModeConfig(q: ParsedQuizItem): EditorExamOptions {
 	};
 }
 
+/** La variante de terminal telle qu'elle est ÉCRITE dans le bloc : sa clé et sa
+    valeur, dans l'ordre où le moteur les consulte (engine/terminal.ts
+    getTerminalTextVariant). */
+function variantSource(q: ParsedQuizItem): { cle: string | null; valeur: unknown } {
+	if (q.terminalVariant != null) return { cle: "terminalVariant", valeur: q.terminalVariant };
+	if (q.textVariant != null) return { cle: "textVariant", valeur: q.textVariant };
+	return { cle: null, valeur: null };
+}
+
 export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	let type: QuestionTypeKey = "single";
 	if (q.ordering) type = "ordering";
@@ -67,9 +77,18 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		|| (typeof q.unit === "string" && q.unit.trim().length > 0)) type = "numeric";
 	else if (q.multiSelect) type = "multi";
 	else if (q.type === "text") {
-		if (q.terminalVariant === "cmd") type = "cmd";
-		else if (q.textVariant === "powershell") type = "powershell";
-		else if (q.textVariant === "bash") type = "bash";
+		/* MÊME table d'alias que le moteur (engine/terminal.ts) : trois formes
+		   exactes ne suffisaient pas. Les 22 questions Cisco d'Ahmed écrivent
+		   `textVariant: 'command'`, que le moteur affiche en terminal `cmd` et
+		   que l'éditeur prenait pour du texte ordinaire — la sauvegarde
+		   suivante effaçait la variante ET son invite. */
+		const variante = normalizeTerminalVariantName(variantSource(q).valeur);
+		if (variante === "cmd") type = "cmd";
+		else if (variante === "powershell") type = "powershell";
+		// `sh`, `zsh`, `shell`… : l'éditeur n'a que trois types de terminal, et
+		// bash est celui qui leur ressemble. La forme d'ORIGINE est mémorisée
+		// plus bas et réémise telle quelle, donc rien ne se perd.
+		else if (variante) type = "bash";
 		else type = "text";
 	}
 
@@ -151,9 +170,19 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		question.acceptedAnswers = accepted;
 		question.caseSensitive = q.caseSensitive || false;
 		question.placeholder = q.placeholder || "";
-		if (type === "cmd" || type === "powershell") {
-			question.commandPrefix = q.commandPrefix || (type === "cmd" ? "C:\\>" : "PS>");
+		/* L'invite vaut pour TOUTES les variantes de terminal, bash compris
+		   (engine/terminal.ts getTerminalPromptPrefix) — la restreindre à
+		   cmd/powershell faisait disparaître « Town-Hall# » et consorts. */
+		if (type === "cmd" || type === "powershell" || type === "bash") {
+			const parDefaut = type === "cmd" ? "C:\\>" : type === "powershell" ? "PS>" : "user@hostname:~$ ";
+			question.commandPrefix = q.commandPrefix || parDefaut;
 		}
+		/* La forme EXACTE de la variante, avec la clé qui la portait : c'est
+		   elle qu'on réémettra, pas sa forme canonique. Réécrire
+		   `textVariant: 'command'` en `terminalVariant: 'cmd'` changerait la
+		   note sans que personne ne l'ait demandé. */
+		const src = variantSource(q);
+		if (src.cle) { question._variantKey = src.cle; question._variantValue = String(src.valeur); }
 		if (type === "numeric") {
 			question.unit = typeof q.unit === "string" ? q.unit : "";
 			if (typeof q.tolerance === "number") question.tolerance = q.tolerance;

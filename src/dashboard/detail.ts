@@ -13,7 +13,7 @@ import { loadQuizDraft, saveQuizDraft, questionText, draftIsStale } from "./deta
 import type { QuizDraft, QuizLoadError } from "./detail-io";
 import { renderQuestionView, renderQuestionEdit } from "./detail-question";
 import { renderExamPanel } from "./detail-exam";
-import { mountSlideHost, setSlide, slideTo, reserveTallest, growReserve, finish as finishSlide } from "./detail-slide";
+import { mountSlideHost, setSlide, slideTo, reserveTallest, finish as finishSlide } from "./detail-slide";
 import type { SlideHost } from "./detail-slide";
 import { makeDefault } from "../editor/utils";
 import type { DraftQuestion } from "../editor/utils";
@@ -580,10 +580,6 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 					// quiz », son sélecteur compris) sous le curseur de
 					// l'utilisateur, pour n'en changer qu'une ligne de texte.
 					refreshListLabels(listCol);
-					// Une réponse plus longue peut dépasser la réserve : on
-					// l'étend, jamais on ne la réduit (les chevrons ne doivent
-					// pas remonter pendant la frappe).
-					if (slideHost) growReserve(slideHost, availableHeight(panel));
 				},
 				// Re-peindre le PANNEAU seul : la liste vient d'être refaite par
 				// onChange, et re-rendre tout volerait le focus de la frappe.

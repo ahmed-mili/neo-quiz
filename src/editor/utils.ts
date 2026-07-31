@@ -71,6 +71,10 @@ export interface DraftQuestion {
 	/** Énoncé/explication en HTML pré-rendu (édition mode HTML + fallback import). */
 	_promptHtml?: string;
 	_explainHtml?: string;
+	/** Le `prompt` venait de la NOTE, pas d'un HTML aplati par la lecture.
+	    Ce qui décide s'il faut le réémettre à côté de `promptHtml` : un texte
+	    dérivé n'a pas à apparaître dans une note qui ne l'avait pas. */
+	_promptSource?: boolean;
 	/** Titre modifié manuellement (bloque la renumérotation auto "Question N"). */
 	_userModifiedTitle?: boolean;
 	/** `id` tel qu'il était ÉCRIT dans la note, quand il y en avait un. Le

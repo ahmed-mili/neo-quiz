@@ -13,6 +13,31 @@
 import JSON5 from "json5";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
+/* `_htmlToText` (editor/modals.ts) passe par le DOM ; hors navigateur, ce
+   bouchon reproduit ce que le vrai en ferait — sauts de ligne aux frontieres
+   de bloc, entites decodees (cf. scripts/audit-vaults.mjs, meme raison). */
+globalThis.document = {
+	createElement() {
+		let html = "";
+		const noeud = {
+			set innerHTML(v) { html = String(v); },
+			get textContent() {
+				const LF = String.fromCharCode(10);
+				return html
+					.replace(/<br\s*\/?>/gi, LF)
+					.replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, LF)
+					.replace(/<[^>]+>/g, "")
+					.replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+					.replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+					.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+			},
+			querySelectorAll() { return []; },
+		};
+		Object.defineProperty(noeud, "content", { get() { return noeud; } });
+		return noeud;
+	},
+};
+
 const question = (over) => ({
 	_type: "single", _id: "x", title: "Titre", prompt: "Énoncé",
 	options: ["a", "b"], correctIndex: 0, hint: "", explain: "",
@@ -303,6 +328,16 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
 		examDurationMinutes: 37, examAutoSubmit: false });
 	r.check("champs d'examen d'une question conserves",
 		[exam.examDurationMinutes, exam.examAutoSubmit], [37, false]);
+
+	// Un `prompt` texte ECRIT dans la note survit a cote de son `promptHtml`...
+	const deuxEnonces = tour({ ...base, prompt: "texte de repli", promptHtml: "<strong>riche</strong>",
+		options: ["a", "b"], correctIndex: 0 });
+	r.check("les deux enonces conserves",
+		[deuxEnonces.promptHtml, deuxEnonces.prompt], ["<strong>riche</strong>", "texte de repli"]);
+	// ... mais un texte DERIVE du HTML par la lecture n'est pas ajoute a une
+	// note qui ne l'avait pas.
+	const htmlSeul = tour({ ...base, promptHtml: "<strong>riche</strong>", options: ["a", "b"], correctIndex: 0 });
+	r.check("pas de prompt invente", htmlSeul.prompt, undefined);
 
 	// PROSE qui ressemble a du HTML : elle ne doit PAS partir vers md2html,
 	// sinon on rouvre la corruption que tout le reste evite.

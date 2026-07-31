@@ -115,6 +115,14 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 	if (q._useHtmlPrompt && q._promptHtml) {
 		// Si l'utilisateur édite en mode HTML, utiliser directement _promptHtml
 		L.push(`\t\tpromptHtml: '${e(q._promptHtml)}',`);
+		/* …et GARDER le `prompt` texte s'il existait aussi. Le moteur affiche
+		   `promptHtml` en priorité (engine/cards.ts renderQuizPromptHtml), mais
+		   le texte reste la version lisible de la note, et le taire l'effaçait
+		   (revue codex 2026-07-31 — même défaut que pour l'explication).
+		   `_promptSource` distingue un `prompt` ÉCRIT dans la note du texte que
+		   la lecture a dérivé du HTML : réémettre ce dernier ajouterait un champ
+		   que personne n'a écrit. */
+		if (q.prompt && q._promptSource) L.push(`\t\tprompt: '${e(q.prompt)}',`);
 	} else if (q.prompt) {
 		/* Passage en HTML seulement pour le markdown de BLOC — titre, liste,
 		   citation, bloc de code, ou plusieurs lignes. L'ancien test suffisait à

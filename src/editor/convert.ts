@@ -136,6 +136,7 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 
 	if (q.prompt) {
 		question.prompt = q.prompt;
+		question._promptSource = true;
 	} else if (q.promptHtml) {
 		question.prompt = _htmlToText(q.promptHtml);
 	}

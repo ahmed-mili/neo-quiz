@@ -324,10 +324,26 @@ async function shareViaDiscordInner(ctx: DashboardCtx, source: ShareSource): Pro
 		try {
 			fs.writeFileSync(dest, payload.bytes);
 		} catch (e) { releaseReservedPath(dest); throw e; }
-		try {
-			const encoded = Buffer.from(buildDiscordScript(dest), "utf16le").toString("base64");
-			cp.execFile("powershell", ["-NoProfile", "-WindowStyle", "Hidden", "-EncodedCommand", encoded], { windowsHide: true }, () => { /* fire-and-forget */ });
-		} catch { /* pas Windows / PowerShell indispo */ }
+		/* L'échec de PowerShell arrive en RAPPEL, pas en exception : le `catch`
+		   ne voyait qu'un `execFile` introuvable, et un `ENOENT` du processus
+		   laissait annoncer « Copié » alors que rien n'était parti (revue codex
+		   2026-07-31). On attend donc le lancement avant de conclure. */
+		const lance = await new Promise<boolean>((resolve) => {
+			try {
+				const encoded = Buffer.from(buildDiscordScript(dest), "utf16le").toString("base64");
+				const enfant = cp.execFile("powershell",
+					["-NoProfile", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+					{ windowsHide: true }, () => { /* le script vit sa vie */ });
+				/* On attend le LANCEMENT, pas la fin : le script active Discord
+				   avec ses propres temporisations, et attendre sa sortie
+				   retarderait la confirmation de plusieurs secondes — le
+				   « fire-and-forget » d'origine est délibéré. Un échec de
+				   lancement (`ENOENT`), lui, arrive tout de suite. */
+				enfant.once("error", () => resolve(false));
+				setTimeout(() => resolve(true), 300);
+			} catch { resolve(false); }
+		});
+		if (!lance) return false;
 		new Notice(t("dashboard.quizzes.discordReady"));
 		return true;
 	}

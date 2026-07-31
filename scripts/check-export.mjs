@@ -45,6 +45,12 @@ await withSrcModule("src/editor/export.ts", ({ exportAll }) => {
 	r.check("antislash", extra("C:\\Users\\a"), "C:\\Users\\a");
 	r.check("nombre", extra(42), 42);
 	r.check("booléen", extra(true), true);
+	// JSON5 accepte NaN et Infinity ; `JSON.stringify` les rendait `null`, ce
+	// qui changeait la valeur en silence à la première sauvegarde.
+	r.check("NaN imbriqué", Number.isNaN(extra({ x: NaN }).x), true);
+	r.check("Infinity imbriqué", extra({ x: Infinity }).x, Infinity);
+	r.check("objet profond", extra({ a: { b: { c: [1, "deux", null] } } }), { a: { b: { c: [1, "deux", null] } } });
+	r.check("clé à apostrophe", extra({ "l'a": 1 }), { "l'a": 1 });
 
 	// Identifiants : ancre HTML de la question et clé des résultats sauvegardés.
 	const ids = (questions) => relire(questions, p => p.map(q => q.id));

@@ -2,6 +2,34 @@ import { escHtml, esc5, md2html } from "./utils";
 import type { DraftQuestion } from "./utils";
 import type { EditorExamOptions } from "../types/editor-ctx";
 
+/**
+ * Une valeur quelconque, écrite en JSON5.
+ *
+ * `JSON.stringify` ne convient pas : il rend `NaN` et `Infinity` — deux
+ * littéraux que JSON5 accepte, et qu'un bloc écrit à la main peut contenir —
+ * sous la forme `null`. La valeur serait alors silencieusement changée à la
+ * première sauvegarde.
+ *
+ * `profondeur` borne la récursion : une structure circulaire ne peut pas
+ * arriver depuis un bloc lu par `parseQuizSource`, mais elle ferait exploser
+ * la pile si elle arrivait, et emporterait la sauvegarde avec elle.
+ */
+function json5Value(v: unknown, profondeur = 0): string {
+	if (profondeur > 8) return "null";
+	if (v === null || v === undefined) return "null";
+	if (typeof v === "string") return `'${esc5(v)}'`;
+	// NaN / Infinity / -Infinity sont des littéraux JSON5 valides.
+	if (typeof v === "number" || typeof v === "boolean") return String(v);
+	if (Array.isArray(v)) return "[" + v.map(x => json5Value(x, profondeur + 1)).join(", ") + "]";
+	if (typeof v === "object") {
+		const paires = Object.entries(v as Record<string, unknown>)
+			.map(([k, x]) => `'${esc5(k)}': ${json5Value(x, profondeur + 1)}`);
+		return "{" + paires.join(", ") + "}";
+	}
+	// Fonction, symbole : rien de tout cela ne sort d'un bloc quiz-blocks.
+	return "null";
+}
+
 function exportQuestion(q: DraftQuestion, idx: number, usedIds?: Set<string>): string {
 	const id = questionId(q, idx, usedIds);
 	const e = esc5;
@@ -101,19 +129,14 @@ function exportQuestion(q: DraftQuestion, idx: number, usedIds?: Set<string>): s
 			} else if (typeof val === 'number' || typeof val === 'boolean') {
 				L.push(`\t\t${key}: ${val},`);
 			} else {
-				/* Tout le reste — `null`, un objet, un tableau d'objets — passe
-				   par JSON. Les branches d'origine ne savaient écrire que des
-				   scalaires et des tableaux de scalaires : un objet imbriqué
-				   sortait en `[object Object]` (JSON5 invalide, donc écriture
-				   refusée en silence) et un `null` disparaissait purement. Ces
-				   clés viennent d'un bloc écrit à la main : on les rend telles
-				   qu'on les a lues, quelle que soit leur forme. */
-				try {
-					L.push(`\t\t${key}: ${JSON.stringify(val)},`);
-				} catch {
-					// Structure circulaire : la clé est perdue de toute façon,
-					// mais elle ne doit pas emporter le bloc entier avec elle.
-				}
+				/* Tout le reste — `null`, un objet, un tableau d'objets. Les
+				   branches d'origine ne savaient écrire que des scalaires et des
+				   tableaux de scalaires : un objet imbriqué sortait en
+				   `[object Object]` (JSON5 invalide, donc écriture refusée en
+				   silence) et un `null` disparaissait purement. Ces clés viennent
+				   d'un bloc écrit à la main : on les rend telles qu'on les a
+				   lues, quelle que soit leur forme. */
+				L.push(`\t\t${key}: ${json5Value(val)},`);
 			}
 		}
 	}

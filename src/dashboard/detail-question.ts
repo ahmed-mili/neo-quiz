@@ -117,6 +117,11 @@ function renderPromptField(parent: HTMLElement, q: DraftQuestion, cb: EditCallba
 			q._useHtmlPrompt = true;
 		} else {
 			q.prompt = v;
+			/* Ce texte vient de l'AUTEUR, pas d'un HTML aplati : le marquer est
+			   ce qui le fait réémettre s'il finit par cohabiter avec un
+			   `promptHtml` — sans quoi il disparaissait au rechargement suivant
+			   (revue codex 2026-07-31). */
+			q._promptSource = true;
 			// L'énoncé redevient du texte : le HTML pré-rendu d'un import
 			// l'écraserait au rendu suivant (et à l'export, cf. export.ts).
 			q._useHtmlPrompt = false;
@@ -176,10 +181,11 @@ function renderExtras(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, 
 		.replace(/<br\s*\/?>/gi, "\n");
 	bridge.field(explain, "", explainValue, t("editor.form.explainPlaceholder"), true, v => {
 		if (richExplain) {
-			// L'export préfère `explain` (texte) à `_explainHtml` : le vider est
-			// ce qui donne la main au HTML qu'on édite ici.
+			/* Le HTML édité ici fait foi, mais le texte de secours n'a pas à
+			   DISPARAÎTRE pour autant : l'export sait désormais écrire les deux,
+			   et le vider effaçait un champ que l'auteur n'avait pas touché
+			   (revue codex 2026-07-31). */
 			q._explainHtml = v;
-			q.explain = "";
 		} else {
 			q.explain = v;
 			// Le HTML pré-rendu d'un import cède la main au texte fraîchement

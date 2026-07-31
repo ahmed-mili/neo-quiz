@@ -331,16 +331,22 @@ async function shareViaDiscordInner(ctx: DashboardCtx, source: ShareSource): Pro
 		const lance = await new Promise<boolean>((resolve) => {
 			try {
 				const encoded = Buffer.from(buildDiscordScript(dest), "utf16le").toString("base64");
+				let conclu = false;
 				const enfant = cp.execFile("powershell",
 					["-NoProfile", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
-					{ windowsHide: true }, () => { /* le script vit sa vie */ });
+					{ windowsHide: true }, (err) => {
+						/* Un échec TARDIF (code de sortie non nul, script
+						   interrompu) arrive après la confirmation : le taire
+						   laisserait croire à un envoi qui n'a pas eu lieu. */
+						if (err && conclu) new Notice(t("dashboard.quizzes.shareSaveError"));
+					});
 				/* On attend le LANCEMENT, pas la fin : le script active Discord
 				   avec ses propres temporisations, et attendre sa sortie
 				   retarderait la confirmation de plusieurs secondes — le
 				   « fire-and-forget » d'origine est délibéré. Un échec de
 				   lancement (`ENOENT`), lui, arrive tout de suite. */
 				enfant.once("error", () => resolve(false));
-				setTimeout(() => resolve(true), 300);
+				setTimeout(() => { conclu = true; resolve(true); }, 300);
 			} catch { resolve(false); }
 		});
 		if (!lance) return false;

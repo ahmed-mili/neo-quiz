@@ -164,6 +164,10 @@ export function stripInlineMarkdown(raw: unknown): string {
 	   placeholder affichait ses chevrons là où le rendu, lui, affiche « x »
 	   en gras (revue codex 2026-07-31). */
 	const html = inlineMarkdown(restoreAllowedInlineTags(escapeHtmlText(raw)));
+	/* Les espaces ne sont PAS normalisés : un placeholder de zone de texte peut
+	   être multiligne et indenté exprès (« Exemple :\n    SELECT * … »), et
+	   l'aplatir lui ferait perdre sa forme. Les appelants qui veulent UNE ligne
+	   — la vignette de la liste — la demandent eux-mêmes. */
 	return html
 		// Un `<br>` sépare deux mots : le remplacer par RIEN les collerait.
 		.replace(/<br\s*\/?>/gi, " ")
@@ -174,8 +178,7 @@ export function stripInlineMarkdown(raw: unknown): string {
 		.replace(/\&lt;/g, "<").replace(/\&gt;/g, ">")
 		.replace(/\&quot;/g, "\"").replace(/\&#39;/g, "'")
 		// `&amp;` en DERNIER : le faire avant ressusciterait « &amp;lt; » en « < ».
-		.replace(/\&amp;/g, "&")
-		.replace(/\s+/g, " ").trim();
+		.replace(/\&amp;/g, "&");
 }
 
 /* ── Liste blanche du HTML PRÉ-RENDU ──────────────────────────────────
@@ -513,13 +516,51 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 	 * L'ordre compte : on assainit AVANT de remplacer les `![[…]]`, pour que
 	 * les `<img>` que cette fonction fabrique elle-même — les seuls en qui on
 	 * ait confiance — ne repassent pas devant le filtre.
+	 *
+	 * Et le remplacement ne touche QUE les nœuds de texte. Une substitution de
+	 * chaîne sur tout le HTML atteignait aussi les attributs : un
+	 * `title="![[pic.png]]"` devenait `title="<div class="…"><img …>"`, dont le
+	 * guillemet interne refermait l'attribut — du vrai balisage fabriqué APRÈS
+	 * la dernière passe d'assainissement (revue codex 2026-07-31).
 	 */
 	function replaceObsidianEmbedsInHtml(html: unknown, { wrapClass = "quiz-explain-embed-wrap", imgClass = "quiz-explain-embed" }: EmbedClassOptions = {}): string {
 		// NE PAS faire unescapeHtmlText ici car cela casserait l'affichage
 		// des entités HTML comme &gt; qui doivent rester comme &gt; pour être
 		// affichées comme > par le navigateur, pas interprétées comme des balises
-		const content = sanitizeQuizHtml(html);
-		return content.replace(/!\[\[([^\]]+)\]\]/g, (_: string, spec: string) => buildEmbedImgHtml(spec, { wrapClass, imgClass }));
+		const tpl = document.createElement("template");
+		tpl.innerHTML = sanitizeQuizHtml(html);
+
+		const EMBED_RE = /!\[\[([^\]]+)\]\]/g;
+		const textes: Text[] = [];
+		const marcheur = document.createTreeWalker(tpl.content, NodeFilter.SHOW_TEXT);
+		for (let n = marcheur.nextNode(); n; n = marcheur.nextNode()) {
+			if (EMBED_RE.test(n.nodeValue ?? "")) textes.push(n as Text);
+			EMBED_RE.lastIndex = 0;
+		}
+
+		for (const noeud of textes) {
+			const texte = noeud.nodeValue ?? "";
+			/* Le nœud porte du texte DÉCODÉ : ses `<` et ses `&` doivent être
+			   réécrits avant de repasser par un analyseur, sinon « a < b »
+			   redeviendrait du balisage. Seul le HTML de l'image, que l'on
+			   fabrique nous-mêmes, entre brut. */
+			let html = "";
+			let fin = 0;
+			EMBED_RE.lastIndex = 0;
+			for (let m = EMBED_RE.exec(texte); m; m = EMBED_RE.exec(texte)) {
+				html += escapeHtmlText(texte.slice(fin, m.index));
+				html += buildEmbedImgHtml(m[1], { wrapClass, imgClass });
+				fin = m.index + m[0].length;
+			}
+			html += escapeHtmlText(texte.slice(fin));
+
+			/* Remplacement par un FRAGMENT construit à part : réécrire le HTML du
+			   parent détruirait ses autres enfants (et leurs écouteurs). */
+			const frag = document.createElement("template");
+			frag.innerHTML = html;
+			noeud.replaceWith(frag.content);
+		}
+		return tpl.innerHTML;
 	}
 
 	return {

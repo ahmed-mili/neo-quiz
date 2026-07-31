@@ -92,6 +92,12 @@ const CAS_NUS = [
 	["balise littérale retirée", "<strong>x</strong> y", "x y"],
 	["saut de ligne devient une espace", "a<br>b", "a b"],
 	["balise NON autorisée reste visible", "<img src=x> y", "<img src=x> y"],
+	// Un placeholder de zone de texte peut être multiligne et indenté exprès :
+	// l'aplatir ici lui ferait perdre sa forme. Les appelants qui veulent UNE
+	// ligne (la vignette de la liste) la demandent eux-mêmes.
+	["indentation d'un placeholder préservée",
+		"Exemple :\n    SELECT **x**\n    FROM t",
+		"Exemple :\n    SELECT x\n    FROM t"],
 ];
 
 await withSrcModule("src/engine/sanitizer.ts", ({ renderInlineText, stripInlineMarkdown }) => {

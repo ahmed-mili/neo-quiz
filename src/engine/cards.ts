@@ -145,21 +145,31 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			/* Seul champ `*Html` qui ne passe pas par `replaceObsidianEmbedsInHtml`
 			   (il a sa propre résolution de `src`) : il lui faut donc son propre
 			   passage au filtre. Une option d'un quiz PARTAGÉ arrive avec le HTML
-			   de son auteur, et finit dans le DOM par `innerHTML`. */
-			optionContentHtml = ctx.sanitize.sanitizeQuizHtml(q.optionHtml[oi]);
+			   de son auteur, et finit dans le DOM par `innerHTML`.
+
+			   L'ordre : RÉSOUDRE d'abord, assainir ensuite. Une image d'option est
+			   écrite avec un chemin nu (`schema.png`), que la liste blanche retire
+			   — assainir en premier effaçait donc les images des vieux quiz avant
+			   même qu'on puisse les résoudre.
+
+			   Et la résolution passe par le DOM, non par une substitution de
+			   chaîne : `/src="…"/g` atteignait aussi le TEXTE d'une option, et
+			   `<code>src="schema.png"</code>` — qui parle de code, pas d'image —
+			   se faisait réécrire en chemin `app://` (revue codex 2026-07-31).
+			   Le `<template>` reste inerte : rien ne se charge pendant qu'on le
+			   manipule. */
+			const tpl = document.createElement("template");
+			tpl.innerHTML = String(q.optionHtml[oi]);
 			if (typeof ctx.app?.vault?.adapter?.getResourcePath === "function") {
-				optionContentHtml = optionContentHtml.replace(/src="([^"]+)"/g, (match: string, src: string) => {
-					if (src.startsWith("http") || src.startsWith("data:") || src.startsWith("app://")) {
-						return match;
-					}
+				tpl.content.querySelectorAll("img[src]").forEach(img => {
+					const src = img.getAttribute("src") || "";
+					if (/^(https?:|data:|app:)/i.test(src)) return;
 					try {
-						const resolved = ctx.app.vault.adapter.getResourcePath(src);
-						return `src="${ctx.escapeHtmlAttr(resolved)}"`;
-					} catch {
-						return match;
-					}
+						img.setAttribute("src", ctx.app.vault.adapter.getResourcePath(src));
+					} catch { /* chemin non résoluble : laissé tel quel, la liste blanche tranchera */ }
 				});
 			}
+			optionContentHtml = ctx.sanitize.sanitizeQuizHtml(tpl.innerHTML);
 		} else {
 			optionContentHtml = ctx.sanitize.renderRawHtmlWithEmbeds(q.options[oi], { wrapClass: "quiz-option-embed-wrap", imgClass: "quiz-option-embed" });
 		}

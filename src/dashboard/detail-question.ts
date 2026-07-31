@@ -28,10 +28,13 @@ import type { FormBridge } from "./detail-form-bridge";
     demande d'Ahmed 2026-07-21 « il faut que ça ressemble au vrai rendu des
     quiz à droite ». Tout passe par editor/question-preview.ts, partagé avec
     l'aperçu de l'éditeur — un seul markup à suivre si le moteur change. */
-export function renderQuestionView(parent: HTMLElement, q: DraftQuestion, app: App, index: number): void {
+export function renderQuestionView(parent: HTMLElement, q: DraftQuestion, app: App, index: number, sourcePath?: string): void {
 	renderQuizPreviewCard(parent, q, {
 		app,
 		fallbackTitle: `Question ${index + 1}`,
+		// Le chemin de la NOTE, pour que ses `![[…]]` se résolvent comme dans le
+		// quiz. Absent pour un quiz encore en mémoire (résultat d'une génération).
+		sourcePath,
 		// Pas de bouton d'indice ici : l'indice se lit en jouant, la page
 		// d'un quiz sert à relire et corriger.
 	});

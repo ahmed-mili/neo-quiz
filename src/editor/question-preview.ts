@@ -38,6 +38,16 @@ export interface QuizPreviewOptions {
 	fallbackTitle: string;
 	/** Bouton indice : rendu seulement si un handler est fourni. */
 	onHint?: (hint: string) => void;
+	/**
+	 * Chemin de la NOTE qui porte le quiz, pour résoudre ses `![[…]]` comme le
+	 * moteur le fait (`ctx.sourcePath`). Sans lui, `getFirstLinkpathDest` juge
+	 * sans contexte : deux pièces jointes homonymes dans des dossiers
+	 * différents donnent la mauvaise, et un lien relatif (`../images/x.png`)
+	 * ne se résout pas du tout — l'aperçu montrait alors une AUTRE image que
+	 * le quiz, ou aucune (revue codex 2026-07-31). Absent pour un quiz encore
+	 * en mémoire, qui n'a pas de note.
+	 */
+	sourcePath?: string;
 }
 
 /**
@@ -55,7 +65,7 @@ export interface QuizPreviewOptions {
  * nu (`schema.png`, ce que `md2html` écrit) en serait retiré — et l'aperçu
  * n'aurait plus d'images du tout.
  */
-export function resolveImagesInHtml(app: App, html: string): string {
+export function resolveImagesInHtml(app: App, html: string, sourcePath = ""): string {
 	if (!html) return html;
 	const tpl = document.createElement("template");
 	tpl.innerHTML = html;
@@ -72,7 +82,7 @@ export function resolveImagesInHtml(app: App, html: string): string {
 		   calcul par `attachmentFolderPath` ci-dessous ne marche que si la
 		   pièce jointe est EXACTEMENT dans le dossier configuré — d'où des
 		   aperçus sans image alors que le quiz, lui, les affichait. */
-		const dest = app.metadataCache?.getFirstLinkpathDest?.(lien, "");
+		const dest = app.metadataCache?.getFirstLinkpathDest?.(lien, sourcePath);
 		if (dest) {
 			img.setAttribute("src", app.vault.getResourcePath(dest));
 			return;
@@ -93,8 +103,8 @@ export function resolveImagesInHtml(app: App, html: string): string {
     accents graves d'une adresse IP là où le quiz montre du code. Le `<p>`
     que md2html ajoute autour d'un texte d'une ligne est retiré : ces
     libellés vivent dans une cellule, pas dans un paragraphe. */
-function inlineInto(el: HTMLElement, app: App, raw: string): void {
-	el.innerHTML = resolveImagesInHtml(app, md2html(raw).replace(/^<p>|<\/p>$/g, ""));
+function inlineInto(el: HTMLElement, app: App, raw: string, sourcePath?: string): void {
+	el.innerHTML = resolveImagesInHtml(app, md2html(raw).replace(/^<p>|<\/p>$/g, ""), sourcePath);
 }
 
 /** Le SUPPORT de compréhension, au-dessus de la question — mêmes classes que
@@ -103,7 +113,7 @@ function inlineInto(el: HTMLElement, app: App, raw: string): void {
     pouvait pas la relire. Toujours déplié ici (l'aperçu n'a pas d'état) et
     sans le compte « questions 2 à 4 », qui demanderait de connaître tout le
     quiz alors que la carte ne voit qu'une question. */
-function renderPassage(card: HTMLElement, q: DraftQuestion, app: App): void {
+function renderPassage(card: HTMLElement, q: DraftQuestion, app: App, sourcePath?: string): void {
 	const extras = q._extraFields || {};
 	const text = typeof extras.passage === "string" ? extras.passage : "";
 	const html = typeof extras.passageHtml === "string" ? extras.passageHtml : "";
@@ -121,7 +131,7 @@ function renderPassage(card: HTMLElement, q: DraftQuestion, app: App): void {
 	head.createSpan({ cls: "quiz-passage-title", text: title });
 	const body = wrap.createDiv({ cls: "quiz-passage-body" });
 	const content = body.createDiv({ cls: "quiz-passage-content" });
-	content.innerHTML = resolveImagesInHtml(app, html || md2html(text));
+	content.innerHTML = resolveImagesInHtml(app, html || md2html(text), sourcePath);
 }
 
 /** Construit la carte de question dans `host` et la renvoie. */
@@ -131,12 +141,12 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 	const wrap = host.createDiv({ cls: "quiz-blocks-host" });
 	const card = wrap.createEl("section", { cls: "quiz-card" });
 
-	renderPassage(card, q, app);
+	renderPassage(card, q, app, opts.sourcePath);
 
 	// Le TITRE aussi rend son markdown : le moteur le fait (engine/cards.ts),
 	// et un titre de question technique cite volontiers une commande entre
 	// accents graves — ils s'affichaient bruts dans l'aperçu.
-	inlineInto(card.createEl("h2"), app, q.title || fallbackTitle);
+	inlineInto(card.createEl("h2"), app, q.title || fallbackTitle, opts.sourcePath);
 
 	if (q.resourceButton) {
 		const rbtn = card.createEl("button", { cls: "quiz-resource-btn" });
@@ -150,7 +160,7 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		const raw = q._promptHtml
 			? q._promptHtml.replace(/!\[\[([^\]]+)\]\]/g, '<img src="$1" class="qb-md-img" />')
 			: md2html(q.prompt);
-		promptEl.innerHTML = resolveImagesInHtml(app, raw);
+		promptEl.innerHTML = resolveImagesInHtml(app, raw, opts.sourcePath);
 	}
 
 	if (type === "single" || type === "multi") {
@@ -161,7 +171,7 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		const list = card.createDiv({ cls: "quiz-options-wrap" });
 		(q.options || []).forEach((o) => {
 			const opt = list.createDiv({ cls: `quiz-option ${isMulti ? "multi" : ""}`.trim(), attr: { role: "button", tabindex: "0" } });
-			opt.innerHTML = resolveImagesInHtml(app, md2html(o || "..."));
+			opt.innerHTML = resolveImagesInHtml(app, md2html(o || "..."), opts.sourcePath);
 		});
 	}
 
@@ -171,12 +181,12 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		const slotsWrap = orderingWrap.createDiv({ cls: "quiz-ordering-slots" });
 		(q.slots || []).forEach((slotLabel) => {
 			const slot = slotsWrap.createDiv({ cls: "quiz-slot" });
-			inlineInto(slot.createDiv({ cls: "quiz-slot-label" }), app, slotLabel);
+			inlineInto(slot.createDiv({ cls: "quiz-slot-label" }), app, slotLabel, opts.sourcePath);
 			slot.createDiv({ cls: "quiz-slot-value", text: "…" });
 		});
 		// Pool dans l'ordre STOCKÉ (celui montré à l'élève), pas l'ordre correct.
 		const pool = orderingWrap.createDiv({ cls: "quiz-ordering-pool" });
-		(q.possibilities || []).forEach(p => inlineInto(pool.createSpan({ cls: "quiz-pool-item" }), app, p));
+		(q.possibilities || []).forEach(p => inlineInto(pool.createSpan({ cls: "quiz-pool-item" }), app, p, opts.sourcePath));
 	}
 
 	if (type === "matching") {
@@ -185,11 +195,11 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		const slotsWrap = matchWrap.createDiv({ cls: "quiz-ordering-slots" });
 		(q.rows || []).forEach((row, ri) => {
 			const slot = slotsWrap.createDiv({ cls: "quiz-slot" });
-			inlineInto(slot.createDiv({ cls: "quiz-slot-label" }), app, row || t("editor.matching.rowFallback", { n: ri }));
+			inlineInto(slot.createDiv({ cls: "quiz-slot-label" }), app, row || t("editor.matching.rowFallback", { n: ri }), opts.sourcePath);
 			slot.createDiv({ cls: "quiz-slot-value", text: "…" });
 		});
 		const pool = matchWrap.createDiv({ cls: "quiz-ordering-pool" });
-		(q.choices || []).forEach(c => inlineInto(pool.createSpan({ cls: "quiz-pool-item" }), app, c));
+		(q.choices || []).forEach(c => inlineInto(pool.createSpan({ cls: "quiz-pool-item" }), app, c, opts.sourcePath));
 	}
 
 	if (type === "cloze") {
@@ -204,7 +214,7 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		card.createDiv({ cls: "quiz-multi-indicator", text: t("engine.cloze.instructions", { count: blanks.length }) });
 		const body = card.createDiv({ cls: "quiz-cloze" });
 		body.innerHTML = fillSlots(
-			resolveImagesInHtml(app, md2html(marked).replace(/^<p>|<\/p>$/g, "")),
+			resolveImagesInHtml(app, md2html(marked).replace(/^<p>|<\/p>$/g, ""), opts.sourcePath),
 			(index) => `<span class="quiz-cloze-slot"><input class="quiz-cloze-input" type="text" readonly `
 				+ `aria-label="${t("engine.cloze.blankAria", { n: index + 1 }).replace(/"/g, "&quot;")}"></span>`,
 		);

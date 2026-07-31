@@ -60,8 +60,16 @@ function parseQuizSource(source?: string | null): QuizQuestion[] {
  */
 function isQuizModeConfig(item: unknown): boolean {
 	const q = item as (QuizQuestion & QuizModeConfig) | null | undefined;
-	return !!q && typeof q === "object" && !Array.isArray(q) && !q.prompt
-		&& (q.examMode === true || q.learnMode === true || typeof q.mode === "string");
+	if (!q || typeof q !== "object" || Array.isArray(q) || q.prompt) return false;
+	if (q.examMode === true || q.learnMode === true) return true;
+	/* Les TROIS modes du plugin, pas « une chaîne quelconque ». Une question
+	   légitime nommée `{ title: 'Quel mode choisir ?', mode: 'transport' }`
+	   passait pour la configuration du bloc et DISPARAISSAIT à la réécriture —
+	   et en dernière position, même une question complète avec ses réponses
+	   (`mode: 'dark'`) y passait (revue codex 2026-07-31). C'est déjà la liste
+	   que `readModeConfig` accepte : la reconnaissance et la lecture parlent
+	   maintenant du même vocabulaire. */
+	return q.mode === "quiz" || q.mode === "learn" || q.mode === "exam";
 }
 
 /**

@@ -627,7 +627,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 				onStructureChange: () => paintPanel(listCol, panel, nav, spec),
 			});
 		} else {
-			renderQuestionView(content, q, ctx.app, index);
+			renderQuestionView(content, q, ctx.app, index, draft?.file?.path);
 		}
 	}
 

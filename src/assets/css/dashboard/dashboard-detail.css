@@ -1022,3 +1022,47 @@
 	line-height: 1.6;
 	color: var(--text-faint);
 }
+
+
+/* ── Énoncé : la zone du formulaire de l'éditeur, habillée en champ de page ──
+   Le markup vient de `bridge.field` (classes qb-*) pour garder la barre
+   d'entités, le raccourci ``` et le collage d'image ; seule la MATIÈRE est
+   celle de la page (verre, liseré, focus d'accent). */
+.qbd-qz-field--rich .qb-entity-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-bottom: 6px;
+}
+
+.qbd-root .qbd-qz-field--rich .qb-field-textarea {
+	width: 100%;
+	min-height: 84px;
+	resize: vertical;
+	padding: 12px 14px;
+	border-radius: var(--radius-m, 12px);
+	/* !important : le chrome natif d'Obsidian repeint les textarea (et les
+	   assombrit au survol) par-dessus nos classes. */
+	background: color-mix(in srgb, var(--background-secondary) 55%, transparent) !important;
+	border: 1px solid var(--qbd-glass-edge);
+	box-shadow: var(--qbd-glass-sheen) !important;
+	backdrop-filter: var(--qbd-glass-blur-dense);
+	-webkit-backdrop-filter: var(--qbd-glass-blur-dense);
+	color: var(--text-normal);
+	font-family: var(--font-interface, inherit);
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 1.45;
+	transition: border-color 0.14s ease;
+}
+
+.qbd-root .qbd-qz-field--rich .qb-field-textarea:focus {
+	border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--qbd-glass-edge));
+	outline: none;
+}
+
+/* Le label vide que `bridge.field` insère avant la zone ne doit pas creuser
+   un vide sous le nôtre. */
+.qbd-qz-field--rich .qb-field-label:empty {
+	display: none;
+}

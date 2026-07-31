@@ -76,10 +76,17 @@ export interface QuizPageHandlers {
 	render(container: HTMLElement, spec: QuizPageSpec): void;
 	/** Écrit sur-le-champ ce qui est en attente (sortie de vue, fermeture). */
 	flush(): void;
+	/** Écrit, puis rend TOUT ce que la page tient au système : écoute clavier
+	    posée sur le document, glissement en vol, brouillon. Sans cet appel à
+	    la fermeture de la vue, le listener ne se détachait qu'au prochain
+	    appui de touche — et retenait d'ici là le DOM et le brouillon. */
+	dispose(): void;
 }
 
 export interface DetailHandlers {
 	render(container: HTMLElement, quiz: QuizIndexEntry): void;
+	/** Relayé à la page : appelé à la fermeture de la vue dashboard. */
+	dispose(): void;
 }
 
 /* ── La page « quiz » du dashboard : UNE instance, sur un quiz du vault. La
@@ -117,6 +124,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 				isStale: () => ctx.view.currentView !== "detail",
 			});
 		},
+		dispose: () => page.dispose(),
 	};
 }
 
@@ -671,5 +679,16 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		return svg;
 	}
 
-	return { render, flush: flushSave };
+	function dispose(): void {
+		flushSave();
+		if (keyCleanup) keyCleanup();
+		if (slideHost) { finishSlide(slideHost); slideHost = null; }
+		draft = null;
+		currentSpec = null;
+		currentContainer = null;
+		currentPath = null;
+		countEl = null;
+	}
+
+	return { render, flush: flushSave, dispose };
 }

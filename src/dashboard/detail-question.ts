@@ -64,7 +64,7 @@ export function renderQuestionEdit(parent: HTMLElement, q: DraftQuestion, cb: Ed
 	});
 
 	renderTitleField(parent, q, cb);
-	renderPromptField(parent, q, cb);
+	renderPromptField(parent, q, cb, bridge);
 
 	// ── Les champs du TYPE (réponses, emplacements, paires, gabarit…) ──
 	// Rendus par le formulaire de l'éditeur : mêmes classes, mêmes règles
@@ -94,29 +94,48 @@ function renderTitleField(parent: HTMLElement, q: DraftQuestion, cb: EditCallbac
 	});
 }
 
-function renderPromptField(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks): void {
+/** Un énoncé importé peut porter du HTML de STRUCTURE (tableau, liste, bloc
+    de code, image) que le texte brut ne sait pas exprimer. Le repérer décide
+    lequel des deux champs éditer — sans quoi corriger une faute de frappe
+    aplatissait le tableau. */
+function hasBlockHtml(html: string | undefined): boolean {
+	return !!html && /<(table|thead|tbody|tr|td|th|pre|ul|ol|li|img|div|h[1-6]|blockquote)\b/i.test(html);
+}
+
+function renderPromptField(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, bridge: FormBridge): void {
 	// Champ NU (label + zone de saisie), pas une carte dans une carte — le
-	// double cadre gris de la première version faisait lourd.
-	const field = parent.createDiv({ cls: "qbd-qz-field" });
-	field.createDiv({ cls: "qbd-qz-field-label", text: t("dashboard.quiz.editPrompt") });
-	const input = field.createEl("textarea", { cls: "qbd-qz-field-input" });
-	input.value = q.prompt || "";
-	input.rows = 2;
-	input.placeholder = t("dashboard.quiz.editPromptPlaceholder");
-	autoGrow(input);
-	// Deuxieme passe apres layout : au premier appel la largeur du panneau
-	// n'est pas encore arretee, scrollHeight vaut celui d'une ligne et
-	// l'enonce se retrouve coupe.
-	requestAnimationFrame(() => autoGrow(input));
-	input.addEventListener("input", () => {
-		q.prompt = input.value;
-		// L'énoncé redevient du texte : le HTML pré-rendu d'un import
-		// l'écraserait au rendu suivant (et à l'export, cf. export.ts).
-		q._useHtmlPrompt = false;
-		delete q._promptHtml;
-		autoGrow(input);
+	// double cadre gris de la première version faisait lourd. La zone vient
+	// du formulaire de l'éditeur : elle apporte la barre d'entités HTML, le
+	// raccourci ``` + Entrée et le collage d'image vers le vault — trois
+	// capacités que la version maison n'avait pas.
+	const rich = hasBlockHtml(q._promptHtml);
+	const field = parent.createDiv({ cls: "qbd-qz-field qbd-qz-field--rich" });
+	field.createDiv({
+		cls: "qbd-qz-field-label",
+		text: t(rich ? "dashboard.quiz.editPromptHtml" : "dashboard.quiz.editPrompt"),
+	});
+
+	const value = rich
+		? (q._promptHtml || "").replace(/<br\s*\/?>/gi, "\n")
+		: (q.prompt || "");
+
+	bridge.field(field, "", value, t("dashboard.quiz.editPromptPlaceholder"), true, (v) => {
+		if (rich) {
+			// On édite le HTML LUI-MÊME : c'est la seule façon de garder un
+			// tableau ou un bloc de code qu'aucun texte brut ne rendrait.
+			q._promptHtml = v;
+			q._useHtmlPrompt = true;
+		} else {
+			q.prompt = v;
+			// L'énoncé redevient du texte : le HTML pré-rendu d'un import
+			// l'écraserait au rendu suivant (et à l'export, cf. export.ts).
+			q._useHtmlPrompt = false;
+			delete q._promptHtml;
+		}
 		cb.onChange();
 	});
+
+	if (rich) field.createDiv({ cls: "qbd-qz-section-help", text: t("dashboard.quiz.editPromptHtmlHint") });
 }
 
 /* ── Sections optionnelles ────────────────────────────────── */
@@ -241,10 +260,4 @@ function section(parent: HTMLElement, icon: string, label: string, open: boolean
 	});
 
 	return inner;
-}
-
-/** Textarea qui suit son contenu (pas d'ascenseur interne, pas de saut). */
-function autoGrow(el: HTMLTextAreaElement): void {
-	el.style.height = "auto";
-	el.style.height = el.scrollHeight + "px";
 }

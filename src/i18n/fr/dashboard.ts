@@ -196,6 +196,8 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.quiz.editTitle": "Titre",
 	"dashboard.quiz.editTitlePlaceholder": "Nommez cette question…",
 	"dashboard.quiz.editPrompt": "Question",
+	"dashboard.quiz.editPromptHtml": "Question (HTML)",
+	"dashboard.quiz.editPromptHtmlHint": "Cette question porte du HTML structuré (tableau, liste, bloc de code). Elle s'édite en HTML pour que la structure survive.",
 	"dashboard.quiz.editPromptPlaceholder": "Saisissez votre question…",
 	"dashboard.quiz.answerPlaceholder": "Saisissez une réponse…",
 	"dashboard.quiz.goodAnswer": "Bonne réponse",

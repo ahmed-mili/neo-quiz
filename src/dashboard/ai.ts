@@ -159,6 +159,11 @@ export interface AiHandlers {
 	render(container: HTMLElement): Promise<void>;
 	openAddFiles(): void;
 	openAddNotes(): void;
+	/** Rend ce que la page tient au système à la fermeture de la vue :
+	    observateur de taille, écoute « focus fenêtre », page du quiz généré,
+	    et URL d'objet des images encore en mémoire. Sans lui, chaque
+	    ouverture/fermeture du dashboard en laissait une série derrière elle. */
+	dispose(): void;
 }
 
 export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
@@ -2122,5 +2127,17 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		}
 	}
 
-	return { render, openAddFiles, openAddNotes };
+	function dispose(): void {
+		if (composerResizeObserver) { composerResizeObserver.disconnect(); composerResizeObserver = null; }
+		if (__focusRecheck) { window.removeEventListener("focus", __focusRecheck); __focusRecheck = null; }
+		resultPage?.dispose();
+		resultPage = null;
+		generatedDraft = null;
+		dropSentMessage();
+		for (const img of images) URL.revokeObjectURL(img.url);
+		images = [];
+		containerRef = null;
+	}
+
+	return { render, openAddFiles, openAddNotes, dispose };
 }

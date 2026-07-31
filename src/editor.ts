@@ -51,9 +51,9 @@ export class QuizBuilderView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
-		// Ce qui est en attente d'écriture part MAINTENANT : l'onglet se ferme,
-		// plus personne ne videra le débounce.
-		this.page?.flush();
+		// Écriture en attente ET écoute clavier du document : l'onglet se
+		// ferme, plus personne ne les videra.
+		this.page?.dispose();
 		this.page = null;
 		// Obsidian réutilise le contentEl entre deux vues : les classes posées
 		// à l'ouverture se retirent ici, pas dans onunload.

@@ -272,6 +272,11 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 
 	async onClose(): Promise<void> {
 		if (this._unregisterScanner) this._unregisterScanner();
+		// La page d'un quiz tient une écoute clavier posée sur le DOCUMENT et,
+		// peut-être, une écriture en attente : sans cet appel elles survivaient
+		// à la fermeture de la vue.
+		this.detail?.dispose();
+		this.ai?.dispose();
 	}
 
 	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry }): void {

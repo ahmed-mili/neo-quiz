@@ -317,7 +317,7 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
    fenetre : deux collages d'image rapproches obtenaient le meme chemin et la
    seconde image effacait la premiere. La reservation doit fermer cette course
    DANS une fenetre — c'est la seule qui arrive en pratique. */
-await withSrcModule("src/unique-path.ts", async ({ reserveFreePath }) => {
+await withSrcModule("src/unique-path.ts", async ({ reserveFreePath, releaseReservedPath }) => {
 	const r = makeReporter("Reservation de nom");
 	const surDisque = new Set(["a/img.png"]);
 	// `exists` volontairement lent : c'est la fenetre par laquelle les deux
@@ -349,6 +349,14 @@ await withSrcModule("src/unique-path.ts", async ({ reserveFreePath }) => {
 	let leve = false;
 	try { await reserveFreePath("x/y", ".md", async () => true); } catch { leve = true; }
 	r.check("echec bruyant quand tout est pris", leve, true);
+
+	// Une ecriture RATEE doit RENDRE le nom : sinon la session le condamne, et
+	// le collage suivant sauterait un nom pourtant libre.
+	const jamaisSurDisque = async () => false;
+	const n1 = await reserveFreePath("z/note", ".md", jamaisSurDisque);
+	releaseReservedPath(n1);
+	const n2 = await reserveFreePath("z/note", ".md", jamaisSurDisque);
+	r.check("nom rendu apres un echec d'ecriture", [n1, n2], ["z/note.md", "z/note.md"]);
 
 	r.done();
 });

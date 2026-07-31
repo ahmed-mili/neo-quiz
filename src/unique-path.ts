@@ -53,3 +53,15 @@ export async function reserveFreePath(
 	}
 	throw new Error("Aucun nom de fichier libre après 50 essais : " + base + ext);
 }
+
+/**
+ * Rend un nom réservé qui n'a finalement PAS été écrit.
+ *
+ * Sans ça, une écriture ratée condamnait le nom pour toute la session : le
+ * collage suivant sautait un nom pourtant libre, et cinquante échecs de suite
+ * faisaient lever alors que rien n'existait sur le disque (revue codex
+ * 2026-07-31). À appeler dans le `catch` de l'écriture, jamais après un succès.
+ */
+export function releaseReservedPath(chemin: string): void {
+	reserves.delete(chemin);
+}

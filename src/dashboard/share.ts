@@ -1,7 +1,7 @@
 import { Notice, Platform, TFile, normalizePath, setIcon, setTooltip } from "obsidian";
 import { QbdModal } from "../modal-base";
 import { t } from "../i18n";
-import { reserveFreePath } from "../unique-path";
+import { reserveFreePath, releaseReservedPath } from "../unique-path";
 import type { TransKey } from "../i18n";
 import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { ModuleGroup } from "./quiz-modules";
@@ -122,13 +122,17 @@ async function saveSharedInner(ctx: DashboardCtx, source: ShareSource): Promise<
 		const dossier = path.join(os.homedir(), "Downloads");
 		const dest = await reserveFreePath(path.join(dossier, base), ext,
 			async (c) => fs.existsSync(c), (n) => ` (${n})`);
-		fs.writeFileSync(dest, payload.bytes);
+		try {
+			fs.writeFileSync(dest, payload.bytes);
+		} catch (e) { releaseReservedPath(dest); throw e; }
 		(require("electron") as { shell: { showItemInFolder(p: string): void } }).shell.showItemInFolder(dest);
 		new Notice(t("dashboard.quizzes.fileSaved", { path: dest }));
 	} else {
 		const dest = await reserveFreePath(normalizePath(base), ext,
 			(c) => ctx.app.vault.adapter.exists(c), (n) => ` (${n})`);
-		await ctx.app.vault.adapter.writeBinary(dest, payload.bytes.buffer as ArrayBuffer);
+		try {
+			await ctx.app.vault.adapter.writeBinary(dest, payload.bytes.buffer as ArrayBuffer);
+		} catch (e) { releaseReservedPath(dest); throw e; }
 		new Notice(t("dashboard.quizzes.fileSaved", { path: dest }));
 	}
 }

@@ -10,7 +10,7 @@ import type {
 	MatchingQuestion,
 } from "../types/quiz";
 import { t } from "../i18n";
-import { reserveFreePath } from "../unique-path";
+import { reserveFreePath, releaseReservedPath } from "../unique-path";
 
 export interface OptionEntry {
 	index: number;
@@ -440,7 +440,14 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 		const path = await uniquePath(adapter, fileBase, "json");
 		const json = `${JSON.stringify(payload, null, 2)}\n`;
 
-		await adapter.write(path, json);
+		try {
+			await adapter.write(path, json);
+		} catch (e) {
+			// Le nom était réservé pour CE fichier : il redevient libre, sinon
+			// la prochaine sauvegarde sauterait un nom disponible.
+			releaseReservedPath(path);
+			throw e;
+		}
 		try {
 			await adapter.write(`${RESULTS_DIR}/latest.json`, `${JSON.stringify({ ...payload, savedResultPath: path }, null, 2)}\n`);
 		} catch (_) { /* le fichier latest.json est un miroir best-effort */ }

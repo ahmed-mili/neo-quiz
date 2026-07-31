@@ -158,8 +158,12 @@ async function deleteQuiz(ctx: DashboardCtx, quiz: QuizIndexEntry): Promise<void
 async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFile): Promise<boolean> {
 	let videApresRetrait = false;
 	let avaitUnBloc = false;
+	/** Le contenu vu par le dernier passage du rappel — le témoin d'un
+	    éventuel `trashFile`. */
+	let vu = "";
 	await ctx.app.vault.process(file, (content) => {
 		// Le rappel peut être rejoué : repartir de zéro à chaque essai.
+		vu = content;
 		avaitUnBloc = QUIZ_BLOCK_RE.test(content);
 		if (!avaitUnBloc) { videApresRetrait = false; return content; }
 		const remaining = content.replace(QUIZ_BLOCK_RE, "");
@@ -174,9 +178,23 @@ async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFi
 	   pour rien (revue codex 2026-07-31). */
 	if (!avaitUnBloc) return false;
 	if (videApresRetrait) {
+		/* COMPARE-AND-SWAP avant la corbeille : entre le rappel et ici,
+		   quelqu'un a pu ajouter du texte à la note. La jeter emporterait ce
+		   texte (revue codex 2026-07-31). Si elle a changé, on se rabat sur le
+		   retrait du seul bloc — la note reste, avec ce qui vient d'y être
+		   écrit. */
+		let jetee = false;
+		await ctx.app.vault.process(file, (content) => {
+			if (content !== vu) {
+				jetee = false;
+				return content.replace(QUIZ_BLOCK_RE, "");
+			}
+			jetee = true;
+			return content;
+		});
 		// La note ne contenait que le quiz : corbeille (récupérable), jamais
 		// de suppression définitive.
-		await ctx.app.fileManager.trashFile(file);
+		if (jetee) await ctx.app.fileManager.trashFile(file);
 	}
 	ctx.statsStore?.deleteRecord(quiz.path);
 	return true;
@@ -196,7 +214,10 @@ async function deleteModuleQuizzes(ctx: DashboardCtx, group: ModuleGroup): Promi
 		// module n'a pas été entièrement supprimé.
 		if (!(file instanceof TFile)) { echecs++; continue; }
 		try {
-			await deleteQuizCore(ctx, q, file);
+			// Un `false` — aucun bloc trouvé — est un échec comme un autre :
+			// l'annoncer comme un succès faisait croire le module entièrement
+			// supprimé (revue codex 2026-07-31).
+			if (!await deleteQuizCore(ctx, q, file)) echecs++;
 		} catch (e) {
 			echecs++;
 			console.error("[quiz-blocks] suppression impossible :", q.path, e);

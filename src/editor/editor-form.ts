@@ -1,6 +1,6 @@
 import { Notice } from "obsidian";
 import { t } from "../i18n";
-import { reserveFreePath } from "../unique-path";
+import { reserveFreePath, releaseReservedPath } from "../unique-path";
 import type { EditorCtx } from "../types/editor-ctx";
 import type { DraftQuestion } from "./utils";
 
@@ -13,6 +13,13 @@ type EditorVault = {
 	};
 };
 
+/** Ce que l'éditeur utilise de l'app : le vault, et le gestionnaire de fichiers
+    qui sait où ranger une pièce jointe selon les réglages de l'utilisateur. */
+type EditorApp = {
+	vault: EditorVault;
+	fileManager: { getAvailablePathForAttachment(filename: string, sourcePath?: string): Promise<string> };
+};
+
 /** Handlers du formulaire d'édition d'une question (champs, ressource, éditeurs par type, éditeur de tableau). */
 export interface EditorFormHandlers {
 	renderEditor(): void;
@@ -23,14 +30,20 @@ export interface EditorFormHandlers {
 }
 
 /**
- * Nom LIBRE pour une image collée, dans le dossier de pièces jointes du vault.
+ * Chemin où écrire une image collée, décidé par OBSIDIAN.
  *
- * L'horodatage seul ne distingue qu'à la SECONDE : coller deux captures coup
- * sur coup écrivait deux fois le même chemin, et la seconde image écrasait la
- * première — sans un mot (revue codex 2026-07-31). On demande donc au disque
- * si le nom est libre, et on suffixe tant qu'il ne l'est pas.
+ * `getAvailablePathForAttachment` (API publique depuis 1.5.7) résout le réglage
+ * « dossier des pièces jointes » — y compris ses modes relatifs `./` (le
+ * dossier de la note) et `./sous-dossier` —, crée le parent au besoin et
+ * déduplique le nom. Le calculer à la main donnait `.//Pasted image….png`, et
+ * écrivait à la RACINE du vault ce qui devait aller à côté de la note (revue
+ * codex 2026-07-31).
+ *
+ * `sourcePath` est la note à laquelle l'image appartient ; sans elle, Obsidian
+ * prend le fichier actif, ce qui reste le comportement attendu quand l'éditeur
+ * n'a pas de note (quiz généré, encore en mémoire).
  */
-async function nomImageLibre(vault: EditorVault, ext: string): Promise<{ fileName: string; filePath: string }> {
+async function cheminImageCollee(app: EditorApp, ext: string, sourcePath?: string): Promise<{ fileName: string; filePath: string }> {
 	const now = new Date();
 	const ts = now.getFullYear().toString() +
 		String(now.getMonth() + 1).padStart(2, "0") +
@@ -38,28 +51,22 @@ async function nomImageLibre(vault: EditorVault, ext: string): Promise<{ fileNam
 		String(now.getHours()).padStart(2, "0") +
 		String(now.getMinutes()).padStart(2, "0") +
 		String(now.getSeconds()).padStart(2, "0");
-	/* Le dossier de pièces jointes tel qu'Obsidian l'écrit : `/` et `./`
-	   désignent la racine du vault, et `${file}` est un GABARIT (le dossier de
-	   la note) qu'on ne peut pas résoudre ici — dans ces trois cas on écrit à
-	   la racine plutôt que de fabriquer un chemin littéral absurde comme
-	   `.//Pasted image….png` ou `${file}/…` (revue codex 2026-07-31). */
-	const brut = (vault.getConfig("attachmentFolderPath") || "").trim();
-	const dossier = (!brut || brut === "/" || brut === "." || brut === "./" || brut.includes("${file}"))
-		? "" : brut.replace(/\/+$/, "");
-	const chemin = (nom: string): string => dossier ? dossier + "/" + nom : nom;
-	/* La réservation ferme la course entre deux collages rapprochés : deux
-	   chaînes `await` franchissaient le test d'existence avant que l'une n'ait
-	   écrit, et la seconde image effaçait la première. */
-	let complet: string;
-	try {
-		complet = await reserveFreePath(chemin(`Pasted image ${ts}`), `.${ext}`,
-			(c) => vault.adapter.exists(c));
-	} catch {
-		// Dossier illisible, ou cinquante noms pris : on ne devine pas, on
-		// laisse l'appelant afficher son erreur plutôt qu'écraser un fichier.
-		throw new Error("Impossible de trouver un nom libre pour l'image collée");
-	}
-	return { fileName: complet.slice(dossier ? dossier.length + 1 : 0), filePath: complet };
+	/* Obsidian décide du DOSSIER (et déduplique contre ce qui existe déjà), la
+	   réservation décide du NOM quand deux collages se suivent : mesuré, deux
+	   appels rapprochés à `getAvailablePathForAttachment` rendent le MÊME
+	   chemin tant que le fichier n'existe pas encore, et la seconde image
+	   écrasait la première. */
+	const propose = await app.fileManager.getAvailablePathForAttachment(
+		`Pasted image ${ts}.${ext}`, sourcePath);
+	const point = propose.lastIndexOf(".");
+	const filePath = await reserveFreePath(
+		point > 0 ? propose.slice(0, point) : propose,
+		point > 0 ? propose.slice(point) : "",
+		(c) => app.vault.adapter.exists(c));
+	/* Le lien `![[…]]` porte le NOM, pas le chemin : c'est la forme qu'Obsidian
+	   résout lui-même, et celle que le moteur attend (engine/sanitizer.ts
+	   resolveObsidianEmbedFile). */
+	return { fileName: filePath.split("/").pop() || filePath, filePath };
 }
 
 export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
@@ -256,10 +263,12 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 						   coller ne faisait simplement rien. */
 						try {
 							const ext = item.type.split("/")[1] || "png";
-							const vault = ctx.plugin.app.vault as unknown as EditorVault;
-							const { fileName, filePath } = await nomImageLibre(vault, ext);
+							const app = ctx.plugin.app as unknown as EditorApp;
+							const { fileName, filePath } = await cheminImageCollee(app, ext);
 							const buffer = await file.arrayBuffer();
-							await vault.adapter.writeBinary(filePath, new Uint8Array(buffer));
+							try {
+								await app.vault.adapter.writeBinary(filePath, new Uint8Array(buffer));
+							} catch (err) { releaseReservedPath(filePath); throw err; }
 							_insertAt(ta, `![[${fileName}]]`, onChange);
 							_autoResize(ta);
 							view.schedulePreview();
@@ -398,11 +407,13 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 
 								try {
 									const ext = file.type?.split("/")[1] || "png";
-									const vault = ctx.plugin.app.vault as unknown as EditorVault;
-									const { fileName, filePath: path } = await nomImageLibre(vault, ext);
+									const app = ctx.plugin.app as unknown as EditorApp;
+									const { fileName, filePath: path } = await cheminImageCollee(app, ext);
 
 									const buf = await file.arrayBuffer();
-									await vault.adapter.writeBinary(path, new Uint8Array(buf));
+									try {
+										await app.vault.adapter.writeBinary(path, new Uint8Array(buf));
+									} catch (err) { releaseReservedPath(path); throw err; }
 
 									const before = input.value.slice(0, input.selectionStart ?? 0);
 									const after = input.value.slice(input.selectionEnd ?? 0);

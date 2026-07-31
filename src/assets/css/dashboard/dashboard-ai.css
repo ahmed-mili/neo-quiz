@@ -110,6 +110,12 @@
 	   jamais de scroll horizontal, même avec un chemin ou une URL très long. */
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
+	/* Une consigne d'une trentaine de lignes — la vraie taille des demandes
+	   d'Ahmed — pousserait le loader hors de l'écran. La bulle se borne et
+	   défile en dedans : la demande reste consultable, la scène reste lisible. */
+	max-height: 40vh;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 
 .qbd-ai-sent-images,

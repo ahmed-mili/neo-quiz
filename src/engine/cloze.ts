@@ -87,11 +87,16 @@ export function parseCloze(template: unknown): ParsedCloze {
 	return { segments, blanks };
 }
 
-/** Jeton posé à la place d'un trou, le temps du rendu markdown. Fait d'un
-    caractère de contrôle : aucun texte de quiz réel n'en contient, et il
-    traverse l'échappement HTML sans être touché. */
-const SLOT_MARK = String.fromCharCode(0) + "CLOZE";
-const SLOT_RE = new RegExp(String.fromCharCode(0) + "CLOZE(\\d+)" + String.fromCharCode(0), "g");
+/* Jeton posé à la place d'un trou, le temps du rendu markdown.
+   ZONE PRIVÉE (U+E000/U+E001) et non U+0000 : un marqueur fait de caractères
+   NULS ne survit pas à un aller-retour `innerHTML` — l'analyseur HTML les
+   remplace ou les jette, et l'aperçu affichait alors « CLOZE0 » en toutes
+   lettres au milieu de la phrase (constaté sur une génération). Les
+   caractères de zone privée traversent l'échappement HTML, le rendu markdown
+   ET l'analyseur, et aucun texte de quiz réel n'en contient. */
+const SLOT_OPEN = String.fromCharCode(0xE000);
+const SLOT_CLOSE = String.fromCharCode(0xE001);
+const SLOT_RE = new RegExp(SLOT_OPEN + "(\\d+)" + SLOT_CLOSE, "g");
 
 /**
  * Le gabarit avec ses trous remplacés par des JETONS, prêt à passer par le
@@ -112,7 +117,7 @@ export function markSlots(template: unknown): { marked: string; blanks: ClozeBla
 		// jamais être juste — il reste du texte littéral.
 		if (answers.length === 0) return whole;
 		blanks.push({ answers });
-		return SLOT_MARK + (blanks.length - 1) + String.fromCharCode(0);
+		return SLOT_OPEN + (blanks.length - 1) + SLOT_CLOSE;
 	});
 	return { marked, blanks };
 }

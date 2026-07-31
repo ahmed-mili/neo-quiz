@@ -97,5 +97,16 @@ await withSrcModule("src/engine/cloze.ts", ({ markSlots, fillSlots }) => {
 	r.check("gras enjambant un trou",
 		rendu("**avant {{x}} apres**").rempli, "**avant [0] apres**");
 
+	/* Le jeton doit survivre a un aller-retour `innerHTML` : l apercu passe par
+	   le DOM (resolveImagesInHtml), et un marqueur fait de caracteres NULS y
+	   etait remplace — « CLOZE0 » s affichait alors en toutes lettres. */
+	const { marked } = markSlots("ping {{8.8.8.8}} -t");
+	r.check("jeton hors du plan de base (zone privee)",
+		[...marked].some(c => c.charCodeAt(0) >= 0xE000 && c.charCodeAt(0) <= 0xE001), true);
+	r.check("jeton sans caractere NUL",
+		marked.includes(String.fromCharCode(0)), false);
+	r.check("jeton sans lettres lisibles",
+		/CLOZE/.test(marked), false);
+
 	r.done();
 });

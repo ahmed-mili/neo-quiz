@@ -4,6 +4,7 @@
    sur les clés d'un autre. */
 export const EN_EDITOR = {
 	/* ── Vue & ossature (editor.ts, editor/ui.ts) ── */
+	"editor.empty.hint": "Open a note that contains a quiz-blocks block, then run « Open quiz from the current note ».",
 	"editor.view.title": "Quiz Editor",
 	"editor.panel.questions": "Questions",
 	"editor.panel.editor": "Editor",

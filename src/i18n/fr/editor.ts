@@ -3,6 +3,7 @@ import type { EN_EDITOR } from "../en/editor";
 /* Domaine « editor » — français. */
 export const FR_EDITOR: Record<keyof typeof EN_EDITOR, string> = {
 	/* ── Vue & ossature (editor.ts, editor/ui.ts) ── */
+	"editor.empty.hint": "Ouvrez une note qui contient un bloc quiz-blocks, puis lancez « Ouvrir le quiz de la note courante ».",
 	"editor.view.title": "Éditeur de quiz",
 	"editor.panel.questions": "Questions",
 	"editor.panel.editor": "Éditeur",

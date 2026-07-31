@@ -57,6 +57,15 @@ export function resolveImagesInHtml(app: App, html: string): string {
 	return temp.innerHTML;
 }
 
+/** Écrit un libellé COURT en rendant son markdown inline (gras, code…) —
+    le moteur le fait désormais partout, l'aperçu ne doit pas afficher les
+    accents graves d'une adresse IP là où le quiz montre du code. Le `<p>`
+    que md2html ajoute autour d'un texte d'une ligne est retiré : ces
+    libellés vivent dans une cellule, pas dans un paragraphe. */
+function inlineInto(el: HTMLElement, app: App, raw: string): void {
+	el.innerHTML = resolveImagesInHtml(app, md2html(raw).replace(/^<p>|<\/p>$/g, ""));
+}
+
 /** Construit la carte de question dans `host` et la renvoie. */
 export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts: QuizPreviewOptions): HTMLElement {
 	const { app, fallbackTitle } = opts;
@@ -99,12 +108,12 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		const slotsWrap = orderingWrap.createDiv({ cls: "quiz-ordering-slots" });
 		(q.slots || []).forEach((slotLabel) => {
 			const slot = slotsWrap.createDiv({ cls: "quiz-slot" });
-			slot.createDiv({ cls: "quiz-slot-label", text: slotLabel });
+			inlineInto(slot.createDiv({ cls: "quiz-slot-label" }), app, slotLabel);
 			slot.createDiv({ cls: "quiz-slot-value", text: "…" });
 		});
 		// Pool dans l'ordre STOCKÉ (celui montré à l'élève), pas l'ordre correct.
 		const pool = orderingWrap.createDiv({ cls: "quiz-ordering-pool" });
-		(q.possibilities || []).forEach(p => pool.createSpan({ cls: "quiz-pool-item", text: p }));
+		(q.possibilities || []).forEach(p => inlineInto(pool.createSpan({ cls: "quiz-pool-item" }), app, p));
 	}
 
 	if (type === "matching") {
@@ -113,11 +122,11 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		const slotsWrap = matchWrap.createDiv({ cls: "quiz-ordering-slots" });
 		(q.rows || []).forEach((row, ri) => {
 			const slot = slotsWrap.createDiv({ cls: "quiz-slot" });
-			slot.createDiv({ cls: "quiz-slot-label", text: row || t("editor.matching.rowFallback", { n: ri }) });
+			inlineInto(slot.createDiv({ cls: "quiz-slot-label" }), app, row || t("editor.matching.rowFallback", { n: ri }));
 			slot.createDiv({ cls: "quiz-slot-value", text: "…" });
 		});
 		const pool = matchWrap.createDiv({ cls: "quiz-ordering-pool" });
-		(q.choices || []).forEach(c => pool.createSpan({ cls: "quiz-pool-item", text: c }));
+		(q.choices || []).forEach(c => inlineInto(pool.createSpan({ cls: "quiz-pool-item" }), app, c));
 	}
 
 	if (type === "cloze") {

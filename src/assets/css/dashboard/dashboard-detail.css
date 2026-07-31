@@ -952,15 +952,18 @@
 	animation: qbd-qz-body-in 220ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
-/* Le bouton « Editor » accuse le coup : l'icône pivote au changement d'état,
-   la surface s'enfonce brièvement au clic. */
-.qbd-root .qbd-qz-edit-btn .qbd-btn-icon {
-	display: inline-flex;
-	transition: transform 220ms cubic-bezier(0.2, 0.7, 0.3, 1);
+/* Le bouton « Editor » accuse le coup. L'icône CHANGE avec l'état (crayon ↔
+   coche) : elle ne peut pas se transitionner d'une forme à l'autre, alors
+   c'est son APPARITION qu'on anime — une courte pulsation. La surface, elle,
+   s'enfonce au clic. */
+@keyframes qbd-qz-edit-icon-in {
+	from { opacity: 0; transform: scale(0.6) rotate(-25deg); }
+	to   { opacity: 1; transform: none; }
 }
 
-.qbd-root .qbd-qz-edit-btn.is-on .qbd-btn-icon {
-	transform: rotate(-90deg) scale(1.05);
+.qbd-root .qbd-qz-edit-btn .qbd-btn-icon {
+	display: inline-flex;
+	animation: qbd-qz-edit-icon-in 260ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
 .qbd-root .qbd-qz-edit-btn:active {
@@ -972,5 +975,50 @@
 	.qbd-qz-body--entering {
 		animation: none;
 	}
-	.qbd-root .qbd-qz-edit-btn .qbd-btn-icon { transition: none; }
+	.qbd-root .qbd-qz-edit-btn .qbd-btn-icon { animation: none; }
+}
+
+
+/* ── Onglet d'un quiz (vue « quiz-blocks-builder ») ──
+   La MÊME page que dans le dashboard, hébergée par un onglet : il ne reste
+   qu'à lui donner la gouttière et la colonne centrée que la zone de contenu
+   du dashboard fournit déjà (.qbd-content). */
+.qb-tab-page {
+	padding: 28px 32px;
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+
+.qb-tab-page > .qbd-qz {
+	width: 100%;
+	max-width: 1182px;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+/* Onglet ouvert sans quiz : on dit quoi faire, on ne montre pas un quiz vide. */
+.qb-tab-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	height: 100%;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.qb-tab-empty h2 {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+.qb-tab-empty p {
+	margin: 0;
+	max-width: 420px;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--text-faint);
 }

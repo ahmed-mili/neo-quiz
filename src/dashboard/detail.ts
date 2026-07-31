@@ -136,6 +136,10 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	let saveTimer: number | null = null;
 	/** Piste du carrousel du panneau — recréée à chaque paintPanel. */
 	let slideHost: SlideHost | null = null;
+	/** Badge du header : le compte ANNONCÉ (spec) devient le compte RÉEL dès
+	    que le brouillon est lu — un onglet qui ne connaît pas son quiz à
+	    l'avance affichait « 0 » jusqu'au premier repaint. */
+	let countEl: HTMLElement | null = null;
 	/** Détache l'écoute clavier de la page précédente. */
 	let keyCleanup: (() => void) | null = null;
 
@@ -213,6 +217,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			}
 			draft = result;
 			activeIdx = Math.min(activeIdx, Math.max(0, draft.questions.length - 1));
+			if (countEl) countEl.textContent = String(draft.questions.length);
 			paint(listCol, panel, nav, spec);
 		});
 	}
@@ -239,7 +244,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		const titleRow = info.createDiv({ cls: "qbd-qz-title-row" });
 		titleRow.createEl("h2", { cls: "qbd-qz-title", text: spec.title });
 		const count = draft ? draft.questions.length : spec.questionCount;
-		titleRow.createSpan({ cls: "qbd-qz-count", text: String(count) });
+		countEl = titleRow.createSpan({ cls: "qbd-qz-count", text: String(count) });
 		if (spec.subtitle) info.createEl("p", { cls: "qbd-qz-path", text: spec.subtitle });
 
 		const actions = header.createDiv({ cls: "qbd-qz-actions" });

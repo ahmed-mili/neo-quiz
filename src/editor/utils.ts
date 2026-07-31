@@ -92,6 +92,12 @@ export interface DraftQuestion {
 	 */
 	_variantKey?: string;
 	_variantValue?: string;
+	/** La variante venait d'une forme IMBRIQUÉE (`text.variant`,
+	    `terminal.variant`). L'export n'écrit alors AUCUNE clé de variante : la
+	    forme imbriquée est déjà réémise telle quelle par `_extraFields`, et en
+	    ajouter une seconde ferait cohabiter deux déclarations pour la même
+	    chose. */
+	_variantNested?: boolean;
 	/** Clés inconnues préservées au round-trip import→export (editor/modals.js convertToInternalFormat). */
 	_extraFields?: Record<string, unknown>;
 	/** Gabarit guidé de l'éditeur math (miroir de TextQuestion.answerTemplate). */

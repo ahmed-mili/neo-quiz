@@ -67,7 +67,7 @@ function extraModeFields(q: ParsedQuizItem): Record<string, unknown> | undefined
 /** La variante de terminal telle qu'elle est ÉCRITE dans le bloc : sa clé et sa
     valeur, dans l'ordre où le moteur les consulte (engine/terminal.ts
     getTerminalTextVariant). */
-function variantSource(q: ParsedQuizItem): { cle: string | null; valeur: unknown } {
+function variantSource(q: ParsedQuizItem): { cle: string | null; valeur: unknown; imbriquee?: boolean } {
 	if (q.terminalVariant != null) return { cle: "terminalVariant", valeur: q.terminalVariant };
 	if (q.textVariant != null) return { cle: "textVariant", valeur: q.textVariant };
 	/* Formes IMBRIQUÉES, que le moteur consulte aussi. Sans elles, un
@@ -79,7 +79,7 @@ function variantSource(q: ParsedQuizItem): { cle: string | null; valeur: unknown
 		v && typeof v === "object" && !Array.isArray(v)
 			? (v as { variant?: unknown }).variant : undefined;
 	const imbriquee = sousObjet(q.text) ?? sousObjet(q.terminal);
-	if (imbriquee != null) return { cle: null, valeur: imbriquee };
+	if (imbriquee != null) return { cle: null, valeur: imbriquee, imbriquee: true };
 	return { cle: null, valeur: null };
 }
 
@@ -215,11 +215,14 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		   (engine/terminal.ts getTextAcceptedAnswers). Les traiter comme
 		   exclusifs faisait cesser d'accepter « yes » sur une question qui
 		   portait `acceptedAnswers: ['oui']` ET `acceptableAnswers: ['yes']`. */
-		let accepted = [
+		/* DÉDOUBLONNÉE : les trois champs disent souvent la même chose, et
+		   l'export les écrirait alors deux fois — le bloc grossit à chaque
+		   sauvegarde sans que le quiz change. */
+		let accepted = [...new Set([
 			...(Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : []),
 			...(Array.isArray(q.acceptableAnswers) ? q.acceptableAnswers : []),
 			...(Array.isArray(q.correctAnswers) ? q.correctAnswers : []),
-		];
+		].map(v => String(v ?? "")))];
 		if (accepted.length === 0) accepted = [""];
 		// `answer`/`correctText` : formats émis par la génération IA et
 		// UNIONNÉS aux acceptedAnswers par le moteur (terminal.js:166-170)
@@ -253,6 +256,7 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		   note sans que personne ne l'ait demandé. */
 		const src = variantSource(q);
 		if (src.cle) { question._variantKey = src.cle; question._variantValue = String(src.valeur); }
+		else if (src.imbriquee) question._variantNested = true;
 		if (type === "numeric") {
 			question.unit = typeof q.unit === "string" ? q.unit : "";
 			if (typeof q.tolerance === "number") question.tolerance = q.tolerance;
@@ -260,7 +264,7 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		}
 	}
 
-	const knownKeys = new Set(['id','title','prompt','promptHtml','options','correctIndex','multiSelect','correctIndices','ordering','slots','possibilities','correctOrder','matching','rows','choices','correctMap','type','terminalVariant','textVariant','commandPrefix','placeholder','caseSensitive','acceptedAnswers','acceptableAnswers','correctText','answer','hint','explain','explainHtml','resourceButton','examMode','examDurationMinutes','examAutoSubmit','examShowTimer','cloze','numeric','tolerance','tolerancePercent','unit']);
+	const knownKeys = new Set(['id','title','prompt','promptHtml','options','correctIndex','multiSelect','correctIndices','ordering','slots','possibilities','correctOrder','matching','rows','choices','correctMap','type','terminalVariant','textVariant','commandPrefix','placeholder','caseSensitive','acceptedAnswers','acceptableAnswers','correctAnswers','correctText','answer','hint','explain','explainHtml','resourceButton','examMode','examDurationMinutes','examAutoSubmit','examShowTimer','cloze','numeric','tolerance','tolerancePercent','unit']);
 	/* `Object.create(null)` : un objet ordinaire ABSORBE une clé nommée
 	   `__proto__` au lieu de la stocker, et le champ personnalisé
 	   disparaissait sans un mot. */

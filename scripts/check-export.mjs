@@ -285,6 +285,16 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
 	// Variante imbriquee : le TYPE doit etre terminal, donc l'invite survit.
 	const imb = tour({ ...base, type: "text", text: { variant: "bash" }, commandPrefix: "srv$ ", answer: "ls" });
 	r.check("invite d'une variante imbriquee conservee", imb.commandPrefix, "srv$ ");
+	// ... et AUCUNE seconde declaration de variante n'est ajoutee : la forme
+	// imbriquee est deja reemise par les champs personnalises.
+	r.check("pas de variante en double",
+		[imb.textVariant, imb.terminalVariant, imb.text], [undefined, undefined, { variant: "bash" }]);
+	// L'union des reponses ne doit pas produire de doublon...
+	const doublon = tour({ ...base, type: "text", acceptedAnswers: ["oui"], acceptableAnswers: ["oui"] });
+	r.check("union sans doublon", doublon.acceptedAnswers, ["oui"]);
+	// ... et `correctAnswers`, desormais consomme, n'est plus reemis a cote.
+	const trois = tour({ ...base, type: "text", acceptedAnswers: ["a"], correctAnswers: ["b"] });
+	r.check("correctAnswers fondu", [trois.acceptedAnswers, trois.correctAnswers], [["a", "b"], undefined]);
 
 	// PROSE qui ressemble a du HTML : elle ne doit PAS partir vers md2html,
 	// sinon on rouvre la corruption que tout le reste evite.

@@ -169,7 +169,11 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 		   que l'éditeur ramène à trois types. Réémettre la forme canonique
 		   réécrirait la note sans qu'on l'ait demandé — et les trois formes
 		   exactes d'avant en effaçaient purement 22 (revue 2026-07-31). */
-		if (q._variantKey && q._variantValue) {
+		if (q._variantNested) {
+			/* Rien : la forme imbriquée (`text.variant`) est réémise telle quelle
+			   par `_extraFields`, et une seconde déclaration ferait cohabiter
+			   deux variantes pour la même question. */
+		} else if (q._variantKey && q._variantValue) {
 			L.push(`\t\t${json5Key(q._variantKey)}: '${e(q._variantValue)}',`);
 		} else if (t === "cmd") L.push("\t\tterminalVariant: 'cmd',");
 		else if (t === "powershell") L.push("\t\ttextVariant: 'powershell',");

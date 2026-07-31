@@ -1,4 +1,4 @@
-import { escHtml, esc5, md2html } from "./utils";
+import { escHtml, esc5, md2html, isRichHtml } from "./utils";
 import type { DraftQuestion } from "./utils";
 import type { EditorExamOptions } from "../types/editor-ctx";
 
@@ -75,6 +75,20 @@ function hasBlockMarkdown(texte: string): boolean {
 	return /\n/.test(texte) || /^\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```)/m.test(texte);
 }
 
+/**
+ * Le texte porte-t-il une balise inline AVEC des attributs (`<strong data-x>`) ?
+ *
+ * Le rendu du texte ne restaure que les balises inline NUES
+ * (engine/sanitizer.ts restoreAllowedInlineTags) : sur `Use <strong data-x="1">
+ * bold</strong>`, l'ouvrante resterait échappée et la fermante deviendrait
+ * réelle — un fragment coupé en deux à l'écran. `md2html` échappe les deux, ce
+ * qui affiche le littéral tel qu'il est écrit ; c'est donc lui qu'il faut, pour
+ * ce cas-là seulement.
+ */
+function contientBaliseAttribuee(texte: string): boolean {
+	return /<[a-z][a-z0-9]*\s[^>]*>/i.test(texte);
+}
+
 function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string {
 	const id = questionId(q, idx, ids);
 	const e = esc5;
@@ -103,8 +117,11 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 		   Le markdown INLINE n'a plus besoin d'être converti : depuis que le
 		   moteur rend `prompt` lui-même (engine/sanitizer.ts), le laisser en
 		   texte est à la fois fidèle et plus lisible dans la note. */
-		if (hasBlockMarkdown(q.prompt)) L.push(`\t\tpromptHtml: '${e(md2html(q.prompt))}',`);
-		else L.push(`\t\tprompt: '${e(q.prompt)}',`);
+		if (hasBlockMarkdown(q.prompt) || contientBaliseAttribuee(q.prompt)) {
+			L.push(`\t\tpromptHtml: '${e(md2html(q.prompt))}',`);
+		} else {
+			L.push(`\t\tprompt: '${e(q.prompt)}',`);
+		}
 	} else if (q._promptHtml) {
 		L.push(`\t\tpromptHtml: '${e(q._promptHtml)}',`);
 	}
@@ -163,7 +180,14 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 			if (typeof q.tolerance === "number") L.push(`\t\ttolerance: ${q.tolerance},`);
 			if (typeof q.tolerancePercent === "number") L.push(`\t\ttolerancePercent: ${q.tolerancePercent},`);
 		}
-		L.push(`\t\tacceptedAnswers: [\n${(q.acceptedAnswers || []).filter(Boolean).map(a => `\t\t\t'${e(a)}',`).join("\n")}\n\t\t],`);
+		/* `filter(Boolean)` jetait la réponse « 0 » — celle d'une question
+		   numérique dont le résultat est zéro, et le moteur l'accepte
+		   (getTextAcceptedAnswers convertit tout en chaîne). Seules les lignes
+		   VIDES du formulaire sont écartées. */
+		const reponses = (q.acceptedAnswers || [])
+			.filter(a => a != null && String(a) !== "")
+			.map(a => `\t\t\t'${e(String(a))}',`);
+		L.push(`\t\tacceptedAnswers: [\n${reponses.join("\n")}\n\t\t],`);
 	}
 	/* Virgule SYSTÉMATIQUE, y compris sur le dernier champ écrit : JSON5
 	   autorise la virgule traînante, et la conditionner à « y a-t-il un champ
@@ -176,7 +200,15 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 		L.push(`\t\thint: '${e(q.hint)}',`);
 	}
 	// Priorité à explain modifié par l'utilisateur
-	if (q.explain) {
+	/* Quand les DEUX existent, le moteur affiche `explainHtml` (cards.ts
+	   explanationHtml) : l'export doit donc l'écrire, et `explain` en plus. Le
+	   taire faisait perdre le HTML riche d'une note qui portait les deux
+	   champs — l'export avait la priorité INVERSE du rendu (revue codex
+	   2026-07-31). */
+	if (q.explain && q._explainHtml && isRichHtml(q._explainHtml)) {
+		L.push(`\t\texplainHtml: '${e(q._explainHtml)}',`);
+		L.push(`\t\texplain: '${e(q.explain)}',`);
+	} else if (q.explain) {
 		// Même règle que l'énoncé : le markdown inline reste du TEXTE, que le
 		// moteur rend (engine/cards.ts explanationHtml).
 		if (hasBlockMarkdown(q.explain)) L.push(`\t\texplainHtml: '${e(md2html(q.explain))}',`);

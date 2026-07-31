@@ -163,6 +163,13 @@ await withSrcModule(["src/quiz-utils.ts", "src/editor/convert.ts"], (qu, convert
 	// configuration : ses options sont des coquilles.
 	r.check("ligne vide finale reconnue comme configuration",
 		idx([q, { id: "q6", title: "Question 6", options: ["", ""], correctIndex: 0, mode: "learn" }]), 1);
+	// Une cle personnalisee nommee comme un champ de question ne doit pas
+	// empecher de reconnaitre une configuration legitime.
+	r.check("configuration a cle `type` personnalisee",
+		idx([q, { mode: "learn", type: "teacher-profile", owner: "alice" }]), 1);
+	// ... et une question HISTORIQUE complete ne doit pas etre avalee.
+	r.check("question historique avec mode",
+		idx([q, { mode: "learn", promptHtml: "<p>2 + 2 ?</p>", text: true, answer: "4" }]), -1);
 	r.check("bloc sans configuration", idx([q, q]), -1);
 	r.check("bloc vide", idx([]), -1);
 
@@ -203,6 +210,62 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
 	// Une question texte SANS variante ne doit pas en gagner une.
 	const nu = tour({ ...base });
 	r.check("pas de variante inventee", [nu.textVariant, nu.terminalVariant], [undefined, undefined]);
+
+	r.done();
+});
+
+/* CONTENU QUI NE DOIT PAS BOUGER A L'ECRITURE. Chacun de ces cas a ete une
+   perte ou une corruption reelle : rien ne levait, rien ne s'affichait, et la
+   sauvegarde annoncait un succes. */
+await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert, exp) => {
+	const r = makeReporter("Fidelite de l'ecriture");
+	const BR = String.fromCharCode(10);   // saut de ligne, construit par code
+	const tour = (brut) => JSON5.parse(exp.exportAll([convert.convertParsedToInternal(brut)], null))[0];
+	const base = { id: "x", title: "T" };
+
+	// `md2html` ne connait pas la regle de flanc du rendu.
+	const mult = tour({ ...base, prompt: "Ici 3*4*5 est une multiplication.", options: ["a", "b"], correctIndex: 0 });
+	r.check("multiplication non convertie", mult.prompt, "Ici 3*4*5 est une multiplication.");
+	r.check("pas de promptHtml invente", mult.promptHtml, undefined);
+
+	// Le markdown de BLOC, lui, a toujours besoin du HTML.
+	const liste = tour({ ...base, prompt: "Choisis :" + BR + "- un" + BR + "- deux", options: ["a", "b"], correctIndex: 0 });
+	r.check("liste convertie en HTML", typeof liste.promptHtml, "string");
+
+	// Une explication en HTML RICHE survit a une sauvegarde qui ne la touche pas.
+	const riche = tour({ ...base, prompt: "P", options: ["a", "b"], correctIndex: 0,
+		explainHtml: "<blockquote><strong>Contexte</strong> — libre.</blockquote>" });
+	r.check("HTML riche conserve", riche.explainHtml, "<blockquote><strong>Contexte</strong> — libre.</blockquote>");
+
+	// Les deux champs coexistent : le moteur affiche le HTML, l'export doit l'ecrire.
+	const deux = tour({ ...base, prompt: "P", options: ["a", "b"], correctIndex: 0,
+		explain: "texte de repli", explainHtml: "<strong>riche</strong>" });
+	r.check("les deux explications conservees",
+		[deux.explainHtml, deux.explain], ["<strong>riche</strong>", "texte de repli"]);
+
+	// La reponse « 0 » d'une question numerique.
+	const zero = tour({ ...base, type: "text", numeric: true, acceptedAnswers: [0] });
+	r.check("reponse zero conservee", zero.acceptedAnswers, ["0"]);
+
+	// Le marqueur historique `text: true`.
+	const legacy = tour({ ...base, text: true, answer: "oui" });
+	r.check("marqueur `text: true` reconnu", legacy.type, "text");
+	r.check("reponse d'une question historique conservee", legacy.acceptedAnswers, ["oui"]);
+
+	// Un bouton de ressource enrichi.
+	const res = tour({ ...base, prompt: "P", options: ["a", "b"], correctIndex: 0,
+		resourceButton: { label: "Voir", fileName: "c.pdf", page: 7, meta: { checksum: "abc" } } });
+	r.check("bouton de ressource complet", res.resourceButton,
+		{ label: "Voir", fileName: "c.pdf", page: 7, meta: { checksum: "abc" } });
+
+	// Un gabarit de trous VIDE reste une question a trous.
+	const vide = tour({ ...base, prompt: "P", cloze: "", caseSensitive: true });
+	r.check("gabarit vide reste un cloze", [vide.cloze, vide.caseSensitive], ["", true]);
+
+	// Une cle `__proto__` est une cle comme une autre.
+	const proto = tour({ ...base, prompt: "P", options: ["a", "b"], correctIndex: 0, ["__proto__"]: { garde: 1 } });
+	r.check("cle __proto__ conservee",
+		Object.prototype.hasOwnProperty.call(proto, "__proto__"), true);
 
 	r.done();
 });

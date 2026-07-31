@@ -65,7 +65,13 @@ export function renderExamPanel(parent: HTMLElement, opts: ExamPanelOptions): vo
 			// d'objet de configuration dans le bloc, et en écrire un vide
 			// ajouterait du bruit à la note.
 			if (next === "quiz") {
-				opts.set(null);
+				/* Le mode « quiz » est le défaut du moteur, mais l'objet de
+				   configuration peut porter des clés personnalisées : les jeter
+				   avec lui perdait le travail de l'auteur. On ne le supprime donc
+				   que s'il ne restait rien d'autre dedans. */
+				const actuel = opts.get();
+				if (actuel?._extra) opts.set({ ...actuel, mode: "quiz", enabled: false });
+				else opts.set(null);
 			} else {
 				const base = opts.get() || defaults(next);
 				base.mode = next;

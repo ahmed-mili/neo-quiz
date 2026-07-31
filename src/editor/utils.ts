@@ -211,5 +211,11 @@ export function isRichHtml(html: string | undefined): boolean {
 	   alors classé riche : l'erreur va dans le bon sens (on édite le HTML, on
 	   ne perd rien). */
 	const stripped = html.replace(/<\/?p>|<br\s*\/?>/gi, "");
-	return /<[a-z][a-z0-9]*\b[^>]*>/i.test(stripped);
+	if (/<[a-z][a-z0-9]*\b[^>]*>/i.test(stripped)) return true;
+	/* Une balise ÉCHAPPÉE (`&lt;strong&gt;`) compte aussi. Aplatie par
+	   `_htmlToText`, elle redevient un vrai `<strong>` — que le rendu du texte
+	   restaure ensuite en gras : un exemple de code affiché à l'apprenant se
+	   transformait en mise en forme (revue codex 2026-07-31). Traitée comme
+	   riche, elle reste dans `_explainHtml`, où elle est rendue littéralement. */
+	return /&lt;\/?[a-z][a-z0-9]*\b[^&]*&gt;/i.test(html);
 }

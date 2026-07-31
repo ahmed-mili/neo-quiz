@@ -94,7 +94,11 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		|| typeof q.tolerancePercent === "number"
 		|| (typeof q.unit === "string" && q.unit.trim().length > 0)) type = "numeric";
 	else if (q.multiSelect) type = "multi";
-	else if (q.type === "text") {
+	/* `text: true` est le marqueur HISTORIQUE d'une question texte, et le
+	   moteur le reconnaît toujours (engine.ts isTextQuestion). Ne pas le
+	   reconnaître ici classait la question en QCM et supprimait sa réponse
+	   à la première sauvegarde (revue codex 2026-07-31). */
+	else if (q.type === "text" || q.text === true) {
 		/* MÊME table d'alias que le moteur (engine/terminal.ts) : trois formes
 		   exactes ne suffisaient pas. Les 22 questions Cisco d'Ahmed écrivent
 		   `textVariant: 'command'`, que le moteur affiche en terminal `cmd` et
@@ -216,7 +220,10 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	}
 
 	const knownKeys = new Set(['id','title','prompt','promptHtml','options','correctIndex','multiSelect','correctIndices','ordering','slots','possibilities','correctOrder','matching','rows','choices','correctMap','type','terminalVariant','textVariant','commandPrefix','placeholder','caseSensitive','acceptedAnswers','acceptableAnswers','correctText','answer','hint','explain','explainHtml','resourceButton','examMode','examDurationMinutes','examAutoSubmit','examShowTimer','cloze','numeric','tolerance','tolerancePercent','unit']);
-	const extraFields: Record<string, unknown> = {};
+	/* `Object.create(null)` : un objet ordinaire ABSORBE une clé nommée
+	   `__proto__` au lieu de la stocker, et le champ personnalisé
+	   disparaissait sans un mot. */
+	const extraFields: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
 	for (const key of Object.keys(q)) {
 		if (!knownKeys.has(key)) extraFields[key] = q[key];
 	}

@@ -114,10 +114,19 @@ function isStrictQuizModeConfig(item: unknown): boolean {
 	const rempli = (v: unknown): boolean => Array.isArray(v)
 		? v.some(x => typeof x === "string" ? x.trim() !== "" : x != null)
 		: typeof v === "string" ? v.trim() !== "" : v != null && v !== false;
-	if (rempli(q.options) || rempli(q.cloze) || rempli(q.ordering)
-		|| rempli(q.matching) || rempli(q.type)) return false;
-	// Un index de bonne réponse ne compte que s'il DÉSIGNE quelque chose.
-	if (rempli(q.options) && (q.correctIndex != null || q.correctIndices != null)) return false;
+	/* TOUS les marqueurs de question du moteur, pas seulement les plus visibles.
+	   En oublier laissait passer une question historique complète —
+	   `{ mode: 'learn', promptHtml: '<p>2 + 2 ?</p>', text: true, answer: '4' }`
+	   était pris pour la configuration et retiré du quiz (revue codex
+	   2026-07-31). */
+	const MARQUEURS = ["options", "optionHtml", "cloze", "ordering", "matching",
+		"promptHtml", "answer", "acceptedAnswers", "acceptableAnswers",
+		"correctText", "correctAnswers", "numeric", "text"];
+	if (MARQUEURS.some(cle => rempli(q[cle]))) return false;
+	/* `type` ne compte que s'il nomme un type de QUESTION. Une configuration a
+	   le droit de porter une clé `type` personnalisée (« teacher-profile ») —
+	   la traiter comme un marqueur en faisait une question fantôme. */
+	if (typeof q.type === "string" && ["text", "single", "multiple", "multi"].includes(q.type)) return false;
 	return true;
 }
 

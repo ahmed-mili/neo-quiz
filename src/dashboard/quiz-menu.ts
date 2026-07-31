@@ -8,7 +8,6 @@ import type { QuizIndexEntry } from "./scanner";
 import type { ModuleGroup, ModuleMap } from "./quiz-modules";
 import { ModuleEditModal } from "./module-edit";
 import type { ActionMenuItem } from "./ui-select";
-import { openQuizInEditor } from "./quiz-open";
 import { QUIZ_BLOCK_RE } from "../quiz-utils";
 
 /* ══════════════════════════════════════════════════════════

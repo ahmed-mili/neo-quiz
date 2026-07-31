@@ -22,13 +22,6 @@ import type { FormBridge } from "./detail-form-bridge";
    Le renvoi « ouvrir l'éditeur complet » n'a donc plus lieu d'être.
 ══════════════════════════════════════════════════════════ */
 
-/** Types que la page sait éditer en place — désormais tous. Conservé parce
-    que la liste de gauche et l'aperçu s'en servent pour distinguer les
-    questions à réponses des autres. */
-export function isChoiceQuestion(q: DraftQuestion): boolean {
-	return q._type === "single" || q._type === "multi";
-}
-
 /* ── Consultation ─────────────────────────────────────────── */
 
 /** Le VRAI rendu du quiz (mêmes classes que le moteur), pas une imitation :

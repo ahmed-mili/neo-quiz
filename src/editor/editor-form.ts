@@ -556,9 +556,16 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 		}
 
 		if (["text", "cmd", "powershell", "bash"].includes(qType)) {
-			// "C:\>" / "PS>" : invites de commandes réelles, pas de l'UI.
-			if (qType === "cmd" || qType === "powershell")
-				_field(box, t("editor.text.commandPrefix"), q.commandPrefix, qType === "cmd" ? "C:\\>" : "PS>", false, v => { q.commandPrefix = v; rerender(); });
+			/* "C:\>" / "PS>" / "user@hostname:~$ " : invites de commandes réelles,
+			   pas de l'UI. BASH aussi : le moteur lit son invite
+			   (engine/terminal.ts getTerminalPromptPrefix) et l'export l'écrit,
+			   mais le formulaire ne la proposait pas — une question bash avait
+			   donc une invite qu'on ne pouvait plus changer. */
+			if (qType === "cmd" || qType === "powershell" || qType === "bash") {
+				const invite = qType === "cmd" ? "C:\\>" : qType === "powershell" ? "PS>" : "user@hostname:~$ ";
+				_field(box, t("editor.text.commandPrefix"), q.commandPrefix, invite, false,
+					v => { q.commandPrefix = v; rerender(); });
+			}
 			_field(box, t("editor.text.placeholderLabel"), q.placeholder, t("editor.text.placeholderHint"), false, v => { q.placeholder = v; rerender(); });
 			_arrayEditor(box, t("editor.text.acceptedAnswers"), q.acceptedAnswers!, rerender, t("editor.text.answerPlaceholder"), t("editor.action.add"));
 			const toggleWrap = box.createDiv({ cls: "qb-toggle-wrap" });

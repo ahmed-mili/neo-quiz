@@ -46,6 +46,12 @@ communautaire d'Obsidian.
   `[object Object]` (bloc illisible, sauvegarde refusée sans un mot). **Pas de
   framework de test au-delà** ; ne pas en ajouter pour du code qu'une lecture suffit
   à juger.
+- `node scripts/audit-vaults.mjs "<vault>" […]` — **avant une release**, ou après
+  toute retouche de `convertParsedToInternal` / `exportAll` : fait l'aller-retour
+  lecture → écriture → lecture sur TOUS les quiz de vrais vaults (63 quiz, 1157
+  questions au 2026-07-31). Un bloc qui ne se relit pas est une sauvegarde qui
+  échoue EN SILENCE chez l'utilisateur — la page refuse d'écrire un JSON5 invalide
+  et le travail reste en mémoire. Aucun fichier n'est modifié.
 - `npm run dev` — esbuild en watch : rebuild + redéploiement à chaque save (JS et CSS).
 - `npm run build` — build production → `dist/` + déploiement dans les vaults.
 - **Release** : bumper la version dans `src/assets/manifest.json`, créer un tag

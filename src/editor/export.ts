@@ -62,6 +62,19 @@ function json5Key(k: string): string {
 	return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k) ? k : `'${esc5(k)}'`;
 }
 
+/**
+ * Ce texte contient-il du markdown de BLOC — celui que le rendu inline du
+ * moteur ne sait pas exprimer ?
+ *
+ * Titre, liste, citation, bloc de code, ou simplement plusieurs lignes. Le
+ * gras, l'italique et le code inline n'en font PAS partie : le moteur les rend
+ * depuis le texte brut, et les convertir en HTML à l'écriture ne faisait que
+ * figer — et parfois corrompre — la source.
+ */
+function hasBlockMarkdown(texte: string): boolean {
+	return /\n/.test(texte) || /^\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```)/m.test(texte);
+}
+
 function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string {
 	const id = questionId(q, idx, ids);
 	const e = esc5;
@@ -75,8 +88,17 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 		// Si l'utilisateur édite en mode HTML, utiliser directement _promptHtml
 		L.push(`\t\tpromptHtml: '${e(q._promptHtml)}',`);
 	} else if (q.prompt) {
-		const hasMd = q.prompt && (/[*#`>\-]/.test(q.prompt) || q.prompt.includes("\n"));
-		if (hasMd) L.push(`\t\tpromptHtml: '${e(md2html(q.prompt))}',`);
+		/* Passage en HTML seulement pour le markdown de BLOC — titre, liste,
+		   citation, bloc de code, ou plusieurs lignes. L'ancien test suffisait à
+		   la présence d'une étoile ou d'un accent grave n'importe où, et
+		   `md2html` ne connaît pas la règle de flanc du rendu : sauvegarder une
+		   question contenant « 3*4*5 » l'écrivait `3<em>4</em>5` DANS LA NOTE.
+		   La donnée était corrompue par une simple correction de faute de frappe
+		   (revue codex 2026-07-31).
+		   Le markdown INLINE n'a plus besoin d'être converti : depuis que le
+		   moteur rend `prompt` lui-même (engine/sanitizer.ts), le laisser en
+		   texte est à la fois fidèle et plus lisible dans la note. */
+		if (hasBlockMarkdown(q.prompt)) L.push(`\t\tpromptHtml: '${e(md2html(q.prompt))}',`);
 		else L.push(`\t\tprompt: '${e(q.prompt)}',`);
 	} else if (q._promptHtml) {
 		L.push(`\t\tpromptHtml: '${e(q._promptHtml)}',`);
@@ -150,7 +172,10 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 	}
 	// Priorité à explain modifié par l'utilisateur
 	if (q.explain) {
-		L.push(`\t\texplainHtml: '${e(md2html(q.explain))}',`);
+		// Même règle que l'énoncé : le markdown inline reste du TEXTE, que le
+		// moteur rend (engine/cards.ts explanationHtml).
+		if (hasBlockMarkdown(q.explain)) L.push(`\t\texplainHtml: '${e(md2html(q.explain))}',`);
+		else L.push(`\t\texplain: '${e(q.explain)}',`);
 	} else if (q._explainHtml) {
 		L.push(`\t\texplainHtml: '${e(q._explainHtml)}',`);
 	}

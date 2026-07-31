@@ -191,3 +191,25 @@ function esc5(s?: unknown): string {
 }
 
 export { Q_TYPES, loadReact, _setIcon, _iconSpan, makeDefault, defaultSlots, md2html, escHtml, esc5 };
+
+/** Un champ importé peut porter du HTML que le texte brut ne sait pas
+    exprimer — un tableau, mais aussi un simple `<strong>`. Le repérer décide
+    lequel des deux champs éditer : sans quoi corriger une faute de frappe
+    aplatissait la mise en forme.
+
+    Les enveloppes NEUTRES ne comptent pas : `<p>…</p>` et `<br>` sont ce que
+    md2html produit pour du texte ordinaire, et basculer en édition HTML pour
+    ça imposerait des balises à qui écrit une phrase. */
+export function isRichHtml(html: string | undefined): boolean {
+	if (!html) return false;
+	// Un commentaire HTML est du contenu que le texte brut perdrait.
+	if (html.includes("<!--")) return true;
+	/* Seule une balise `<p>` NUE est neutre — c'est ce que md2html produit
+	   pour du texte ordinaire. Un `<p role="note">` porte de l'information que
+	   le sanitizer conserve et affiche ; le traiter comme une enveloppe
+	   effaçait ses attributs à la première frappe. Un `<p class="">` vide est
+	   alors classé riche : l'erreur va dans le bon sens (on édite le HTML, on
+	   ne perd rien). */
+	const stripped = html.replace(/<\/?p>|<br\s*\/?>/gi, "");
+	return /<[a-z][a-z0-9]*\b[^>]*>/i.test(stripped);
+}

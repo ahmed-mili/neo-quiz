@@ -1,4 +1,4 @@
-import { makeDefault, defaultSlots } from "./utils";
+import { makeDefault, defaultSlots, isRichHtml } from "./utils";
 import type { DraftQuestion, QuestionTypeKey } from "./utils";
 import { _htmlToText } from "./modals";
 import type { ParsedQuizItem } from "./modals";
@@ -112,7 +112,14 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	}
 
 	if (q.explain) question.explain = q.explain;
-	else if (q.explainHtml) {
+	else if (q.explainHtml && !isRichHtml(q.explainHtml)) {
+		/* Uniquement si le HTML est une simple enveloppe (`<p>`, `<br>`) : le
+		   remplir depuis un HTML RICHE faisait reprendre à l'export la version
+		   APLATIE — corriger une faute de frappe dans le TITRE suffisait à
+		   perdre un `<blockquote>` et ses emphases, sans que l'explication ait
+		   été touchée (revue codex 2026-07-31). Laissé vide, c'est
+		   `_explainHtml` qui fait foi des deux côtés, comme `_useHtmlPrompt`
+		   le fait déjà pour l'énoncé. */
 		question.explain = _htmlToText(q.explainHtml);
 	}
 	if (q.explainHtml) {

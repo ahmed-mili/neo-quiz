@@ -4,20 +4,16 @@
  * Le projet n'a pas de framework de test, et n'en veut pas. Cette logique-ci
  * fait exception : elle décide, sur du texte écrit par un modèle ou à la main,
  * ce qui devient du gras et ce qui reste une multiplication. Elle s'est déjà
- * trompée sur `3*4*5`, sur un chemin Windows et sur un prix en dollars — trois
- * cas qu'aucune relecture n'attrape à l'œil.
+ * trompée sur `3*4*5`, sur un chemin Windows, sur un prix en dollars et sur
+ * une multiplication en lettres grecques — des cas qu'aucune relecture
+ * n'attrape à l'œil.
  *
- * Le script bundle la VRAIE fonction (`renderInlineText`, src/engine/sanitizer.ts)
- * avec esbuild plutôt que d'en recopier une réplique : une copie finirait par
- * diverger de l'originale et validerait le vide.
+ * La VRAIE fonction est chargée (scripts/lib/load-src.mjs) plutôt que
+ * recopiée : une réplique finirait par diverger de l'originale.
  *
  *     npm run check:md
  */
-import { build } from "esbuild";
-import { readFileSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 const BS = "\\";      // un antislash littéral
 const DOL = "\\$";    // un dollar échappé en markdown
@@ -69,38 +65,8 @@ const CAS = [
 	["emphase imbriquee", "**fort *italique* ici**", "<strong>fort <em>italique</em> ici</strong>"],
 ];
 
-const dir = mkdtempSync(join(tmpdir(), "quiz-md-"));
-const bundle = join(dir, "sanitizer.mjs");
-try {
-	await build({
-		entryPoints: ["src/engine/sanitizer.ts"],
-		bundle: true,
-		format: "esm",
-		platform: "node",
-		// `obsidian` n'existe pas hors d'Obsidian, et seuls des TYPES en
-		// viennent : le marquer externe suffit, rien ne l'appelle au runtime.
-		external: ["obsidian"],
-		outfile: bundle,
-		logLevel: "warning",
-	});
-
-	const { renderInlineText } = await import(pathToFileURL(bundle).href);
-
-	let echecs = 0;
-	for (const [nom, entree, attendu] of CAS) {
-		const obtenu = renderInlineText(entree);
-		if (obtenu === attendu) continue;
-		echecs++;
-		console.error("ÉCHEC  " + nom);
-		console.error("       attendu : " + JSON.stringify(attendu));
-		console.error("       obtenu  : " + JSON.stringify(obtenu));
-	}
-
-	if (echecs) {
-		console.error("\n" + echecs + "/" + CAS.length + " cas en échec");
-		process.exit(1);
-	}
-	console.log(CAS.length + "/" + CAS.length + " cas passent");
-} finally {
-	rmSync(dir, { recursive: true, force: true });
-}
+await withSrcModule("src/engine/sanitizer.ts", ({ renderInlineText }) => {
+	const r = makeReporter("Markdown");
+	for (const [nom, entree, attendu] of CAS) r.check(nom, renderInlineText(entree), attendu);
+	r.done();
+});

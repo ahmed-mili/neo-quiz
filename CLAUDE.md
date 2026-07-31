@@ -36,16 +36,21 @@ communautaire d'Obsidian.
 
 ## Commandes
 
-- `npm run check` — typecheck (`tsc --noEmit`). **C'est la seule vérification
-  automatisée : il n'y a AUCun framework de test.** Toujours lancer après une modif TS.
+- `npm run check` — typecheck (`tsc --noEmit`). Toujours lancer après une modif TS.
+- `npm run check:md` — **le seul jeu de cas du projet** (24) : le rendu markdown des
+  champs texte du moteur (`renderInlineText`, engine/sanitizer.ts), bundlé par esbuild
+  et éprouvé pour de vrai. Il existe parce que cette logique décide si `3*4*5` est une
+  multiplication ou de l'italique — trois régressions déjà, qu'aucune relecture
+  n'attrape à l'œil. **Pas de framework de test au-delà de ça** ; ne pas en ajouter un
+  pour du code qu'une lecture suffit à juger.
 - `npm run dev` — esbuild en watch : rebuild + redéploiement à chaque save (JS et CSS).
 - `npm run build` — build production → `dist/` + déploiement dans les vaults.
 - **Release** : bumper la version dans `src/assets/manifest.json`, créer un tag
   `git tag vX.Y.Z`, `git push` du tag → le workflow `release.yml` build et publie.
   (Ne pas utiliser `npm run release` : il pointe vers un `scripts\release.bat` absent.)
 
-Vérification d'un changement = `npm run check` **puis** test manuel dans Obsidian
-(pas de tests unitaires à exécuter).
+Vérification d'un changement = `npm run check` (+ `npm run check:md` si le rendu des
+champs texte est touché) **puis** test manuel dans Obsidian.
 
 ## Build & déploiement (`esbuild.config.mjs`)
 

@@ -61,6 +61,79 @@ function FLANK(delim: string): RegExp {
 	);
 }
 
+function escapeHtmlText(value: unknown): string {
+	return String(value ?? "")
+		.replace(/\&/g, "\&amp;")
+		.replace(/\</g, "\&lt;")
+		.replace(/\>/g, "\&gt;")
+		.replace(/"/g, "\&quot;")
+		.replace(/'/g, "\&#39;");
+}
+
+function restoreAllowedInlineTags(html: unknown): string {
+	return String(html ?? "")
+		.replace(/\&lt;br\s*\/?\&gt;/gi, "<br>")
+		.replace(/\&lt;(\/?)code\&gt;/gi, "<$1code>")
+		.replace(/\&lt;(\/?)(strong|b|em|i|u|mark|kbd|samp|small|sub|sup)\&gt;/gi, "<$1$2>");
+}
+
+/* ── Markdown INLINE des champs texte ────────────────────────────────
+   Un quiz écrit à la main — ou généré par un modèle — contient du
+   markdown : `**gras**`, `*italique*`, `` `code` ``. Sans cette passe,
+   les étoiles et les accents graves s'affichaient TELS QUELS dans les
+   énoncés, les options, l'explication et surtout la leçon du mode learn
+   (constat Ahmed 2026-07-31). Le champ n'a pas d'équivalent HTML
+   (`learn`, `cloze`… passent en texte brut) : c'est ici, au rendu, que
+   ça se joue — pas à l'export, qui doit garder la source lisible.
+
+   Entrée : du texte DÉJÀ échappé (escapeHtmlText) où les quelques
+   balises inline autorisées ont été restaurées. On n'introduit donc
+   jamais de HTML venu de l'utilisateur : uniquement les balises que
+   cette fonction écrit elle-même.
+
+   Ce qui est mis à l'abri AVANT toute substitution :
+   - les formules LaTeX ($…$, $$…$$) — MathJax lit la source telle
+     quelle, et un `*` ou un `_` y appartient à la formule ;
+   - les <code> déjà présents — leur contenu est littéral par nature. */
+function inlineMarkdown(escaped: string): string {
+	const stash: string[] = [];
+	const keep = (html: string): string => MD_MARK + (stash.push(html) - 1) + MD_MARK;
+
+	let out = escaped
+		// `\$` ÉCHAPPÉ n'ouvre pas une formule : « Prix \$5 … \$10 » n'est
+		// pas du LaTeX, et le prendre pour tel figeait tout le segment (le
+		// gras au milieu restait littéral).
+		.replace(/(^|[^\\])(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g, (_m, before: string, math: string) => before + keep(math))
+		.replace(/<code>[\s\S]*?<\/code>/g, m => keep(m))
+		// Double accent grave AVANT le simple : c'est la forme markdown
+		// d'un code qui CONTIENT un accent grave (``a ` b``).
+		.replace(/``([^\n]+?)``/g, (_m, code: string) => keep(`<code>${code}</code>`))
+		.replace(/`([^`\n]+)`/g, (_m, code: string) => keep(`<code>${code}</code>`));
+
+	out = out
+		// Triple AVANT double avant simple : `***x***` traité en une passe,
+		// sinon les balises se croisent (<strong><em>…</strong></em>).
+		.replace(FLANK("\\*\\*\\*"), "$1<strong><em>$2</em></strong>")
+		.replace(FLANK("\\*\\*"), "$1<strong>$2</strong>")
+		.replace(FLANK("\\*"), "$1<em>$2</em>")
+		.replace(FLANK("~~"), "$1<del>$2</del>");
+
+	return out.replace(new RegExp(MD_MARK + "(\\d+)" + MD_MARK, "g"), (_m, i: string) => stash[Number(i)]);
+}
+
+/** Texte d'affichage : échappé, puis markdown inline. Le pendant de
+    `escapeHtmlText` pour tout ce que l'apprenant LIT (libellés de
+    classement, d'appariement, titres, réponses attendues) — mais jamais
+    pour ce qu'il ÉCRIT (valeur d'un textarea) ni pour un attribut.
+
+    EXPORTÉ pour `scripts/check-markdown.mjs` : c'est la seule logique du
+    plugin assez tordue pour mériter un jeu de cas, et le script doit
+    éprouver CETTE fonction — une réplique dans le script finirait par
+    diverger de l'originale et validerait le vide. */
+export function renderInlineText(raw: unknown): string {
+	return inlineMarkdown(restoreAllowedInlineTags(escapeHtmlText(raw)));
+}
+
 export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 	const QUIZ_HTML_ALLOWED_TAGS = new Set([
 		"a", "b", "blockquote", "br", "center", "code", "details", "div", "em", "font",
@@ -92,15 +165,6 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 			.replace(/'/g, "\&#39;")
 			.replace(/\</g, "\&lt;")
 			.replace(/\>/g, "\&gt;");
-	}
-
-	function escapeHtmlText(value: unknown): string {
-		return String(value ?? "")
-			.replace(/\&/g, "\&amp;")
-			.replace(/\</g, "\&lt;")
-			.replace(/\>/g, "\&gt;")
-			.replace(/"/g, "\&quot;")
-			.replace(/'/g, "\&#39;");
 	}
 
 	function unescapeHtmlText(value: unknown): string {
@@ -294,65 +358,6 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 			return `<div class="${wrapClass}"><img class="${imgClass}" src="${src}" alt="${altAttr}" loading="eager"${widthAttr}${heightAttr}></div>`;
 		}
 		return `<code>${escapeHtmlText(`![[${embedSpec}]]`)}</code>`;
-	}
-
-	/* ── Markdown INLINE des champs texte ────────────────────────────────
-	   Un quiz écrit à la main — ou généré par un modèle — contient du
-	   markdown : `**gras**`, `*italique*`, `` `code` ``. Sans cette passe,
-	   les étoiles et les accents graves s'affichaient TELS QUELS dans les
-	   énoncés, les options, l'explication et surtout la leçon du mode learn
-	   (constat Ahmed 2026-07-31). Le champ n'a pas d'équivalent HTML
-	   (`learn`, `cloze`… passent en texte brut) : c'est ici, au rendu, que
-	   ça se joue — pas à l'export, qui doit garder la source lisible.
-
-	   Entrée : du texte DÉJÀ échappé (escapeHtmlText) où les quelques
-	   balises inline autorisées ont été restaurées. On n'introduit donc
-	   jamais de HTML venu de l'utilisateur : uniquement les balises que
-	   cette fonction écrit elle-même.
-
-	   Ce qui est mis à l'abri AVANT toute substitution :
-	   - les formules LaTeX ($…$, $$…$$) — MathJax lit la source telle
-	     quelle, et un `*` ou un `_` y appartient à la formule ;
-	   - les <code> déjà présents — leur contenu est littéral par nature. */
-	function inlineMarkdown(escaped: string): string {
-		const stash: string[] = [];
-		const keep = (html: string): string => MD_MARK + (stash.push(html) - 1) + MD_MARK;
-
-		let out = escaped
-			// `\$` ÉCHAPPÉ n'ouvre pas une formule : « Prix \$5 … \$10 » n'est
-			// pas du LaTeX, et le prendre pour tel figeait tout le segment (le
-			// gras au milieu restait littéral).
-			.replace(/(^|[^\\])(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g, (_m, before: string, math: string) => before + keep(math))
-			.replace(/<code>[\s\S]*?<\/code>/g, m => keep(m))
-			// Double accent grave AVANT le simple : c'est la forme markdown
-			// d'un code qui CONTIENT un accent grave (``a ` b``).
-			.replace(/``([^\n]+?)``/g, (_m, code: string) => keep(`<code>${code}</code>`))
-			.replace(/`([^`\n]+)`/g, (_m, code: string) => keep(`<code>${code}</code>`));
-
-		out = out
-			// Triple AVANT double avant simple : `***x***` traité en une passe,
-			// sinon les balises se croisent (<strong><em>…</strong></em>).
-			.replace(FLANK("\\*\\*\\*"), "$1<strong><em>$2</em></strong>")
-			.replace(FLANK("\\*\\*"), "$1<strong>$2</strong>")
-			.replace(FLANK("\\*"), "$1<em>$2</em>")
-			.replace(FLANK("~~"), "$1<del>$2</del>");
-
-		return out.replace(new RegExp(MD_MARK + "(\\d+)" + MD_MARK, "g"), (_m, i: string) => stash[Number(i)]);
-	}
-
-	/** Texte d'affichage : échappé, puis markdown inline. Le pendant de
-	    `escapeHtmlText` pour tout ce que l'apprenant LIT (libellés de
-	    classement, d'appariement, titres, réponses attendues) — mais jamais
-	    pour ce qu'il ÉCRIT (valeur d'un textarea) ni pour un attribut. */
-	function renderInlineText(raw: unknown): string {
-		return inlineMarkdown(restoreAllowedInlineTags(escapeHtmlText(raw)));
-	}
-
-	function restoreAllowedInlineTags(html: unknown): string {
-		return String(html ?? "")
-			.replace(/\&lt;br\s*\/?\&gt;/gi, "<br>")
-			.replace(/\&lt;(\/?)code\&gt;/gi, "<$1code>")
-			.replace(/\&lt;(\/?)(strong|b|em|i|u|mark|kbd|samp|small|sub|sup)\&gt;/gi, "<$1$2>");
 	}
 
 	function renderTextWithEmbeds(raw: unknown, { wrapClass = "quiz-question-embed-wrap", imgClass = "quiz-question-embed" }: EmbedClassOptions = {}): string {

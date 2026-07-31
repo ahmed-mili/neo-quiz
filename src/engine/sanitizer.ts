@@ -299,7 +299,7 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 	function resourceButtonHtml(q: QuestionBase | null | undefined): string {
 		const rb = q?.resourceButton;
 		if (!rb || !rb.label || !rb.fileName) return "";
-		return `<button class="quiz-resource-btn" type="button" data-resource-file="${escapeHtmlAttr(rb.fileName)}"><span class="quiz-resource-btn-icon" aria-hidden="true">${ctx.lucideIcons?.paperclip || "⬇" }</span><span class="quiz-resource-btn-label">${escapeHtmlText(rb.label)}</span></button>`;
+		return `<button class="quiz-resource-btn" type="button" data-resource-file="${escapeHtmlAttr(rb.fileName)}"><span class="quiz-resource-btn-icon" aria-hidden="true">${ctx.lucideIcons?.paperclip || "⬇" }</span><span class="quiz-resource-btn-label">${renderInlineText(rb.label)}</span></button>`;
 	}
 
 	function resolveObsidianEmbedFile(linkPath: unknown): TAbstractFile | null {

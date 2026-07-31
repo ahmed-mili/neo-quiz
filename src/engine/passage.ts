@@ -124,8 +124,8 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 		return `<div class="quiz-passage${isCollapsed ? " is-collapsed" : ""}" data-passage-key="${ctx.escapeHtmlAttr(p.key)}">
 			<div class="quiz-passage-head">
 				<span class="quiz-passage-icon" aria-hidden="true">${ICON_BOOK}</span>
-				<span class="quiz-passage-title">${ctx.escapeHtmlText(p.title)}</span>
-				${scope ? `<span class="quiz-passage-scope">${ctx.escapeHtmlText(scope)}</span>` : ""}
+				<span class="quiz-passage-title">${ctx.sanitize.renderInlineText(p.title)}</span>
+				${scope ? `<span class="quiz-passage-scope">${ctx.sanitize.renderInlineText(scope)}</span>` : ""}
 				<button class="quiz-passage-toggle" type="button" data-passage-toggle="1" aria-expanded="${isCollapsed ? "false" : "true"}" aria-label="${ctx.escapeHtmlAttr(toggleLabel)}" title="${ctx.escapeHtmlAttr(toggleLabel)}">${ICON_CHEVRON}</button>
 			</div>
 			<div class="quiz-passage-body"><div class="quiz-passage-content">${contentHtml}</div></div>

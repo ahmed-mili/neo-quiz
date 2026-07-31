@@ -264,7 +264,7 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 						try {
 							const ext = item.type.split("/")[1] || "png";
 							const app = ctx.plugin.app as unknown as EditorApp;
-							const { fileName, filePath } = await cheminImageCollee(app, ext);
+							const { fileName, filePath } = await cheminImageCollee(app, ext, view.sourcePath);
 							const buffer = await file.arrayBuffer();
 							try {
 								await app.vault.adapter.writeBinary(filePath, new Uint8Array(buffer));
@@ -408,7 +408,7 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 								try {
 									const ext = file.type?.split("/")[1] || "png";
 									const app = ctx.plugin.app as unknown as EditorApp;
-									const { fileName, filePath: path } = await cheminImageCollee(app, ext);
+									const { fileName, filePath: path } = await cheminImageCollee(app, ext, view.sourcePath);
 
 									const buf = await file.arrayBuffer();
 									try {

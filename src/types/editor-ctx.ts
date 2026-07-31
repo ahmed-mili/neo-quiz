@@ -61,6 +61,14 @@ export interface EditorHostView {
 	/** Conteneur du formulaire — inutilisé par le pont, qui ne rend que les
 	    champs d'un TYPE et jamais le formulaire entier. */
 	editorInnerEl: HTMLElement;
+	/**
+	 * Chemin de la NOTE éditée, quand il y en a une. Sert à ranger une image
+	 * collée là où l'utilisateur l'a demandé : le réglage « dossier des pièces
+	 * jointes » a des modes RELATIFS à la note (`./`, `./images`), et sans ce
+	 * chemin Obsidian se rabat sur le fichier ACTIF — qui, depuis un onglet de
+	 * quiz ou le dashboard, n'est pas la note du quiz.
+	 */
+	sourcePath?: string;
 	renderCode(): void;
 	schedulePreview(): void;
 	scheduleSave?(): void;

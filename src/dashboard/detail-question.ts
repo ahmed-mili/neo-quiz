@@ -52,12 +52,13 @@ export interface EditCallbacks {
 	onStructureChange(): void;
 }
 
-export function renderQuestionEdit(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks): void {
+export function renderQuestionEdit(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, sourcePath?: string): void {
 	const bridge = createFormBridge({
 		app: cb.app,
 		plugin: cb.plugin,
 		onChange: cb.onChange,
 		onStructureChange: cb.onStructureChange,
+		sourcePath,
 	});
 
 	renderTitleField(parent, q, cb);

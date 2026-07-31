@@ -625,7 +625,10 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 				// Re-peindre le PANNEAU seul : la liste vient d'être refaite par
 				// onChange, et re-rendre tout volerait le focus de la frappe.
 				onStructureChange: () => paintPanel(listCol, panel, nav, spec),
-			});
+			// Le chemin de la NOTE : une image collée doit atterrir là où le
+			// réglage de l'utilisateur le dit, y compris dans ses modes
+			// relatifs à la note. Absent pour un quiz encore en mémoire.
+			}, draft?.file?.path);
 		} else {
 			renderQuestionView(content, q, ctx.app, index, draft?.file?.path);
 		}

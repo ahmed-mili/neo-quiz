@@ -28,6 +28,8 @@ export interface FormBridgeOptions {
 	onChange(): void;
 	/** L'ajout/retrait d'un champ a changé la structure : repeindre le panneau. */
 	onStructureChange(): void;
+	/** Chemin de la note éditée (voir EditorHostView.sourcePath). */
+	sourcePath?: string;
 }
 
 export interface FormBridge {
@@ -66,6 +68,7 @@ export function createFormBridge(opts: FormBridgeOptions): FormBridge {
 		app: opts.app,
 		plugin: opts.plugin,
 		editorInnerEl: document.createElement("div"),
+		sourcePath: opts.sourcePath,
 		/* Les quatre crochets mènent tous à la persistance, sauf `renderCode`
 		   qui n'a plus de panneau à rafraîchir. `schedulePreview` en fait
 		   partie : c'est le SEUL signal émis quand une image est collée dans

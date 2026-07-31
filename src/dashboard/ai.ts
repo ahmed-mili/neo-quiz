@@ -185,6 +185,10 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	// Listener « focus fenêtre » du re-check des statuts CLI (remplacé à
 	// chaque render, retiré quand la zone de hint disparaît).
 	let __focusRecheck: (() => void) | null = null;
+	/** Sondage « le serveur Ollama a-t-il démarré ? ». Retenu ici pour être
+	    annulable : sans ça il continuait de tourner (et de redessiner la page)
+	    après la fermeture de la vue. */
+	let ollamaPoll: number | null = null;
 	// ResizeObserver de la carte composer (mesure du text-indent des chips) :
 	// déconnecté et recréé à chaque render (composer recréé) — cf. layoutChipsRow.
 	let composerResizeObserver: ResizeObserver | null = null;
@@ -1351,15 +1355,15 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 								// Poll : vert automatique dès que le
 								// serveur répond (10 s max).
 								let tries = 0;
-								const poll = window.setInterval(() => {
+								if (ollamaPoll) window.clearInterval(ollamaPoll);
+								ollamaPoll = window.setInterval(() => {
 									tries++;
 									// force : le serveur vient de démarrer, le cache
 									// de détection dirait encore « injoignable ».
 									aiProviders.checkOllama(settings.aiOllamaUrl, true).then(r2 => {
-										if (r2.ok || tries >= 10) {
-											window.clearInterval(poll);
-											if (r2.ok) render(containerRef);
-										}
+										if (!r2.ok && tries < 10) return;
+										if (ollamaPoll) { window.clearInterval(ollamaPoll); ollamaPoll = null; }
+										if (r2.ok) render(containerRef);
 									});
 								}, 1000);
 							}
@@ -2162,6 +2166,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// complétion irait repeindre un conteneur détaché.
 		activeClient?.abort();
 		activeClient = null;
+		if (ollamaPoll) { window.clearInterval(ollamaPoll); ollamaPoll = null; }
 		closeAllSelects();
 		if (composerResizeObserver) { composerResizeObserver.disconnect(); composerResizeObserver = null; }
 		if (__focusRecheck) { window.removeEventListener("focus", __focusRecheck); __focusRecheck = null; }

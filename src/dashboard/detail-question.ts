@@ -86,6 +86,10 @@ function renderTitleField(parent: HTMLElement, q: DraftQuestion, cb: EditCallbac
 	input.placeholder = t("dashboard.quiz.editTitlePlaceholder");
 	input.addEventListener("input", () => {
 		q.title = input.value;
+		// Un titre SAISI est un titre d'auteur, même s'il ressemble au motif
+		// automatique : sans ce drapeau, le prochain réordonnancement le
+		// remplacerait par « Question N ».
+		q._userModifiedTitle = true;
 		cb.onChange();
 	});
 }

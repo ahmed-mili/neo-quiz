@@ -95,9 +95,12 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
     avec ses étoiles. Le contenu, lui, n'est pas touché — seul l'affichage. */
 export function questionText(q: DraftQuestion): string {
 	return (q.prompt || q.title || "")
-		.replace(/`{1,3}/g, "")
-		.replace(/\*{1,2}/g, "")
-		.replace(/~~/g, "")
+		// Seuls les marqueurs APPARIÉS tombent, avec la même règle de flanc
+		// gauche que le rendu (engine/sanitizer.ts) : retirer toutes les
+		// étoiles changeait « 3*4*5 » en « 345 » et « C:\*.ts » en « C:\.ts ».
+		.replace(/`([^`\n]+)`/g, "$1")
+		.replace(/(^|[^0-9A-Za-zÀ-ÿ\\*])\*{1,3}(?=\S)([\s\S]*?\S)\*{1,3}/g, "$1$2")
+		.replace(/(^|[^0-9A-Za-zÀ-ÿ\\~])~~(?=\S)([\s\S]*?\S)~~/g, "$1$2")
 		.replace(/^\s*#{1,6}\s+/gm, "")
 		.replace(/\s+/g, " ")
 		.trim();

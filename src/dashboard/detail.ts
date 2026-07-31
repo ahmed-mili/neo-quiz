@@ -6,7 +6,7 @@ import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { quizTypeLabel } from "./quiz-card";
 import { openQuizForPlay } from "./quiz-open";
-import { TypePickerModal } from "../editor/modals";
+import { TypePickerModal, ConfirmModal } from "../editor/modals";
 import { loadQuizDraft, saveQuizDraft, questionText } from "./detail-io";
 import type { QuizDraft, QuizLoadError } from "./detail-io";
 import { renderQuestionView, renderQuestionEdit } from "./detail-question";
@@ -55,8 +55,9 @@ export interface QuizPageSpec {
 	stats?: QuizIndexEntry;
 	/** Flèche retour : le SEUL chemin de sortie de la page. */
 	onBack(): void;
-	/** Bouton principal à droite. Absent → masqué. */
-	start?: { label: string; icon: string; onClick(): void };
+	/** Bouton principal à droite. Absent → masqué. Reçoit son propre élément :
+	    un menu flottant doit s'ancrer au bouton cliqué, pas à la page. */
+	start?: { label: string; icon: string; onClick(el: HTMLElement): void };
 	/** Actions supplémentaires, posées avant le bouton principal. */
 	actions?: Array<{ label: string; icon: string; onClick(el: HTMLElement): void }>;
 	/** Vrai quand la page n'est plus celle qu'on regarde (vue changée) : les
@@ -134,6 +135,9 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	let activeIdx = 0;
 	let editing = false;
 	let saveTimer: number | null = null;
+	/** Brouillon FIGÉ dont l'écriture est en attente, et sa fonction d'écriture
+	    — pour que le débounce n'aille pas viser le quiz suivant. */
+	let pendingSave: { draft: QuizDraft; save: (d: QuizDraft) => Promise<boolean> } | null = null;
 	/** Piste du carrousel du panneau — recréée à chaque paintPanel. */
 	let slideHost: SlideHost | null = null;
 	/** Badge du header : le compte ANNONCÉ (spec) devient le compte RÉEL dès
@@ -149,13 +153,20 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		// l'insertion dans une note — il n'y a rien à écrire d'ici là.
 		if (!draft || !currentSpec?.save) return;
 		if (saveTimer) window.clearTimeout(saveTimer);
+		/* Le brouillon et son écrivain sont FIGÉS ici, pas relus à l'échéance :
+		   ouvrir un autre quiz pendant les 600 ms remplaçait `draft` et
+		   `currentSpec`, et la frappe du premier partait alors dans le second —
+		   ou nulle part. */
+		const pending = draft;
+		const save = currentSpec.save;
 		saveTimer = window.setTimeout(() => {
 			saveTimer = null;
-			if (!draft || !currentSpec?.save) return;
-			void currentSpec.save(draft).then(ok => {
+			pendingSave = null;
+			void save(pending).then(ok => {
 				if (!ok) new Notice(t("dashboard.quiz.saveError"));
 			});
 		}, SAVE_DEBOUNCE_MS);
+		pendingSave = { draft: pending, save };
 	}
 
 	/** Repeint la page telle qu'elle est — sans repasser par l'hôte, qui
@@ -173,6 +184,9 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		currentContainer = container;
 		currentSpec = spec;
 		if (spec.key !== currentPath) {
+			// Le quiz précédent part MAINTENANT : sans ça, ouvrir un autre quiz
+			// dans les 600 ms du débounce perdait la dernière frappe.
+			flushSave();
 			currentPath = spec.key;
 			draft = null;
 			activeIdx = 0;
@@ -278,7 +292,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			start.createSpan({ text: startSpec.label });
 			start.addEventListener("click", () => {
 				flushSave();
-				startSpec.onClick();
+				startSpec.onClick(start);
 			});
 		}
 	}
@@ -300,7 +314,12 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		body.classList.add("qbd-qz-body--leaving");
 		// La sortie est plus courte que l'entrée : la page repeinte doit
 		// arriver, pas se faire attendre.
+		const target = currentSpec;
 		window.setTimeout(() => {
+			// La page a pu être quittée pendant ces 130 ms : le conteneur est
+			// PARTAGÉ par toutes les vues du dashboard, et repeindre ici
+			// écraserait la destination avec l'ancien quiz.
+			if (!page.isConnected || currentSpec !== target) return;
 			repaint();
 			currentContainer?.querySelector(".qbd-qz-body")?.classList.add("qbd-qz-body--entering");
 		}, 130);
@@ -436,11 +455,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 					if (!draft || btn.disabled) return;
 					const qs = draft.questions;
 					[qs[i], qs[target]] = [qs[target], qs[i]];
-					// Les titres AUTOMATIQUES suivent le nouvel ordre ; ceux que
-					// l'auteur a écrits ne bougent pas (même règle que l'éditeur).
-					qs.forEach((qq, idx) => {
-						if (!qq._userModifiedTitle && /^Question \d+$/.test(qq.title || "")) qq.title = `Question ${idx + 1}`;
-					});
+					renumberAuto(qs);
 					if (activeIdx === i) activeIdx = target;
 					else if (activeIdx === target) activeIdx = i;
 					scheduleSave();
@@ -458,10 +473,27 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 				del.addEventListener("click", (e) => {
 					e.stopPropagation();
 					if (!draft) return;
-					draft.questions.splice(i, 1);
-					if (activeIdx >= draft.questions.length) activeIdx = draft.questions.length - 1;
-					scheduleSave();
-					paint(listCol, panel, nav, spec);
+					const title = q.title || `Question ${i + 1}`;
+					// Confirmation, comme dans l'éditeur : la croix est révélée au
+					// survol, l'écriture dans la note est immédiate, et rien ne
+					// rattrape une question supprimée par erreur.
+					new ConfirmModal(ctx.app,
+						t("editor.delete.title", { title }),
+						t("editor.delete.message"),
+						t("editor.action.delete"),
+						t("editor.action.cancel"),
+						(confirmed) => {
+							if (!confirmed || !draft) return;
+							draft.questions.splice(i, 1);
+							// L'index actif suit la LISTE : supprimer une question
+							// AVANT la courante la faisait sauter à la suivante.
+							if (activeIdx > i) activeIdx--;
+							else if (activeIdx === i) activeIdx = Math.min(i, draft.questions.length - 1);
+							renumberAuto(draft.questions);
+							scheduleSave();
+							paint(listCol, panel, nav, spec);
+						},
+					).open();
 				});
 			}
 		});
@@ -591,12 +623,26 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		next.addEventListener("click", () => goToQuestion(activeIdx + 1, listCol, panel, nav, spec));
 	}
 
-	/** Écrit MAINTENANT ce qui est en attente (sortie de page, lancement). */
+	/** Écrit MAINTENANT ce qui est en attente (sortie de page, lancement,
+	    ouverture d'un autre quiz). Vise le brouillon FIGÉ au moment de la
+	    frappe, jamais celui affiché à cet instant. */
 	function flushSave(): void {
-		if (!saveTimer || !draft || !currentSpec?.save) return;
+		if (!saveTimer || !pendingSave) return;
 		window.clearTimeout(saveTimer);
 		saveTimer = null;
-		void currentSpec.save(draft);
+		const { draft: pending, save } = pendingSave;
+		pendingSave = null;
+		void save(pending);
+	}
+
+	/** Les titres AUTOMATIQUES suivent l'ordre de la liste ; ceux que l'auteur
+	    a écrits ne bougent jamais (même règle que l'éditeur). Appelé après
+	    tout déplacement ET toute suppression — sans quoi supprimer « Question
+	    2 » laissait « Question 1, Question 3… » dans la note. */
+	function renumberAuto(questions: DraftQuestion[]): void {
+		questions.forEach((qq, idx) => {
+			if (!qq._userModifiedTitle && /^Question \d+$/.test(qq.title || "")) qq.title = `Question ${idx + 1}`;
+		});
 	}
 
 	function createRingSVG(pct: number, color: string, size: number, sw: number): SVGSVGElement {

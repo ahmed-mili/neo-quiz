@@ -36,7 +36,9 @@ function defaults(mode: QuizMode): EditorExamOptions {
 		mode,
 		enabled: mode === "exam",
 		durationMinutes: 10,
-		autoSubmit: false,
+		// Défauts du MOTEUR (quiz-utils.ts) : un examen soumet à la fin du
+		// temps et montre son chrono, sauf mention contraire.
+		autoSubmit: true,
 		showTimer: true,
 	};
 }
@@ -104,13 +106,14 @@ export function renderExamPanel(parent: HTMLElement, opts: ExamPanelOptions): vo
 	const dur = durWrap.createEl("input", { cls: "qbd-qz-field-input qbd-qz-field-input--single", type: "number" });
 	dur.value = String(cfg.durationMinutes);
 	dur.min = "1";
+	dur.max = "180";
 	dur.addEventListener("input", () => {
-		// Une durée nulle ou négative rendrait l'examen injouable : on ne
-		// descend jamais sous la minute, quoi que la frappe produise.
-		const n = Math.max(1, Math.round(Number(dur.value) || 0));
-		cfg.durationMinutes = n;
+		// Bornes du MOTEUR (quiz-utils.ts, 1 à 180 minutes) : au-delà, la page
+		// afficherait 999 pendant que l'examen en durerait 180.
+		cfg.durationMinutes = Math.max(1, Math.min(180, Math.round(Number(dur.value) || 0)));
 		opts.onChange();
 	});
+	dur.addEventListener("blur", () => { dur.value = String(cfg.durationMinutes); });
 
 	checkbox(box, t("dashboard.quiz.autoSubmit"), cfg.autoSubmit, (on) => {
 		cfg.autoSubmit = on;

@@ -42,6 +42,25 @@ export interface SanitizerHandlers {
     source TypeScript ne survit pas à un outil de formatage. */
 const MD_MARK = String.fromCharCode(0);
 
+/**
+ * Motif d'un délimiteur markdown apparié (`**`, `*`, `~~`), avec la règle de
+ * FLANC GAUCHE : le délimiteur ouvrant ne peut suivre ni une lettre, ni un
+ * chiffre, ni un antislash. C'est ce qui distingue de l'emphase deux cas très
+ * courants dans un quiz technique :
+ *   - `3*4*5` — une multiplication, pas de l'italique ;
+ *   - `C:\Users\*\AppData\*\Cache` — un chemin Windows, où `\*` est d'ailleurs
+ *     la forme markdown d'une étoile littérale.
+ * Le contenu, lui, doit commencer et finir collé au délimiteur (`(?=\S)` …
+ * `\S`) : « 3 * 4 * 5 », espacé, n'est pas non plus de l'emphase.
+ */
+function FLANK(delim: string): RegExp {
+	return new RegExp(
+		"(^|[^0-9A-Za-zÀ-ÿ\\\\" + delim.replace(/\\/g, "") + "])"
+		+ delim + "(?=\\S)((?:(?!" + delim + ")[\\s\\S])*?\\S)" + delim,
+		"g",
+	);
+}
+
 export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 	const QUIZ_HTML_ALLOWED_TAGS = new Set([
 		"a", "b", "blockquote", "br", "center", "code", "details", "div", "em", "font",
@@ -300,18 +319,23 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 		const keep = (html: string): string => MD_MARK + (stash.push(html) - 1) + MD_MARK;
 
 		let out = escaped
-			.replace(/\$\$[\s\S]*?\$\$|\$[^$\n]+\$/g, m => keep(m))
+			// `\$` ÉCHAPPÉ n'ouvre pas une formule : « Prix \$5 … \$10 » n'est
+			// pas du LaTeX, et le prendre pour tel figeait tout le segment (le
+			// gras au milieu restait littéral).
+			.replace(/(^|[^\\])(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g, (_m, before: string, math: string) => before + keep(math))
 			.replace(/<code>[\s\S]*?<\/code>/g, m => keep(m))
+			// Double accent grave AVANT le simple : c'est la forme markdown
+			// d'un code qui CONTIENT un accent grave (``a ` b``).
+			.replace(/``([^\n]+?)``/g, (_m, code: string) => keep(`<code>${code}</code>`))
 			.replace(/`([^`\n]+)`/g, (_m, code: string) => keep(`<code>${code}</code>`));
 
-		// Gras AVANT italique (sinon `**x**` se lirait comme deux italiques
-		// vides). Le `(?=\S)` et le `\S` final imposent des délimiteurs collés
-		// au texte : une multiplication écrite « 3 * 4 * 5 » n'est pas de
-		// l'italique, et c'est précisément le cas qui casse un quiz de maths.
 		out = out
-			.replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "<strong>$1</strong>")
-			.replace(/(^|[^*])\*(?=\S)([^*]*?\S)\*(?!\*)/g, "$1<em>$2</em>")
-			.replace(/~~(?=\S)([\s\S]*?\S)~~/g, "<del>$1</del>");
+			// Triple AVANT double avant simple : `***x***` traité en une passe,
+			// sinon les balises se croisent (<strong><em>…</strong></em>).
+			.replace(FLANK("\\*\\*\\*"), "$1<strong><em>$2</em></strong>")
+			.replace(FLANK("\\*\\*"), "$1<strong>$2</strong>")
+			.replace(FLANK("\\*"), "$1<em>$2</em>")
+			.replace(FLANK("~~"), "$1<del>$2</del>");
 
 		return out.replace(new RegExp(MD_MARK + "(\\d+)" + MD_MARK, "g"), (_m, i: string) => stash[Number(i)]);
 	}

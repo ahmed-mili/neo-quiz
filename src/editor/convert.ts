@@ -39,9 +39,15 @@ export function readModeConfig(q: ParsedQuizItem): EditorExamOptions {
 		// learn peut en porter un (« Passer l'examen »), auquel cas il annonce
 		// une durée.
 		enabled: mode === "exam" || (mode === "learn" && q.examDurationMinutes != null),
-		durationMinutes: q.examDurationMinutes || 10,
-		autoSubmit: q.examAutoSubmit ?? false,
-		showTimer: q.examShowTimer ?? true,
+		/* Les défauts sont ceux du MOTEUR (quiz-utils.ts buildExamOpts), pas
+		   des valeurs « raisonnables » choisies ici : la lecture réécrit le
+		   bloc, et un défaut divergent transformait silencieusement
+		   `{ examMode: true }` en `examAutoSubmit: false` — le comportement de
+		   l'examen changeait sans que personne n'y touche. Bornes comprises :
+		   une durée de 999 s'afficherait telle quelle mais durerait 180. */
+		durationMinutes: Math.max(1, Math.min(180, Number(q.examDurationMinutes) || 10)),
+		autoSubmit: q.examAutoSubmit !== false,
+		showTimer: q.examShowTimer !== false,
 	};
 }
 

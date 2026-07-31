@@ -1640,10 +1640,21 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		return msg;
 	}
 
+	/** Le composer est-il resté vierge depuis l'envoi ? */
+	function composerIsEmpty(): boolean {
+		return !composerText.trim() && noteAttachments.length === 0 && images.length === 0;
+	}
+
 	/** Remet la demande partie dans le composer (annulation, réessai) et
-	    referme la bulle — le contraire exact de takeComposerMessage. */
+	    referme la bulle — le contraire exact de takeComposerMessage.
+
+	    Le composer reste utilisable pendant la génération : si une NOUVELLE
+	    demande y a été saisie entre-temps, elle prime. Rendre l'ancienne
+	    l'effacerait purement et simplement (et abandonnerait ses images sans
+	    les révoquer) ; l'ancienne est alors abandonnée, elle. */
 	function restoreComposerMessage(): void {
 		if (!sentMessage) return;
+		if (!composerIsEmpty()) { dropSentMessage(); return; }
 		composerText = sentMessage.text;
 		noteAttachments = sentMessage.notes;
 		images = sentMessage.images;
@@ -1770,7 +1781,10 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			start: {
 				label: t("ai.result.insert"),
 				icon: "plus",
-				onClick: () => openInsertPicker(host),
+				// Ancré sur le BOUTON : openNotePicker positionne son menu avec
+				// le rectangle de l'élément reçu — lui passer le conteneur de la
+				// page l'aurait posé hors écran.
+				onClick: (btn) => openInsertPicker(btn),
 			},
 			isStale: () => phase !== "result",
 		});
@@ -1845,6 +1859,10 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		dropSentMessage();
 		composerText = "";
 		noteAttachments = [];
+		// Les vignettes préparées dans le composer pendant la génération
+		// disparaissent avec lui : leurs URL d'objet se libèrent ici, sinon
+		// elles resteraient allouées jusqu'à la fermeture d'Obsidian.
+		for (const img of images) URL.revokeObjectURL(img.url);
 		images = [];
 		render(containerRef);
 	}

@@ -48,6 +48,21 @@ function parseQuizSource(source?: string | null): QuizQuestion[] {
 	return parsed as QuizQuestion[];
 }
 
+/**
+ * Cet élément est-il l'objet de CONFIGURATION du bloc plutôt qu'une question ?
+ * Aucun énoncé, et l'un des marqueurs de mode.
+ *
+ * LA règle, pour toutes les lectures d'un bloc quiz-blocks : le moteur ici, et
+ * `editor/convert.ts` qui la réexporte pour la page « quiz », le scanner et la
+ * génération IA. Deux copies d'un critère pareil finissent par diverger, et
+ * l'écart se paie en questions fantômes — chaque lecteur comptant les siennes.
+ */
+export function isQuizModeConfig(item: unknown): boolean {
+	const q = item as (QuizQuestion & QuizModeConfig) | null | undefined;
+	return !!q && typeof q === "object" && !Array.isArray(q) && !q.prompt
+		&& (q.examMode === true || q.learnMode === true || typeof q.mode === "string");
+}
+
 function extractExamOptions(quizArray: QuizQuestion[]): {
 	questions: QuizQuestion[];
 	quizMode: QuizMode;
@@ -56,10 +71,16 @@ function extractExamOptions(quizArray: QuizQuestion[]): {
 } {
 	if (!Array.isArray(quizArray) || quizArray.length === 0) return { questions: quizArray, quizMode: "quiz", examOptions: null, learnExamOptions: null };
 
-	const lastItem = quizArray[quizArray.length - 1] as (QuizQuestion & QuizModeConfig) | undefined;
-	const isConfigObject = lastItem && typeof lastItem === "object" && !lastItem.prompt && (lastItem.examMode === true || lastItem.learnMode === true || typeof lastItem.mode === "string");
+	/* N'IMPORTE OÙ dans le tableau, pas seulement en dernier. L'export écrit
+	   toujours la configuration à la fin, mais un quiz écrit à la main — ou
+	   par un modèle — la place volontiers en tête. Le moteur affichait alors
+	   une première carte VIDE et comptait une question de plus, là où la page
+	   « quiz » et le scanner, eux, la reconnaissaient déjà partout : « 0/11 »
+	   pour un quiz de dix questions. */
+	const configIdx = quizArray.findIndex(isQuizModeConfig);
+	const lastItem = configIdx >= 0 ? quizArray[configIdx] as QuizQuestion & QuizModeConfig : undefined;
 
-	if (isConfigObject && lastItem) {
+	if (lastItem) {
 		// Déterminer le mode : "learn" | "exam" | "quiz"
 		let mode = typeof lastItem.mode === "string" ? lastItem.mode : "";
 		if (!mode) {
@@ -89,7 +110,7 @@ function extractExamOptions(quizArray: QuizQuestion[]): {
 		}
 
 		return {
-			questions: quizArray.slice(0, -1),
+			questions: quizArray.filter((_, i) => i !== configIdx),
 			quizMode,
 			examOptions,
 			learnExamOptions

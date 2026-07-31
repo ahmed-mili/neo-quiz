@@ -153,6 +153,24 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	/** Brouillon FIGÉ dont l'écriture est en attente, et sa fonction d'écriture
 	    — pour que le débounce n'aille pas viser le quiz suivant. */
 	let pendingSave: { draft: QuizDraft; save: (d: QuizDraft) => Promise<boolean> } | null = null;
+	/** Les écritures s'ENCHAÎNENT, jamais en parallèle. Le débounce annule des
+	    MINUTERIES, pas une écriture déjà partie : deux frappes assez espacées
+	    en déclenchaient deux, et la seconde lisait le témoin (`blockSource`)
+	    avant que la première ne l'ait actualisé — son compare-and-swap échouait,
+	    sa version restait en mémoire, et la note gardait la précédente
+	    (revue codex 2026-07-31, `[true, false]` reproduit). */
+	let saveChain: Promise<void> = Promise.resolve();
+
+	/** Met une écriture À LA SUITE des précédentes, et signale son échec. */
+	function runSave(pending: QuizDraft, save: (d: QuizDraft) => Promise<boolean>): void {
+		// `then(ok, err)` et non `.then().catch()` : la chaîne doit rester
+		// TENABLE après un échec, sinon toutes les écritures suivantes de la
+		// session seraient court-circuitées par un rejet définitif.
+		saveChain = saveChain.then(() => save(pending)).then(
+			(ok) => { if (!ok) new Notice(t("dashboard.quiz.saveError")); },
+			() => { new Notice(t("dashboard.quiz.saveError")); },
+		);
+	}
 	/** Piste du carrousel du panneau — recréée à chaque paintPanel. */
 	let slideHost: SlideHost | null = null;
 	/** Badge du header : le compte ANNONCÉ (spec) devient le compte RÉEL dès
@@ -177,9 +195,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		saveTimer = window.setTimeout(() => {
 			saveTimer = null;
 			pendingSave = null;
-			void save(pending).then(ok => {
-				if (!ok) new Notice(t("dashboard.quiz.saveError"));
-			});
+			runSave(pending, save);
 		}, SAVE_DEBOUNCE_MS);
 		pendingSave = { draft: pending, save };
 	}
@@ -712,9 +728,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		pendingSave = null;
 		// Même alerte que le chemin débouncé : une écriture ratée au moment où
 		// l'on QUITTE la page est précisément celle qu'il faut signaler.
-		void save(pending).then(ok => {
-			if (!ok) new Notice(t("dashboard.quiz.saveError"));
-		});
+		runSave(pending, save);
 	}
 
 	/** Les titres AUTOMATIQUES suivent l'ordre de la liste ; ceux que l'auteur

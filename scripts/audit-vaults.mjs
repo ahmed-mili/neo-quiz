@@ -55,13 +55,17 @@ function walk(dir, out) {
 const fichiers = racines.flatMap(r => walk(r, []));
 console.log(fichiers.length + " notes examinées dans " + racines.length + " vault(s)");
 
-await withSrcModule("src/editor/convert.ts", async (convert) => {
-	await withSrcModule("src/editor/export.ts", (exp) => {
+/* `QUIZ_BLOCK_RE` du plugin, jamais une copie : une regex recopiée ici était
+   PLUS STRICTE que l'originale (fence sans attribut, fermante non indentée) et
+   sautait en silence des blocs que le plugin, lui, charge — un audit vert ne
+   disait alors rien de ces quiz-là (revue codex 2026-07-31). */
+await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts", "src/quiz-utils.ts"],
+	(convert, exp, { QUIZ_BLOCK_RE }) => {
 		let quiz = 0, questions = 0, casses = 0, divergents = 0;
 
 		for (const f of fichiers) {
 			const contenu = readFileSync(f, "utf8");
-			const m = contenu.match(/```quiz-blocks\r?\n([\s\S]*?)\r?\n```/);
+			const m = contenu.match(QUIZ_BLOCK_RE);
 			if (!m) continue;
 			let parsed;
 			try { parsed = JSON5.parse(m[1]); } catch { continue; }   // bloc déjà cassé : pas notre affaire
@@ -96,6 +100,7 @@ await withSrcModule("src/editor/convert.ts", async (convert) => {
 
 		console.log("\nquiz : " + quiz + " | questions : " + questions
 			+ " | blocs illisibles : " + casses + " | comptes divergents : " + divergents);
-		process.exit(casses || divergents ? 1 : 0);
+		// `exitCode` et non `exit()` : la pile doit se dérouler pour que
+		// `withSrcModule` retire son dossier temporaire.
+		if (casses || divergents) process.exitCode = 1;
 	});
-});

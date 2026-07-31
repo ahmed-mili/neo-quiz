@@ -3,6 +3,7 @@ import type { DraftQuestion, QuestionTypeKey } from "./utils";
 import { _htmlToText } from "./modals";
 import type { ParsedQuizItem } from "./modals";
 import type { EditorExamOptions } from "../types/editor-ctx";
+import { isQuizModeConfig } from "../quiz-utils";
 
 /* ══════════════════════════════════════════════════════════
    CONVERT — item JSON5 brut → DraftQuestion (forme d'édition)
@@ -14,15 +15,14 @@ import type { EditorExamOptions } from "../types/editor-ctx";
    Corps repris à l'identique.
 ══════════════════════════════════════════════════════════ */
 
-/* Objet de CONFIGURATION du bloc, pas une question — même critère que le
-   moteur (quiz-utils.ts extractExamOptions) : aucun énoncé, et l'un des
-   marqueurs de mode. Vit ici pour que TOUTE lecture du bloc partage la même
-   règle : la page « quiz » ne reconnaissait que `examMode` et importait un
-   `{ mode: 'learn' }` comme une sixième question vide — qu'une simple
-   correction de faute de frappe réécrivait ensuite dans la note. */
+/* Objet de CONFIGURATION du bloc, pas une question — LE critère vit dans
+   quiz-utils.ts, avec le reste de la lecture d'un bloc. Réexporté sous ce nom
+   parce que la page « quiz », le scanner et la génération IA l'appellent ainsi :
+   la page ne reconnaissait que `examMode` et importait un `{ mode: 'learn' }`
+   comme une sixième question vide — qu'une simple correction de faute de frappe
+   réécrivait ensuite dans la note. */
 export function isModeConfig(q: ParsedQuizItem): boolean {
-	return !!q && typeof q === "object" && !q.prompt
-		&& (q.examMode === true || q.learnMode === true || typeof q.mode === "string");
+	return isQuizModeConfig(q);
 }
 
 /** Options du bloc lues depuis un objet de mode (cf. isModeConfig). */

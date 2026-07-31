@@ -27,30 +27,43 @@ const OBSIDIAN_STUB = [
 ].join("\n");
 
 /**
- * @param {string} entry chemin du module source (ex. "src/editor/export.ts")
- * @param {(mod: Record<string, unknown>) => Promise<void> | void} run
+ * @param {string | string[]} entry un module source ("src/editor/export.ts"),
+ *   ou plusieurs — le rappel reçoit alors un module par entrée, dans l'ordre.
+ * @param {(...mods: Record<string, unknown>[]) => Promise<void> | void} run
  */
 export async function withSrcModule(entry, run) {
+	const entries = Array.isArray(entry) ? entry : [entry];
 	const dir = mkdtempSync(join(tmpdir(), "quiz-check-"));
 	try {
-		const outfile = join(dir, "module.mjs");
-		await build({
-			entryPoints: [entry],
-			bundle: true,
-			format: "esm",
-			platform: "node",
-			outfile,
-			logLevel: "warning",
-			plugins: [{
-				name: "obsidian-stub",
-				setup(b) {
-					b.onResolve({ filter: /^obsidian$/ }, () => ({ path: "obsidian", namespace: "stub" }));
-					b.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ contents: OBSIDIAN_STUB, loader: "js" }));
-				},
-			}],
-		});
-		await run(await import(pathToFileURL(outfile).href));
+		const sorties = entries.map((_, i) => join(dir, "module" + i + ".mjs"));
+		// Un build par entrée : `outdir` déduirait les noms des chemins source,
+		// et deux modules homonymes se marcheraient dessus.
+		for (let i = 0; i < entries.length; i++) {
+			await build({
+				entryPoints: [entries[i]],
+				bundle: true,
+				format: "esm",
+				platform: "node",
+				outfile: sorties[i],
+				logLevel: "warning",
+				plugins: [{
+					name: "obsidian-stub",
+					setup(b) {
+						b.onResolve({ filter: /^obsidian$/ }, () => ({ path: "obsidian", namespace: "stub" }));
+						b.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ contents: OBSIDIAN_STUB, loader: "js" }));
+					},
+				}],
+			});
+		}
+		const mods = [];
+		for (const s of sorties) mods.push(await import(pathToFileURL(s).href));
+		await run(...mods);
 	} finally {
+		/* Ce `finally` ne s'exécute QUE si le rappel laisse la pile se dérouler.
+		   Un `process.exit()` dedans le saute, et chaque exécution laissait un
+		   dossier `quiz-check-*` dans le répertoire temporaire (revue codex
+		   2026-07-31, treize retrouvés). D'où `process.exitCode` — jamais
+		   `process.exit` — dans les scripts qui appellent cette fonction. */
 		rmSync(dir, { recursive: true, force: true });
 	}
 }
@@ -71,7 +84,12 @@ export function makeReporter(titre) {
 		done() {
 			if (echecs) {
 				console.error("\n" + titre + " : " + echecs + "/" + total + " cas en échec");
-				process.exit(1);
+				// `exitCode` et non `exit()` : la pile doit se dérouler pour que le
+				// dossier temporaire soit nettoyé. Les jeux de cas suivants
+				// s'exécutent quand même — voir TOUS les échecs vaut mieux que
+				// s'arrêter au premier.
+				process.exitCode = 1;
+				return;
 			}
 			console.log(titre + " : " + total + "/" + total + " cas passent");
 		},

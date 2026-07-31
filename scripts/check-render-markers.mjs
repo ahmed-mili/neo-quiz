@@ -100,7 +100,10 @@ const MOTIFS = [
 const fichiers = racines.flatMap(r => walk(r, []));
 console.log(fichiers.length + " notes examinées dans " + racines.length + " vault(s)");
 
-await withSrcModule("src/engine/sanitizer.ts", (sanitizer) => {
+/* `QUIZ_BLOCK_RE` du plugin, jamais une copie : une regex recopiée serait plus
+   stricte que l'originale et sauterait en silence des blocs que le plugin, lui,
+   charge — l'audit resterait vert sans les avoir vus. */
+await withSrcModule(["src/engine/sanitizer.ts", "src/quiz-utils.ts"], (sanitizer, { QUIZ_BLOCK_RE }) => {
 	const rendre = sanitizer.renderInlineText;
 	let quiz = 0, champs = 0;
 	const parMotif = new Map();
@@ -134,7 +137,7 @@ await withSrcModule("src/engine/sanitizer.ts", (sanitizer) => {
 	];
 
 	for (const f of fichiers) {
-		const m = readFileSync(f, "utf8").match(/```quiz-blocks\r?\n([\s\S]*?)\r?\n```/);
+		const m = readFileSync(f, "utf8").match(QUIZ_BLOCK_RE);
 		if (!m) continue;
 		let parsed;
 		try { parsed = JSON5.parse(m[1]); } catch { continue; }
@@ -162,7 +165,7 @@ await withSrcModule("src/engine/sanitizer.ts", (sanitizer) => {
 	console.log("quiz : " + quiz + " | champs texte rendus : " + champs);
 	if (parMotif.size === 0) {
 		console.log("\nAucun marqueur markdown non rendu. OK");
-		process.exit(0);
+		return;
 	}
 	console.log("\nMARQUEURS NON RENDUS :");
 	for (const [libelle, n] of [...parMotif].sort((a, b) => b[1] - a[1])) {
@@ -173,5 +176,7 @@ await withSrcModule("src/engine/sanitizer.ts", (sanitizer) => {
 		console.log("  [" + e.libelle + "] " + e.fichier.split(/[\\/]/).pop() + " q" + e.qi + "." + e.nom);
 		console.log("      " + e.extrait);
 	}
-	process.exit(1);
+	// `exitCode` et non `exit()` : la pile doit se dérouler pour que
+	// `withSrcModule` retire son dossier temporaire.
+	process.exitCode = 1;
 });

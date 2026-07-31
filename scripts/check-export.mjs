@@ -84,6 +84,38 @@ await withSrcModule("src/editor/export.ts", ({ exportAll }) => {
 	r.check("tableau creux", extra([1, , 3]), [1, null, 3]);
 	r.check("date", typeof extra(new Date(0)), "string");
 
+	/* Constats de la revue codex du 2026-07-31. */
+	// Une clé de PREMIER niveau qui n'est pas un identifiant doit être citée :
+	// `a-b: {...}` rendait le bloc illisible, donc la sauvegarde refusée EN
+	// SILENCE — toutes les retouches restaient en mémoire.
+	r.check("clé de premier niveau non identifiante",
+		relire([question({ _extraFields: { "a-b": { x: 1 } } })], p => p[0]["a-b"]),
+		{ x: 1 });
+	r.check("clé de premier niveau à espace",
+		relire([question({ _extraFields: { "deux mots": 1 } })], p => p[0]["deux mots"]), 1);
+	r.check("clé identifiante laissée nue",
+		exportAll([question({ _extraFields: { monChamp: 1 } })], null).includes("monChamp: 1"), true);
+	// `String(-0)` rend « 0 » : le signe disparaissait sans que personne
+	// n'ait touché à la valeur.
+	r.check("zéro négatif", Object.is(extra(-0), -0), true);
+	r.check("zéro négatif imbriqué", Object.is(extra({ x: -0 }).x, -0), true);
+	// Un identifiant explicite garde SA réservation, mais un candidat SUFFIXÉ
+	// n'en est plus une : sans cette nuance, la seule question qui avait un
+	// identifiant unique le perdait.
+	r.check("suffixe n'usurpe pas une réservation ultérieure",
+		ids([question({ _sourceId: "dup" }), question({ _sourceId: "dup" }), question({ _sourceId: "dup-2" })]),
+		["dup", "dup-3", "dup-2"]);
+	// L'identifiant retenu est MÉMORISÉ : sinon le slug se recalculait à la
+	// retouche suivante du titre, et l'ancre HTML changeait sous les pieds des
+	// résultats déjà sauvegardés.
+	r.check("slug mémorisé sur la question", (() => {
+		const q = question({ title: "Alpha" });
+		exportAll([q], null);
+		const premier = q._sourceId;
+		q.title = "Beta";
+		return [premier, JSON5.parse(exportAll([q], null))[0].id];
+	})(), ["alpha", "alpha"]);
+
 	// Le mode du bloc est réémis sous sa forme d'origine.
 	const mode = (examOptions) => {
 		const parsed = JSON5.parse(exportAll([question({})], examOptions));

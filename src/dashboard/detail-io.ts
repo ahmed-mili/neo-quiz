@@ -87,10 +87,14 @@ export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft |
 export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean> {
 	if (!draft.file) return false;
 	const file = draft.file;
-	/* Première vérification, tôt : inutile d'exporter tout un quiz pour un
-	   brouillon qu'on sait déjà périmé. La garantie, elle, vient de
-	   `vault.process` ci-dessous. */
-	if (draftIsStale(draft)) return false;
+	/* PAS de garde `draftIsStale` ici. Le `mtime` parle de toute la NOTE ;
+	   le brouillon, lui, ne possède que son bloc. Corriger une faute de frappe
+	   dans le texte AUTOUR du quiz — dans l'éditeur markdown, en même temps que
+	   la page est ouverte — faisait échouer toutes les sauvegardes suivantes
+	   alors que le bloc, lui, n'avait pas bougé d'un caractère : la page
+	   n'écrivait plus rien jusqu'à sa réouverture (revue codex 2026-07-31).
+	   La garantie vient du compare-and-swap ci-dessous, qui a la bonne
+	   granularité : le BLOC. */
 	try {
 		const source = exportAll(draft.questions, draft.examOptions);
 		// Garde-fou de l'éditeur, conservé : on ne réécrit JAMAIS un bloc dont

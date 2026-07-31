@@ -17,6 +17,10 @@ import type { EditorExamOptions } from "../types/editor-ctx";
 function json5Value(v: unknown, vus: Set<object> = new Set()): string {
 	if (v === null || v === undefined) return "null";
 	if (typeof v === "string") return `'${esc5(v)}'`;
+	// `-0` AVANT le cas général : `String(-0)` rend « 0 » et perdrait le signe,
+	// alors que JSON5 sait l'écrire. Le zéro négatif est rare, mais c'est une
+	// valeur que l'auteur a écrite — on ne la change pas dans son dos.
+	if (Object.is(v, -0)) return "-0";
 	// NaN / Infinity / -Infinity sont des littéraux JSON5 valides.
 	if (typeof v === "number" || typeof v === "boolean") return String(v);
 	if (typeof v !== "object") return "null";   // fonction, symbole
@@ -40,11 +44,22 @@ function json5Value(v: unknown, vus: Set<object> = new Set()): string {
 		}
 
 		const paires = Object.entries(v as Record<string, unknown>)
-			.map(([k, x]) => `'${esc5(k)}': ${json5Value(x, vus)}`);
+			.map(([k, x]) => `${json5Key(k)}: ${json5Value(x, vus)}`);
 		return "{" + paires.join(", ") + "}";
 	} finally {
 		vus.delete(v);
 	}
+}
+
+/**
+ * Nom de propriété en JSON5. Un identifiant reste NU — c'est la forme du
+ * reste du bloc, et tout citer rendrait les notes illisibles. Tout le reste
+ * est cité : un champ personnalisé nommé `'a-b'` sortait en `a-b:`, que JSON5
+ * refuse — et le bloc entier devenait alors non relisible, donc non
+ * sauvegardable, en silence (revue codex 2026-07-31).
+ */
+function json5Key(k: string): string {
+	return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k) ? k : `'${esc5(k)}'`;
 }
 
 function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string {
@@ -141,20 +156,14 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 		]);
 		for (const [key, val] of Object.entries(q._extraFields)) {
 			if (exportedKeys.has(key)) continue; // Skip already exported keys
-			if (typeof val === 'string') {
-				L.push(`\t\t${key}: '${e(val)}',`);
-			} else if (typeof val === 'number' || typeof val === 'boolean') {
-				L.push(`\t\t${key}: ${val},`);
-			} else {
-				/* Tout le reste — `null`, un objet, un tableau d'objets. Les
-				   branches d'origine ne savaient écrire que des scalaires et des
-				   tableaux de scalaires : un objet imbriqué sortait en
-				   `[object Object]` (JSON5 invalide, donc écriture refusée en
-				   silence) et un `null` disparaissait purement. Ces clés viennent
-				   d'un bloc écrit à la main : on les rend telles qu'on les a
-				   lues, quelle que soit leur forme. */
-				L.push(`\t\t${key}: ${json5Value(val)},`);
-			}
+			/* UNE seule branche, `json5Value`, pour toutes les formes. Les
+			   branches d'origine ne savaient écrire que des scalaires et des
+			   tableaux de scalaires : un objet imbriqué sortait en
+			   `[object Object]` (JSON5 invalide, donc écriture refusée en
+			   silence) et un `null` disparaissait purement. Ces clés viennent
+			   d'un bloc écrit à la main : on les rend telles qu'on les a lues,
+			   quelle que soit leur forme — nom de clé compris. */
+			L.push(`\t\t${json5Key(key)}: ${json5Value(val)},`);
 		}
 	}
 
@@ -190,18 +199,32 @@ function questionId(q: DraftQuestion, idx: number, ctx?: IdContext): string {
 		|| `q${idx + 1}`;
 	if (!ctx) return base;
 
-	/* Un identifiant EXPLICITE a le droit de prendre sa réservation ; un slug
-	   DÉRIVÉ, non — il doit éviter aussi les réservations à venir. Et le
-	   suffixe s'applique même à un identifiant explicite : deux questions
-	   portant le même (un copier-coller de bloc suffit) auraient la même ancre,
-	   et la seconde deviendrait inatteignable. */
-	const pris = (id: string): boolean =>
-		ctx.attribues.has(id) || (!explicite && ctx.reserves.has(id));
+	/* Un identifiant EXPLICITE a le droit de prendre SA réservation — celle-là
+	   seulement. Un slug dérivé, ou un candidat suffixé, n'appartient à
+	   personne : il doit éviter aussi les réservations à venir, sinon il prend
+	   la place d'une question plus bas. Avec `dup, dup, dup-2`, ignorer cette
+	   nuance donnait `dup, dup-2, dup-2-2` — la seule question qui avait un
+	   identifiant unique le perdait (revue codex 2026-07-31).
+	   Le suffixe, lui, s'applique même à un identifiant explicite : deux
+	   questions portant le même (un copier-coller de bloc suffit) auraient la
+	   même ancre, et la seconde deviendrait inatteignable. */
+	const libre = (id: string): boolean => {
+		if (ctx.attribues.has(id)) return false;
+		if (explicite && id === base) return true;
+		return !ctx.reserves.has(id);
+	};
 
 	let id = base;
 	let n = 2;
-	while (pris(id)) id = `${base}-${n++}`;
+	while (!libre(id)) id = `${base}-${n++}`;
 	ctx.attribues.add(id);
+	/* L'identifiant RETENU devient celui de la question. Sans ça, un slug
+	   dérivé du titre était écrit dans la note mais oublié en mémoire : la
+	   retouche suivante du titre le recalculait, et l'ancre HTML comme les
+	   résultats déjà sauvegardés pointaient dans le vide (revue codex
+	   2026-07-31). Vaut aussi pour un identifiant explicite qu'il a fallu
+	   suffixer — c'est bien celui-là, désormais, qui est son ancre. */
+	q._sourceId = id;
 	return id;
 }
 

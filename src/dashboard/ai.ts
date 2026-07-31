@@ -1858,6 +1858,13 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	/** « Recommencer » — désormais la FLÈCHE RETOUR de la page (demande Ahmed
 	    2026-07-31) : sortir du quiz généré, c'est revenir au composer vide. */
 	function restartGeneration(): void {
+		resetGeneration();
+		render(containerRef);
+	}
+
+	/** Remet la page « Générer » à neuf SANS la redessiner — pour l'appelant
+	    qui va de toute façon quitter la vue (insertion dans une note). */
+	function resetGeneration(): void {
 		phase = "idle";
 		generatedQuestions = [];
 		generatedDraft = null;
@@ -1869,7 +1876,6 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// elles resteraient allouées jusqu'à la fermeture d'Obsidian.
 		for (const img of images) URL.revokeObjectURL(img.url);
 		images = [];
-		render(containerRef);
 	}
 
 	function updateGenerateBtn(btn: HTMLButtonElement | null): void {
@@ -2122,6 +2128,19 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			content += "\n\n" + quizBlock;
 			await ctx.app.vault.modify(file, content);
 			new Notice(t("ai.notice.quizInserted", { name: file.basename }));
+
+			/* Le quiz a maintenant une NOTE : on va sur sa page, celle qui écrit
+			   dans le fichier. Rester sur la page « Générer » laisserait deux
+			   copies du même quiz — une en mémoire qui ne se sauvegarde nulle
+			   part, une sur le disque — et la première retouche irait dans le
+			   vide. Le scan du seul fichier suffit à obtenir son entrée : le
+			   scan de vault complet arriverait trop tard. */
+			await ctx.scanner.scanFile(file);
+			const entry = ctx.scanner.getQuiz(file.path);
+			if (entry) {
+				resetGeneration();
+				ctx.navigate("detail", { quiz: entry });
+			}
 		} catch (err) {
 			new Notice(t("ai.notice.insertFailed"));
 		}

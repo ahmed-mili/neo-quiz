@@ -130,9 +130,15 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 			   demandé, et le compare-and-swap ne pouvait pas s'en apercevoir : il
 			   ne compare que le JSON5 (revue codex 2026-07-31). */
 			const lignes = actuel[0].split("\n");
-			const ouverture = lignes[0];
-			const fermeture = lignes[lignes.length - 1];
-			const block = ouverture + "\n" + source + "\n" + fermeture;
+			const ouverture = lignes[0].replace(/\r$/, "");
+			const fermeture = lignes[lignes.length - 1].replace(/\r$/, "");
+			/* Les FINS DE LIGNE de la note, pas celles de l'export. Une note
+			   Windows (ou importée, ou synchronisée) est en CRLF ; y écrire un
+			   bloc en LF la rendait mixte, et le moindre changement d'une
+			   question apparaissait comme une réécriture du bloc entier dans un
+			   diff ou une synchro. */
+			const eol = actuel[0].includes("\r\n") ? "\r\n" : "\n";
+			const block = ouverture + eol + source.replace(/\r?\n/g, eol) + eol + fermeture;
 			// Remplacement par FONCTION, jamais par chaîne : dans une chaîne de
 			// remplacement, `$1`, `$&`, `` $` `` et `$'` sont des motifs
 			// spéciaux — et un quiz de maths est plein de `$…$` (« $1$ » aurait

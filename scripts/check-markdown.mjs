@@ -65,10 +65,38 @@ const CAS = [
 	["emphase imbriquee", "**fort *italique* ici**", "<strong>fort <em>italique</em> ici</strong>"],
 ];
 
-await withSrcModule("src/engine/sanitizer.ts", ({ renderInlineText }) => {
+/* Texte NU : mêmes règles de flanc, sortie sans balises. Là où le HTML
+   n'existe pas — attribut `placeholder`, `aria-label`, vignette de liste —
+   un marqueur apparié doit TOMBER, jamais s'afficher. Ce qui n'est pas de
+   l'emphase (multiplication, chemin, formule) reste intact : c'est la même
+   grammaire, et ces cas-là ont déjà coûté quatre corrections au rendu. */
+const CAS_NUS = [
+	["gras retiré", "Réponds en **majuscules**", "Réponds en majuscules"],
+	["code retiré", "tape `ls -l` ici", "tape ls -l ici"],
+	["triple retiré", "un ***point*** ici", "un point ici"],
+	["barré retiré", "le port ~~25~~ 587", "le port 25 587"],
+	["multiplication intacte", "calcule 3*4*5 ici", "calcule 3*4*5 ici"],
+	["étoile isolée intacte", "arp -d * vide le cache", "arp -d * vide le cache"],
+	["chemin Windows intact",
+		"C:" + BS + "Users" + BS + "*" + BS + "AppData",
+		"C:" + BS + "Users" + BS + "*" + BS + "AppData"],
+	["formule LaTeX intacte", "vaut $a*b*c$ au total", "vaut $a*b*c$ au total"],
+	// Un attribut est réencodé par escapeHtmlAttr au point d'appel : rendre ici
+	// « &#39; » laisserait l'entité VISIBLE dans le placeholder.
+	["apostrophe rendue au caractère", "d'où l'erreur", "d'où l'erreur"],
+	["chevrons rendus au caractère", "si a < b alors", "si a < b alors"],
+	["esperluette non doublée", "Tom & Jerry", "Tom & Jerry"],
+	["chaîne vide", "", ""],
+];
+
+await withSrcModule("src/engine/sanitizer.ts", ({ renderInlineText, stripInlineMarkdown }) => {
 	const r = makeReporter("Markdown");
 	for (const [nom, entree, attendu] of CAS) r.check(nom, renderInlineText(entree), attendu);
 	r.done();
+
+	const rn = makeReporter("Texte nu");
+	for (const [nom, entree, attendu] of CAS_NUS) rn.check(nom, stripInlineMarkdown(entree), attendu);
+	rn.done();
 });
 
 /* Texte à trous : une paire markdown qui ENJAMBE un trou doit rester une

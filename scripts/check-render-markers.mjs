@@ -14,6 +14,23 @@
  * Un champ porteur d'une variante `*Html` n'est PAS compté : le moteur affiche
  * alors le HTML pré-rendu et ignore le texte (engine/cards.ts).
  *
+ * CE QUE CE SCRIPT NE VOIT PAS — et comment le voir. Il éprouve la GRAMMAIRE,
+ * pas le CÂBLAGE : un champ que le moteur affiche sans appeler le rendu du
+ * tout passe ici pour sain. C'est exactement ce qui était arrivé au libellé
+ * d'emplacement d'un classement (`quiz-slot-label`, interpolé brut). Le seul
+ * filet contre ça est de lire le DOM RENDU, dans Obsidian :
+ *
+ *     obsidian eval vault=<nom> code="(()=>{ \
+ *       const host=leaf.view.containerEl.querySelector('.quiz-blocks-host'); \
+ *       return [...host.querySelectorAll('.quiz-track-item')].map(it=>{ \
+ *         const c=it.cloneNode(true); \
+ *         c.querySelectorAll('code,pre,mjx-container,.MathJax').forEach(n=>n.remove()); \
+ *         return c.innerText; }).filter(t=>/\*[^\n]*\*/.test(t)); })()"
+ *
+ * sur une note qui charge chaque type de question de markdown. Les deux
+ * vérifications sont complémentaires : celle-ci sur 8546 champs réels, celle-là
+ * sur tous les chemins d'affichage.
+ *
  * Aucun fichier n'est modifié.
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -31,7 +48,10 @@ function walk(dir, out) {
 	let entries;
 	try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
 	for (const e of entries) {
-		if (e.name.startsWith(".")) continue;
+		// `_to_delete` est le bac à sable : on y écrit exprès des quiz tordus
+		// (étoiles littérales, pièges de rendu) qui n'ont pas à peser sur un
+		// audit censé parler des VRAIS quiz d'Ahmed.
+		if (e.name.startsWith(".") || e.name === "_to_delete") continue;
 		const p = join(dir, e.name);
 		if (e.isDirectory()) walk(p, out);
 		else if (e.name.endsWith(".md")) out.push(p);
@@ -52,20 +72,25 @@ function retirerLitteraux(html) {
 /* Les motifs cherchés dans ce qu'il RESTE. Chacun est un markdown qu'un
    modèle produit spontanément et que l'apprenant ne doit pas lire tel quel.
 
-   Un délimiteur SEUL sur sa ligne n'en est pas un : `arp -d *` et
-   `GRANT … ON glpi.*` sont des étoiles littérales, et les laisser telles
-   quelles est le comportement JUSTE (mesuré : les 6 seules occurrences des
-   deux vaults sont de cette nature). Ce qui trahit un rendu manqué, c'est
-   une PAIRE survivante — deux délimiteurs sur la même ligne. */
-function paire(delim) {
+   Un délimiteur SURVIVANT n'est pas forcément un rendu manqué — le plus
+   souvent c'est une étoile littérale, et la laisser est le comportement
+   JUSTE : `arp -d *`, `GRANT … ON glpi.*`, `3*4*5`, `C:\Users\*\AppData`
+   (les 6 seules occurrences des deux vaults sont de cette nature).
+
+   Ce qui trahit vraiment un champ passé À CÔTÉ du rendu, c'est un
+   délimiteur qui aurait PU ouvrir une emphase — même règle de flanc que le
+   moteur : ni lettre, ni chiffre, ni antislash devant, du non-espace
+   derrière — suivi d'un autre délimiteur sur la même ligne. Le rendu, lui,
+   n'en laisse jamais passer un pareil. */
+function ouvrante(delim) {
 	const d = delim.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	return new RegExp("(?:^|<br>)[^\\n]*?" + d + "[^\\n]*?" + d);
+	return new RegExp("(?:^|[^\\p{L}\\p{N}\\\\" + d + "])" + d + "(?=\\S)[^\\n]*?" + d, "u");
 }
 
 const MOTIFS = [
-	["gras/italique", paire("*")],
-	["code inline", paire("`")],
-	["barré", /~~/],
+	["gras/italique", ouvrante("*")],
+	["code inline", ouvrante("`")],
+	["barré", ouvrante("~~")],
 	["titre", /(^|<br>)\s*#{1,6}\s+\S/],
 	["gras souligné", /(^|[^\p{L}\p{N}\\_])__(?=\S)[\s\S]*?\S__/u],
 	["lien", /\[[^\]\n]+\]\([^)\n]+\)/],

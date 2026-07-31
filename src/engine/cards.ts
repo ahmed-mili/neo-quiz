@@ -183,7 +183,7 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			if (ctx.quizState.locked && filled) cls += oi === correctOrder[si] ? " correct" : " wrong";
 
 			return `<div class="${cls}" data-order-slot="${si}" role="button" tabindex="0" ${(!ctx.quizState.locked && filled) ? `draggable="true" data-slot-item="${oi}"` : ""}>
-				<div class="quiz-slot-label">${slotLabels[si] ?? String(si + 1)}</div>
+				<div class="quiz-slot-label">${ctx.sanitize.renderInlineText(slotLabels[si] ?? String(si + 1))}</div>
 				<div class="quiz-slot-value">${filled ? ctx.sanitize.renderInlineText(items[oi]) : t("engine.ordering.dropHere")}</div>
 			</div>`;
 		}).join("");

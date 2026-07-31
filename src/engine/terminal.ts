@@ -292,9 +292,13 @@ export function createTerminalHandlers(ctx: EngineCtx): TerminalHandlers {
 
 		// `q.placeholder` vient du .md de l'utilisateur (donnée du quiz) : il prime
 		// toujours. Seul le placeholder PAR DÉFAUT est traduit.
-		const placeholder = ctx.escapeHtmlAttr(
+		//
+		// `stripInlineMarkdown` et non `renderInlineText` : un attribut ne rend
+		// aucune balise. « Réponds en **majuscules** » y montrait ses étoiles —
+		// ici les marqueurs appariés TOMBENT, faute de pouvoir devenir du gras.
+		const placeholder = ctx.escapeHtmlAttr(ctx.sanitize.stripInlineMarkdown(
 			isTerminal ? (q?.placeholder || "") : (q?.placeholder || t("engine.text.placeholder"))
-		);
+		));
 		const textareaName = ctx.escapeHtmlAttr(q?.id || `q${qi + 1}`);
 
 		if (isTerminal) {
@@ -385,7 +389,9 @@ export function createTerminalHandlers(ctx: EngineCtx): TerminalHandlers {
 			// l'élève n'a encore rien saisi.
 			template: q?.answerTemplate || "",
 			readOnly: !!ctx.quizState.locked,
-			placeholder: q?.placeholder || "",
+			// Même raison qu'au champ texte : MathLive affiche ce placeholder
+			// comme du texte nu, pas comme du HTML.
+			placeholder: ctx.sanitize.stripInlineMarkdown(q?.placeholder || ""),
 			onInput: (latex) => {
 				if (ctx.quizState.locked) return;
 				ctx.invalidateSavedResults?.();

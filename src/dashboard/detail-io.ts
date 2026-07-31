@@ -2,6 +2,7 @@ import { TFile } from "obsidian";
 import type { App } from "obsidian";
 import { parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-utils";
 import { convertParsedToInternal, isModeConfig, readModeConfig } from "../editor/convert";
+import { stripInlineMarkdown } from "../engine/sanitizer";
 import { exportAll } from "../editor/export";
 import type { DraftQuestion } from "../editor/utils";
 import type { ParsedQuizItem } from "../editor/modals";
@@ -138,15 +139,15 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
     vignette de la liste est du texte brut, et « **exactes** » s'y lisait
     avec ses étoiles. Le contenu, lui, n'est pas touché — seul l'affichage. */
 export function questionText(q: DraftQuestion): string {
-	return (q.prompt || q.title || "")
-		/* Seuls les marqueurs APPARIÉS tombent, avec la même règle de flanc
-		   gauche que le rendu (engine/sanitizer.ts) : retirer toutes les
-		   étoiles changeait « 3*4*5 » en « 345 » et « C:\*.ts » en « C:\.ts ».
-		   `\p{L}\p{N}` et non l'ASCII : « α*β*γ » est une multiplication
-		   elle aussi. */
-		.replace(/`([^`\n]+)`/gu, "$1")
-		.replace(/(^|[^\p{L}\p{N}\\*])\*{1,3}(?=\S)([\s\S]*?\S)\*{1,3}/gu, "$1$2")
-		.replace(/(^|[^\p{L}\p{N}\\~])~~(?=\S)([\s\S]*?\S)~~/gu, "$1$2")
+	/* Seuls les marqueurs APPARIÉS tombent, et c'est la grammaire du RENDU qui
+	   en décide (engine/sanitizer.ts) : retirer toutes les étoiles changeait
+	   « 3*4*5 » en « 345 » et « C:\*.ts » en « C:\.ts ». Cette fonction a
+	   longtemps porté sa propre copie des règles de flanc — deux copies d'une
+	   grammaire aussi pointue finissent par diverger, et c'est la vignette qui
+	   se serait mise à mentir sur ce que la carte affiche. */
+	return stripInlineMarkdown(q.prompt || q.title || "")
+		// Les titres, eux, n'existent pas en INLINE : le rendu les laisse tels
+		// quels dans une carte, mais une vignette d'une ligne n'en veut pas.
 		.replace(/^\s*#{1,6}\s+/gm, "")
 		.replace(/\s+/g, " ")
 		.trim();

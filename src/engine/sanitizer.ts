@@ -29,6 +29,7 @@ export interface SanitizerHandlers {
 	buildEmbedImgHtml(embedSpec: unknown, opts?: EmbedClassOptions): string;
 	restoreAllowedInlineTags(html: unknown): string;
 	renderInlineText(raw: unknown): string;
+	stripInlineMarkdown(raw: unknown): string;
 	renderTextWithEmbeds(raw: unknown, opts?: EmbedClassOptions): string;
 	renderHintWithCodeAndEmbeds(raw: unknown): string;
 	renderRawHtmlWithEmbeds(raw: unknown, opts?: EmbedClassOptions): string;
@@ -140,6 +141,24 @@ function inlineMarkdown(escaped: string): string {
     diverger de l'originale et validerait le vide. */
 export function renderInlineText(raw: unknown): string {
 	return inlineMarkdown(restoreAllowedInlineTags(escapeHtmlText(raw)));
+}
+
+/** Le même texte, mais RAMENÉ AU TEXTE NU : les marqueurs appariés tombent au
+    lieu de devenir des balises. Pour les endroits où le HTML n'existe pas —
+    l'attribut `placeholder` d'un champ, un `aria-label`, la vignette d'une
+    liste. Sans ça, un placeholder « Réponds en **majuscules** » affichait ses
+    étoiles : du markdown non rendu, exactement ce qu'on chasse ailleurs.
+
+    Mêmes règles de flanc que `renderInlineText` — c'est volontairement la
+    même grammaire, sur le même texte, avec une sortie différente. */
+export function stripInlineMarkdown(raw: unknown): string {
+	const html = inlineMarkdown(escapeHtmlText(raw));
+	return html
+		.replace(/<\/?(?:strong|em|del|code)>/g, "")
+		.replace(/\&lt;/g, "<").replace(/\&gt;/g, ">")
+		.replace(/\&quot;/g, "\"").replace(/\&#39;/g, "'")
+		// `&amp;` en DERNIER : le faire avant ressusciterait « &amp;lt; » en « < ».
+		.replace(/\&amp;/g, "&");
 }
 
 export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
@@ -433,6 +452,7 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 		buildEmbedImgHtml,
 		restoreAllowedInlineTags,
 		renderInlineText,
+		stripInlineMarkdown,
 		renderTextWithEmbeds,
 		renderHintWithCodeAndEmbeds,
 		renderRawHtmlWithEmbeds,

@@ -93,16 +93,30 @@ export function quizShareSource(ctx: DashboardCtx, quiz: QuizIndexEntry): ShareS
 async function saveShared(ctx: DashboardCtx, source: ShareSource): Promise<void> {
 	const payload = await source.build();
 	if (!payload) return;
+	/* Un fichier du MÊME nom ne se fait pas écraser : sur mobile la
+	   destination est la RACINE DU VAULT, et un quiz partagé pouvait y
+	   remplacer une note de l'utilisateur sans un mot (revue codex
+	   2026-07-31). On suffixe jusqu'à trouver un nom libre, comme le fait
+	   n'importe quel téléchargement. */
+	const pointExt = payload.fileName.lastIndexOf(".");
+	const base = pointExt > 0 ? payload.fileName.slice(0, pointExt) : payload.fileName;
+	const ext = pointExt > 0 ? payload.fileName.slice(pointExt) : "";
+
 	if (Platform.isDesktopApp) {
 		const fs = require("fs") as typeof import("fs");
 		const path = require("path") as typeof import("path");
 		const os = require("os") as typeof import("os");
-		const dest = path.join(os.homedir(), "Downloads", payload.fileName);
+		const dossier = path.join(os.homedir(), "Downloads");
+		let dest = path.join(dossier, payload.fileName);
+		for (let n = 2; fs.existsSync(dest); n++) dest = path.join(dossier, `${base} (${n})${ext}`);
 		fs.writeFileSync(dest, payload.bytes);
 		(require("electron") as { shell: { showItemInFolder(p: string): void } }).shell.showItemInFolder(dest);
 		new Notice(t("dashboard.quizzes.fileSaved", { path: dest }));
 	} else {
-		const dest = normalizePath(payload.fileName);
+		let dest = normalizePath(payload.fileName);
+		for (let n = 2; await ctx.app.vault.adapter.exists(dest); n++) {
+			dest = normalizePath(`${base} (${n})${ext}`);
+		}
 		await ctx.app.vault.adapter.writeBinary(dest, payload.bytes.buffer as ArrayBuffer);
 		new Notice(t("dashboard.quizzes.fileSaved", { path: dest }));
 	}

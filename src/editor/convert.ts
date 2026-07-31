@@ -181,14 +181,17 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	const sousChamp = (conteneur: unknown, cle: string): unknown =>
 		conteneur && typeof conteneur === "object" && !Array.isArray(conteneur)
 			? (conteneur as Record<string, unknown>)[cle] : undefined;
-	/** Première liste de chaînes non vide parmi les candidats. */
+	/** Première liste PRÉSENTE parmi les candidats — vide comprise. Un
+	    `slots: []` explicite dit « pas de libellé », et lui substituer les
+	    libellés par défaut inventait un contenu que l'auteur avait retiré ; le
+	    moteur, lui, numérote alors les emplacements. */
 	const listeTexte = (...cands: unknown[]): string[] | null => {
-		for (const c of cands) if (Array.isArray(c) && c.length) return c.map(v => String(v ?? ""));
+		for (const c of cands) if (Array.isArray(c)) return c.map(v => String(v ?? ""));
 		return null;
 	};
-	/** Première liste de nombres non vide parmi les candidats. */
+	/** Idem pour une liste de nombres. */
 	const listeNombre = (...cands: unknown[]): number[] | null => {
-		for (const c of cands) if (Array.isArray(c) && c.length) return c.map(v => Number(v));
+		for (const c of cands) if (Array.isArray(c)) return c.map(v => Number(v));
 		return null;
 	};
 

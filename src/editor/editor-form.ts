@@ -5,7 +5,10 @@ import type { DraftQuestion } from "./utils";
 /** API vault utilisée par l'éditeur : getConfig (non public) + writeBinary (accepte aussi une vue typée). */
 type EditorVault = {
 	getConfig(key: string): string | null;
-	adapter: { writeBinary(path: string, data: ArrayBuffer | ArrayBufferView): Promise<void> };
+	adapter: {
+		writeBinary(path: string, data: ArrayBuffer | ArrayBufferView): Promise<void>;
+		exists(path: string): Promise<boolean>;
+	};
 };
 
 /** Handlers du formulaire d'édition d'une question (champs, ressource, éditeurs par type, éditeur de tableau). */
@@ -15,6 +18,31 @@ export interface EditorFormHandlers {
 	_resourceSection(parent: HTMLElement, q: DraftQuestion): void;
 	_renderTypeFields(box: HTMLElement, q: DraftQuestion): void;
 	_arrayEditor(parent: HTMLElement, label: string, items: string[], onChange: () => void, placeholder: string, addLabel: string): void;
+}
+
+/**
+ * Nom LIBRE pour une image collée, dans le dossier de pièces jointes du vault.
+ *
+ * L'horodatage seul ne distingue qu'à la SECONDE : coller deux captures coup
+ * sur coup écrivait deux fois le même chemin, et la seconde image écrasait la
+ * première — sans un mot (revue codex 2026-07-31). On demande donc au disque
+ * si le nom est libre, et on suffixe tant qu'il ne l'est pas.
+ */
+async function nomImageLibre(vault: EditorVault, ext: string): Promise<{ fileName: string; filePath: string }> {
+	const now = new Date();
+	const ts = now.getFullYear().toString() +
+		String(now.getMonth() + 1).padStart(2, "0") +
+		String(now.getDate()).padStart(2, "0") +
+		String(now.getHours()).padStart(2, "0") +
+		String(now.getMinutes()).padStart(2, "0") +
+		String(now.getSeconds()).padStart(2, "0");
+	const dossier = vault.getConfig("attachmentFolderPath") || "";
+	const chemin = (nom: string): string => dossier ? dossier + "/" + nom : nom;
+	let fileName = `Pasted image ${ts}.${ext}`;
+	for (let n = 2; await vault.adapter.exists(chemin(fileName)); n++) {
+		fileName = `Pasted image ${ts}-${n}.${ext}`;
+	}
+	return { fileName, filePath: chemin(fileName) };
 }
 
 export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
@@ -205,18 +233,9 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 						e.preventDefault();
 						const file = item.getAsFile();
 						if (!file) continue;
-						const now = new Date();
-						const ts = now.getFullYear().toString() +
-							String(now.getMonth() + 1).padStart(2, "0") +
-							String(now.getDate()).padStart(2, "0") +
-							String(now.getHours()).padStart(2, "0") +
-							String(now.getMinutes()).padStart(2, "0") +
-							String(now.getSeconds()).padStart(2, "0");
 						const ext = item.type.split("/")[1] || "png";
-						const fileName = `Pasted image ${ts}.${ext}`;
 						const vault = ctx.plugin.app.vault as unknown as EditorVault;
-						const attachFolder = vault.getConfig("attachmentFolderPath") || "";
-						const filePath = attachFolder ? attachFolder + "/" + fileName : fileName;
+						const { fileName, filePath } = await nomImageLibre(vault, ext);
 						const buffer = await file.arrayBuffer();
 						await vault.adapter.writeBinary(filePath, new Uint8Array(buffer));
 						_insertAt(ta, `![[${fileName}]]`, onChange);
@@ -352,19 +371,9 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 								if (!file) continue;
 
 								try {
-									const now = new Date();
-									const ts = now.getFullYear().toString() +
-										String(now.getMonth() + 1).padStart(2, "0") +
-										String(now.getDate()).padStart(2, "0") +
-										String(now.getHours()).padStart(2, "0") +
-										String(now.getMinutes()).padStart(2, "0") +
-										String(now.getSeconds()).padStart(2, "0");
 									const ext = file.type?.split("/")[1] || "png";
-									const fileName = `Pasted image ${ts}.${ext}`;
-
 									const vault = ctx.plugin.app.vault as unknown as EditorVault;
-									const folder = vault.getConfig('attachmentFolderPath') || '';
-									const path = folder ? folder + '/' + fileName : fileName;
+									const { fileName, filePath: path } = await nomImageLibre(vault, ext);
 
 									const buf = await file.arrayBuffer();
 									await vault.adapter.writeBinary(path, new Uint8Array(buf));

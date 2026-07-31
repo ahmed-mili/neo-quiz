@@ -404,12 +404,19 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 		}
 	}
 
+	/**
+	 * Chemin libre pour un fichier de résultats.
+	 *
+	 * Le suffixe est TIRÉ AU SORT, pas incrémenté : `exists` puis `write` n'est
+	 * pas atomique, et deux fenêtres d'Obsidian sauvegardant le même quiz dans
+	 * la même seconde choisissaient exactement le même `-2` — la seconde
+	 * écrasait la première (revue codex 2026-07-31). Un compteur les fait
+	 * converger ; le hasard les sépare.
+	 */
 	async function uniquePath(adapter: DataAdapter, basePath: string, ext: string): Promise<string> {
 		let path = `${basePath}.${ext}`;
-		let counter = 2;
-		while (await adapter.exists(path)) {
-			path = `${basePath}-${counter}.${ext}`;
-			counter++;
+		for (let essai = 0; essai < 20 && await adapter.exists(path); essai++) {
+			path = `${basePath}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
 		}
 		return path;
 	}

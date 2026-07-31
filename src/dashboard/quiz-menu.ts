@@ -155,14 +155,22 @@ async function deleteQuiz(ctx: DashboardCtx, quiz: QuizIndexEntry): Promise<void
  */
 async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFile): Promise<void> {
 	let videApresRetrait = false;
+	let avaitUnBloc = false;
 	await ctx.app.vault.process(file, (content) => {
 		// Le rappel peut être rejoué : repartir de zéro à chaque essai.
+		avaitUnBloc = QUIZ_BLOCK_RE.test(content);
+		if (!avaitUnBloc) { videApresRetrait = false; return content; }
 		const remaining = content.replace(QUIZ_BLOCK_RE, "");
 		videApresRetrait = remaining.trim().length === 0;
 		// Rien d'autre dans la note : on ne la vide pas pour la jeter juste
 		// après — on la laisse telle quelle et c'est la corbeille qui l'emporte.
 		return videApresRetrait ? content : remaining;
 	});
+	/* Aucun bloc trouvé : la note a été vidée ailleurs entre-temps. On ne
+	   touche ni au fichier ni aux statistiques — supprimer l'enregistrement
+	   d'un quiz qu'on n'a pas supprimé effacerait un historique de révision
+	   pour rien (revue codex 2026-07-31). */
+	if (!avaitUnBloc) return;
 	if (videApresRetrait) {
 		// La note ne contenait que le quiz : corbeille (récupérable), jamais
 		// de suppression définitive.
@@ -173,11 +181,24 @@ async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFi
 
 /** Delete d'un MODULE entier : chaque quiz passe par le même cœur. */
 async function deleteModuleQuizzes(ctx: DashboardCtx, group: ModuleGroup): Promise<void> {
+	/* Une note qui résiste n'arrête pas les autres, et ne fait pas passer la
+	   suppression pour un échec total : chaque quiz est indépendant, et laisser
+	   une exception remonter d'ici laissait le module A MOITIÉ supprimé avec
+	   une interface qui ne se redessinait même pas (revue codex 2026-07-31). */
+	let echecs = 0;
 	for (const q of group.quizzes) {
 		const file = ctx.app.vault.getAbstractFileByPath(q.path);
-		if (file instanceof TFile) await deleteQuizCore(ctx, q, file);
+		if (!(file instanceof TFile)) continue;
+		try {
+			await deleteQuizCore(ctx, q, file);
+		} catch (e) {
+			echecs++;
+			console.error("[quiz-blocks] suppression impossible :", q.path, e);
+		}
 	}
-	new Notice(t("dashboard.quizzes.deleted"));
+	new Notice(echecs
+		? t("dashboard.quizzes.deletedPartial", { count: echecs })
+		: t("dashboard.quizzes.deleted"));
 }
 
 /* ── Menus ── */

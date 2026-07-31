@@ -103,6 +103,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.quizzes.renameExists": "« {name} » existe déjà dans ce dossier.",
 	"dashboard.quizzes.renameError": "Impossible de renommer ce quiz",
 	"dashboard.quizzes.deleted": "Quiz supprimé",
+	"dashboard.quizzes.deletedPartial": "Quiz supprimé — {count} n'ont pas pu être retirés",
 	"dashboard.quizzes.deleteConfirmTitle": "Supprimer le quiz",
 	"dashboard.quizzes.deleteConfirmBody": "Supprimer « {title} » et ses stats de la note ? Cette action est définitive.",
 	"dashboard.quizzes.deleteConfirmCta": "Supprimer",

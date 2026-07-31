@@ -106,6 +106,9 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 		parseQuizSource(source);
 
 		let ecrit = false;
+		/* Ce qui a réellement été écrit entre les clôtures — pas `source`,
+		   qui n'en est que la forme LF (cf. `eol` plus bas). */
+		let temoin = source;
 		/* `vault.process` et non `read` + `modify` : Obsidian garantit qu'aucune
 		   modification ne s'intercale entre la lecture et l'écriture.
 
@@ -138,7 +141,13 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 			   question apparaissait comme une réécriture du bloc entier dans un
 			   diff ou une synchro. */
 			const eol = actuel[0].includes("\r\n") ? "\r\n" : "\n";
-			const block = ouverture + eol + source.replace(/\r?\n/g, eol) + eol + fermeture;
+			/* Le TÉMOIN du prochain compare-and-swap est ce qu'on écrit VRAIMENT,
+			   fins de ligne comprises. Mémoriser la version LF de l'export dans
+			   une note CRLF faisait échouer la sauvegarde SUIVANTE — la première
+			   frappe passait, la seconde était perdue en silence (revue codex
+			   2026-07-31, régression du correctif CRLF de la même nuit). */
+			temoin = source.replace(/\r?\n/g, eol);
+			const block = ouverture + eol + temoin + eol + fermeture;
 			// Remplacement par FONCTION, jamais par chaîne : dans une chaîne de
 			// remplacement, `$1`, `$&`, `` $` `` et `$'` sont des motifs
 			// spéciaux — et un quiz de maths est plein de `$…$` (« $1$ » aurait
@@ -147,7 +156,7 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 		});
 		if (!ecrit) return false;
 		// Le bloc qu'on vient d'écrire devient le témoin du prochain échange.
-		draft.blockSource = source;
+		draft.blockSource = temoin;
 		// Notre propre écriture ne doit pas passer pour une modification
 		// EXTERNE au prochain rendu (cf. draftIsStale).
 		draft.mtime = file.stat?.mtime ?? draft.mtime;

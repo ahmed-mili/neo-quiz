@@ -70,3 +70,32 @@ await withSrcModule("src/engine/sanitizer.ts", ({ renderInlineText }) => {
 	for (const [nom, entree, attendu] of CAS) r.check(nom, renderInlineText(entree), attendu);
 	r.done();
 });
+
+/* Texte à trous : une paire markdown qui ENJAMBE un trou doit rester une
+   paire. Rendre chaque segment séparément laissait « `git ` » et « ` -b` »
+   avec un accent grave chacun, tous deux affichés bruts. */
+await withSrcModule("src/engine/cloze.ts", ({ markSlots, fillSlots }) => {
+	const r = makeReporter("Trous");
+
+	const rendu = (gabarit) => {
+		const { marked, blanks } = markSlots(gabarit);
+		// Le vrai rendu passe par le sanitizer ; ici on vérifie seulement que
+		// le marquage laisse le gabarit d'un seul tenant et que les jetons se
+		// remplacent tous.
+		return { marked, n: blanks.length, rempli: fillSlots(marked, (i) => "[" + i + "]") };
+	};
+
+	r.check("un trou", rendu("La capitale est {{Paris}}.").rempli, "La capitale est [0].");
+	r.check("deux trous", rendu("{{a}} puis {{b}}").rempli, "[0] puis [1]");
+	r.check("trou vide non compté", rendu("rien {{}} ici").n, 0);
+	r.check("trou vide laissé littéral", rendu("rien {{}} ici").rempli, "rien {{}} ici");
+	r.check("variantes comptées une fois", rendu("{{l'euro|euro}}").n, 1);
+	r.check("code enjambant un trou — gabarit d'un seul tenant",
+		rendu("tape `git {{checkout}} -b` ici").marked.includes("`git "), true);
+	r.check("code enjambant un trou — un seul segment",
+		rendu("tape `git {{checkout}} -b` ici").rempli, "tape `git [0] -b` ici");
+	r.check("gras enjambant un trou",
+		rendu("**avant {{x}} apres**").rempli, "**avant [0] apres**");
+
+	r.done();
+});

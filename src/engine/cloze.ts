@@ -87,6 +87,41 @@ export function parseCloze(template: unknown): ParsedCloze {
 	return { segments, blanks };
 }
 
+/** Jeton posé à la place d'un trou, le temps du rendu markdown. Fait d'un
+    caractère de contrôle : aucun texte de quiz réel n'en contient, et il
+    traverse l'échappement HTML sans être touché. */
+const SLOT_MARK = String.fromCharCode(0) + "CLOZE";
+const SLOT_RE = new RegExp(String.fromCharCode(0) + "CLOZE(\\d+)" + String.fromCharCode(0), "g");
+
+/**
+ * Le gabarit avec ses trous remplacés par des JETONS, prêt à passer par le
+ * rendu markdown D'UN SEUL TENANT.
+ *
+ * Rendre chaque segment séparément — ce que faisait la première version —
+ * coupe les paires markdown à la frontière d'un trou : dans
+ * `` `git {{checkout}} -b` ``, chaque moitié n'a qu'un accent grave, et les
+ * deux s'affichent bruts. En marquant puis en rendant le tout, la paire est
+ * intacte et le trou se retrouve À L'INTÉRIEUR du `<code>`, là où il doit
+ * être.
+ */
+export function markSlots(template: unknown): { marked: string; blanks: ClozeBlank[] } {
+	const blanks: ClozeBlank[] = [];
+	const marked = String(template ?? "").replace(BLANK_RE, (whole, inner: string) => {
+		const answers = String(inner ?? "").split("|").map(a => a.trim()).filter(a => a.length > 0);
+		// Même règle que parseCloze : `{{}}` n'est pas un trou, il ne pourrait
+		// jamais être juste — il reste du texte littéral.
+		if (answers.length === 0) return whole;
+		blanks.push({ answers });
+		return SLOT_MARK + (blanks.length - 1) + String.fromCharCode(0);
+	});
+	return { marked, blanks };
+}
+
+/** Remplace les jetons du HTML rendu par ce que `slot` produit pour chacun. */
+export function fillSlots(html: string, slot: (index: number) => string): string {
+	return html.replace(SLOT_RE, (_m, n: string) => slot(Number(n)));
+}
+
 export function createClozeHandlers(ctx: EngineCtx): ClozeHandlers {
 
 	const getBlanks = (q: ClozeQuestion): ClozeBlank[] => parseCloze(q?.cloze).blanks;
@@ -113,42 +148,42 @@ export function createClozeHandlers(ctx: EngineCtx): ClozeHandlers {
 	}
 
 	function clozeCardHtml(q: ClozeQuestion, qi: number): string {
-		const { segments, blanks } = parseCloze(q.cloze);
+		const { marked, blanks } = markSlots(q.cloze);
 		const sel = ctx.quizState.selections[qi];
 		const values: unknown[] = Array.isArray(sel) ? sel : [];
 		const locked = ctx.quizState.locked;
 
-		const body = segments.map(seg => {
-			if (seg.type === "text") {
-				return ctx.sanitize.renderTextWithEmbeds(seg.value, {
-					wrapClass: "quiz-cloze-embed-wrap",
-					imgClass: "quiz-cloze-embed"
-				});
-			}
+		// Le gabarit ENTIER passe par le rendu (markdown + images), trous
+		// marqués : une paire `…` ou **…** qui enjambe un trou reste une paire.
+		const rendered = ctx.sanitize.renderTextWithEmbeds(marked, {
+			wrapClass: "quiz-cloze-embed-wrap",
+			imgClass: "quiz-cloze-embed"
+		});
 
-			const value = String(values[seg.index] ?? "");
+		const body = fillSlots(rendered, (index) => {
+			const value = String(values[index] ?? "");
 			// Un trou REMPLI se distingue des trous encore vides sans attendre
 			// la correction (demande Ahmed 2026-07-31) : la classe porte cet
 			// état, le CSS lui donne son fond et sa bordure pleine.
 			let cls = "quiz-cloze-input" + (value.trim() ? " is-filled" : "");
 			let expected = "";
 			if (locked) {
-				const ok = isBlankCorrect(q, seg.index, value);
+				const ok = isBlankCorrect(q, index, value);
 				cls += ok ? " correct" : " wrong";
 				// La bonne réponse ne s'affiche qu'à côté d'un trou raté : la
 				// rappeler partout noierait la correction.
 				if (!ok) {
-					const answer = blanks[seg.index]?.answers[0] ?? "";
+					const answer = blanks[index]?.answers[0] ?? "";
 					expected = `<span class="quiz-cloze-expected">${ctx.sanitize.renderInlineText(answer)}</span>`;
 				}
 			}
 
 			return `<span class="quiz-cloze-slot"><input class="${cls}" type="text" `
-				+ `data-cloze="${seg.index}" value="${ctx.escapeHtmlAttr(value)}" `
+				+ `data-cloze="${index}" value="${ctx.escapeHtmlAttr(value)}" `
 				+ `autocomplete="off" autocapitalize="off" spellcheck="false" `
-				+ `aria-label="${ctx.escapeHtmlAttr(t("engine.cloze.blankAria", { n: seg.index + 1 }))}"`
+				+ `aria-label="${ctx.escapeHtmlAttr(t("engine.cloze.blankAria", { n: index + 1 }))}"`
 				+ `${locked ? " disabled" : ""}>${expected}</span>`;
-		}).join("");
+		});
 
 		return `<div class="quiz-multi-indicator">${t("engine.cloze.instructions", { count: blanks.length })}</div>
 		<div class="quiz-cloze">${body}</div>`;

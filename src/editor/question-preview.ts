@@ -3,7 +3,7 @@ import { t } from "../i18n";
 import { md2html, _setIcon } from "./utils";
 import type { DraftQuestion } from "./utils";
 import { mathifyElement } from "../engine/mathjax";
-import { parseCloze } from "../engine/cloze";
+import { markSlots, fillSlots } from "../engine/cloze";
 
 /* ══════════════════════════════════════════════════════════
    QUESTION PREVIEW — la question telle que l'apprenant la verra
@@ -159,27 +159,21 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 	}
 
 	if (type === "cloze") {
-		// Le gabarit, avec ses trous VIDES : mêmes classes que le moteur
-		// (engine/cloze.ts clozeCardHtml), donc mêmes cases tiretées. Sans
-		// cette branche, un texte à trous n'affichait que son énoncé — la
-		// question elle-même restait invisible dans l'aperçu.
-		const { segments, blanks } = parseCloze(q.cloze);
+		/* Le gabarit, avec ses trous VIDES : mêmes classes que le moteur
+		   (engine/cloze.ts clozeCardHtml), donc mêmes cases tiretées. Sans
+		   cette branche, un texte à trous n'affichait que son énoncé.
+
+		   Le gabarit ENTIER passe par md2html, trous marqués — comme dans le
+		   moteur : rendre chaque segment séparément couperait les paires
+		   markdown qui enjambent un trou (`` `git {{checkout}} -b` ``). */
+		const { marked, blanks } = markSlots(q.cloze);
 		card.createDiv({ cls: "quiz-multi-indicator", text: t("engine.cloze.instructions", { count: blanks.length }) });
 		const body = card.createDiv({ cls: "quiz-cloze" });
-		for (const seg of segments) {
-			if (seg.type === "text") {
-				const span = body.createSpan();
-				span.innerHTML = resolveImagesInHtml(app, md2html(seg.value).replace(/^<p>|<\/p>$/g, ""));
-				continue;
-			}
-			const slot = body.createSpan({ cls: "quiz-cloze-slot" });
-			const input = slot.createEl("input", {
-				cls: "quiz-cloze-input",
-				type: "text",
-				attr: { readonly: true, "aria-label": t("engine.cloze.blankAria", { n: seg.index + 1 }) },
-			});
-			input.value = "";
-		}
+		body.innerHTML = fillSlots(
+			resolveImagesInHtml(app, md2html(marked).replace(/^<p>|<\/p>$/g, "")),
+			(index) => `<span class="quiz-cloze-slot"><input class="quiz-cloze-input" type="text" readonly `
+				+ `aria-label="${t("engine.cloze.blankAria", { n: index + 1 }).replace(/"/g, "&quot;")}"></span>`,
+		);
 	}
 
 	if (type === "numeric") {

@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 
-const render = readFileSync("src/dashboard/quizzes-render.ts", "utf8");
+/* Le mécanisme a été EXTRAIT vers collapsible.ts le 2026-07-28 (« Mes quiz »
+   et l'accueil partagent la même section repliable). Ce script lisait encore
+   quizzes-render.ts et échouait donc en silence depuis : trois de ses sept
+   garanties ne gardaient plus rien. */
+const render = readFileSync("src/dashboard/collapsible.ts", "utf8");
 const css = readFileSync("src/assets/css/dashboard/dashboard-quizzes.css", "utf8");
 
 const checks = [

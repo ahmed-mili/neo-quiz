@@ -3,6 +3,7 @@ import type { DraftQuestion, QuestionTypeKey } from "./utils";
 import { _htmlToText } from "./modals";
 import type { ParsedQuizItem } from "./modals";
 import type { EditorExamOptions } from "../types/editor-ctx";
+import { normalizeQuizMode } from "../quiz-utils";
 
 /* ══════════════════════════════════════════════════════════
    CONVERT — item JSON5 brut → DraftQuestion (forme d'édition)
@@ -22,12 +23,13 @@ import type { EditorExamOptions } from "../types/editor-ctx";
 
 /** Options du bloc lues depuis l'objet de mode. */
 export function readModeConfig(q: ParsedQuizItem): EditorExamOptions {
-	const mode: "quiz" | "learn" | "exam" =
-		typeof q.mode === "string" && (q.mode === "learn" || q.mode === "exam" || q.mode === "quiz")
-			? q.mode
-			: q.examMode === true ? "exam"
+	/* Même normalisation que le moteur (quiz-utils.ts) : un bloc écrit à la main
+	   dit volontiers `mode: 'Learn'`, et la reconnaissance l'accepte — la
+	   lecture ne peut pas, elle, le renvoyer au mode quiz. */
+	const mode: "quiz" | "learn" | "exam" = normalizeQuizMode(q.mode)
+		?? (q.examMode === true ? "exam"
 			: q.learnMode === true ? "learn"
-			: "quiz";
+				: "quiz");
 	return {
 		mode,
 		// Le chrono n'est « activé » que pour un vrai mode examen ; un mode

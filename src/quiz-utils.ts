@@ -69,7 +69,23 @@ function isQuizModeConfig(item: unknown): boolean {
 	   (`mode: 'dark'`) y passait (revue codex 2026-07-31). C'est déjà la liste
 	   que `readModeConfig` accepte : la reconnaissance et la lecture parlent
 	   maintenant du même vocabulaire. */
-	return q.mode === "quiz" || q.mode === "learn" || q.mode === "exam";
+	return normalizeQuizMode(q.mode) !== null;
+}
+
+/**
+ * Le mode écrit dans un bloc, ramené à sa forme canonique — ou `null` si ce
+ * n'en est pas un.
+ *
+ * TOLÉRANT à la casse et aux espaces : un bloc écrit à la main contient
+ * `mode: 'Learn'` ou `mode: 'exam '` aussi facilement que la forme exacte, et
+ * exiger l'exactitude ferait pire que l'ancien code — celui-ci reconnaissait
+ * au moins l'objet comme une configuration (quitte à retomber sur le mode
+ * quiz), là où un refus net le transformerait en question fantôme.
+ */
+export function normalizeQuizMode(value: unknown): QuizMode | null {
+	if (typeof value !== "string") return null;
+	const m = value.trim().toLowerCase();
+	return m === "quiz" || m === "learn" || m === "exam" ? m : null;
 }
 
 /**
@@ -130,14 +146,14 @@ function extractExamOptions(quizArray: QuizQuestion[]): {
 	const lastItem = configIdx >= 0 ? quizArray[configIdx] as QuizQuestion & QuizModeConfig : undefined;
 
 	if (lastItem) {
-		// Déterminer le mode : "learn" | "exam" | "quiz"
-		let mode = typeof lastItem.mode === "string" ? lastItem.mode : "";
-		if (!mode) {
-			if (lastItem.examMode === true) mode = "exam";
-			else if (lastItem.learnMode === true) mode = "learn";
-			else mode = "quiz";
-		}
-		const quizMode: QuizMode = (mode === "learn" || mode === "exam" || mode === "quiz") ? mode : "quiz";
+		/* Déterminer le mode : "learn" | "exam" | "quiz". `mode` prime sur les
+		   deux booléens historiques, et passe par la même normalisation que la
+		   RECONNAISSANCE — sans quoi un `mode: 'Learn'` serait admis comme
+		   configuration puis lu comme un mode quiz. */
+		const quizMode: QuizMode = normalizeQuizMode(lastItem.mode)
+			?? (lastItem.examMode === true ? "exam"
+				: lastItem.learnMode === true ? "learn"
+					: "quiz");
 
 		// Construction des options d'examen
 		const buildExamOpts = (): ExamOptions => ({

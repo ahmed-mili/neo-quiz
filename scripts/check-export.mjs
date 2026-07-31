@@ -130,3 +130,36 @@ await withSrcModule("src/editor/export.ts", ({ exportAll }) => {
 
 	r.done();
 });
+
+/* LECTURE du mode : reconnaissance et lecture doivent parler le meme
+   vocabulaire. Un bloc ecrit a la main dit volontiers `mode: 'Learn'` ; le
+   refuser en ferait une question fantome, l'accepter sans le normaliser le
+   relirait comme un mode quiz. Et une chaine `mode` etrangere au plugin ne
+   doit PAS faire disparaitre une vraie question. */
+await withSrcModule(["src/quiz-utils.ts", "src/editor/convert.ts"], (qu, convert) => {
+	const r = makeReporter("Mode du bloc");
+	const idx = (items) => qu.findQuizModeConfigIndex(items);
+	const q = { title: "Une question", prompt: "Enonce", options: ["a", "b"], correctIndex: 0 };
+
+	r.check("mode exact reconnu", idx([q, { mode: "learn" }]), 1);
+	r.check("mode a la casse tolerante", idx([q, { mode: "Learn" }]), 1);
+	r.check("mode a espaces tolere", idx([q, { mode: " exam " }]), 1);
+	r.check("examMode booleen reconnu", idx([q, { examMode: true }]), 1);
+	r.check("mode en TETE reconnu", idx([{ mode: "learn" }, q]), 0);
+	// Ce qui ne doit surtout PAS etre pris pour une configuration.
+	r.check("chaine mode etrangere ignoree",
+		idx([{ title: "Quel mode choisir ?", mode: "transport" }, q]), -1);
+	r.check("question complete avec mode etranger, en dernier",
+		idx([q, { title: "Mode sombre ?", mode: "dark", options: ["Oui", "Non"], correctIndex: 0 }]), -1);
+	// En TETE, le critere est strict : un element qui a des reponses est une
+	// question, meme s'il porte un mode valide.
+	r.check("question a reponses en tete n'est pas une config",
+		idx([{ title: "x", mode: "learn", options: ["a", "b"], correctIndex: 0 }, q]), -1);
+	r.check("bloc sans configuration", idx([q, q]), -1);
+	r.check("bloc vide", idx([]), -1);
+
+	r.check("lecture normalisee", convert.readModeConfig({ mode: "Learn" }).mode, "learn");
+	r.check("lecture d'un booleen", convert.readModeConfig({ examMode: true }).mode, "exam");
+
+	r.done();
+});

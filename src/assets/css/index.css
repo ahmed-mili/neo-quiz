@@ -56,11 +56,9 @@
 
 /* Editor */
 @import url('./editor/editor-base.css');
-@import url('./editor/editor-layout.css');
 @import url('./editor/editor-forms.css');
 @import url('./editor/editor-answers.css');
 @import url('./editor/editor-ui-components.css');
 @import url('./editor/editor-wysiwyg.css');
-@import url('./editor/editor-exam.css');
 @import url('./editor/editor-forms-extra.css');
 @import url('./editor/editor-icons.css');

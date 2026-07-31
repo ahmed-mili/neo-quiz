@@ -10,28 +10,45 @@ import type { EditorExamOptions } from "../types/editor-ctx";
  * sous la forme `null`. La valeur serait alors silencieusement changée à la
  * première sauvegarde.
  *
- * `profondeur` borne la récursion : une structure circulaire ne peut pas
- * arriver depuis un bloc lu par `parseQuizSource`, mais elle ferait exploser
- * la pile si elle arrivait, et emporterait la sauvegarde avec elle.
+ * Les CYCLES sont coupés par un ensemble de visités, pas par une profondeur
+ * maximale : un plafond arbitraire tronquait aussi les objets légitimement
+ * profonds, ce qui est exactement la perte de données qu'on cherche à éviter.
  */
-function json5Value(v: unknown, profondeur = 0): string {
-	if (profondeur > 8) return "null";
+function json5Value(v: unknown, vus: Set<object> = new Set()): string {
 	if (v === null || v === undefined) return "null";
 	if (typeof v === "string") return `'${esc5(v)}'`;
 	// NaN / Infinity / -Infinity sont des littéraux JSON5 valides.
 	if (typeof v === "number" || typeof v === "boolean") return String(v);
-	if (Array.isArray(v)) return "[" + v.map(x => json5Value(x, profondeur + 1)).join(", ") + "]";
-	if (typeof v === "object") {
+	if (typeof v !== "object") return "null";   // fonction, symbole
+
+	// Cycle : la valeur se contient elle-même. Impossible depuis un bloc lu par
+	// `parseQuizSource`, mais la pile exploserait si ça arrivait.
+	if (vus.has(v)) return "null";
+	vus.add(v);
+	try {
+		// `toJSON` d'abord : c'est ainsi qu'une Date rend sa chaîne ISO, comme
+		// le faisait `JSON.stringify`.
+		const brut = v as { toJSON?: () => unknown };
+		if (typeof brut.toJSON === "function") return json5Value(brut.toJSON(), vus);
+
+		if (Array.isArray(v)) {
+			// `map` SAUTE les trous d'un tableau creux et produirait `[1, , 3]`,
+			// que JSON5 refuse. Chaque position est écrite, vide ou non.
+			const items: string[] = [];
+			for (let i = 0; i < v.length; i++) items.push(json5Value(v[i], vus));
+			return "[" + items.join(", ") + "]";
+		}
+
 		const paires = Object.entries(v as Record<string, unknown>)
-			.map(([k, x]) => `'${esc5(k)}': ${json5Value(x, profondeur + 1)}`);
+			.map(([k, x]) => `'${esc5(k)}': ${json5Value(x, vus)}`);
 		return "{" + paires.join(", ") + "}";
+	} finally {
+		vus.delete(v);
 	}
-	// Fonction, symbole : rien de tout cela ne sort d'un bloc quiz-blocks.
-	return "null";
 }
 
-function exportQuestion(q: DraftQuestion, idx: number, usedIds?: Set<string>): string {
-	const id = questionId(q, idx, usedIds);
+function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string {
+	const id = questionId(q, idx, ids);
 	const e = esc5;
 	const L: string[] = [];
 	L.push("\t{");
@@ -158,28 +175,47 @@ function exportQuestion(q: DraftQuestion, idx: number, usedIds?: Set<string>): s
  * produisaient le même identifiant, donc deux ancres `id` identiques dans la
  * page ; `usedIds` les départage.
  */
-function questionId(q: DraftQuestion, idx: number, usedIds?: Set<string>): string {
-	if (q._sourceId) {
-		// Réservé LUI AUSSI : sans ça, un slug dérivé d'un titre pouvait tomber
-		// sur un identifiant explicite déjà écrit plus haut dans le bloc.
-		usedIds?.add(q._sourceId);
-		return q._sourceId;
-	}
-	const slug = (q.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20);
-	let id = slug || `q${idx + 1}`;
-	if (usedIds) {
-		let n = 2;
-		while (usedIds.has(id)) id = `${slug || "q"}-${n++}`;
-		usedIds.add(id);
-	}
+/** Identifiants en jeu pour UNE écriture (cf. exportAll). */
+interface IdContext {
+	/** Tous les `_sourceId` du bloc, y compris ceux à venir. */
+	reserves: Set<string>;
+	/** Ceux déjà attribués au fil de l'écriture. */
+	attribues: Set<string>;
+}
+
+function questionId(q: DraftQuestion, idx: number, ctx?: IdContext): string {
+	const explicite = q._sourceId;
+	const base = explicite
+		|| (q.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20)
+		|| `q${idx + 1}`;
+	if (!ctx) return base;
+
+	/* Un identifiant EXPLICITE a le droit de prendre sa réservation ; un slug
+	   DÉRIVÉ, non — il doit éviter aussi les réservations à venir. Et le
+	   suffixe s'applique même à un identifiant explicite : deux questions
+	   portant le même (un copier-coller de bloc suffit) auraient la même ancre,
+	   et la seconde deviendrait inatteignable. */
+	const pris = (id: string): boolean =>
+		ctx.attribues.has(id) || (!explicite && ctx.reserves.has(id));
+
+	let id = base;
+	let n = 2;
+	while (pris(id)) id = `${base}-${n++}`;
+	ctx.attribues.add(id);
 	return id;
 }
 
 function exportAll(questions: DraftQuestion[], examOptions: EditorExamOptions | null = null): string {
-	// Les identifiants déjà posés dans CETTE écriture : deux questions de même
-	// titre ne peuvent pas se retrouver avec la même ancre.
-	const usedIds = new Set<string>();
-	const parts = questions.map((q, i) => exportQuestion(q, i, usedIds));
+	/* Deux questions ne peuvent pas se retrouver avec la même ancre HTML.
+	   `reserves` retient les identifiants ÉCRITS dans la note, y compris ceux
+	   des questions qui viennent plus bas : un slug dérivé d'un titre ne doit
+	   pas prendre la place de l'un d'eux, sinon c'est l'identifiant qu'il
+	   fallait préserver qui se retrouve suffixé. */
+	const attribution: IdContext = {
+		reserves: new Set(questions.map(q => q._sourceId).filter((v): v is string => !!v)),
+		attribues: new Set<string>(),
+	};
+	const parts = questions.map((q, i) => exportQuestion(q, i, attribution));
 
 	/* L'objet de mode est réémis SOUS SA FORME D'ORIGINE. Un quiz importé en
 	   mode learn ressortait en mode examen (ou perdait son mode), parce que

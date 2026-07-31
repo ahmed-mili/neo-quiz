@@ -32,6 +32,12 @@ export interface QuizDraft {
 	    l'éditeur markdown, synchro) : le brouillon en mémoire serait alors
 	    périmé, et la frappe suivante écraserait la modification externe. */
 	mtime?: number;
+	/** Le BLOC tel qu'il était la dernière fois qu'on l'a lu ou écrit. C'est la
+	    valeur témoin du compare-and-swap : au moment d'écrire, si le bloc de la
+	    note ne lui ressemble plus, quelqu'un d'autre est passé par là. Le
+	    `mtime` seul ne suffit pas — il se lit AVANT `vault.process`, et deux
+	    pages pouvaient le franchir toutes les deux. */
+	blockSource?: string;
 }
 
 /** La note a-t-elle changé hors de ce brouillon depuis sa lecture ? */
@@ -70,7 +76,7 @@ export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft |
 			}
 			questions.push(convertParsedToInternal(item));
 		}
-		return { file, questions, examOptions, mtime: file.stat?.mtime ?? 0 };
+		return { file, questions, examOptions, mtime: file.stat?.mtime ?? 0, blockSource: match[1] };
 	} catch {
 		return "loadError";
 	}
@@ -93,12 +99,21 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 
 		let ecrit = false;
 		/* `vault.process` et non `read` + `modify` : Obsidian garantit qu'aucune
-		   modification ne s'intercale entre la lecture et l'écriture. Le couple
-		   read/modify laissait une fenêtre — deux pages ouvertes sur la même
-		   note (dashboard + onglet) pouvaient franchir le garde `mtime` en même
-		   temps, puis s'écraser l'une l'autre. */
+		   modification ne s'intercale entre la lecture et l'écriture.
+
+		   Le rappel repart de ZÉRO à chaque invocation (`ecrit` remis à faux) :
+		   il peut être rejoué, et le résultat d'un essai abandonné ne doit pas
+		   survivre au suivant. C'est la DERNIÈRE invocation qui fait foi. */
 		await app.vault.process(file, (content) => {
-			if (!QUIZ_BLOCK_RE.test(content)) return content;
+			ecrit = false;
+			const actuel = content.match(QUIZ_BLOCK_RE);
+			if (!actuel) return content;
+			/* COMPARE-AND-SWAP : on n'écrit que si le bloc est encore celui
+			   qu'on a lu. Deux pages ouvertes sur la même note pouvaient
+			   franchir le garde `mtime` en même temps — il se lit avant
+			   `process` — puis s'écraser l'une l'autre en annonçant toutes deux
+			   un succès. Ici la seconde repart bredouille, et le dit. */
+			if (draft.blockSource !== undefined && actuel[1] !== draft.blockSource) return content;
 			ecrit = true;
 			// Remplacement par FONCTION, jamais par chaîne : dans une chaîne de
 			// remplacement, `$1`, `$&`, `` $` `` et `$'` sont des motifs
@@ -107,6 +122,8 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 			return content.replace(QUIZ_BLOCK_RE, () => block);
 		});
 		if (!ecrit) return false;
+		// Le bloc qu'on vient d'écrire devient le témoin du prochain échange.
+		draft.blockSource = source;
 		// Notre propre écriture ne doit pas passer pour une modification
 		// EXTERNE au prochain rendu (cf. draftIsStale).
 		draft.mtime = file.stat?.mtime ?? draft.mtime;

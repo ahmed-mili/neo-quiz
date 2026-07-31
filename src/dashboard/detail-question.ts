@@ -99,10 +99,13 @@ function isRichHtml(html: string | undefined): boolean {
 	if (!html) return false;
 	// Un commentaire HTML est du contenu que le texte brut perdrait.
 	if (html.includes("<!--")) return true;
-	// `<p …>` AVEC ses attributs éventuels : ne retirer que la balise nue
-	// classait `<p class="">texte</p>` comme riche, et imposait l'édition HTML
-	// pour une simple phrase.
-	const stripped = html.replace(/<\/?p(?:\s[^>]*)?>|<br\s*\/?>/gi, "");
+	/* Seule une balise `<p>` NUE est neutre — c'est ce que md2html produit
+	   pour du texte ordinaire. Un `<p role="note">` porte de l'information que
+	   le sanitizer conserve et affiche ; le traiter comme une enveloppe
+	   effaçait ses attributs à la première frappe. Un `<p class="">` vide est
+	   alors classé riche : l'erreur va dans le bon sens (on édite le HTML, on
+	   ne perd rien). */
+	const stripped = html.replace(/<\/?p>|<br\s*\/?>/gi, "");
 	return /<[a-z][a-z0-9]*\b[^>]*>/i.test(stripped);
 }
 

@@ -69,8 +69,20 @@ await withSrcModule("src/editor/export.ts", ({ exportAll }) => {
 		ids([question({ title: "X", _sourceId: "meme-titre" }), question({ title: "Même titre" })]),
 		["meme-titre", "m-me-titre"]);
 	r.check("deux ids explicites identiques restent distincts",
-		ids([question({ _sourceId: "dup" }), question({ title: "dup" })]),
+		ids([question({ _sourceId: "dup" }), question({ _sourceId: "dup" })]),
 		["dup", "dup-2"]);
+	// Un slug DÉRIVÉ ne prend pas la place d'un id explicite qui vient plus BAS.
+	r.check("slug cède la place à un id explicite ultérieur",
+		ids([question({ title: "cible" }), question({ _sourceId: "cible" })]),
+		["cible-2", "cible"]);
+	// Objets profonds et formes non ordinaires.
+	r.check("objet profond (12 niveaux)", (() => {
+		let v = "feuille";
+		for (let i = 0; i < 12; i++) v = { n: v };
+		return extra(v);
+	})(), (() => { let v = "feuille"; for (let i = 0; i < 12; i++) v = { n: v }; return v; })());
+	r.check("tableau creux", extra([1, , 3]), [1, null, 3]);
+	r.check("date", typeof extra(new Date(0)), "string");
 
 	// Le mode du bloc est réémis sous sa forme d'origine.
 	const mode = (examOptions) => {

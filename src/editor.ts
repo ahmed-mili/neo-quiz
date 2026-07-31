@@ -96,6 +96,10 @@ export class QuizBuilderView extends ItemView {
 		if (!this.page) {
 			this.page = createQuizPage({ app: this.app, plugin: this.plugin });
 		}
+		// Consommé : le drapeau ne vaut que pour CETTE ouverture. Le laisser
+		// posé ferait rouvrir en édition à chaque repeint de l'onglet.
+		const startEditing = this.startEditing;
+		this.startEditing = false;
 		this.page.render(host, {
 			key: file.path,
 			title: file.basename,
@@ -104,7 +108,7 @@ export class QuizBuilderView extends ItemView {
 			questionCount: 0,
 			load: () => loadQuizDraft(this.app, file.path),
 			save: (draft) => saveQuizDraft(this.app, draft),
-			startEditing: this.startEditing,
+			startEditing,
 			// Retour = refermer l'onglet : il n'a pas d'écran parent.
 			onBack: () => this.leaf.detach(),
 			start: {

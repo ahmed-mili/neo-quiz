@@ -159,9 +159,6 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	    que le brouillon est lu — un onglet qui ne connaît pas son quiz à
 	    l'avance affichait « 0 » jusqu'au premier repaint. */
 	let countEl: HTMLElement | null = null;
-	/** Clé du quiz pour lequel une demande d'ouverture en édition a déjà été
-	    honorée — elle ne vaut qu'une fois (cf. render). */
-	let editRequestKey: string | null = null;
 	/** Détache l'écoute clavier de la page précédente. */
 	let keyCleanup: (() => void) | null = null;
 
@@ -223,11 +220,12 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		}
 
 		/* Demande EXPLICITE d'ouvrir en édition (menu « Modifier », quiz qu'on
-		   vient de créer). Honorée UNE SEULE FOIS par quiz : la spec est
-		   réutilisée telle quelle à chaque repeint, et la relire forcerait le
-		   mode à revenir dès qu'on le quitte. */
-		if (spec.startEditing && editRequestKey !== spec.key) {
-			editRequestKey = spec.key;
+		   vient de créer). Elle se CONSOMME : la même spec est réutilisée telle
+		   quelle à chaque repeint, et la relire faisait revenir le mode à la
+		   seconde où l'on cliquait « Terminé ». L'hôte en fabrique une neuve à
+		   chaque demande — c'est là que la prochaine viendra. */
+		if (spec.startEditing) {
+			spec.startEditing = false;
 			editing = true;
 		}
 
@@ -341,13 +339,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	    lequel on revient le plus souvent. */
 	function toggleEditing(page: HTMLElement): void {
 		editing = !editing;
-		if (!editing) {
-			flushSave();
-			// L'utilisateur vient de SORTIR de l'édition : une demande ultérieure
-			// (menu « Modifier ») doit pouvoir l'y ramener. Sans cette remise à
-			// zéro, elle n'était honorée qu'une fois par session.
-			editRequestKey = null;
-		}
+		if (!editing) flushSave();
 
 		const body = page.querySelector(".qbd-qz-body");
 		if (!body || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
@@ -565,9 +557,12 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		const el = listCol.querySelectorAll<HTMLElement>(".qbd-qz-card-text")[activeIdx];
 		if (!q || !el) return;
 		const text = questionText(q);
-		if (el.textContent === text) return;
-		el.textContent = text || t("dashboard.quiz.promptEmpty");
+		// La classe est ajustée AVANT le retour anticipé : saisir exactement le
+		// libellé de repli (« Question vide ») laissait sinon la vignette
+		// marquée comme vide.
 		el.classList.toggle("is-empty", !text);
+		if (el.textContent === (text || t("dashboard.quiz.promptEmpty"))) return;
+		el.textContent = text || t("dashboard.quiz.promptEmpty");
 		if (text.includes("$")) void mathifyElement(el);
 	}
 

@@ -27,6 +27,8 @@ export class QuizBuilderView extends ItemView {
 	private page: QuizPageHandlers | null = null;
 	/** Note dont le bloc quiz-blocks est ouvert ici (null : rien encore). */
 	sourceFile: TFile | null = null;
+	/** Ouvrir en édition (quiz qu'on vient de créer). */
+	private startEditing = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: Plugin) {
 		super(leaf);
@@ -66,8 +68,9 @@ export class QuizBuilderView extends ItemView {
 	    source du bloc) n'est plus lu — la page relit la note elle-même, par
 	    la même chaîne que le dashboard — mais reste accepté : c'est la
 	    signature qu'appellent le plugin et le dashboard. */
-	async openQuizFile(file: TFile, _source?: string): Promise<void> {
+	async openQuizFile(file: TFile, _source?: string, opts: { edit?: boolean } = {}): Promise<void> {
 		this.sourceFile = file;
+		this.startEditing = !!opts.edit;
 		this.renderPage();
 		// Rafraîchit le titre de l'onglet (API interne, absente d'obsidian.d.ts).
 		const leaf = this.leaf as WorkspaceLeaf & { updateHeader?(): void };
@@ -101,6 +104,7 @@ export class QuizBuilderView extends ItemView {
 			questionCount: 0,
 			load: () => loadQuizDraft(this.app, file.path),
 			save: (draft) => saveQuizDraft(this.app, draft),
+			startEditing: this.startEditing,
 			// Retour = refermer l'onglet : il n'a pas d'écran parent.
 			onBack: () => this.leaf.detach(),
 			start: {

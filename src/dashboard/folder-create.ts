@@ -182,7 +182,8 @@ export async function createQuizInFolder(ctx: DashboardCtx, folder: string): Pro
 		await ensureFolder(ctx, folder);
 		const path = freeNotePath(ctx, folder, t("dashboard.quizzes.newQuizDefaultName"));
 		await ctx.app.vault.create(path, exportAllWithFence([makeDefault("single")]) + "\n");
-		await openQuizPathInEditor(ctx.app, path);
+		// En ÉDITION d'emblée : la question qu'on vient de créer est vierge.
+		await openQuizPathInEditor(ctx.app, path, { edit: true });
 	} catch {
 		new Notice(t("dashboard.quizzes.newQuizError"));
 	}

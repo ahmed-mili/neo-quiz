@@ -25,22 +25,23 @@ export async function openQuizForPlay(app: App, quiz: QuizIndexEntry): Promise<v
 	await leaf.openFile(file);
 }
 
-/** Accès à `openQuizFile`, greffé au runtime sur QuizBuilderView (editor.ts:239)
- * mais non déclaré sur la classe elle-même — même pattern que detail.ts. */
+/** Surface minimale de `QuizBuilderView` dont on a besoin ici : la vue est
+ * résolue depuis un `leaf.view` (type `View`), qui ne déclare pas cette
+ * méthode. */
 type QuizEditorViewLike = {
-	openQuizFile?: (file: TFile, source: string) => Promise<void>;
+	openQuizFile?: (file: TFile, source: string, opts?: { edit?: boolean }) => Promise<void>;
 };
 
-/** Ouvre un quiz dans l'éditeur visuel (vue onglet, réutilisée si déjà ouverte).
-    Extrait de detail.ts (openInEditor) pour être partagé avec le menu ⋯ des
-    cartes de « Mes quiz » — un seul chemin d'édition, jamais deux copies. */
+/** Ouvre un quiz dans son onglet (réutilisé s'il est déjà là). L'onglet porte
+    la MÊME page que le dashboard depuis le 2026-07-31 — « éditeur visuel » ne
+    désigne plus un écran à part. */
 export async function openQuizInEditor(app: App, quiz: QuizIndexEntry): Promise<void> {
 	return openQuizPathInEditor(app, quiz.path);
 }
 
 /** Même ouverture, par chemin de note — pour un quiz qui vient d'être créé et
     que le scanner n'a pas encore indexé (bouton « New quiz » du drill-down). */
-export async function openQuizPathInEditor(app: App, path: string): Promise<void> {
+export async function openQuizPathInEditor(app: App, path: string, opts: { edit?: boolean } = {}): Promise<void> {
 	const file = app.vault.getAbstractFileByPath(path);
 	if (!file || !(file instanceof TFile)) {
 		new Notice(t("dashboard.detail.fileNotFound"));
@@ -65,7 +66,7 @@ export async function openQuizPathInEditor(app: App, path: string): Promise<void
 		}
 		const view = leaf.view as QuizEditorViewLike;
 		if (view && view.openQuizFile) {
-			await view.openQuizFile(file, match[1]);
+			await view.openQuizFile(file, match[1], opts);
 			new Notice(t("dashboard.detail.opened", { name: file.basename }));
 		}
 	} catch {

@@ -63,6 +63,10 @@ export interface QuizPageSpec {
 	/** Vrai quand la page n'est plus celle qu'on regarde (vue changée) : les
 	    flèches ← → cessent alors de lui répondre. */
 	isStale?(): boolean;
+	/** Ouvrir d'emblée en ÉDITION. Pour un quiz qu'on vient de créer : sa
+	    question est vierge, la relire n'apprendrait rien. Ne vaut qu'à la
+	    PREMIÈRE ouverture de cette clé — ensuite l'utilisateur décide. */
+	startEditing?: boolean;
 }
 
 /** Dépendances d'une page « quiz », indépendantes du dashboard. */
@@ -198,7 +202,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			currentPath = spec.key;
 			draft = null;
 			activeIdx = 0;
-			editing = false;
+			editing = !!spec.startEditing;
 		} else if (draft && draftIsStale(draft)) {
 			// La note a changé DEHORS (éditeur markdown, synchro) pendant que la
 			// page gardait son brouillon : le relire, sinon la frappe suivante

@@ -7,7 +7,7 @@ import type { QuizStatRecord } from "./stats-store";
 import { quizTypeLabel } from "./quiz-card";
 import { openQuizForPlay } from "./quiz-open";
 import { TypePickerModal, ConfirmModal } from "../editor/modals";
-import { loadQuizDraft, saveQuizDraft, questionText } from "./detail-io";
+import { loadQuizDraft, saveQuizDraft, questionText, draftIsStale } from "./detail-io";
 import type { QuizDraft, QuizLoadError } from "./detail-io";
 import { renderQuestionView, renderQuestionEdit } from "./detail-question";
 import { renderExamPanel } from "./detail-exam";
@@ -199,6 +199,12 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			draft = null;
 			activeIdx = 0;
 			editing = false;
+		} else if (draft && draftIsStale(draft)) {
+			// La note a changé DEHORS (éditeur markdown, synchro) pendant que la
+			// page gardait son brouillon : le relire, sinon la frappe suivante
+			// réécrirait par-dessus la modification externe.
+			flushSave();
+			draft = null;
 		}
 
 		const page = container.createDiv({ cls: "qbd-qz" });
@@ -516,6 +522,19 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		});
 	}
 
+	/** Met à jour le texte des vignettes sans toucher au reste de la colonne. */
+	function refreshListLabels(listCol: HTMLElement): void {
+		if (!draft) return;
+		const labels = listCol.querySelectorAll<HTMLElement>(".qbd-qz-card-text");
+		draft.questions.forEach((q, i) => {
+			const el = labels[i];
+			if (!el) return;
+			const text = questionText(q);
+			el.textContent = text || t("dashboard.quiz.promptEmpty");
+			el.classList.toggle("is-empty", !text);
+		});
+	}
+
 	/** Contenu d'UNE slide : la question, en consultation ou en édition.
 	    `index` est celui de la question rendue (pas forcément la courante :
 	    la passe de mesure les rend toutes). */
@@ -529,7 +548,11 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 				plugin: ctx.plugin,
 				onChange: () => {
 					scheduleSave();
-					paintList(listCol, panel, nav, spec);
+					// Rafraîchir les LIBELLÉS, pas reconstruire la liste : à chaque
+					// frappe on détruisait sinon les cartes (et le bloc « Mode du
+					// quiz », son sélecteur compris) sous le curseur de
+					// l'utilisateur, pour n'en changer qu'une ligne de texte.
+					refreshListLabels(listCol);
 					// Une réponse plus longue peut dépasser la réserve : on
 					// l'étend, jamais on ne la réduit (les chevrons ne doivent
 					// pas remonter pendant la frappe).

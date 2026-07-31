@@ -27,6 +27,17 @@ export interface QuizDraft {
 	file: TFile | null;
 	questions: DraftQuestion[];
 	examOptions: EditorExamOptions | null;
+	/** `mtime` de la note au moment de la LECTURE, remis à jour à chaque
+	    écriture. Sert à détecter qu'elle a changé DEHORS (édition dans
+	    l'éditeur markdown, synchro) : le brouillon en mémoire serait alors
+	    périmé, et la frappe suivante écraserait la modification externe. */
+	mtime?: number;
+}
+
+/** La note a-t-elle changé hors de ce brouillon depuis sa lecture ? */
+export function draftIsStale(draft: QuizDraft): boolean {
+	if (!draft.file || draft.mtime == null) return false;
+	return (draft.file.stat?.mtime ?? 0) !== draft.mtime;
 }
 
 /** Erreur de chargement, portée à l'UI sous forme de clé de traduction. */
@@ -59,7 +70,7 @@ export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft |
 			}
 			questions.push(convertParsedToInternal(item));
 		}
-		return { file, questions, examOptions };
+		return { file, questions, examOptions, mtime: file.stat?.mtime ?? 0 };
 	} catch {
 		return "loadError";
 	}
@@ -83,6 +94,9 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 		const block = "```quiz-blocks\n" + source + "\n```";
 		const updated = content.replace(QUIZ_BLOCK_RE, () => block);
 		if (updated !== content) await app.vault.modify(file, updated);
+		// Notre propre écriture ne doit pas passer pour une modification
+		// EXTERNE au prochain rendu (cf. draftIsStale).
+		draft.mtime = file.stat?.mtime ?? draft.mtime;
 		return true;
 	} catch {
 		return false;

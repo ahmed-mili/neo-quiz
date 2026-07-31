@@ -12,6 +12,7 @@
 @import url('./utilities.css');
 
 /* Components */
+@import url('./components/host-note.css');
 @import url('./components/nav-tabs.css');
 @import url('./components/quiz-card.css');
 @import url('./components/passage.css');

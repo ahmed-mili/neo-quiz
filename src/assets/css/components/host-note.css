@@ -1,0 +1,47 @@
+/* =========================================================
+   NOTE HÔTE — le markdown autour du quiz adopte sa colonne
+   =========================================================
+
+   Le quiz se centre dans une colonne de --quiz-max-width, mais le markdown qui
+   l'ENTOURE (titre, paragraphes, tableaux) occupe toute la largeur de la note
+   tant que « Longueur de ligne lisible » est désactivée dans Obsidian. Le quiz
+   paraissait alors décalé au milieu d'un texte collé à gauche.
+
+   Le markdown reçoit donc EXACTEMENT la formule de largeur de .quiz-nav /
+   .quiz-card (layout.css). L'alignement est exact par construction, pas par
+   réglage : même formule, même conteneur de référence. */
+
+
+/* --- Mode lecture : les blocs sont les enfants directs du sizer -------------
+   Le bloc qui PORTE le quiz garde sa pleine largeur (`:not(:has(…))`) : le
+   réduire ferait recalculer au quiz sa colonne sur une base déjà rognée, et il
+   finirait plus étroit que le texte — le décalage reviendrait, deux fois plus
+   petit et deux fois plus dur à voir. */
+
+.markdown-preview-sizer:has(.quiz-blocks-host)
+  > div:not(.markdown-preview-pusher):not(:has(.quiz-blocks-host)) {
+  width: min(var(--quiz-max-width), calc(100% - (var(--quiz-side-gap) * 2)));
+  margin-inline: auto;
+}
+
+
+/* --- Mode édition (live preview) : contraindre le conteneur, pas les lignes --
+   Ici la même approche ne marche PAS : Obsidian pose `margin: 0 !important` sur
+   les enfants de `.cm-content`, parce que CodeMirror calcule la position du
+   curseur et de la sélection en supposant les lignes sans marge. On ne force
+   pas ce garde-fou — c'est le CONTENEUR qui adopte la colonne (exactement ce
+   que fait Obsidian pour sa propre longueur de ligne lisible), et les lignes la
+   remplissent à 100 %.
+
+   Le retrait latéral est dès lors porté par le conteneur : on le neutralise
+   pour le quiz à l'intérieur, sinon il se le retrancherait une seconde fois et
+   se retrouverait plus étroit que le texte qui l'entoure. */
+
+.cm-contentContainer:has(.quiz-blocks-host) {
+  width: min(var(--quiz-max-width), calc(100% - (var(--quiz-side-gap) * 2)));
+  margin-inline: auto;
+}
+
+.cm-content:has(.quiz-blocks-host) {
+  --quiz-side-gap: 0px;
+}

@@ -275,8 +275,9 @@ if ($h -ne [IntPtr]::Zero) {
 
 async function shareViaDiscord(ctx: DashboardCtx, source: ShareSource): Promise<boolean> {
 	try {
-		await shareViaDiscordInner(ctx, source);
-		return true;
+		// `false` quand RIEN n'a été envoyé (quiz introuvable, construction
+		// abandonnée) : la fenêtre ne doit pas afficher « Copié » pour ça.
+		return await shareViaDiscordInner(ctx, source);
 	} catch (e) {
 		// Appelé en `void` depuis un gestionnaire de clic : sans ce filet, un
 		// échec fermait la fenêtre sans rien envoyer ni rien dire.
@@ -286,16 +287,18 @@ async function shareViaDiscord(ctx: DashboardCtx, source: ShareSource): Promise<
 	}
 }
 
-async function shareViaDiscordInner(ctx: DashboardCtx, source: ShareSource): Promise<void> {
+async function shareViaDiscordInner(ctx: DashboardCtx, source: ShareSource): Promise<boolean> {
 	const payload = await source.build();
-	if (!payload) return;
+	if (!payload) return false;
 
 	// 1. Partage natif du système (mobile) — l'expérience « Partager avec ».
 	const file = new File([payload.bytes as BlobPart], payload.fileName, { type: payload.mime });
 	const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean; share?: (d: unknown) => Promise<void> };
 	if (nav.canShare && nav.share && nav.canShare({ files: [file] })) {
 		try { await nav.share({ files: [file], title: payload.fileName }); } catch { /* annulé par l'utilisateur */ }
-		return;
+		// Le partage natif dit lui-même ce qu'il a fait : pas de « Copié » du
+		// plugin par-dessus.
+		return false;
 	}
 
 	// 2. Desktop : fichier → presse-papier + Discord au premier plan (script
@@ -326,11 +329,12 @@ async function shareViaDiscordInner(ctx: DashboardCtx, source: ShareSource): Pro
 			cp.execFile("powershell", ["-NoProfile", "-WindowStyle", "Hidden", "-EncodedCommand", encoded], { windowsHide: true }, () => { /* fire-and-forget */ });
 		} catch { /* pas Windows / PowerShell indispo */ }
 		new Notice(t("dashboard.quizzes.discordReady"));
-		return;
+		return true;
 	}
 
-	// 3. Repli ultime : enregistrer le fichier.
+	// 3. Repli ultime : enregistrer le fichier — qui affiche sa propre Notice.
 	await saveShared(ctx, source);
+	return false;
 }
 
 export class ShareModal extends QbdModal {

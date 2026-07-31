@@ -284,6 +284,11 @@ export interface QuizState {
 	lastQuestionIndex: number;
 	locked: boolean;
 	pendingResultsLock: boolean;
+	/** La session a DÉJÀ été comptée dans les statistiques. Sans ce drapeau,
+	    un double clic sur « Voir le score » comptait deux tentatives pour une
+	    seule session (engine/state.ts goToResults). Remis à faux par
+	    `resetQuiz`, qui recommence bien une session. */
+	resultsCounted: boolean;
 	savedResultsPath: string | null;
 	shuffleMap: QuestionShuffleEntry[];
 	/** Élément en cours de sélection pour glisser-déposer, question de classement (engine/interactions.js). */

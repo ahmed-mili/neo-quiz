@@ -271,6 +271,9 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		ctx.closeHintModal();
 		ctx.quizState.practiceMode = nextMode;
 		ctx.quizState.pendingResultsLock = false;
+		// Recommencer, c'est une NOUVELLE session : elle a le droit d'être
+		// comptée à son tour.
+		ctx.quizState.resultsCounted = false;
 		ctx.quizState.savedResultsPath = null;
 		if (nextMode === "text") ctx.stopExamTimer?.();
 
@@ -309,18 +312,30 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 			ctx.updateExamTimerDisplay();
 		}
 
-		// Enregistrer les stats QCM dans le dashboard
+		/* Stats du dashboard. Le mode TEXTE compte lui aussi : travailler tous
+		   les jours en mode learn ne mettait a jour ni progression, ni derniere
+		   activite, ni nombre de tentatives — le dashboard restait muet sur
+		   l'essentiel du travail (revue codex 2026-07-31).
+		   Son score, lui, n'est pas enregistre : en mode texte, la correction
+		   est une AUTO-EVALUATION, et la ranger a cote des scores d'un QCM les
+		   rendrait incomparables. `updateRecord` prend le maximum, donc un 0 ne
+		   peut pas abaisser un score existant.
+		   `resultsCounted` : `goToResults` n'etait pas protege contre un double
+		   clic, et « Voir le score » comptait alors deux tentatives pour une
+		   seule session. */
 		const statsStore = (ctx.plugin as { _statsStore?: StatsStoreLike })._statsStore;
-		if (!ctx.textOnly?.isTextOnlyMode?.() && statsStore && ctx.sourcePath) {
-			const { pct, correct, total } = computeScorePercent();
+		if (!ctx.quizState.resultsCounted && statsStore && ctx.sourcePath) {
+			ctx.quizState.resultsCounted = true;
+			const modeTexte = !!ctx.textOnly?.isTextOnlyMode?.();
+			const { pct, total } = computeScorePercent();
 			let questionsDone = 0;
 			for (let i = 0; i < ctx.quiz.length; i++) {
 				if (isComplete(i)) questionsDone++;
 			}
 			statsStore.updateRecord(ctx.sourcePath, {
-				bestScore: pct,
+				bestScore: modeTexte ? 0 : pct,
 				questionsDone,
-				totalQuestions: total
+				totalQuestions: total || ctx.quiz.length
 			});
 		}
 

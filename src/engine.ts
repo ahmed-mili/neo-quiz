@@ -343,6 +343,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		lastQuestionIndex: 0,
 		locked: false,
 		pendingResultsLock: false,
+		resultsCounted: false,
 		savedResultsPath: null,
 		shuffleMap: buildShuffleMap(),
 		orderingPick: initOrderingPicks(),

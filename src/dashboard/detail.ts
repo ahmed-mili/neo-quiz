@@ -636,10 +636,14 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		setSlide(slideHost, (slide) => fillSlide(slide, q, activeIdx, listCol, panel, nav, spec));
 		paintNav(listCol, panel, nav, spec);
 
-		// Les chevrons se posent à la hauteur de la question la PLUS HAUTE du
-		// quiz, une fois pour toutes : ils ne bougent plus d'une question à
-		// l'autre. Mesuré ici (et à chaque bascule de mode, dont le contenu
-		// n'a pas la même hauteur), pas à chaque navigation.
+		/* Les chevrons se posent à la hauteur de la question la PLUS HAUTE du
+		   quiz, une fois pour toutes : ils ne bougent plus d'une question à
+		   l'autre. Mesuré ici (pas à chaque navigation).
+
+		   En ÉDITION, non : la mesure rendrait le FORMULAIRE COMPLET de chaque
+		   question du quiz — trente formulaires pour en afficher un. Et la
+		   réserve n'y sert à rien, le panneau ayant son propre ascenseur. */
+		if (editing) return;
 		const questions = draft.questions;
 		reserveTallest(
 			slideHost,

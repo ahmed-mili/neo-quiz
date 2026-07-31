@@ -22,10 +22,11 @@
  *
  *     obsidian eval vault=<nom> code="(()=>{ \
  *       const host=leaf.view.containerEl.querySelector('.quiz-blocks-host'); \
+ *       const re=new RegExp('[*][^\n]*[*]'); \
  *       return [...host.querySelectorAll('.quiz-track-item')].map(it=>{ \
  *         const c=it.cloneNode(true); \
  *         c.querySelectorAll('code,pre,mjx-container,.MathJax').forEach(n=>n.remove()); \
- *         return c.innerText; }).filter(t=>/\*[^\n]*\*/.test(t)); })()"
+ *         return c.innerText; }).filter(t=>re.test(t)); })()"
  *
  * sur une note qui charge chaque type de question de markdown. Les deux
  * vérifications sont complémentaires : celle-ci sur 8546 champs réels, celle-là

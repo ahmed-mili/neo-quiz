@@ -136,7 +136,12 @@ function exportQuestion(q: DraftQuestion, idx: number, usedIds?: Set<string>): s
  * page ; `usedIds` les départage.
  */
 function questionId(q: DraftQuestion, idx: number, usedIds?: Set<string>): string {
-	if (q._sourceId) return q._sourceId;
+	if (q._sourceId) {
+		// Réservé LUI AUSSI : sans ça, un slug dérivé d'un titre pouvait tomber
+		// sur un identifiant explicite déjà écrit plus haut dans le bloc.
+		usedIds?.add(q._sourceId);
+		return q._sourceId;
+	}
 	const slug = (q.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20);
 	let id = slug || `q${idx + 1}`;
 	if (usedIds) {

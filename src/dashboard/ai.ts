@@ -189,6 +189,10 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	    annulable : sans ça il continuait de tourner (et de redessiner la page)
 	    après la fermeture de la vue. */
 	let ollamaPoll: number | null = null;
+	/** La vue a été fermée : plus rien ne doit repeindre ni démarrer. Un
+	    `abort()` posé pendant l'encodage des images n'a encore aucun processus
+	    à tuer — c'est ce drapeau qui arrête la génération à l'étape suivante. */
+	let disposed = false;
 	// ResizeObserver de la carte composer (mesure du text-indent des chips) :
 	// déconnecté et recréé à chaque render (composer recréé) — cf. layoutChipsRow.
 	let composerResizeObserver: ResizeObserver | null = null;
@@ -2049,6 +2053,15 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				}));
 			}
 
+			// La vue a-t-elle été fermée pendant l'encodage des images ? Lancer le
+			// CLI maintenant ferait tourner un processus que plus personne
+			// n'écoute, et sa réponse repeindrait un conteneur détaché.
+			if (disposed) {
+				document.removeEventListener("keydown", onEsc);
+				activeClient = null;
+				return;
+			}
+
 			generatedQuestions = await client.generate(prompt, {
 				count: questionCount,
 				type: questionType,
@@ -2164,6 +2177,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// Une génération en vol survivrait à la vue : son CLI continuerait de
 		// tourner, son écoute Escape resterait posée sur le document, et sa
 		// complétion irait repeindre un conteneur détaché.
+		disposed = true;
 		activeClient?.abort();
 		activeClient = null;
 		if (ollamaPoll) { window.clearInterval(ollamaPoll); ollamaPoll = null; }

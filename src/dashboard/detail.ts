@@ -213,9 +213,11 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			activeIdx = 0;
 			editing = false;
 		} else if (draft && draftIsStale(draft)) {
-			// La note a changé DEHORS (éditeur markdown, synchro) pendant que la
-			// page gardait son brouillon : le relire, sinon la frappe suivante
-			// réécrirait par-dessus la modification externe.
+			/* La note a changé DEHORS (éditeur markdown, synchro) pendant que la
+			   page gardait son brouillon : on la relit, sinon la frappe suivante
+			   réécrirait par-dessus. La modification externe gagne — mais on le
+			   DIT, sinon des retouches en attente disparaîtraient sans un mot. */
+			if (saveTimer) new Notice(t("dashboard.quiz.externalChange"));
 			flushSave();
 			draft = null;
 		}
@@ -339,7 +341,13 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	    lequel on revient le plus souvent. */
 	function toggleEditing(page: HTMLElement): void {
 		editing = !editing;
-		if (!editing) flushSave();
+		if (!editing) {
+			flushSave();
+			// L'utilisateur vient de SORTIR de l'édition : une demande ultérieure
+			// (menu « Modifier ») doit pouvoir l'y ramener. Sans cette remise à
+			// zéro, elle n'était honorée qu'une fois par session.
+			editRequestKey = null;
+		}
 
 		const body = page.querySelector(".qbd-qz-body");
 		if (!body || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
@@ -548,18 +556,19 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		});
 	}
 
-	/** Met à jour le texte des vignettes sans toucher au reste de la colonne. */
+	/** Met à jour le texte de la vignette de la question COURANTE — la seule
+	    que l'édition peut changer. Les parcourir toutes à chaque frappe
+	    réécrivait, et re-mathifiait, des libellés identiques. */
 	function refreshListLabels(listCol: HTMLElement): void {
 		if (!draft) return;
-		const labels = listCol.querySelectorAll<HTMLElement>(".qbd-qz-card-text");
-		draft.questions.forEach((q, i) => {
-			const el = labels[i];
-			if (!el) return;
-			const text = questionText(q);
-			el.textContent = text || t("dashboard.quiz.promptEmpty");
-			el.classList.toggle("is-empty", !text);
-			if (text.includes("$")) void mathifyElement(el);
-		});
+		const q = draft.questions[activeIdx];
+		const el = listCol.querySelectorAll<HTMLElement>(".qbd-qz-card-text")[activeIdx];
+		if (!q || !el) return;
+		const text = questionText(q);
+		if (el.textContent === text) return;
+		el.textContent = text || t("dashboard.quiz.promptEmpty");
+		el.classList.toggle("is-empty", !text);
+		if (text.includes("$")) void mathifyElement(el);
 	}
 
 	/** Contenu d'UNE slide : la question, en consultation ou en édition.

@@ -45,6 +45,19 @@ export interface FormBridge {
 }
 
 export function createFormBridge(opts: FormBridgeOptions): FormBridge {
+	/* `editor-form` signale un changement en appelant SUCCESSIVEMENT
+	   `renderCode()`, `schedulePreview()` et `scheduleSave()`. Les deux
+	   derniers mènent ici au même endroit : sans coalescence, chaque frappe
+	   déclenchait deux fois le rafraîchissement de la liste et la
+	   planification de l'écriture. Une micro-tâche suffit à les fondre — elles
+	   partent toujours dans le même tour de boucle. */
+	let notifPrevue = false;
+	const notifier = (): void => {
+		if (notifPrevue) return;
+		notifPrevue = true;
+		queueMicrotask(() => { notifPrevue = false; opts.onChange(); });
+	};
+
 	/* Vue factice. `editorInnerEl` n'est jamais lu (on n'appelle pas
 	   renderEditor(), qui rendrait le formulaire ENTIER de l'éditeur) ; il est
 	   quand même pointé sur un nœud détaché plutôt que laissé indéfini, pour
@@ -60,8 +73,8 @@ export function createFormBridge(opts: FormBridgeOptions): FormBridge {
 		   Le laisser inerte perdait le lien à la fermeture et laissait la
 		   pièce jointe orpheline. */
 		renderCode: () => { /* pas de panneau Code */ },
-		schedulePreview: () => opts.onChange(),
-		scheduleSave: () => opts.onChange(),
+		schedulePreview: notifier,
+		scheduleSave: notifier,
 		render: () => opts.onStructureChange(),
 	};
 

@@ -80,25 +80,33 @@ export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft |
 export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean> {
 	if (!draft.file) return false;
 	const file = draft.file;
-	/* Dernière vérification AVANT d'écrire, pas seulement au rendu : la même
-	   note peut être ouverte dans deux pages (dashboard + onglet), chacune avec
-	   son brouillon. Sans ce garde, la seconde à écrire réécrit le bloc ENTIER
-	   depuis son état d'avant et annule la correction de la première. */
+	/* Première vérification, tôt : inutile d'exporter tout un quiz pour un
+	   brouillon qu'on sait déjà périmé. La garantie, elle, vient de
+	   `vault.process` ci-dessous. */
 	if (draftIsStale(draft)) return false;
 	try {
-		const content = await app.vault.read(file);
 		const source = exportAll(draft.questions, draft.examOptions);
 		// Garde-fou de l'éditeur, conservé : on ne réécrit JAMAIS un bloc dont
 		// le JSON5 généré ne se relit pas — la note vaut mieux que la frappe.
 		parseQuizSource(source);
-		if (!QUIZ_BLOCK_RE.test(content)) return false;
-		// Remplacement par FONCTION, jamais par chaîne : dans une chaîne de
-		// remplacement, `$1`, `$&`, `` $` `` et `$'` sont des motifs spéciaux —
-		// et un quiz de maths est plein de `$…$` (« $1$ » aurait réinjecté la
-		// source entière à sa place, `$'` tout le reste de la note).
 		const block = "```quiz-blocks\n" + source + "\n```";
-		const updated = content.replace(QUIZ_BLOCK_RE, () => block);
-		if (updated !== content) await app.vault.modify(file, updated);
+
+		let ecrit = false;
+		/* `vault.process` et non `read` + `modify` : Obsidian garantit qu'aucune
+		   modification ne s'intercale entre la lecture et l'écriture. Le couple
+		   read/modify laissait une fenêtre — deux pages ouvertes sur la même
+		   note (dashboard + onglet) pouvaient franchir le garde `mtime` en même
+		   temps, puis s'écraser l'une l'autre. */
+		await app.vault.process(file, (content) => {
+			if (!QUIZ_BLOCK_RE.test(content)) return content;
+			ecrit = true;
+			// Remplacement par FONCTION, jamais par chaîne : dans une chaîne de
+			// remplacement, `$1`, `$&`, `` $` `` et `$'` sont des motifs
+			// spéciaux — et un quiz de maths est plein de `$…$` (« $1$ » aurait
+			// réinjecté la source entière à sa place, `$'` tout le reste).
+			return content.replace(QUIZ_BLOCK_RE, () => block);
+		});
+		if (!ecrit) return false;
 		// Notre propre écriture ne doit pas passer pour une modification
 		// EXTERNE au prochain rendu (cf. draftIsStale).
 		draft.mtime = file.stat?.mtime ?? draft.mtime;
@@ -114,12 +122,14 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
     avec ses étoiles. Le contenu, lui, n'est pas touché — seul l'affichage. */
 export function questionText(q: DraftQuestion): string {
 	return (q.prompt || q.title || "")
-		// Seuls les marqueurs APPARIÉS tombent, avec la même règle de flanc
-		// gauche que le rendu (engine/sanitizer.ts) : retirer toutes les
-		// étoiles changeait « 3*4*5 » en « 345 » et « C:\*.ts » en « C:\.ts ».
-		.replace(/`([^`\n]+)`/g, "$1")
-		.replace(/(^|[^0-9A-Za-zÀ-ÿ\\*])\*{1,3}(?=\S)([\s\S]*?\S)\*{1,3}/g, "$1$2")
-		.replace(/(^|[^0-9A-Za-zÀ-ÿ\\~])~~(?=\S)([\s\S]*?\S)~~/g, "$1$2")
+		/* Seuls les marqueurs APPARIÉS tombent, avec la même règle de flanc
+		   gauche que le rendu (engine/sanitizer.ts) : retirer toutes les
+		   étoiles changeait « 3*4*5 » en « 345 » et « C:\*.ts » en « C:\.ts ».
+		   `\p{L}\p{N}` et non l'ASCII : « α*β*γ » est une multiplication
+		   elle aussi. */
+		.replace(/`([^`\n]+)`/gu, "$1")
+		.replace(/(^|[^\p{L}\p{N}\\*])\*{1,3}(?=\S)([\s\S]*?\S)\*{1,3}/gu, "$1$2")
+		.replace(/(^|[^\p{L}\p{N}\\~])~~(?=\S)([\s\S]*?\S)~~/gu, "$1$2")
 		.replace(/^\s*#{1,6}\s+/gm, "")
 		.replace(/\s+/g, " ")
 		.trim();

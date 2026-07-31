@@ -57,6 +57,14 @@ await withSrcModule("src/editor/export.ts", ({ exportAll }) => {
 		ids([question({ title: "---" })]), ["q1"]);
 	r.check("id d'origine préservé",
 		ids([question({ title: "Autre titre", _sourceId: "nr-single" })]), ["nr-single"]);
+	// Un identifiant EXPLICITE occupe sa place : le slug d'une question sans id
+	// ne doit pas tomber dessus (deux ancres HTML identiques dans la page).
+	r.check("slug généré n'écrase pas un id explicite",
+		ids([question({ title: "X", _sourceId: "meme-titre" }), question({ title: "Même titre" })]),
+		["meme-titre", "m-me-titre"]);
+	r.check("deux ids explicites identiques restent distincts",
+		ids([question({ _sourceId: "dup" }), question({ title: "dup" })]),
+		["dup", "dup-2"]);
 
 	// Le mode du bloc est réémis sous sa forme d'origine.
 	const mode = (examOptions) => {

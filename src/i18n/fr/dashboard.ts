@@ -197,6 +197,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.quiz.editPromptHtml": "Question (HTML)",
 	"dashboard.quiz.editPromptHtmlHint": "Cette question porte du HTML structuré (tableau, liste, bloc de code). Elle s'édite en HTML pour que la structure survive.",
 	"dashboard.quiz.editPromptPlaceholder": "Saisissez votre question…",
+	"dashboard.quiz.externalChange": "Cette note a changé hors du plugin. Elle a été relue, et vos dernières retouches n'ont pas été écrites.",
 	"dashboard.quiz.saveError": "Impossible d'enregistrer le quiz",
 
 	/* ── ui-select ── */

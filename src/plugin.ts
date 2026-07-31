@@ -1274,11 +1274,19 @@ export default class InteractiveQuizPlugin extends Plugin {
 			callback: async () => {
 				const activeFile = this.app.workspace.getActiveFile();
 				if (activeFile && activeFile.path.endsWith(".md")) {
-					const content = await this.app.vault.read(activeFile);
-					if (QUIZ_BLOCK_RE.test(content)) {
-						const { openQuizPathInEditor } = require("./dashboard/quiz-open") as typeof import("./dashboard/quiz-open");
-						await openQuizPathInEditor(this.app, activeFile.path);
-						return;
+					try {
+						// `cachedRead` : on ne fait que TESTER la présence d'un bloc,
+						// et la note sera relue par l'ouverture. Une lecture qui
+						// échoue ne doit pas faire échouer la commande — on retombe
+						// simplement sur le dashboard.
+						const content = await this.app.vault.cachedRead(activeFile);
+						if (QUIZ_BLOCK_RE.test(content)) {
+							const { openQuizPathInEditor } = require("./dashboard/quiz-open") as typeof import("./dashboard/quiz-open");
+							await openQuizPathInEditor(this.app, activeFile.path);
+							return;
+						}
+					} catch {
+						// Lecture impossible : la suite mène au dashboard.
 					}
 				}
 				// Un onglet déjà ouvert sur un quiz vaut mieux que le dashboard :

@@ -97,7 +97,12 @@ function renderTitleField(parent: HTMLElement, q: DraftQuestion, cb: EditCallbac
     ça imposerait des balises à qui écrit une phrase. */
 function isRichHtml(html: string | undefined): boolean {
 	if (!html) return false;
-	const stripped = html.replace(/<\/?p>|<br\s*\/?>/gi, "");
+	// Un commentaire HTML est du contenu que le texte brut perdrait.
+	if (html.includes("<!--")) return true;
+	// `<p …>` AVEC ses attributs éventuels : ne retirer que la balise nue
+	// classait `<p class="">texte</p>` comme riche, et imposait l'édition HTML
+	// pour une simple phrase.
+	const stripped = html.replace(/<\/?p(?:\s[^>]*)?>|<br\s*\/?>/gi, "");
 	return /<[a-z][a-z0-9]*\b[^>]*>/i.test(stripped);
 }
 

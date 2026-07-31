@@ -1801,7 +1801,12 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	function generatedTitle(): string {
 		const raw = (sentMessage?.text || "").trim().split("\n")[0].trim();
 		if (!raw) return t("ai.result.untitled");
-		return raw.length > 60 ? raw.slice(0, 60).trimEnd() + "…" : raw;
+		if (raw.length <= 60) return raw;
+		// Couper au dernier MOT entier : « …sur le modele OSI : un texte a t… »
+		// se lit mal. Repli sur la coupe brute si le premier mot est immense.
+		const cut = raw.slice(0, 60);
+		const space = cut.lastIndexOf(" ");
+		return (space > 30 ? cut.slice(0, space) : cut).replace(/[\s:,;–—-]+$/, "") + "…";
 	}
 
 	/** « 6 questions · 54k tokens · $0.73 · 2 min 33 s » — la ligne du header,

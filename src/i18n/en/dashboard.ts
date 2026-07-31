@@ -52,7 +52,6 @@ export const EN_DASHBOARD = {
 	"dashboard.onboarding.samplePrompt": "What is the capital of France?",
 
 	/* ── Mes quiz ── */
-	"dashboard.quizzes.title": "My quizzes",
 	"dashboard.quizzes.new": "New folder",
 	"dashboard.quizzes.newFolderTitle": "New folder",
 	"dashboard.quizzes.newFolderCta": "Create",
@@ -155,7 +154,6 @@ export const EN_DASHBOARD = {
 	"dashboard.card.review": "To review",
 	"dashboard.card.progress": "In progress · {pct}%",
 	"dashboard.card.fresh": "Not started",
-	"dashboard.card.best": "Best {score}%",
 	"dashboard.card.more": "More actions",
 
 	/* ── Type de quiz (calculé par le scanner, traduit au rendu) ── */
@@ -220,15 +218,6 @@ export const EN_DASHBOARD = {
 	"dashboard.quiz.editPromptHtml": "Question (HTML)",
 	"dashboard.quiz.editPromptHtmlHint": "This question carries structured HTML (a table, a list, a code block). It is edited as HTML so that structure survives.",
 	"dashboard.quiz.editPromptPlaceholder": "Type your question…",
-	"dashboard.quiz.answerPlaceholder": "Type an answer…",
-	"dashboard.quiz.goodAnswer": "Correct answer",
-	"dashboard.quiz.badAnswer": "Wrong answer",
-	"dashboard.quiz.markGood": "Mark as correct",
-	"dashboard.quiz.markBad": "Mark as wrong",
-	"dashboard.quiz.deleteAnswer": "Delete this answer",
-	"dashboard.quiz.addAnswer": "Add an answer",
-	"dashboard.quiz.editUnsupported": "This question type is edited in the full editor.",
-	"dashboard.quiz.openFullEditor": "Open the full editor",
 	"dashboard.quiz.saveError": "Couldn't save the quiz",
 
 	/* ── ui-select (dropdown, menus, slider d'effort, sélecteur de note) ── */

@@ -5,31 +5,15 @@ export const FR_EDITOR: Record<keyof typeof EN_EDITOR, string> = {
 	/* ── Vue & ossature (editor.ts, editor/ui.ts) ── */
 	"editor.empty.hint": "Ouvrez une note qui contient un bloc quiz-blocks, puis lancez « Ouvrir le quiz de la note courante ».",
 	"editor.view.title": "Éditeur de quiz",
-	"editor.panel.questions": "Questions",
-	"editor.panel.editor": "Éditeur",
-	"editor.panel.preview": "Aperçu",
-	"editor.panel.code": "Code",
-	"editor.sidebar.count": "Questions ({n})",
-	"editor.code.title": "JSON5 généré",
 
 	/* ── Actions communes ── */
-	"editor.action.save": "Sauvegarder",
-	"editor.action.open": "Ouvrir",
-	"editor.action.export": "Exporter",
-	"editor.action.copy": "Copier",
-	"editor.action.copied": "Copié !",
 	"editor.action.add": "Ajouter",
 	"editor.action.delete": "Supprimer",
 	"editor.action.cancel": "Annuler",
-	"editor.action.close": "Fermer",
 	"editor.toggle.enable": "Activer",
 	"editor.toggle.disable": "Désactiver",
 
 	/* ── Sauvegarde (infobulles du bouton + notice) ── */
-	"editor.save.nothingToSave": "Aucune modification à sauvegarder",
-	"editor.save.openFileFirst": "Ouvrez un fichier pour sauvegarder",
-	"editor.save.allSaved": "Toutes les modifications sont sauvegardées",
-	"editor.save.clickToSave": "Cliquez pour sauvegarder les modifications",
 
 	/* ── Texte à trous ── */
 	"editor.type.cloze.label": "Texte à trous",
@@ -63,11 +47,6 @@ export const FR_EDITOR: Record<keyof typeof EN_EDITOR, string> = {
 	"editor.passage.idPlaceholder": "doc1",
 
 	/* ── Mode examen ── */
-	"editor.exam.title": "Mode Examen",
-	"editor.exam.duration": "Durée",
-	"editor.exam.minutesUnit": "min",
-	"editor.exam.autoSubmit": "Soumettre auto à la fin",
-	"editor.exam.showTimer": "Afficher le timer",
 
 	/* ── Types de question (Q_TYPES, editor/utils.ts) ── */
 	"editor.type.single.label": "Choix unique",
@@ -146,7 +125,6 @@ export const FR_EDITOR: Record<keyof typeof EN_EDITOR, string> = {
 	"editor.text.defaultPlaceholder": "Votre réponse...",
 
 	/* ── Panneau Aperçu ── */
-	"editor.preview.titleWith": "Aperçu — {title}",
 	"editor.preview.resourceFallback": "Ressource",
 	"editor.preview.multiHint": "Sélectionnez une ou plusieurs réponses",
 	"editor.preview.orderingHint": "Classez les éléments dans le bon ordre",
@@ -157,39 +135,12 @@ export const FR_EDITOR: Record<keyof typeof EN_EDITOR, string> = {
 	"editor.typeModal.subtitle": "Choisissez le type de question",
 
 	/* ── Modale d'import ── */
-	"editor.import.title": "Importer un quiz",
-	"editor.import.placeholder": "Collez ici le contenu d'un bloc quiz-blocks ou le code JSON5 du quiz...",
-	"editor.import.load": "Charger",
-	"editor.import.fromNote": "Importer depuis une note",
 
 	/* ── Sélecteurs de note (import / ouverture) ── */
-	"editor.suggest.chooseNote": "Choisir une note contenant un quiz...",
-	"editor.suggest.openBadge": "Ouvert",
-	"editor.suggest.activeBadge": "Actif",
-	"editor.open.loadingPlaceholder": "Chargement des quiz en cours...",
-	"editor.open.searching": "Recherche des quiz dans le vault...",
-	"editor.open.searchPlaceholder": "Rechercher un quiz...",
 
 	/* ── Modale de suppression ── */
 	"editor.delete.title": "Supprimer « {title} » ?",
 	"editor.delete.message": "Cette action est irréversible. La question sera définitivement supprimée.",
 
 	/* ── Notices ── */
-	"editor.notice.noQuestionFound": "Aucune question trouvée",
-	"editor.notice.noQuestionInContent": "Aucune question trouvée dans le contenu",
-	"editor.notice.noValidQuestion": "Aucune question valide trouvée",
-	"editor.notice.imported": "{n} question(s) importée(s)",
-	"editor.notice.importedFrom": "{n} question(s) importée(s) depuis {file}",
-	"editor.notice.importError": "Erreur lors de l'import : {error}",
-	"editor.notice.invalidGenerated": "Erreur : le quiz généré n'est pas valide.",
-	"editor.notice.blockNotFound": "Erreur : bloc quiz-blocks introuvable",
-	"editor.notice.saveError": "Erreur lors de la sauvegarde : {error}",
-	"editor.notice.saved": "Sauvegardé",
-	"editor.notice.cannotDeleteLast": "Impossible de supprimer la dernière question",
-	"editor.notice.questionDeleted": "Question « {title} » supprimée",
-	"editor.notice.noBlockInNote": "Aucun bloc quiz-blocks trouvé dans cette note",
-	"editor.notice.importedFromNote": "Quiz importé depuis {file}",
-	"editor.notice.readNoteError": "Erreur lors de la lecture de la note",
-	"editor.notice.quizOpened": "Quiz ouvert : {file}",
-	"editor.notice.openError": "Erreur lors de l'ouverture",
 };

@@ -196,7 +196,6 @@ export const EN_AI = {
 	"ai.result.count": "{count} questions generated",
 	"ai.result.untitled": "Generated quiz",
 	"ai.result.insert": "Insert into a note",
-	"ai.result.restart": "Start over",
 
 	/* ── Notices ── */
 	"ai.notice.pdfNoText": "“{name}”: no extractable text (scanned PDF?)",

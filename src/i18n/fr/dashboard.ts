@@ -46,7 +46,6 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.onboarding.samplePrompt": "Quelle est la capitale de la France ?",
 
 	/* ── Mes quiz ── */
-	"dashboard.quizzes.title": "Mes quiz",
 	"dashboard.quizzes.new": "Nouveau dossier",
 	"dashboard.quizzes.newFolderTitle": "Nouveau dossier",
 	"dashboard.quizzes.newFolderCta": "Créer",
@@ -135,7 +134,6 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.card.review": "À revoir",
 	"dashboard.card.progress": "En cours · {pct}%",
 	"dashboard.card.fresh": "À commencer",
-	"dashboard.card.best": "Meilleur {score}%",
 	"dashboard.card.more": "Plus d'actions",
 
 	/* ── Type de quiz ── */
@@ -199,15 +197,6 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.quiz.editPromptHtml": "Question (HTML)",
 	"dashboard.quiz.editPromptHtmlHint": "Cette question porte du HTML structuré (tableau, liste, bloc de code). Elle s'édite en HTML pour que la structure survive.",
 	"dashboard.quiz.editPromptPlaceholder": "Saisissez votre question…",
-	"dashboard.quiz.answerPlaceholder": "Saisissez une réponse…",
-	"dashboard.quiz.goodAnswer": "Bonne réponse",
-	"dashboard.quiz.badAnswer": "Mauvaise réponse",
-	"dashboard.quiz.markGood": "Marquer comme bonne réponse",
-	"dashboard.quiz.markBad": "Marquer comme mauvaise réponse",
-	"dashboard.quiz.deleteAnswer": "Supprimer cette réponse",
-	"dashboard.quiz.addAnswer": "Ajouter une réponse",
-	"dashboard.quiz.editUnsupported": "Ce type de question se modifie dans l'éditeur complet.",
-	"dashboard.quiz.openFullEditor": "Ouvrir l'éditeur complet",
 	"dashboard.quiz.saveError": "Impossible d'enregistrer le quiz",
 
 	/* ── ui-select ── */

@@ -164,7 +164,6 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.result.count": "{count} questions générées",
 	"ai.result.untitled": "Quiz généré",
 	"ai.result.insert": "Insérer dans une note",
-	"ai.result.restart": "Recommencer",
 
 	/* ── Notices ── */
 	"ai.notice.pdfNoText": "« {name} » : aucun texte extractible (PDF scanné ?)",

@@ -6,31 +6,15 @@ export const EN_EDITOR = {
 	/* ── Vue & ossature (editor.ts, editor/ui.ts) ── */
 	"editor.empty.hint": "Open a note that contains a quiz-blocks block, then run « Open quiz from the current note ».",
 	"editor.view.title": "Quiz Editor",
-	"editor.panel.questions": "Questions",
-	"editor.panel.editor": "Editor",
-	"editor.panel.preview": "Preview",
-	"editor.panel.code": "Code",
-	"editor.sidebar.count": "Questions ({n})",
-	"editor.code.title": "Generated JSON5",
 
 	/* ── Actions communes ── */
-	"editor.action.save": "Save",
-	"editor.action.open": "Open",
-	"editor.action.export": "Export",
-	"editor.action.copy": "Copy",
-	"editor.action.copied": "Copied!",
 	"editor.action.add": "Add",
 	"editor.action.delete": "Delete",
 	"editor.action.cancel": "Cancel",
-	"editor.action.close": "Close",
 	"editor.toggle.enable": "Enable",
 	"editor.toggle.disable": "Disable",
 
 	/* ── Sauvegarde (infobulles du bouton + notice) ── */
-	"editor.save.nothingToSave": "No changes to save",
-	"editor.save.openFileFirst": "Open a file to save",
-	"editor.save.allSaved": "All changes are saved",
-	"editor.save.clickToSave": "Click to save your changes",
 
 	/* ── Texte à trous ── */
 	"editor.type.cloze.label": "Fill in the blanks",
@@ -64,11 +48,6 @@ export const EN_EDITOR = {
 	"editor.passage.idPlaceholder": "doc1",
 
 	/* ── Mode examen ── */
-	"editor.exam.title": "Exam mode",
-	"editor.exam.duration": "Duration",
-	"editor.exam.minutesUnit": "min",
-	"editor.exam.autoSubmit": "Auto-submit when time is up",
-	"editor.exam.showTimer": "Show timer",
 
 	/* ── Types de question (Q_TYPES, editor/utils.ts) ── */
 	"editor.type.single.label": "Single choice",
@@ -147,7 +126,6 @@ export const EN_EDITOR = {
 	"editor.text.defaultPlaceholder": "Your answer...",
 
 	/* ── Panneau Aperçu ── */
-	"editor.preview.titleWith": "Preview — {title}",
 	"editor.preview.resourceFallback": "Resource",
 	"editor.preview.multiHint": "Select one or more answers",
 	"editor.preview.orderingHint": "Put the items in the right order",
@@ -158,39 +136,12 @@ export const EN_EDITOR = {
 	"editor.typeModal.subtitle": "Choose the question type",
 
 	/* ── Modale d'import ── */
-	"editor.import.title": "Import a quiz",
-	"editor.import.placeholder": "Paste the contents of a quiz-blocks block, or the quiz JSON5, here...",
-	"editor.import.load": "Load",
-	"editor.import.fromNote": "Import from a note",
 
 	/* ── Sélecteurs de note (import / ouverture) ── */
-	"editor.suggest.chooseNote": "Choose a note containing a quiz...",
-	"editor.suggest.openBadge": "Open",
-	"editor.suggest.activeBadge": "Active",
-	"editor.open.loadingPlaceholder": "Loading quizzes...",
-	"editor.open.searching": "Searching the vault for quizzes...",
-	"editor.open.searchPlaceholder": "Search for a quiz...",
 
 	/* ── Modale de suppression ── */
 	"editor.delete.title": "Delete \"{title}\"?",
 	"editor.delete.message": "This cannot be undone. The question will be permanently deleted.",
 
 	/* ── Notices ── */
-	"editor.notice.noQuestionFound": "No question found",
-	"editor.notice.noQuestionInContent": "No question found in the content",
-	"editor.notice.noValidQuestion": "No valid question found",
-	"editor.notice.imported": "{n} question(s) imported",
-	"editor.notice.importedFrom": "{n} question(s) imported from {file}",
-	"editor.notice.importError": "Import failed: {error}",
-	"editor.notice.invalidGenerated": "Error: the generated quiz is not valid.",
-	"editor.notice.blockNotFound": "Error: quiz-blocks block not found",
-	"editor.notice.saveError": "Save failed: {error}",
-	"editor.notice.saved": "Saved",
-	"editor.notice.cannotDeleteLast": "You cannot delete the last question",
-	"editor.notice.questionDeleted": "Question \"{title}\" deleted",
-	"editor.notice.noBlockInNote": "No quiz-blocks block found in this note",
-	"editor.notice.importedFromNote": "Quiz imported from {file}",
-	"editor.notice.readNoteError": "Could not read the note",
-	"editor.notice.quizOpened": "Quiz opened: {file}",
-	"editor.notice.openError": "Could not open the quiz",
 } as const;

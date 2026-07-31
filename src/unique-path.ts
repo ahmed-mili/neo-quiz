@@ -21,8 +21,15 @@
  * collision improbable, il ne l'interdit pas.
  */
 
-/** Noms déjà rendus dans cette session, tous appelants confondus. */
+/** Noms déjà rendus dans cette session, tous appelants confondus.
+    Les clés sont repliées en minuscules : Windows et macOS ne distinguent pas
+    `Quiz.zip` de `quiz.zip`, et deux appels concurrents obtenaient ces deux
+    noms — donc le MÊME fichier physique, dont un seul contenu survivait
+    (revue codex 2026-07-31). */
 const reserves = new Set<string>();
+
+/** La clé de réservation d'un chemin : sa forme repliée. */
+const cle = (chemin: string): string => chemin.toLowerCase();
 
 /**
  * @param base      chemin sans extension (« dossier/Pasted image 2026… »)
@@ -41,13 +48,13 @@ export async function reserveFreePath(
 	   empêcher. Cinquante essais ne s'atteignent pas par accident. */
 	for (let n = 1; n <= 50; n++) {
 		const chemin = n === 1 ? base + ext : base + suffixe(n) + ext;
-		if (reserves.has(chemin)) continue;
+		if (reserves.has(cle(chemin))) continue;
 		/* RÉSERVÉ AVANT le premier `await`, et c'est tout l'intérêt : réserver
 		   après le test d'existence laissait les deux chaînes concurrentes
 		   franchir ce test puis choisir le MÊME nom (mesuré). Ici la seconde
 		   trouve le candidat déjà pris et passe au suivant, parce que le
 		   premier tour de boucle s'exécute sans interruption. */
-		reserves.add(chemin);
+		reserves.add(cle(chemin));
 		if (!(await existe(chemin))) return chemin;
 		// Pris sur le disque : il reste réservé (il existe de toute façon).
 	}
@@ -63,5 +70,5 @@ export async function reserveFreePath(
  * 2026-07-31). À appeler dans le `catch` de l'écriture, jamais après un succès.
  */
 export function releaseReservedPath(chemin: string): void {
-	reserves.delete(chemin);
+	reserves.delete(cle(chemin));
 }

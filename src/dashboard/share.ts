@@ -292,8 +292,18 @@ async function shareViaDiscord(ctx: DashboardCtx, source: ShareSource): Promise<
 		const path = require("path") as typeof import("path");
 		const os = require("os") as typeof import("os");
 		const cp = require("child_process") as typeof import("child_process");
-		const dest = path.join(os.tmpdir(), payload.fileName);
-		fs.writeFileSync(dest, payload.bytes);
+		/* Un nom LIBRE, même dans le dossier temporaire : partager deux quiz
+		   homonymes coup sur coup écrasait le fichier que le presse-papiers du
+		   PREMIER référence encore, et Discord envoyait alors deux fois le
+		   second (revue codex 2026-07-31). */
+		const pointExtTmp = payload.fileName.lastIndexOf(".");
+		const baseTmp = pointExtTmp > 0 ? payload.fileName.slice(0, pointExtTmp) : payload.fileName;
+		const extTmp = pointExtTmp > 0 ? payload.fileName.slice(pointExtTmp) : "";
+		const dest = await reserveFreePath(path.join(os.tmpdir(), baseTmp), extTmp,
+			async (c) => fs.existsSync(c), (n) => ` (${n})`);
+		try {
+			fs.writeFileSync(dest, payload.bytes);
+		} catch (e) { releaseReservedPath(dest); throw e; }
 		try {
 			const encoded = Buffer.from(buildDiscordScript(dest), "utf16le").toString("base64");
 			cp.execFile("powershell", ["-NoProfile", "-WindowStyle", "Hidden", "-EncodedCommand", encoded], { windowsHide: true }, () => { /* fire-and-forget */ });

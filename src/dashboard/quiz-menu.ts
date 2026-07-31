@@ -192,8 +192,13 @@ async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFi
 			jetee = true;
 			return content;
 		});
-		// La note ne contenait que le quiz : corbeille (récupérable), jamais
-		// de suppression définitive.
+		/* La note ne contenait que le quiz : corbeille (RÉCUPÉRABLE), jamais de
+		   suppression définitive.
+		   Fenêtre résiduelle assumée : une écriture arrivée entre ce
+		   compare-and-swap et `trashFile` partira quand même à la corbeille.
+		   Obsidian n'expose aucun « jeter si inchangé », et c'est précisément
+		   parce qu'on ne peut pas la fermer que la corbeille est le seul geste
+		   admis ici — l'utilisateur récupère sa note en un clic. */
 		if (jetee) await ctx.app.fileManager.trashFile(file);
 	}
 	ctx.statsStore?.deleteRecord(quiz.path);

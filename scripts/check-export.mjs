@@ -358,5 +358,14 @@ await withSrcModule("src/unique-path.ts", async ({ reserveFreePath, releaseReser
 	const n2 = await reserveFreePath("z/note", ".md", jamaisSurDisque);
 	r.check("nom rendu apres un echec d'ecriture", [n1, n2], ["z/note.md", "z/note.md"]);
 
+	// Windows et macOS ne distinguent pas la casse : deux appels concurrents ne
+	// doivent pas obtenir `Quiz.zip` et `quiz.zip`, qui sont le MEME fichier.
+	const casse = await Promise.all([
+		reserveFreePath("d/Quiz", ".zip", jamaisSurDisque),
+		reserveFreePath("d/quiz", ".zip", jamaisSurDisque),
+	]);
+	r.check("la casse ne cree pas deux fois le meme fichier",
+		casse[0].toLowerCase() !== casse[1].toLowerCase(), true);
+
 	r.done();
 });

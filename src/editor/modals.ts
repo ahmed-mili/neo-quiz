@@ -65,15 +65,20 @@ export interface ParsedQuizItem {
  * This avoids data loss that a regex (/<[^>]+>/g) would cause.
  */
 function _htmlToText(html: string): string {
-	const temp = document.createElement("div");
+	/* `<template>` et non `<div>` : son document propriétaire est INERTE. Un
+	   `<img src=x onerror=…>` venu du HTML d'un quiz partagé se chargeait dans
+	   un `<div>` détaché — et déclenchait son gestionnaire — alors qu'on ne
+	   voulait qu'en extraire du texte. */
+	const temp = document.createElement("template");
 	temp.innerHTML = html;
+	const racine = temp.content;
 	// Convert <br> to newlines before extracting text
-	temp.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
+	racine.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
 	// Convert block-level boundaries to newlines for readability
-	temp.querySelectorAll("p, div, li, tr, h1, h2, h3, h4, h5, h6").forEach(el => {
+	racine.querySelectorAll("p, div, li, tr, h1, h2, h3, h4, h5, h6").forEach(el => {
 		el.insertAdjacentText("beforeend", "\n");
 	});
-	return temp.textContent || "";
+	return racine.textContent || "";
 }
 
 /* ════════════════════════════════════════════════════════

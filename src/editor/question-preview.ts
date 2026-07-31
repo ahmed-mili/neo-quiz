@@ -4,6 +4,7 @@ import { md2html, _setIcon } from "./utils";
 import type { DraftQuestion } from "./utils";
 import { mathifyElement } from "../engine/mathjax";
 import { markSlots, fillSlots } from "../engine/cloze";
+import { sanitizeQuizHtml } from "../engine/sanitizer";
 
 /* ══════════════════════════════════════════════════════════
    QUESTION PREVIEW — la question telle que l'apprenant la verra
@@ -39,22 +40,52 @@ export interface QuizPreviewOptions {
 	onHint?: (hint: string) => void;
 }
 
-/** Résout les images `![[...]]` du vault dans un HTML déjà rendu. */
+/**
+ * Résout les images `![[...]]` du vault dans un HTML déjà rendu, puis passe le
+ * tout par la liste blanche du moteur.
+ *
+ * `<template>` et non `<div>` : son document propriétaire est INERTE, donc un
+ * `<img src=x onerror=…>` glissé dans le `passageHtml` d'un quiz partagé n'y
+ * charge rien et n'exécute rien. Un `<div>` détaché, lui, déclenche quand
+ * même le gestionnaire (standard HTML) — l'aperçu de l'éditeur exécutait donc
+ * le HTML d'un quiz avant même que l'auteur ne l'ait relu.
+ *
+ * L'assainissement vient APRÈS la résolution, pas avant : à ce stade les `src`
+ * sont des `app://…` que la liste blanche accepte, alors qu'un nom de fichier
+ * nu (`schema.png`, ce que `md2html` écrit) en serait retiré — et l'aperçu
+ * n'aurait plus d'images du tout.
+ */
 export function resolveImagesInHtml(app: App, html: string): string {
 	if (!html) return html;
-	const temp = document.createElement("div");
-	temp.innerHTML = html;
-	temp.querySelectorAll<HTMLImageElement>("img.qb-md-img").forEach(img => {
-		const fileName = img.getAttribute("src");
-		if (!fileName) return;
+	const tpl = document.createElement("template");
+	tpl.innerHTML = html;
+	tpl.content.querySelectorAll<HTMLImageElement>("img.qb-md-img").forEach(img => {
+		const spec = img.getAttribute("src");
+		if (!spec) return;
+		// `![[fichier|300|légende]]` : seule la première part est un chemin.
+		const lien = spec.split("|")[0].trim();
+		if (!lien) return;
+
+		/* `getFirstLinkpathDest` D'ABORD, comme le moteur (engine/sanitizer.ts
+		   resolveObsidianEmbedFile) : c'est la résolution d'Obsidian lui-même,
+		   qui retrouve une pièce jointe où qu'elle soit dans le vault. Le
+		   calcul par `attachmentFolderPath` ci-dessous ne marche que si la
+		   pièce jointe est EXACTEMENT dans le dossier configuré — d'où des
+		   aperçus sans image alors que le quiz, lui, les affichait. */
+		const dest = app.metadataCache?.getFirstLinkpathDest?.(lien, "");
+		if (dest) {
+			img.setAttribute("src", app.vault.getResourcePath(dest));
+			return;
+		}
+
 		const attachFolder = (app.vault as unknown as VaultWithGetConfig).getConfig("attachmentFolderPath") || "";
 		const folderPath = attachFolder.replace("${file}", "").replace(/\/$/, "") || ".";
-		const filePath = folderPath === "." ? fileName : `${folderPath}/${fileName}`;
+		const filePath = folderPath === "." ? lien : `${folderPath}/${lien}`;
 		if (app.vault.getAbstractFileByPath(filePath)) {
-			img.src = app.vault.adapter.getResourcePath(filePath);
+			img.setAttribute("src", app.vault.adapter.getResourcePath(filePath));
 		}
 	});
-	return temp.innerHTML;
+	return sanitizeQuizHtml(tpl.innerHTML);
 }
 
 /** Écrit un libellé COURT en rendant son markdown inline (gras, code…) —

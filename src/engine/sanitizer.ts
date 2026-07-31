@@ -178,205 +178,212 @@ export function stripInlineMarkdown(raw: unknown): string {
 		.replace(/\s+/g, " ").trim();
 }
 
-export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
-	const QUIZ_HTML_ALLOWED_TAGS = new Set([
-		"a", "b", "blockquote", "br", "center", "code", "details", "div", "em", "font",
-		"h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "kbd", "li", "mark",
-		"ol", "p", "pre", "samp", "small", "span", "strong", "sub", "summary", "sup",
-		"table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul"
-	]);
+/* ── Liste blanche du HTML PRÉ-RENDU ──────────────────────────────────
+   Ce bloc ne dépend d'aucun contexte : il vit au niveau du MODULE pour que
+   l'aperçu de l'éditeur (editor/question-preview.ts) puisse l'appeler lui
+   aussi. Il n'y a qu'une liste blanche dans ce plugin, et deux surfaces qui
+   affichent le même `explainHtml` ne peuvent pas en avoir chacune la sienne. */
 
-	const QUIZ_HTML_DROP_TAGS = new Set([
-		"script", "style", "iframe", "object", "embed", "link", "meta"
-	]);
+const QUIZ_HTML_ALLOWED_TAGS = new Set([
+	"a", "b", "blockquote", "br", "center", "code", "details", "div", "em", "font",
+	"h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "kbd", "li", "mark",
+	"ol", "p", "pre", "samp", "small", "span", "strong", "sub", "summary", "sup",
+	"table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul"
+]);
 
-	const QUIZ_HTML_GLOBAL_ATTRS = new Set([
-		"class", "title", "role", "aria-label", "aria-hidden", "tabindex"
-	]);
+const QUIZ_HTML_DROP_TAGS = new Set([
+	"script", "style", "iframe", "object", "embed", "link", "meta"
+]);
 
-	/* `style` n'est pas jeté en bloc : il est RÉDUIT. Retirer l'attribut entier
-	   aurait décoloré 594 fragments des quiz d'Ahmed — mesuré sur ses deux
-	   vaults, où `color:` est d'ailleurs la SEULE propriété employée, sur
-	   `<span>` et `<p>`. Les autres entrées de cette liste sont ses voisines
-	   évidentes, admises d'avance pour ne pas rouvrir le sujet à la première
-	   mise en forme un peu riche.
-	   Ce qui reste dehors est ce qui sert à ATTAQUER : `url(…)` (requête
-	   sortante, donc traçage), `expression(…)` et `-moz-binding` (du code),
-	   `position`/`z-index` (recouvrir l'interface d'Obsidian). */
-	const QUIZ_STYLE_ALLOWED_PROPS = new Set([
-		"color", "background-color", "font-weight", "font-style",
-		"text-align", "text-decoration"
-	]);
-	/* Une valeur ne peut être qu'un mot, un nombre, un `#hex` ou une fonction
-	   de couleur. Ni guillemet, ni antislash, ni parenthèse ouvrante autre que
-	   celles-là — un `url(` ne peut donc pas se former. */
-	const QUIZ_STYLE_SAFE_VALUE = /^(?:rgba?\(|hsla?\(|[\w %.,#-]|\))+$/i;
+const QUIZ_HTML_GLOBAL_ATTRS = new Set([
+	"class", "title", "role", "aria-label", "aria-hidden", "tabindex"
+]);
 
-	/** `style` réduit à ses déclarations sûres ; chaîne vide s'il n'en reste
-	    aucune — l'attribut est alors retiré. */
-	function sanitizeStyleAttr(value: unknown): string {
-		return String(value ?? "")
-			.split(";")
-			.map(decl => {
-				const sep = decl.indexOf(":");
-				if (sep < 0) return "";
-				const prop = decl.slice(0, sep).trim().toLowerCase();
-				const val = decl.slice(sep + 1).trim();
-				if (!QUIZ_STYLE_ALLOWED_PROPS.has(prop)) return "";
-				if (!val || !QUIZ_STYLE_SAFE_VALUE.test(val)) return "";
-				return prop + ": " + val;
-			})
-			.filter(Boolean)
-			.join("; ");
+/* `style` n'est pas jeté en bloc : il est RÉDUIT. Retirer l'attribut entier
+   aurait décoloré 594 fragments des quiz d'Ahmed — mesuré sur ses deux
+   vaults, où `color:` est d'ailleurs la SEULE propriété employée, sur
+   `<span>` et `<p>`. Les autres entrées de cette liste sont ses voisines
+   évidentes, admises d'avance pour ne pas rouvrir le sujet à la première
+   mise en forme un peu riche.
+   Ce qui reste dehors est ce qui sert à ATTAQUER : `url(…)` (requête
+   sortante, donc traçage), `expression(…)` et `-moz-binding` (du code),
+   `position`/`z-index` (recouvrir l'interface d'Obsidian). */
+const QUIZ_STYLE_ALLOWED_PROPS = new Set([
+	"color", "background-color", "font-weight", "font-style",
+	"text-align", "text-decoration"
+]);
+/* Une valeur ne peut être qu'un mot, un nombre, un `#hex` ou une fonction
+   de couleur. Ni guillemet, ni antislash, ni parenthèse ouvrante autre que
+   celles-là — un `url(` ne peut donc pas se former. */
+const QUIZ_STYLE_SAFE_VALUE = /^(?:rgba?\(|hsla?\(|[\w %.,#-]|\))+$/i;
+
+/** `style` réduit à ses déclarations sûres ; chaîne vide s'il n'en reste
+    aucune — l'attribut est alors retiré. */
+function sanitizeStyleAttr(value: unknown): string {
+	return String(value ?? "")
+		.split(";")
+		.map(decl => {
+			const sep = decl.indexOf(":");
+			if (sep < 0) return "";
+			const prop = decl.slice(0, sep).trim().toLowerCase();
+			const val = decl.slice(sep + 1).trim();
+			if (!QUIZ_STYLE_ALLOWED_PROPS.has(prop)) return "";
+			if (!val || !QUIZ_STYLE_SAFE_VALUE.test(val)) return "";
+			return prop + ": " + val;
+		})
+		.filter(Boolean)
+		.join("; ");
+}
+
+const QUIZ_HTML_TAG_ATTRS: Record<string, Set<string>> = {
+	a: new Set(["href", "target", "rel"]),
+	img: new Set(["src", "alt", "width", "height"]),
+	td: new Set(["colspan", "rowspan"]),
+	th: new Set(["colspan", "rowspan"]),
+	font: new Set(["color"])
+};
+
+function escapeHtmlAttr(value: unknown): string {
+	return String(value ?? "")
+		.replace(/\&/g, "\&amp;")
+		.replace(/"/g, "\&quot;")
+		.replace(/'/g, "\&#39;")
+		.replace(/\</g, "\&lt;")
+		.replace(/\>/g, "\&gt;");
+}
+
+function unescapeHtmlText(value: unknown): string {
+	return String(value ?? "")
+		.replace(/\&lt;/g, "<")
+		.replace(/\&gt;/g, ">")
+		.replace(/\&quot;/g, '"')
+		.replace(/\&#39;/g, "'")
+		.replace(/\&amp;/g, "&");
+}
+
+function isSafeQuizUrl(value: unknown, { image = false }: { image?: boolean } = {}): boolean {
+	const raw = String(value ?? "").trim();
+	if (!raw) return false;
+
+	if (
+		raw.startsWith("#") ||
+		raw.startsWith("/") ||
+		raw.startsWith("./") ||
+		raw.startsWith("../")
+	) {
+		return true;
 	}
 
-	const QUIZ_HTML_TAG_ATTRS: Record<string, Set<string>> = {
-		a: new Set(["href", "target", "rel"]),
-		img: new Set(["src", "alt", "width", "height"]),
-		td: new Set(["colspan", "rowspan"]),
-		th: new Set(["colspan", "rowspan"]),
-		font: new Set(["color"])
+	if (/^(https?:|mailto:|tel:|obsidian:|app:|file:|blob:)/i.test(raw)) {
+		return true;
+	}
+
+	if (image && /^data:image\//i.test(raw)) {
+		return true;
+	}
+
+	return false;
+}
+
+function unwrapQuizHtmlElement(node: ChildNode | null | undefined): void {
+	const parent = node?.parentNode ?? null;
+	if (!parent || !node) return;
+
+	let first: ChildNode | null;
+	while ((first = node.firstChild)) {
+		parent.insertBefore(first, node);
+	}
+	parent.removeChild(node);
+}
+
+export function sanitizeQuizHtml(html: unknown): string {
+	const tpl = document.createElement("template");
+	tpl.innerHTML = String(html ?? "");
+
+	const walk = (node: ChildNode | null | undefined): void => {
+		if (!node) return;
+
+		if (node.nodeType === Node.COMMENT_NODE) {
+			node.remove();
+			return;
+		}
+
+		if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+		// Narrowing sûr : nodeType === ELEMENT_NODE garantit un Element (TS ne
+		// corrèle pas nodeType et le type ChildNode automatiquement).
+		const el = node as Element;
+
+		const tag = el.tagName.toLowerCase();
+
+		if (QUIZ_HTML_DROP_TAGS.has(tag)) {
+			el.remove();
+			return;
+		}
+
+		if (!QUIZ_HTML_ALLOWED_TAGS.has(tag)) {
+			unwrapQuizHtmlElement(el);
+			return;
+		}
+
+		const allowedAttrs = QUIZ_HTML_TAG_ATTRS[tag] || new Set<string>();
+
+		Array.from(el.attributes).forEach(attr => {
+			const name = attr.name.toLowerCase();
+			const value = attr.value;
+
+			if (name.startsWith("on")) {
+				el.removeAttribute(attr.name);
+				return;
+			}
+
+			if (name === "style") {
+				const reduit = sanitizeStyleAttr(value);
+				if (reduit) el.setAttribute("style", reduit);
+				else el.removeAttribute(attr.name);
+				return;
+			}
+
+			if (!QUIZ_HTML_GLOBAL_ATTRS.has(name) && !allowedAttrs.has(name)) {
+				el.removeAttribute(attr.name);
+				return;
+			}
+
+			if (
+				(name === "href" || name === "src") &&
+				!isSafeQuizUrl(value, { image: name === "src" && tag === "img" })
+			) {
+				el.removeAttribute(attr.name);
+				return;
+			}
+
+			if (
+				(name === "width" || name === "height" || name === "colspan" || name === "rowspan") &&
+				!/^\d{1,4}$/.test(String(value).trim())
+			) {
+				el.removeAttribute(attr.name);
+				return;
+			}
+
+			if (name === "target" && !/^_(self|blank)$/.test(String(value).trim())) {
+				el.removeAttribute(attr.name);
+				return;
+			}
+		});
+
+		if (tag === "a" && el.getAttribute("target") === "_blank") {
+			el.setAttribute("rel", "noopener noreferrer");
+		}
+
+		Array.from(el.childNodes).forEach(walk);
 	};
 
-	function escapeHtmlAttr(value: unknown): string {
-		return String(value ?? "")
-			.replace(/\&/g, "\&amp;")
-			.replace(/"/g, "\&quot;")
-			.replace(/'/g, "\&#39;")
-			.replace(/\</g, "\&lt;")
-			.replace(/\>/g, "\&gt;");
-	}
+	Array.from(tpl.content.childNodes).forEach(walk);
+	return tpl.innerHTML;
+}
 
-	function unescapeHtmlText(value: unknown): string {
-		return String(value ?? "")
-			.replace(/\&lt;/g, "<")
-			.replace(/\&gt;/g, ">")
-			.replace(/\&quot;/g, '"')
-			.replace(/\&#39;/g, "'")
-			.replace(/\&amp;/g, "&");
-	}
 
-	function isSafeQuizUrl(value: unknown, { image = false }: { image?: boolean } = {}): boolean {
-		const raw = String(value ?? "").trim();
-		if (!raw) return false;
-
-		if (
-			raw.startsWith("#") ||
-			raw.startsWith("/") ||
-			raw.startsWith("./") ||
-			raw.startsWith("../")
-		) {
-			return true;
-		}
-
-		if (/^(https?:|mailto:|tel:|obsidian:|app:|file:|blob:)/i.test(raw)) {
-			return true;
-		}
-
-		if (image && /^data:image\//i.test(raw)) {
-			return true;
-		}
-
-		return false;
-	}
-
-	function unwrapQuizHtmlElement(node: ChildNode | null | undefined): void {
-		const parent = node?.parentNode ?? null;
-		if (!parent || !node) return;
-
-		let first: ChildNode | null;
-		while ((first = node.firstChild)) {
-			parent.insertBefore(first, node);
-		}
-		parent.removeChild(node);
-	}
-
-	function sanitizeQuizHtml(html: unknown): string {
-		const tpl = document.createElement("template");
-		tpl.innerHTML = String(html ?? "");
-
-		const walk = (node: ChildNode | null | undefined): void => {
-			if (!node) return;
-
-			if (node.nodeType === Node.COMMENT_NODE) {
-				node.remove();
-				return;
-			}
-
-			if (node.nodeType !== Node.ELEMENT_NODE) return;
-
-			// Narrowing sûr : nodeType === ELEMENT_NODE garantit un Element (TS ne
-			// corrèle pas nodeType et le type ChildNode automatiquement).
-			const el = node as Element;
-
-			const tag = el.tagName.toLowerCase();
-
-			if (QUIZ_HTML_DROP_TAGS.has(tag)) {
-				el.remove();
-				return;
-			}
-
-			if (!QUIZ_HTML_ALLOWED_TAGS.has(tag)) {
-				unwrapQuizHtmlElement(el);
-				return;
-			}
-
-			const allowedAttrs = QUIZ_HTML_TAG_ATTRS[tag] || new Set<string>();
-
-			Array.from(el.attributes).forEach(attr => {
-				const name = attr.name.toLowerCase();
-				const value = attr.value;
-
-				if (name.startsWith("on")) {
-					el.removeAttribute(attr.name);
-					return;
-				}
-
-				if (name === "style") {
-					const reduit = sanitizeStyleAttr(value);
-					if (reduit) el.setAttribute("style", reduit);
-					else el.removeAttribute(attr.name);
-					return;
-				}
-
-				if (!QUIZ_HTML_GLOBAL_ATTRS.has(name) && !allowedAttrs.has(name)) {
-					el.removeAttribute(attr.name);
-					return;
-				}
-
-				if (
-					(name === "href" || name === "src") &&
-					!isSafeQuizUrl(value, { image: name === "src" && tag === "img" })
-				) {
-					el.removeAttribute(attr.name);
-					return;
-				}
-
-				if (
-					(name === "width" || name === "height" || name === "colspan" || name === "rowspan") &&
-					!/^\d{1,4}$/.test(String(value).trim())
-				) {
-					el.removeAttribute(attr.name);
-					return;
-				}
-
-				if (name === "target" && !/^_(self|blank)$/.test(String(value).trim())) {
-					el.removeAttribute(attr.name);
-					return;
-				}
-			});
-
-			if (tag === "a" && el.getAttribute("target") === "_blank") {
-				el.setAttribute("rel", "noopener noreferrer");
-			}
-
-			Array.from(el.childNodes).forEach(walk);
-		};
-
-		Array.from(tpl.content.childNodes).forEach(walk);
-		return tpl.innerHTML;
-	}
-
+export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 	function renderInlineQuizHtml(raw: unknown): string {
 		return restoreAllowedInlineTags(
 			escapeHtmlText(String(raw ?? "")).replace(/\n/g, "<br>")

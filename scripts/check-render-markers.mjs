@@ -85,7 +85,11 @@ function retirerLitteraux(html) {
    n'en laisse jamais passer un pareil. */
 function ouvrante(delim) {
 	const d = delim.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	return new RegExp("(?:^|[^\\p{L}\\p{N}\\\\" + d + "])" + d + "(?=\\S)[^\\n]*?" + d, "u");
+	/* Les DEUX flancs, comme le moteur : contenu collé au délimiteur ouvrant
+	   (`(?=\S)`) ET au fermant (`\S` juste avant). Sans le flanc droit,
+	   « Motifs *foo * » — que le rendu laisse intact, à raison — était signalé
+	   (revue codex 2026-07-31). */
+	return new RegExp("(?:^|[^\\p{L}\\p{N}\\\\" + d + "])" + d + "(?=\\S)[^\\n]*?\\S" + d, "u");
 }
 
 const MOTIFS = [
@@ -93,7 +97,14 @@ const MOTIFS = [
 	["code inline", ouvrante("`")],
 	["barré", ouvrante("~~")],
 	["titre", /(^|<br>)\s*#{1,6}\s+\S/],
-	["gras souligné", /(^|[^\p{L}\p{N}\\_])__(?=\S)[\s\S]*?\S__/u],
+	/* L'emphase à UNDERSCORE n'est volontairement pas rendue par le moteur :
+	   dans un quiz technique, `snake_case`, `TTL_{reçu}` et `file_name` sont
+	   partout, et la règle de CommonMark qui les épargne demande une contrainte
+	   de flanc droit que le reste de la grammaire n'a pas. Mesuré avant de
+	   trancher : ZÉRO paire d'underscores dans les 8568 champs des deux vaults.
+	   Le motif reste ici pour que la décision se rouvre d'elle-même le jour où
+	   un quiz en contiendra vraiment. */
+	["emphase soulignée", /(^|[^\p{L}\p{N}\\_])__?(?=\S)[^\n]*?\S__?(?![\p{L}\p{N}])/u],
 	["lien", /\[[^\]\n]+\]\([^)\n]+\)/],
 ];
 
@@ -129,6 +140,9 @@ await withSrcModule(["src/engine/sanitizer.ts", "src/quiz-utils.ts"], (sanitizer
 		["title", null], ["prompt", "promptHtml"], ["passage", "passageHtml"],
 		["passageTitle", null], ["hint", null], ["explain", "explainHtml"],
 		["learn", "learnHtml"], ["cloze", null], ["answer", null], ["placeholder", null],
+		// Préfixes de terminal : eux aussi s'affichent, eux aussi ont laissé
+		// passer du markdown (revue codex 2026-07-31).
+		["commandPrefix", null], ["terminalPrefix", null], ["promptPrefix", null],
 	];
 	const LISTES = [
 		["options", "optionHtml"], ["possibilities", null], ["orderingItems", null],

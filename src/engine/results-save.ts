@@ -65,12 +65,19 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 		return String(value ?? "").replace(/\s+/g, " ").trim();
 	}
 
+	/* Le HTML d'un quiz n'est pas forcément le nôtre : un quiz PARTAGÉ arrive
+	   avec les `explainHtml` de son auteur. `div.innerHTML = …` construisait un
+	   arbre VIVANT dans le document courant — un `<img src=x onerror=…>` s'y
+	   charge et déclenche son gestionnaire, même hors de l'arbre affiché
+	   (standard HTML). `<template>` a un « document propriétaire inerte » :
+	   les ressources n'y sont pas chargées, les scripts pas exécutés. On n'y
+	   lit que du texte, ce qui est tout ce qu'on voulait. */
 	function htmlToText(html: unknown): string {
 		if (!html) return "";
 		if (typeof document !== "undefined" && document.createElement) {
-			const el = document.createElement("div");
-			el.innerHTML = String(html);
-			return normalizeSpace(el.textContent || "");
+			const tpl = document.createElement("template");
+			tpl.innerHTML = String(html);
+			return normalizeSpace(tpl.content.textContent || "");
 		}
 		return normalizeSpace(String(html).replace(/<[^>]*>/g, " "));
 	}

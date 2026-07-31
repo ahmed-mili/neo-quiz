@@ -142,7 +142,11 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 	function optionContentHtml(q: QcmQuestion | MultiSelectQuestion, oi: number): string {
 		let optionContentHtml = "";
 		if (q.optionHtml?.[oi]) {
-			optionContentHtml = q.optionHtml[oi];
+			/* Seul champ `*Html` qui ne passe pas par `replaceObsidianEmbedsInHtml`
+			   (il a sa propre résolution de `src`) : il lui faut donc son propre
+			   passage au filtre. Une option d'un quiz PARTAGÉ arrive avec le HTML
+			   de son auteur, et finit dans le DOM par `innerHTML`. */
+			optionContentHtml = ctx.sanitize.sanitizeQuizHtml(q.optionHtml[oi]);
 			if (typeof ctx.app?.vault?.adapter?.getResourcePath === "function") {
 				optionContentHtml = optionContentHtml.replace(/src="([^"]+)"/g, (match: string, src: string) => {
 					if (src.startsWith("http") || src.startsWith("data:") || src.startsWith("app://")) {

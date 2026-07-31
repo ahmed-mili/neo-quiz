@@ -87,6 +87,11 @@ const CAS_NUS = [
 	["chevrons rendus au caractère", "si a < b alors", "si a < b alors"],
 	["esperluette non doublée", "Tom & Jerry", "Tom & Jerry"],
 	["chaîne vide", "", ""],
+	// Une balise inline ÉCRITE à la main : le rendu en fait du gras, le texte
+	// nu doit en faire du texte — et non montrer ses chevrons.
+	["balise littérale retirée", "<strong>x</strong> y", "x y"],
+	["saut de ligne devient une espace", "a<br>b", "a b"],
+	["balise NON autorisée reste visible", "<img src=x> y", "<img src=x> y"],
 ];
 
 await withSrcModule("src/engine/sanitizer.ts", ({ renderInlineText, stripInlineMarkdown }) => {

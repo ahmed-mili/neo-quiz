@@ -149,7 +149,12 @@ export function createTerminalHandlers(ctx: EngineCtx): TerminalHandlers {
 			}
 		}
 
-		return `<span class="quiz-command-prefix">${ctx.escapeHtmlText(promptPrefix)}</span>`;
+		/* `renderInlineText` et non `escapeHtmlText` : c'est un `<span>`, donc le
+		   markdown y a un sens. Un préfixe `**PS**>` s'affichait avec ses
+		   étoiles. La forme `user@host:~$` ci-dessus garde son échappement nu —
+		   elle est découpée en segments colorés, et le markdown n'a rien à y
+		   faire. */
+		return `<span class="quiz-command-prefix">${ctx.sanitize.renderInlineText(promptPrefix)}</span>`;
 	}
 
 	function getTextMaxLength(q: TextQuestion): number | null {

@@ -150,15 +150,32 @@ export function renderInlineText(raw: unknown): string {
     étoiles : du markdown non rendu, exactement ce qu'on chasse ailleurs.
 
     Mêmes règles de flanc que `renderInlineText` — c'est volontairement la
-    même grammaire, sur le même texte, avec une sortie différente. */
+    même grammaire, sur le même texte, avec une sortie différente.
+
+    ⚠ La sortie est du TEXTE, pas du HTML : les entités y sont décodées, donc
+    un `<img …>` que l'utilisateur a écrit littéralement en ressort tel quel.
+    Elle ne doit JAMAIS être interpolée dans du HTML sans être ré-échappée —
+    `escapeHtmlAttr`, `setAttribute` ou `textContent`, comme le font ses
+    appelants. Pour du HTML, c'est `renderInlineText` qu'il faut. */
 export function stripInlineMarkdown(raw: unknown): string {
-	const html = inlineMarkdown(escapeHtmlText(raw));
+	/* `restoreAllowedInlineTags` AUSSI ici, comme au rendu : sans lui, un
+	   `<strong>x</strong>` écrit à la main restait échappé pendant le retrait
+	   des balises, puis ressortait visible au décodage des entités — le
+	   placeholder affichait ses chevrons là où le rendu, lui, affiche « x »
+	   en gras (revue codex 2026-07-31). */
+	const html = inlineMarkdown(restoreAllowedInlineTags(escapeHtmlText(raw)));
 	return html
-		.replace(/<\/?(?:strong|em|del|code)>/g, "")
+		// Un `<br>` sépare deux mots : le remplacer par RIEN les collerait.
+		.replace(/<br\s*\/?>/gi, " ")
+		// Toute balise restante vient de nous (produite ci-dessus ou restaurée
+		// depuis la liste blanche) : ce qui venait de l'utilisateur est encore
+		// échappé à ce stade, et ne sera décodé qu'après.
+		.replace(/<[^>]*>/g, "")
 		.replace(/\&lt;/g, "<").replace(/\&gt;/g, ">")
 		.replace(/\&quot;/g, "\"").replace(/\&#39;/g, "'")
 		// `&amp;` en DERNIER : le faire avant ressusciterait « &amp;lt; » en « < ».
-		.replace(/\&amp;/g, "&");
+		.replace(/\&amp;/g, "&")
+		.replace(/\s+/g, " ").trim();
 }
 
 export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
@@ -176,6 +193,42 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 	const QUIZ_HTML_GLOBAL_ATTRS = new Set([
 		"class", "title", "role", "aria-label", "aria-hidden", "tabindex"
 	]);
+
+	/* `style` n'est pas jeté en bloc : il est RÉDUIT. Retirer l'attribut entier
+	   aurait décoloré 594 fragments des quiz d'Ahmed — mesuré sur ses deux
+	   vaults, où `color:` est d'ailleurs la SEULE propriété employée, sur
+	   `<span>` et `<p>`. Les autres entrées de cette liste sont ses voisines
+	   évidentes, admises d'avance pour ne pas rouvrir le sujet à la première
+	   mise en forme un peu riche.
+	   Ce qui reste dehors est ce qui sert à ATTAQUER : `url(…)` (requête
+	   sortante, donc traçage), `expression(…)` et `-moz-binding` (du code),
+	   `position`/`z-index` (recouvrir l'interface d'Obsidian). */
+	const QUIZ_STYLE_ALLOWED_PROPS = new Set([
+		"color", "background-color", "font-weight", "font-style",
+		"text-align", "text-decoration"
+	]);
+	/* Une valeur ne peut être qu'un mot, un nombre, un `#hex` ou une fonction
+	   de couleur. Ni guillemet, ni antislash, ni parenthèse ouvrante autre que
+	   celles-là — un `url(` ne peut donc pas se former. */
+	const QUIZ_STYLE_SAFE_VALUE = /^(?:rgba?\(|hsla?\(|[\w %.,#-]|\))+$/i;
+
+	/** `style` réduit à ses déclarations sûres ; chaîne vide s'il n'en reste
+	    aucune — l'attribut est alors retiré. */
+	function sanitizeStyleAttr(value: unknown): string {
+		return String(value ?? "")
+			.split(";")
+			.map(decl => {
+				const sep = decl.indexOf(":");
+				if (sep < 0) return "";
+				const prop = decl.slice(0, sep).trim().toLowerCase();
+				const val = decl.slice(sep + 1).trim();
+				if (!QUIZ_STYLE_ALLOWED_PROPS.has(prop)) return "";
+				if (!val || !QUIZ_STYLE_SAFE_VALUE.test(val)) return "";
+				return prop + ": " + val;
+			})
+			.filter(Boolean)
+			.join("; ");
+	}
 
 	const QUIZ_HTML_TAG_ATTRS: Record<string, Set<string>> = {
 		a: new Set(["href", "target", "rel"]),
@@ -274,8 +327,15 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 				const name = attr.name.toLowerCase();
 				const value = attr.value;
 
-				if (name.startsWith("on") || name === "style") {
+				if (name.startsWith("on")) {
 					el.removeAttribute(attr.name);
+					return;
+				}
+
+				if (name === "style") {
+					const reduit = sanitizeStyleAttr(value);
+					if (reduit) el.setAttribute("style", reduit);
+					else el.removeAttribute(attr.name);
 					return;
 				}
 
@@ -430,11 +490,28 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 		return renderTextWithEmbeds(raw, { wrapClass, imgClass });
 	}
 
+	/**
+	 * Le chemin d'affichage des champs `*Html` (énoncé, explication, leçon,
+	 * support). C'est LE point de passage de tout HTML pré-rendu vers le DOM —
+	 * d'où le passage par `sanitizeQuizHtml` ici, et non chez chacun des six
+	 * appelants qui l'oubliaient tous (engine/cards.ts, passage.ts,
+	 * text-only.ts).
+	 *
+	 * Ce HTML n'est pas forcément celui d'Ahmed : un quiz PARTAGÉ arrive avec
+	 * les `explainHtml` de son auteur, et il est inséré par `innerHTML`, hors
+	 * de portée du filtre d'Obsidian (le bloc est traité par ce plugin, pas par
+	 * le rendu markdown). Sans cette passe, un `<img src=x onerror=…>` glissé
+	 * dans une explication s'exécutait avec les droits d'Obsidian.
+	 *
+	 * L'ordre compte : on assainit AVANT de remplacer les `![[…]]`, pour que
+	 * les `<img>` que cette fonction fabrique elle-même — les seuls en qui on
+	 * ait confiance — ne repassent pas devant le filtre.
+	 */
 	function replaceObsidianEmbedsInHtml(html: unknown, { wrapClass = "quiz-explain-embed-wrap", imgClass = "quiz-explain-embed" }: EmbedClassOptions = {}): string {
 		// NE PAS faire unescapeHtmlText ici car cela casserait l'affichage
 		// des entités HTML comme &gt; qui doivent rester comme &gt; pour être
 		// affichées comme > par le navigateur, pas interprétées comme des balises
-		const content = String(html ?? "");
+		const content = sanitizeQuizHtml(html);
 		return content.replace(/!\[\[([^\]]+)\]\]/g, (_: string, spec: string) => buildEmbedImgHtml(spec, { wrapClass, imgClass }));
 	}
 

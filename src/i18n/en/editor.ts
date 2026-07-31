@@ -5,6 +5,7 @@
 export const EN_EDITOR = {
 	/* ── Vue & ossature (editor.ts, editor/ui.ts) ── */
 	"editor.empty.hint": "Open a note that contains a quiz-blocks block, then run « Open quiz from the current note ».",
+	"editor.answer.noneCorrect": "No correct answer — nobody can get this question right.",
 	"editor.learn.section": "Lesson",
 	"editor.learn.help": "Shown before the question in Learn mode.",
 	"editor.learn.placeholder": "What the learner should read first…",

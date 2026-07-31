@@ -334,9 +334,21 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 
 		if (qType === "single" || qType === "multi") {
 			const isMulti = qType === "multi";
+			/* Une question à choix MULTIPLES sans aucune bonne réponse ne peut
+			   être réussie par personne, et rien ne le disait : elle
+			   s'enregistrait comme les autres (revue codex 2026-07-31). Même
+			   avertissement que le texte à trous sans trou. */
+			const alerteMulti = isMulti ? box.createDiv({ cls: "qb-field-help" }) : null;
+			const majAlerte = (): void => {
+				if (!alerteMulti) return;
+				const aucune = (q.correctIndices || []).length === 0;
+				alerteMulti.toggleClass("qb-field-help--warn", aucune);
+				alerteMulti.setText(aucune ? t("editor.answer.noneCorrect") : "");
+			};
 			const cardsContainer = box.createDiv({ cls: "qb-answer-cards" });
 
 			const renderCards = () => {
+				majAlerte();
 				cardsContainer.empty();
 
 				q.options!.forEach((o, i) => {

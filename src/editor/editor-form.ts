@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import { reserveFreePath } from "../unique-path";
 import type { EditorCtx } from "../types/editor-ctx";
 import type { DraftQuestion } from "./utils";
 
@@ -36,13 +37,28 @@ async function nomImageLibre(vault: EditorVault, ext: string): Promise<{ fileNam
 		String(now.getHours()).padStart(2, "0") +
 		String(now.getMinutes()).padStart(2, "0") +
 		String(now.getSeconds()).padStart(2, "0");
-	const dossier = vault.getConfig("attachmentFolderPath") || "";
+	/* Le dossier de pièces jointes tel qu'Obsidian l'écrit : `/` et `./`
+	   désignent la racine du vault, et `${file}` est un GABARIT (le dossier de
+	   la note) qu'on ne peut pas résoudre ici — dans ces trois cas on écrit à
+	   la racine plutôt que de fabriquer un chemin littéral absurde comme
+	   `.//Pasted image….png` ou `${file}/…` (revue codex 2026-07-31). */
+	const brut = (vault.getConfig("attachmentFolderPath") || "").trim();
+	const dossier = (!brut || brut === "/" || brut === "." || brut === "./" || brut.includes("${file}"))
+		? "" : brut.replace(/\/+$/, "");
 	const chemin = (nom: string): string => dossier ? dossier + "/" + nom : nom;
-	let fileName = `Pasted image ${ts}.${ext}`;
-	for (let n = 2; await vault.adapter.exists(chemin(fileName)); n++) {
-		fileName = `Pasted image ${ts}-${n}.${ext}`;
+	/* La réservation ferme la course entre deux collages rapprochés : deux
+	   chaînes `await` franchissaient le test d'existence avant que l'une n'ait
+	   écrit, et la seconde image effaçait la première. */
+	let complet: string;
+	try {
+		complet = await reserveFreePath(chemin(`Pasted image ${ts}`), `.${ext}`,
+			(c) => vault.adapter.exists(c));
+	} catch {
+		// Dossier illisible, ou cinquante noms pris : on ne devine pas, on
+		// laisse l'appelant afficher son erreur plutôt qu'écraser un fichier.
+		throw new Error("Impossible de trouver un nom libre pour l'image collée");
 	}
-	return { fileName, filePath: chemin(fileName) };
+	return { fileName: complet.slice(dossier ? dossier.length + 1 : 0), filePath: complet };
 }
 
 export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {

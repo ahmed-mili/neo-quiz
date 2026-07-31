@@ -1,6 +1,7 @@
 import { Notice, Platform, TFile, normalizePath, setIcon, setTooltip } from "obsidian";
 import { QbdModal } from "../modal-base";
 import { t } from "../i18n";
+import { reserveFreePath } from "../unique-path";
 import type { TransKey } from "../i18n";
 import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { ModuleGroup } from "./quiz-modules";
@@ -107,16 +108,14 @@ async function saveShared(ctx: DashboardCtx, source: ShareSource): Promise<void>
 		const path = require("path") as typeof import("path");
 		const os = require("os") as typeof import("os");
 		const dossier = path.join(os.homedir(), "Downloads");
-		let dest = path.join(dossier, payload.fileName);
-		for (let n = 2; fs.existsSync(dest); n++) dest = path.join(dossier, `${base} (${n})${ext}`);
+		const dest = await reserveFreePath(path.join(dossier, base), ext,
+			async (c) => fs.existsSync(c), (n) => ` (${n})`);
 		fs.writeFileSync(dest, payload.bytes);
 		(require("electron") as { shell: { showItemInFolder(p: string): void } }).shell.showItemInFolder(dest);
 		new Notice(t("dashboard.quizzes.fileSaved", { path: dest }));
 	} else {
-		let dest = normalizePath(payload.fileName);
-		for (let n = 2; await ctx.app.vault.adapter.exists(dest); n++) {
-			dest = normalizePath(`${base} (${n})${ext}`);
-		}
+		const dest = await reserveFreePath(normalizePath(base), ext,
+			(c) => ctx.app.vault.adapter.exists(c), (n) => ` (${n})`);
 		await ctx.app.vault.adapter.writeBinary(dest, payload.bytes.buffer as ArrayBuffer);
 		new Notice(t("dashboard.quizzes.fileSaved", { path: dest }));
 	}

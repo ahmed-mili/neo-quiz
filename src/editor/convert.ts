@@ -275,6 +275,14 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	for (const key of Object.keys(q)) {
 		if (!knownKeys.has(key)) extraFields[key] = q[key];
 	}
+	/* LIMITE ASSUMÉE. Une forme imbriquée `ordering: { items, correctOrder,
+	   slotLabels }` est lue champ par champ puis réécrite sous la forme PLATE
+	   (`ordering: true` + `slots` + `possibilities` + `correctOrder`) : ses
+	   données survivent, mais un sous-champ que le plugin ne lit pas
+	   (`ordering.revealMode`…) est perdu. Le réémettre demanderait de maintenir
+	   une SECONDE forme d'export, et zéro quiz des deux vaults est concerné
+	   (audit-vaults). On préfère une seule forme d'écriture, connue et
+	   éprouvée, à un second chemin pour un cas que personne n'a. */
 	question._extraFields = extraFields;
 
 	return question;

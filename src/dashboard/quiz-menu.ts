@@ -139,8 +139,10 @@ async function deleteQuiz(ctx: DashboardCtx, quiz: QuizIndexEntry): Promise<void
 		new Notice(t("dashboard.detail.fileNotFound"));
 		return;
 	}
-	await deleteQuizCore(ctx, quiz, file);
-	new Notice(t("dashboard.quizzes.deleted"));
+	// La note peut ne plus contenir de bloc (supprimé ailleurs entre-temps) :
+	// annoncer « Quiz supprimé » serait alors faux.
+	if (await deleteQuizCore(ctx, quiz, file)) new Notice(t("dashboard.quizzes.deleted"));
+	else new Notice(t("dashboard.detail.noBlockInNote"));
 }
 
 /**
@@ -153,7 +155,7 @@ async function deleteQuiz(ctx: DashboardCtx, quiz: QuizIndexEntry): Promise<void
  * décision « il ne reste rien » se prend donc sur le contenu RÉEL au moment de
  * l'écriture, et la mise à la corbeille n'a lieu qu'après.
  */
-async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFile): Promise<void> {
+async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFile): Promise<boolean> {
 	let videApresRetrait = false;
 	let avaitUnBloc = false;
 	await ctx.app.vault.process(file, (content) => {
@@ -170,13 +172,14 @@ async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFi
 	   touche ni au fichier ni aux statistiques — supprimer l'enregistrement
 	   d'un quiz qu'on n'a pas supprimé effacerait un historique de révision
 	   pour rien (revue codex 2026-07-31). */
-	if (!avaitUnBloc) return;
+	if (!avaitUnBloc) return false;
 	if (videApresRetrait) {
 		// La note ne contenait que le quiz : corbeille (récupérable), jamais
 		// de suppression définitive.
 		await ctx.app.fileManager.trashFile(file);
 	}
 	ctx.statsStore?.deleteRecord(quiz.path);
+	return true;
 }
 
 /** Delete d'un MODULE entier : chaque quiz passe par le même cœur. */
@@ -188,7 +191,10 @@ async function deleteModuleQuizzes(ctx: DashboardCtx, group: ModuleGroup): Promi
 	let echecs = 0;
 	for (const q of group.quizzes) {
 		const file = ctx.app.vault.getAbstractFileByPath(q.path);
-		if (!(file instanceof TFile)) continue;
+		// Fichier introuvable : c'est un échec comme un autre, pas un silence.
+		// Le compter est la seule façon pour l'utilisateur de savoir que le
+		// module n'a pas été entièrement supprimé.
+		if (!(file instanceof TFile)) { echecs++; continue; }
 		try {
 			await deleteQuizCore(ctx, q, file);
 		} catch (e) {

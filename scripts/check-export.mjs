@@ -312,3 +312,43 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
 
 	r.done();
 });
+
+/* RESERVATION D'UN NOM DE FICHIER. Un `exists` puis un `write` laisse une
+   fenetre : deux collages d'image rapproches obtenaient le meme chemin et la
+   seconde image effacait la premiere. La reservation doit fermer cette course
+   DANS une fenetre — c'est la seule qui arrive en pratique. */
+await withSrcModule("src/unique-path.ts", async ({ reserveFreePath }) => {
+	const r = makeReporter("Reservation de nom");
+	const surDisque = new Set(["a/img.png"]);
+	// `exists` volontairement lent : c'est la fenetre par laquelle les deux
+	// chaines passaient avant que l'une n'ait ecrit.
+	const existe = async (c) => { await new Promise(res => setTimeout(res, 10)); return surDisque.has(c); };
+
+	const paire = await Promise.all([
+		reserveFreePath("a/img", ".png", existe),
+		reserveFreePath("a/img", ".png", existe),
+	]);
+	r.check("deux appels concurrents donnent deux noms", paire[0] !== paire[1], true);
+	r.check("le nom deja pris sur le disque est evite",
+		paire.includes("a/img.png"), false);
+
+	const trio = await Promise.all([
+		reserveFreePath("a/img", ".png", existe),
+		reserveFreePath("a/img", ".png", existe),
+		reserveFreePath("a/img", ".png", existe),
+	]);
+	r.check("trois appels concurrents, trois noms", new Set(trio).size, 3);
+
+	// Suffixe personnalise (partage : « quiz (2).md »).
+	const libre = new Set();
+	const partage = await reserveFreePath("Downloads/quiz", ".md",
+		async (c) => libre.has(c), (n) => ` (${n})`);
+	r.check("premier nom sans suffixe", partage, "Downloads/quiz.md");
+
+	// Tout pris : la fonction LEVE plutot que de rendre un chemin occupe.
+	let leve = false;
+	try { await reserveFreePath("x/y", ".md", async () => true); } catch { leve = true; }
+	r.check("echec bruyant quand tout est pris", leve, true);
+
+	r.done();
+});

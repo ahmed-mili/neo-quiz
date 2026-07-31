@@ -10,6 +10,7 @@ import type {
 	MatchingQuestion,
 } from "../types/quiz";
 import { t } from "../i18n";
+import { reserveFreePath } from "../unique-path";
 
 export interface OptionEntry {
 	index: number;
@@ -414,11 +415,13 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 	 * converger ; le hasard les sépare.
 	 */
 	async function uniquePath(adapter: DataAdapter, basePath: string, ext: string): Promise<string> {
-		let path = `${basePath}.${ext}`;
-		for (let essai = 0; essai < 20 && await adapter.exists(path); essai++) {
-			path = `${basePath}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-		}
-		return path;
+		/* `reserveFreePath` (src/unique-path.ts) : le nom est RÉSERVÉ en mémoire
+		   en plus d'être testé sur le disque, et l'échec est bruyant. Un
+		   `exists` puis `write` laissait deux sauvegardes du même quiz choisir
+		   le même fichier, et la seconde écrasait la première. */
+		return reserveFreePath(basePath, `.${ext}`,
+			(chemin) => adapter.exists(chemin),
+			() => `-${Math.random().toString(36).slice(2, 7)}`);
 	}
 
 	async function saveCurrentResults(): Promise<SavedResults> {

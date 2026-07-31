@@ -32,11 +32,17 @@ if (racines.length === 0) {
 globalThis.document = {
 	createElement() {
 		let html = "";
-		return {
+		const noeud = {
 			set innerHTML(v) { html = String(v); },
 			get textContent() { return html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""); },
 			querySelectorAll() { return []; },
 		};
+		/* `<template>` : le code réel lit `tpl.content` (document propriétaire
+		   INERTE — c'est ce qui empêche un `<img onerror>` de s'exécuter). Le
+		   bouchon n'a pas de vrai DOM ; se renvoyer lui-même suffit pour ce que
+		   cet audit vérifie, à savoir la VALIDITÉ du bloc réécrit. */
+		Object.defineProperty(noeud, "content", { get() { return noeud; } });
+		return noeud;
 	},
 };
 

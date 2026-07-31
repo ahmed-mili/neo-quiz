@@ -1998,12 +1998,30 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		}
 	}
 
+	/** Une génération est-elle DÉJÀ partie ? Posé avant le moindre `await`. */
+	let demarrage = false;
+
 	async function startGeneration(container: HTMLElement | null): Promise<void> {
-		/* Les chemins écrits dans le prompt deviennent des pièces jointes AVANT
-		   la capture : elles doivent partir avec la demande, et apparaître dans
-		   la bulle « envoyé » — c'est là que l'utilisateur voit désormais ce
-		   qui est parti, le composer étant vidé juste après. */
-		await attachPromptPaths();
+		/* VERROU d'abord, et de façon synchrone : `phase = "loading"` n'était
+		   posé qu'après l'attente ci-dessous, et Entrée ou un second clic
+		   pendant ce temps lançait une DEUXIÈME génération — qui capturait un
+		   composer déjà vidé et écrasait `activeClient`, donc la première ne
+		   pouvait même plus être annulée (revue codex 2026-07-31). C'est le
+		   contraire de « le message est parti ». */
+		if (demarrage || phase === "loading") return;
+		demarrage = true;
+		try {
+			/* Les chemins écrits dans le prompt deviennent des pièces jointes
+			   AVANT la capture : elles doivent partir avec la demande, et
+			   apparaître dans la bulle « envoyé » — c'est là que l'utilisateur
+			   voit désormais ce qui est parti, le composer étant vidé juste
+			   après. */
+			await attachPromptPaths();
+		} finally {
+			/* Rendu dès que la phase prend le relais : le verrou ne couvre que
+			   la fenêtre entre le clic et `phase = "loading"`. */
+			demarrage = false;
+		}
 
 		// Le composer se vide MAINTENANT, avant le premier rendu de la phase
 		// « loading » : la demande passe en bulle et le champ redevient neuf.

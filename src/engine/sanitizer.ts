@@ -529,8 +529,16 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 		// affichées comme > par le navigateur, pas interprétées comme des balises
 		const tpl = document.createElement("template");
 		tpl.innerHTML = sanitizeQuizHtml(html);
+		/* `normalize()` avant de parcourir : l'assainissement retire les
+		   commentaires et déballe les balises inconnues, ce qui laisse des nœuds
+		   de texte ADJACENTS. Un `![[a<!-- x -->.png]]` se retrouvait coupé en
+		   « ![[a » et « .png]] », et aucun des deux ne contenait l'embed —
+		   l'ancienne substitution de chaîne, elle, le voyait. */
+		tpl.content.normalize();
 
 		const EMBED_RE = /!\[\[([^\]]+)\]\]/g;
+		/* Collecté AVANT toute mutation : remplacer un nœud pendant que le
+		   marcheur avance le ferait sauter le suivant. */
 		const textes: Text[] = [];
 		const marcheur = document.createTreeWalker(tpl.content, NodeFilter.SHOW_TEXT);
 		for (let n = marcheur.nextNode(); n; n = marcheur.nextNode()) {

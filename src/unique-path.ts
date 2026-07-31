@@ -28,7 +28,18 @@
     (revue codex 2026-07-31). */
 const reserves = new Set<string>();
 
-/** La clé de réservation d'un chemin : sa forme repliée. */
+/**
+ * La clé de réservation d'un chemin : sa forme repliée.
+ *
+ * Le repliage est INCONDITIONNEL, y compris sous Linux où deux noms qui ne
+ * diffèrent que par la casse sont bien deux fichiers. Le coût y est nul en
+ * pratique — la seule conséquence est un suffixe sur un nom qui aurait pu s'en
+ * passer, dans le cas improbable où deux écritures concurrentes ne diffèrent
+ * que par la casse. Le bénéfice, lui, est une perte de fichier en moins sur
+ * Windows et macOS. Même raisonnement pour les subtilités de `toLowerCase()`
+ * (le `I` turc, le `ß` allemand) : replier deux noms distincts coûte un
+ * suffixe, les séparer à tort coûterait un fichier.
+ */
 const cle = (chemin: string): string => chemin.toLowerCase();
 
 /**

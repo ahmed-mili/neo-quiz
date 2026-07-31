@@ -274,6 +274,17 @@ if ($h -ne [IntPtr]::Zero) {
    plan (Ctrl+V + Entrée). Dernier repli : enregistrer le fichier. ── */
 
 async function shareViaDiscord(ctx: DashboardCtx, source: ShareSource): Promise<void> {
+	try {
+		await shareViaDiscordInner(ctx, source);
+	} catch (e) {
+		// Appelé en `void` depuis un gestionnaire de clic : sans ce filet, un
+		// échec fermait la fenêtre sans rien envoyer ni rien dire.
+		console.error("[quiz-blocks] partage Discord impossible :", e);
+		new Notice(t("dashboard.quizzes.shareSaveError"));
+	}
+}
+
+async function shareViaDiscordInner(ctx: DashboardCtx, source: ShareSource): Promise<void> {
 	const payload = await source.build();
 	if (!payload) return;
 
@@ -299,8 +310,12 @@ async function shareViaDiscord(ctx: DashboardCtx, source: ShareSource): Promise<
 		const pointExtTmp = payload.fileName.lastIndexOf(".");
 		const baseTmp = pointExtTmp > 0 ? payload.fileName.slice(0, pointExtTmp) : payload.fileName;
 		const extTmp = pointExtTmp > 0 ? payload.fileName.slice(pointExtTmp) : "";
+		/* Suffixe TIRÉ AU SORT et non incrémenté : le fichier temporaire n'est
+		   jamais nettoyé (Discord le lit après coup), donc une session qui
+		   partage cinquante fois le même quiz épuisait la suite « (2)…(50) »
+		   et finissait par lever. Le hasard, lui, ne s'épuise pas. */
 		const dest = await reserveFreePath(path.join(os.tmpdir(), baseTmp), extTmp,
-			async (c) => fs.existsSync(c), (n) => ` (${n})`);
+			async (c) => fs.existsSync(c), () => `-${Math.random().toString(36).slice(2, 7)}`);
 		try {
 			fs.writeFileSync(dest, payload.bytes);
 		} catch (e) { releaseReservedPath(dest); throw e; }

@@ -2,8 +2,15 @@
    5) CARTE question
    ========================================================= */
 
+/* Marges VERTICALES en longhand, jamais le raccourci `margin` : layout.css
+   centre la carte dans la slide avec `margin-left/right: auto`, et ce fichier
+   est importé APRÈS lui. Un `margin: 10px 0 18px` remet donc les marges
+   horizontales à 0 et recolle la carte à gauche pendant que la nav, elle,
+   reste centrée. Invisible tant que --quiz-max-width valait 9000px (la carte
+   remplissait la slide, `auto` n'avait rien à répartir). */
 .quiz-card{
-  margin: 10px 0 18px;
+  margin-top: 10px;
+  margin-bottom: 18px;
   padding-left: clamp(2px, 0.8vw, 6px);
   padding-right: clamp(2px, 0.8vw, 6px);
   overflow: visible;

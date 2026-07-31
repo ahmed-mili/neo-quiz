@@ -164,6 +164,10 @@ await withSrcModule(["src/engine/sanitizer.ts", "src/quiz-utils.ts"], (sanitizer
 				if (htmlPrioritaire && (q[htmlPrioritaire] || q["_" + htmlPrioritaire])) continue;
 				verifier(f, qi, nom, q[nom]);
 			}
+			// Libellé du bouton de ressource : imbriqué, et rendu par le moteur
+			// (sanitizer.ts resourceButtonHtml).
+			const rb = q.resourceButton;
+			if (rb && typeof rb === "object") verifier(f, qi, "resourceButton.label", rb.label);
 			for (const [nom, htmlPrioritaire] of LISTES) {
 				const liste = q[nom];
 				if (!Array.isArray(liste)) continue;

@@ -162,6 +162,27 @@ function renderExtras(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, 
 	bridge.field(doc, t("editor.passage.idLabel"), readExtra("passageId"), t("editor.passage.idPlaceholder"), false,
 		v => writeExtra("passageId", v));
 
+	/* ── Leçon (mode learn) ──
+	   Le mode learn AFFICHE ce texte avant la question ; sans champ, Ahmed
+	   pouvait le lire dans ses quiz mais pas le corriger — la page devait être
+	   « tout aussi complète ». Comme le document, la leçon vit dans les champs
+	   personnalisés : le formulaire fixe ne la connaît pas, l'export la rend
+	   telle quelle.
+	   HTML si le contenu en porte, même règle que l'énoncé et l'explication :
+	   l'aplatir à la première frappe effacerait une mise en forme. */
+	const learnHtmlBrut = readExtra("learnHtml");
+	const richLearn = isRichHtml(learnHtmlBrut);
+	const hasLearn = !!(readExtra("learn") || learnHtmlBrut);
+	const learn = section(parent, "graduation-cap", t("editor.learn.section"), hasLearn);
+	learn.createDiv({ cls: "qbd-qz-section-help", text: t("editor.learn.help") });
+	const learnValeur = (richLearn ? learnHtmlBrut : readExtra("learn")).replace(/<br\s*\/?>/gi, "\n");
+	bridge.field(learn, "", learnValeur,
+		t("editor.learn.placeholder"), true, v => {
+			if (richLearn) writeExtra("learnHtml", v);
+			else writeExtra("learn", v);
+		});
+	if (richLearn) learn.createDiv({ cls: "qbd-qz-section-help", text: t("dashboard.quiz.editPromptHtmlHint") });
+
 	// ── Bouton ressource ──
 	renderResourceSection(parent, q, cb, bridge);
 

@@ -152,11 +152,17 @@ export function createTerminalHandlers(ctx: EngineCtx): TerminalHandlers {
 			if (match) {
 				const [, userHost, colon, pathPart, dollarPart] = match;
 
+				/* `renderInlineText` sur CHAQUE segment, pas `escapeHtmlText` :
+				   la forme colorée affichait ses `**` là où la forme simple les
+				   rend depuis cette nuit. Segment par segment, donc une paire
+				   qui enjamberait deux segments reste littérale — c'est le prix
+				   de la coloration, et il est visible plutôt que silencieux. */
+				const r = ctx.sanitize.renderInlineText;
 				return '<span class="quiz-command-prefix quiz-command-prefix-bash">' +
-					`<span class="quiz-bash-prefix-userhost">${ctx.escapeHtmlText(userHost)}</span>` +
-					`<span class="quiz-bash-prefix-colon">${ctx.escapeHtmlText(colon)}</span>` +
-					`<span class="quiz-bash-prefix-path">${ctx.escapeHtmlText(pathPart)}</span>` +
-					`<span class="quiz-bash-prefix-dollar">${ctx.escapeHtmlText(dollarPart)}</span>` +
+					`<span class="quiz-bash-prefix-userhost">${r(userHost)}</span>` +
+					`<span class="quiz-bash-prefix-colon">${r(colon)}</span>` +
+					`<span class="quiz-bash-prefix-path">${r(pathPart)}</span>` +
+					`<span class="quiz-bash-prefix-dollar">${r(dollarPart)}</span>` +
 				'</span>';
 			}
 		}

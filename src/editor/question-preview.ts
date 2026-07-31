@@ -128,7 +128,9 @@ function renderPassage(card: HTMLElement, q: DraftQuestion, app: App, sourcePath
 	const icon = head.createSpan({ cls: "quiz-passage-icon" });
 	icon.setAttribute("aria-hidden", "true");
 	_setIcon(icon, "book-open-text");
-	head.createSpan({ cls: "quiz-passage-title", text: title });
+	// `inlineInto` et non `text:` — le titre d'un document cite volontiers une
+	// commande entre accents graves, et le moteur, lui, la rend.
+	inlineInto(head.createSpan({ cls: "quiz-passage-title" }), app, title, sourcePath);
 	const body = wrap.createDiv({ cls: "quiz-passage-body" });
 	const content = body.createDiv({ cls: "quiz-passage-content" });
 	content.innerHTML = resolveImagesInHtml(app, html || md2html(text), sourcePath);
@@ -152,7 +154,9 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		const rbtn = card.createEl("button", { cls: "quiz-resource-btn" });
 		const icon = rbtn.createSpan({ cls: "quiz-resource-btn-icon" });
 		_setIcon(icon, "paperclip");
-		rbtn.createSpan({ cls: "quiz-resource-btn-label", text: q.resourceButton.label || t("editor.preview.resourceFallback") });
+		// Même raison : le moteur rend ce libellé (sanitizer.ts resourceButtonHtml).
+		inlineInto(rbtn.createSpan({ cls: "quiz-resource-btn-label" }), app,
+			q.resourceButton.label || t("editor.preview.resourceFallback"), opts.sourcePath);
 	}
 
 	if (q._promptHtml || q.prompt) {

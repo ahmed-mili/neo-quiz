@@ -4,6 +4,9 @@ import type { EN_EDITOR } from "../en/editor";
 export const FR_EDITOR: Record<keyof typeof EN_EDITOR, string> = {
 	/* ── Vue & ossature (editor.ts, editor/ui.ts) ── */
 	"editor.empty.hint": "Ouvrez une note qui contient un bloc quiz-blocks, puis lancez « Ouvrir le quiz de la note courante ».",
+	"editor.learn.section": "Leçon",
+	"editor.learn.help": "Affichée avant la question, en mode Learn.",
+	"editor.learn.placeholder": "Ce que l'apprenant lit d'abord…",
 	"editor.paste.imageFailed": "Impossible de coller l'image",
 	"editor.view.title": "Éditeur de quiz",
 

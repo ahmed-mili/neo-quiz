@@ -46,6 +46,10 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 	currentView: DashboardViewName = "home"; // home | quizzes | detail | ai
 	selectedQuiz: QuizIndexEntry | null = null;
 	previousView: DashboardViewName = "home";
+	/** Demande « ouvrir en édition » posée par navigate(), consommée par le
+	    prochain rendu de la page d'un quiz. Une seule fois : le mode appartient
+	    ensuite à l'utilisateur. */
+	pendingEdit = false;
 	navEl: HTMLElement | null = null;
 	contentEl_: HTMLElement | null = null;
 	ctx?: DashboardCtx;
@@ -279,7 +283,7 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 		this.ai?.dispose();
 	}
 
-	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry }): void {
+	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void {
 		// Historique boutons souris : empiler l'état QUITTÉ — sauf restauration
 		// (goNavBack/Forward gèrent leurs piles) et sauf navigation immobile
 		// (re-clic du rail sur la page courante : rien à restaurer).
@@ -294,6 +298,9 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 		if (!this.isRestoringNav && !this.sameNav(this.captureNav(), arriving)) {
 			this.recordNav();
 		}
+		// Demande d'ouverture en ÉDITION : consommée par le prochain rendu de la
+		// page (renderCurrentView), une seule fois.
+		this.pendingEdit = !!data?.edit;
 		if (data) {
 			if (data.quiz) this.selectedQuiz = data.quiz;
 		}
@@ -348,7 +355,9 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 				break;
 			case "detail":
 				if (this.selectedQuiz) {
-					this.detail.render(contentEl, this.selectedQuiz);
+					const edit = this.pendingEdit;
+					this.pendingEdit = false;
+					this.detail.render(contentEl, this.selectedQuiz, edit);
 				} else {
 					this.currentView = "home";
 					this.home.render(contentEl, entering);

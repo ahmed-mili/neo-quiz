@@ -147,7 +147,7 @@ export interface DashboardView extends ItemView {
 	detail?: DetailHandlers;
 	ai?: AiHandlers;
 
-	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry }): void;
+	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void;
 	renderSidebar(): void;
 	renderCurrentView(): void;
 	/** Historique boutons souris — cf. QuizDashboardView (dashboard.ts). */
@@ -181,8 +181,9 @@ export interface DashboardCtx {
 	navEl: HTMLElement;
 	/** Même référence DOM que `view.contentEl_` (dashboard.js:61) — nommé `contentEl` dans le littéral ctx réel. */
 	contentEl: HTMLElement;
-	/** dashboard.js:62, délègue à `view.navigate(view, data)` (dashboard.js:127-139). `data.quiz` est le seul champ lu. */
-	navigate: (view: DashboardViewName, data?: { quiz?: QuizIndexEntry }) => void;
+	/** Délègue à `view.navigate(view, data)`. `edit: true` ouvre la page du
+	    quiz directement en ÉDITION (menu ⋯ « Modifier »). */
+	navigate: (view: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }) => void;
 	/** Historique boutons souris (spec 2026-07-20-mouse-nav-history) : empile
 	    l'état de navigation COURANT avant un changement — appelé par quizzes.ts
 	    juste avant drill in/out. Délègue à `view.recordNav()` (no-op pendant

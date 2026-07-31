@@ -187,7 +187,10 @@ export function buildQuizCardMenu(ctx: DashboardCtx, rerender: () => void): (qui
 			{
 				icon: "pencil",
 				label: t("dashboard.detail.edit"),
-				onClick: () => { void openQuizInEditor(ctx.app, quiz); },
+				// La page du quiz, en ÉDITION, DANS le dashboard : ouvrir un
+				// onglet à côté ferait deux surfaces pour le même quiz, alors
+				// qu'un clic sur la carte mène déjà à cette page.
+				onClick: () => { ctx.navigate("detail", { quiz, edit: true }); },
 			},
 			{
 				// « text-cursor-input » et non un crayon : « Edit » (pencil) ouvre

@@ -90,7 +90,7 @@ export interface QuizPageHandlers {
 }
 
 export interface DetailHandlers {
-	render(container: HTMLElement, quiz: QuizIndexEntry): void;
+	render(container: HTMLElement, quiz: QuizIndexEntry, startEditing?: boolean): void;
 	/** Relayé à la page : appelé à la fermeture de la vue dashboard. */
 	dispose(): void;
 }
@@ -102,7 +102,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 	const page = createQuizPage({ app: ctx.app, plugin: ctx.plugin, statsStore: ctx.statsStore });
 
 	return {
-		render(container: HTMLElement, quiz: QuizIndexEntry): void {
+		render(container: HTMLElement, quiz: QuizIndexEntry, startEditing?: boolean): void {
 			// La cible du retour est fixée à l'ARRIVÉE sur la page : lue au clic,
 			// elle aurait déjà été écrasée par une navigation intermédiaire.
 			const target = ctx.view.previousView || "home";
@@ -128,6 +128,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 					onClick: () => void openQuizForPlay(ctx.app, quiz),
 				},
 				isStale: () => ctx.view.currentView !== "detail",
+				startEditing,
 			});
 		},
 		dispose: () => page.dispose(),
@@ -158,6 +159,9 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	    que le brouillon est lu — un onglet qui ne connaît pas son quiz à
 	    l'avance affichait « 0 » jusqu'au premier repaint. */
 	let countEl: HTMLElement | null = null;
+	/** Clé du quiz pour lequel une demande d'ouverture en édition a déjà été
+	    honorée — elle ne vaut qu'une fois (cf. render). */
+	let editRequestKey: string | null = null;
 	/** Détache l'écoute clavier de la page précédente. */
 	let keyCleanup: (() => void) | null = null;
 
@@ -207,13 +211,22 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			currentPath = spec.key;
 			draft = null;
 			activeIdx = 0;
-			editing = !!spec.startEditing;
+			editing = false;
 		} else if (draft && draftIsStale(draft)) {
 			// La note a changé DEHORS (éditeur markdown, synchro) pendant que la
 			// page gardait son brouillon : le relire, sinon la frappe suivante
 			// réécrirait par-dessus la modification externe.
 			flushSave();
 			draft = null;
+		}
+
+		/* Demande EXPLICITE d'ouvrir en édition (menu « Modifier », quiz qu'on
+		   vient de créer). Honorée UNE SEULE FOIS par quiz : la spec est
+		   réutilisée telle quelle à chaque repeint, et la relire forcerait le
+		   mode à revenir dès qu'on le quitte. */
+		if (spec.startEditing && editRequestKey !== spec.key) {
+			editRequestKey = spec.key;
+			editing = true;
 		}
 
 		const page = container.createDiv({ cls: "qbd-qz" });

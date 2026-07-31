@@ -298,6 +298,11 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// 2026-07-10 — le loader préfigure le résultat, qui vit en haut).
 		// display: contents en CSS → la carte reste un enfant flex direct.
 		const loadingZone = phase === "loading" ? stage.createDiv({ cls: "qbd-ai-loading-zone" }) : null;
+		/* L'erreur se lit SOUS la demande, au-dessus du composer — comme la
+		   réponse qu'elle remplace. Rendue en dernier, elle passait sous le
+		   composer : on lisait la demande, puis un champ vide, puis seulement
+		   l'échec. */
+		const errorZone = phase === "error" ? stage.createDiv({ cls: "qbd-ai-loading-zone" }) : null;
 
 		// ── Fournisseur : bouton LOGO SEUL dans le pied du composer (la
 		// carte « Modèle IA » est supprimée) — le menu garde logos, statut
@@ -1034,7 +1039,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// ── État de la scène : loader AU-DESSUS du composer, erreur sous
 		// le composer, ou l'éditeur embarqué dans la zone résultat. ──
 		if (phase === "loading") renderLoading(loadingZone!);
-		else if (phase === "error") renderError(stage);
+		else if (phase === "error") renderError(errorZone!);
 		else if (phase === "result") renderResult(resultZone!);
 
 		// Onglet ouvert → saisie immédiate sans clic (demande 2026-07-10).

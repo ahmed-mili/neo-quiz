@@ -78,6 +78,7 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 
 	const question = makeDefault(type);
 	question._id = q.id || Math.random().toString(36).slice(2, 10);
+	if (typeof q.id === "string" && q.id.trim()) question._sourceId = q.id;
 	question.title = q.title || "";
 	// « Question N » non localisé : motif du titre auto écrit dans le .md.
 	question._userModifiedTitle = !/^Question \d+$/.test(question.title);

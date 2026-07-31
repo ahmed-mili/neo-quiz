@@ -73,6 +73,14 @@ export interface DraftQuestion {
 	_explainHtml?: string;
 	/** Titre modifié manuellement (bloque la renumérotation auto "Question N"). */
 	_userModifiedTitle?: boolean;
+	/** `id` tel qu'il était ÉCRIT dans la note, quand il y en avait un. Le
+	    conserver est nécessaire : cet identifiant devient l'ancre HTML de la
+	    question (engine/cards.ts) et il est consigné dans les résultats
+	    sauvegardés. Le recalculer depuis le titre — ce que faisait l'export —
+	    cassait les ancres et découplait les résultats déjà enregistrés dès la
+	    première retouche. Absent quand la note n'en portait pas : on n'écrit
+	    pas un identifiant que personne n'a choisi. */
+	_sourceId?: string;
 	/** Clés inconnues préservées au round-trip import→export (editor/modals.js convertToInternalFormat). */
 	_extraFields?: Record<string, unknown>;
 	/** Gabarit guidé de l'éditeur math (miroir de TextQuestion.answerTemplate). */

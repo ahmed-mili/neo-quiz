@@ -3,7 +3,12 @@ import type { DraftQuestion } from "./utils";
 import type { EditorExamOptions } from "../types/editor-ctx";
 
 function exportQuestion(q: DraftQuestion, idx: number): string {
-	const id = q.title ? q.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20) : `q${idx + 1}`;
+	/* L'identifiant ÉCRIT dans la note prime : il sert d'ancre HTML à la
+	   question et figure dans les résultats déjà sauvegardés. Le dériver du
+	   titre à chaque écriture le faisait changer à la moindre retouche. Il
+	   n'est dérivé que pour une question qui n'en avait pas. */
+	const id = q._sourceId
+		|| (q.title ? q.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20) : `q${idx + 1}`);
 	const e = esc5;
 	const L: string[] = [];
 	L.push("\t{");

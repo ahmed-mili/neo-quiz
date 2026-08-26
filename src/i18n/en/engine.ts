@@ -77,6 +77,12 @@ export const EN_ENGINE = {
 
 	/* ── Mode apprentissage ── */
 	"engine.learn.label": "Lesson",
+	"engine.learn.newConcept": "New concept",
+	"engine.learn.testMe": "I understand — test me",
+	"engine.learn.sources": "Sources",
+	"engine.learn.sourcePage": "Page {page}",
+	"engine.review.next": "Next review: {date}",
+	"engine.review.noneDue": "Nothing to review yet. Next review: {date}.",
 
 	/* ── Question texte / terminal ── */
 	"engine.text.placeholder": "Your answer...",
@@ -94,6 +100,10 @@ export const EN_ENGINE = {
 	"engine.rating.understood": "Got it",
 	"engine.rating.partial": "Partly",
 	"engine.rating.review": "To review",
+	"engine.rating.again": "Again",
+	"engine.rating.hard": "Hard",
+	"engine.rating.good": "Good",
+	"engine.rating.easy": "Easy",
 
 	/* ── Slide de soumission ── */
 	"engine.submit.back": "Back",

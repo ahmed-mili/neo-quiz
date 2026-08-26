@@ -1,6 +1,13 @@
 import type { Plugin } from "obsidian";
 import { t } from "../i18n";
 import type { StatsRecord } from "../types/quiz";
+import {
+	createStoredMemoryCard,
+	isReviewDue,
+	scheduleReview,
+	type ReviewRating,
+	type StoredMemoryCard,
+} from "../learning/scheduler";
 
 /* ══════════════════════════════════════════════════════════
    STATS STORE — Stockage persistant des scores et progression
@@ -16,6 +23,24 @@ import type { StatsRecord } from "../types/quiz";
 export interface QuizStatRecord extends StatsRecord {
 	lastPlayed: number;
 	attempts: number;
+	/** Mémoire espacée par question. Optionnel pour migrer les anciennes stats. */
+	reviewItems?: Record<string, QuestionReviewRecord>;
+}
+
+export interface QuestionReviewRecord {
+	card: StoredMemoryCard;
+	introducedAt: number;
+	lastReviewedAt: number;
+	lastRating: ReviewRating | null;
+	title?: string;
+	conceptId?: string;
+	sourcePage?: number;
+}
+
+export interface QuestionReviewMeta {
+	title?: string;
+	conceptId?: string;
+	sourcePage?: number;
 }
 
 /**
@@ -36,6 +61,10 @@ export interface StatsStore {
 	getRecord(path: string): QuizStatRecord | null;
 	getAll(): Record<string, QuizStatRecord>;
 	deleteRecord(path: string): void;
+	getQuestionReview(path: string, questionKey: string): QuestionReviewRecord | null;
+	markQuestionIntroduced(path: string, questionKey: string, meta?: QuestionReviewMeta): QuestionReviewRecord;
+	recordQuestionReview(path: string, questionKey: string, rating: ReviewRating, meta?: QuestionReviewMeta): QuestionReviewRecord;
+	getDueCount(path?: string, now?: number): number;
 	formatRelativeTime(timestamp: number): string;
 	destroy(): void;
 }
@@ -75,7 +104,9 @@ export function createStatsStore(plugin: StatsStorePlugin): StatsStore {
 			questionsDone: Math.max(existing.questionsDone, update.questionsDone || 0),
 			totalQuestions: update.totalQuestions || existing.totalQuestions,
 			lastPlayed: Date.now(),
-			attempts: existing.attempts + 1
+			attempts: existing.attempts + 1,
+			// Une tentative classique ne doit jamais effacer l'historique FSRS.
+			reviewItems: existing.reviewItems || {},
 		};
 
 		scheduleSave();
@@ -98,6 +129,75 @@ export function createStatsStore(plugin: StatsStorePlugin): StatsStore {
 			delete data[path];
 			scheduleSave();
 		}
+	}
+
+	function ensureQuizRecord(path: string): QuizStatRecord {
+		return data[path] ||= {
+			bestScore: 0,
+			questionsDone: 0,
+			totalQuestions: 0,
+			lastPlayed: 0,
+			attempts: 0,
+			reviewItems: {},
+		};
+	}
+
+	function getQuestionReview(path: string, questionKey: string): QuestionReviewRecord | null {
+		return data[path]?.reviewItems?.[questionKey] || null;
+	}
+
+	function markQuestionIntroduced(path: string, questionKey: string, meta: QuestionReviewMeta = {}): QuestionReviewRecord {
+		const quiz = ensureQuizRecord(path);
+		quiz.reviewItems ||= {};
+		const existing = quiz.reviewItems[questionKey];
+		if (existing) return existing;
+		const now = Date.now();
+		const record: QuestionReviewRecord = {
+			card: createStoredMemoryCard(new Date(now)),
+			introducedAt: now,
+			lastReviewedAt: 0,
+			lastRating: null,
+			...meta,
+		};
+		quiz.reviewItems[questionKey] = record;
+		scheduleSave();
+		return record;
+	}
+
+	function recordQuestionReview(
+		path: string,
+		questionKey: string,
+		rating: ReviewRating,
+		meta: QuestionReviewMeta = {},
+	): QuestionReviewRecord {
+		const quiz = ensureQuizRecord(path);
+		quiz.reviewItems ||= {};
+		const now = Date.now();
+		const existing = quiz.reviewItems[questionKey];
+		const scheduled = scheduleReview(existing?.card, rating, new Date(now));
+		const record: QuestionReviewRecord = {
+			...existing,
+			...meta,
+			card: scheduled.card,
+			introducedAt: existing?.introducedAt || now,
+			lastReviewedAt: now,
+			lastRating: rating,
+		};
+		quiz.reviewItems[questionKey] = record;
+		quiz.lastPlayed = now;
+		scheduleSave();
+		return record;
+	}
+
+	function getDueCount(path?: string, now = Date.now()): number {
+		const quizzes = path ? [data[path]].filter(Boolean) : Object.values(data);
+		let count = 0;
+		for (const quiz of quizzes) {
+			for (const item of Object.values(quiz.reviewItems || {})) {
+				if (item.lastReviewedAt > 0 && isReviewDue(item.card, now)) count++;
+			}
+		}
+		return count;
 	}
 
 	/* ── Formater un timestamp en temps relatif ──
@@ -158,6 +258,10 @@ export function createStatsStore(plugin: StatsStorePlugin): StatsStore {
 		getRecord,
 		getAll,
 		deleteRecord,
+		getQuestionReview,
+		markQuestionIntroduced,
+		recordQuestionReview,
+		getDueCount,
 		formatRelativeTime,
 		destroy
 	};

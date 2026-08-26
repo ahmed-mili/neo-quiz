@@ -181,6 +181,11 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	let embedEditor: EmbedEditor | null = null;
 	let generationId = 0;
 	let generatedQuestions: unknown[] = [];
+	const generatedQuestionCount = (): number => generatedQuestions.filter(item => {
+		if (!item || typeof item !== "object") return false;
+		const value = item as Record<string, unknown>;
+		return !(value.mode || value.learnMode || value.examMode);
+	}).length;
 	let errorMessage = "";
 	let containerRef: HTMLElement | null = null;
 	/* Ce que la DERNIÈRE génération a consommé — null quand le fournisseur ne
@@ -1434,12 +1439,19 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		const buf = await file.arrayBuffer();
 		const pdf = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
 		const pages: string[] = [];
+		let extractedCharacters = 0;
 		for (let i = 1; i <= pdf.numPages; i++) {
 			const page = await pdf.getPage(i);
 			const content = await page.getTextContent();
-			pages.push(content.items.map(it => it.str).join(" "));
+			const pageText = content.items.map(it => it.str).join(" ").trim();
+			extractedCharacters += pageText.length;
+			// Les marqueurs restent dans le contexte envoyé au modèle afin que
+			// chaque question puisse citer précisément sa page source.
+			pages.push(`--- Page ${i} ---\n${pageText}`);
 		}
-		return pages.join("\n\n");
+		// Préserve la détection existante des scans sans couche texte : les
+		// seuls marqueurs de page ne doivent pas faire croire que le PDF est lu.
+		return extractedCharacters > 0 ? pages.join("\n\n") : "";
 	}
 
 	/* Attache une note du vault comme source du quiz (menu « Ajouter des
@@ -1636,7 +1648,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		const countWrap = bar.createDiv({ cls: "qbd-ai-result-count-wrap" });
 		const checkIcon = countWrap.createSpan({ cls: "qbd-ai-result-check" });
 		setIcon(checkIcon, "check-circle");
-		countWrap.createSpan({ cls: "qbd-ai-result-count", text: t("ai.result.count", { count: generatedQuestions.length }) });
+		countWrap.createSpan({ cls: "qbd-ai-result-count", text: t("ai.result.count", { count: generatedQuestionCount() }) });
 
 		renderUsageBadge(countWrap);
 
@@ -1842,7 +1854,9 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			// (l'IA distingue les documents d'un envoi multi-notes).
 			const source = images.length > 0 ? "image" : noteAttachments.length > 0 ? "text" : "topic";
 			const notesBlock = noteAttachments
-				.map(n => (noteAttachments.length > 1 ? "--- " + n.name + " ---\n" : "") + n.content)
+				// Même avec une seule pièce jointe, le nom est requis pour produire
+				// des sourceRefs ouvrables et stables dans le quiz généré.
+				.map(n => "--- " + n.name + " ---\n" + n.content)
 				.join("\n\n");
 			// Repli quand des images sont envoyées SANS consigne : instruction au
 			// modèle (pas de l'UI) → anglais, et surtout « dans leur langue »,
@@ -1886,7 +1900,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 					await recordUsage(usagePlugin, {
 						...lastUsage,
 						at: Date.now(),
-						questionCount: generatedQuestions.length
+						questionCount: generatedQuestionCount()
 					});
 					// La génération vient de consommer du forfait : relire tout de
 					// suite garde le survol du bouton d'usage juste, sans attendre

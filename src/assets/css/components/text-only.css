@@ -377,31 +377,33 @@
   gap: 10px;
 }
 
-.quiz-textonly-rating-btn.understood{
+.quiz-textonly-rating-btn.good,
+.quiz-textonly-rating-btn.easy{
   border-color: color-mix(in srgb, var(--quiz-success) 36%, var(--background-modifier-border));
 }
 
-.quiz-textonly-rating-btn.partial{
+.quiz-textonly-rating-btn.hard{
   border-color: color-mix(in srgb, var(--quiz-hint) 40%, var(--background-modifier-border));
 }
 
-.quiz-textonly-rating-btn.review{
+.quiz-textonly-rating-btn.again{
   border-color: color-mix(in srgb, var(--quiz-danger) 34%, var(--background-modifier-border));
 }
 
-.quiz-textonly-rating-btn.understood.selected{
+.quiz-textonly-rating-btn.good.selected,
+.quiz-textonly-rating-btn.easy.selected{
   color: var(--quiz-accent-text);
   background: var(--quiz-success);
   border-color: var(--quiz-success);
 }
 
-.quiz-textonly-rating-btn.partial.selected{
+.quiz-textonly-rating-btn.hard.selected{
   color: var(--quiz-accent-text);
   background: var(--quiz-hint);
   border-color: var(--quiz-hint);
 }
 
-.quiz-textonly-rating-btn.review.selected{
+.quiz-textonly-rating-btn.again.selected{
   color: var(--quiz-accent-text);
   background: var(--quiz-danger);
   border-color: var(--quiz-danger);
@@ -446,15 +448,16 @@
   font-weight: 800;
 }
 
-.quiz-textonly-result-stat.understood{
+.quiz-textonly-result-stat.good,
+.quiz-textonly-result-stat.easy{
   border-color: color-mix(in srgb, var(--quiz-success) 48%, var(--background-modifier-border));
 }
 
-.quiz-textonly-result-stat.partial{
+.quiz-textonly-result-stat.hard{
   border-color: color-mix(in srgb, var(--quiz-hint) 52%, var(--background-modifier-border));
 }
 
-.quiz-textonly-result-stat.review{
+.quiz-textonly-result-stat.again{
   border-color: color-mix(in srgb, var(--quiz-danger) 44%, var(--background-modifier-border));
 }
 
@@ -467,17 +470,18 @@
   background: color-mix(in srgb, var(--quiz-hint) 10%, var(--background-primary));
 }
 
-.quiz-tab.understood{
+.quiz-tab.good,
+.quiz-tab.easy{
   border-color: color-mix(in srgb, var(--quiz-success) 55%, var(--background-modifier-border));
   background: color-mix(in srgb, var(--quiz-success) 16%, var(--background-primary));
 }
 
-.quiz-tab.partial{
+.quiz-tab.hard{
   border-color: color-mix(in srgb, var(--quiz-hint) 55%, var(--background-modifier-border));
   background: color-mix(in srgb, var(--quiz-hint) 14%, var(--background-primary));
 }
 
-.quiz-tab.review{
+.quiz-tab.again{
   border-color: color-mix(in srgb, var(--quiz-danger) 55%, var(--background-modifier-border));
   background: color-mix(in srgb, var(--quiz-danger) 12%, var(--background-primary));
 }

@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "json5": "^2.2.3",
-    "mathlive": "^0.110.0"
+    "mathlive": "^0.110.0",
+    "ts-fsrs": "^5.4.1"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

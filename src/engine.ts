@@ -20,9 +20,11 @@ import { createPassageHandlers } from "./engine/passage";
 import { createClozeHandlers } from "./engine/cloze";
 import { mathifyElement } from "./engine/mathjax";
 import { t } from "./i18n";
+import { isReviewDue, stableQuestionKey } from "./learning/scheduler";
 
 import type { App, Plugin } from "obsidian";
 import type { EngineCtx } from "./types/engine-ctx";
+import type { StatsStore } from "./dashboard/stats-store";
 import type {
 	QuizQuestion,
 	QuizState,
@@ -70,7 +72,38 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		return;
 	}
 
-	const { questions: quiz, quizMode, examOptions, learnExamOptions } = extractExamOptions(rawQuiz);
+	const { questions: allQuestions, quizMode, examOptions, learnExamOptions } = extractExamOptions(rawQuiz);
+	const learningStore = (plugin as Plugin & { _statsStore?: StatsStore })._statsStore;
+	let quiz = allQuestions;
+
+	/* En mode apprentissage, une réouverture devient une vraie séance : cartes
+	   dues d'abord, puis notions jamais évaluées. Les cartes futures restent
+	   cachées jusqu'à leur échéance FSRS au lieu d'être bachotées trop tôt. */
+	if (quizMode === "learn" && learningStore) {
+		const candidates = allQuestions.map((question, index) => ({
+			question,
+			review: learningStore.getQuestionReview(sourcePath, stableQuestionKey(question, index)),
+		}));
+		const due = candidates
+			.filter(item => item.review?.lastReviewedAt && isReviewDue(item.review.card))
+			.sort((a, b) => Date.parse(a.review!.card.due) - Date.parse(b.review!.card.due));
+		const fresh = candidates.filter(item => !item.review || item.review.lastReviewedAt <= 0);
+		quiz = [...due, ...fresh].map(item => item.question);
+
+		if (quiz.length === 0 && candidates.length > 0) {
+			const nextDue = candidates
+				.map(item => item.review?.card.due)
+				.filter((dueAt): dueAt is string => !!dueAt)
+				.map(dueAt => Date.parse(dueAt))
+				.filter(Number.isFinite)
+				.sort((a, b) => a - b)[0];
+			const when = nextDue
+				? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(nextDue))
+				: "—";
+			renderParagraph(container, t("engine.review.noneDue", { date: when }));
+			return;
+		}
+	}
 
 	if (!Array.isArray(quiz) || quiz.length === 0) {
 		renderParagraph(container, t("engine.error.noQuestions"));
@@ -313,6 +346,12 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	const initTextOnlyAnswers = () => quiz.map(() => "");
 	const initTextOnlyChecked = () => quiz.map(() => false);
 	const initTextOnlyRatings = () => quiz.map(() => null);
+	const initLessonSeen = () => quiz.map((q, i) => {
+		if (quizMode !== "learn" || !(q.learn || q.learnHtml || q._learnHtml || q.explain || q.explainHtml || q._explainHtml)) return true;
+		// Lire puis fermer avant le rappel ne compte pas comme apprentissage :
+		// seule une première auto-évaluation validée masque la leçon à l'avenir.
+		return (learningStore?.getQuestionReview(sourcePath, stableQuestionKey(q, i))?.lastReviewedAt || 0) > 0;
+	});
 	const initOrderingPicks = () => quiz.map(() => null);
 	const initMatchPicks = () => quiz.map(() => null);
 
@@ -333,8 +372,11 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	const TOTAL_SLIDES = slideMap.length;
 
 	const quizState: QuizState = {
-		practiceMode: "qcm",
+		// Le rappel libre évite que les choix donnent la réponse au premier
+		// regard. La bascule permet toujours de revenir au QCM.
+		practiceMode: quizMode === "learn" ? "text" : "qcm",
 		selections: initSelections(),
+		lessonSeen: initLessonSeen(),
 		textOnlyAnswers: initTextOnlyAnswers(),
 		textOnlyChecked: initTextOnlyChecked(),
 		textOnlyRatings: initTextOnlyRatings(),

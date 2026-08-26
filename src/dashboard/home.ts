@@ -161,6 +161,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		const statsGrid = container.createDiv({ cls: "qbd-home-stats" });
 
 		const totalQuestions = ctx.scanner ? ctx.scanner.getTotalQuestions() : 0;
+		const dueNow = ctx.statsStore ? ctx.statsStore.getDueCount() : 0;
 		const mastered = quizzes.filter(q => {
 			const s = stats[q.path];
 			return s && s.bestScore >= 80;
@@ -171,9 +172,10 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		const statCards: StatCard[] = [
 			{ label: t("dashboard.home.statQuizzes"), value: String(quizzes.length), sub: t("dashboard.home.statQuizzesSub"), icon: "layers" },
 			{ label: t("dashboard.home.statQuestions"), value: String(totalQuestions), sub: t("dashboard.home.statQuestionsSub"), icon: "list" },
+			{ label: t("dashboard.home.statDue"), value: String(dueNow), sub: t("dashboard.home.statDueSub"), icon: "refresh-cw", highlight: dueNow > 0 },
 			{
 				label: t("dashboard.home.statMastered"), value: `${mastered}/${quizzes.length}`, sub: t("dashboard.home.statMasteredSub"),
-				icon: "award", highlight: true
+				icon: "award"
 			}
 		];
 

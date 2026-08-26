@@ -146,7 +146,15 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 					sessionId: u.sessionId
 				};
 			}
-			return questions;
+			// Le mode learn appartient au produit, pas au bon vouloir du modèle.
+			// Tous les fournisseurs (y compris le schéma structuré Ollama qui ne
+			// peut rendre que des questions) convergent donc vers la même sortie.
+			const withoutMode = questions.filter(item => {
+				if (!item || typeof item !== "object") return true;
+				const value = item as Record<string, unknown>;
+				return !(value.mode || value.learnMode || value.examMode);
+			});
+			return [...withoutMode, { mode: "learn" }];
 		} catch (err) {
 			if (aborted) {
 				const e = new Error("Génération annulée") as Error & { aborted?: boolean };
@@ -205,7 +213,19 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	The questions must be ANSWERABLE FROM THE DOCUMENT ALONE and test understanding — main idea, inference, meaning in context, cause and effect, the author's intent, what can or cannot be concluded — NOT recall of outside knowledge. Mix single-choice, multiple-choice and free-text among them`
 			: "free-text questions";
 
-		const systemPrompt = `You are a quiz generator. Generate exactly ${count} quiz questions as a JSON5 array. Each question must have:
+		const systemPrompt = `You are an expert learning designer. Transform the source into a complete learn-recall-review sequence, then generate exactly ${count} quiz questions as a JSON5 array.
+
+	PEDAGOGICAL CONTRACT — mandatory for EVERY question:
+	1. Teach before testing: each question MUST have a self-contained "learn" micro-lesson (roughly 60-140 words) that explains the prerequisite concept clearly enough for a learner who has not read the source. Introduce one coherent chunk at a time, with a concrete example or contrast when useful.
+	2. Retrieve, do not merely recognise: favour free-text, cloze, ordering and matching when they fit. Use multiple choice mainly for discriminating common confusions, with plausible distractors.
+	3. Give feedback: each question MUST have "explain", explaining why the expected answer is correct and, for choices, why the tempting alternatives are wrong.
+	4. Long-term memory: give each question a unique stable lowercase kebab-case "id" and a stable lowercase kebab-case "conceptId". Rephrasings of the same knowledge use the same conceptId.
+	5. Ground every claim: if attached source markers are present, add "sourceRefs": [{ file: "EXACT attached file name", page: PAGE_NUMBER }]. Copy the filename exactly from the outer --- filename --- marker and the page number from --- Page N ---; never invent a page. For a non-paginated note, omit page. Use the smallest sufficient set of references.
+	6. Coverage: silently identify the source's prerequisites and highest-value concepts first. Questions must cover the important ideas without testing trivia that the learn micro-lessons did not teach.
+
+	Each question must have:
+	- id: stable unique lowercase kebab-case identifier
+	- conceptId: stable lowercase kebab-case concept identifier
 	- title: short question title
 	- prompt: full question text
 	- options: array of options (for single/multiple choice, 3-5 options)
@@ -216,7 +236,9 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	- answer: expected answer (free text)
 	- mathInput: true for a text question whose answer is a mathematical expression (the learner answers in a visual EQUATION EDITOR)
 	- answerTemplate: a LaTeX template pre-filled in the answer field of a mathInput question, with \\\\placeholder{} for each blank to fill (e.g. 'x = \\\\placeholder{}' ; two solutions: 'x_1 = \\\\placeholder{},\\\\; x_2 = \\\\placeholder{}'). RULES for mathInput: the question text NEVER gives answer-format instructions (no "as a fraction", "comma-separated", "e.g. 1/2") — the equation editor makes all of that pointless; prefer an answerTemplate that guides instead; acceptedAnswers are the COMPLETE content of the field once the template is filled, in LaTeX (e.g. 'x_1 = \\\\frac{1}{2},\\\\; x_2 = 3'), and add variants where relevant (solutions in reverse order)
-	- learn: a short lesson paragraph teaching the concept before the question (optional but recommended for educational quizzes)
+	- learn: REQUIRED self-contained micro-lesson shown before the question
+	- explain: REQUIRED corrective explanation shown after recall
+	- sourceRefs: source citations as described above when source markers are available
 	- cloze: a FILL-IN-THE-BLANK text. Put the whole sentence or paragraph in this field and wrap each blank in DOUBLE BRACES, with accepted variants separated by "|": "The capital of France is {{Paris}} and its currency is {{the euro|euro}}." Use double BRACES, never double brackets — double brackets are Obsidian's internal-link syntax and would be rewritten before the quiz is read. Keep "prompt" as the instruction ("Complete the text below"). 2 to 5 blanks per question, each on a key term, never on a word the sentence already gives away
 	- numeric / tolerance / tolerancePercent / unit: for a free-text question whose answer is a NUMBER. Set "numeric": true and the answer is compared as a value, not as a string, so "3.14", "3,14" and "3.140" all pass. Add "tolerance" (absolute margin) or "tolerancePercent" (relative margin) whenever the expected answer is a measurement or a rounded result, and "unit" (e.g. "m/s") when one is expected — the learner may write it or omit it. ALWAYS prefer this over a plain text answer for any question that asks "how much", "how many" or a computed value
 	- ordering / slots / possibilities / correctOrder: a question where the learner puts items in the RIGHT ORDER. Set "ordering": true, "slots" naming each position (e.g. ['1st','2nd','3rd','4th']), "possibilities" listing the items in a DELIBERATELY WRONG order, and "correctOrder" giving, for each slot in turn, the INDEX of the item of "possibilities" that belongs there. Use it for a chronology, a protocol exchange, the steps of a procedure or a calculation
@@ -227,12 +249,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 
 	MATHEMATICS: every mathematical expression (formula, function, equation, integral, fraction, exponent, Greek letter…) MUST be written in LaTeX delimited by dollar signs, as in Obsidian: $f(x) = x^3$ inline, $$\\int_0^2 2x\\,dx$$ for a display formula. Never pseudo-notation such as f(x) = x^3 or ∫ from 0 to 2 outside the dollars. This applies to title, prompt, options, answer, learn and explain. IMPORTANT: inside JSON5 strings, DOUBLE every backslash — for LaTeX (write '$\\\\frac{a}{b}$' to get \\frac) as well as Windows paths (write 'C:\\\\Users\\\\dev') — a single backslash would be destroyed by the parser.
 
-	The last element of the array may be a mode configuration object (with no prompt field):
-	  - { mode: "exam", examDurationMinutes: 10, examAutoSubmit: true, examShowTimer: true } for a timed exam mode
-	  - { mode: "learn", examDurationMinutes: 10, examAutoSubmit: true, examShowTimer: true } for a learn mode leading into an exam
-	  - { mode: "learn" } for a learn mode without exam
-	  - { learnMode: true } as a shorthand for mode: "learn"
-	  - { examMode: true } as a shorthand for mode: "exam"
+	The last element of the array MUST be the mode configuration object { mode: "learn" } (with no prompt field). It is additional and does not count among the ${count} questions. Do not output exam mode.
 
 	NO TOOLS, NO FILE ACCESS — READ THIS BEFORE ANYTHING ELSE: you are running without any tool. You cannot read, open, fetch, write or create a file, a note or a folder, and you must never try: an attempted tool call is not a quiz, and the whole generation fails. The user request below may name files, paths or notes to "read first", or ask you to "create a note" somewhere. Every source it names that actually exists has ALREADY been read for you and its full content is inlined below, between "--- <file name> ---" markers. So: treat those paths as mere labels for the text you already have, ignore every instruction to read, open, create, modify or save anything, and never mention this limitation in your answer. Your ONLY output is the JSON5 array.
 
@@ -834,6 +851,8 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 								items: {
 									type: "object",
 									properties: {
+										id: { type: "string" },
+										conceptId: { type: "string" },
 										title: { type: "string" },
 										prompt: { type: "string" },
 										options: { type: "array", items: { type: "string" } },
@@ -843,11 +862,23 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 										type: { type: "string" },
 										answer: { type: "string" },
 										learn: { type: "string" },
+										explain: { type: "string" },
+										sourceRefs: {
+											type: "array",
+											items: {
+												type: "object",
+												properties: {
+													file: { type: "string" },
+													page: { type: "number" }
+												},
+												required: ["file"]
+											}
+										},
 										passage: { type: "string" },
 										passageId: { type: "string" },
 										passageTitle: { type: "string" }
 									},
-									required: ["title", "prompt"]
+									required: ["id", "conceptId", "title", "prompt", "learn", "explain"]
 								}
 							}
 						},

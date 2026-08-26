@@ -3,7 +3,9 @@ import type { DraftQuestion } from "./utils";
 import type { EditorExamOptions } from "../types/editor-ctx";
 
 function exportQuestion(q: DraftQuestion, idx: number): string {
-	const id = q.title ? q.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20) : `q${idx + 1}`;
+	// Conserver l'id importé : il sert désormais de clé stable à la mémoire
+	// espacée. Un changement de titre ne doit pas remettre la carte à zéro.
+	const id = q._id || (q.title ? q.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20) : `q${idx + 1}`);
 	const e = esc5;
 	const L: string[] = [];
 	L.push("\t{");
@@ -102,9 +104,10 @@ function exportQuestion(q: DraftQuestion, idx: number): string {
 				L.push(`\t\t${key}: ${val},`);
 			} else if (typeof val === 'boolean') {
 				L.push(`\t\t${key}: ${val},`);
-			} else if (Array.isArray(val)) {
-				const items = (val as unknown[]).map(v => typeof v === 'string' ? `'${e(v)}'` : v).join(", ");
-				L.push(`\t\t${key}: [${items}],`);
+			} else if (Array.isArray(val) || (val && typeof val === 'object')) {
+				// JSON est un sous-ensemble de JSON5 et préserve aussi les tableaux
+				// d'objets tels que sourceRefs (l'ancien join écrivait [object Object]).
+				L.push(`\t\t${key}: ${JSON.stringify(val)},`);
 			}
 		}
 	}

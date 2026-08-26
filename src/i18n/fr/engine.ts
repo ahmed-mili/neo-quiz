@@ -70,6 +70,12 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 
 	/* ── Mode apprentissage ── */
 	"engine.learn.label": "Leçon",
+	"engine.learn.newConcept": "Nouvelle notion",
+	"engine.learn.testMe": "J’ai compris — me tester",
+	"engine.learn.sources": "Sources",
+	"engine.learn.sourcePage": "Page {page}",
+	"engine.review.next": "Prochaine révision : {date}",
+	"engine.review.noneDue": "Rien à revoir pour le moment. Prochaine révision : {date}.",
 
 	/* ── Question texte / terminal ── */
 	"engine.text.placeholder": "Votre réponse...",
@@ -87,6 +93,10 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 	"engine.rating.understood": "Compris",
 	"engine.rating.partial": "Partiel",
 	"engine.rating.review": "À revoir",
+	"engine.rating.again": "À revoir",
+	"engine.rating.hard": "Difficile",
+	"engine.rating.good": "Correct",
+	"engine.rating.easy": "Facile",
 
 	/* ── Slide de soumission ── */
 	"engine.submit.back": "Retour",

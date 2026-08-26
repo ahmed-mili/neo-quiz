@@ -9,7 +9,8 @@ import type { ModuleGroup, ModuleMap } from "./quiz-modules";
 import { ModuleEditModal } from "./module-edit";
 import type { ActionMenuItem } from "./ui-select";
 import { openQuizInEditor } from "./quiz-open";
-import { QUIZ_BLOCK_RE } from "../quiz-utils";
+import { extractExamOptions, parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-utils";
+import JSON5 from "json5";
 
 /* ══════════════════════════════════════════════════════════
    QUIZ MENU — contenu du menu ⋯ des cartes de « Mes quiz ».
@@ -145,6 +146,55 @@ async function deleteQuiz(ctx: DashboardCtx, quiz: QuizIndexEntry): Promise<void
 	new Notice(t("dashboard.quizzes.deleted"));
 }
 
+/** Convertit uniquement l'objet de configuration final. Les questions et
+ * leurs longues chaînes HTML restent octet pour octet identiques. */
+async function convertQuizToLearn(ctx: DashboardCtx, quiz: QuizIndexEntry): Promise<void> {
+	const file = ctx.app.vault.getAbstractFileByPath(quiz.path);
+	if (!(file instanceof TFile)) return void new Notice(t("dashboard.detail.fileNotFound"));
+	const content = await ctx.app.vault.read(file);
+	const match = QUIZ_BLOCK_RE.exec(content);
+	if (!match || match.index == null) return void new Notice(t("dashboard.detail.noBlock"));
+
+	try {
+		const parsed = parseQuizSource(match[1]);
+		const current = extractExamOptions(parsed);
+		if (current.quizMode === "learn") return void new Notice(t("dashboard.quizzes.learnAlready"));
+
+		const last = parsed[parsed.length - 1] as unknown as Record<string, unknown> | undefined;
+		const hasConfig = !!last && typeof last === "object" && !last.prompt
+			&& (last.examMode === true || last.learnMode === true || typeof last.mode === "string");
+		const nextConfig: Record<string, unknown> = hasConfig ? { ...last } : {};
+		delete nextConfig.examMode;
+		delete nextConfig.learnMode;
+		nextConfig.mode = "learn";
+
+		let source = match[1];
+		if (hasConfig) {
+			const end = source.lastIndexOf("}");
+			const start = source.lastIndexOf("{", end);
+			if (start < 0 || end < start) throw new Error("Configuration introuvable");
+			source = source.slice(0, start) + JSON5.stringify(nextConfig, null, 2) + source.slice(end + 1);
+		} else {
+			const close = source.lastIndexOf("]");
+			if (close < 0) throw new Error("Tableau introuvable");
+			const before = source.slice(0, close).trimEnd();
+			const separator = before.endsWith(",") ? "" : ",";
+			source = `${before}${separator}\n${JSON5.stringify(nextConfig, null, 2)}\n${source.slice(close)}`;
+		}
+
+		// Refuser toute écriture si la modification minimale n'est pas reparsable.
+		if (extractExamOptions(parseQuizSource(source)).quizMode !== "learn") throw new Error("Mode non converti");
+		const replacement = match[0].replace(match[1], source);
+		const updated = content.slice(0, match.index) + replacement + content.slice(match.index + match[0].length);
+		await ctx.app.vault.modify(file, updated);
+		await ctx.scanner?.scanFile(file);
+		new Notice(t("dashboard.quizzes.learnConverted", { title: quiz.title }));
+	} catch (error) {
+		console.error("[quiz-blocks] conversion learn impossible:", error);
+		new Notice(t("dashboard.quizzes.learnConvertError"));
+	}
+}
+
 /** Cœur du delete, sans Notice (partagé quiz seul / module entier). */
 async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFile, content: string): Promise<void> {
 	const remaining = content.replace(QUIZ_BLOCK_RE, "");
@@ -175,7 +225,7 @@ async function deleteModuleQuizzes(ctx: DashboardCtx, group: ModuleGroup): Promi
     (Ahmed 2026-07-19). */
 export function buildQuizCardMenu(ctx: DashboardCtx, rerender: () => void): (quiz: QuizIndexEntry) => ActionMenuItem[] {
 	return (quiz) => {
-		return [
+		const items: ActionMenuItem[] = [
 			{
 				icon: "share-2",
 				label: t("dashboard.quizzes.menuShare"),
@@ -189,6 +239,17 @@ export function buildQuizCardMenu(ctx: DashboardCtx, rerender: () => void): (qui
 				label: t("dashboard.detail.edit"),
 				onClick: () => { void openQuizInEditor(ctx.app, quiz); },
 			},
+			...(quiz.quizMode !== "learn" ? [{
+				icon: "brain",
+				label: t("dashboard.quizzes.menuConvertLearn"),
+				onClick: () => {
+					new ConfirmModal(ctx.app, {
+						title: t("dashboard.quizzes.convertLearnTitle"),
+						body: t("dashboard.quizzes.convertLearnBody"),
+						cta: t("dashboard.quizzes.convertLearnCta"),
+					}, () => { void convertQuizToLearn(ctx, quiz).then(rerender); }).open();
+				},
+			}] satisfies ActionMenuItem[] : []),
 			{
 				// « text-cursor-input » et non un crayon : « Edit » (pencil) ouvre
 				// déjà l'éditeur de questions — deux crayons se confondraient.
@@ -210,6 +271,7 @@ export function buildQuizCardMenu(ctx: DashboardCtx, rerender: () => void): (qui
 				},
 			},
 		];
+		return items;
 	};
 }
 

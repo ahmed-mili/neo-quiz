@@ -89,7 +89,8 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 
 	function isCorrect(i: number): boolean {
 		if (ctx.textOnly?.isTextOnlyMode?.()) {
-			return ctx.quizState.textOnlyRatings?.[i] === "understood";
+			const rating = ctx.quizState.textOnlyRatings?.[i];
+			return rating === "good" || rating === "easy";
 		}
 
 		const q = ctx.quiz[i], sel = ctx.quizState.selections[i];

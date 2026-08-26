@@ -76,7 +76,12 @@ export function renderQuizCard(
 	// ── État du quiz (calcul partagé quiz-mastery.ts) ──
 	// `state` reste un identifiant (suffixe de classe CSS) ; seul `stateLabel`
 	// est traduit — et il l'est ici, à chaque rendu de carte.
-	const { state, pct } = computeQuizState(quiz, stats);
+	const computed = computeQuizState(quiz, stats);
+	const dueNow = Object.values(stats?.reviewItems || {}).some(item =>
+		item.lastReviewedAt > 0 && Date.parse(item.card.due) <= Date.now());
+	// Une échéance FSRS est plus pertinente que l'ancien classement par score.
+	const state = dueNow ? "review" : computed.state;
+	const pct = computed.pct;
 	const best = stats ? stats.bestScore : 0;
 	let stateLabel: string, stateIcon: string;
 	switch (state) {

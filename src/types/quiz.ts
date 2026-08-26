@@ -27,6 +27,13 @@ export interface ResourceButton {
 	fileName: string;
 }
 
+/** Preuve reliant un contenu généré à sa source dans le vault. */
+export interface SourceReference {
+	file: string;
+	page?: number;
+	label?: string;
+}
+
 /**
  * Champs communs à toutes les variantes de question. La plupart sont
  * optionnels : le moteur les lit avec `||`/`??`/`?.` et tolère leur absence
@@ -35,6 +42,8 @@ export interface ResourceButton {
 export interface QuestionBase {
 	/** Identifiant stable optionnel ; sert d'ancre de section si non vide (engine/cards.js questionCardHtml). */
 	id?: string;
+	/** Notion pédagogique commune à plusieurs formulations d'une même connaissance. */
+	conceptId?: string;
 	title?: string;
 	/** Énoncé texte brut, rendu via sanitize.renderTextWithEmbeds (engine/cards.js renderQuizPromptHtml). */
 	prompt?: string;
@@ -53,6 +62,8 @@ export interface QuestionBase {
 	learn?: string;
 	learnHtml?: string;
 	_learnHtml?: string;
+	/** Références précises utilisées par l'IA pour produire la leçon et la correction. */
+	sourceRefs?: SourceReference[];
 	resourceButton?: ResourceButton | null;
 	/**
 	 * SUPPORT DE COMPRÉHENSION — document à lire avant de répondre (texte,
@@ -228,7 +239,7 @@ export type QuizQuestion =
 export type PracticeMode = "qcm" | "text";
 
 /** Auto-évaluation en mode entraînement texte libre (engine/text-only.js RATINGS). */
-export type TextOnlyRating = "understood" | "partial" | "review";
+export type TextOnlyRating = "again" | "hard" | "good" | "easy";
 
 /**
  * Sélection courante pour une question, selon sa variante
@@ -273,6 +284,8 @@ export type QuestionShuffleEntry =
 export interface QuizState {
 	practiceMode: PracticeMode;
 	selections: QuestionSelection[];
+	/** Leçon initiale quittée via « Me tester » pendant cette instance. */
+	lessonSeen: boolean[];
 	/** Réponses libres saisies en mode entraînement texte (engine/text-only.js hasAnyAnswer). */
 	textOnlyAnswers: string[];
 	/** Question validée ("Vérifier" cliqué) en mode entraînement texte (engine/text-only.js isChecked). */

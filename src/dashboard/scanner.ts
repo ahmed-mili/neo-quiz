@@ -36,15 +36,22 @@ export type QuizTypeTag = "mixed" | "single" | "multiple" | "text" | "ordering" 
  * QuizQuestion complet de types/quiz.ts : parseQuizMeta ne lit que ces 3 champs). */
 interface RawQuizItem {
 	examMode?: boolean;
+	learnMode?: boolean;
+	mode?: string;
+	prompt?: string;
+	promptHtml?: string;
 	multiSelect?: boolean;
 	type?: string;
 }
+
+export type IndexedQuizMode = "learn" | "exam" | "quiz";
 
 /** Métadonnées extraites d'un bloc quiz-blocks (parseQuizMeta). */
 export interface QuizMeta {
 	questions: number;
 	types: QuestionTypeTag[];
 	quizType: QuizTypeTag;
+	quizMode: IndexedQuizMode;
 }
 
 /**
@@ -90,10 +97,22 @@ export function createScanner(app: App): Scanner {
 			const parsed: unknown = JSON5.parse(source);
 			if (!Array.isArray(parsed)) return null;
 
-			// Ignorer l'objet examMode final s'il existe
+			// Ignorer toutes les formes de configuration finales. L'ancien filtre
+			// ne connaissait que examMode et comptait { mode: "learn" } comme une
+			// question supplémentaire dans le dashboard.
+			const isModeConfig = (q: unknown): q is RawQuizItem => {
+				if (!q || typeof q !== "object") return false;
+				const item = q as RawQuizItem;
+				return !item.prompt && !item.promptHtml
+					&& (item.examMode === true || item.learnMode === true || typeof item.mode === "string");
+			};
+			let config: RawQuizItem | undefined;
+			for (let i = parsed.length - 1; i >= 0; i--) {
+				if (isModeConfig(parsed[i])) { config = parsed[i]; break; }
+			}
 			const questions = parsed.filter((q): q is RawQuizItem => {
 				if (!q || typeof q !== "object") return false;
-				return !(q as RawQuizItem).examMode;
+				return !isModeConfig(q);
 			});
 
 			if (questions.length === 0) return null;
@@ -123,7 +142,12 @@ export function createScanner(app: App): Scanner {
 			return {
 				questions: questions.length,
 				types: Array.from(typeSet),
-				quizType
+				quizType,
+				quizMode: config?.mode === "learn" || config?.learnMode === true
+					? "learn"
+					: config?.mode === "exam" || config?.examMode === true
+					? "exam"
+					: "quiz",
 			};
 		} catch {
 			return null;

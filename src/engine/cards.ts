@@ -300,7 +300,7 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 				: "";
 			// Le compteur « rated/total » reste du code (mise en forme <strong>) :
 			// seule l'étiquette est traduite.
-			return `<div class="quiz-track-item" data-slide-kind="results"><section class="quiz-result quiz-textonly-result"><h2 class="quiz-result-title" style="font-weight:900;">${title}</h2><p>${t("engine.result.ratedLabel")} <strong>${results.rated}/${results.total}</strong></p>${correctionHint}<div class="quiz-textonly-result-grid"><div class="quiz-textonly-result-stat understood"><strong>${results.understood}</strong><span>${t("engine.rating.understood")}</span></div><div class="quiz-textonly-result-stat partial"><strong>${results.partial}</strong><span>${t("engine.rating.partial")}</span></div><div class="quiz-textonly-result-stat review"><strong>${results.review}</strong><span>${t("engine.rating.review")}</span></div>${results.pending > 0 ? `<div class="quiz-textonly-result-stat pending"><strong>${results.pending}</strong><span>${t(results.pending > 1 ? "engine.result.pending.other" : "engine.result.pending.one")}</span></div>` : ""}</div><div class="quiz-actions">${correctionBtn}${saveResultsButtonHtml()}<button class="quiz-action-btn success quiz-retry-btn" type="button">${t("engine.result.retry")}</button></div></section></div>`;
+			return `<div class="quiz-track-item" data-slide-kind="results"><section class="quiz-result quiz-textonly-result"><h2 class="quiz-result-title" style="font-weight:900;">${title}</h2><p>${t("engine.result.ratedLabel")} <strong>${results.rated}/${results.total}</strong></p>${correctionHint}<div class="quiz-textonly-result-grid"><div class="quiz-textonly-result-stat again"><strong>${results.again}</strong><span>${t("engine.rating.again")}</span></div><div class="quiz-textonly-result-stat hard"><strong>${results.hard}</strong><span>${t("engine.rating.hard")}</span></div><div class="quiz-textonly-result-stat good"><strong>${results.good}</strong><span>${t("engine.rating.good")}</span></div><div class="quiz-textonly-result-stat easy"><strong>${results.easy}</strong><span>${t("engine.rating.easy")}</span></div>${results.pending > 0 ? `<div class="quiz-textonly-result-stat pending"><strong>${results.pending}</strong><span>${t(results.pending > 1 ? "engine.result.pending.other" : "engine.result.pending.one")}</span></div>` : ""}</div><div class="quiz-actions">${correctionBtn}${saveResultsButtonHtml()}<button class="quiz-action-btn success quiz-retry-btn" type="button">${t("engine.result.retry")}</button></div></section></div>`;
 		}
 		const { pct, correct, total } = ctx.computeScorePercent();
 		// Mode learn : bouton "Passer l'examen"
@@ -373,6 +373,7 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 	function questionCardHtml(qi: number): string {
 		const q = ctx.quiz[qi];
 		const isTextOnly = ctx.textOnly?.isTextOnlyMode?.();
+		const lessonPending = !!isTextOnly && ctx.textOnly.isLessonPending(qi);
 		const isTxt = ctx.isTextQuestion(q);
 		const isCloze = ctx.isClozeQuestion(q);
 		const isOrd = ctx.isOrderingQuestion(q);
@@ -439,9 +440,9 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		return `<div class="quiz-track-item" data-slide-kind="question" data-qi="${qi}">
 			<section class="quiz-card"${sectionIdAttr}>
 				${passageSection}
-				<h2>${ctx.escapeHtmlText(q.title)}</h2>
-				${ctx.sanitize.resourceButtonHtml(q)}
-				<div class="quiz-question">${renderQuizPromptHtml(q)}</div>
+				${lessonPending ? "" : `<h2>${ctx.escapeHtmlText(q.title)}</h2>`}
+				${lessonPending ? "" : ctx.sanitize.resourceButtonHtml(q)}
+				${lessonPending ? "" : `<div class="quiz-question">${renderQuizPromptHtml(q)}</div>`}
 				${body}
 				${learnSection}
 				${hintBtn}

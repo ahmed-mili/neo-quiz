@@ -94,3 +94,54 @@
 .theme-light .quiz-exam-btn{
   box-shadow: none !important;
 }
+
+/* ── Apprendre avant de se tester ── */
+
+.quiz-learning-gate{
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--quiz-primary) 30%, var(--background-modifier-border));
+  border-radius: 14px;
+  background: linear-gradient(145deg,
+    color-mix(in srgb, var(--quiz-primary) 10%, var(--background-primary)),
+    var(--background-primary));
+}
+
+.quiz-learning-gate h3{
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.quiz-learning-kicker{
+  color: var(--quiz-primary);
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.quiz-learning-gate .quiz-start-recall-btn{
+  justify-self: start;
+  margin-top: 2px;
+}
+
+.quiz-source-refs{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: .82rem;
+}
+
+.quiz-source-ref{
+  min-height: 30px;
+  padding: 5px 9px;
+}
+
+.quiz-next-review{
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: .82rem;
+}

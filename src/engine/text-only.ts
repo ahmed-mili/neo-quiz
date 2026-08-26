@@ -7,11 +7,14 @@ import type {
 	TextOnlyRating,
 } from "../types/quiz";
 import { t } from "../i18n";
+import { stableQuestionKey, type ReviewRating } from "../learning/scheduler";
+import type { StatsStore } from "../dashboard/stats-store";
 
 export interface TextOnlyResults {
-	understood: number;
-	partial: number;
-	review: number;
+	again: number;
+	hard: number;
+	good: number;
+	easy: number;
 	pending: number;
 	total: number;
 	rated: number;
@@ -32,6 +35,7 @@ export interface TextOnlyHandlers {
 	hasAnyAnswer(qi: number): boolean;
 	isChecked(qi: number): boolean;
 	isRated(qi: number): boolean;
+	isLessonPending(qi: number): boolean;
 	computeResults(): TextOnlyResults;
 	getCorrectOptionIndices(q: QuizQuestion): number[];
 	expectedAnswerHtml(q: QuizQuestion): string;
@@ -50,9 +54,21 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 	   accessor : la traduction est lue au moment où le HTML est construit.
 	   `className` reste une constante — c'est un identifiant CSS, jamais traduit. */
 	const RATINGS: Record<TextOnlyRating, RatingMeta> = {
-		understood: { get label() { return t("engine.rating.understood"); }, className: "understood" },
-		partial: { get label() { return t("engine.rating.partial"); }, className: "partial" },
-		review: { get label() { return t("engine.rating.review"); }, className: "review" }
+		again: { get label() { return t("engine.rating.again"); }, className: "again" },
+		hard: { get label() { return t("engine.rating.hard"); }, className: "hard" },
+		good: { get label() { return t("engine.rating.good"); }, className: "good" },
+		easy: { get label() { return t("engine.rating.easy"); }, className: "easy" }
+	};
+
+	const learningStore = (ctx.plugin as typeof ctx.plugin & { _statsStore?: StatsStore })._statsStore;
+	const questionKey = (qi: number): string => stableQuestionKey(ctx.quiz[qi], qi);
+	const reviewMeta = (qi: number) => {
+		const q = ctx.quiz[qi];
+		return {
+			title: q.title,
+			conceptId: q.conceptId,
+			sourcePage: q.sourceRefs?.[0]?.page,
+		};
 	};
 
 	function isTextOnlyMode(): boolean {
@@ -93,14 +109,55 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 		return !!normalizeRating(ctx.quizState.textOnlyRatings?.[qi]);
 	}
 
+	function isLessonPending(qi: number): boolean {
+		const q = ctx.quiz[qi];
+		return ctx.quizMode === "learn"
+			&& !!(q?.learn || q?.learnHtml || q?._learnHtml || q?.explain || q?.explainHtml || q?._explainHtml)
+			&& !ctx.quizState.lessonSeen[qi];
+	}
+
 	function computeResults(): TextOnlyResults {
-		const counts = { understood: 0, partial: 0, review: 0, pending: 0 };
+		const counts = { again: 0, hard: 0, good: 0, easy: 0, pending: 0 };
 		for (let i = 0; i < ctx.quiz.length; i++) {
 			const rating = normalizeRating(ctx.quizState.textOnlyRatings?.[i]);
 			if (rating) counts[rating]++;
 			else counts.pending++;
 		}
 		return { ...counts, total: ctx.quiz.length, rated: ctx.quiz.length - counts.pending };
+	}
+
+	function sourceRefsHtml(q: QuizQuestion): string {
+		if (!Array.isArray(q.sourceRefs) || q.sourceRefs.length === 0) return "";
+		const buttons = q.sourceRefs.map(ref => {
+			const page = Number.isFinite(ref.page) ? t("engine.learn.sourcePage", { page: String(ref.page) }) : ref.file;
+			const label = ref.label || page;
+			return `<button class="quiz-resource-btn quiz-source-ref" type="button" data-resource-file="${ctx.escapeHtmlAttr(ref.file)}"><span aria-hidden="true">↗</span><span>${ctx.escapeHtmlText(label)}</span></button>`;
+		}).join("");
+		return `<div class="quiz-source-refs"><span>${t("engine.learn.sources")}</span>${buttons}</div>`;
+	}
+
+	function lessonGateHtml(q: QuizQuestion): string {
+		// Migration sans IA des anciens quiz : leurs explications très riches
+		// deviennent la leçon initiale, sans dupliquer le contenu dans la note.
+		const learnHtml = q.learnHtml || q._learnHtml || q.explainHtml || q._explainHtml;
+		const content = learnHtml
+			? ctx.sanitize.replaceObsidianEmbedsInHtml(learnHtml)
+			: ctx.sanitize.renderTextWithEmbeds(q.learn || q.explain || "");
+		return `<div class="quiz-learning-gate">
+			<div class="quiz-learning-kicker">${t("engine.learn.newConcept")}</div>
+			<h3>${ctx.escapeHtmlText(q.title || t("engine.learn.label"))}</h3>
+			<div class="quiz-learn-content">${content}</div>
+			${sourceRefsHtml(q)}
+			<button class="quiz-action-btn success quiz-start-recall-btn" type="button">${t("engine.learn.testMe")}</button>
+		</div>`;
+	}
+
+	function nextReviewHtml(qi: number): string {
+		const record = learningStore?.getQuestionReview(ctx.sourcePath, questionKey(qi));
+		if (!record || record.lastReviewedAt <= 0) return "";
+		const due = new Date(record.card.due);
+		const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(due);
+		return `<div class="quiz-next-review">${t("engine.review.next", { date: when })}</div>`;
 	}
 
 	function getCorrectOptionIndices(q: QuizQuestion): number[] {
@@ -215,6 +272,7 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 	}
 
 	function questionCardBodyHtml(q: QuizQuestion, qi: number): string {
+		if (isLessonPending(qi)) return lessonGateHtml(q);
 		const checked = isChecked(qi);
 		const examAnswerPhase = isExamAnswerPhase();
 		const revealed = checked && !examAnswerPhase;
@@ -224,8 +282,10 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 
 		const reviewHtml = revealed ? `<div class="quiz-textonly-review">
 			${ratingButtonsHtml(qi)}
+			${nextReviewHtml(qi)}
 			${comparisonOptionsHtml(q, qi)}
 			${learningHtml(q)}
+			${sourceRefsHtml(q)}
 		</div>` : "";
 
 		return `<div class="quiz-textonly">
@@ -271,6 +331,16 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 	}
 
 	function bindTextOnlyQuestion(trackItem: HTMLElement, qi: number): void {
+		const startRecall = trackItem.querySelector<HTMLButtonElement>(".quiz-start-recall-btn");
+		if (startRecall) {
+			startRecall.addEventListener("click", e => {
+				e.preventDefault();
+				ctx.quizState.lessonSeen[qi] = true;
+				learningStore?.markQuestionIntroduced(ctx.sourcePath, questionKey(qi), reviewMeta(qi));
+				ctx.refreshQuestionSlide(qi, { syncHeight: true });
+			});
+			return;
+		}
 		const textarea = trackItem.querySelector<HTMLTextAreaElement>(".quiz-textonly-textarea[data-textonly-answer]");
 		if (textarea) {
 			const syncLayout = () => {
@@ -333,6 +403,7 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 				const rating = normalizeRating(btn.dataset.textonlyRating as TextOnlyRating | undefined);
 				if (!rating) return;
 				ctx.quizState.textOnlyRatings[qi] = rating;
+				learningStore?.recordQuestionReview(ctx.sourcePath, questionKey(qi), rating as ReviewRating, reviewMeta(qi));
 				ctx.commitQuestionInteraction(qi, { syncHeight: true });
 			});
 		});
@@ -348,6 +419,7 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 		hasAnyAnswer,
 		isChecked,
 		isRated,
+		isLessonPending,
 		computeResults,
 		getCorrectOptionIndices,
 		expectedAnswerHtml,

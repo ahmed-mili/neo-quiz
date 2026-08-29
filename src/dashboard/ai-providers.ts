@@ -148,7 +148,7 @@ export const PROVIDERS: Provider[] = [
 		get sub() { return t("ai.provider.ollamaSub"); },
 		logo: "ollama",
 		desktopOnly: false,
-		defaultModel: "glm-5.2:cloud",
+		defaultModel: "glm-5.3:cloud",
 		defaultEffort: "high"
 	}
 ];
@@ -605,25 +605,33 @@ export function resolveClaudeModel(value?: string): string {
 /* ── Modèles Ollama (un seul endpoint local, cloud + local) ──
    Ollama sert local ET cloud sur localhost:11434. Les tags cloud portent le
    suffixe « :cloud » OU « …-cloud » : LES DEUX FORMES existent (ex.
-   gpt-oss:120b-cloud vs glm-5.2:cloud) et le suffixe NE dit RIEN du prix.
+   gpt-oss:120b-cloud vs glm-5.3:cloud) et le suffixe NE dit RIEN du prix.
    Gratuit vs payant est décidé par Ollama PAR MODÈLE, évolue dans le temps, et
    n'est fiable qu'à la génération (403 « requires a subscription »). On ne fige
    donc AUCUN statut de prix. Le catalogue ne garde que les modèles récents
    (dernière version par famille) et est rafraîchi dynamiquement depuis
    ollama.com (cf. fetchOllamaCloudCatalog) ; le tableau ci-dessous n'est qu'un
    repli embarqué (si hors-ligne) et la source des tags exacts connus. */
+/* Tags relevés un par un sur ollama.com/library/<modèle>/tags le 2026-08-29.
+   Les relever plutôt que les deviner N'EST PAS DU ZÈLE : « <famille>:cloud »
+   n'existe pas pour tout le monde (mistral-large-3 n'a que « :675b-cloud »,
+   nemotron-3-nano que « :30b-cloud »), et un tag inventé donne un 404 à la
+   génération. gemini-3-flash-preview a perdu son tag cloud et sort d'ici. */
 export const OLLAMA_FALLBACK_CATALOG: OllamaCatalogEntry[] = [
 	{ value: "gpt-oss:120b-cloud", label: "GPT-OSS 120B" },
 	{ value: "gpt-oss:20b-cloud", label: "GPT-OSS 20B" },
 	{ value: "minimax-m3:cloud", label: "MiniMax M3" },
 	{ value: "nemotron-3-ultra:cloud", label: "Nemotron 3 Ultra" },
 	{ value: "nemotron-3-super:cloud", label: "Nemotron 3 Super" },
-	{ value: "glm-5.2:cloud", label: "GLM-5.2" },
-	{ value: "kimi-k2.7-code:cloud", label: "Kimi K2.7 Code" },
+	{ value: "nemotron-3-nano:30b-cloud", label: "Nemotron 3 Nano" },
+	{ value: "glm-5.3:cloud", label: "GLM-5.3" },
+	{ value: "glm-5.3-flash:cloud", label: "GLM-5.3 Flash" },
+	{ value: "kimi-k3:cloud", label: "Kimi K3" },
 	{ value: "qwen3.5:cloud", label: "Qwen 3.5" },
 	{ value: "deepseek-v4-pro:cloud", label: "DeepSeek V4 Pro" },
 	{ value: "deepseek-v4-flash:cloud", label: "DeepSeek V4 Flash" },
-	{ value: "gemini-3-flash-preview:cloud", label: "Gemini 3 Flash" }
+	{ value: "mistral-large-3:675b-cloud", label: "Mistral Large 3" },
+	{ value: "gemma4:cloud", label: "Gemma 4" }
 ];
 
 // Le menu affiche UNE liste scrollable (façon app Ollama) : jusqu'à 20 modèles,
@@ -636,7 +644,7 @@ export const OLLAMA_VISIBLE_COUNT = 7;
 // L'ordre = qualité, indépendamment du prix (un modèle payant → 403 explicite à
 // la génération, jamais figé ici). L'utilisateur réordonne à volonté.
 export const DEFAULT_OLLAMA_SELECTION: string[] = [
-	"glm-5.2:cloud", "kimi-k2.7-code:cloud", "deepseek-v4-pro:cloud", "qwen3.5:cloud",
+	"glm-5.3:cloud", "kimi-k3:cloud", "deepseek-v4-pro:cloud", "qwen3.5:cloud",
 	"minimax-m3:cloud", "gpt-oss:120b-cloud", "nemotron-3-ultra:cloud"
 ];
 
@@ -702,7 +710,7 @@ export function resolveOllamaSelection(values?: string[] | null, catalog?: Ollam
 /* ── Regroupement par MODÈLE et « dernière version seulement » ──
    Règle produit ABSOLUE (mémoire projet : ollama-latest-version-only) : la liste
    ne contient QUE la version la plus récente de chaque modèle. « kimi-k2.6 »
-   disparaît dès que « kimi-k2.7-code » est là ; « glm-4.7 » dès qu'il y a « glm-5.2 ».
+   disparaît dès que « kimi-k3 » est là ; « glm-5.2 » dès qu'il y a « glm-5.3 ».
 
    Base = préfixe alphabétique AVANT le premier chiffre, sur le nom SANS le tag
    (« :cloud »). C'est ce qui fait qu'un suffixe de variante (« -code ») ne scinde

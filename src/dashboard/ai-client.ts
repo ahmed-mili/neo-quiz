@@ -8,6 +8,7 @@ import {
 	resolveKimiModel,
 	resolveEffort,
 	getCodexModels,
+	getProvider,
 	buildChildEnv,
 	isOllamaCloudModel,
 } from "./ai-providers";
@@ -81,12 +82,6 @@ function userError(message: string): UserFacingError {
 }
 
 export function createAiClient(plugin: AiPlugin): AiClient {
-	const DEFAULT_MODELS: Record<string, string> = {
-		"claude-code": "sonnet",
-		codex: "gpt-5.6-terra",
-		ollama: "glm-5.2:cloud",
-	};
-
 	// ── Annulation (bouton stop / Esc) ──
 	// Chaque appel CLI/HTTP enregistre sa fonction d'arrêt ici ; abort()
 	// l'invoque. L'erreur qui en résulte (process tué, fetch avorté) est
@@ -163,7 +158,10 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		const { count = 5, type = "Mixte", source = "topic", images = [] } = options;
 		lastRequestText = prompt;
 		const provider = plugin.settings.aiProvider || "claude-code";
-		let model = plugin.settings.aiModel || DEFAULT_MODELS[provider];
+		// Le défaut vient du registry, JAMAIS d'une copie locale : une seconde
+		// table avait divergé (« sonnet » ici, « opus » dans PROVIDERS), donc le
+		// composer annonçait un modèle et la génération en lançait un autre.
+		let model = plugin.settings.aiModel || getProvider(provider).defaultModel;
 		// Fable 5 masqué si la promo n'est plus proposée → retombe sur le défaut Claude
 		if (provider === "claude-code") {
 			model = resolveClaudeModel(model);

@@ -22,6 +22,7 @@ const OBSIDIAN_STUB = [
 	"export const FuzzySuggestModal = class {};",
 	"export const setIcon = () => nope('setIcon');",
 	"export const Platform = {};",
+	"export const requestUrl = () => nope('requestUrl');",
 	"export const MarkdownRenderer = {};",
 	"export const loadPdfJs = () => nope('loadPdfJs');",
 ].join("\n");

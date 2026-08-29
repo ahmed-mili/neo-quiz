@@ -284,32 +284,6 @@ function buildTutorials(): Record<string, TutorialDef> {
 			warning: t("plugin.tutorial.codex.warning"),
 			docsLink: { label: t("plugin.tutorial.codex.docs"), url: "https://learn.chatgpt.com/docs/codex/cli" }
 		},
-		"kimi-code": {
-			title: t("plugin.tutorial.kimi.title"),
-			sections: [
-				{
-					heading: t("plugin.tutorial.kimi.s1.heading"),
-					text: t("plugin.tutorial.kimi.s1.text"),
-					link: { label: t("plugin.tutorial.kimi.s1.link"), url: "https://www.kimi.com/code" }
-				},
-				{
-					heading: t("plugin.tutorial.kimi.s2.heading"),
-					text: t("plugin.tutorial.kimi.s2.text"),
-					// « Voir les abonnements » → page d'abonnement, où les cartes
-					// (prix + Subscribe + « Kimi Code available ») sont visibles
-					// d'emblée. URL nue, sans les paramètres de tracking du site
-					// (cf. le même choix, commenté, dans ai.ts).
-					link: { label: t("plugin.tutorial.kimi.s2.link"), url: "https://www.kimi.com/membership/pricing" }
-				},
-				{
-					heading: t("plugin.tutorial.kimi.s3.heading"),
-					text: t("plugin.tutorial.kimi.s3.text"),
-					link: null
-				}
-			],
-			warning: t("plugin.tutorial.kimi.warning"),
-			docsLink: { label: t("plugin.tutorial.kimi.docs"), url: "https://moonshotai.github.io/kimi-code/" }
-		},
 		ollama: {
 			title: t("plugin.tutorial.ollama.title"),
 			sections: [
@@ -597,49 +571,31 @@ class QuizBlocksSettingTab extends PluginSettingTab {
 		if (currentProvider) {
 			const models = currentProvider === "claude-code" ? aiProviders.getClaudeModels() : aiProviders.getDefaultModels(currentProvider);
 
-			// Liste vide = Kimi dont le CLI n'a encore rien publié (compte non
-			// connecté, ou détection async pas revenue). Les autres fournisseurs
-			// ont toujours un repli. Pas de dropdown vide ni de models[0] sur du
-			// vide : on explique, et on redessine si des modèles arrivent (la
-			// seconde passe a une liste pleine → aucune boucle de rendu).
-			if (!models.length) {
-				new Setting(containerEl)
-					.setName(t("plugin.ai.model.name"))
-					.setDesc(t("plugin.ai.model.noneAvailable"));
-				// Le tutoriel ci-dessous (marche à suivre /login) doit rester
-				// affiché → surtout pas de return ici.
-				aiProviders.checkKimi(true).then(res => {
-					if (res.ok && res.models.length) this.display();
-				});
-			} else {
-				const currentModel = currentProvider === "claude-code"
-					? aiProviders.resolveClaudeModel(this.plugin.settings.aiModel || models[0].value)
-					: (this.plugin.settings.aiModel || models[0].value);
+			const currentModel = currentProvider === "claude-code"
+				? aiProviders.resolveClaudeModel(this.plugin.settings.aiModel || models[0].value)
+				: (this.plugin.settings.aiModel || models[0].value);
 
-				new Setting(containerEl)
-					.setName(t("plugin.ai.model.name"))
-					.setDesc(currentProvider === "ollama"
-						? t("plugin.ai.model.descOllama")
-						: currentProvider === "codex"
-						? t("plugin.ai.model.descCodex")
-						: currentProvider === "kimi-code"
-						? t("plugin.ai.model.descKimi")
-						: t("plugin.ai.model.descClaude"))
-					.addDropdown(dropdown => {
-						for (const m of models) {
-							dropdown.addOption(m.value, m.label + (m.hint ? " (" + m.hint + ")" : ""));
-						}
-						// If current model is not in the list, add it as custom
-						if (!models.find(m => m.value === currentModel)) {
-							dropdown.addOption(currentModel, t("plugin.ai.model.custom", { model: currentModel }));
-						}
-						dropdown.setValue(currentModel);
-						dropdown.onChange(async (value) => {
-							this.plugin.settings.aiModel = value;
-							await this.plugin.saveSettings();
-						});
+			new Setting(containerEl)
+				.setName(t("plugin.ai.model.name"))
+				.setDesc(currentProvider === "ollama"
+					? t("plugin.ai.model.descOllama")
+					: currentProvider === "codex"
+					? t("plugin.ai.model.descCodex")
+					: t("plugin.ai.model.descClaude"))
+				.addDropdown(dropdown => {
+					for (const m of models) {
+						dropdown.addOption(m.value, m.label + (m.hint ? " (" + m.hint + ")" : ""));
+					}
+					// If current model is not in the list, add it as custom
+					if (!models.find(m => m.value === currentModel)) {
+						dropdown.addOption(currentModel, t("plugin.ai.model.custom", { model: currentModel }));
+					}
+					dropdown.setValue(currentModel);
+					dropdown.onChange(async (value) => {
+						this.plugin.settings.aiModel = value;
+						await this.plugin.saveSettings();
 					});
-			}
+				});
 		}
 
 		// Ollama URL (local only)
@@ -1207,6 +1163,17 @@ export default class InteractiveQuizPlugin extends Plugin {
 				this.settings.aiModel = "";
 			}
 			delete this.settings.aiApiKey;
+			await this.saveSettings();
+		}
+
+		// Migration 2026-08-29 : le fournisseur Kimi Code est retiré. Un réglage
+		// qui le nommait encore laisserait le composer sur un fournisseur absent
+		// du menu — donc un bouton qui n'ouvre rien. Le choix redevient explicite
+		// (aucun présélectionné), comme pour la migration Anthropic ci-dessus.
+		if (this.settings.aiProvider === "kimi-code") {
+			this.settings.aiProvider = "";
+			this.settings.aiModel = "";
+			this.settings.aiEffort = "";
 			await this.saveSettings();
 		}
 

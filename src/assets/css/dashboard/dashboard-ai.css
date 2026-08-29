@@ -283,12 +283,6 @@
 	color: var(--text-normal);
 }
 
-/* Kimi : logo monochrome (noir sur la marque) → suit le thème, comme
-   OpenAI/Ollama, pour rester lisible en clair comme en sombre. */
-.qbd-provider-logo--kimi {
-	color: var(--text-normal);
-}
-
 /* Icône à droite d'un modèle dans le menu (façon app Ollama) : nuage = cloud,
    téléchargement = local non installé, aucune = local installé. Calée à droite
    de la ligne, alignée sur le nom. */

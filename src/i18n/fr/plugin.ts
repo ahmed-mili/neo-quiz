@@ -37,10 +37,8 @@ export const FR_PLUGIN: Record<keyof typeof EN_PLUGIN, string> = {
 	"plugin.ai.provider.desc": "Choisissez le fournisseur pour la génération de quiz",
 	"plugin.ai.provider.none": "Aucun (à choisir)",
 	"plugin.ai.model.name": "Modèle",
-	"plugin.ai.model.noneAvailable": "Aucun modèle disponible. Le Kimi Code CLI ne publie ses modèles qu'une fois votre abonnement connecté : dans un terminal, lancez « kimi » puis /login, et rouvrez ces réglages.",
 	"plugin.ai.model.descOllama": "Modèle Ollama. Les « :cloud » tournent sur le cloud (compte connecté via ollama signin) ; les autres en local (ollama pull).",
 	"plugin.ai.model.descCodex": "Modèle Codex (ChatGPT) à utiliser pour la génération.",
-	"plugin.ai.model.descKimi": "Modèle Kimi publié par votre CLI (kimi provider list) — la liste suit votre abonnement.",
 	"plugin.ai.model.descClaude": "Modèle Claude à utiliser (mêmes noms que dans Claude Code).",
 	"plugin.ai.model.custom": "{model} (personnalisé)",
 
@@ -82,19 +80,6 @@ export const FR_PLUGIN: Record<keyof typeof EN_PLUGIN, string> = {
 	"plugin.tutorial.codex.s3.text": "Le plugin détecte le Codex CLI automatiquement, quelle que soit la méthode d'installation — revenez simplement sur Obsidian après l'installation. Choisissez un modèle ci-dessus et générez.",
 	"plugin.tutorial.codex.warning": "Vos requêtes passent par votre session Codex locale et comptent dans l'usage de votre abonnement ChatGPT. Aucune clé n'est stockée dans Obsidian.",
 	"plugin.tutorial.codex.docs": "Documentation Codex CLI",
-
-	/* ── Tutoriel Kimi (Kimi Code CLI) ── */
-	"plugin.tutorial.kimi.title": "Comment configurer Kimi (Kimi Code CLI)",
-	"plugin.tutorial.kimi.s1.heading": "1. Installer le Kimi Code CLI",
-	"plugin.tutorial.kimi.s1.text": "La génération utilise le Kimi Code CLI, l'outil de terminal de Moonshot AI (commande « kimi »). Installateur officiel — Windows : irm https://code.kimi.com/kimi-code/install.ps1 | iex · macOS/Linux : curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash",
-	"plugin.tutorial.kimi.s1.link": "Découvrir Kimi Code",
-	"plugin.tutorial.kimi.s2.heading": "2. Connecter votre abonnement",
-	"plugin.tutorial.kimi.s2.text": "Dans un terminal, lancez « kimi » puis tapez /login. Aucune clé API : c'est votre abonnement Kimi Code qui est utilisé. Kimi Code est un service payant — sans abonnement actif, aucun modèle n'est proposé.",
-	"plugin.tutorial.kimi.s2.link": "Voir les abonnements",
-	"plugin.tutorial.kimi.s3.heading": "3. Choisir un modèle",
-	"plugin.tutorial.kimi.s3.text": "La liste de modèles ci-dessus est celle que votre CLI publie (kimi provider list) : elle suit votre compte, donc les nouveaux modèles (K3…) apparaissent d'eux-mêmes. Tant qu'aucun compte n'est connecté, elle reste vide.",
-	"plugin.tutorial.kimi.warning": "Vos requêtes passent par votre session Kimi Code locale et comptent dans l'usage de votre abonnement. Aucune clé n'est stockée dans Obsidian.",
-	"plugin.tutorial.kimi.docs": "Documentation Kimi Code",
 
 	/* ── Tutoriel Ollama (local + cloud) ── */
 	"plugin.tutorial.ollama.title": "Comment configurer Ollama (local + cloud)",

@@ -64,7 +64,7 @@ export interface UsageRead {
 }
 
 /** Fournisseurs dont le forfait est réellement lisible sur cette machine.
-    Ailleurs (Ollama en local, Kimi Code), il n'y a rien à consulter — et le
+    Ailleurs (Ollama en local), il n'y a rien à consulter — et le
     dire est une information, pas un échec. */
 export function providerPublishesPlan(provider: string): boolean {
 	return provider === "claude-code" || provider === "codex";
@@ -507,7 +507,7 @@ export async function fetchPlanUsage(plugin: UsagePlugin, provider: string, sess
 		// nom affiché plutôt qu'un « Plus » supposé.
 		return { ...empty, rows: readCodexUsage(sessionId), fetchedAt: Date.now() };
 	}
-	// Ollama (local ou cloud) et Kimi Code ne publient aucun quota lisible
+	// Ollama (local ou cloud) ne publie aucun quota lisible
 	// localement — l'écran le dit plutôt que d'afficher un zéro trompeur.
 	return empty;
 }

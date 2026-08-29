@@ -110,7 +110,6 @@ export const EN_AI = {
 	"ai.provider.choose": "Choose a provider",
 	"ai.provider.claudeSub": "Pro / Max account",
 	"ai.provider.codexSub": "Codex CLI · ChatGPT subscription",
-	"ai.provider.kimiSub": "Kimi Code CLI · Kimi subscription",
 	"ai.provider.ollamaSub": "Local and cloud",
 
 	/* ── Statuts (pastille + sous-titre du menu fournisseur) ── */
@@ -121,8 +120,6 @@ export const EN_AI = {
 	// Affiché que le compte soit connecté ou non : le CLI et sa version, comme
 	// pour Claude/Codex/Ollama. C'est la PASTILLE (verte/orange) qui porte
 	// l'état — inutile de le répéter en toutes lettres (demande Ahmed).
-	"ai.status.kimiVersion": "Kimi Code v{version}",
-	"ai.status.kimiMissing": "Kimi Code not installed",
 	"ai.status.ollamaOk": "Ollama v{version}",
 	"ai.status.ollamaLocalOne": "{count} local + cloud",
 	"ai.status.ollamaLocalMany": "{count} local + cloud",
@@ -130,7 +127,6 @@ export const EN_AI = {
 	"ai.status.serverStopped": "Server stopped",
 	"ai.status.notInstalled": "Not installed",
 	"ai.status.desktopOnly": "Desktop only",
-	"ai.status.loginRequired": "Sign-in required",
 
 	/* ── Hints contextuels sous le composer ── */
 	"ai.hint.claudeDesktopOnly": "Generating with Claude is available on desktop only.",
@@ -139,14 +135,9 @@ export const EN_AI = {
 	"ai.hint.codexDesktopOnly": "Generating with ChatGPT (Codex CLI) is available on desktop only.",
 	"ai.hint.codexNotInstalled": "The Codex CLI is not installed — it is OpenAI's terminal tool, different from the Codex app. Install it, then connect your ChatGPT account with “codex login”:",
 	"ai.hint.installCodex": "Install Codex CLI",
-	"ai.hint.kimiDesktopOnly": "Generating with Kimi (Kimi Code CLI) is available on desktop only.",
-	"ai.hint.kimiNotInstalled": "The Kimi Code CLI is not installed. Install it, then connect your subscription with “/login”:",
-	"ai.hint.installKimi": "Install Kimi Code",
 	// Ni « installed », ni la version, ni ce qui se passera ensuite : le statut du
 	// fournisseur donne déjà la version, et les modèles qui apparaissent se voient
 	// (demande Ahmed). Ce message ne dit QUE ce qui manque et comment y remédier.
-	"ai.hint.kimiNotLoggedIn": "No Kimi account connected. In a terminal, run “kimi” then type /login.",
-	"ai.hint.kimiPlans": "See Kimi plans",
 	"ai.hint.ollamaServerOff": "Ollama is installed but its server is not running.",
 	"ai.hint.startOllama": "Start Ollama",
 	"ai.hint.ollamaNotInstalled": "Ollama is not installed. Install it, start it, and the plugin will detect it automatically:",
@@ -227,13 +218,6 @@ export const EN_AI = {
 	"ai.err.codexRateLimit": "You have reached the usage limit of your ChatGPT subscription. Try again later.",
 	"ai.err.codexEmpty": "ChatGPT (Codex) returned no response. Try again or switch model.",
 	"ai.err.codex": "Codex error: {detail}",
-	"ai.err.invalidModelKimi": "Invalid Kimi model name: {model}",
-	"ai.err.kimiNotInstalled": "Kimi Code is not installed. Install it from kimi.com/code, then sign in with /login.",
-	"ai.err.kimiTimeout": "Kimi did not answer within the time limit ({minutes} min). Try again.",
-	"ai.err.kimiNotLoggedIn": "Kimi account not connected. In a terminal, run “kimi” then /login with your Kimi Code subscription.",
-	"ai.err.kimiRateLimit": "You have reached the usage limit of your Kimi subscription. Try again later.",
-	"ai.err.kimiEmpty": "Kimi returned no response. Try again or switch model.",
-	"ai.err.kimiCode": "Kimi Code error: {detail}",
 	"ai.err.none": "none",
 	"ai.err.httpStatus": "Error {status}",
 	"ai.err.ollamaModelMissing": "Model \"{model}\" is not installed.\nRun in a terminal: ollama pull {model}\nAvailable models: {models}",

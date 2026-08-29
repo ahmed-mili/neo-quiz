@@ -5,7 +5,6 @@ import type { AiSettings } from "../types/dashboard-ctx";
 import {
 	resolveClaudeModel,
 	resolveCodexModel,
-	resolveKimiModel,
 	resolveEffort,
 	getCodexModels,
 	getProvider,
@@ -16,9 +15,8 @@ import type { AiUsage } from "./ai-usage";
 import { t } from "../i18n";
 
 /* ══════════════════════════════════════════════════════════
-   AI CLIENT — Claude Code + Codex + Kimi Code + Ollama
-   Claude/Codex/Kimi: via le CLI de l'abonnement (aucune clé API).
-   Prompt par stdin sauf Kimi (son -p exige un argument).
+   AI CLIENT — Claude Code + Codex + Ollama
+   Claude/Codex: via le CLI de l'abonnement (aucune clé API), prompt par stdin.
    Ollama: fetch() pour lire les corps d'erreur. Multimodal pour images.
 ══════════════════════════════════════════════════════════ */
 
@@ -172,11 +170,6 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		if (provider === "codex") {
 			model = resolveCodexModel(model);
 		}
-		// Kimi : "" est LÉGITIME (aucun alias en dur, cf. ai-providers) — on
-		// omet alors -m et le CLI applique son propre default_model.
-		if (provider === "kimi-code") {
-			model = resolveKimiModel(model);
-		}
 
 		// ── Prompts : ANGLAIS, et INDÉPENDANTS de la langue de l'UI ──
 		// Le prompt ne dicte PAS la langue du quiz : il impose au modèle de
@@ -264,10 +257,6 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 			const m = getCodexModels().find(x => x.value === model);
 			const fast = !!plugin.settings.aiCodexFast && !!(m && m.fast);
 			return callCodex(model, systemPrompt, userPrompt, images, effort, fast);
-		} else if (provider === "kimi-code") {
-			// Pas d'effort : `kimi -p` n'expose aucun flag pour le passer
-			// (cf. getEfforts dans ai-providers).
-			return callKimi(model, systemPrompt, userPrompt, images);
 		} else {
 			return callClaudeCode(model, systemPrompt, userPrompt, images);
 		}
@@ -589,164 +578,6 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		return parts.join("\n");
 	}
 
-	/* ── Kimi via le Kimi Code CLI (abonnement Kimi) ──
-	   Aucune clé API : réutilise la session du CLI connecté (`kimi` → /login).
-	   Deux différences assumées avec Claude/Codex, vérifiées sur le CLI 0.26.0 :
-	   1. `-p, --prompt <prompt>` exige un ARGUMENT — le CLI ne lit pas stdin
-	      (« argument missing » même avec un pipe). D'où execFile + tableau
-	      d'arguments : aucun échappement, aucun shell, un prompt plein de
-	      guillemets/dollars/retours ligne passe tel quel. Au-delà de
-	      KIMI_ARG_MAX on bascule sur un fichier (CreateProcess plafonne la
-	      ligne de commande à 32 767 caractères sous Windows).
-	   2. Sortie `--output-format stream-json` = un objet JSON par ligne, forme
-	      { role, content?, tool_calls? } — on ne garde que le texte assistant. */
-	const KIMI_ARG_MAX = 20000;
-
-	async function callKimi(model: string, systemPrompt: string, userPrompt: string, images: ImagePayload[] = []): Promise<unknown[]> {
-		if (!Platform.isDesktopApp) {
-			throw new Error(t("ai.hint.kimiDesktopOnly"));
-		}
-		// L'alias Kimi contient un « / » (« kimi-code/kimi-for-coding ») —
-		// contrairement aux modèles Claude/Codex. Vide = pas de -m du tout.
-		if (model && !/^[a-zA-Z0-9._:/-]+$/.test(model)) {
-			throw new Error(t("ai.err.invalidModelKimi", { model }));
-		}
-
-		const cp = require("child_process") as typeof import("child_process");
-		const os = require("os") as typeof import("os");
-		const path = require("path") as typeof import("path");
-		const fs = require("fs") as typeof import("fs");
-
-		let tmpDir: string | null = null;
-		const mkTmp = (): string => {
-			if (!tmpDir) tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "quiz-blocks-kimi-"));
-			return tmpDir;
-		};
-
-		// Images : fichiers temporaires que l'agent lit avec son outil de
-		// lecture (même approche que Claude Code — `kimi -p` n'a pas de flag
-		// d'image, et ses tool calls sont auto-approuvés en mode prompt).
-		let imageNote = "";
-		if (images.length > 0) {
-			const dir = mkTmp();
-			const paths = images.map((img, i) => {
-				const ext = ((img.mediaType || "image/png").split("/")[1] || "png").replace("jpeg", "jpg");
-				const p = path.join(dir, "image-" + (i + 1) + "." + ext);
-				fs.writeFileSync(p, Buffer.from(img.base64, "base64"));
-				return p;
-			});
-			// Instruction au MODÈLE (pas de l'UI) → anglais, comme le prompt système.
-			imageNote = "\n\nFirst read these images, then base the quiz on their content:\n" +
-				paths.map(p => "- " + p).join("\n");
-		}
-
-		const fullPrompt = systemPrompt + "\n\n" + userPrompt + imageNote;
-
-		// Prompt trop long pour la ligne de commande → déporté en fichier que
-		// l'agent lit (une note entière attachée dépasse vite la limite).
-		let promptArg = fullPrompt;
-		if (fullPrompt.length > KIMI_ARG_MAX) {
-			const dir = mkTmp();
-			const promptFile = path.join(dir, "instructions.md");
-			fs.writeFileSync(promptFile, fullPrompt, "utf8");
-			// Instruction au MODÈLE → anglais, comme le prompt système.
-			promptArg = "Read the file " + promptFile +
-				" and follow exactly the instructions it contains. Reply only with the requested result.";
-		}
-
-		const args = ["-p", promptArg, "--output-format", "stream-json"];
-		if (model) args.push("-m", model);
-		// Les fichiers temporaires vivent hors du workspace : sans --add-dir,
-		// l'agent n'a pas le droit de les lire.
-		if (tmpDir) args.push("--add-dir", tmpDir);
-
-		let stdout: string;
-		try {
-			stdout = await new Promise<string>((resolve, reject) => {
-				const child = cp.execFile("kimi", args, {
-					cwd: os.homedir(),
-					env: buildChildEnv(),
-					timeout: CLI_TIMEOUT_MS,
-					maxBuffer: 16 * 1024 * 1024,
-					windowsHide: true
-				}, (err, out, stderr) => {
-					if (err) {
-						const e = err as ExecError;
-						e.stderr = stderr;
-						e.stdout = out;
-						reject(e);
-					} else {
-						resolve(out);
-					}
-				});
-				abortCurrent = () => { aborted = true; killTree(child); };
-			});
-		} catch (err) {
-			/* Une ANNULATION n'est pas une erreur. `killTree` fait sortir le
-			   processus en echec — souvent avec `killed`, que la branche
-			   ci-dessous prendrait pour un depassement de delai — et le journal
-			   se remplissait d'erreurs a chaque clic sur Stop. `generate()`
-			   traduit ensuite ce rejet en erreur `aborted`, que l'UI traite
-			   comme un retour a l'etat initial. */
-			if (aborted) throw err;
-			const e = err as ExecError;
-			console.error("[quiz-blocks] Kimi Code error:", e.message, e.stderr || "");
-			const detail = ((e.stderr || "") + " " + (e.stdout || "") + " " + e.message).toLowerCase();
-			if (e.code === "ENOENT" || e.code === 127 || detail.includes("not recognized") || detail.includes("introuvable") || detail.includes("command not found")) {
-				throw new Error(t("ai.err.kimiNotInstalled"));
-			}
-			if (e.killed || detail.includes("etimedout")) {
-				throw new Error(t("ai.err.kimiTimeout", { minutes: CLI_TIMEOUT_MIN }));
-			}
-			// Message exact du CLI 0.26.0 sans compte connecté : « No model
-			// configured. Run `kimi` and use /login to sign in ».
-			if (detail.includes("no model configured") || detail.includes("login") || detail.includes("unauthorized") || detail.includes("api key") || detail.includes("credential") || detail.includes("authenticat")) {
-				throw new Error(t("ai.err.kimiNotLoggedIn"));
-			}
-			if (detail.includes("rate limit") || detail.includes("usage limit") || detail.includes("quota") || detail.includes("subscription")) {
-				throw new Error(t("ai.err.kimiRateLimit"));
-			}
-			throw new Error(t("ai.err.kimiCode", { detail: (e.stderr || e.message).trim().slice(0, 300) }));
-		} finally {
-			if (tmpDir) {
-				try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* best effort */ }
-			}
-		}
-
-		const content = extractKimiText(stdout);
-		if (!content.trim()) {
-			throw new Error(t("ai.err.kimiEmpty"));
-		}
-		console.log("[quiz-blocks] Kimi Code success - response length:", content.length);
-		return parseQuizResponse(content);
-	}
-
-	/* stream-json : une ligne = un message { role, content?, tool_calls? }.
-	   On concatène le texte des messages assistant (les messages d'outil et les
-	   lignes illisibles sont ignorés — le raisonnement, lui, part sur stderr et
-	   n'atteint jamais stdout). */
-	function extractKimiText(stdout: string): string {
-		const parts: string[] = [];
-		for (const line of String(stdout || "").split("\n")) {
-			const trimmed = line.trim();
-			if (!trimmed.startsWith("{")) continue;
-			try {
-				const msg = JSON.parse(trimmed) as { role?: string; content?: unknown };
-				if (msg.role !== "assistant" || !msg.content) continue;
-				if (typeof msg.content === "string") {
-					parts.push(msg.content);
-				} else if (Array.isArray(msg.content)) {
-					// Forme bloc ({ type: "text", text }) — tolérée par sécurité.
-					for (const b of msg.content) {
-						const t = b && typeof b === "object" ? (b as { text?: unknown }).text : null;
-						if (typeof t === "string") parts.push(t);
-					}
-				}
-			} catch (e) { /* ligne non-JSON → ignorée */ }
-		}
-		return parts.join("");
-	}
-
 	async function callOllama(model: string, systemPrompt: string, userPrompt: string, ollamaUrl?: string, authHeaders?: Record<string, string>, images: ImagePayload[] = [], effort: string | null = null): Promise<unknown[]> {
 		if (!ollamaUrl) {
 			ollamaUrl = (plugin.settings.aiOllamaUrl || "http://localhost:11434").replace(/\/+$/, "");
@@ -1061,9 +892,6 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		return new Error(t("ai.err.notQuiz", { preview: text.replace(/\s+/g, " ").slice(0, 160) }));
 	}
 
-	/* Kimi Code n'est pas dans cette liste : son `--output-format stream-json`
-	   ne publie aucun compteur de tokens (CLI 0.26.0, vérifié). Plutôt que
-	   d'estimer, l'écran d'usage dira que ce fournisseur ne les fournit pas. */
 	return {
 		generate,
 		abort: () => { if (abortCurrent) abortCurrent(); },

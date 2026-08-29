@@ -69,7 +69,7 @@ export function langSetting(): LangSetting {
 }
 
 /** Traduit une clé. `vars` remplace les jetons {nom} du libellé :
-    t("ai.kimi.notLoggedIn", { version: "0.26.0" }). */
+    t("ai.status.claudeOk", { version: "2.1.251" }). */
 export function t(key: TransKey, vars?: Record<string, string | number>): string {
 	const dict = DICTS[current] || EN;
 	// Repli sur l'anglais si une clé manque à l'exécution (dictionnaire chargé

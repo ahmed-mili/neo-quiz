@@ -107,12 +107,6 @@ interface OllamaCtl {
 	refreshTrigger: (() => void) | null;
 }
 
-/** État partagé du contrôle Kimi : la liste de modèles n'existe qu'après la
-    détection async (checkKimi) → le trigger doit pouvoir se redessiner. */
-interface KimiCtl {
-	refreshTrigger: (() => void) | null;
-}
-
 interface ProviderStatusEntry {
 	dot: string;
 	text: string;
@@ -126,7 +120,6 @@ interface RefreshArgs {
 	currentModel: string;
 	modelSelect: unknown;
 	ollamaCtl: OllamaCtl | null;
-	kimiCtl: KimiCtl | null;
 	buildOllamaList: (detected: aiProviders.OllamaDetectedModel[] | null) => OllamaListItem[];
 	force?: boolean;
 }
@@ -219,7 +212,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	let errorMessage = "";
 	let containerRef: HTMLElement | null = null;
 	/* Ce que la DERNIÈRE génération a consommé — null quand le fournisseur ne
-	   publie aucun compteur (Kimi Code), auquel cas l'écran le dit. */
+	   publie aucun compteur, auquel cas l'écran le dit. */
 	let lastUsage: AiUsage | null = null;
 	/* Dernier état de forfait CONNU — sert au seul survol du bouton d'usage :
 	   passer la souris ne déclenche jamais de lecture réseau, c'est le modal
@@ -357,7 +350,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				// après un « claude/codex update », la version affichée se met à
 				// jour toute seule, le menu ouvert est redessiné à l'arrivée des
 				// résultats (setStatus → refreshMenu).
-				onOpen: () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, kimiCtl, buildOllamaList, force: true })
+				onOpen: () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true })
 			});
 			providerSelect = sel;
 			sel.el.addClass("qbd-provider-trigger-logo");
@@ -399,9 +392,6 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// à CHAQUE ouverture du menu (et sur détection async) → reflète toujours la
 		// sélection courante des réglages, même éditée après le rendu de la vue.
 		let ollamaCtl: OllamaCtl | null = null;
-		// Idem pour Kimi : la liste vient du CLI (checkKimi), pas d'un fichier
-		// lisible en sync → le trigger se redessine à l'arrivée de la détection.
-		let kimiCtl: KimiCtl | null = null;
 
 		// Construit les options Ollama depuis la sélection de l'utilisateur
 		// (settings.aiOllamaModels, ordre réglable) + les locaux installés hors
@@ -523,46 +513,6 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 							ctx.plugin.settings.aiEffort = v;
 							await ctx.plugin.saveSettings();
 							refreshTriggers();
-						}
-					});
-				});
-			};
-		} else if (provider === "kimi-code") {
-			// Kimi : modèle SEUL (pas de bouton effort — `kimi -p` n'expose
-			// aucun flag d'effort, cf. getEfforts). La liste vient du CLI et
-			// n'existe qu'une fois le compte connecté : tant qu'elle est vide,
-			// le trigger affiche « Connexion requise » et n'ouvre pas de menu
-			// vide — le hint sous le composer explique quoi faire.
-			kimiCtl = { refreshTrigger: null };
-			const ctl = kimiCtl;
-			buildModelControl = (parent: HTMLElement): void => {
-				const trigger = parent.createEl("button", { cls: "qbd-select qbd-model-trigger qbd-composer-plain" });
-				trigger.type = "button";
-				const trigLabel = trigger.createSpan({ cls: "qbd-select-label" });
-				const currentMv = () => aiProviders.resolveKimiModel(ctx.plugin.settings.aiModel || currentModel);
-				const refreshTrigger = () => {
-					trigLabel.empty();
-					const models = aiProviders.getKimiModels();
-					const cur = models.find(m => m.value === currentMv()) || models[0];
-					trigLabel.createSpan({
-						cls: "qbd-model-trigger-name",
-						text: cur ? cur.label : t("ai.status.loginRequired")
-					});
-					trigger.disabled = !models.length;
-				};
-				refreshTrigger();
-				ctl.refreshTrigger = refreshTrigger;
-				trigger.addEventListener("click", () => {
-					const models = aiProviders.getKimiModels();
-					if (!models.length) return;
-					openModelMenu(trigger, {
-						models,
-						currentModel: currentMv(),
-						efforts: [],
-						onPickModel: async (v) => {
-							ctx.plugin.settings.aiModel = v;
-							await ctx.plugin.saveSettings();
-							refreshTrigger();
 						}
 					});
 				});
@@ -1024,7 +974,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// contrôle modèle (modelSelect existe). ollamaCtl et buildOllamaList
 		// sont locaux à render → passés en paramètres (les référencer depuis
 		// la fonction sœur lançait un ReferenceError, statut Ollama gelé).
-		refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, kimiCtl, buildOllamaList });
+		refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList });
 
 		// Retour de focus fenêtre = l'utilisateur revient du terminal où il
 		// vient d'installer/connecter un CLI : re-vérifier automatiquement
@@ -1038,7 +988,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				return;
 			}
 			if (!hintZone.querySelector(".qbd-ai-hint--err, .qbd-ai-hint--warn")) return;
-			refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, kimiCtl, buildOllamaList, force: true });
+			refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true });
 		};
 		window.addEventListener("focus", __focusRecheck);
 
@@ -1110,10 +1060,8 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	     (learn.chatgpt.com/docs/codex/cli) ;
 	   - Ollama : winget (paquet officiel Ollama.Ollama) sur Windows, le
 	     script officiel ailleurs — docs.ollama.com ne publie pas de one-liner
-	     PowerShell, l'exe d'installation étant la voie mise en avant ;
-	   - Kimi Code : installateurs officiels de code.kimi.com (scripts lus le
-	     2026-07-16 ; install.sh refuse explicitement Windows → install.ps1). */
-	function installCmd(provider: "claude-code" | "codex" | "kimi-code" | "ollama"): { code: string; lang: string } {
+	     PowerShell, l'exe d'installation étant la voie mise en avant. */
+	function installCmd(provider: "claude-code" | "codex" | "ollama"): { code: string; lang: string } {
 		const win = Platform.isWin;
 		if (provider === "claude-code") {
 			return win
@@ -1124,11 +1072,6 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			return win
 				? { code: 'powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"', lang: "powershell" }
 				: { code: "curl -fsSL https://chatgpt.com/codex/install.sh | sh", lang: "bash" };
-		}
-		if (provider === "kimi-code") {
-			return win
-				? { code: "irm https://code.kimi.com/kimi-code/install.ps1 | iex", lang: "powershell" }
-				: { code: "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash", lang: "bash" };
 		}
 		return win
 			? { code: "winget install --id Ollama.Ollama -e", lang: "powershell" }
@@ -1191,7 +1134,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	/* Détections async : statut de chaque provider (trigger + menu du
 	   sélecteur), et pour le provider actif, hint contextuel + liste
 	   réelle de modèles. */
-	function refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, kimiCtl, buildOllamaList, force }: RefreshArgs): void {
+	function refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force }: RefreshArgs): void {
 		const settings = ctx.plugin.settings;
 
 		// Affichage IMMÉDIAT du dernier hint connu pour ce fournisseur : les
@@ -1258,63 +1201,6 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 					}
 				});
 			}
-		});
-
-		aiProviders.checkKimi(force).then(res => {
-			if (!res.ok) {
-				setStatus("kimi-code", providerSelect, res.reason === "mobile" ? "warn" : "err",
-					res.reason === "mobile" ? t("ai.status.desktopOnly") : t("ai.status.kimiMissing"));
-				setHint("kimi-code", hintZone, provider, res.reason === "mobile"
-					? {
-						type: "warn", icon: "monitor",
-						text: t("ai.hint.kimiDesktopOnly")
-					}
-					: {
-						type: "err", icon: "download",
-						text: t("ai.hint.kimiNotInstalled"),
-						...installCmd("kimi-code"),
-						action: {
-							label: t("ai.hint.installKimi"), icon: "arrow-up-right",
-							onClick: () => window.open("https://www.kimi.com/code", "_blank")
-						}
-					});
-				return;
-			}
-			// Statut = le CLI et sa version, connecté ou non (comme Claude/Codex/
-			// Ollama) : c'est la PASTILLE qui dit l'état — verte si des modèles
-			// sont là, orange s'il faut encore /login (demande Ahmed). Le détail
-			// et la marche à suivre vivent dans le hint, pas dans le sous-titre.
-			setStatus("kimi-code", providerSelect,
-				res.models.length ? "ok" : "warn",
-				t("ai.status.kimiVersion", { version: res.version }));
-
-			// CLI présent mais aucun modèle : le compte n'est pas connecté (tant
-			// que /login n'a rien peuplé, `provider list` est vide). État distinct
-			// d'un CLI absent → warn + marche à suivre, pas une erreur rouge.
-			if (!res.models.length) {
-				setHint("kimi-code", hintZone, provider, {
-					type: "warn", icon: "log-in",
-					text: t("ai.hint.kimiNotLoggedIn"),
-					action: {
-						label: t("ai.hint.kimiPlans"), icon: "arrow-up-right",
-						// Page d'abonnement, PAS kimi.com/code : les cartes (Moderato,
-						// Allegretto… avec « Kimi Code available » et le bouton
-						// Subscribe) y sont visibles d'emblée, alors que sur /code il
-						// faut chercher les offres plus bas (choix Ahmed, vérifié au
-						// rendu le 2026-07-16). URL NUE volontairement : les « ?from=…
-						// &track_id=… » vus dans le navigateur sont le tracking du site
-						// (provenance du clic + id de visite), qu'il régénère seul —
-						// les recopier ferait passer le plugin pour sa propre topbar.
-						// À ne pas « corriger » en scrollant la page : une page tierce
-						// ouverte par window.open est cross-origin, donc impilotable.
-						onClick: () => window.open("https://www.kimi.com/membership/pricing", "_blank")
-					}
-				});
-			} else {
-				setHint("kimi-code", hintZone, provider, null);
-			}
-			// Modèles arrivés (ou disparus) → le trigger du composer se redessine.
-			if (provider === "kimi-code" && kimiCtl && kimiCtl.refreshTrigger) kimiCtl.refreshTrigger();
 		});
 
 		aiProviders.checkOllama(settings.aiOllamaUrl, force).then(async (res) => {

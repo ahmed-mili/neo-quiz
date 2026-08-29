@@ -86,8 +86,13 @@ export const EN_AI = {
 	"ai.usage.minutesAgo": "{n} min ago",
 	"ai.usage.hoursAgo": "{n} h ago",
 	"ai.usage.refresh": "Refresh",
-	"ai.usage.fableIncluded": "{model} is still included in your {plan} plan.",
-	"ai.usage.fableIncludedNote": "If a message asks you to set up usage credits, restart Claude Code.",
+	/* Accès à Fable : dépend du forfait depuis le 2026-07-20 (cf. l'en-tête de
+	   la section Fable dans ai-providers.ts). Les deux cas sont dits en propre,
+	   et un forfait qui ne tranche pas n'affiche aucune des deux phrases. */
+	"ai.usage.fableIncluded": "{model} is part of your {plan} plan.",
+	"ai.usage.fableIncludedNote": "It draws from the weekly limits above, and uses them faster than other models. Past its share, keep going with usage credits or switch models.",
+	"ai.usage.fableCredits": "{model} isn't included in your {plan} plan.",
+	"ai.usage.fableCreditsNote": "It runs on pay-as-you-go usage credits, separately from the weekly limits above.",
 	"ai.usage.learnMore": "Learn more about usage limits",
 
 	/* ── Options de génération ── */
@@ -167,21 +172,9 @@ export const EN_AI = {
 	"ai.modelDesc.codex54": "Solid for everyday coding",
 	"ai.modelDesc.codex54mini": "Light and fast for simple tasks",
 
-	/* ── Badge promo Fable (daté depuis le cache du CLI Claude Code) ── */
+	/* ── Badge d'accès à Fable (déduit du forfait lu dans le trousseau du CLI) ── */
 	"ai.badge.included": "Included",
-	"ai.badge.includedUntil": "Included until {month} {day}",
-	"ai.month.january": "January",
-	"ai.month.february": "February",
-	"ai.month.march": "March",
-	"ai.month.april": "April",
-	"ai.month.may": "May",
-	"ai.month.june": "June",
-	"ai.month.july": "July",
-	"ai.month.august": "August",
-	"ai.month.september": "September",
-	"ai.month.october": "October",
-	"ai.month.november": "November",
-	"ai.month.december": "December",
+	"ai.badge.usageCredits": "Usage credits",
 
 	/* ── Niveaux d'effort : seuls les sous-titres sont traduits (low, medium,
 	   high… sont le vocabulaire des CLI, identique dans toutes les langues). ── */

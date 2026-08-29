@@ -64,8 +64,10 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.usage.minutesAgo": "il y a {n} min",
 	"ai.usage.hoursAgo": "il y a {n} h",
 	"ai.usage.refresh": "Actualiser",
-	"ai.usage.fableIncluded": "{model} est toujours inclus dans votre forfait {plan}.",
-	"ai.usage.fableIncludedNote": "Si un message vous demande de configurer des crédits d'utilisation, redémarrez Claude Code.",
+	"ai.usage.fableIncluded": "{model} fait partie de votre forfait {plan}.",
+	"ai.usage.fableIncludedNote": "Il puise dans les limites hebdomadaires ci-dessus, et les consomme plus vite que les autres modèles. Au-delà de sa part, continuez avec des crédits d'utilisation ou changez de modèle.",
+	"ai.usage.fableCredits": "{model} n'est pas inclus dans votre forfait {plan}.",
+	"ai.usage.fableCreditsNote": "Il fonctionne avec des crédits d'utilisation à la consommation, indépendamment des limites hebdomadaires ci-dessus.",
 	"ai.usage.learnMore": "En savoir plus sur les limites d'utilisation",
 
 	/* ── Options de génération ── */
@@ -136,21 +138,9 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.modelDesc.codex54": "Solide pour le code au quotidien",
 	"ai.modelDesc.codex54mini": "Léger et rapide pour les tâches simples",
 
-	/* ── Badge promo Fable (daté depuis le cache du CLI Claude Code) ── */
+	/* ── Badge d'accès à Fable (déduit du forfait lu dans le trousseau du CLI) ── */
 	"ai.badge.included": "Inclus",
-	"ai.badge.includedUntil": "Inclus jusqu'au {day} {month}",
-	"ai.month.january": "janvier",
-	"ai.month.february": "février",
-	"ai.month.march": "mars",
-	"ai.month.april": "avril",
-	"ai.month.may": "mai",
-	"ai.month.june": "juin",
-	"ai.month.july": "juillet",
-	"ai.month.august": "août",
-	"ai.month.september": "septembre",
-	"ai.month.october": "octobre",
-	"ai.month.november": "novembre",
-	"ai.month.december": "décembre",
+	"ai.badge.usageCredits": "Crédits d'utilisation",
 
 	/* ── Niveaux d'effort (sous-titres seulement) ── */
 	"ai.effort.ultracodeSub": "xhigh + workflows",

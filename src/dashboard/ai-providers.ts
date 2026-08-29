@@ -1,6 +1,9 @@
 import { Platform, requestUrl } from "obsidian";
 import { t, currentLang } from "../i18n";
-import type { Lang, TransKey } from "../i18n";
+import type { Lang } from "../i18n";
+// Le forfait Claude est lu par ai-usage (trousseau du CLI) : une seule source
+// pour les deux modules. ai-usage n'importe rien d'ici — pas de cycle.
+import { readClaudePlan } from "./ai-usage";
 
 /* ══════════════════════════════════════════════════════════
    AI PROVIDERS — Registry central
@@ -164,7 +167,9 @@ export function getProvider(id: string): Provider {
    Le libellé réellement affiché est appris de ce que le CLI a servi, cf.
    learnedClaudeLabels() plus bas. */
 export const CLAUDE_CODE_MODELS: ModelDef[] = [
-	{ value: "fable", label: "Fable 5", get hint() { return t("ai.modelHint.mostPowerful"); }, get desc() { return t("ai.modelDesc.fable"); }, get badge() { return t("ai.badge.included"); } },
+	// Pas de `badge` ici : l'accès à Fable dépend du FORFAIT (inclus sur Max,
+	// crédits d'usage sur Pro) — getClaudeModels() le pose au rendu.
+	{ value: "fable", label: "Fable 5", get hint() { return t("ai.modelHint.mostPowerful"); }, get desc() { return t("ai.modelDesc.fable"); } },
 	{ value: "opus", label: "Opus 5", get hint() { return t("ai.modelHint.recommended"); }, get desc() { return t("ai.modelDesc.opus"); } },
 	{ value: "sonnet", label: "Sonnet 5", get hint() { return t("ai.modelHint.everyday"); }, get desc() { return t("ai.modelDesc.sonnet"); } },
 	{ value: "haiku", label: "Haiku 4.5", get hint() { return t("ai.modelHint.fastest"); }, get desc() { return t("ai.modelDesc.haiku"); } }
@@ -389,35 +394,53 @@ export function getEffortLabel(value: string | undefined, providerId: string): s
 	return def ? def.label : "";
 }
 
-/* ── Fable 5 : détection + badge DYNAMIQUES via les caches du CLI Claude Code ──
-   Le CLI publie dans ~/.claude.json : (1) le modèle promo courant sous
-   `additionalModelOptionsCache` (ex. { value: "claude-fable-5[1m]", … }) → sert
-   à savoir si Fable est proposé ; (2) l'annonce de promo sous
-   `cachedGrowthBookFeatures.tengu_startup_announcements` (title « Extended
-   through July 19 ») → sert à dater le badge. On lit ces caches plutôt qu'une
-   date en dur : dispo ET date suivent automatiquement les prolongations/fin de
-   promo, sans maintenance. Même esprit que les modèles Codex dynamiques
-   (~/.codex/models_cache.json). Lecture desktop-only (fs), cache TTL pour ne pas
-   relire ~/.claude.json à chaque ouverture de menu. Fallback prudent si
-   illisible/absent : Fable masqué. Si la date est introuvable : badge « Inclus ». */
-/* `through` = la DATE BRUTE de fin de promo (mois anglais du cache + jour), pas
-   un libellé : le badge est fabriqué au rendu par fableBadge(). Sans ça, le
-   cache TTL figerait le badge dans la langue du moment où il a été rempli. */
-type FableInfo = { offered: boolean; through?: { month: string; day: string } };
-/** Ce que ~/.claude.json apprend en UNE lecture : la promo Fable et le nom des
-    modèles réellement servis. Même fichier, même TTL — une seule lecture. */
-type ClaudeCliInfo = { fable: FableInfo; labels: Record<string, string> };
-let claudeCliCache: { at: number; info: ClaudeCliInfo } | null = null;
-const FABLE_CACHE_TTL = 60000;
+/* ── Fable 5 : disponibilité et MODE D'ACCÈS, lus des sources qui les tiennent ──
+   Fable 5 n'est PLUS une promo datée. Vérifié le 2026-08-29 sur
+   support.claude.com/en/articles/15424964 (« Claude Fable 5 on your plan »,
+   modifié le 2026-07-20) : depuis le 2026-07-20, Fable 5 fait partie STANDARD
+   des forfaits Max et des sièges premium Team/Enterprise (il puise dans les
+   limites hebdomadaires, plus vite que les autres modèles) ; sur Pro et les
+   sièges standard, il tourne aux CRÉDITS D'USAGE dès le premier message.
+   Le plugin ne date donc plus rien : il lit (1) si le CLI propose Fable
+   (`additionalModelOptionsCache`, ex. { value: "claude-fable-5[1m]", … }),
+   (2) le forfait local (cf. fableAccessBadge), et en déduit le libellé.
 
-/* Mois anglais du cache CLI → clé i18n (jamais un libellé : table évaluée au
-   chargement du module). */
-const MONTH_KEYS: Record<string, TransKey> = {
-	January: "ai.month.january", February: "ai.month.february", March: "ai.month.march",
-	April: "ai.month.april", May: "ai.month.may", June: "ai.month.june",
-	July: "ai.month.july", August: "ai.month.august", September: "ai.month.september",
-	October: "ai.month.october", November: "ai.month.november", December: "ai.month.december"
+   CE QUI A ÉTÉ RETIRÉ, ET POURQUOI : la date de fin de promo était extraite de
+   `cachedGrowthBookFeatures.tengu_startup_announcements` (« Extended through
+   July 19 »). Le CLI ne publie plus cette annonce — la promo est devenue
+   permanente — donc le badge retombait en silence sur un « Inclus » nu, faux
+   pour un forfait Pro. Les promos VIVANTES du CLI vivent maintenant dans
+   `tengu_rate_limit_promo_notices` ([{ bar, text, variant }], ex. « +50% weekly
+   limits promo through Aug 31 ») : elles ne parlent pas de Fable mais des
+   limites hebdomadaires, et sont affichées TELLES QUELLES sur la jauge qu'elles
+   désignent (cf. usage-modal) — datées par leur émetteur, jamais par nous.
+
+   Lecture desktop-only (fs), cache TTL pour ne pas relire ~/.claude.json à
+   chaque ouverture de menu. Fallback prudent si illisible/absent : Fable masqué,
+   aucune note promo. */
+
+/** Note promo publiée par le CLI Claude Code, rattachée à UNE jauge d'usage.
+    `bar` est la clé d'API de la fenêtre (« five_hour », « seven_day »…), pas
+    un libellé. Le texte est affiché tel quel, jamais traduit ni reformulé :
+    c'est une annonce commerciale qui porte sa propre date de péremption. */
+export interface ClaudePromoNotice { bar: string; text: string }
+
+/** Ce que ~/.claude.json apprend en UNE lecture : Fable proposé ?, le nom des
+    modèles réellement servis, et les notes promo en cours. Même fichier, même
+    TTL — une seule lecture pour les trois usages. */
+type ClaudeCliInfo = {
+	fableOffered: boolean;
+	labels: Record<string, string>;
+	promos: ClaudePromoNotice[];
 };
+let claudeCliCache: { at: number; info: ClaudeCliInfo } | null = null;
+const CLAUDE_CLI_CACHE_TTL = 60000;
+
+/* Repli neuf à chaque appel : l'objet est stocké dans le cache TTL et rendu
+   aux appelants, une constante partagée serait modifiable de l'extérieur. */
+function emptyCliInfo(): ClaudeCliInfo {
+	return { fableOffered: false, labels: {}, promos: [] };
+}
 
 /* Une entrée `additionalModelOptionsCache` désigne-t-elle Fable ? */
 function cacheEntryIsFable(entry: unknown): boolean {
@@ -426,30 +449,31 @@ function cacheEntryIsFable(entry: unknown): boolean {
 	return typeof value === "string" && value.toLowerCase().includes("fable");
 }
 
-/* Date de fin de promo lue dans l'annonce Fable (« Extended through July 19 »
-   → { month: "July", day: "19" }). undefined si non trouvée/parsée → badge nu. */
-function fableThroughFromAnnouncements(anns: unknown): FableInfo["through"] {
-	if (!Array.isArray(anns)) return undefined;
-	const fable = anns.find(
-		(a): a is { title?: string; text?: string } =>
-			!!a && typeof (a as { id?: unknown }).id === "string" &&
-			(a as { id: string }).id.toLowerCase().includes("fable")
-	);
-	if (!fable) return undefined;
-	const m = `${fable.title ?? ""} ${fable.text ?? ""}`.match(/through\s+([A-Za-z]+)\s+(\d{1,2})/);
-	if (!m || !MONTH_KEYS[m[1]]) return undefined;
-	return { month: m[1], day: m[2] };
+/* Notes promo du CLI → on ne garde que ce qu'on affiche (la jauge visée et le
+   texte), et seulement si les deux sont des chaînes utiles. Forme inattendue :
+   aucune note, jamais d'exception. */
+function promoNoticesFrom(raw: unknown): ClaudePromoNotice[] {
+	if (!Array.isArray(raw)) return [];
+	const out: ClaudePromoNotice[] = [];
+	for (const entry of raw) {
+		if (!entry || typeof entry !== "object") continue;
+		const { bar, text } = entry as { bar?: unknown; text?: unknown };
+		if (typeof bar === "string" && bar && typeof text === "string" && text.trim()) {
+			out.push({ bar, text: text.trim() });
+		}
+	}
+	return out;
 }
 
-/* Libellé du badge Fable, traduit AU RENDU (« Included until July 19 » /
-   « Inclus jusqu'au 19 juillet »). Chaque langue ordonne jour et mois
-   elle-même via les jetons {day}/{month}. */
-function fableBadge(info: FableInfo): string {
-	if (!info.through) return t("ai.badge.included");
-	return t("ai.badge.includedUntil", {
-		day: info.through.day,
-		month: t(MONTH_KEYS[info.through.month])
-	});
+/* Badge d'accès à Fable, déduit du FORFAIT local (~/.claude/.credentials.json,
+   déjà lu par ai-usage — on ne rouvre pas une seconde source). Max → inclus ;
+   Pro → crédits d'usage. Team/Enterprise dépendent du SIÈGE (premium ou
+   standard), que le trousseau ne dit pas : aucun badge plutôt qu'un badge faux. */
+function fableAccessBadge(): string | undefined {
+	const plan = readClaudePlan()?.name.toLowerCase();
+	if (plan === "max") return t("ai.badge.included");
+	if (plan === "pro") return t("ai.badge.usageCredits");
+	return undefined;
 }
 
 /* ── Libellés de modèles APPRIS (« Opus 5 », pas « Opus 4.8 ») ──
@@ -516,35 +540,31 @@ function labelsFromModelUsage(projects: unknown): Record<string, string> {
 	return labels;
 }
 
-/* Lit ~/.claude.json (cache TTL, desktop) : Fable proposé ? + date de fin de
-   promo (le libellé du badge, lui, est fabriqué au rendu par fableBadge) +
-   libellés de modèles appris. UNE lecture pour les deux usages. */
+/* Lit ~/.claude.json (cache TTL, desktop) : Fable proposé ? + libellés de
+   modèles appris + notes promo en cours. UNE lecture pour les trois usages. */
 function readClaudeCliInfo(): ClaudeCliInfo {
-	if (!Platform.isDesktopApp) return { fable: { offered: false }, labels: {} };
-	if (claudeCliCache && Date.now() - claudeCliCache.at < FABLE_CACHE_TTL) {
+	if (!Platform.isDesktopApp) return emptyCliInfo();
+	if (claudeCliCache && Date.now() - claudeCliCache.at < CLAUDE_CLI_CACHE_TTL) {
 		return claudeCliCache.info;
 	}
-	let info: ClaudeCliInfo = { fable: { offered: false }, labels: {} };
+	let info = emptyCliInfo();
 	try {
 		const fs = require("fs") as typeof import("fs");
 		const os = require("os") as typeof import("os");
 		const path = require("path") as typeof import("path");
 		const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude.json"), "utf8")) as {
 			additionalModelOptionsCache?: unknown;
-			cachedGrowthBookFeatures?: { tengu_startup_announcements?: unknown };
+			cachedGrowthBookFeatures?: { tengu_rate_limit_promo_notices?: unknown };
 			projects?: unknown;
 		};
 		const cache = cfg.additionalModelOptionsCache;
-		const offered = Array.isArray(cache) ? cache.some(cacheEntryIsFable) : cacheEntryIsFable(cache);
 		info = {
-			fable: {
-				offered,
-				through: offered ? fableThroughFromAnnouncements(cfg.cachedGrowthBookFeatures?.tengu_startup_announcements) : undefined
-			},
-			labels: labelsFromModelUsage(cfg.projects)
+			fableOffered: Array.isArray(cache) ? cache.some(cacheEntryIsFable) : cacheEntryIsFable(cache),
+			labels: labelsFromModelUsage(cfg.projects),
+			promos: promoNoticesFrom(cfg.cachedGrowthBookFeatures?.tengu_rate_limit_promo_notices)
 		};
 	} catch {
-		info = { fable: { offered: false }, labels: {} }; // absent/illisible → repli
+		info = emptyCliInfo(); // absent/illisible → repli
 	}
 	claudeCliCache = { at: Date.now(), info };
 	return info;
@@ -552,16 +572,23 @@ function readClaudeCliInfo(): ClaudeCliInfo {
 
 /* Fable est-il actuellement proposé par le CLI Claude Code ? */
 export function isFableOffered(): boolean {
-	return readClaudeCliInfo().fable.offered;
+	return readClaudeCliInfo().fableOffered;
+}
+
+/** Notes promo que le CLI rattache à la jauge d'usage `bar` (clé d'API de la
+    fenêtre : « five_hour », « seven_day »…). Vide si le CLI n'en publie pas. */
+export function claudePromoNoticesFor(bar: string): ClaudePromoNotice[] {
+	return readClaudeCliInfo().promos.filter(n => n.bar === bar);
 }
 
 /* Liste des modèles Claude visibles maintenant : libellés à jour de ce que le
-   CLI a servi, et Fable inclus seulement s'il est proposé, avec son badge daté
-   (« Inclus jusqu'au <date> »). */
+   CLI a servi, et Fable inclus seulement s'il est proposé, avec le badge qui
+   correspond au forfait détecté (« Inclus » sur Max, « Crédits d'usage » sur
+   Pro, aucun quand le forfait ne tranche pas). */
 export function getClaudeModels(): ModelDef[] {
-	const { fable, labels } = readClaudeCliInfo();
-	const models = fable.offered
-		? CLAUDE_CODE_MODELS.map(m => m.value === "fable" ? { ...m, badge: fableBadge(fable) } : m)
+	const { fableOffered, labels } = readClaudeCliInfo();
+	const models = fableOffered
+		? CLAUDE_CODE_MODELS.map(m => m.value === "fable" ? { ...m, badge: fableAccessBadge() } : m)
 		: CLAUDE_CODE_MODELS.filter(m => m.value !== "fable");
 	// L'alias EST le nom de famille (« opus ») : un libellé appris le remplace.
 	return models.map(m => labels[m.value] ? { ...m, label: labels[m.value] } : m);

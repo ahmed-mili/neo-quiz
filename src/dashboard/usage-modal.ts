@@ -2,7 +2,7 @@ import { setIcon } from "obsidian";
 import type { App } from "obsidian";
 import { QbdModal } from "../modal-base";
 import { t, currentLang } from "../i18n";
-import { isFableOffered, getClaudeModels } from "./ai-providers";
+import { isFableOffered, getClaudeModels, claudePromoNoticesFor } from "./ai-providers";
 import {
 	fetchPlanUsage, readUsageLog, summarize, startOfToday, providerPublishesPlan,
 	formatTokens, formatCost, formatDuration, formatCountdown, formatResetMoment, formatAge
@@ -156,6 +156,18 @@ class UsageModal extends QbdModal {
 		}
 	}
 
+	/** Clé d'API de la fenêtre que cette jauge représente — c'est par elle que le
+	    CLI Claude Code rattache ses notes promo (`tengu_rate_limit_promo_notices`).
+	    Seules les correspondances CERTAINES sont déclarées : une ligne dont on ne
+	    sait pas nommer la fenêtre n'affiche pas de note plutôt qu'une note posée
+	    sur la mauvaise jauge. */
+	private promoBarKey(row: UsageRow): string | null {
+		if (this.options.provider !== "claude-code") return null;
+		if (row.kind === "session") return "five_hour";
+		if (row.kind === "weekly-all") return "seven_day";
+		return null;
+	}
+
 	private renderRow(parent: HTMLElement, row: UsageRow): void {
 		const el = parent.createDiv({ cls: "qbd-usage-row" });
 
@@ -176,15 +188,31 @@ class UsageModal extends QbdModal {
 			cls: "qbd-usage-row-pct",
 			text: t("ai.usage.usedPercent", { n: Math.round(row.usedPercent) })
 		});
+
+		/* Notes promo du CLI, sous la jauge qu'elles désignent. Texte affiché TEL
+		   QUEL (anglais compris) : c'est une annonce d'Anthropic, datée par elle
+		   — la traduire ou la reformuler la ferait mentir dès la prochaine
+		   prolongation. */
+		const promoBar = this.promoBarKey(row);
+		for (const notice of promoBar ? claudePromoNoticesFor(promoBar) : []) {
+			parent.createDiv({ cls: "qbd-usage-row-promo", text: notice.text });
+		}
 	}
 
-	/** Encart d'information sur Fable — affiché seulement quand le CLI le
-	    propose ET que le forfait est connu : la phrase nomme les deux. */
+	/** Encart d'information sur Fable — affiché seulement quand le CLI le propose
+	    ET que le forfait tranche son mode d'accès : depuis le 2026-07-20, Fable
+	    fait partie du forfait sur Max mais tourne aux crédits d'usage sur Pro
+	    (cf. l'en-tête de la section Fable dans ai-providers.ts). Team et
+	    Enterprise dépendent du SIÈGE, que le trousseau du CLI ne dit pas : rien
+	    d'affiché plutôt qu'une des deux phrases prise au hasard. */
 	private renderFableNote(parent: HTMLElement): void {
 		// Prose : le forfait SANS son palier (« votre forfait Max »), comme
 		// l'écran officiel — le « (5x) » n'appartient qu'au titre.
 		const plan = this.data?.planName;
 		if (this.options.provider !== "claude-code" || !plan || !isFableOffered()) return;
+		const included = plan.toLowerCase() === "max";
+		const metered = plan.toLowerCase() === "pro";
+		if (!included && !metered) return;
 		// Le libellé exact de Fable vient de la même table que le sélecteur de
 		// modèles (donc du CLI), jamais d'un « Fable 5 » réécrit ici.
 		const fable = getClaudeModels().find(m => m.value === "fable");
@@ -196,9 +224,12 @@ class UsageModal extends QbdModal {
 		const body = box.createDiv({ cls: "qbd-usage-info-body" });
 		body.createDiv({
 			cls: "qbd-usage-info-title",
-			text: t("ai.usage.fableIncluded", { model: fable.label, plan })
+			text: t(included ? "ai.usage.fableIncluded" : "ai.usage.fableCredits", { model: fable.label, plan })
 		});
-		body.createDiv({ cls: "qbd-usage-info-text", text: t("ai.usage.fableIncludedNote") });
+		body.createDiv({
+			cls: "qbd-usage-info-text",
+			text: t(included ? "ai.usage.fableIncludedNote" : "ai.usage.fableCreditsNote")
+		});
 	}
 
 	private renderLearnMore(parent: HTMLElement): void {

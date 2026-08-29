@@ -2008,6 +2008,18 @@
   white-space: nowrap;
 }
 
+/* Note promo du CLI, sous la jauge qu'elle désigne. Frère de .qbd-usage-row,
+   pas enfant : la grille à trois colonnes de la ligne ferait tenir le texte
+   dans la seule colonne du libellé. La marge négative annule le
+   `margin-bottom` de la ligne pour recoller la note à sa barre. */
+.qbd-usage-row-promo {
+  margin: -10px 0 14px;
+  font-size: 0.8em;
+  line-height: 1.5;
+  color: var(--text-accent);
+  overflow-wrap: anywhere;
+}
+
 .qbd-usage-note {
   margin: 10px 0;
   font-size: 0.85em;

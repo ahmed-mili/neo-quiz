@@ -84,29 +84,28 @@ function isQuizModeConfig(item: unknown): boolean {
  * Le mode écrit dans un bloc, ramené à sa forme canonique — ou `null` si ce
  * n'en est pas un.
  *
- * TOLÉRANT à la casse et aux espaces : un bloc écrit à la main contient
- * `mode: 'Learn'` ou `mode: 'exam '` aussi facilement que la forme exacte, et
- * exiger l'exactitude ferait pire que l'ancien code — celui-ci reconnaissait
- * au moins l'objet comme une configuration (quitte à retomber sur le mode
- * quiz), là où un refus net le transformerait en question fantôme.
+ * TOLÉRANT à la casse et aux espaces, pour TOUS les modes — alias hérité
+ * ("learn") comme noms canoniques ("quiz", "lesson", "exam") : un bloc écrit
+ * à la main contient `mode: 'Learn'` ou `mode: 'exam '` aussi facilement que
+ * la forme exacte, et exiger l'exactitude ferait pire que l'ancien code —
+ * celui-ci reconnaissait au moins l'objet comme une configuration (quitte à
+ * retomber sur le mode quiz), là où un refus net le transformerait en
+ * question fantôme.
  *
- * "learn" reste reconnu, TOLÉRANT à la casse comme les deux autres — c'est
- * l'alias hérité du mode renommé "lesson" (task 0, 2026-08-31), et un quiz
- * partagé écrit avant le renommage doit continuer de s'ouvrir. Le nom
- * CANONIQUE, lui, n'est PAS tolérant à la casse : `mode: 'Lesson'` n'ouvre
- * pas la porte du mode leçon, seul `mode: 'lesson'` exact la reconnaît —
- * personne n'a encore pu écrire cette variante à la main, aucune raison de la
- * pré-tolérer.
+ * Round 1 de revue (2026-08-31) : une première version de cette fonction
+ * exigeait la casse EXACTE pour "lesson" mais pas pour "learn" — asymétrie
+ * absurde entre l'alias et le nom canonique (`mode: 'Lesson'` fantôme,
+ * `mode: 'Learn'` reconnu), corrigée ici : la casse est tolérée partout.
+ *
+ * "learn" reste reconnu indéfiniment : c'est l'alias hérité du mode renommé
+ * "lesson" (task 0, 2026-08-31), et un quiz partagé écrit avant le
+ * renommage doit continuer de s'ouvrir.
  */
 export function normalizeQuizMode(value: unknown): QuizMode | null {
 	if (typeof value !== "string") return null;
-	const trimmed = value.trim();
-	// Le nom CANONIQUE est vérifié AVANT la mise en minuscule, exact — voir le
-	// paragraphe ci-dessus sur la casse.
-	if (trimmed === "lesson") return "lesson";
-	const m = trimmed.toLowerCase();
+	const m = value.trim().toLowerCase();
 	if (m === "learn") return "lesson";
-	return m === "quiz" || m === "exam" ? m : null;
+	return m === "quiz" || m === "lesson" || m === "exam" ? m : null;
 }
 
 /**
@@ -242,6 +241,43 @@ function extractExamOptions(quizArray: QuizQuestion[]): {
 	}
 
 	return { questions: quizArray, quizMode: "quiz", examOptions: null, lessonExamOptions: null };
+}
+
+/** Forme structurelle minimale acceptée par `pickLessonFields` : les six
+    champs "leçon" possibles d'une question, dans n'importe lequel des trois
+    types réels qui les portent (`QuestionBase`, `ParsedQuizItem`,
+    `DraftQuestion`) — typés `unknown` ici pour ne dépendre d'aucun des trois. */
+interface LessonFieldsSource {
+	lesson?: unknown;
+	lessonHtml?: unknown;
+	_lessonHtml?: unknown;
+	learn?: unknown;
+	learnHtml?: unknown;
+	_learnHtml?: unknown;
+}
+
+/**
+ * Contenu "Leçon" BRUT d'une question, texte et HTML chacun ramenés à UNE
+ * seule chaîne de repli — nom canonique d'abord, alias hérité `learn*`
+ * ensuite (mode "learn" renommé "lesson", task 0 du lot mode leçon,
+ * 2026-08-31) : un quiz partagé écrit avant le renommage doit continuer de
+ * s'afficher indéfiniment, on ne réécrit plus jamais que le nouveau nom.
+ *
+ * SEULE définition de cet ordre dans tout le plugin (round 1 de revue,
+ * 2026-08-31) : `engine/sanitizer.ts` (rendu, a besoin en plus du sanitizer
+ * pour choisir entre HTML pré-rendu et texte brut) et `editor/convert.ts` /
+ * `editor/export.ts` (lecture / écriture du JSON5, qui n'ont pas besoin du
+ * sanitizer) l'appellent tous les trois — avant cette fonction, chacun avait
+ * réécrit sa propre chaîne, dans un ordre différent des deux autres, et
+ * `export.ts` avait même oublié `lessonHtml` (présent seulement dans
+ * `ParsedQuizItem`, pas dans `DraftQuestion`).
+ */
+export function pickLessonFields(q: LessonFieldsSource): { text?: string; html?: string } {
+	const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
+	return {
+		text: str(q.lesson) ?? str(q.learn),
+		html: str(q.lessonHtml) ?? str(q._lessonHtml) ?? str(q.learnHtml) ?? str(q._learnHtml),
+	};
 }
 
 function renderParagraph(container: HTMLElement, text?: string | null): HTMLParagraphElement {

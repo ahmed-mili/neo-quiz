@@ -4,6 +4,7 @@ import { t } from "../i18n";
 import type { DraftQuestion } from "../editor/utils";
 import { renderQuizPreviewCard } from "../editor/question-preview";
 import { isRichHtml } from "../editor/utils";
+import { _htmlToText } from "../editor/modals";
 import { createFormBridge } from "./detail-form-bridge";
 import type { FormBridge } from "./detail-form-bridge";
 
@@ -170,11 +171,19 @@ function renderExtras(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, 
 	   l'ancien nom "learn" au nouveau à la lecture, et cette section n'écrit
 	   donc plus jamais que le nouveau (même règle que l'explication ci-dessous).
 	   HTML si le contenu en porte, même règle que l'énoncé et l'explication :
-	   l'aplatir à la première frappe effacerait une mise en forme. */
+	   l'aplatir à la première frappe effacerait une mise en forme.
+	   `q.lesson` N'EST PAS dérivé d'un HTML non riche par convert.ts (round 1
+	   de revue, FINDING 2 : cette dérivation faisait réécrire les deux champs
+	   à l'export). La zone non-HTML doit quand même montrer quelque chose de
+	   lisible pour une leçon qui n'a QUE du HTML non riche : dérivé ICI, pour
+	   l'AFFICHAGE seul — tant que l'auteur ne tape rien, `q.lesson` reste
+	   vide et l'export continue de n'écrire que `lessonHtml`, inchangé. */
 	const richLesson = isRichHtml(q._lessonHtml);
 	const lesson = section(parent, "graduation-cap", t("editor.lesson.section"), !!(q.lesson || q._lessonHtml));
 	lesson.createDiv({ cls: "qbd-qz-section-help", text: t("editor.lesson.help") });
-	const lessonValeur = (richLesson ? (q._lessonHtml || "") : (q.lesson || "")).replace(/<br\s*\/?>/gi, "\n");
+	const lessonAffichage = richLesson ? (q._lessonHtml || "")
+		: (q.lesson || (q._lessonHtml ? _htmlToText(q._lessonHtml) : ""));
+	const lessonValeur = lessonAffichage.replace(/<br\s*\/?>/gi, "\n");
 	bridge.field(lesson, "", lessonValeur,
 		t("editor.lesson.placeholder"), true, v => {
 			if (richLesson) {

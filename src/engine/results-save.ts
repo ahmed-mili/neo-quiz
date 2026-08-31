@@ -24,6 +24,9 @@ export interface QuestionResult {
 	kind: string;
 	promptText: string;
 	answer: unknown;
+	/** Nommé `learnText` jusqu'au schéma 1 (renommé "lesson", task 0 du lot
+	    mode leçon, 2026-08-31 round 1 de revue) — cf. `schemaVersion` sur
+	    `ResultsPayload`, dont le commentaire liste les changements par version. */
 	lessonText: string;
 	explanationText: string;
 }
@@ -370,14 +373,23 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 	   passent PAS par le dictionnaire — les traduire rendrait deux exports de la
 	   même session illisibles côté outillage. Seul `selfEvaluation.label` suit la
 	   langue de l'UI : c'est le doublon lisible de `selfEvaluation.value`, qui
-	   reste la clé stable (« understood » / « partial » / « review »). */
+	   reste la clé stable (« understood » / « partial » / « review »).
+
+	   Historique du schéma :
+	   - 2 (2026-08-31, round 1 de revue task 0) : `questions[].learnText` →
+	     `lessonText` (mode "learn" renommé "lesson") ; `quizMode` ne vaut plus
+	     jamais "learn" non plus, seulement "lesson". Trois fichiers de résultats
+	     déjà écrits par l'utilisateur restent au schéma 1 — le plugin ne les
+	     relit jamais, seul l'outillage externe a besoin de ce numéro pour
+	     distinguer les deux formes.
+	   - 1 : forme initiale. */
 	function buildPayload(): ResultsPayload {
 		const mode = ctx.textOnly?.isTextOnlyMode?.() ? "training" : "qcm";
 		const now = new Date();
 		const elapsedMs = ctx.examStartTime ? Math.max(0, Date.now() - ctx.examStartTime) : null;
 
 		return {
-			schemaVersion: 1,
+			schemaVersion: 2,
 			plugin: "quiz-blocks",
 			savedAt: now.toISOString(),
 			sourcePath: ctx.sourcePath || null,

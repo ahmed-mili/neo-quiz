@@ -1,6 +1,7 @@
 import { escHtml, esc5, md2html, isRichHtml } from "./utils";
 import type { DraftQuestion } from "./utils";
 import type { EditorExamOptions } from "../types/editor-ctx";
+import { pickLessonFields } from "../quiz-utils";
 
 /**
  * Une valeur quelconque, écrite en JSON5.
@@ -239,18 +240,34 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 	}
 
 	/* Leçon (mode "lesson", renommé depuis "learn" — task 0 du lot mode leçon,
-	   2026-08-31) : `convertParsedToInternal` a déjà ramené la question aux
-	   deux noms canoniques (`lesson`/`_lessonHtml`) ; les noms hérités ne sont
-	   relus ici QUE pour un appelant qui construirait une question sans passer
-	   par lui (jeux de cas). Dans tous les cas, seul le nom canonique est
-	   RÉÉCRIT — jamais `learn`/`learnHtml`/`_learnHtml`. Les deux champs sont
-	   indépendants (pas de isRichHtml comme pour l'explication) : l'ancien
-	   passage par `_extraFields` écrivait déjà les deux à la fois quand les
-	   deux étaient présents, et cette écriture les préserve pareil. */
-	const lessonText = q.lesson || q.learn;
-	const lessonHtml = q._lessonHtml || q.learnHtml || q._learnHtml;
-	if (lessonText) L.push(`\t\tlesson: '${e(String(lessonText))}',`);
-	if (lessonHtml) L.push(`\t\tlessonHtml: '${e(String(lessonHtml))}',`);
+	   2026-08-31) : `pickLessonFields` (quiz-utils.ts) porte l'ORDRE de repli,
+	   partagé avec engine/sanitizer.ts et editor/convert.ts (round 1 de revue,
+	   2026-08-31 : les trois le réécrivaient chacun, dans un ordre différent,
+	   et celui-ci en particulier omettait `q.lessonHtml`). `convertParsedToInternal`
+	   a normalement déjà ramené la question aux deux noms canoniques
+	   (`lesson`/`_lessonHtml`) ; les noms hérités ne sont relus ici QUE pour un
+	   appelant qui construirait une question sans passer par lui (jeux de cas).
+	   Dans tous les cas, seul le nom canonique est RÉÉCRIT — jamais
+	   `learn`/`learnHtml`/`_learnHtml`.
+	   PAS de `isRichHtml` ici, CONTRAIREMENT à explain/explainHtml juste
+	   au-dessus : `convertParsedToInternal` ne fabrique plus de `lesson`
+	   dérivé d'un HTML non riche (cf. son commentaire), donc `lessonText` ici
+	   n'est JAMAIS qu'un texte génuinement écrit à part — les deux ne
+	   coexistent que s'ils l'ont VRAIMENT été. Round 1 de revue, FINDING 2 :
+	   une version précédente écrivait les deux sans condition (le texte
+	   dérivé de convert.ts s'ajoutait au HTML), et une note qui ne portait
+	   qu'un `learnHtml` ressortait avec un `lesson:` EN PLUS — un champ
+	   AJOUTÉ que l'audit ne voit pas (il cherche les champs perdus, pas les
+	   champs ajoutés). */
+	const { text: lessonText, html: lessonHtml } = pickLessonFields(q);
+	if (lessonText && lessonHtml) {
+		L.push(`\t\tlessonHtml: '${e(lessonHtml)}',`);
+		L.push(`\t\tlesson: '${e(lessonText)}',`);
+	} else if (lessonText) {
+		L.push(`\t\tlesson: '${e(lessonText)}',`);
+	} else if (lessonHtml) {
+		L.push(`\t\tlessonHtml: '${e(lessonHtml)}',`);
+	}
 
 	if (q._extraFields && Object.keys(q._extraFields).length > 0) {
 		// Track keys already exported to avoid duplicates

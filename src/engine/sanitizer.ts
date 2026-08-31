@@ -1,6 +1,7 @@
 import type { TAbstractFile, TFile } from "obsidian";
 import type { EngineCtx } from "../types/engine-ctx";
 import type { QuestionBase } from "../types/quiz";
+import { pickLessonFields } from "../quiz-utils";
 
 /** Spec `![[lien|100x50|alt]]` décomposée (buildEmbedImgHtml, resolveObsidianEmbedFile). */
 interface ParsedEmbedSpec {
@@ -301,25 +302,26 @@ function unwrapQuizHtmlElement(node: ChildNode | null | undefined): void {
 
 /**
  * Contenu "Leçon" d'une question, déjà rendu pour l'affichage — ou chaîne
- * vide si la question n'en porte pas. Nom canonique prioritaire, alias
- * hérité `learn*` en repli : le mode "learn" a été renommé "lesson" (task 0
- * du lot mode leçon, 2026-08-31), mais un quiz partagé écrit avant ce
- * renommage doit continuer de s'afficher indéfiniment — on LIT les deux, on
- * n'ÉCRIT plus que le nouveau nom (editor/export.ts).
+ * vide si la question n'en porte pas. L'ORDRE de repli (nom canonique
+ * prioritaire, alias hérité `learn*` ensuite) vient de `pickLessonFields`
+ * (quiz-utils.ts) — SEULE définition de cet ordre, partagée avec
+ * `editor/convert.ts` et `editor/export.ts` (round 1 de revue, 2026-08-31 :
+ * les trois le réécrivaient chacun, dans des ordres différents). Cette
+ * fonction-ci n'ajoute que ce que le moteur a en plus des deux autres :
+ * choisir, une fois la valeur connue, LEQUEL des deux rendus l'affiche.
  *
  * EXPORTÉE et appelée par engine/cards.ts et engine/text-only.ts, qui
- * faisaient chacun le même repli HTML/texte en double : une chaîne de repli,
- * jamais dupliquée. Prend le sous-ensemble de `SanitizerHandlers` dont elle a
- * besoin — pas tout `ctx` — pour rester appelable sans le reste du moteur.
+ * faisaient chacun le même choix en double. Prend le sous-ensemble de
+ * `SanitizerHandlers` dont elle a besoin — pas tout `ctx` — pour rester
+ * appelable sans le reste du moteur.
  */
 export function renderLessonHtml(
 	q: QuestionBase,
 	sanitize: Pick<SanitizerHandlers, "replaceObsidianEmbedsInHtml" | "renderTextWithEmbeds">
 ): string {
-	const html = q.lessonHtml || q._lessonHtml || q.learnHtml || q._learnHtml;
+	const { text, html } = pickLessonFields(q);
 	if (html) return sanitize.replaceObsidianEmbedsInHtml(html);
-	const texte = q.lesson || q.learn;
-	if (texte) return sanitize.renderTextWithEmbeds(texte);
+	if (text) return sanitize.renderTextWithEmbeds(text);
 	return "";
 }
 

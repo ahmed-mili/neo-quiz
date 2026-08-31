@@ -3,7 +3,7 @@ import type { DraftQuestion, QuestionTypeKey } from "./utils";
 import { _htmlToText } from "./modals";
 import type { ParsedQuizItem } from "./modals";
 import type { EditorExamOptions } from "../types/editor-ctx";
-import { normalizeQuizMode } from "../quiz-utils";
+import { normalizeQuizMode, pickLessonFields } from "../quiz-utils";
 import { normalizeTerminalVariantName } from "../engine/terminal";
 
 /* ══════════════════════════════════════════════════════════
@@ -164,18 +164,24 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		question._explainHtml = q.explainHtml;
 	}
 
-	/* Leçon (mode "lesson", renommé depuis "learn") : nom canonique
-	   prioritaire, alias hérité en repli — un quiz partagé écrit avant le
-	   renommage (task 0 du lot mode leçon, 2026-08-31) doit continuer de
-	   s'afficher. Même logique que l'explication : un HTML NON riche est
-	   aussi converti en texte lisible, pour que l'édition non-HTML ne parte
-	   pas d'un champ vide. */
-	const lessonHtmlBrut = q._lessonHtml || q.lessonHtml || q.learnHtml || q._learnHtml;
-	if (q.lesson) question.lesson = q.lesson;
-	else if (q.learn) question.lesson = q.learn;
-	else if (lessonHtmlBrut && !isRichHtml(lessonHtmlBrut)) {
-		question.lesson = _htmlToText(lessonHtmlBrut);
-	}
+	/* Leçon (mode "lesson", renommé depuis "learn") : `pickLessonFields`
+	   (quiz-utils.ts) porte l'ORDRE de repli — nom canonique prioritaire,
+	   alias hérité ensuite — partagé avec engine/sanitizer.ts et
+	   editor/export.ts (round 1 de revue, 2026-08-31 : chacun le réécrivait
+	   avant, dans un ordre différent).
+	   PAS de dérivation HTML→texte ici, CONTRAIREMENT à l'explication
+	   ci-dessus : `question.lesson` ne porte que ce qui a été GENUINEMENT
+	   écrit comme texte (`lesson`/`learn`), jamais une conversion de
+	   `lessonHtml`/`learnHtml`. Une première version dérivait aussi un
+	   `question.lesson` depuis un HTML non riche — mais export.ts ne peut
+	   alors plus distinguer un texte VOULU d'un texte FABRIQUÉ pour
+	   l'affichage, et une note qui ne portait qu'un `learnHtml` non riche
+	   ressortait avec un `lesson:` en PLUS de `lessonHtml:` (round 1 de
+	   revue, FINDING 2). L'affichage non-HTML d'une leçon sans texte propre
+	   dérive son texte à la VOLÉE côté UI (dashboard/detail-question.ts),
+	   sans jamais l'écrire ici. */
+	const { text: lessonText, html: lessonHtmlBrut } = pickLessonFields(q);
+	if (lessonText) question.lesson = lessonText;
 	if (lessonHtmlBrut) question._lessonHtml = lessonHtmlBrut;
 
 	if (q.resourceButton) {

@@ -125,3 +125,32 @@ await withSrcModule("src/quiz-utils.ts", ({ parseQuizSource, extractExamOptions,
 
 	r.done();
 });
+
+/**
+ * FIX round 1 de revue (2026-08-31), FINDING 2 : `source` (Task 1) n'avait
+ * qu'un test de LECTURE (`extractExamOptions` ci-dessus) — rien ne verrouillait
+ * l'ÉCRITURE. `source` n'est dans aucune liste `connues` (editor/convert.ts
+ * `extraModeFields`) : il part donc en `_extra`, et `exportAll` (editor/export.ts)
+ * le réémet dans les QUATRE branches de l'objet de mode, `mode: 'quiz'`
+ * comprise. L'invariant tient aujourd'hui sans code dédié — mais rien ne
+ * l'empêcherait de se rompre EN SILENCE si quelqu'un ajoutait `source` à
+ * `connues` sans écrire le code de réémission correspondant : la note de
+ * référence perdrait son lien vers le chapitre sans qu'aucune vérification
+ * ne le remarque. Ce cas ferme ce trou par un aller-retour réel, du JSON5
+ * d'entrée au JSON5 de sortie.
+ */
+await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert, exp) => {
+	const r = makeReporter("Boucle d'apprentissage — source (ecriture)");
+
+	const source = "[[Chapitre 1 — Lesson]]";
+	const configBrut = JSON5.parse(`[{ mode: "quiz", source: "${source}" }]`)[0];
+	const examOptions = convert.readModeConfig(configBrut);
+	const question = { id: "x", title: "T", prompt: "P", options: ["a", "b"], correctIndex: 0 };
+	const written = exp.exportAll([question], examOptions);
+	const configEcrit = JSON5.parse(written).at(-1);
+
+	r.check("source intact a l'aller-retour", configEcrit.source, source);
+	r.check("mode 'quiz' toujours ecrit a cote de source", configEcrit.mode, "quiz");
+
+	r.done();
+});

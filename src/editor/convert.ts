@@ -192,13 +192,21 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	   2026-08-31) : `slice`/`role` round-trippent comme un champ typé
 	   ORDINAIRE (cf. `tolerance` plus haut), pas via `_extraFields` — sinon
 	   une valeur hors contrat y survivrait recopiée telle quelle, alors que
-	   l'écriture (editor/export.ts) doit au contraire la TAIRE. La
-	   validation fine (entier ≥ 1, rôle parmi les trois valeurs connues) a
-	   lieu là-bas, à l'unique endroit qui écrit le bloc ; ici, seule la
-	   FORME de base est vérifiée pour éviter de mémoriser un type absurde
-	   (une chaîne dans `slice`, un nombre dans `role`). */
+	   l'écriture (editor/export.ts) doit au contraire la TAIRE.
+	   `slice` n'a que la FORME de base vérifiée ici (un nombre) : sa borne
+	   (entier ≥ 1) est une règle métier, validée à l'unique endroit qui
+	   écrit le bloc (editor/export.ts) — la dupliquer ici serait une
+	   deuxième source de vérité à resynchroniser.
+	   `role`, en revanche, doit être validé DÈS LA LECTURE (fix round 1 de
+	   revue, 2026-08-31) : `DraftQuestion.role` est typé `QuestionRole`
+	   ("pre"/"recall"/"test"), et un cast `as DraftQuestion["role"]` sur un
+	   `string` quelconque ("bogus" compris) mentait sur ce type — aucune
+	   fuite aujourd'hui puisque l'export re-valide avant d'écrire, mais un
+	   futur consommateur en mémoire (modèle de tranches, UI) ferait confiance
+	   à ce type sans reconstruire la vérification. Une appartenance aux
+	   trois valeurs suffit, sans dupliquer la règle d'écriture. */
 	if (typeof q.slice === "number") question.slice = q.slice;
-	if (typeof q.role === "string") question.role = q.role as DraftQuestion["role"];
+	if (q.role === "pre" || q.role === "recall" || q.role === "test") question.role = q.role;
 
 	if (type === "single" || type === "multi") {
 		question.options = q.options || ["", ""];

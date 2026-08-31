@@ -270,12 +270,11 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 			e.preventDefault();
 			e.stopPropagation();
 			const key = root.dataset.passageKey || "";
-			const nowCollapsed = !collapsed.has(key);
-			if (nowCollapsed) collapsed.add(key); else collapsed.delete(key);
+			const nowCollapsed = collapseState.toggle(key);
 			const label = t(nowCollapsed ? "engine.passage.expand" : "engine.passage.collapse");
 
 			/* Toutes les slides existent DÉJÀ dans le DOM (piste préconstruite) :
-			   mémoriser l'état dans `collapsed` ne suffit pas, il n'est relu qu'à
+			   mémoriser l'état dans `collapseState` ne suffit pas, il n'est relu qu'à
 			   la construction du HTML. Le repli doit donc être appliqué ICI à
 			   chaque copie du MÊME document — sinon replier sur Q1 laisse le texte
 			   déplié en arrivant sur Q2, et le partage n'en est plus un. */
@@ -307,8 +306,7 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 	}
 
 	function resetPassageState(): void {
-		collapsed.clear();
-		defaultFoldSeeded.clear();
+		collapseState.reset();
 	}
 
 	return { resolvePassage, passageVisibilityFor, passageHtml, bindPassage, resetPassageState };

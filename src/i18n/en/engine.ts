@@ -80,6 +80,12 @@ export const EN_ENGINE = {
 
 	/* ── Mode leçon ── */
 	"engine.lesson.label": "Lesson",
+	/* Progression en tranches (en-tête de carte, Task 6) : "sliceProgress" est
+	   la ligne principale, "role*" son sous-titre selon le rôle de la question. */
+	"engine.lesson.sliceProgress": "Slice {current} of {total}",
+	"engine.lesson.rolePre": "Before reading",
+	"engine.lesson.roleRecall": "From memory",
+	"engine.lesson.roleTest": "Check",
 
 	/* ── Question texte / terminal ── */
 	"engine.text.placeholder": "Your answer...",

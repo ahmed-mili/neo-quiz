@@ -533,3 +533,80 @@ await withSrcModule("src/engine/text-only.ts", ({ createTextOnlyHandlers }) => {
 
 	r.done();
 });
+
+/**
+ * Task 6 du lot mode leçon (2026-08-31) : en mode Leçon, l'en-tête de carte
+ * compte en TRANCHES ("Tranche X sur Y" + le rôle de la question en
+ * sous-titre), jamais en questions — src/engine/cards.ts, fonctions
+ * `lessonProgressHtml`/`lessonRoleLabel` (internes, câblées via
+ * `questionCardHtml`, la seule sortie exposée par `createCardRenderers`).
+ *
+ * ctx factice minimal : une seule question QCM simple (pas de passage,
+ * d'indice, ni de verrouillage), seuls `sliceOfQuestion`/`lessonSlices`/
+ * `roleOfQuestion` varient d'un cas à l'autre — exactement les trois
+ * accessors que `lessonProgressHtml` lit, chacun UNE fois par appel.
+ *
+ * Limite connue de ce harnais (`load-src.mjs` bundle chaque entrée à part,
+ * `bundle: true`) : charger `src/i18n.ts` à côté de `cards.ts` donnerait DEUX
+ * copies indépendantes du module i18n, dont les `current` respectifs ne se
+ * voient pas — impossible de piloter `setLanguage` sur l'i18n bundlé DANS
+ * cards.ts depuis l'extérieur. Ce bloc ne peut donc pas rejouer ici le
+ * changement de langue en cours de session (déjà couvert par le principe
+ * `t() au rendu` documenté et par la revue de code) ; il vérifie la langue
+ * par défaut ("en", valeur initiale de `src/i18n.ts`) et le calcul PAR APPEL
+ * de `lessonRoleLabel` selon le rôle reçu — la fonction relit `role` à
+ * chaque invocation, elle ne peut donc pas être une table figée à l'import.
+ */
+await withSrcModule("src/engine/cards.ts", ({ createCardRenderers }) => {
+	const r = makeReporter("Boucle d'apprentissage — en-tete de carte compte en tranches");
+
+	// Question QCM simple : aucun champ ne declenche passage/indice/lecon-texte,
+	// pour isoler la seule chose testee ici, la progression en tranches.
+	const q = { title: "T", prompt: "P", options: ["a", "b"], correctIndex: 0 };
+	const makeCtx = ({ quizMode, slice, sliceTotal, role }) => ({
+		quiz: [q],
+		quizMode,
+		quizState: { current: 0, locked: false, selections: [null], shuffleMap: [[0, 1]] },
+		isTextQuestion: () => false,
+		isClozeQuestion: () => false,
+		isOrderingQuestion: () => false,
+		isMatchingQuestion: () => false,
+		sanitize: {
+			renderInlineText: (s) => s,
+			resourceButtonHtml: () => "",
+			renderTextWithEmbeds: (s) => s,
+			renderRawHtmlWithEmbeds: (s) => s
+		},
+		passage: { passageHtml: () => "" },
+		// Les trois accessors de lesson.ts, exactement ceux que lessonProgressHtml lit.
+		sliceOfQuestion: () => slice,
+		lessonSlices: () => Array.from({ length: sliceTotal }, (_, i) => ({ index: i + 1, questionIndexes: [] })),
+		roleOfQuestion: () => role
+	});
+
+	// Quiz ORDINAIRE (hors Lecon) : sliceOfQuestion renvoie null (comportement
+	// de lesson.ts hors mode ou sans slice valide) -> AUCUN bloc de progression.
+	// Il n'existait avant cette tache aucun compteur de questions dans l'en-tete
+	// de carte (seule verite trouvee en lecture du code reel) : ce cas prouve
+	// qu'il n'y a donc rien a regresser, seulement rien a ajouter ici.
+	const ordinaire = createCardRenderers(makeCtx({ quizMode: "quiz", slice: null, sliceTotal: 0, role: "test" })).questionCardHtml(0);
+	r.check("quiz ordinaire : aucun bloc de progression en tranches dans la carte", ordinaire.includes("quiz-lesson-progress"), false);
+
+	// Lecon, tranche 2 sur 4, role "recall".
+	const lecon = createCardRenderers(makeCtx({ quizMode: "lesson", slice: 2, sliceTotal: 4, role: "recall" })).questionCardHtml(0);
+	r.check("Lecon : le bloc de progression en tranches apparait", lecon.includes("quiz-lesson-progress"), true);
+	r.check("Lecon : 'Slice 2 of 4' (tranche courante / total, langue par defaut)", lecon.includes("Slice 2 of 4"), true);
+	r.check("Lecon : le role 'recall' est traduit en sous-titre ('From memory')", lecon.includes("From memory"), true);
+	r.check("Lecon : la tranche precede le role dans le balisage (role = sous-titre, en second)",
+		lecon.indexOf("Slice 2 of 4") < lecon.indexOf("From memory"), true);
+	r.check("Lecon : le bloc de progression precede le titre de la question dans la carte",
+		lecon.indexOf("quiz-lesson-progress") < lecon.indexOf("<h2>"), true);
+
+	// Les trois roles se traduisent chacun sur leur propre cle (pas de contamination).
+	const pre = createCardRenderers(makeCtx({ quizMode: "lesson", slice: 1, sliceTotal: 3, role: "pre" })).questionCardHtml(0);
+	r.check("role 'pre' -> 'Before reading'", pre.includes("Before reading"), true);
+	const test = createCardRenderers(makeCtx({ quizMode: "lesson", slice: 1, sliceTotal: 3, role: "test" })).questionCardHtml(0);
+	r.check("role 'test' -> 'Check'", test.includes("Check"), true);
+
+	r.done();
+});

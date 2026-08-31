@@ -66,6 +66,12 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 
 	/* ── Mode leçon ── */
 	"engine.lesson.label": "Leçon",
+	/* Progression en tranches (en-tête de carte, Task 6) : "sliceProgress" est
+	   la ligne principale, "role*" son sous-titre selon le rôle de la question. */
+	"engine.lesson.sliceProgress": "Tranche {current} sur {total}",
+	"engine.lesson.rolePre": "Avant la lecture",
+	"engine.lesson.roleRecall": "De mémoire",
+	"engine.lesson.roleTest": "Vérification",
 
 	/* ── Question texte / terminal ── */
 	"engine.text.placeholder": "Votre réponse...",

@@ -7,6 +7,7 @@ import type {
 	MatchingQuestion,
 	TextQuestion,
 	ClozeQuestion,
+	QuestionRole,
 } from "../types/quiz";
 import { mathifyElement } from "./mathjax";
 import { renderLessonHtml } from "./sanitizer";
@@ -381,6 +382,40 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		}
 	}
 
+	/* Libellé du rôle affiché en sous-titre de la progression en tranches
+	   (Task 6, mode Leçon) : une FONCTION, jamais une table
+	   `{ pre: t(...), recall: t(...), test: t(...) }` figée au niveau du
+	   module — c'est exactement le piège documenté dans CLAUDE.md (TUTORIALS) :
+	   une chaîne traduite dans une constante de premier niveau se fige à la
+	   langue de démarrage et ignore tout changement de langue en cours de vie
+	   du plugin. `t()` n'est appelé qu'ici, à chaque rendu de carte. */
+	function lessonRoleLabel(role: QuestionRole): string {
+		if (role === "pre") return t("engine.lesson.rolePre");
+		if (role === "recall") return t("engine.lesson.roleRecall");
+		return t("engine.lesson.roleTest");
+	}
+
+	/* En-tête « Tranche X sur Y » + rôle en sous-titre (Task 6, mode Leçon).
+	   Hors mode Leçon (ou pour un quiz ordinaire, question sans `slice`
+	   valide), `sliceOfQuestion` renvoie déjà `null` (engine/lesson.ts) : ce
+	   bloc ne peut donc RIEN changer à l'en-tête des 48 quiz ordinaires
+	   d'Ahmed. Il n'y avait jusqu'ici aucun compteur de questions dans l'en-
+	   tête de carte (seuls les onglets `navHtml` en affichent un, hors du
+	   périmètre de cette tâche) : ce bloc s'AJOUTE, il ne remplace rien.
+	   Chaque accessor de tranches est appelé UNE SEULE fois ici et son
+	   résultat réutilisé localement — `lesson.ts` reconstruit son modèle à
+	   chaque appel (accessor vivant sur `ctx.quizMode`, jamais un cache). */
+	function lessonProgressHtml(qi: number): string {
+		const slice = ctx.sliceOfQuestion(qi);
+		if (slice === null) return "";
+		const total = ctx.lessonSlices().length;
+		const role = ctx.roleOfQuestion(qi);
+		return `<div class="quiz-lesson-progress">
+			<div class="quiz-lesson-progress-slice">${t("engine.lesson.sliceProgress", { current: slice, total })}</div>
+			<div class="quiz-lesson-progress-role">${lessonRoleLabel(role)}</div>
+		</div>`;
+	}
+
 	function questionCardHtml(qi: number): string {
 		const q = ctx.quiz[qi];
 		// Décision PAR QUESTION : une tranche de Leçon mélange des rôles ("test"
@@ -452,9 +487,11 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		// verrouillage) — décision tranchée par `passageVisibility`
 		// (engine/passage.ts), jamais recalculée ici.
 		const passageSection = ctx.passage.passageHtml(qi);
+		const lessonProgress = lessonProgressHtml(qi);
 
 		return `<div class="quiz-track-item" data-slide-kind="question" data-qi="${qi}">
 			<section class="quiz-card"${sectionIdAttr}>
+				${lessonProgress}
 				${passageSection}
 				<h2>${ctx.sanitize.renderInlineText(q.title)}</h2>
 				${ctx.sanitize.resourceButtonHtml(q)}

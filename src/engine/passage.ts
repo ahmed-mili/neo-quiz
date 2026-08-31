@@ -73,6 +73,16 @@ export interface PassageHandlers {
 	passageVisibilityFor(qi: number): PassageVisibility;
 	passageHtml(qi: number): string;
 	bindPassage(trackItem: HTMLElement, qi: number): void;
+	/**
+	 * Vide l'état de session mémorisé par CLÉ de support (repli manuel de
+	 * l'utilisateur + repli par défaut déjà semé). À appeler depuis
+	 * `resetQuiz` (engine/state.ts) : sans ça, un « recommencer » ou un
+	 * aller-retour Leçon → Examen → Leçon retrouve un support de rôle "test"
+	 * qui ne se replie plus par défaut (déjà semé lors de la session
+	 * précédente), et un support replié manuellement le reste pour toujours —
+	 * corrigé au round 1 de revue de la Task 4.
+	 */
+	resetPassageState(): void;
 }
 
 /* Icônes Lucide inline (book-open, chevron-down) : le plugin n'a pas d'autre
@@ -82,15 +92,50 @@ export interface PassageHandlers {
 const ICON_BOOK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>';
 const ICON_CHEVRON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
-export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
-	/* Replis mémorisés par CLÉ de support, pas par question — c'est ce qui fait
-	   qu'un document replié le reste d'une question à l'autre. */
+/**
+ * État de repli des supports, par CLÉ — extrait en fonction PURE (aucune
+ * dépendance à `ctx` ni au DOM) pour la même raison que `passageVisibility` :
+ * le rendre vérifiable par `scripts/check-lesson.mjs` sans passer par un
+ * clic réel (`bindPassage` a besoin d'un `document`, absent hors Obsidian).
+ *
+ * Round 1 de revue de la Task 4, FINDING important : `resetQuiz` ne vidait
+ * ni le repli manuel de l'utilisateur ni le repli par défaut déjà semé — un
+ * « recommencer », ou un aller-retour Leçon → Examen → Leçon, retrouvait un
+ * support de rôle "test" qui ne se repliait plus par défaut si l'utilisateur
+ * l'avait déplié pendant la session précédente. `reset()` corrige ça ; le cas
+ * de vérification correspondant instancie CET état directement, sans DOM.
+ */
+export function createPassageCollapseState() {
 	const collapsed = new Set<string>();
-	/* Une clé n'y entre qu'UNE fois : le repli par défaut du rôle "test" en
-	   mode Leçon (tableau de la Task 4) ne doit s'appliquer qu'à la toute
-	   première apparition de la clé, sinon chaque re-rendu écraserait un
-	   dépli manuel de l'utilisateur en le repliant à nouveau. */
-	const defaultFoldSeeded = new Set<string>();
+	/* Une clé n'y entre qu'UNE fois PAR SESSION : le repli par défaut du rôle
+	   "test" en mode Leçon (tableau de la Task 4) ne doit s'appliquer qu'à la
+	   toute première apparition de la clé, sinon chaque re-rendu écraserait
+	   un dépli manuel de l'utilisateur en le repliant à nouveau. */
+	const seeded = new Set<string>();
+	return {
+		isCollapsed: (key: string): boolean => collapsed.has(key),
+		/** Sème le repli par défaut une seule fois par clé ; sans effet ensuite. */
+		seedCollapsedOnce(key: string): void {
+			if (seeded.has(key)) return;
+			seeded.add(key);
+			collapsed.add(key);
+		},
+		/** Bascule manuel (clic) — renvoie le nouvel état pour l'aria/le libellé. */
+		toggle(key: string): boolean {
+			const nowCollapsed = !collapsed.has(key);
+			if (nowCollapsed) collapsed.add(key); else collapsed.delete(key);
+			return nowCollapsed;
+		},
+		/** À appeler depuis `resetQuiz` : nouvelle session, nouveau repli par défaut. */
+		reset(): void {
+			collapsed.clear();
+			seeded.clear();
+		}
+	};
+}
+
+export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
+	const collapseState = createPassageCollapseState();
 
 	/** Décision de visibilité pour `qi`, exposée sur `ctx` — voir `passageVisibility`. */
 	function passageVisibilityFor(qi: number): PassageVisibility {
@@ -188,16 +233,14 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 
 		// Repli par défaut : seul le rôle "test" en mode Leçon démarre replié
 		// (tableau de la Task 4), et seulement à la première apparition de la
-		// clé — un rôle "recall" qui vient de s'ouvrir n'a jamais pu être replié
-		// puisqu'il n'existait pas dans le DOM avant son verrouillage.
-		if (isLesson && role === "test" && !defaultFoldSeeded.has(p.key)) {
-			defaultFoldSeeded.add(p.key);
-			collapsed.add(p.key);
-		}
+		// clé (`seedCollapsedOnce` est un no-op ensuite) — un rôle "recall" qui
+		// vient de s'ouvrir n'a jamais pu être replié puisqu'il n'existait pas
+		// dans le DOM avant son verrouillage.
+		if (isLesson && role === "test") collapseState.seedCollapsedOnce(p.key);
 		// "open" force le dépli — y compris si un support PARTAGÉ (`passageId`)
 		// a été replié par une autre question du même groupe — pour garantir la
 		// comparaison texte/rappel que ce rôle existe pour offrir.
-		const isCollapsed = visibility === "open" ? false : collapsed.has(p.key);
+		const isCollapsed = visibility === "open" ? false : collapseState.isCollapsed(p.key);
 		const scope = scopeLabel(p);
 		const toggleLabel = t(isCollapsed ? "engine.passage.expand" : "engine.passage.collapse");
 
@@ -263,5 +306,10 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 		});
 	}
 
-	return { resolvePassage, passageVisibilityFor, passageHtml, bindPassage };
+	function resetPassageState(): void {
+		collapsed.clear();
+		defaultFoldSeeded.clear();
+	}
+
+	return { resolvePassage, passageVisibilityFor, passageHtml, bindPassage, resetPassageState };
 }

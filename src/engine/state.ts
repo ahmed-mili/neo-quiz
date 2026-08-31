@@ -375,6 +375,11 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 
 		ctx.__quizSlideHeightCache?.clear();
 		ctx.__quizWarmSlidePromises?.clear();
+		// Repli/repli-par-défaut du support de compréhension (Task 4, mode Leçon) :
+		// à côté des autres .clear() de session, pour qu'un futur ajout d'état de
+		// session pense à en faire autant — round 1 de revue, sans ça un
+		// « recommencer » retrouvait un support déjà semé de la session précédente.
+		ctx.passage.resetPassageState();
 
 		ctx.examStarted = false;
 		ctx.examEnded = false;

@@ -61,3 +61,38 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
 
 	r.done();
 });
+
+/**
+ * Task 1 du lot mode leçon : les champs `slice`/`role` (question) et `source`
+ * (configuration). Le point délicat n'est pas la déclaration de type — elle
+ * ne change rien au runtime — mais `isStrictQuizModeConfig` : `slice`, `role`
+ * et `source` ne doivent PAS rejoindre ses MARQUEURS, sous peine de faire
+ * disparaître une vraie question de leçon (qui porte `slice`/`role` mais
+ * jamais seuls : toujours avec un marqueur de question, `options`/`answer`…)
+ * ou, à l'inverse, de faire d'une configuration qui référence sa source une
+ * question fantôme.
+ */
+await withSrcModule("src/quiz-utils.ts", ({ parseQuizSource, extractExamOptions }) => {
+	const r = makeReporter("Boucle d'apprentissage — slice/role/source");
+
+	// Le bloc d'une Lesson porte slice/role ; parseQuizSource doit les rendre tels quels.
+	const src = `[
+	  { id: "a", slice: 1, role: "pre",    prompt: "P ?", type: "text", answer: "x" },
+	  { id: "b", slice: 1, role: "recall", prompt: "R ?", type: "text", answer: "y", passage: "Texte." },
+	  { id: "c", slice: 1, role: "test",   prompt: "T ?", options: ["1","2"], correctIndex: 0 },
+	  { mode: "lesson" }
+	]`;
+	const { questions, quizMode } = extractExamOptions(parseQuizSource(src));
+	r.check("mode 'lesson' lu", quizMode, "lesson");
+	r.check("la configuration ne doit pas compter comme une question", questions.length, 3);
+	r.check("role rendu tel quel", questions.map(q => q.role), ["pre", "recall", "test"]);
+	r.check("slice rendu tel quel", questions.map(q => q.slice), [1, 1, 1]);
+
+	// Une configuration qui porte `source` reste une configuration, pas une question.
+	const parseeAvecSource = parseQuizSource(`[{ mode: "quiz", source: "[[Chapitre 1 — Lesson]]" }]`);
+	const avecSource = extractExamOptions(parseeAvecSource);
+	r.check("un bloc de reference n'a aucune question propre", avecSource.questions.length, 0);
+	r.check("mode 'quiz' conserve malgre 'source'", avecSource.quizMode, "quiz");
+
+	r.done();
+});

@@ -22,6 +22,9 @@ interface QuizModeConfig {
 	examDurationMinutes?: number;
 	examAutoSubmit?: boolean;
 	examShowTimer?: boolean;
+	/** Référence libre vers la note source de la leçon (ex. un lien `[[...]]`) —
+	    jamais lue comme un marqueur de question par `isStrictQuizModeConfig`. */
+	source?: string;
 }
 
 function parseQuizSource(source?: string | null): QuizQuestion[] {

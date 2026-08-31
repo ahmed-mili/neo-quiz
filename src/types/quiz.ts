@@ -27,6 +27,9 @@ export interface ResourceButton {
 	fileName: string;
 }
 
+/** Rôles de la boucle d'apprentissage. Valeurs PERSISTÉES : jamais traduites. */
+export type QuestionRole = "pre" | "recall" | "test";
+
 /**
  * Champs communs à toutes les variantes de question. La plupart sont
  * optionnels : le moteur les lit avec `||`/`??`/`?.` et tolère leur absence
@@ -79,6 +82,21 @@ export interface QuestionBase {
 	passageId?: string;
 	/** Titre affiché dans l'en-tête du support (défaut : libellé « Document » traduit). */
 	passageTitle?: string;
+	/**
+	 * BOUCLE D'APPRENTISSAGE (mode "lesson") — numéro de tranche, à partir de 1.
+	 * Absent ⇒ question de quiz ordinaire. Un bloc où AUCUNE question ne porte
+	 * `slice` n'active pas la boucle : le mode lesson garde son comportement
+	 * historique (section « Leçon » + bouton d'examen).
+	 */
+	slice?: number;
+	/**
+	 * Place de la question dans la boucle en 5 temps :
+	 *   "pre"    — posée AVANT la lecture, support masqué, la tentative est le mécanisme ;
+	 *   "recall" — restitution de mémoire, support masqué puis rouvert à la correction ;
+	 *   "test"   — question ciblée d'après lecture, support rouvrable à la demande.
+	 * Absent ⇒ traitée comme "test".
+	 */
+	role?: QuestionRole;
 }
 
 /** Question à choix unique (engine.js: multiSelect absent/false ⇒ q.correctIndex). */

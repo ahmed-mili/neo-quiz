@@ -1,4 +1,4 @@
-# Mode Learn — conception
+# Mode Lesson — conception
 
 **Date** : 2026-08-31
 **Statut** : conception validée, plan d'implémentation à écrire
@@ -17,50 +17,77 @@ choses. La pratique de récupération est la technique de haute utilité ; et
 divagation d'attention, ni gain au test final. L'unité utile n'est donc pas « une
 tranche de cours », c'est « une tranche **et son test** ».
 
-Ce document conçoit le mode **Learn** : un chapitre découpé en tranches, chaque
+Ce document conçoit le mode **Lesson** : un chapitre découpé en tranches, chaque
 tranche instrumentée par la boucle en 5 temps.
 
 ## 2. Vocabulaire arrêté
 
 | Concept | Fichier | Bouton (EN) | Bouton (FR) | Valeur persistée |
 |---|---|---|---|---|
-| Apprendre un chapitre | `… — Learn.md` | Learn | Apprendre | `mode: "learn"` |
+| Apprendre un chapitre | `… — Lesson.md` | Lesson | Leçon | `mode: "lesson"` |
 | Se tester dessus | `… — Quiz.md` | Quiz | Quiz | `mode: "quiz"` |
 
-`learn` n'est pas un mot nouveau, et c'est plus fort que prévu : `mode: "learn"`
-est **déjà un mode de quiz** (`QuizMode = "quiz" | "exam" | "learn"`), utilisé par
-**10 notes réelles** des vaults. Il affiche aujourd'hui la section « Leçon » avant
-la question et un bouton « Passer l'examen » (`src/engine/cards.ts:321,435`).
+**UN SEUL MOT partout** : fichier, onglet, bouton, valeur persistée, nom de
+module, nom de fonction. Le mot est `lesson`.
 
-**Décision (2026-08-31)** : le mode Learn n'est pas un mode nouveau, il
-**enrichit** le mode `learn` existant.
+**Pourquoi `lesson` et pas `learn`** (arbitrage définitif, 2026-08-31). Ce qu'on
+nomme ici est un OBJET, pas une action : il est listé, compté, ouvert, partagé.
+`lesson` est un nom, donc dénombrable — « 12 lessons », « cette leçon ». `learn`
+est un verbe : « 12 learns » n'existe pas. Un nom fait très bien un libellé de
+bouton ; un verbe ne peut pas faire un nom d'entité. Le nom couvre les deux
+usages, le verbe un seul.
 
-- une note `mode: "learn"` **sans** `slice` garde exactement son comportement
-  actuel — les 10 notes existantes ne bougent pas, aucune migration ;
-- une note `mode: "learn"` **avec** des `slice` active la boucle en 5 temps.
+**Écarté** : `learn` (verbe, cf. ci-dessus), `Course` (faux ami — désigne le
+cursus entier en anglais), `Study` (désigne en anglais courant la relecture,
+précisément ce que le mode remplace), `Lecture` (c'est la technique que la
+littérature classe en faible utilité).
+
+### L'héritage `learn`, traité en alias de LECTURE
+
+`mode: "learn"` existe déjà (`QuizMode = "quiz" | "exam" | "learn"`) et sert
+**10 notes réelles** ; les champs `learn` / `learnHtml` / `_learnHtml` y sont
+écrits **108 fois**. Il affiche aujourd'hui la section « Leçon » avant la question
+et un bouton « Passer l'examen » (`src/engine/cards.ts:321,435`).
+
+La règle : **on lit les deux, on n'écrit que `lesson`.**
+
+| Ancien nom | Nouveau nom | Traitement |
+|---|---|---|
+| `mode: "learn"` | `mode: "lesson"` | accepté en lecture, normalisé en `lesson` |
+| `learn` (champ de question) | `lesson` | idem |
+| `learnHtml`, `_learnHtml` | `lessonHtml`, `_lessonHtml` | idem |
+| `learnMode: true` | `mode: "lesson"` | idem |
+| `learnExamOptions` (interne) | `lessonExamOptions` | renommage de code seul |
+
+Aucune note n'est réécrite d'office : une note héritée s'ouvre inchangée, et se
+convertit d'elle-même à sa première sauvegarde depuis l'éditeur. **Aucun quiz
+partagé ne casse.**
+
+**Décision** : le mode Lesson n'est pas un mode nouveau, il **enrichit** le mode
+existant.
+
+- une note en mode lesson **sans** `slice` garde exactement son comportement
+  actuel — les 10 notes existantes ne bougent pas ;
+- une note en mode lesson **avec** des `slice` active la boucle en 5 temps.
 
 C'est la condition d'activation la plus économe : elle se lit dans les données
 elles-mêmes, sans drapeau supplémentaire à tenir à jour.
-
-**Écarté** : `Course` (faux ami — désigne le cursus entier en anglais), `Study`
-(désigne en anglais courant la relecture, précisément ce que le mode remplace),
-`Lecture`/`Leçon` seuls (connotent le contenu reçu, pas le travail fourni).
 
 ## 3. Architecture : une source, deux notes
 
 Décision d'Ahmed, 2026-08-31 : **deux fichiers Markdown distincts** pour
 l'organisation du vault, mais **une seule source de vérité** pour le contenu.
 
-- `Chapitre 1 — Learn.md` porte tout : les tranches de cours et les questions.
+- `Chapitre 1 — Lesson.md` porte tout : les tranches de cours et les questions.
   C'est le fichier que l'IA génère et que l'on corrige.
 - `Chapitre 1 — Quiz.md` ne contient qu'un bloc de référence :
 
 ```
-[{ mode: "quiz", source: "[[Chapitre 1 — Learn]]" }]
+[{ mode: "quiz", source: "[[Chapitre 1 — Lesson]]" }]
 ```
 
 Le moteur lit les questions de la note référencée et n'affiche qu'elles. Corriger
-une question dans la note Learn la corrige dans le Quiz, sans synchronisation.
+une question dans la note Lesson la corrige dans le Quiz, sans synchronisation.
 
 **Pourquoi pas deux contenus indépendants** : la génération IA serait faite deux
 fois, et une correction dans l'un ne profiterait pas à l'autre.
@@ -100,16 +127,16 @@ Correspondance avec la boucle en 5 temps :
 
 **Compatibilité ascendante** : une question sans `slice` ni `role` est une
 question de quiz ordinaire. Tous les blocs existants du vault (67 quiz, 1176
-questions) s'ouvrent inchangés. Un bloc sans aucun `slice` n'a pas de mode Learn
+questions) s'ouvrent inchangés. Un bloc sans aucun `slice` n'a pas de mode Lesson
 disponible — le bouton n'apparaît pas.
 
 Le texte de la tranche réutilise `passage` / `passageId` / `passageTitle`, qui
 portent déjà « un document, N questions dessus » (`src/types/quiz.ts:56-72`).
 
-## 5. Ce que le mode Learn fait, que le bloc actuel ne fait pas
+## 5. Ce que le mode Lesson fait, que le bloc actuel ne fait pas
 
 1. **Masquer le support pendant la restitution.** Aujourd'hui l'utilisateur replie
-   le passage lui-même. En mode Learn, une question `role: "recall"` masque le
+   le passage lui-même. En mode Lesson, une question `role: "recall"` masque le
    support tant que la réponse n'est pas validée, puis le rouvre pour la
    comparaison. C'est le temps 3 de la boucle, et il ne vaut rien si le texte
    reste sous les yeux.
@@ -125,7 +152,7 @@ portent déjà « un document, N questions dessus » (`src/types/quiz.ts:56-72`)
 
 La bascule globale QCM ⇄ Texte (`practiceMode`, `src/engine/text-only.ts`,
 `src/engine/interactions.ts:446`) est **retirée de l'UI du quiz** : elle ferait
-doublon avec Learn / Quiz et porte à confusion.
+doublon avec Lesson / Quiz et porte à confusion.
 
 **Sa mécanique est absorbée, pas supprimée.** Le mode texte est aujourd'hui le
 seul endroit du plugin où une réponse libre est jugée par l'utilisateur
@@ -148,9 +175,9 @@ Explicitement remis à plus tard, pour que ce lot reste livrable :
   rétention) ;
 - la session « une seule chose » du dashboard ;
 - le type de question « étape manquante » natif pour le contenu procédural (il est
-  aujourd'hui simulé avec `learnHtml` + un énoncé à trous, ce qui suffit pour
+  aujourd'hui simulé avec `lessonHtml` + un énoncé à trous, ce qui suffit pour
   juger la méthode) ;
-- la génération IA d'une note Learn à partir d'un PDF ;
+- la génération IA d'une note Lesson à partir d'un PDF ;
 - le renommage du plugin.
 
 ## 8. Décisions prises
@@ -158,9 +185,9 @@ Explicitement remis à plus tard, pour que ce lot reste livrable :
 - **Le Quiz ne reprend que les questions `role: "test"`** et les questions sans
   rôle. Une restitution privée de son cours n'a plus de référence à laquelle se
   comparer ; une pré-question sans lecture à suivre n'a pas d'objet.
-- **Pas de bascule Learn/Quiz dans le bloc** : le choix est porté par le fichier
+- **Pas de bascule Lesson/Quiz dans le bloc** : le choix est porté par le fichier
   ouvert, conformément à la décision « deux fichiers » d'Ahmed.
-- **Une commande crée la note Quiz depuis une note Learn ouverte**, sinon le bloc de
+- **Une commande crée la note Quiz depuis une note Lesson ouverte**, sinon le bloc de
   référence est écrit à la main à chaque chapitre.
 
 ## 9. Reste ouvert (à régler à l'usage, pas par la recherche)
@@ -181,10 +208,10 @@ des notes, pas dans le code.
 
 - `npm run check` après chaque tâche.
 - `npm run check:export` : l'écriture d'un bloc doit conserver `slice`, `role` et
-  `source` — un champ perdu rend la Learn muette.
+  `source` — un champ perdu rend la Lesson muette.
 - `node scripts/audit-vaults.mjs` sur les vrais vaults **avant de clore le lot** :
   c'est le seul filet contre une perte de champ à l'aller-retour, et c'est lui qui
   avait trouvé les 109 champs perdus de la refonte précédente.
-- Test manuel dans Obsidian sur `Chapitre 1 — Learn.md` : la maquette existante
-  sert de cas de référence, elle doit se rejouer en mode Learn sans réécriture de
+- Test manuel dans Obsidian sur `Chapitre 1 — Lesson.md` : la maquette existante
+  sert de cas de référence, elle doit se rejouer en mode Lesson sans réécriture de
   son contenu.

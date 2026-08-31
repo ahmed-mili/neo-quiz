@@ -31,6 +31,17 @@ export interface ResourceButton {
 export type QuestionRole = "pre" | "recall" | "test";
 
 /**
+ * Liste canonique des rôles, dans l'ordre de la boucle en 5 temps. Source
+ * unique du vocabulaire : `src/editor/convert.ts` (lecture) et
+ * `src/editor/export.ts` (écriture) valident encore `role` par une
+ * comparaison en dur (`q.role === "pre" || ...`) — les raccorder à cette
+ * constante est délibérément différé à la revue finale du lot mode leçon
+ * (task 3, 2026-08-31), pour ne pas élargir la tâche qui l'introduit
+ * (`src/engine/lesson.ts`, seul consommateur actuel).
+ */
+export const QUESTION_ROLES: readonly QuestionRole[] = ["pre", "recall", "test"];
+
+/**
  * Champs communs à toutes les variantes de question. La plupart sont
  * optionnels : le moteur les lit avec `||`/`??`/`?.` et tolère leur absence
  * (engine/cards.js explanationHtml, renderQuizPromptHtml, questionCardHtml).

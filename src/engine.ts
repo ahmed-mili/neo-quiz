@@ -18,6 +18,7 @@ import { createTextOnlyHandlers } from "./engine/text-only";
 import { createResultsSaver } from "./engine/results-save";
 import { createPassageHandlers } from "./engine/passage";
 import { createClozeHandlers } from "./engine/cloze";
+import { createLessonHandlers } from "./engine/lesson";
 import { mathifyElement } from "./engine/mathjax";
 import { t } from "./i18n";
 
@@ -194,6 +195,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	const resultsSaver = createResultsSaver(ctx);
 	const passage = createPassageHandlers(ctx);
 	const cloze = createClozeHandlers(ctx);
+	const lesson = createLessonHandlers(ctx);
 
 	// Fonctions utilitaires seront définies après les constantes SLIDE_* pour éviter TDZ
 
@@ -220,6 +222,12 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		resultsSaver,
 		passage,
 		cloze,
+		lesson,
+		// depuis lesson : accessors (pas des flags __quiz*), voir engine/lesson.ts.
+		isLessonMode: lesson.isLessonMode,
+		lessonSlices: lesson.lessonSlices,
+		sliceOfQuestion: lesson.sliceOfQuestion,
+		roleOfQuestion: lesson.roleOfQuestion,
 		// Fonctions exposées directement
 		escapeHtmlText: sanitizer.escapeHtmlText,
 		escapeHtmlAttr: sanitizer.escapeHtmlAttr,

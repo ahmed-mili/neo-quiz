@@ -1,15 +1,18 @@
 /**
  * Interface du `ctx` (god-object) du MOTEUR de rendu du quiz (src/engine.js,
  * fonction renderInteractiveQuiz). C'est la plus grande interface du projet :
- * un contexte partagé, assemblé en plusieurs passes, injecté dans les 17
+ * un contexte partagé, assemblé en plusieurs passes, injecté dans les 18
  * factories `engine/*` et consommé par elles (référence croisée).
  *
  * DÉRIVATION (zones de engine.js) :
  *   - :93-125   littéral `ctx` initial + getters/setters d'examen + utilitaires
  *               (shuffleArray, clamp, prédicats isOrdering/isMatching/isText).
- *   - :128-144  instanciation des 17 factories (createSanitizer, …).
- *   - :149-222  1er Object.assign : greffe des 17 sous-modules (ctx.sanitize,
+ *   - :128-144  instanciation des 18 factories (createSanitizer, …).
+ *   - :149-222  1er Object.assign : greffe des 18 sous-modules (ctx.sanitize,
  *               ctx.cards, …) + aplatit ~55 méthodes directement sur ctx.
+ *               (plages `engine.js:XXX` de ce bloc : héritées de l'ancien
+ *               fichier JS pré-conversion, déjà décalées avant task 3 —
+ *               non corrigées ici, hors périmètre de cette tâche.)
  *   - :275-330  ctx.quizState (état runtime), ctx.slideMap, constantes SLIDE_*,
  *               initialiseurs et prédicats de slide.
  *   - :397-429  2e Object.assign : flags primitifs __quiz* (SNAPSHOT par valeur)
@@ -27,7 +30,7 @@
  *   Les getters/setters d'examen (closure, :108-115) sont vus comme de simples
  *   propriétés par les consommateurs — leur nature accessor est transparente.
  *
- * SOUS-MODULES : les 17 slots (sanitize, cards, track, viewport, state…) pointent
+ * SOUS-MODULES : les 18 slots (sanitize, cards, track, viewport, state…) pointent
  * chacun vers le VRAI handler-type de leur module, importé depuis engine/*.ts
  * (conversion terminée). Les méthodes aplaties issues d'un sous-module sont
  * typées par indexed-access sur ce type réel
@@ -69,6 +72,7 @@ import type { StateHandlers } from "../engine/state";
 import type { ResultsSaverHandlers } from "../engine/results-save";
 import type { PassageHandlers } from "../engine/passage";
 import type { ClozeHandlers } from "../engine/cloze";
+import type { LessonHandlers } from "../engine/lesson";
 
 /**
  * Mode du quiz (engine.js ctx.quizMode / originalQuizMode). Miroir du type
@@ -83,7 +87,7 @@ import type { ClozeHandlers } from "../engine/cloze";
 export type QuizMode = "lesson" | "exam" | "quiz" | "training";
 
 /* ════════════════════════════════════════════════════════
-   Les 17 sous-modules ont tous leur VRAI handler-type (Task 10 terminée) :
+   Les 18 sous-modules ont tous leur VRAI handler-type (Task 10 terminée) :
    importés depuis engine/*.ts, plus aucun placeholder `unknown`-based.
    ════════════════════════════════════════════════════════ */
 
@@ -192,6 +196,7 @@ export interface EngineCtx {
 	resultsSaver: ResultsSaverHandlers;
 	passage: PassageHandlers;
 	cloze: ClozeHandlers;
+	lesson: LessonHandlers;
 
 	/* ════════════════════════════════════════════════
 	   Méthodes APLATIES issues des sous-modules (1er Object.assign, :156-219).
@@ -277,6 +282,14 @@ export interface EngineCtx {
 	// depuis exam (engine.js:825-826)
 	stopExamTimer: ExamHandlers["stopExamTimer"];
 	updateExamTimerDisplay: ExamHandlers["updateExamTimerDisplay"];
+
+	// depuis lesson (1er Object.assign, engine.ts) — accessors, pas des
+	// flags : recalculent le modèle à chaque appel (engine/lesson.ts), car
+	// ctx.quizMode est mutable (switchToExamMode, resetQuiz).
+	isLessonMode: LessonHandlers["isLessonMode"];
+	lessonSlices: LessonHandlers["lessonSlices"];
+	sliceOfQuestion: LessonHandlers["sliceOfQuestion"];
+	roleOfQuestion: LessonHandlers["roleOfQuestion"];
 
 	/* ════════════════════════════════════════════════
 	   ACCESSORS de closure (2e Object.assign, engine.js:424-428) — état VIVANT.

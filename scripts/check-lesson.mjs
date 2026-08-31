@@ -154,3 +154,59 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
 
 	r.done();
 });
+
+/**
+ * Task 3 du lot mode leçon : `buildLessonModel` (src/engine/lesson.ts), le
+ * modèle PUR des tranches, dérivé des `slice`/`role` de chaque question.
+ * Chargé conjointement avec `src/quiz-utils.ts` pour partir d'un vrai JSON5
+ * parsé (parseQuizSource/extractExamOptions), pas d'objets construits à la
+ * main qui finiraient par diverger de la forme réelle des questions.
+ */
+await withSrcModule(["src/quiz-utils.ts", "src/engine/lesson.ts"], ({ parseQuizSource, extractExamOptions }, { buildLessonModel }) => {
+	const r = makeReporter("Boucle d'apprentissage — modele de tranches");
+
+	// Les tranches sont derivees des questions, dans l'ordre des numeros de slice.
+	const src = `[
+	  { slice: 1, role: "pre",    prompt: "A", type: "text", answer: "x" },
+	  { slice: 2, role: "test",   prompt: "D", options: ["1","2"], correctIndex: 0 },
+	  { slice: 1, role: "recall", prompt: "B", type: "text", answer: "y" },
+	  { slice: 1, role: "test",   prompt: "C", options: ["1","2"], correctIndex: 0 },
+	  { mode: "lesson" }
+	]`;
+	const lesson = buildLessonModel(extractExamOptions(parseQuizSource(src)).questions, "lesson");
+	r.check("mode lesson avec slices actif", lesson.isLesson, true);
+	r.check("deux tranches distinctes", lesson.slices.length, 2);
+	r.check("la tranche 1 garde l'ordre du tableau", lesson.slices[0].questionIndexes, [0, 2, 3]);
+	r.check("la tranche 2 ne contient que la question D", lesson.slices[1].questionIndexes, [1]);
+	r.check("la question d'index 1 appartient a la 2e tranche", lesson.sliceOf(1), 2);
+	r.check("role rendu tel quel pour la question d'index 1", lesson.roleOf(1), "test");
+
+	// Une question sans champ `role` du tout recoit le defaut "test" (pas "pre" ni undefined).
+	const sansRole = buildLessonModel(
+		extractExamOptions(parseQuizSource(`[{ slice: 1, prompt: "Q", options: ["1","2"], correctIndex: 0 }, { mode: "lesson" }]`)).questions,
+		"lesson"
+	);
+	r.check("role absent retombe sur le defaut 'test'", sansRole.roleOf(0), "test");
+
+	// Un mode lesson SANS slice garde le comportement historique : pas de boucle.
+	const legacy = `[{ prompt: "Q", options: ["1","2"], correctIndex: 0, lesson: "Lecon" }, { mode: "lesson" }]`;
+	r.check("mode lesson sans aucun slice n'active pas la boucle",
+		buildLessonModel(extractExamOptions(parseQuizSource(legacy)).questions, "lesson").isLesson, false);
+
+	// Un slice mal forme (0, pas un entier >= 1) est ignore, il ne cree pas de tranche fantome.
+	const sale = `[{ slice: 0, prompt: "Q", options: ["1","2"], correctIndex: 0 }, { mode: "lesson" }]`;
+	r.check("slice 0 est ignore, pas de tranche fantome",
+		buildLessonModel(extractExamOptions(parseQuizSource(sale)).questions, "lesson").isLesson, false);
+
+	// Un slice present mais quizMode != "lesson" ne doit jamais activer la boucle
+	// (ex. mode "quiz" ordinaire qui reutiliserait par erreur un champ slice).
+	const quizOrdinaire = `[{ slice: 1, prompt: "Q", options: ["1","2"], correctIndex: 0 }, { mode: "quiz" }]`;
+	r.check("slice valide mais mode 'quiz' n'active pas la boucle",
+		buildLessonModel(extractExamOptions(parseQuizSource(quizOrdinaire)).questions, "quiz").isLesson, false);
+
+	// Hors mode Lesson, sliceOf renvoie toujours null (meme sur une question qui porte un slice).
+	r.check("sliceOf renvoie null hors mode lesson",
+		buildLessonModel(extractExamOptions(parseQuizSource(quizOrdinaire)).questions, "quiz").sliceOf(0), null);
+
+	r.done();
+});

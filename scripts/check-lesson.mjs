@@ -249,3 +249,37 @@ await withSrcModule("src/engine/lesson.ts", ({ createLessonHandlers }) => {
 
 	r.done();
 });
+
+/**
+ * Task 4 du lot mode leçon : `passageVisibility` (src/engine/passage.ts),
+ * la decision PURE qui dit si le support de comprehension d'une question se
+ * rend "hidden" (rien du tout), "open" (deplie, sans repli par defaut) ou
+ * "collapsible" (repliable, jamais reaffiche d'office). Cas un par ligne du
+ * tableau du brief, plus quelques bords non couverts par le tableau mais
+ * tranches par le "pourquoi" (verrouillage sans effet sur "pre" et "test").
+ */
+await withSrcModule("src/engine/passage.ts", ({ passageVisibility }) => {
+	const r = makeReporter("Boucle d'apprentissage — visibilite du support par role");
+
+	// Tableau du brief, une ligne par cas.
+	r.check("pre, non verrouille, mode Lecon -> hidden",
+		passageVisibility({ role: "pre", locked: false, isLesson: true }), "hidden");
+	r.check("recall, non verrouille, mode Lecon -> hidden",
+		passageVisibility({ role: "recall", locked: false, isLesson: true }), "hidden");
+	r.check("recall, verrouille, mode Lecon -> open",
+		passageVisibility({ role: "recall", locked: true, isLesson: true }), "open");
+	r.check("test, non verrouille, mode Lecon -> collapsible",
+		passageVisibility({ role: "test", locked: false, isLesson: true }), "collapsible");
+	r.check("recall, non verrouille, HORS mode Lecon -> collapsible (comportement d'aujourd'hui)",
+		passageVisibility({ role: "recall", locked: false, isLesson: false }), "collapsible");
+
+	// Bords non ecrits dans le tableau, mais qu'implique le "pourquoi" du brief.
+	r.check("pre reste hidden meme verrouille (le mecanisme ne se leve jamais a posteriori)",
+		passageVisibility({ role: "pre", locked: true, isLesson: true }), "hidden");
+	r.check("test reste collapsible meme verrouille (jamais reaffiche d'office)",
+		passageVisibility({ role: "test", locked: true, isLesson: true }), "collapsible");
+	r.check("pre HORS mode Lecon -> collapsible (le role n'a aucun effet hors Lecon)",
+		passageVisibility({ role: "pre", locked: false, isLesson: false }), "collapsible");
+
+	r.done();
+});

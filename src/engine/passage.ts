@@ -1,4 +1,5 @@
 import type { EngineCtx } from "../types/engine-ctx";
+import type { QuestionRole } from "../types/quiz";
 import { mathifyElement } from "./mathjax";
 import { t } from "../i18n";
 
@@ -14,7 +15,44 @@ import { t } from "../i18n";
    L'état replié est mémorisé PAR SUPPORT (pas par question) — replier le texte
    sur Q1 le garde replié en arrivant sur Q2, ce qu'attend un lecteur qui a fini
    de lire et veut la place pour répondre.
+
+   Task 4 du lot mode leçon (2026-08-31) : en mode Leçon, cette visibilité
+   suit aussi le RÔLE de la question dans la boucle en 5 temps — voir
+   `passageVisibility` ci-dessous.
 ══════════════════════════════════════════════════════════ */
+
+/**
+ * Trois régimes d'affichage du support, jamais un quatrième :
+ * - "hidden" : rien n'est rendu (pas de HTML caché en CSS — voir `passageHtml`).
+ * - "open" : rendu et déplié, sans repli par défaut.
+ * - "collapsible" : rendu, repliable à la demande.
+ */
+export type PassageVisibility = "hidden" | "open" | "collapsible";
+
+/**
+ * Décision PURE, vérifiable sans DOM (`scripts/check-lesson.mjs`) : le rendu
+ * ne fait QUE la consulter, jamais recalculer la règle lui-même.
+ *
+ * Hors mode Leçon, le support garde le comportement d'aujourd'hui —
+ * repliable, ouvert par défaut — quel que soit le rôle (qui vaut "test" par
+ * défaut sur un quiz ordinaire, cf. `roleOfQuestion`) : les 67 quiz réels
+ * d'Ahmed ne doivent voir aucune différence.
+ *
+ * En mode Leçon, le rôle tranche :
+ * - "pre" : la question est posée AVANT la lecture (Richland 2009) — montrer
+ *   le support détruirait le mécanisme de la tentative faite dans l'ignorance.
+ * - "recall" : restitution de mémoire ; le support reste cache PENDANT la
+ *   tentative (sinon le rappel ne vaut rien), puis se rouvre de lui-même une
+ *   fois la question verrouillée, pour la comparaison avec le texte réel.
+ * - "test" (rôle par défaut) : après la lecture, le support est repliable à
+ *   la demande mais jamais réaffiché d'office.
+ */
+export function passageVisibility({ role, locked, isLesson }: { role: QuestionRole; locked: boolean; isLesson: boolean }): PassageVisibility {
+	if (!isLesson) return "collapsible";
+	if (role === "pre") return "hidden";
+	if (role === "recall") return locked ? "open" : "hidden";
+	return "collapsible";
+}
 
 /** Support résolu pour une question donnée (partage `passageId` déjà appliqué). */
 export interface ResolvedPassage {
@@ -31,6 +69,8 @@ export interface ResolvedPassage {
 
 export interface PassageHandlers {
 	resolvePassage(qi: number): ResolvedPassage | null;
+	/** Décision de visibilité seule (rôle + verrouillage + mode Leçon), sans le repli par défaut — voir `passageHtml`. */
+	passageVisibilityFor(qi: number): PassageVisibility;
 	passageHtml(qi: number): string;
 	bindPassage(trackItem: HTMLElement, qi: number): void;
 }
@@ -46,6 +86,20 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 	/* Replis mémorisés par CLÉ de support, pas par question — c'est ce qui fait
 	   qu'un document replié le reste d'une question à l'autre. */
 	const collapsed = new Set<string>();
+	/* Une clé n'y entre qu'UNE fois : le repli par défaut du rôle "test" en
+	   mode Leçon (tableau de la Task 4) ne doit s'appliquer qu'à la toute
+	   première apparition de la clé, sinon chaque re-rendu écraserait un
+	   dépli manuel de l'utilisateur en le repliant à nouveau. */
+	const defaultFoldSeeded = new Set<string>();
+
+	/** Décision de visibilité pour `qi`, exposée sur `ctx` — voir `passageVisibility`. */
+	function passageVisibilityFor(qi: number): PassageVisibility {
+		return passageVisibility({
+			role: ctx.roleOfQuestion(qi),
+			locked: ctx.quizState.locked,
+			isLesson: ctx.isLessonMode()
+		});
+	}
 
 	/** Champ support d'une question, forme texte ou HTML pré-rendu. */
 	const rawText = (qi: number): string => String(ctx.quiz[qi]?.passage ?? "").trim();
@@ -110,6 +164,21 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 	}
 
 	function passageHtml(qi: number): string {
+		/* Un seul appel à chaque accessor de lesson.ts, réutilisé ci-dessous :
+		   ils recalculent leur modèle à chaque appel (engine/lesson.ts), et
+		   cette fonction est elle-même invoquée une fois PAR QUESTION à chaque
+		   rendu complet (`ctx.cards.questionCardHtml`, dans la boucle de
+		   `render()` sur `slideMap`) — les appeler une seconde fois ici serait
+		   payer deux fois le même calcul en silence. */
+		const role = ctx.roleOfQuestion(qi);
+		const isLesson = ctx.isLessonMode();
+		const visibility = passageVisibility({ role, locked: ctx.quizState.locked, isLesson });
+
+		// "hidden" : rien n'est rendu, pas même le conteneur — un support caché
+		// en CSS resterait lisible par l'inspecteur, la recherche du navigateur
+		// et la sélection au clavier (exigence non négociable de la Task 4).
+		if (visibility === "hidden") return "";
+
 		const p = resolvePassage(qi);
 		if (!p) return "";
 
@@ -117,7 +186,18 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 			? ctx.sanitize.replaceObsidianEmbedsInHtml(p.html, { wrapClass: "quiz-passage-embed-wrap", imgClass: "quiz-passage-embed" })
 			: ctx.sanitize.renderTextWithEmbeds(p.text, { wrapClass: "quiz-passage-embed-wrap", imgClass: "quiz-passage-embed" });
 
-		const isCollapsed = collapsed.has(p.key);
+		// Repli par défaut : seul le rôle "test" en mode Leçon démarre replié
+		// (tableau de la Task 4), et seulement à la première apparition de la
+		// clé — un rôle "recall" qui vient de s'ouvrir n'a jamais pu être replié
+		// puisqu'il n'existait pas dans le DOM avant son verrouillage.
+		if (isLesson && role === "test" && !defaultFoldSeeded.has(p.key)) {
+			defaultFoldSeeded.add(p.key);
+			collapsed.add(p.key);
+		}
+		// "open" force le dépli — y compris si un support PARTAGÉ (`passageId`)
+		// a été replié par une autre question du même groupe — pour garantir la
+		// comparaison texte/rappel que ce rôle existe pour offrir.
+		const isCollapsed = visibility === "open" ? false : collapsed.has(p.key);
 		const scope = scopeLabel(p);
 		const toggleLabel = t(isCollapsed ? "engine.passage.expand" : "engine.passage.collapse");
 
@@ -183,5 +263,5 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 		});
 	}
 
-	return { resolvePassage, passageHtml, bindPassage };
+	return { resolvePassage, passageVisibilityFor, passageHtml, bindPassage };
 }

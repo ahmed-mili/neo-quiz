@@ -449,6 +449,10 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 
 		// Le support de compréhension précède le titre : on lit le document AVANT
 		// de savoir ce qu'on nous en demande, comme sur un sujet d'examen papier.
+		// En mode Leçon, `passageHtml` peut rendre une chaîne VIDE selon le rôle
+		// de la question (Task 4 : "pre" avant lecture, "recall" avant
+		// verrouillage) — décision tranchée par `passageVisibility`
+		// (engine/passage.ts), jamais recalculée ici.
 		const passageSection = ctx.passage.passageHtml(qi);
 
 		return `<div class="quiz-track-item" data-slide-kind="question" data-qi="${qi}">

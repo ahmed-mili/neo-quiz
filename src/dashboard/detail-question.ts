@@ -162,26 +162,32 @@ function renderExtras(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, 
 	bridge.field(doc, t("editor.passage.idLabel"), readExtra("passageId"), t("editor.passage.idPlaceholder"), false,
 		v => writeExtra("passageId", v));
 
-	/* ── Leçon (mode learn) ──
-	   Le mode learn AFFICHE ce texte avant la question ; sans champ, Ahmed
+	/* ── Leçon (mode "lesson", renommé depuis "learn") ──
+	   Le mode leçon AFFICHE ce texte avant la question ; sans champ, Ahmed
 	   pouvait le lire dans ses quiz mais pas le corriger — la page devait être
-	   « tout aussi complète ». Comme le document, la leçon vit dans les champs
-	   personnalisés : le formulaire fixe ne la connaît pas, l'export la rend
-	   telle quelle.
+	   « tout aussi complète ». Champ TYPÉ (q.lesson/_lessonHtml), et non plus
+	   dans les `_extraFields` génériques : editor/convert.ts a déjà ramené
+	   l'ancien nom "learn" au nouveau à la lecture, et cette section n'écrit
+	   donc plus jamais que le nouveau (même règle que l'explication ci-dessous).
 	   HTML si le contenu en porte, même règle que l'énoncé et l'explication :
 	   l'aplatir à la première frappe effacerait une mise en forme. */
-	const learnHtmlBrut = readExtra("learnHtml");
-	const richLearn = isRichHtml(learnHtmlBrut);
-	const hasLearn = !!(readExtra("learn") || learnHtmlBrut);
-	const learn = section(parent, "graduation-cap", t("editor.learn.section"), hasLearn);
-	learn.createDiv({ cls: "qbd-qz-section-help", text: t("editor.learn.help") });
-	const learnValeur = (richLearn ? learnHtmlBrut : readExtra("learn")).replace(/<br\s*\/?>/gi, "\n");
-	bridge.field(learn, "", learnValeur,
-		t("editor.learn.placeholder"), true, v => {
-			if (richLearn) writeExtra("learnHtml", v);
-			else writeExtra("learn", v);
+	const richLesson = isRichHtml(q._lessonHtml);
+	const lesson = section(parent, "graduation-cap", t("editor.lesson.section"), !!(q.lesson || q._lessonHtml));
+	lesson.createDiv({ cls: "qbd-qz-section-help", text: t("editor.lesson.help") });
+	const lessonValeur = (richLesson ? (q._lessonHtml || "") : (q.lesson || "")).replace(/<br\s*\/?>/gi, "\n");
+	bridge.field(lesson, "", lessonValeur,
+		t("editor.lesson.placeholder"), true, v => {
+			if (richLesson) {
+				q._lessonHtml = v;
+			} else {
+				q.lesson = v;
+				// Le HTML pré-rendu d'un import cède la main au texte fraîchement
+				// saisi — même règle que l'explication (export.ts sinon réémet l'ancien).
+				delete q._lessonHtml;
+			}
+			cb.onChange();
 		});
-	if (richLearn) learn.createDiv({ cls: "qbd-qz-section-help", text: t("dashboard.quiz.editPromptHtmlHint") });
+	if (richLesson) lesson.createDiv({ cls: "qbd-qz-section-help", text: t("dashboard.quiz.editPromptHtmlHint") });
 
 	// ── Bouton ressource ──
 	renderResourceSection(parent, q, cb, bridge);

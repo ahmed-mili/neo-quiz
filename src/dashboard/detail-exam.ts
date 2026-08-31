@@ -9,7 +9,7 @@ import type { EditorExamOptions } from "../types/editor-ctx";
    Le mode (quiz / apprentissage / examen) et le chrono vivaient dans la
    barre latérale de l'éditeur, et le mode LUI-MÊME n'y était même pas
    réglable : il fallait ouvrir le panneau « Code » et écrire
-   `mode: 'learn'` à la main. Retirer l'éditeur sans ce sélecteur aurait
+   `mode: 'lesson'` à la main. Retirer l'éditeur sans ce sélecteur aurait
    donc retiré une capacité — c'est le seul point où la page ne se contente
    pas de reprendre l'existant.
 
@@ -28,7 +28,7 @@ export interface ExamPanelOptions {
 	onStructureChange(): void;
 }
 
-type QuizMode = "quiz" | "learn" | "exam";
+type QuizMode = "quiz" | "lesson" | "exam";
 
 /** Options par défaut d'un bloc qui n'en avait pas encore. */
 function defaults(mode: QuizMode): EditorExamOptions {
@@ -56,7 +56,7 @@ export function renderExamPanel(parent: HTMLElement, opts: ExamPanelOptions): vo
 		value: mode,
 		options: [
 			{ value: "quiz", label: t("dashboard.quiz.modeQuiz") },
-			{ value: "learn", label: t("dashboard.quiz.modeLearn") },
+			{ value: "lesson", label: t("dashboard.quiz.modeLesson") },
 			{ value: "exam", label: t("dashboard.quiz.modeExam") },
 		],
 		onChange: (value) => {
@@ -75,7 +75,7 @@ export function renderExamPanel(parent: HTMLElement, opts: ExamPanelOptions): vo
 			} else {
 				const base = opts.get() || defaults(next);
 				base.mode = next;
-				// Le chrono n'a de sens qu'en examen ; un mode learn le porte
+				// Le chrono n'a de sens qu'en examen ; un mode leçon le porte
 				// seulement si l'auteur l'active explicitement ci-dessous.
 				base.enabled = next === "exam";
 				opts.set(base);
@@ -87,19 +87,19 @@ export function renderExamPanel(parent: HTMLElement, opts: ExamPanelOptions): vo
 
 	box.createDiv({
 		cls: "qbd-qz-exam-help",
-		text: t(mode === "learn" ? "dashboard.quiz.modeLearnHelp"
+		text: t(mode === "lesson" ? "dashboard.quiz.modeLessonHelp"
 			: mode === "exam" ? "dashboard.quiz.modeExamHelp"
 			: "dashboard.quiz.modeQuizHelp"),
 	});
 
-	// Le chrono : toujours pour l'examen, en option pour l'apprentissage
+	// Le chrono : toujours pour l'examen, en option pour la leçon
 	// (bouton « Passer l'examen »). Rien à régler en mode quiz.
 	if (mode === "quiz") return;
 	const cfg = opts.get();
 	if (!cfg) return;
 
-	if (mode === "learn") {
-		checkbox(box, t("dashboard.quiz.learnExam"), cfg.enabled, (on) => {
+	if (mode === "lesson") {
+		checkbox(box, t("dashboard.quiz.lessonExam"), cfg.enabled, (on) => {
 			cfg.enabled = on;
 			opts.onChange();
 			opts.onStructureChange();

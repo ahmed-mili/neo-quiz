@@ -13,9 +13,11 @@ import type { ResourceButton } from "../types/quiz";
 export interface ParsedQuizItem {
 	[key: string]: unknown;
 	examMode?: boolean;
-	/** Raccourci du mode learn, équivalent à `mode: "learn"` (quiz-utils.ts). */
+	/** Raccourci hérité de `mode: "learn"` (renommé "lesson", quiz-utils.ts) —
+	    lu en repli, jamais écrit : aucun raccourci équivalent pour "lesson". */
 	learnMode?: boolean;
-	/** Mode du bloc : « quiz » | « learn » | « exam ». Marqueur de l'objet de configuration. */
+	/** Mode du bloc : « quiz » | « lesson » | « exam » (ou l'alias hérité
+	    « learn », lu en repli). Marqueur de l'objet de configuration. */
 	mode?: string;
 	examDurationMinutes?: number;
 	examAutoSubmit?: boolean;
@@ -33,6 +35,15 @@ export interface ParsedQuizItem {
 	promptHtml?: string;
 	explain?: string;
 	explainHtml?: string;
+	/** Contenu "Leçon" (mode "lesson", renommé depuis "learn") — nom canonique. */
+	lesson?: string;
+	lessonHtml?: string;
+	_lessonHtml?: string;
+	/** Alias hérités de "learn" : lus en repli par editor/convert.ts, jamais
+	    réécrits (editor/export.ts). */
+	learn?: string;
+	learnHtml?: string;
+	_learnHtml?: string;
 	resourceButton?: ResourceButton;
 	options?: string[];
 	correctIndex?: number;

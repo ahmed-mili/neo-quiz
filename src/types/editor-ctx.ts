@@ -32,11 +32,14 @@ import type { DraftQuestion } from "../editor/utils";
 export interface EditorExamOptions extends ExamOptions {
 	enabled: boolean;
 	/**
-	 * Mode du quiz, tel qu'il était écrit dans le bloc lu. Mémorisé pour être
-	 * réémis à l'identique (editor/export.ts) : sans lui, un quiz importé en
-	 * mode learn ressortait en mode examen, ou perdait son mode.
+	 * Mode du quiz, tel qu'il était écrit dans le bloc lu — déjà NORMALISÉ
+	 * (readModeConfig) : "learn" a été renommé "lesson" (task 0 du lot mode
+	 * leçon, 2026-08-31), et cette valeur ne vaut donc plus jamais "learn".
+	 * Mémorisé pour être réémis à l'identique (editor/export.ts) : sans lui,
+	 * un quiz importé en mode leçon ressortait en mode examen, ou perdait son
+	 * mode.
 	 */
-	mode?: "quiz" | "learn" | "exam";
+	mode?: "quiz" | "lesson" | "exam";
 	/**
 	 * Clés de l'objet de mode que le plugin ne connaît pas, gardées telles
 	 * quelles pour être réémises. Sans elles, un bloc écrit à la main perdait

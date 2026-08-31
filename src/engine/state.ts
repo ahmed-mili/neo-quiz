@@ -313,7 +313,7 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		}
 
 		/* Stats du dashboard. Le mode TEXTE compte lui aussi : travailler tous
-		   les jours en mode learn ne mettait a jour ni progression, ni derniere
+		   les jours en mode leçon ne mettait a jour ni progression, ni derniere
 		   activite, ni nombre de tentatives — le dashboard restait muet sur
 		   l'essentiel du travail (revue codex 2026-07-31).
 		   Son score, lui, n'est pas enregistre : en mode texte, la correction
@@ -382,13 +382,13 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		ctx.stopExamTimer();
 
 		// Réinitialiser au mode d'origine si demandé
-		if (resetToOriginalMode && ctx.originalQuizMode === "learn") {
+		if (resetToOriginalMode && ctx.originalQuizMode === "lesson") {
 			ctx.trainingSession = false;
-			ctx.quizMode = "learn";
+			ctx.quizMode = "lesson";
 			ctx.isExamMode = false;
 			ctx.examOptions = null;
 			ctx.examDurationMs = 0;
-			ctx.learnExamOptions = ctx.originalLearnExamOptions;
+			ctx.lessonExamOptions = ctx.originalLessonExamOptions;
 			ctx.examTimeRemaining = 0;
 		} else {
 			ctx.examTimeRemaining = ctx.isExamMode ? ctx.examDurationMs : 0;

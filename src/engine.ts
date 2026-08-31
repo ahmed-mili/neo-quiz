@@ -70,7 +70,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		return;
 	}
 
-	const { questions: quiz, quizMode, examOptions, learnExamOptions } = extractExamOptions(rawQuiz);
+	const { questions: quiz, quizMode, examOptions, lessonExamOptions } = extractExamOptions(rawQuiz);
 
 	if (!Array.isArray(quiz) || quiz.length === 0) {
 		renderParagraph(container, t("engine.error.noQuestions"));
@@ -132,7 +132,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 
 	// Créer le contexte partagé (ctx) pour injection de dépendances
 	const originalQuizMode = quizMode;
-	const originalLearnExamOptions = learnExamOptions ? { ...learnExamOptions } : null;
+	const originalLessonExamOptions = lessonExamOptions ? { ...lessonExamOptions } : null;
 
 	// Cast unique documenté (as EngineCtx) : à ce point les 17 slots de
 	// sous-modules (sanitize, cards, …), l'état runtime (quizState) et les
@@ -151,9 +151,9 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		trainingSession: false,
 		examOptions,
 		examDurationMs,
-		learnExamOptions,
+		lessonExamOptions,
 		originalQuizMode,
-		originalLearnExamOptions,
+		originalLessonExamOptions,
 		get examTimeRemaining() { return examTimeRemaining; },
 		set examTimeRemaining(v: number) { examTimeRemaining = v; },
 		get examStarted() { return examStarted; },
@@ -868,17 +868,17 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	// Assign render function to ctx AFTER it's defined to avoid TDZ
 	ctx.render = render;
 
-	// ── Mode Apprentissage → Examen : transition ──
+	// ── Mode Leçon → Examen : transition ──
 	function switchToExamMode(): void {
-		if (quizMode !== "learn" || !learnExamOptions) return;
+		if (quizMode !== "lesson" || !lessonExamOptions) return;
 
-		// Changer les flags de mode (le slideMap ne change pas, les learn sections
-		// sont intégrées dans les question cards et seront masquées au render)
+		// Changer les flags de mode (le slideMap ne change pas, les sections de
+		// leçon sont intégrées dans les question cards et seront masquées au render)
 		ctx.quizMode = "exam";
 		ctx.isExamMode = true;
 		ctx.trainingSession = false;
-		ctx.examOptions = learnExamOptions;
-		ctx.examDurationMs = learnExamOptions.durationMinutes * 60 * 1000;
+		ctx.examOptions = lessonExamOptions;
+		ctx.examDurationMs = lessonExamOptions.durationMinutes * 60 * 1000;
 		ctx.examTimeRemaining = ctx.examDurationMs;
 
 		// Reset complet du quiz en mode examen

@@ -26,17 +26,20 @@ import { normalizeTerminalVariantName } from "../engine/terminal";
 export function readModeConfig(q: ParsedQuizItem): EditorExamOptions {
 	/* Même normalisation que le moteur (quiz-utils.ts) : un bloc écrit à la main
 	   dit volontiers `mode: 'Learn'`, et la reconnaissance l'accepte — la
-	   lecture ne peut pas, elle, le renvoyer au mode quiz. */
-	const mode: "quiz" | "learn" | "exam" = normalizeQuizMode(q.mode)
+	   lecture ne peut pas, elle, le renvoyer au mode quiz. `normalizeQuizMode`
+	   ramène l'alias hérité "learn" à son nom canonique "lesson" (renommé task 0
+	   du lot mode leçon, 2026-08-31) ; `q.learnMode` est le raccourci hérité
+	   équivalent. */
+	const mode: "quiz" | "lesson" | "exam" = normalizeQuizMode(q.mode)
 		?? (q.examMode === true ? "exam"
-			: q.learnMode === true ? "learn"
+			: q.learnMode === true ? "lesson"
 				: "quiz");
 	return {
 		mode,
 		// Le chrono n'est « activé » que pour un vrai mode examen ; un mode
-		// learn peut en porter un (« Passer l'examen »), auquel cas il annonce
+		// leçon peut en porter un (« Passer l'examen »), auquel cas il annonce
 		// une durée.
-		enabled: mode === "exam" || (mode === "learn" && q.examDurationMinutes != null),
+		enabled: mode === "exam" || (mode === "lesson" && q.examDurationMinutes != null),
 		/* Les défauts sont ceux du MOTEUR (quiz-utils.ts buildExamOpts), pas
 		   des valeurs « raisonnables » choisies ici : la lecture réécrit le
 		   bloc, et un défaut divergent transformait silencieusement
@@ -161,6 +164,20 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		question._explainHtml = q.explainHtml;
 	}
 
+	/* Leçon (mode "lesson", renommé depuis "learn") : nom canonique
+	   prioritaire, alias hérité en repli — un quiz partagé écrit avant le
+	   renommage (task 0 du lot mode leçon, 2026-08-31) doit continuer de
+	   s'afficher. Même logique que l'explication : un HTML NON riche est
+	   aussi converti en texte lisible, pour que l'édition non-HTML ne parte
+	   pas d'un champ vide. */
+	const lessonHtmlBrut = q._lessonHtml || q.lessonHtml || q.learnHtml || q._learnHtml;
+	if (q.lesson) question.lesson = q.lesson;
+	else if (q.learn) question.lesson = q.learn;
+	else if (lessonHtmlBrut && !isRichHtml(lessonHtmlBrut)) {
+		question.lesson = _htmlToText(lessonHtmlBrut);
+	}
+	if (lessonHtmlBrut) question._lessonHtml = lessonHtmlBrut;
+
 	if (q.resourceButton) {
 		question.resourceButton = { ...q.resourceButton };
 	}
@@ -274,7 +291,11 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	   de configuration, jamais pour une question (revue codex 2026-07-31).
 	   L'objet de configuration, lui, ne passe pas par ici : il est repéré par
 	   son index et lu par `readModeConfig`. */
-	const knownKeys = new Set(['id','title','prompt','promptHtml','options','correctIndex','multiSelect','correctIndices','ordering','slots','possibilities','correctOrder','matching','rows','choices','correctMap','type','terminalVariant','textVariant','commandPrefix','placeholder','caseSensitive','acceptedAnswers','acceptableAnswers','correctAnswers','correctText','answer','hint','explain','explainHtml','resourceButton','cloze','numeric','tolerance','tolerancePercent','unit']);
+	const knownKeys = new Set(['id','title','prompt','promptHtml','options','correctIndex','multiSelect','correctIndices','ordering','slots','possibilities','correctOrder','matching','rows','choices','correctMap','type','terminalVariant','textVariant','commandPrefix','placeholder','caseSensitive','acceptedAnswers','acceptableAnswers','correctAnswers','correctText','answer','hint','explain','explainHtml','resourceButton','cloze','numeric','tolerance','tolerancePercent','unit',
+		// Leçon (mode "lesson") : nom canonique + alias hérités de "learn" — les
+		// deux sont lus explicitement ci-dessus, donc ni l'un ni l'autre ne doit
+		// retomber dans `_extraFields` (double écriture à l'export sinon).
+		'lesson','lessonHtml','_lessonHtml','learn','learnHtml','_learnHtml']);
 	/* `Object.create(null)` : un objet ordinaire ABSORBE une clé nommée
 	   `__proto__` au lieu de la stocker, et le champ personnalisé
 	   disparaissait sans un mot. */

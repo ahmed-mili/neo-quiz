@@ -68,8 +68,8 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 	"engine.hint.title": "Indice",
 	"engine.hint.close": "Fermer",
 
-	/* ── Mode apprentissage ── */
-	"engine.learn.label": "Leçon",
+	/* ── Mode leçon ── */
+	"engine.lesson.label": "Leçon",
 
 	/* ── Question texte / terminal ── */
 	"engine.text.placeholder": "Votre réponse...",

@@ -85,9 +85,9 @@ function restoreAllowedInlineTags(html: unknown): string {
    Un quiz écrit à la main — ou généré par un modèle — contient du
    markdown : `**gras**`, `*italique*`, `` `code` ``. Sans cette passe,
    les étoiles et les accents graves s'affichaient TELS QUELS dans les
-   énoncés, les options, l'explication et surtout la leçon du mode learn
+   énoncés, les options, l'explication et surtout la leçon du mode leçon
    (constat Ahmed 2026-07-31). Le champ n'a pas d'équivalent HTML
-   (`learn`, `cloze`… passent en texte brut) : c'est ici, au rendu, que
+   (`lesson`, `cloze`… passent en texte brut) : c'est ici, au rendu, que
    ça se joue — pas à l'export, qui doit garder la source lisible.
 
    Entrée : du texte DÉJÀ échappé (escapeHtmlText) où les quelques
@@ -297,6 +297,30 @@ function unwrapQuizHtmlElement(node: ChildNode | null | undefined): void {
 		parent.insertBefore(first, node);
 	}
 	parent.removeChild(node);
+}
+
+/**
+ * Contenu "Leçon" d'une question, déjà rendu pour l'affichage — ou chaîne
+ * vide si la question n'en porte pas. Nom canonique prioritaire, alias
+ * hérité `learn*` en repli : le mode "learn" a été renommé "lesson" (task 0
+ * du lot mode leçon, 2026-08-31), mais un quiz partagé écrit avant ce
+ * renommage doit continuer de s'afficher indéfiniment — on LIT les deux, on
+ * n'ÉCRIT plus que le nouveau nom (editor/export.ts).
+ *
+ * EXPORTÉE et appelée par engine/cards.ts et engine/text-only.ts, qui
+ * faisaient chacun le même repli HTML/texte en double : une chaîne de repli,
+ * jamais dupliquée. Prend le sous-ensemble de `SanitizerHandlers` dont elle a
+ * besoin — pas tout `ctx` — pour rester appelable sans le reste du moteur.
+ */
+export function renderLessonHtml(
+	q: QuestionBase,
+	sanitize: Pick<SanitizerHandlers, "replaceObsidianEmbedsInHtml" | "renderTextWithEmbeds">
+): string {
+	const html = q.lessonHtml || q._lessonHtml || q.learnHtml || q._learnHtml;
+	if (html) return sanitize.replaceObsidianEmbedsInHtml(html);
+	const texte = q.lesson || q.learn;
+	if (texte) return sanitize.renderTextWithEmbeds(texte);
+	return "";
 }
 
 export function sanitizeQuizHtml(html: unknown): string {

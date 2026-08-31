@@ -77,8 +77,10 @@ import type { ClozeHandlers } from "../engine/cloze";
  * `"training"` n'est PAS produit par le parsing (quiz-utils) mais assigné au
  * runtime par engine/exam.ts startTrainingMode (`ctx.quizMode = "training"`) —
  * ajouté ici en Task 10c pour coller à la réalité de la mutation.
+ * "learn" a été renommé "lesson" (task 0 du lot mode leçon, 2026-08-31) :
+ * quiz-utils.ts continue de LIRE l'ancien nom, mais ne le renvoie plus jamais.
  */
-export type QuizMode = "learn" | "exam" | "quiz" | "training";
+export type QuizMode = "lesson" | "exam" | "quiz" | "training";
 
 /* ════════════════════════════════════════════════════════
    Les 17 sous-modules ont tous leur VRAI handler-type (Task 10 terminée) :
@@ -111,9 +113,9 @@ export interface EngineCtx {
 	trainingSession: boolean;
 	examOptions: ExamOptions | null;
 	examDurationMs: number;
-	learnExamOptions: ExamOptions | null;
+	lessonExamOptions: ExamOptions | null;
 	originalQuizMode: QuizMode;
-	originalLearnExamOptions: ExamOptions | null;
+	originalLessonExamOptions: ExamOptions | null;
 
 	/* ── État d'examen : getters/setters de closure (engine.js:108-115),
 	     vus comme de simples propriétés par les consommateurs. ── */
@@ -353,6 +355,6 @@ export interface EngineCtx {
 	commitQuestionInteraction(qi: number, opts?: { syncHeight?: boolean }): void;
 	/** engine.js:714-800 — rendu principal (reconstruit tout le HTML des slides). */
 	render(): void;
-	/** engine.js:803-819 — bascule mode Apprentissage → Examen (learn only). */
+	/** engine.js:803-819 — bascule mode Leçon → Examen (lesson only). */
 	switchToExamMode(): void;
 }

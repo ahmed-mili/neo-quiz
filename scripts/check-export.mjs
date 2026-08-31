@@ -146,12 +146,32 @@ await withSrcModule("src/editor/export.ts", ({ exportAll }) => {
 		const parsed = JSON5.parse(exportAll([question({})], examOptions));
 		return parsed[parsed.length - 1];
 	};
-	r.check("mode learn conservé",
-		mode({ mode: "learn", enabled: false, durationMinutes: 10, autoSubmit: true, showTimer: true }),
-		{ mode: "learn" });
+	/* "lesson" et non "learn" : `examOptions.mode` arrive ici déjà NORMALISÉ
+	   par readModeConfig (task 0 du lot mode leçon, 2026-08-31) — l'export ne
+	   reçoit donc plus jamais l'ancien nom, seulement le nouveau. */
+	r.check("mode lesson conservé",
+		mode({ mode: "lesson", enabled: false, durationMinutes: 10, autoSubmit: true, showTimer: true }),
+		{ mode: "lesson" });
 	r.check("mode examen avec chrono",
 		mode({ mode: "exam", enabled: true, durationMinutes: 20, autoSubmit: true, showTimer: false }),
 		{ examMode: true, examDurationMinutes: 20, examAutoSubmit: true, examShowTimer: false });
+
+	/* Renommage lesson (task 0) : le nom hérité d'une QUESTION (`learnHtml`)
+	   est lu en repli mais jamais réécrit — seul `lessonHtml` doit apparaître
+	   dans le bloc produit, et le mode doit être normalisé lui aussi.
+	   Adapté du brief au style `r.check` du fichier plutôt que `assert.ok`
+	   (aucun module `assert` importé ici, et le reporter local continue les
+	   autres cas après un échec au lieu de stopper au premier). Guillemets
+	   SIMPLES dans la dernière assertion, pour coller à la convention réelle
+	   de json5Value/esc5 (guillemets doubles dans le brief, probablement une
+	   inattention — l'export n'a jamais émis que des guillemets simples). */
+	const lessonWritten = exportAll(
+		[{ prompt: "Q", options: ["a", "b"], correctIndex: 0, learnHtml: "<p>L</p>" }],
+		{ mode: "lesson" }
+	);
+	r.check("ancien nom de question converti a l'ecriture", lessonWritten.includes("lessonHtml"), true);
+	r.check("ancien nom de question plus jamais ecrit", lessonWritten.includes("learnHtml"), false);
+	r.check("mode normalise a l'ecriture", lessonWritten.includes("mode: 'lesson'"), true);
 
 	r.done();
 });
@@ -205,7 +225,9 @@ await withSrcModule(["src/quiz-utils.ts", "src/editor/convert.ts"], (qu, convert
 	r.check("bloc sans configuration", idx([q, q]), -1);
 	r.check("bloc vide", idx([]), -1);
 
-	r.check("lecture normalisee", convert.readModeConfig({ mode: "Learn" }).mode, "learn");
+	// "lesson" et non "learn" : readModeConfig normalise l'alias hérité au nom
+	// canonique (task 0 du lot mode leçon, 2026-08-31).
+	r.check("lecture normalisee", convert.readModeConfig({ mode: "Learn" }).mode, "lesson");
 	r.check("lecture d'un booleen", convert.readModeConfig({ examMode: true }).mode, "exam");
 
 	r.done();

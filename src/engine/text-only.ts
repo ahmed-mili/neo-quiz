@@ -6,6 +6,7 @@ import type {
 	MultiSelectQuestion,
 	TextOnlyRating,
 } from "../types/quiz";
+import { renderLessonHtml } from "./sanitizer";
 import { t } from "../i18n";
 
 export interface TextOnlyResults {
@@ -163,12 +164,9 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 
 	function learningHtml(q: QuizQuestion): string {
 		const chunks: string[] = [];
-		const learnHtml = q.learnHtml || q._learnHtml;
-		if (learnHtml || q.learn) {
-			const content = learnHtml
-				? ctx.sanitize.replaceObsidianEmbedsInHtml(learnHtml)
-				: ctx.sanitize.renderTextWithEmbeds(q.learn || "");
-			chunks.push(`<div class="quiz-textonly-explain-block"><div class="quiz-textonly-label">${t("engine.learn.label")}</div><div class="quiz-textonly-explain-content">${content}</div></div>`);
+		const lessonContent = renderLessonHtml(q, ctx.sanitize);
+		if (lessonContent) {
+			chunks.push(`<div class="quiz-textonly-explain-block"><div class="quiz-textonly-label">${t("engine.lesson.label")}</div><div class="quiz-textonly-explain-content">${lessonContent}</div></div>`);
 		}
 
 		const explainHtml = q.explainHtml || q._explainHtml;

@@ -71,6 +71,14 @@ export interface DraftQuestion {
 	/** Énoncé/explication en HTML pré-rendu (édition mode HTML + fallback import). */
 	_promptHtml?: string;
 	_explainHtml?: string;
+	/** Contenu "Leçon" (mode "lesson", renommé depuis "learn") — miroir texte/HTML de `explain`/`_explainHtml`. */
+	lesson?: string;
+	_lessonHtml?: string;
+	/** Alias hérités de "learn", lus en repli à l'import (editor/convert.ts) et
+	    à l'export direct (editor/export.ts) — jamais réécrits. */
+	learn?: string;
+	learnHtml?: string;
+	_learnHtml?: string;
 	/** Le `prompt` venait de la NOTE, pas d'un HTML aplati par la lecture.
 	    Ce qui décide s'il faut le réémettre à côté de `promptHtml` : un texte
 	    dérivé n'a pas à apparaître dans une note qui ne l'avait pas. */

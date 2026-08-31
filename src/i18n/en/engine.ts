@@ -75,8 +75,8 @@ export const EN_ENGINE = {
 	"engine.hint.title": "Hint",
 	"engine.hint.close": "Close",
 
-	/* ── Mode apprentissage ── */
-	"engine.learn.label": "Lesson",
+	/* ── Mode leçon ── */
+	"engine.lesson.label": "Lesson",
 
 	/* ── Question texte / terminal ── */
 	"engine.text.placeholder": "Your answer...",

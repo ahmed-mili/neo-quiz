@@ -88,11 +88,18 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts", "src/quiz-
 		   réciproquement pour l'explication, la leçon, le support et les
 		   options. Tout le reste doit survivre à l'identique — un champ qui
 		   disparaît est du travail perdu chez l'utilisateur, en silence, et
-		   c'est la seule chose que ni le typage ni la relecture n'attrapent. */
+		   c'est la seule chose que ni le typage ni la relecture n'attrapent.
+		   `learn`/`learnHtml` → `lesson`/`lessonHtml` : renommage du mode
+		   "learn" en "lesson" (task 0 du lot mode leçon, 2026-08-31) —
+		   editor/export.ts n'écrit plus jamais les anciens noms, donc une
+		   entrée qui les portait ressort forcément sous les nouveaux ; rien
+		   n'est perdu, seule la clé change. */
 		const EQUIVALENTS = {
 			prompt: ["prompt", "promptHtml"], promptHtml: ["prompt", "promptHtml"],
 			explain: ["explain", "explainHtml"], explainHtml: ["explain", "explainHtml"],
-			learn: ["learn", "learnHtml"], learnHtml: ["learn", "learnHtml"],
+			learn: ["learn", "learnHtml", "lesson", "lessonHtml"],
+			learnHtml: ["learn", "learnHtml", "lesson", "lessonHtml"],
+			lesson: ["lesson", "lessonHtml"], lessonHtml: ["lesson", "lessonHtml"],
 			passage: ["passage", "passageHtml"], passageHtml: ["passage", "passageHtml"],
 			options: ["options", "optionHtml"], optionHtml: ["options", "optionHtml"],
 			terminalVariant: ["terminalVariant", "textVariant"],
@@ -191,9 +198,10 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts", "src/quiz-
 			}
 			/* Le mode réémet un objet de configuration ; le compte doit suivre.
 			   Même règle que l'export (editor/export.ts exportAll) : un mode
-			   `learn`, un examen actif, un mode `quiz` ÉCRIT, ou des clés
-			   personnalisées à rendre. */
-			const emetConfig = !!examOptions && (examOptions.mode === "learn"
+			   `lesson` (readModeConfig normalise déjà l'alias hérité "learn" —
+			   task 0 du lot mode leçon, 2026-08-31), un examen actif, un mode
+			   `quiz` ÉCRIT, ou des clés personnalisées à rendre. */
+			const emetConfig = !!examOptions && (examOptions.mode === "lesson"
 				|| examOptions.enabled || examOptions.mode === "quiz"
 				|| !!examOptions._extra);
 			const attendu = qs.length + (emetConfig ? 1 : 0);

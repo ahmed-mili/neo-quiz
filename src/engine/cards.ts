@@ -9,6 +9,7 @@ import type {
 	ClozeQuestion,
 } from "../types/quiz";
 import { mathifyElement } from "./mathjax";
+import { renderLessonHtml } from "./sanitizer";
 import { t, type TransKey } from "../i18n";
 
 export interface CardHandlers {
@@ -317,16 +318,16 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			return `<div class="quiz-track-item" data-slide-kind="results"><section class="quiz-result quiz-textonly-result"><h2 class="quiz-result-title" style="font-weight:900;">${title}</h2><p>${t("engine.result.ratedLabel")} <strong>${results.rated}/${results.total}</strong></p>${correctionHint}<div class="quiz-textonly-result-grid"><div class="quiz-textonly-result-stat understood"><strong>${results.understood}</strong><span>${t("engine.rating.understood")}</span></div><div class="quiz-textonly-result-stat partial"><strong>${results.partial}</strong><span>${t("engine.rating.partial")}</span></div><div class="quiz-textonly-result-stat review"><strong>${results.review}</strong><span>${t("engine.rating.review")}</span></div>${results.pending > 0 ? `<div class="quiz-textonly-result-stat pending"><strong>${results.pending}</strong><span>${t(results.pending > 1 ? "engine.result.pending.other" : "engine.result.pending.one")}</span></div>` : ""}</div><div class="quiz-actions">${correctionBtn}${saveResultsButtonHtml()}<button class="quiz-action-btn success quiz-retry-btn" type="button">${t("engine.result.retry")}</button></div></section></div>`;
 		}
 		const { pct, correct, total } = ctx.computeScorePercent();
-		// Mode learn : bouton "Passer l'examen"
-		const learnExamBtn = (ctx.quizMode === "learn" && ctx.learnExamOptions)
+		// Mode leçon : bouton "Passer l'examen"
+		const lessonExamBtn = (ctx.quizMode === "lesson" && ctx.lessonExamOptions)
 			? `<button class="quiz-action-btn quiz-exam-btn" type="button">${t("engine.result.takeExam")}</button>`
 			: "";
-		// Mode examen issu du mode learn : bouton "Repasser l'examen"
-		const retakeExamBtn = (ctx.quizMode === "exam" && ctx.originalQuizMode === "learn" && ctx.originalLearnExamOptions)
+		// Mode examen issu du mode leçon : bouton "Repasser l'examen"
+		const retakeExamBtn = (ctx.quizMode === "exam" && ctx.originalQuizMode === "lesson" && ctx.originalLessonExamOptions)
 			? `<button class="quiz-action-btn quiz-exam-btn" type="button">${t("engine.result.retakeExam")}</button>`
 			: "";
 		// Le score (« 12/20 », « 60 % ») reste du code : seule l'étiquette est traduite.
-		return `<div class="quiz-track-item" data-slide-kind="results"><section class="quiz-result"><h2 class="quiz-result-title" style="font-weight:900;">${t("engine.result.title")}</h2><p style="font-size:48px;font-weight:900;margin:18px 0 6px;">${pct}%</p><p>${t("engine.result.correctLabel")} <strong>${correct}/${total}</strong></p><div class="quiz-actions">${saveResultsButtonHtml()}<button class="quiz-action-btn success quiz-retry-btn" type="button">${t("engine.result.retry")}</button>${learnExamBtn}${retakeExamBtn}</div></section></div>`;
+		return `<div class="quiz-track-item" data-slide-kind="results"><section class="quiz-result"><h2 class="quiz-result-title" style="font-weight:900;">${t("engine.result.title")}</h2><p style="font-size:48px;font-weight:900;margin:18px 0 6px;">${pct}%</p><p>${t("engine.result.correctLabel")} <strong>${correct}/${total}</strong></p><div class="quiz-actions">${saveResultsButtonHtml()}<button class="quiz-action-btn success quiz-retry-btn" type="button">${t("engine.result.retry")}</button>${lessonExamBtn}${retakeExamBtn}</div></section></div>`;
 	}
 
 
@@ -432,14 +433,14 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		}
 
 		const hintBtn = (!isTextOnly && q.hint && String(q.hint).trim()) ? `<button class="quiz-hint-btn" type="button">${t("engine.hint.button")}</button>` : "";
-		const learnSection = (!isTextOnly && ctx.quizMode === "learn" && (q.learn || q.learnHtml || q._learnHtml) && !ctx.quizState.locked)
-			? (() => {
-				const learnHtml = q.learnHtml || q._learnHtml;
-				const learnContent = learnHtml
-					? ctx.sanitize.replaceObsidianEmbedsInHtml(learnHtml)
-					: ctx.sanitize.renderTextWithEmbeds(q.learn || "");
-				return `<div class="quiz-learn-section"><div class="quiz-learn-label">${t("engine.learn.label")}</div><div class="quiz-learn-content">${learnContent}</div></div>`;
-			})()
+		// Mode leçon (ex "learn") : la leçon s'affiche AVANT que la question soit
+		// verrouillée, jamais après (revoir la leçon une fois corrigé n'a pas de
+		// sens). Classes CSS `quiz-learn-*` conservées telles quelles.
+		const lessonContent = (!isTextOnly && ctx.quizMode === "lesson" && !ctx.quizState.locked)
+			? renderLessonHtml(q, ctx.sanitize)
+			: "";
+		const learnSection = lessonContent
+			? `<div class="quiz-learn-section"><div class="quiz-learn-label">${t("engine.lesson.label")}</div><div class="quiz-learn-content">${lessonContent}</div></div>`
 			: "";
 		const textOnlyActions = isTextOnly ? ctx.textOnly.questionActionsHtml(qi) : "";
 		const sectionIdAttr = (typeof q?.id === "string" && q.id.trim().length > 0)

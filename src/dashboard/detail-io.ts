@@ -67,9 +67,9 @@ export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft |
 		const parsed = parseQuizSource(match[1]) as unknown as ParsedQuizItem[];
 		const questions: DraftQuestion[] = [];
 		let examOptions: EditorExamOptions | null = null;
-		/* Objet de mode (examen OU learn) : c'est la configuration du bloc,
+		/* Objet de mode (examen OU leçon) : c'est la configuration du bloc,
 		   jamais une question. Le reconnaître au seul `examMode` faisait entrer
-		   un `{ mode: 'learn' }` dans la liste comme une question vide — et la
+		   un `{ mode: 'lesson' }` dans la liste comme une question vide — et la
 		   première réécriture la matérialisait dans la note. Repéré par son
 		   INDEX : le critère dépend de la POSITION dans le bloc (quiz-utils.ts),
 		   un test élément par élément ne peut pas le savoir. */

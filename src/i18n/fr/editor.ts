@@ -5,9 +5,9 @@ export const FR_EDITOR: Record<keyof typeof EN_EDITOR, string> = {
 	/* ── Vue & ossature (editor.ts, editor/ui.ts) ── */
 	"editor.empty.hint": "Ouvrez une note qui contient un bloc quiz-blocks, puis lancez « Ouvrir le quiz de la note courante ».",
 	"editor.answer.noneCorrect": "Aucune bonne réponse — personne ne peut réussir cette question.",
-	"editor.learn.section": "Leçon",
-	"editor.learn.help": "Affichée avant la question, en mode Learn.",
-	"editor.learn.placeholder": "Ce que l'apprenant lit d'abord…",
+	"editor.lesson.section": "Leçon",
+	"editor.lesson.help": "Affichée avant la question, en mode Leçon.",
+	"editor.lesson.placeholder": "Ce que l'apprenant lit d'abord…",
 	"editor.paste.imageFailed": "Impossible de coller l'image",
 	"editor.view.title": "Éditeur de quiz",
 

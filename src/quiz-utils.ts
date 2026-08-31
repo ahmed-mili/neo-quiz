@@ -1,16 +1,22 @@
 import JSON5 from "json5";
 import type { QuizQuestion, ExamOptions } from "./types/quiz";
 
-/** Mode d'un quiz, lu dans l'objet de configuration optionnel en fin de tableau. */
-type QuizMode = "learn" | "exam" | "quiz";
+/** Mode d'un quiz, lu dans l'objet de configuration optionnel en fin de tableau.
+    "learn" a été renommé "lesson" (task 0 du lot mode leçon, 2026-08-31) : ce
+    fichier n'écrit et ne renvoie plus jamais que "lesson", mais continue de
+    LIRE "learn" indéfiniment (cf. normalizeQuizMode) — un quiz partagé écrit
+    avec l'ancien nom doit continuer de fonctionner. */
+type QuizMode = "lesson" | "exam" | "quiz";
 
 /**
  * Objet de configuration optionnel placé en dernier élément du tableau JSON5
- * d'un bloc quiz-blocks (mode examen/learn) — pas une question, distingué par
+ * d'un bloc quiz-blocks (mode examen/leçon) — pas une question, distingué par
  * l'absence de `prompt` et la présence d'un des champs mode (extractExamOptions).
  */
 interface QuizModeConfig {
 	examMode?: boolean;
+	/** Raccourci historique de `mode: "learn"` (désormais "lesson") — alias lu
+	    en repli, jamais écrit (aucun raccourci équivalent pour "lesson"). */
 	learnMode?: boolean;
 	mode?: string;
 	examDurationMinutes?: number;
@@ -61,6 +67,8 @@ function parseQuizSource(source?: string | null): QuizQuestion[] {
 function isQuizModeConfig(item: unknown): boolean {
 	const q = item as (QuizQuestion & QuizModeConfig) | null | undefined;
 	if (!q || typeof q !== "object" || Array.isArray(q) || q.prompt) return false;
+	/* `q.learnMode` : alias hérité de `mode: "learn"` (renommé "lesson") — lu
+	   indéfiniment, jamais écrit. */
 	if (q.examMode === true || q.learnMode === true) return true;
 	/* Les TROIS modes du plugin, pas « une chaîne quelconque ». Une question
 	   légitime nommée `{ title: 'Quel mode choisir ?', mode: 'transport' }`
@@ -81,11 +89,24 @@ function isQuizModeConfig(item: unknown): boolean {
  * exiger l'exactitude ferait pire que l'ancien code — celui-ci reconnaissait
  * au moins l'objet comme une configuration (quitte à retomber sur le mode
  * quiz), là où un refus net le transformerait en question fantôme.
+ *
+ * "learn" reste reconnu, TOLÉRANT à la casse comme les deux autres — c'est
+ * l'alias hérité du mode renommé "lesson" (task 0, 2026-08-31), et un quiz
+ * partagé écrit avant le renommage doit continuer de s'ouvrir. Le nom
+ * CANONIQUE, lui, n'est PAS tolérant à la casse : `mode: 'Lesson'` n'ouvre
+ * pas la porte du mode leçon, seul `mode: 'lesson'` exact la reconnaît —
+ * personne n'a encore pu écrire cette variante à la main, aucune raison de la
+ * pré-tolérer.
  */
 export function normalizeQuizMode(value: unknown): QuizMode | null {
 	if (typeof value !== "string") return null;
-	const m = value.trim().toLowerCase();
-	return m === "quiz" || m === "learn" || m === "exam" ? m : null;
+	const trimmed = value.trim();
+	// Le nom CANONIQUE est vérifié AVANT la mise en minuscule, exact — voir le
+	// paragraphe ci-dessus sur la casse.
+	if (trimmed === "lesson") return "lesson";
+	const m = trimmed.toLowerCase();
+	if (m === "learn") return "lesson";
+	return m === "quiz" || m === "exam" ? m : null;
 }
 
 /**
@@ -164,9 +185,9 @@ function extractExamOptions(quizArray: QuizQuestion[]): {
 	questions: QuizQuestion[];
 	quizMode: QuizMode;
 	examOptions: ExamOptions | null;
-	learnExamOptions: ExamOptions | null;
+	lessonExamOptions: ExamOptions | null;
 } {
-	if (!Array.isArray(quizArray) || quizArray.length === 0) return { questions: quizArray, quizMode: "quiz", examOptions: null, learnExamOptions: null };
+	if (!Array.isArray(quizArray) || quizArray.length === 0) return { questions: quizArray, quizMode: "quiz", examOptions: null, lessonExamOptions: null };
 
 	/* N'IMPORTE OÙ dans le tableau, pas seulement en dernier. L'export écrit
 	   toujours la configuration à la fin, mais un quiz écrit à la main — ou
@@ -183,13 +204,14 @@ function extractExamOptions(quizArray: QuizQuestion[]): {
 	const lastItem = configIdx >= 0 ? quizArray[configIdx] as QuizQuestion & QuizModeConfig : undefined;
 
 	if (lastItem) {
-		/* Déterminer le mode : "learn" | "exam" | "quiz". `mode` prime sur les
+		/* Déterminer le mode : "lesson" | "exam" | "quiz". `mode` prime sur les
 		   deux booléens historiques, et passe par la même normalisation que la
 		   RECONNAISSANCE — sans quoi un `mode: 'Learn'` serait admis comme
-		   configuration puis lu comme un mode quiz. */
+		   configuration puis lu comme un mode quiz. `lastItem.learnMode` reste
+		   l'alias hérité de `mode: "learn"` (renommé "lesson"). */
 		const quizMode: QuizMode = normalizeQuizMode(lastItem.mode)
 			?? (lastItem.examMode === true ? "exam"
-				: lastItem.learnMode === true ? "learn"
+				: lastItem.learnMode === true ? "lesson"
 					: "quiz");
 
 		// Construction des options d'examen
@@ -205,21 +227,21 @@ function extractExamOptions(quizArray: QuizQuestion[]): {
 			examOptions = buildExamOpts();
 		}
 
-		// Options d'examen pour le mode learn (utilisé par "Passer l'examen")
-		let learnExamOptions: ExamOptions | null = null;
-		if (quizMode === "learn" && lastItem.examDurationMinutes != null) {
-			learnExamOptions = buildExamOpts();
+		// Options d'examen pour le mode leçon (utilisé par "Passer l'examen")
+		let lessonExamOptions: ExamOptions | null = null;
+		if (quizMode === "lesson" && lastItem.examDurationMinutes != null) {
+			lessonExamOptions = buildExamOpts();
 		}
 
 		return {
 			questions: quizArray.filter((_, i) => i !== configIdx),
 			quizMode,
 			examOptions,
-			learnExamOptions
+			lessonExamOptions
 		};
 	}
 
-	return { questions: quizArray, quizMode: "quiz", examOptions: null, learnExamOptions: null };
+	return { questions: quizArray, quizMode: "quiz", examOptions: null, lessonExamOptions: null };
 }
 
 function renderParagraph(container: HTMLElement, text?: string | null): HTMLParagraphElement {

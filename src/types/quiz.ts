@@ -49,7 +49,14 @@ export interface QuestionBase {
 	/** Explication HTML pré-rendue, prioritaire sur `explain`. */
 	explainHtml?: string;
 	_explainHtml?: string;
-	/** Contenu "Leçon" affiché en mode learn (engine/cards.js learnSection, engine/text-only.js learningHtml). */
+	/** Contenu "Leçon" affiché en mode leçon (engine/cards.ts learnSection, engine/text-only.ts learningHtml). */
+	lesson?: string;
+	lessonHtml?: string;
+	_lessonHtml?: string;
+	/** Alias hérités du mode "learn", renommé "lesson" (task 0 du lot mode
+	    leçon, 2026-08-31) : LUS en repli indéfiniment (engine/sanitizer.ts
+	    renderLessonHtml) — un quiz partagé écrit avant le renommage doit
+	    continuer de s'afficher — mais plus jamais ÉCRITS (editor/export.ts). */
 	learn?: string;
 	learnHtml?: string;
 	_learnHtml?: string;

@@ -214,7 +214,7 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 	   autorise la virgule traînante, et la conditionner à « y a-t-il un champ
 	   après ? » n'a jamais tenu. `hint` et `explainHtml` se croyaient derniers
 	   et s'écrivaient sans virgule — mais `_extraFields` en écrit d'autres
-	   ensuite (learn, passage, mathInput, numeric…). Une question portant une
+	   ensuite (passage, mathInput, numeric…). Une question portant une
 	   explication ET un de ces champs produisait un bloc JSON5 INVALIDE, que le
 	   moteur refusait de parser (« invalid character 'p' »). */
 	if (q.hint) {
@@ -238,6 +238,20 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 		L.push(`\t\texplainHtml: '${e(q._explainHtml)}',`);
 	}
 
+	/* Leçon (mode "lesson", renommé depuis "learn" — task 0 du lot mode leçon,
+	   2026-08-31) : `convertParsedToInternal` a déjà ramené la question aux
+	   deux noms canoniques (`lesson`/`_lessonHtml`) ; les noms hérités ne sont
+	   relus ici QUE pour un appelant qui construirait une question sans passer
+	   par lui (jeux de cas). Dans tous les cas, seul le nom canonique est
+	   RÉÉCRIT — jamais `learn`/`learnHtml`/`_learnHtml`. Les deux champs sont
+	   indépendants (pas de isRichHtml comme pour l'explication) : l'ancien
+	   passage par `_extraFields` écrivait déjà les deux à la fois quand les
+	   deux étaient présents, et cette écriture les préserve pareil. */
+	const lessonText = q.lesson || q.learn;
+	const lessonHtml = q._lessonHtml || q.learnHtml || q._learnHtml;
+	if (lessonText) L.push(`\t\tlesson: '${e(String(lessonText))}',`);
+	if (lessonHtml) L.push(`\t\tlessonHtml: '${e(String(lessonHtml))}',`);
+
 	if (q._extraFields && Object.keys(q._extraFields).length > 0) {
 		// Track keys already exported to avoid duplicates
 		const exportedKeys = new Set([
@@ -246,7 +260,11 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 			'correctOrder', 'matching', 'rows', 'choices', 'correctMap', 'type',
 			'terminalVariant', 'textVariant', 'commandPrefix', 'placeholder',
 			'caseSensitive', 'acceptedAnswers', 'hint', 'explainHtml',
-			'resourceButton', 'cloze', 'numeric', 'tolerance', 'tolerancePercent', 'unit'
+			'resourceButton', 'cloze', 'numeric', 'tolerance', 'tolerancePercent', 'unit',
+			// Leçon (mode "lesson") : déjà écrits ci-dessus, les noms canoniques
+			// ET les alias hérités ne doivent pas être réécrits une seconde fois
+			// via `_extraFields`.
+			'lesson', 'lessonHtml', 'learn', 'learnHtml', '_learnHtml'
 		]);
 		for (const [key, val] of Object.entries(q._extraFields)) {
 			if (exportedKeys.has(key)) continue; // Skip already exported keys
@@ -335,8 +353,10 @@ function exportAll(questions: DraftQuestion[], examOptions: EditorExamOptions | 
 	const parts = questions.map((q, i) => exportQuestion(q, i, attribution));
 
 	/* L'objet de mode est réémis SOUS SA FORME D'ORIGINE. Un quiz importé en
-	   mode learn ressortait en mode examen (ou perdait son mode), parce que
-	   l'export ne savait écrire que `examMode: true`. */
+	   mode leçon ressortait en mode examen (ou perdait son mode), parce que
+	   l'export ne savait écrire que `examMode: true`. `examOptions.mode` est
+	   déjà NORMALISÉ (readModeConfig) : il ne vaut donc jamais "learn", même
+	   si le bloc lu portait l'ancien nom. */
 	const mode = examOptions?.mode;
 	const timing = examOptions
 		? `\t\texamDurationMinutes: ${examOptions.durationMinutes},\n\t\texamAutoSubmit: ${examOptions.autoSubmit},\n\t\texamShowTimer: ${examOptions.showTimer},\n`
@@ -346,9 +366,9 @@ function exportAll(questions: DraftQuestion[], examOptions: EditorExamOptions | 
 	   personnelles à la première sauvegarde. */
 	const extra = Object.entries(examOptions?._extra || {})
 		.map(([k, v]) => `\t\t${json5Key(k)}: ${json5Value(v)},\n`).join("");
-	if (mode === "learn") {
-		// Mode learn AVEC examen (« Passer l'examen ») ou sans, selon le chrono.
-		parts.push(`\t// Mode learn\n\t{\n\t\tmode: 'learn',\n${examOptions?.enabled ? timing : ""}${extra}\t}`);
+	if (mode === "lesson") {
+		// Mode leçon AVEC examen (« Passer l'examen ») ou sans, selon le chrono.
+		parts.push(`\t// Mode leçon\n\t{\n\t\tmode: 'lesson',\n${examOptions?.enabled ? timing : ""}${extra}\t}`);
 	} else if (examOptions && examOptions.enabled) {
 		parts.push(`\t// Options mode examen\n\t{\n\t\texamMode: true,\n${timing}${extra}\t}`);
 	} else if (mode === "quiz") {

@@ -24,7 +24,7 @@ export interface QuestionResult {
 	kind: string;
 	promptText: string;
 	answer: unknown;
-	learnText: string;
+	lessonText: string;
 	explanationText: string;
 }
 
@@ -140,8 +140,11 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 		return firstText(q?.prompt, q?.promptHtml, q?._promptHtml);
 	}
 
-	function getLearnText(q: QuizQuestion): string {
-		return firstText(q?.learn, q?.learnHtml, q?._learnHtml);
+	/* Nom canonique prioritaire, alias hérité `learn*` en repli (mode "learn"
+	   renommé "lesson", task 0 du lot mode leçon, 2026-08-31) : sans le repli,
+	   un quiz partagé écrit avant le renommage sauvegardait une leçon vide. */
+	function getLessonText(q: QuizQuestion): string {
+		return firstText(q?.lesson, q?.lessonHtml, q?._lessonHtml, q?.learn, q?.learnHtml, q?._learnHtml);
 	}
 
 	function getExplanationText(q: QuizQuestion): string {
@@ -336,7 +339,7 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 			kind: getQuestionKind(q),
 			promptText: getQuestionPromptText(q),
 			answer: mode === "training" ? buildTextOnlyAnswer(q, qi) : buildQcmAnswer(q, qi),
-			learnText: getLearnText(q),
+			lessonText: getLessonText(q),
 			explanationText: getExplanationText(q)
 		};
 	}

@@ -188,6 +188,18 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		question.resourceButton = { ...q.resourceButton };
 	}
 
+	/* Boucle d'apprentissage (mode "lesson", task 2 du lot mode leçon,
+	   2026-08-31) : `slice`/`role` round-trippent comme un champ typé
+	   ORDINAIRE (cf. `tolerance` plus haut), pas via `_extraFields` — sinon
+	   une valeur hors contrat y survivrait recopiée telle quelle, alors que
+	   l'écriture (editor/export.ts) doit au contraire la TAIRE. La
+	   validation fine (entier ≥ 1, rôle parmi les trois valeurs connues) a
+	   lieu là-bas, à l'unique endroit qui écrit le bloc ; ici, seule la
+	   FORME de base est vérifiée pour éviter de mémoriser un type absurde
+	   (une chaîne dans `slice`, un nombre dans `role`). */
+	if (typeof q.slice === "number") question.slice = q.slice;
+	if (typeof q.role === "string") question.role = q.role as DraftQuestion["role"];
+
 	if (type === "single" || type === "multi") {
 		question.options = q.options || ["", ""];
 		if (type === "single") {
@@ -301,7 +313,12 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 		// Leçon (mode "lesson") : nom canonique + alias hérités de "learn" — les
 		// deux sont lus explicitement ci-dessus, donc ni l'un ni l'autre ne doit
 		// retomber dans `_extraFields` (double écriture à l'export sinon).
-		'lesson','lessonHtml','_lessonHtml','learn','learnHtml','_learnHtml']);
+		'lesson','lessonHtml','_lessonHtml','learn','learnHtml','_learnHtml',
+		// Boucle d'apprentissage (task 2 du lot mode leçon) : lus explicitement
+		// ci-dessus (`question.slice`/`.role`) — une valeur hors contrat doit
+		// être TUE à l'écriture, pas réapparaître recopiée telle quelle via
+		// `_extraFields` sous prétexte que sa forme de base n'a pas été retenue.
+		'slice','role']);
 	/* `Object.create(null)` : un objet ordinaire ABSORBE une clé nommée
 	   `__proto__` au lieu de la stocker, et le champ personnalisé
 	   disparaissait sans un mot. */

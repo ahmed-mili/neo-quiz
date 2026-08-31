@@ -269,6 +269,23 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 		L.push(`\t\tlessonHtml: '${e(lessonHtml)}',`);
 	}
 
+	/* Boucle d'apprentissage (mode "lesson", task 2 du lot mode leçon,
+	   2026-08-31) : `slice` (numéro de tranche, à partir de 1) et `role`
+	   ("pre"/"recall"/"test", cf. types/quiz.ts QuestionBase) ne sont écrits
+	   QUE sous leur forme VALIDE. Contrairement à `_extraFields` — qui
+	   recopie un champ personnalisé tel quel, quelle que soit sa forme —
+	   ces deux-là pilotent le comportement du moteur (buildLessonModel,
+	   task 3 du lot) : un `slice` non entier ou un `role` inconnu doit
+	   disparaître plutôt que casser la boucle en silence. `convertParsedToInternal`
+	   ne mémorise déjà que la forme de base (nombre / chaîne) ; la validation
+	   fine a lieu ICI, seul endroit qui écrit le bloc. */
+	if (typeof q.slice === "number" && Number.isInteger(q.slice) && q.slice >= 1) {
+		L.push(`\t\tslice: ${q.slice},`);
+	}
+	if (q.role === "pre" || q.role === "recall" || q.role === "test") {
+		L.push(`\t\trole: '${e(q.role)}',`);
+	}
+
 	if (q._extraFields && Object.keys(q._extraFields).length > 0) {
 		// Track keys already exported to avoid duplicates
 		const exportedKeys = new Set([
@@ -281,7 +298,11 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 			// Leçon (mode "lesson") : déjà écrits ci-dessus, les noms canoniques
 			// ET les alias hérités ne doivent pas être réécrits une seconde fois
 			// via `_extraFields`.
-			'lesson', 'lessonHtml', 'learn', 'learnHtml', '_learnHtml'
+			'lesson', 'lessonHtml', 'learn', 'learnHtml', '_learnHtml',
+			// Boucle d'apprentissage (task 2) : déjà traités ci-dessus (validés
+			// ou tus) — ne jamais les laisser repasser tels quels par la voie
+			// générique, qui ne connaît aucune validation.
+			'slice', 'role'
 		]);
 		for (const [key, val] of Object.entries(q._extraFields)) {
 			if (exportedKeys.has(key)) continue; // Skip already exported keys

@@ -1,6 +1,6 @@
 import { setIcon } from "obsidian";
 import { t } from "../i18n";
-import type { ResourceButton } from "../types/quiz";
+import type { ResourceButton, QuestionRole } from "../types/quiz";
 
 export type QuestionTypeKey = "single" | "multi" | "ordering" | "matching" | "cloze" | "numeric" | "text" | "cmd" | "powershell" | "bash";
 
@@ -120,6 +120,16 @@ export interface DraftQuestion {
 	tolerance?: number;
 	tolerancePercent?: number;
 	unit?: string;
+	/**
+	 * Boucle d'apprentissage (mode "lesson", task 1 puis 2 du lot mode leçon,
+	 * 2026-08-31) : numéro de tranche et rôle de la question — miroir de
+	 * `QuestionBase.slice`/`.role` (types/quiz.ts). Round-trippent comme un
+	 * champ typé ordinaire (`tolerance`…), pas via `_extraFields` : une
+	 * valeur hors contrat doit être TUE à l'écriture (editor/export.ts), pas
+	 * recopiée telle quelle comme le serait un champ personnalisé.
+	 */
+	slice?: number;
+	role?: QuestionRole;
 }
 
 /* Libellés de slots par défaut (« Étape 1 »…) : contenu de DÉPART écrit ensuite

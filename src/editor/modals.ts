@@ -61,6 +61,12 @@ export interface ParsedQuizItem {
 	tolerance?: number;
 	tolerancePercent?: number;
 	unit?: string;
+	/** Boucle d'apprentissage (mode "lesson", task 1 du lot mode leçon,
+	    2026-08-31) — cf. types/quiz.ts QuestionBase.slice/.role. Type large
+	    (`string`, pas `QuestionRole`) : c'est la forme BRUTE lue dans la note,
+	    pas encore validée — cette étape a lieu à l'écriture (editor/export.ts). */
+	slice?: number;
+	role?: string;
 	acceptedAnswers?: string[];
 	acceptableAnswers?: string[];
 	correctText?: unknown;

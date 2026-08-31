@@ -173,6 +173,34 @@ await withSrcModule("src/editor/export.ts", ({ exportAll }) => {
 	r.check("ancien nom de question plus jamais ecrit", lessonWritten.includes("learnHtml"), false);
 	r.check("mode normalise a l'ecriture", lessonWritten.includes("mode: 'lesson'"), true);
 
+	/* Task 2 du lot mode lecon : `slice`/`role` d'une question survivent a
+	   l'ecriture — c'est exactement le genre de champ qui a deja disparu en
+	   silence (`textVariant: 'command'` non reconnu avait efface 23 invites
+	   de terminal d'un quiz reel). Adapte du brief au style `r.check` /
+	   `relire` du fichier (le brief employait `assert.ok`, absent d'ici) et
+	   aux guillemets simples de la convention reelle de json5Value/esc5. */
+	const sliceRole = relire(
+		[{ id: "b", slice: 2, role: "recall", prompt: "R ?", type: "text", answer: "y" }],
+		p => ({ slice: p[0].slice, role: p[0].role }));
+	r.check("slice conserve a l'ecriture", sliceRole.slice, 2);
+	r.check("role conserve a l'ecriture", sliceRole.role, "recall");
+	r.check("role ecrit entre guillemets simples",
+		exportAll([{ id: "b", slice: 2, role: "recall", prompt: "R ?" }], null).includes("role: 'recall',"),
+		true);
+
+	/* Une valeur HORS CONTRAT ne doit jamais etre recopiee telle quelle : ce
+	   n'est pas un champ personnalise ordinaire (`_extraFields` copie
+	   n'importe quoi), ces deux-la pilotent le comportement du moteur
+	   (buildLessonModel, task 3 du lot) et une valeur absurde doit disparaitre
+	   plutot que de casser la boucle en silence. */
+	const sliceRoleInvalides = relire(
+		[{ id: "c", slice: 0, role: "bogus", prompt: "P" }],
+		p => ({ slice: p[0].slice, role: p[0].role }));
+	r.check("slice invalide (< 1) tu a l'ecriture", sliceRoleInvalides.slice, undefined);
+	r.check("role inconnu tu a l'ecriture", sliceRoleInvalides.role, undefined);
+	r.check("slice non entier tu a l'ecriture",
+		relire([{ id: "d", slice: 1.5, prompt: "P" }], p => p[0].slice), undefined);
+
 	r.done();
 });
 

@@ -72,7 +72,7 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
  * ou, à l'inverse, de faire d'une configuration qui référence sa source une
  * question fantôme.
  */
-await withSrcModule("src/quiz-utils.ts", ({ parseQuizSource, extractExamOptions }) => {
+await withSrcModule("src/quiz-utils.ts", ({ parseQuizSource, extractExamOptions, findQuizModeConfigIndex }) => {
 	const r = makeReporter("Boucle d'apprentissage — slice/role/source");
 
 	// Le bloc d'une Lesson porte slice/role ; parseQuizSource doit les rendre tels quels.
@@ -93,6 +93,35 @@ await withSrcModule("src/quiz-utils.ts", ({ parseQuizSource, extractExamOptions 
 	const avecSource = extractExamOptions(parseeAvecSource);
 	r.check("un bloc de reference n'a aucune question propre", avecSource.questions.length, 0);
 	r.check("mode 'quiz' conserve malgre 'source'", avecSource.quizMode, "quiz");
+
+	// Question ordinaire de remplissage, sans aucun rapport avec slice/role —
+	// juste pour donner un second element neutre aux tableaux ci-dessous.
+	const q = { title: "Une question", prompt: "Enonce", options: ["a", "b"], correctIndex: 0 };
+
+	/* Concern signale a la revue de la Task 1 (progress.md) : aucun cas ne
+	   verrouillait `isStrictQuizModeConfig` contre un futur ajout maladroit de
+	   `slice`/`role` a sa liste de MARQUEURS — cette fonction a deja cause deux
+	   regressions documentees dans ses propres commentaires (une question
+	   fantome ET une vraie question avalee). Deux verrous, dans les deux sens :
+
+	   1. Un objet de CONFIGURATION legitime (marqueur `mode` valide, aucun
+	      marqueur de question, aucun `prompt`) qui porte AUSSI `slice`/`role`
+	      doit rester une configuration. Ce cas echouerait si `slice`/`role`
+	      rejoignaient un jour MARQUEURS : `rempli(q.slice)` deviendrait vrai
+	      et ferait passer cette configuration pour une question. */
+	r.check("configuration valide portant aussi slice/role reste une configuration",
+		findQuizModeConfigIndex([q, { mode: "lesson", slice: 3, role: "recall" }]), 1);
+	/* 2. A l'inverse, une VRAIE question de leçon — marqueurs de question
+	      remplis, `prompt` compris — qui porte `slice`/`role` EN PLUS d'un
+	      champ `mode` errant ne doit jamais etre prise pour la configuration
+	      du bloc, quelle que soit sa position. Deja garanti par le test
+	      `question reelle en dernier avec un mode` ci-dessus (sans slice/role) ;
+	      ce cas verifie que l'ajout de slice/role ne change rien a ce verdict. */
+	r.check("question reelle portant slice/role n'est jamais prise pour la configuration",
+		findQuizModeConfigIndex([
+			{ mode: "lesson", prompt: "P ?", slice: 2, role: "test", type: "text", answer: "y" },
+			q
+		]), -1);
 
 	r.done();
 });

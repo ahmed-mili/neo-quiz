@@ -30,9 +30,12 @@ export const EN_ENGINE = {
 	"engine.nav.prevQuestion": "Previous question",
 	"engine.nav.nextQuestion": "Next question",
 
-	/* ── Bascule de mode ── */
-	"engine.mode.toggleAria": "Practice mode",
-	"engine.mode.toggleLabel": "Practice mode",
+	/* ── Bascule de mode ──
+	   La bascule visible (bouton) a disparu le 2026-08-31 (Task 5, lot mode
+	   leçon) : sa mécanique est absorbée par le rôle "recall" en mode Leçon.
+	   switchOn/switchOff restent : `applyModeToggleVisualState`
+	   (engine/interactions.ts) les lit encore pour le chemin partagé avec
+	   `bindStartModeControls`, même si aucun bouton ne les déclenche plus. */
 	"engine.mode.switchOn": "Turn practice mode on",
 	"engine.mode.switchOff": "Turn practice mode off",
 

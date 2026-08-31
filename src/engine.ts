@@ -816,7 +816,6 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	    }
 
 	    const examChromeHtml = ctx.exam.examTimerHtml();
-	    const modeToggleHtml = (ctx.isExamMode || ctx.trainingSession) ? "" : ctx.cards.modeToggleHtml();
 
 	    // Construire le HTML des slides à partir du slideMap
 	    const slidesHtml = slideMap.map(entry => {
@@ -826,7 +825,10 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	        return "";
 	    }).join("");
 
-	    container.innerHTML = `${examChromeHtml}${ctx.cards.navHtml()}${modeToggleHtml}<div class="quiz-track-viewport" data-quiz-height-ready="0"><div class="quiz-track">${slidesHtml}</div></div>`;
+	    // Le bouton « Practice mode » global a disparu (2026-08-31) : sa mécanique
+	    // (réponse libre + auto-évaluation) est ABSORBÉE par le rôle "recall" en
+	    // mode Leçon, décidé question par question (ctx.textOnly.isTextOnlyFor).
+	    container.innerHTML = `${examChromeHtml}${ctx.cards.navHtml()}<div class="quiz-track-viewport" data-quiz-height-ready="0"><div class="quiz-track">${slidesHtml}</div></div>`;
 	    // LaTeX $...$ / $$...$$ de toutes les slides (prompts, options,
 	    // explications, résultats) : rendu MathJax natif Obsidian.
 	    mathifyElement(container);

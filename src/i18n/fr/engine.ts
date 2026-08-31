@@ -23,9 +23,7 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 	"engine.nav.prevQuestion": "Question précédente",
 	"engine.nav.nextQuestion": "Question suivante",
 
-	/* ── Bascule de mode ── */
-	"engine.mode.toggleAria": "Mode d'entraînement",
-	"engine.mode.toggleLabel": "Mode entraînement",
+	/* ── Bascule de mode ── (voir en/engine.ts pour le contexte du retrait) */
 	"engine.mode.switchOn": "Activer le mode entraînement",
 	"engine.mode.switchOff": "Désactiver le mode entraînement",
 

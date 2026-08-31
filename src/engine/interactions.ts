@@ -323,7 +323,10 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		const isMatch = ctx.isMatchingQuestion(q);
 		const isMulti = !!(q as { multiSelect?: boolean }).multiSelect;
 
-		if (ctx.textOnly?.isTextOnlyMode?.()) {
+		// Décision PAR QUESTION (isTextOnlyFor) : le binder attaché à CETTE
+		// carte suit son propre rôle, pas un mode global — une tranche de Leçon
+		// mélange "test" (binders QCM/texte habituels) et "recall" (auto-évaluation).
+		if (ctx.textOnly?.isTextOnlyFor?.(qi)) {
 			ctx.textOnly.bindTextOnlyQuestion(trackItem, qi);
 		} else {
 			// isTxt/isOrd/isMatch garantissent la variante ⇒ casts documentés.
@@ -495,6 +498,11 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 						ctx.goToSlide(cur + 1, { forceRender: false });
 						navigated = true;
 					} else {
+						// isTextOnlyMode() GLOBAL à dessein, malgré le `qi` de la dernière
+						// question sous la main : sauter l'écran de soumission n'a de sens
+						// que si TOUT le quiz est en réponse libre (chemin historique) — une
+						// tranche de Leçon mélangeant "test" et "recall" doit garder l'étape
+						// de soumission, qui vérifie les questions manquantes du quiz entier.
 						if (ctx.textOnly?.isExamAnswerPhase?.()) ctx.goToSubmit();
 						else if (ctx.textOnly?.isTextOnlyMode?.()) ctx.goToResults();
 						else if (ctx.quizState.locked) ctx.goToSlide(ctx.SLIDE_RESULTS_INDEX, { forceRender: false });
@@ -544,6 +552,9 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		ctx.container.querySelectorAll<HTMLElement>("[data-nav]").forEach(a => bindNavTab(a, () => ctx.goToQuestion(Number(a.dataset.nav))));
 		const resultsTab = ctx.container.querySelector<HTMLElement>("[data-nav-results]");
 		if (resultsTab) bindNavTab(resultsTab, () => {
+			// isTextOnlyMode() GLOBAL, même raison qu'à la flèche droite ci-dessus :
+			// cet onglet n'a pas de question précise en main, et sauter la
+			// soumission reste une décision qui porte sur le quiz entier.
 			if (ctx.textOnly?.isExamAnswerPhase?.()) ctx.goToSubmit();
 			else if (ctx.textOnly?.isTextOnlyMode?.()) ctx.goToResults();
 			else if (ctx.quizState.locked) ctx.goToSlide(ctx.SLIDE_RESULTS_INDEX, { forceRender: false });

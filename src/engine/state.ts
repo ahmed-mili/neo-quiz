@@ -34,7 +34,12 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 	const NAV_TAB_FALLBACK_CLEAR_MS = 320;
 
 	function hasAnyAnswer(i: number): boolean {
-		if (ctx.textOnly?.isTextOnlyMode?.()) {
+		// isTextOnlyFor(i), pas isTextOnlyMode() : une question "recall" de Leçon
+		// stocke sa réponse dans textOnlyAnswers/textOnlyRatings, jamais dans
+		// `selections` — sans cette bascule PAR QUESTION, une tranche mélangeant
+		// "test" et "recall" verrait ses questions de restitution comptées
+		// "sans réponse" quel que soit ce que l'utilisateur a écrit et évalué.
+		if (ctx.textOnly?.isTextOnlyFor?.(i)) {
 			return ctx.textOnly.hasAnyAnswer(i) || ctx.textOnly.isChecked(i) || ctx.textOnly.isRated(i);
 		}
 
@@ -59,7 +64,8 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 	}
 
 	function isComplete(i: number): boolean {
-		if (ctx.textOnly?.isTextOnlyMode?.()) {
+		// Même bascule PAR QUESTION que hasAnyAnswer ci-dessus.
+		if (ctx.textOnly?.isTextOnlyFor?.(i)) {
 			return ctx.textOnly.isRated(i);
 		}
 
@@ -88,7 +94,10 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 	}
 
 	function isCorrect(i: number): boolean {
-		if (ctx.textOnly?.isTextOnlyMode?.()) {
+		// Même bascule PAR QUESTION : le score d'une tranche mixte doit compter
+		// une "recall" auto-évaluée "compris" comme juste, indépendamment du
+		// mode global (qui reste "qcm" en Leçon, cf. Task 5).
+		if (ctx.textOnly?.isTextOnlyFor?.(i)) {
 			return ctx.quizState.textOnlyRatings?.[i] === "understood";
 		}
 

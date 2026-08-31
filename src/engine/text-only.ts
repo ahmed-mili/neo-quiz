@@ -26,6 +26,7 @@ export interface RatingMeta {
 export interface TextOnlyHandlers {
 	RATINGS: Record<TextOnlyRating, RatingMeta>;
 	isTextOnlyMode(): boolean;
+	isTextOnlyFor(qi: number): boolean;
 	isExamAnswerPhase(): boolean;
 	isExamReviewPhase(): boolean;
 	normalizeRating(value: TextOnlyRating | null | undefined): TextOnlyRating | null;
@@ -56,8 +57,29 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 		review: { get label() { return t("engine.rating.review"); }, className: "review" }
 	};
 
+	/* Décision GLOBALE, historique : tout le quiz en réponse libre + auto-
+	   évaluation. Ne dépend plus d'un bouton dans l'UI (retiré 2026-08-31) mais
+	   reste posée par la configuration du bloc (démarrage « Entraînement » d'un
+	   examen, cf. startModeSelectorHtml/exam.ts:startTrainingMode) — un chemin
+	   hors Leçon, conservé tel quel. Les décisions qui portent sur le quiz
+	   ENTIER (écran de soumission, résultats, navigation flèche/onglet
+	   Résultats) restent branchées ici : un mélange de rôles en Leçon n'a pas
+	   d'écran de soumission unique à styliser, ce n'est pas le sujet de cette
+	   fonction. */
 	function isTextOnlyMode(): boolean {
 		return ctx.quizState?.practiceMode === "text";
+	}
+
+	/* Décision PAR QUESTION : absorbe la mécanique de l'ancien bouton « Practice
+	   mode » dans le rôle "recall" du mode Leçon (Task 5, 2026-08-31) — une
+	   question de restitution s'affiche toujours en réponse libre + auto-
+	   évaluation, sans réglage utilisateur, alors que ses voisines "pre"/"test"
+	   du même quiz restent en QCM. Le chemin historique (`practiceMode ===
+	   "text"`) reste une clause OU : un bloc hors Leçon qui active encore ce
+	   mode par sa configuration (démarrage « Entraînement ») continue de tout
+	   afficher en réponse libre, question par question. */
+	function isTextOnlyFor(qi: number): boolean {
+		return isTextOnlyMode() || (ctx.isLessonMode() && ctx.roleOfQuestion(qi) === "recall");
 	}
 
 	function isExamAnswerPhase(): boolean {
@@ -339,6 +361,7 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 	return {
 		RATINGS,
 		isTextOnlyMode,
+		isTextOnlyFor,
 		isExamAnswerPhase,
 		isExamReviewPhase,
 		normalizeRating,

@@ -15,7 +15,6 @@ import { t, type TransKey } from "../i18n";
 export interface CardHandlers {
 	tabClass(i: number): string;
 	navHtml(): string;
-	modeToggleHtml(): string;
 	startModeSelectorHtml(): string;
 	optionClass(qi: number, oi: number): string;
 	optionContentHtml(q: QcmQuestion | MultiSelectQuestion, oi: number): string;
@@ -49,7 +48,10 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		const entry = ctx.slideMap[cur] as { questionIndex?: number } | undefined;
 		const isActive = ctx.isQuestionSlideIndex(cur) && entry?.questionIndex === i;
 		const active = isActive ? "active" : "";
-		if (ctx.textOnly?.isTextOnlyMode?.()) {
+		// Décision PAR QUESTION (isTextOnlyFor) : en mode Leçon, seul l'onglet
+		// d'une question de rôle "recall" doit refléter l'auto-évaluation ; les
+		// autres onglets du même quiz restent QCM même si un `qi` voisin est recall.
+		if (ctx.textOnly?.isTextOnlyFor?.(i)) {
 			const rating = ctx.textOnly.getRatingMeta(ctx.quizState.textOnlyRatings?.[i]);
 			if (rating) return `${active} ${rating.className}`.trim();
 			if (ctx.textOnly.isChecked(i)) return `${active} checked`.trim();
@@ -64,18 +66,6 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 	function navHtml(): string {
 		const resultsActive = (ctx.isSubmitSlideIndex(ctx.quizState.current) || ctx.isResultsSlideIndex(ctx.quizState.current)) ? "active" : "";
 		return `<div class="quiz-nav">${ctx.quiz.map((_, i) => `<a class="quiz-tab ${tabClass(i)}" href="#" data-nav="${i}">Q${i + 1}</a>`).join("")}<a class="quiz-tab is-result ${resultsActive}" href="#" data-nav-results="1">${t("engine.nav.results")}</a></div>`;
-	}
-
-	function modeToggleHtml(): string {
-		const mode = ctx.quizState.practiceMode === "text" ? "text" : "qcm";
-		const isTextOnly = mode === "text";
-		const nextMode = isTextOnly ? "qcm" : "text";
-		return `<div class="quiz-mode-toggle" aria-label="${ctx.escapeHtmlAttr(t("engine.mode.toggleAria"))}">
-			<span class="quiz-mode-toggle-label">${t("engine.mode.toggleLabel")}</span>
-			<button class="quiz-mode-switch${isTextOnly ? " is-on" : ""}" type="button" role="switch" aria-checked="${isTextOnly ? "true" : "false"}" aria-label="${ctx.escapeHtmlAttr(t(isTextOnly ? "engine.mode.switchOff" : "engine.mode.switchOn"))}" data-quiz-mode="${nextMode}">
-				<span class="quiz-mode-switch-track" aria-hidden="true"><span class="quiz-mode-switch-thumb"></span></span>
-			</button>
-		</div>`;
 	}
 
 	function startModeSelectorHtml(): string {
@@ -387,7 +377,9 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 
 	function questionCardHtml(qi: number): string {
 		const q = ctx.quiz[qi];
-		const isTextOnly = ctx.textOnly?.isTextOnlyMode?.();
+		// Décision PAR QUESTION : une tranche de Leçon mélange des rôles ("test"
+		// en QCM à côté de "recall" en réponse libre) — jamais un bascule globale.
+		const isTextOnly = ctx.textOnly?.isTextOnlyFor?.(qi);
 		const isTxt = ctx.isTextQuestion(q);
 		const isCloze = ctx.isClozeQuestion(q);
 		const isOrd = ctx.isOrderingQuestion(q);
@@ -473,7 +465,6 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 	return {
 		tabClass,
 		navHtml,
-		modeToggleHtml,
 		startModeSelectorHtml,
 		optionClass,
 		optionContentHtml,

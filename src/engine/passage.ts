@@ -41,16 +41,26 @@ export type PassageVisibility = "hidden" | "open" | "collapsible";
  * En mode Leçon, le rôle tranche :
  * - "pre" : la question est posée AVANT la lecture (Richland 2009) — montrer
  *   le support détruirait le mécanisme de la tentative faite dans l'ignorance.
- * - "recall" : restitution de mémoire ; le support reste cache PENDANT la
+ * - "recall" : restitution de mémoire ; le support reste caché PENDANT la
  *   tentative (sinon le rappel ne vaut rien), puis se rouvre de lui-même une
- *   fois la question verrouillée, pour la comparaison avec le texte réel.
+ *   fois la question VÉRIFIÉE (auto-évaluation validée), pour la comparaison
+ *   avec le texte réel.
  * - "test" (rôle par défaut) : après la lecture, le support est repliable à
  *   la demande mais jamais réaffiché d'office.
+ *
+ * CORRECTIF (Task 5, 2026-08-31) : le paramètre s'appelait `locked` et lisait
+ * `quizState.locked`, qui est GLOBAL au quiz et ne se pose qu'à l'arrivée sur
+ * l'écran de résultats (engine/track.ts) — un support de "recall" ne se
+ * serait donc rouvert qu'à la toute fin du quiz, jamais juste après la
+ * tentative de CETTE question. `checked` lit à la place l'état PAR QUESTION
+ * `quizState.textOnlyChecked[qi]` (ctx.textOnly.isChecked), posé dès que
+ * l'utilisateur valide sa réponse libre — devenu disponible pour "recall"
+ * précisément parce que la Task 5 rend ce rôle en réponse libre.
  */
-export function passageVisibility({ role, locked, isLesson }: { role: QuestionRole; locked: boolean; isLesson: boolean }): PassageVisibility {
+export function passageVisibility({ role, checked, isLesson }: { role: QuestionRole; checked: boolean; isLesson: boolean }): PassageVisibility {
 	if (!isLesson) return "collapsible";
 	if (role === "pre") return "hidden";
-	if (role === "recall") return locked ? "open" : "hidden";
+	if (role === "recall") return checked ? "open" : "hidden";
 	return "collapsible";
 }
 
@@ -141,7 +151,7 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 	function passageVisibilityFor(qi: number): PassageVisibility {
 		return passageVisibility({
 			role: ctx.roleOfQuestion(qi),
-			locked: ctx.quizState.locked,
+			checked: ctx.textOnly.isChecked(qi),
 			isLesson: ctx.isLessonMode()
 		});
 	}
@@ -217,7 +227,7 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 		   payer deux fois le même calcul en silence. */
 		const role = ctx.roleOfQuestion(qi);
 		const isLesson = ctx.isLessonMode();
-		const visibility = passageVisibility({ role, locked: ctx.quizState.locked, isLesson });
+		const visibility = passageVisibility({ role, checked: ctx.textOnly.isChecked(qi), isLesson });
 
 		// "hidden" : rien n'est rendu, pas même le conteneur — un support caché
 		// en CSS resterait lisible par l'inspecteur, la recherche du navigateur

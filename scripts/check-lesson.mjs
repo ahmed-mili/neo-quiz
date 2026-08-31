@@ -257,29 +257,76 @@ await withSrcModule("src/engine/lesson.ts", ({ createLessonHandlers }) => {
  * "collapsible" (repliable, jamais reaffiche d'office). Cas un par ligne du
  * tableau du brief, plus quelques bords non couverts par le tableau mais
  * tranches par le "pourquoi" (verrouillage sans effet sur "pre" et "test").
+ *
+ * CORRECTIF Task 5 (2026-08-31) : le parametre s'appelait `locked` (lu sur
+ * `quizState.locked`, GLOBAL au quiz) — renomme `checked` (lu sur l'etat PAR
+ * QUESTION `textOnlyChecked[qi]`, via ctx.textOnly.isChecked). Les intitules
+ * ci-dessous parlent desormais de "verifiee" (l'auto-evaluation de CETTE
+ * question a ete validee), plus de "verrouille".
  */
 await withSrcModule("src/engine/passage.ts", ({ passageVisibility }) => {
 	const r = makeReporter("Boucle d'apprentissage — visibilite du support par role");
 
 	// Tableau du brief, une ligne par cas.
-	r.check("pre, non verrouille, mode Lecon -> hidden",
-		passageVisibility({ role: "pre", locked: false, isLesson: true }), "hidden");
-	r.check("recall, non verrouille, mode Lecon -> hidden",
-		passageVisibility({ role: "recall", locked: false, isLesson: true }), "hidden");
-	r.check("recall, verrouille, mode Lecon -> open",
-		passageVisibility({ role: "recall", locked: true, isLesson: true }), "open");
-	r.check("test, non verrouille, mode Lecon -> collapsible",
-		passageVisibility({ role: "test", locked: false, isLesson: true }), "collapsible");
-	r.check("recall, non verrouille, HORS mode Lecon -> collapsible (comportement d'aujourd'hui)",
-		passageVisibility({ role: "recall", locked: false, isLesson: false }), "collapsible");
+	r.check("pre, non verifiee, mode Lecon -> hidden",
+		passageVisibility({ role: "pre", checked: false, isLesson: true }), "hidden");
+	r.check("recall, non verifiee, mode Lecon -> hidden",
+		passageVisibility({ role: "recall", checked: false, isLesson: true }), "hidden");
+	r.check("recall, verifiee, mode Lecon -> open",
+		passageVisibility({ role: "recall", checked: true, isLesson: true }), "open");
+	r.check("test, non verifiee, mode Lecon -> collapsible",
+		passageVisibility({ role: "test", checked: false, isLesson: true }), "collapsible");
+	r.check("recall, non verifiee, HORS mode Lecon -> collapsible (comportement d'aujourd'hui)",
+		passageVisibility({ role: "recall", checked: false, isLesson: false }), "collapsible");
 
 	// Bords non ecrits dans le tableau, mais qu'implique le "pourquoi" du brief.
-	r.check("pre reste hidden meme verrouille (le mecanisme ne se leve jamais a posteriori)",
-		passageVisibility({ role: "pre", locked: true, isLesson: true }), "hidden");
-	r.check("test reste collapsible meme verrouille (jamais reaffiche d'office)",
-		passageVisibility({ role: "test", locked: true, isLesson: true }), "collapsible");
+	r.check("pre reste hidden meme verifiee (le mecanisme ne se leve jamais a posteriori)",
+		passageVisibility({ role: "pre", checked: true, isLesson: true }), "hidden");
+	r.check("test reste collapsible meme verifiee (jamais reaffiche d'office)",
+		passageVisibility({ role: "test", checked: true, isLesson: true }), "collapsible");
 	r.check("pre HORS mode Lecon -> collapsible (le role n'a aucun effet hors Lecon)",
-		passageVisibility({ role: "pre", locked: false, isLesson: false }), "collapsible");
+		passageVisibility({ role: "pre", checked: false, isLesson: false }), "collapsible");
+
+	r.done();
+});
+
+/**
+ * FIX round de revue de la Task 5 (2026-08-31) sur le brief lui-meme :
+ * celui-ci posait que le support d'une question "recall" se rouvre "des lors
+ * que la question est verrouillee" (`quizState.locked`). Or `locked` est
+ * GLOBAL et ne se pose qu'a l'arrivee sur l'ecran de resultats
+ * (engine/track.ts) — avec ce cablage, la comparaison support/rappel
+ * n'arriverait qu'a la toute fin du quiz, jamais juste apres la tentative de
+ * CETTE question. Ce cas cable le VRAI `createPassageHandlers` sur un ctx
+ * factice ou `quizState.locked` reste `false` en permanence, et prouve que
+ * `passageVisibilityFor` s'ouvre quand meme des que `textOnlyChecked[qi]`
+ * (le seul etat PAR QUESTION disponible) passe a `true` pour CETTE question
+ * seulement — une question "recall" voisine, non verifiee, reste cachee.
+ */
+await withSrcModule("src/engine/passage.ts", ({ createPassageHandlers }) => {
+	const r = makeReporter("Boucle d'apprentissage — reouverture du support suit textOnlyChecked, pas le verrou global");
+
+	const textOnlyChecked = { 0: false, 1: false };
+	const ctx = {
+		quiz: [{ role: "recall" }, { role: "recall" }],
+		quizMode: "lesson",
+		isLessonMode: () => true,
+		roleOfQuestion: qi => ctx.quiz[qi].role,
+		// Verrou GLOBAL delibere-ment jamais pose : si passageVisibilityFor
+		// devait encore le lire, ce cas resterait bloque sur "hidden".
+		quizState: { locked: false },
+		textOnly: { isChecked: qi => !!textOnlyChecked[qi] }
+	};
+	const { passageVisibilityFor } = createPassageHandlers(ctx);
+
+	r.check("recall non verifiee reste cachee malgre quizState.locked=false (comportement attendu avant reponse)",
+		passageVisibilityFor(0), "hidden");
+
+	textOnlyChecked[0] = true;
+	r.check("recall verifiee s'ouvre SANS que quizState.locked passe jamais a true",
+		passageVisibilityFor(0), "open");
+	r.check("une autre question recall, elle, non verifiee, reste cachee (etat PAR QUESTION, pas globalise)",
+		passageVisibilityFor(1), "hidden");
 
 	r.done();
 });
@@ -358,6 +405,57 @@ await withSrcModule(["src/engine/passage.ts", "src/engine/state.ts"], (passage, 
 	collapseState.seedCollapsedOnce("q1");
 	r.check("apres resetQuiz : le repli par defaut peut se re-appliquer a la session suivante (defaultFoldSeeded vide, pas seulement collapsed)",
 		collapseState.isCollapsed("q1"), true);
+
+	r.done();
+});
+
+/**
+ * Task 5 du lot mode leçon (2026-08-31) : le bouton global « Practice mode »
+ * disparait de l'interface, sa mecanique (reponse libre + auto-evaluation)
+ * est ABSORBEE par le role "recall" du mode Lecon — `isTextOnlyFor(qi)`
+ * (src/engine/text-only.ts) decide desormais QUESTION PAR QUESTION, jamais
+ * pour le quiz entier. Verrou du risque principal de la tache : un quiz
+ * ORDINAIRE (hors Lecon, sans role) doit se comporter EXACTEMENT comme avant
+ * — d'ou le premier cas, qui reproduit un tel quiz.
+ */
+await withSrcModule("src/engine/text-only.ts", ({ createTextOnlyHandlers }) => {
+	const r = makeReporter("Boucle d'apprentissage — l'auto-evaluation suit le role recall, pas un mode global");
+
+	// ctx factice minimal : seuls les champs lus par isTextOnlyMode/isTextOnlyFor.
+	const makeCtx = ({ isLesson, role, practiceMode }) => ({
+		quizState: { practiceMode },
+		isLessonMode: () => isLesson,
+		roleOfQuestion: () => role
+	});
+
+	// Quiz ORDINAIRE : ni Lecon, ni mode texte historique — comportement AVANT
+	// cette tache (le bouton disparu ne changeait jamais cette valeur ici,
+	// puisque le controle retire ne faisait qu'ecrire practiceMode="qcm"/"text").
+	const ordinaire = createTextOnlyHandlers(makeCtx({ isLesson: false, role: "test", practiceMode: "qcm" }));
+	r.check("quiz ordinaire (hors Lecon, mode qcm) : isTextOnlyFor reste faux, aucune regression",
+		ordinaire.isTextOnlyFor(0), false);
+
+	// Mode Lecon : seul le role "recall" bascule, ses voisins "pre"/"test" non.
+	const recall = createTextOnlyHandlers(makeCtx({ isLesson: true, role: "recall", practiceMode: "qcm" }));
+	r.check("Lecon, role recall, mode qcm : isTextOnlyFor vrai (l'essentiel de la tache)",
+		recall.isTextOnlyFor(0), true);
+
+	const test = createTextOnlyHandlers(makeCtx({ isLesson: true, role: "test", practiceMode: "qcm" }));
+	r.check("Lecon, role test : isTextOnlyFor reste faux (QCM habituel, pas de contamination entre roles)",
+		test.isTextOnlyFor(0), false);
+
+	const pre = createTextOnlyHandlers(makeCtx({ isLesson: true, role: "pre", practiceMode: "qcm" }));
+	r.check("Lecon, role pre : isTextOnlyFor reste faux",
+		pre.isTextOnlyFor(0), false);
+
+	// Chemin historique conserve : un bloc HORS Lecon qui active encore
+	// practiceMode="text" par sa configuration (demarrage Entrainement d'un
+	// examen) continue de tout afficher en reponse libre.
+	const entrainement = createTextOnlyHandlers(makeCtx({ isLesson: false, role: "test", practiceMode: "text" }));
+	r.check("hors Lecon, practiceMode 'text' (chemin historique) : isTextOnlyFor vrai",
+		entrainement.isTextOnlyFor(0), true);
+	r.check("isTextOnlyMode() (decision GLOBALE, ecran de soumission/resultats) reste vraie dans ce meme cas",
+		entrainement.isTextOnlyMode(), true);
 
 	r.done();
 });

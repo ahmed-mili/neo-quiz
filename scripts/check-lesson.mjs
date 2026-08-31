@@ -283,3 +283,81 @@ await withSrcModule("src/engine/passage.ts", ({ passageVisibility }) => {
 
 	r.done();
 });
+
+/**
+ * Round 1 de revue de la Task 4, correctif `a17080c` : `collapsed` et
+ * `defaultFoldSeeded` (les deux Set de la closure de `createPassageCollapseState`,
+ * src/engine/passage.ts) n'etaient jamais vides — un « recommencer », ou un
+ * aller-retour Lecon -> Examen -> Lecon, retrouvait un support deja seme qui
+ * ne se repliait plus par defaut, et un support replie a la main le restait
+ * pour toujours. `resetPassageState()` (passage.ts) corrige ca ; `resetQuiz`
+ * (src/engine/state.ts) l'appelle a cote des autres videages d'etat de session.
+ *
+ * Ce cas cable les DEUX fichiers reels ensemble, comme `createLessonHandlers`
+ * plus haut instancie sa factory sur un contexte factice minimal : seules les
+ * entrees que `resetQuiz()` lit reellement sont fournies a `ctx`, et
+ * `ctx.passage.resetPassageState` delegue au VRAI `reset()` de
+ * `createPassageCollapseState` (jamais un espion qui se contenterait de
+ * verifier qu'il a ete appele) — sinon un `reset()` qui ne viderait qu'un
+ * SEUL des deux Set passerait inapercu, exactement le critere qui a coute le
+ * bug.
+ */
+await withSrcModule(["src/engine/passage.ts", "src/engine/state.ts"], (passage, state) => {
+	const r = makeReporter("Boucle d'apprentissage — resetQuiz remet a zero le repli du support");
+
+	const collapseState = passage.createPassageCollapseState();
+
+	// Contexte factice minimal : uniquement ce que `resetQuiz()` lit ou ecrit.
+	const ctx = {
+		closeHintModal() {},
+		track: { clearTrackTransitionFallback() {} },
+		viewport: {
+			destroyActiveSlideResizeObserver() {},
+			destroyAllSlidesResizeObserver() {},
+			destroyViewportResizeObserver() {}
+		},
+		clearBackgroundWarmIdleHandle() {},
+		cancelEnsureTrackVisibleRaf() {},
+		quizState: {},
+		initSelections: () => [],
+		initTextOnlyAnswers: () => [],
+		initTextOnlyChecked: () => [],
+		initTextOnlyRatings: () => [],
+		buildShuffleMap: () => ({}),
+		initOrderingPicks: () => ({}),
+		initMatchPicks: () => ({}),
+		setSlidingClass() {},
+		// Le cablage sous verrou : resetQuiz doit appeler CECI, qui delegue au
+		// vrai reset() de passage.ts.
+		passage: { resetPassageState: () => collapseState.reset() },
+		stopExamTimer() {},
+		isExamMode: false,
+		render() {}
+	};
+	const { resetQuiz } = state.createStateHandlers(ctx);
+
+	// q0 : repli MANUEL (toggle direct, jamais passe par seedCollapsedOnce —
+	// le cas d'un support hors mode Lecon replie a la main par l'utilisateur).
+	collapseState.toggle("q0");
+	// q1 : repli PAR DEFAUT deja seme (role "test" en mode Lecon, premiere
+	// apparition de la session).
+	collapseState.seedCollapsedOnce("q1");
+	r.check("etat initial : repli manuel actif", collapseState.isCollapsed("q0"), true);
+	r.check("etat initial : repli par defaut deja applique", collapseState.isCollapsed("q1"), true);
+
+	resetQuiz();
+
+	r.check("apres resetQuiz : le repli manuel ne survit pas a la session", collapseState.isCollapsed("q0"), false);
+	r.check("apres resetQuiz : le repli par defaut deja applique est efface", collapseState.isCollapsed("q1"), false);
+
+	/* Le point qui distingue un `reset()` correct (les DEUX Set vides) d'un
+	   `reset()` qui n'aurait vide que `collapsed` : si `defaultFoldSeeded`
+	   gardait "q1", ce second `seedCollapsedOnce` serait un no-op (deja seme)
+	   et q1 resterait deplie a tort — la nouvelle session n'aurait plus jamais
+	   son repli par defaut. */
+	collapseState.seedCollapsedOnce("q1");
+	r.check("apres resetQuiz : le repli par defaut peut se re-appliquer a la session suivante (defaultFoldSeeded vide, pas seulement collapsed)",
+		collapseState.isCollapsed("q1"), true);
+
+	r.done();
+});

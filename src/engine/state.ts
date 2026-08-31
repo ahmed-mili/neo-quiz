@@ -329,13 +329,23 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		   est une AUTO-EVALUATION, et la ranger a cote des scores d'un QCM les
 		   rendrait incomparables. `updateRecord` prend le maximum, donc un 0 ne
 		   peut pas abaisser un score existant.
+		   FINDING 1 (round 1 de revue Task 5, 2026-08-31) : `isTextOnlyMode()`
+		   seule valait FAUX en mode Lecon (practiceMode y reste "qcm"), y compris
+		   quand une ou plusieurs questions "recall" du mix sont jugees par
+		   auto-evaluation — `isCorrect(i)` (plus haut dans ce fichier) y compte
+		   deja ces auto-evaluations comme des reponses justes. Sans correction,
+		   une session de Lecon aurait ecrit un `bestScore` reel qui melangeait
+		   scoring QCM et auto-evaluation, exactement ce que le paragraphe
+		   ci-dessus interdit. `isTextOnlyForAny()` (engine/text-only.ts) est
+		   VRAIE des qu'UNE SEULE question du quiz est actuellement auto-evaluee,
+		   pas seulement quand elles le sont toutes.
 		   `resultsCounted` : `goToResults` n'etait pas protege contre un double
 		   clic, et « Voir le score » comptait alors deux tentatives pour une
 		   seule session. */
 		const statsStore = (ctx.plugin as { _statsStore?: StatsStoreLike })._statsStore;
 		if (!ctx.quizState.resultsCounted && statsStore && ctx.sourcePath) {
 			ctx.quizState.resultsCounted = true;
-			const modeTexte = !!ctx.textOnly?.isTextOnlyMode?.();
+			const modeTexte = !!ctx.textOnly?.isTextOnlyForAny?.();
 			const { pct, total } = computeScorePercent();
 			let questionsDone = 0;
 			for (let i = 0; i < ctx.quiz.length; i++) {

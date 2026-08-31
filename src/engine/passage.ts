@@ -151,7 +151,7 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 	function passageVisibilityFor(qi: number): PassageVisibility {
 		return passageVisibility({
 			role: ctx.roleOfQuestion(qi),
-			checked: ctx.textOnly.isChecked(qi),
+			checked: !!ctx.textOnly?.isChecked?.(qi),
 			isLesson: ctx.isLessonMode()
 		});
 	}
@@ -227,7 +227,7 @@ export function createPassageHandlers(ctx: EngineCtx): PassageHandlers {
 		   payer deux fois le même calcul en silence. */
 		const role = ctx.roleOfQuestion(qi);
 		const isLesson = ctx.isLessonMode();
-		const visibility = passageVisibility({ role, checked: ctx.textOnly.isChecked(qi), isLesson });
+		const visibility = passageVisibility({ role, checked: !!ctx.textOnly?.isChecked?.(qi), isLesson });
 
 		// "hidden" : rien n'est rendu, pas même le conteneur — un support caché
 		// en CSS resterait lisible par l'inspecteur, la recherche du navigateur

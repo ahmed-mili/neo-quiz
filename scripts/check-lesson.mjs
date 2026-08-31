@@ -459,3 +459,77 @@ await withSrcModule("src/engine/text-only.ts", ({ createTextOnlyHandlers }) => {
 
 	r.done();
 });
+
+/**
+ * FIX round 1 de revue de la Task 5 (2026-08-31), FINDINGS 1 et 2 sur le
+ * brief lui-meme : `isTextOnlyMode()` (globale, `practiceMode` seul) reste
+ * FAUSSE en mode Lecon des que le mix contient ne serait-ce qu'UNE question
+ * "recall" (practiceMode y reste "qcm") — deux endroits du moteur la
+ * lisaient encore directement et se trompaient donc dans ce cas precis :
+ *
+ * - FINDING 1 (`goToResults`, src/engine/state.ts) : decidait d'ecrire un
+ *   vrai `bestScore` au tableau de bord des qu'`isTextOnlyMode()` etait
+ *   fausse — alors que `isCorrect(i)` compte deja une auto-evaluation
+ *   "recall" comme une reponse juste, polluant les statistiques reelles.
+ *   `isTextOnlyForAny()` (VRAIE des qu'UNE SEULE question est auto-evaluee)
+ *   corrige ca.
+ * - FINDING 2 (`resultsSlideHtml`, src/engine/cards.ts) : affichait le
+ *   pourcentage QCM des qu'`isTextOnlyMode()` etait fausse — alors qu'une
+ *   tranche ENTIEREMENT "recall" n'a produit aucune vraie correction et doit
+ *   voir la grille compris/partiel/a revoir. `isTextOnlyForAll()` (VRAIE
+ *   seulement si TOUTES les questions sont auto-evaluees) corrige ca.
+ *
+ * Ce bloc verifie les deux fonctions dérivées elles-mêmes (pas les deux
+ * fonctions appelantes, qui exigeraient de simuler tout `render()`).
+ */
+await withSrcModule("src/engine/text-only.ts", ({ createTextOnlyHandlers }) => {
+	const r = makeReporter("Boucle d'apprentissage — isTextOnlyForAny/All (score et ecran de resultats)");
+
+	// ctx factice : un role PAR QUESTION (tableau), pas un seul role global —
+	// c'est precisement le melange qui manquait au ctx du bloc precedent.
+	const makeCtx = ({ isLesson, practiceMode, roles }) => ({
+		quiz: roles.map(() => ({})),
+		quizState: { practiceMode },
+		isLessonMode: () => isLesson,
+		roleOfQuestion: qi => roles[qi]
+	});
+
+	// --- isTextOnlyForAny (Finding 1) ---
+	const ordinaire = createTextOnlyHandlers(makeCtx({ isLesson: false, practiceMode: "qcm", roles: ["test", "test"] }));
+	r.check("quiz ordinaire : isTextOnlyForAny faux, aucune regression sur les stats", ordinaire.isTextOnlyForAny(), false);
+
+	const legacyTexte = createTextOnlyHandlers(makeCtx({ isLesson: false, practiceMode: "text", roles: ["test", "test"] }));
+	r.check("mode texte historique (hors Lecon) : isTextOnlyForAny vrai (comportement d'avant, inchange)", legacyTexte.isTextOnlyForAny(), true);
+
+	const leconMixte = createTextOnlyHandlers(makeCtx({ isLesson: true, practiceMode: "qcm", roles: ["test", "recall", "test"] }));
+	r.check("Lecon MIXTE (une seule question recall) : isTextOnlyForAny vrai -> le score ne doit PAS etre enregistre (Finding 1)",
+		leconMixte.isTextOnlyForAny(), true);
+
+	const leconToutTest = createTextOnlyHandlers(makeCtx({ isLesson: true, practiceMode: "qcm", roles: ["test", "test"] }));
+	r.check("Lecon SANS aucun recall : isTextOnlyForAny faux, le score QCM reel reste enregistrable",
+		leconToutTest.isTextOnlyForAny(), false);
+
+	// --- isTextOnlyForAll (Finding 2) ---
+	const leconToutRecall = createTextOnlyHandlers(makeCtx({ isLesson: true, practiceMode: "qcm", roles: ["recall", "recall"] }));
+	r.check("Lecon ENTIEREMENT recall : isTextOnlyForAll vrai -> grille compris/partiel/a revoir (Finding 2, cas exact du bug)",
+		leconToutRecall.isTextOnlyForAll(), true);
+
+	r.check("la meme Lecon entierement recall reste isTextOnlyForAny vraie (les deux se recoupent, sans s'exclure)",
+		leconToutRecall.isTextOnlyForAny(), true);
+
+	const leconMixte2 = createTextOnlyHandlers(makeCtx({ isLesson: true, practiceMode: "qcm", roles: ["test", "recall"] }));
+	r.check("Lecon MIXTE (pas tout recall) : isTextOnlyForAll faux -> garde le pourcentage QCM (hors perimetre de cette tache)",
+		leconMixte2.isTextOnlyForAll(), false);
+
+	const legacyTexte2 = createTextOnlyHandlers(makeCtx({ isLesson: false, practiceMode: "text", roles: ["test", "test"] }));
+	r.check("mode texte historique (hors Lecon) : isTextOnlyForAll vrai (comportement d'avant, inchange)", legacyTexte2.isTextOnlyForAll(), true);
+
+	const ordinaire2 = createTextOnlyHandlers(makeCtx({ isLesson: false, practiceMode: "qcm", roles: ["test", "test"] }));
+	r.check("quiz ordinaire : isTextOnlyForAll faux", ordinaire2.isTextOnlyForAll(), false);
+
+	const quizVide = createTextOnlyHandlers(makeCtx({ isLesson: false, practiceMode: "text", roles: [] }));
+	r.check("quiz VIDE (0 question) : isTextOnlyForAll reste faux malgre Array.every trivialement vrai sur []",
+		quizVide.isTextOnlyForAll(), false);
+
+	r.done();
+});

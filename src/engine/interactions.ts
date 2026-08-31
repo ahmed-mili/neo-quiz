@@ -14,7 +14,6 @@ export interface InteractionHandlers {
 	bindBinaryQuestion(trackItem: HTMLElement, qi: number, isMulti: boolean): void;
 	bindOrderingQuestion(trackItem: HTMLElement, qi: number, q: OrderingQuestion): void;
 	bindMatchingQuestion(trackItem: HTMLElement, qi: number, q: MatchingQuestion): void;
-	bindModeToggleControls(rootEl?: HTMLElement | null): void;
 	bindStartModeControls(rootEl?: HTMLElement | null): void;
 	bindQuestionTrackItem(trackItem: HTMLElement | null): void;
 	bindSubmitSlideControls(rootEl: Element | null): void;
@@ -32,7 +31,6 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 	let __quizZoomFixSettleTimer = 0;
 	let __quizZoomLastDpr = window.devicePixelRatio || 1;
 	let __quizZoomFixHandler: (() => void) | null = null;
-	const MODE_TOGGLE_ANIMATION_MS = 260;
 
 	function commitQuestionInteraction(qi: number, { syncHeight = true }: { syncHeight?: boolean } = {}): void {
 		ctx.invalidateSavedResults?.();
@@ -433,36 +431,16 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		}
 	}
 
-	function applyModeToggleVisualState(btn: HTMLElement, mode: string): void {
-		const isTextOnly = mode === "text";
-		btn.classList.toggle("is-on", isTextOnly);
-		btn.setAttribute("aria-checked", isTextOnly ? "true" : "false");
-		btn.setAttribute("aria-label", t(isTextOnly ? "engine.mode.switchOff" : "engine.mode.switchOn"));
-		btn.dataset.quizMode = isTextOnly ? "qcm" : "text";
-	}
-
-	function bindModeToggleControls(rootEl: HTMLElement | null = ctx.container): void {
-		rootEl?.querySelectorAll?.<HTMLElement>("[data-quiz-mode]")?.forEach(btn => {
-			btn.addEventListener("click", e => {
-				e.preventDefault();
-				const nextMode = btn.dataset.quizMode === "text" ? "text" : "qcm";
-				if (nextMode === ctx.quizState.practiceMode || btn.dataset.quizSwitching === "1") return;
-
-				btn.dataset.quizSwitching = "1";
-				btn.classList.add("is-animating");
-				requestAnimationFrame(() => {
-					if (ctx.__quizDestroyed) return;
-					applyModeToggleVisualState(btn, nextMode);
-				});
-
-				window.setTimeout(() => {
-					if (ctx.__quizDestroyed) return;
-					ctx.setPracticeMode(nextMode);
-				}, MODE_TOGGLE_ANIMATION_MS);
-			});
-		});
-	}
-
+	/* Le bouton "Practice mode" est retire de l’interface (Task 5, 2026-08-31),
+	   sa mecanique absorbee par le role "recall" en mode Lecon. FINDING 3
+	   (round 1 de revue Task 5) : bindModeToggleControls et
+	   applyModeToggleVisualState, qui geraient le clic sur CE bouton, sont
+	   retires avec lui plutot que laisses en place - verifie par grep
+	   qu’aucun code ne produit plus jamais l’attribut data-quiz-mode qu’ils
+	   ecoutaient. Ce n’etait PAS un chemin partage avec bindStartModeControls
+	   ci-dessous (deux fonctions a selecteurs distincts, [data-quiz-mode]
+	   contre [data-quiz-start-mode]), contrairement a ce qu’affirmait a tort
+	   le commentaire d’une revue precedente. */
 	function bindStartModeControls(rootEl: HTMLElement | null = ctx.container): void {
 		rootEl?.querySelectorAll?.<HTMLElement>("[data-quiz-start-mode]")?.forEach(btn => {
 			btn.addEventListener("click", e => {
@@ -475,8 +453,6 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 	}
 
 	function bindStaticControls(): void {
-		bindModeToggleControls(ctx.container);
-
 		bindSubmitSlideControls(ctx.container.querySelector('.quiz-track-item[data-slide-kind="submit"]'));
 		bindResultsSlideControls(ctx.container.querySelector('.quiz-track-item[data-slide-kind="results"]'));
 
@@ -662,7 +638,6 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		bindBinaryQuestion,
 		bindOrderingQuestion,
 		bindMatchingQuestion,
-		bindModeToggleControls,
 		bindStartModeControls,
 		bindQuestionTrackItem,
 		bindSubmitSlideControls,

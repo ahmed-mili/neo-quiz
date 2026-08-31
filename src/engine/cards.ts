@@ -293,7 +293,13 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 	}
 
 	function resultsSlideHtml(): string {
-		if (ctx.textOnly?.isTextOnlyMode?.()) {
+		// isTextOnlyForAll (pas isTextOnlyMode) : FINDING 2, round 1 de revue Task
+		// 5 — une Lecon entierement composee de questions "recall" doit voir la
+		// grille compris/partiel/a revoir, pas un pourcentage QCM qui ne reflete
+		// rien de ce qu'elle vient de faire. isTextOnlyMode() seule restait
+		// fausse en Lecon (practiceMode y reste "qcm"), meme quand AUCUNE
+		// question de la session n'a de vraie correction.
+		if (ctx.textOnly?.isTextOnlyForAll?.()) {
 			const results = ctx.textOnly.computeResults();
 			const isExamCorrection = ctx.isExamMode && ctx.examEnded;
 			const title = t(isExamCorrection ? "engine.result.freeTextCorrection" : "engine.result.trainingTitle");

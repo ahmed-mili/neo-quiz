@@ -23,9 +23,7 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 	"engine.nav.prevQuestion": "Question précédente",
 	"engine.nav.nextQuestion": "Question suivante",
 
-	/* ── Bascule de mode ── (voir en/engine.ts pour le contexte du retrait) */
-	"engine.mode.switchOn": "Activer le mode entraînement",
-	"engine.mode.switchOff": "Désactiver le mode entraînement",
+	/* ── Bascule de mode ── (retiree, voir en/engine.ts pour le contexte) */
 
 	/* ── Écran de démarrage (choix du mode) ── */
 	"engine.start.selectorAria": "Choisir le mode du quiz",

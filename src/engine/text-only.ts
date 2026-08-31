@@ -27,6 +27,8 @@ export interface TextOnlyHandlers {
 	RATINGS: Record<TextOnlyRating, RatingMeta>;
 	isTextOnlyMode(): boolean;
 	isTextOnlyFor(qi: number): boolean;
+	isTextOnlyForAny(): boolean;
+	isTextOnlyForAll(): boolean;
 	isExamAnswerPhase(): boolean;
 	isExamReviewPhase(): boolean;
 	normalizeRating(value: TextOnlyRating | null | undefined): TextOnlyRating | null;
@@ -62,10 +64,16 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 	   reste posée par la configuration du bloc (démarrage « Entraînement » d'un
 	   examen, cf. startModeSelectorHtml/exam.ts:startTrainingMode) — un chemin
 	   hors Leçon, conservé tel quel. Les décisions qui portent sur le quiz
-	   ENTIER (écran de soumission, résultats, navigation flèche/onglet
-	   Résultats) restent branchées ici : un mélange de rôles en Leçon n'a pas
-	   d'écran de soumission unique à styliser, ce n'est pas le sujet de cette
-	   fonction. */
+	   ENTIER et qui n'ont AUCUNE alternative par question (écran de
+	   soumission, navigation flèche/onglet Résultats, phases d'examen)
+	   restent branchées ici.
+	   CORRECTIF round 1 de revue Task 5 (Findings 1 et 2) : l'écran de
+	   RÉSULTATS (grille auto-évaluée vs pourcentage QCM) et l'exclusion du
+	   score des STATISTIQUES du tableau de bord ne doivent PLUS lire cette
+	   fonction seule — un mélange de rôles en Leçon (certaines questions
+	   "recall", d'autres "test") n'est ni "tout QCM" ni "tout texte" au sens
+	   de ce flag global. Ces deux décisions ont leur propre fonction dérivée,
+	   isTextOnlyForAny / isTextOnlyForAll, ci-dessous. */
 	function isTextOnlyMode(): boolean {
 		return ctx.quizState?.practiceMode === "text";
 	}
@@ -80,6 +88,36 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 	   afficher en réponse libre, question par question. */
 	function isTextOnlyFor(qi: number): boolean {
 		return isTextOnlyMode() || (ctx.isLessonMode() && ctx.roleOfQuestion(qi) === "recall");
+	}
+
+	/* Décision GLOBALE DÉRIVÉE : au moins une question du quiz est actuellement
+	   jugée par auto-évaluation — mode texte historique (toutes le sont), OU
+	   au moins un rôle "recall" en mode Leçon. FINDING 1 (round 1 de revue
+	   Task 5) : sert à exclure le SCORE des statistiques du tableau de bord
+	   (goToResults, engine/state.ts) — mélanger une auto-évaluation à un
+	   score QCM réel les rendrait incomparables (voir son commentaire), et
+	   ça reste vrai dès qu'UNE SEULE question du mix est auto-évaluée, pas
+	   seulement quand elles le sont toutes. Avant ce correctif, isTextOnlyMode()
+	   seule valait faux en Leçon (practiceMode reste "qcm"), et laissait donc
+	   goToResults écrire un bestScore qui mélangeait score réel et
+	   auto-évaluations. */
+	function isTextOnlyForAny(): boolean {
+		return ctx.quiz.some((_, i) => isTextOnlyFor(i));
+	}
+
+	/* Décision GLOBALE DÉRIVÉE, symétrique : TOUTES les questions du quiz sont
+	   jugées par auto-évaluation — mode texte historique, OU une Leçon (ou une
+	   tranche qui constitue tout le bloc) entièrement composée de rôle
+	   "recall". FINDING 2 (round 1 de revue Task 5) : sert à choisir la FORME
+	   de l'écran de résultats (resultsSlideHtml, engine/cards.ts) — la grille
+	   compris/partiel/à revoir n'a de sens que si AUCUNE question de la
+	   session n'a de vraie correction ; un mélange test+recall garde l'écran
+	   à pourcentage QCM (une forme dédiée à ce cas mixte reste hors du
+	   périmètre de cette tâche). Garde ctx.quiz.length > 0 : un tableau vide
+	   rendrait Array.every vrai par défaut, ce qui afficherait à tort la
+	   grille sur un quiz sans questions. */
+	function isTextOnlyForAll(): boolean {
+		return ctx.quiz.length > 0 && ctx.quiz.every((_, i) => isTextOnlyFor(i));
 	}
 
 	function isExamAnswerPhase(): boolean {
@@ -362,6 +400,8 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 		RATINGS,
 		isTextOnlyMode,
 		isTextOnlyFor,
+		isTextOnlyForAny,
+		isTextOnlyForAll,
 		isExamAnswerPhase,
 		isExamReviewPhase,
 		normalizeRating,

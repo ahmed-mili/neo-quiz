@@ -1,0 +1,86 @@
+/* =========================================================
+   BULLE « POURQUOI » — note de méthode au survol
+   -----------------------------------------------------------
+   Marqueur pédagogique posé DANS le contenu d'un quiz
+   (`promptHtml`, `explainHtml`, `learnHtml`) pour justifier une
+   étape de la boucle d'apprentissage : « pourquoi une question
+   AVANT la lecture ? », « pourquoi une explication et pas juste
+   la bonne réponse ? ».
+
+   Écrit côté note, pas côté moteur :
+       <span class="qb-why" title="Richland (2009) : …">pourquoi ?</span>
+   `span`, `class` et `title` sont déjà dans la liste blanche du
+   sanitizer (engine/sanitizer.ts) — aucun code à changer.
+
+   Le texte de la bulle vient de `attr(title)`, donc l'infobulle
+   NATIVE du navigateur ferait double emploi : elle est neutralisée
+   en déplaçant le titre hors du survol n'est pas possible en CSS,
+   on l'assume (elle apparaît après ~1 s, sous la bulle stylée).
+   ========================================================= */
+
+.qb-why{
+  display: inline;
+  cursor: help;
+  font-weight: 600;
+  font-size: 0.92em;
+  color: var(--quiz-primary);
+  border-bottom: 1px dotted color-mix(in srgb, var(--quiz-primary) 60%, transparent);
+  position: relative;
+}
+
+.qb-why:hover,
+.qb-why:focus-visible{
+  outline: none;
+  color: var(--quiz-primary-hover);
+  border-bottom-color: var(--quiz-primary);
+}
+
+/* La bulle elle-même — verre dense du plugin, jamais de rgba en dur. */
+.qb-why::after{
+  content: attr(title);
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: max-content;
+  max-width: min(380px, 70vw);
+  padding: 10px 12px;
+  border-radius: var(--quiz-card-radius);
+  border: 1px solid var(--qbd-glass-edge);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-weight: 400;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  box-shadow: var(--qbd-glass-shadow);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity var(--quiz-dur-fast) var(--quiz-ease-smooth),
+    transform var(--quiz-dur-fast) var(--quiz-ease-smooth);
+}
+
+.qb-why:hover::after,
+.qb-why:focus-visible::after{
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Près du bord droit d'une carte, la bulle s'ancre à droite. */
+.qb-why.qb-why-right::after{
+  left: auto;
+  right: 0;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .qb-why::after{ transition: none; }
+}
+
+/* Sur mobile, pas de survol : la bulle ne s'ouvre qu'au focus clavier
+   ou au toucher long (comportement natif de `title`). */
+.is-mobile .qb-why::after{
+  max-width: min(300px, 84vw);
+}

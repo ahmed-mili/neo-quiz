@@ -210,3 +210,42 @@ await withSrcModule(["src/quiz-utils.ts", "src/engine/lesson.ts"], ({ parseQuizS
 
 	r.done();
 });
+
+/**
+ * Verrou de la decision de conception : `createLessonHandlers` ne memorise
+ * PAS `LessonModel` a l'assemblage — il recalcule `buildLessonModel(ctx.quiz,
+ * ctx.quizMode)` a CHAQUE appel (src/engine/lesson.ts). La raison est que
+ * `ctx.quizMode` est mute en cours de vie du bloc (switchToExamMode,
+ * engine.ts:885 ; startTrainingMode, engine/exam.ts:157 ; resetQuiz,
+ * engine/state.ts:387) : un modele fige au montage rendrait `isLessonMode()`
+ * perime des le premier changement de mode. Round 1 de revue (2026-08-31),
+ * FINDING important : cette justesse n'etait prouvee nulle part — seulement
+ * affirmee dans le rapport et un commentaire. Ce cas instancie la factory
+ * sur un contexte factice minimal (seuls `quiz`/`quizMode` sont lus) et mute
+ * `quizMode` APRES l'instanciation, exactement comme le fait switchToExamMode
+ * sur le vrai ctx : si quelqu'un memorisait un jour le modele a l'assemblage,
+ * ce cas echouerait.
+ */
+await withSrcModule("src/engine/lesson.ts", ({ createLessonHandlers }) => {
+	const r = makeReporter("Boucle d'apprentissage — accessor suit ctx.quizMode (pas un flag fige)");
+
+	const ctx = {
+		quiz: [
+			{ slice: 1, role: "test", prompt: "A", options: ["1", "2"], correctIndex: 0 },
+			{ slice: 2, role: "test", prompt: "B", options: ["1", "2"], correctIndex: 0 }
+		],
+		quizMode: "lesson"
+	};
+	const lesson = createLessonHandlers(ctx);
+	r.check("isLessonMode() vrai juste apres l'instanciation, en mode lesson avec des tranches", lesson.isLessonMode(), true);
+
+	// Mutation de ctx.quizMode APRES l'instanciation, sur le MEME ctx — comme switchToExamMode le ferait en vrai.
+	ctx.quizMode = "exam";
+	r.check("isLessonMode() devient faux des que ctx.quizMode bascule vers 'exam' (accessor vivant, pas un flag fige)", lesson.isLessonMode(), false);
+
+	// Et retour a "lesson" (resetQuiz) : l'accessor doit redevenir vrai, preuve qu'il n'y a pas de cache "une fois faux, toujours faux".
+	ctx.quizMode = "lesson";
+	r.check("isLessonMode() redevient vrai si ctx.quizMode revient a 'lesson'", lesson.isLessonMode(), true);
+
+	r.done();
+});

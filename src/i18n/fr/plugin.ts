@@ -25,6 +25,7 @@ export const FR_PLUGIN: Record<keyof typeof EN_PLUGIN, string> = {
 	"plugin.command.openEditor.desc": "Ouvre un nouvel onglet avec le Quiz Editor vide",
 	"plugin.command.openFromNote.name": "Ouvrir le quiz de la note active",
 	"plugin.command.openFromNote.desc": "Ouvre l'éditeur et charge le quiz de la note active",
+	"plugin.command.createQuizFromLesson.name": "Créer la note quiz depuis cette leçon",
 	"plugin.commands.configure": "Configurer les raccourcis",
 	"plugin.commands.configureNote": "Cliquez sur le bouton ci-dessus pour personnaliser les raccourcis clavier dans les paramètres d'Obsidian.",
 
@@ -141,6 +142,7 @@ export const FR_PLUGIN: Record<keyof typeof EN_PLUGIN, string> = {
 	"plugin.notice.noQuizBlock": "Aucun bloc quiz-blocks trouvé dans cette note",
 	"plugin.notice.quizOpened": "Quiz ouvert : {name}",
 	"plugin.notice.openError": "Erreur lors de l'ouverture",
+	"plugin.notice.createQuizFailed": "Impossible de créer la note quiz",
 	"plugin.block.error": "⚠️ Impossible de charger le quiz : {error}",
 	"plugin.block.unknownError": "erreur inconnue",
 	/* ── Résolution d'une note Quiz vers sa note Lesson (source) ── */

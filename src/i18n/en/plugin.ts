@@ -26,6 +26,7 @@ export const EN_PLUGIN = {
 	"plugin.command.openEditor.desc": "Opens a new tab with an empty quiz editor",
 	"plugin.command.openFromNote.name": "Open the quiz from the active note",
 	"plugin.command.openFromNote.desc": "Opens the editor and loads the quiz from the active note",
+	"plugin.command.createQuizFromLesson.name": "Create quiz note from this lesson",
 	"plugin.commands.configure": "Configure hotkeys",
 	"plugin.commands.configureNote": "Use the button above to customize the hotkeys in Obsidian's settings.",
 
@@ -142,6 +143,7 @@ export const EN_PLUGIN = {
 	"plugin.notice.noQuizBlock": "No quiz-blocks block found in this note",
 	"plugin.notice.quizOpened": "Quiz opened: {name}",
 	"plugin.notice.openError": "Could not open the quiz",
+	"plugin.notice.createQuizFailed": "Could not create the quiz note",
 	"plugin.block.error": "⚠️ Unable to load the quiz: {error}",
 	"plugin.block.unknownError": "unknown error",
 	/* ── Résolution d'une note Quiz vers sa note Lesson (source) ── */

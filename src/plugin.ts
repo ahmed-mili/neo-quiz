@@ -1,18 +1,19 @@
 import {
 	MarkdownRenderChild,
+	MarkdownView,
 	Notice,
 	Platform,
 	Plugin,
 	PluginSettingTab,
 	Setting,
 	setIcon,
+	TFile,
 	TFolder,
 } from "obsidian";
 import type {
 	App,
 	ButtonComponent,
 	MarkdownPostProcessorContext,
-	TFile,
 	WorkspaceLeaf,
 } from "obsidian";
 
@@ -20,6 +21,7 @@ import { parseQuizSource, renderInteractiveQuiz } from "./engine";
 import { QuizBuilderView, VIEW_TYPE } from "./editor";
 import { QUIZ_BLOCK_RE, findQuizModeConfigIndex } from "./quiz-utils";
 import { resolveQuizSourceRef } from "./quiz-source-ref";
+import { deriveQuizNoteName, buildQuizRefBlockContent, isLessonNoteContent } from "./quiz-from-lesson";
 import { QuizDashboardView, VIEW_TYPE_DASHBOARD } from "./dashboard";
 import { createScanner } from "./dashboard/scanner";
 import type { Scanner } from "./dashboard/scanner";
@@ -1350,6 +1352,47 @@ export default class InteractiveQuizPlugin extends Plugin {
 					console.error("Open error:", err);
 					new Notice(t("plugin.notice.openError"));
 				}
+			},
+		});
+
+		/* N'apparaît dans la palette que depuis une note Lesson (brief point 4) :
+		   une commande visible qui échoue est pire qu'une commande absente. Le
+		   contenu testé est celui de l'ÉDITEUR actif (synchrone), pas celui du
+		   disque — `checkCallback` ne peut pas attendre une lecture async. */
+		this.addCommand({
+			id: "create-quiz-from-lesson",
+			name: t("plugin.command.createQuizFromLesson.name"),
+			checkCallback: (checking: boolean) => {
+				const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+				if (!activeView) return false;
+				const content = activeView.editor.getValue();
+				if (!isLessonNoteContent(content)) return false;
+				if (checking) return true;
+
+				void (async () => {
+					const lessonFile = activeView.file;
+					if (!lessonFile) return;
+					const quizName = deriveQuizNoteName(lessonFile.basename);
+					const quizPath = lessonFile.parent
+						? `${lessonFile.parent.path}/${quizName}.md`
+						: `${quizName}.md`;
+
+					// Ne JAMAIS écraser une note quiz déjà présente : on l'ouvre.
+					const existing = this.app.vault.getAbstractFileByPath(quizPath);
+					if (existing instanceof TFile) {
+						await this.app.workspace.getLeaf("tab").openFile(existing);
+						return;
+					}
+
+					try {
+						const created = await this.app.vault.create(quizPath, buildQuizRefBlockContent(lessonFile.basename));
+						await this.app.workspace.getLeaf("tab").openFile(created);
+					} catch (err) {
+						console.error("Create quiz from lesson error:", err);
+						new Notice(t("plugin.notice.createQuizFailed"));
+					}
+				})();
+				return true;
 			},
 		});
 	}

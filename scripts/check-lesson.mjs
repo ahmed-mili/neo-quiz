@@ -1465,3 +1465,34 @@ await withSrcModule("src/quiz-utils.ts", ({ findQuizModeConfigIndex }) => {
 
 	r.done();
 });
+
+/**
+ * Commande "Créer la note quiz depuis cette leçon" (task 9, 2026-08-31) :
+ * les deux fonctions PURES qui décident du nom créé, du contenu écrit, et de
+ * la visibilité de la commande. La partie branchée (lecture de l'éditeur
+ * actif, écriture/ouverture du fichier) n'est pas testable sans Obsidian et
+ * reste dans plugin.ts, réduite au minimum (règle du brief).
+ */
+await withSrcModule("src/quiz-from-lesson.ts", ({ deriveQuizNoteName, buildQuizRefBlockContent, isLessonNoteContent }) => {
+	const r = makeReporter("Créer la note quiz depuis la leçon");
+
+	r.check("suffixe '— Lesson' remplacé par '— Quiz'",
+		deriveQuizNoteName("Chapitre 1 — Lesson"), "Chapitre 1 — Quiz");
+	r.check("nom sans suffixe reconnu : '— Quiz' simplement ajouté",
+		deriveQuizNoteName("Chapitre 1"), "Chapitre 1 — Quiz");
+
+	r.check("contenu du bloc de référence généré",
+		buildQuizRefBlockContent("Chapitre 1 — Lesson"),
+		"```quiz-blocks\n[{ mode: \"quiz\", source: \"[[Chapitre 1 — Lesson]]\" }]\n```\n");
+
+	r.check("note en mode lesson -> commande visible",
+		isLessonNoteContent("```quiz-blocks\n[{ mode: 'lesson' }]\n```"), true);
+	r.check("note en mode quiz -> commande masquée",
+		isLessonNoteContent("```quiz-blocks\n[{ mode: 'quiz' }]\n```"), false);
+	r.check("note sans bloc quiz-blocks -> commande masquée",
+		isLessonNoteContent("# Une note ordinaire, sans bloc."), false);
+	r.check("bloc JSON5 invalide -> commande masquée, pas d'exception",
+		isLessonNoteContent("```quiz-blocks\n[{ mode: 'lesson\n```"), false);
+
+	r.done();
+});

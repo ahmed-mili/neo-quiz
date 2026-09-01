@@ -321,19 +321,21 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		const isMatch = ctx.isMatchingQuestion(q);
 		const isMulti = !!(q as { multiSelect?: boolean }).multiSelect;
 
-		// Carte de rôle "read" (Task 6c) : aucun contrôle de réponse n'est
-		// rendu (cards.ts), donc rien à binder ici — les querySelector des
-		// binders type par type retomberaient tous sur `null`. Le seul
-		// contrôle réel de cette carte est la nav prev/next, câblée plus bas
-		// sans condition de rôle.
-		const isReadCard = ctx.isLessonMode() && ctx.roleOfQuestion(qi) === "read";
-
 		// Décision PAR QUESTION (isTextOnlyFor) : le binder attaché à CETTE
 		// carte suit son propre rôle, pas un mode global — une tranche de Leçon
 		// mélange "test" (binders QCM/texte habituels) et "recall" (auto-évaluation).
-		if (isReadCard) {
-			// rien à binder : pas d'options, pas de champ, pas de bouton de validation.
-		} else if (ctx.textOnly?.isTextOnlyFor?.(qi)) {
+		//
+		// Carte de rôle "read" (Task 6c) : PAS de branche dédiée ici — revue
+		// (fix round 1) : `isTextOnlyFor(qi)` est déjà faux pour "read" (seuls
+		// "recall"/practiceMode="text" y répondent vrai), donc le binder QCM/
+		// texte/ordering/matching ci-dessous s'exécute, mais cards.ts ne rend
+		// plus aucun élément `.quiz-option`/`.quiz-textarea`/`[data-order-*]`/
+		// `[data-match-*]` sur cette carte : chaque `querySelectorAll` retombe
+		// sur une NodeList vide et chaque `addEventListener` en boucle sur zéro
+		// élément. Une garde ici n'aurait annulé que des no-op déjà inertes —
+		// gain nul pour une exception au routage général. Un cas concret où
+		// elle changerait quelque chose : aucun trouvé.
+		if (ctx.textOnly?.isTextOnlyFor?.(qi)) {
 			ctx.textOnly.bindTextOnlyQuestion(trackItem, qi);
 		} else {
 			// isTxt/isOrd/isMatch garantissent la variante ⇒ casts documentés.

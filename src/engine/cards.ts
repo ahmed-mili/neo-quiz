@@ -260,27 +260,43 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		</div>`;
 	}
 
+	/* FIX round 1 (revue, Task 6c) : `getMissingIndices()` exclut déjà "read"
+	   (state.ts), mais son complément — la liste affichée quand RIEN ne
+	   manque — était calculé en dur ici via `ctx.quiz.map((_, i) => i)`, sans
+	   passer par le même filtre. Un quiz Leçon entièrement traité voyait donc
+	   sa carte "read" revenir en pastille "Q3" sur l'écran de soumission,
+	   comme s'il restait quelque chose à y traiter — exactement ce que Task
+	   6b avait déjà réglé côté score/complétude mais pas ici. Une seule
+	   fonction pour les trois écrans (QCM, auto-évaluation, réponse libre en
+	   examen) : il n'y a qu'UNE notion de "question à revoir" sur cette carte. */
+	function reviewableIndices(): number[] {
+		return ctx.quiz.map((_, i) => i).filter(i => !(ctx.isLessonMode() && ctx.roleOfQuestion(i) === "read"));
+	}
+
 	function submitSlideHtml(): string {
 		const missing = ctx.getMissingIndices();
 		const mc = missing.length;
 		if (ctx.textOnly?.isTextOnlyMode?.()) {
 			if (ctx.textOnly.isExamAnswerPhase?.()) {
-				const missingAnswers = ctx.quiz
-					.map((_, i) => i)
+				// Même garde "read" que reviewableIndices : hasAnyAnswer d'une
+				// carte "read" est toujours faux (elle n'écrit jamais dans
+				// textOnlyAnswers), donc sans l'exclusion explicite elle
+				// retomberait en "manquante" ici alors qu'il n'y a rien à répondre.
+				const missingAnswers = reviewableIndices()
 					.filter(i => !ctx.textOnly.hasAnyAnswer(i));
 				const mac = missingAnswers.length;
 				const intro = mac > 0
 					? `<div class="quiz-warn">${plural(mac, "engine.submit.missingFreeAnswers.one", "engine.submit.missingFreeAnswers.other")}</div><div class="quiz-submit-sub">${t("engine.submit.missingList")}</div>`
 					: `<div class="quiz-submit-sub">${t("engine.submit.allFreeAnswered")}</div>`;
-				return `<div class="quiz-track-item" data-slide-kind="submit"><div class="quiz-submit-wrap"><div class="quiz-submit-card">${intro}<div class="quiz-chip-row">${(mac > 0 ? missingAnswers : ctx.quiz.map((_, i) => i)).map(i => `<button class="quiz-chip ${mac > 0 ? "missing" : ""}" type="button" data-jump="${i}">Q${i + 1}</button>`).join("")}</div><div class="quiz-actions"><button class="quiz-action-btn quiz-back-btn" type="button">${t("engine.submit.back")}</button><button class="quiz-action-btn success quiz-show-score-btn" type="button">${t("engine.exam.finish")}</button></div></div></div></div>`;
+				return `<div class="quiz-track-item" data-slide-kind="submit"><div class="quiz-submit-wrap"><div class="quiz-submit-card">${intro}<div class="quiz-chip-row">${(mac > 0 ? missingAnswers : reviewableIndices()).map(i => `<button class="quiz-chip ${mac > 0 ? "missing" : ""}" type="button" data-jump="${i}">Q${i + 1}</button>`).join("")}</div><div class="quiz-actions"><button class="quiz-action-btn quiz-back-btn" type="button">${t("engine.submit.back")}</button><button class="quiz-action-btn success quiz-show-score-btn" type="button">${t("engine.exam.finish")}</button></div></div></div></div>`;
 			}
 
 			const intro = mc > 0
 				? `<div class="quiz-warn">${plural(mc, "engine.submit.missingRatings.one", "engine.submit.missingRatings.other")}</div><div class="quiz-submit-sub">${t("engine.submit.toRateList")}</div>`
 				: `<div class="quiz-submit-sub">${t("engine.submit.allRated")}</div>`;
-			return `<div class="quiz-track-item" data-slide-kind="submit"><div class="quiz-submit-wrap"><div class="quiz-submit-card">${intro}<div class="quiz-chip-row">${(mc > 0 ? missing : ctx.quiz.map((_, i) => i)).map(i => `<button class="quiz-chip ${mc > 0 ? "missing" : ""}" type="button" data-jump="${i}">Q${i + 1}</button>`).join("")}</div><div class="quiz-actions"><button class="quiz-action-btn quiz-back-btn" type="button">${t("engine.submit.back")}</button><button class="quiz-action-btn success quiz-show-score-btn" type="button">${t("engine.submit.showResults")}</button></div></div></div></div>`;
+			return `<div class="quiz-track-item" data-slide-kind="submit"><div class="quiz-submit-wrap"><div class="quiz-submit-card">${intro}<div class="quiz-chip-row">${(mc > 0 ? missing : reviewableIndices()).map(i => `<button class="quiz-chip ${mc > 0 ? "missing" : ""}" type="button" data-jump="${i}">Q${i + 1}</button>`).join("")}</div><div class="quiz-actions"><button class="quiz-action-btn quiz-back-btn" type="button">${t("engine.submit.back")}</button><button class="quiz-action-btn success quiz-show-score-btn" type="button">${t("engine.submit.showResults")}</button></div></div></div></div>`;
 		}
-		return `<div class="quiz-track-item" data-slide-kind="submit"><div class="quiz-submit-wrap"><div class="quiz-submit-card">${mc > 0 ? `<div class="quiz-warn">${plural(mc, "engine.submit.missingAnswers.one", "engine.submit.missingAnswers.other")}</div><div class="quiz-submit-sub">${t("engine.submit.missingList")}</div>` : `<div class="quiz-submit-sub">${t("engine.submit.reviewList")}</div>`}<div class="quiz-chip-row">${(mc > 0 ? missing : ctx.quiz.map((_, i) => i)).map(i => `<button class="quiz-chip ${mc > 0 ? "missing" : ""}" type="button" data-jump="${i}">Q${i + 1}</button>`).join("")}</div><div class="quiz-actions"><button class="quiz-action-btn quiz-back-btn" type="button">${t("engine.submit.back")}</button><button class="quiz-action-btn success quiz-show-score-btn" type="button">${t("engine.submit.showScore")}</button></div></div></div></div>`;
+		return `<div class="quiz-track-item" data-slide-kind="submit"><div class="quiz-submit-wrap"><div class="quiz-submit-card">${mc > 0 ? `<div class="quiz-warn">${plural(mc, "engine.submit.missingAnswers.one", "engine.submit.missingAnswers.other")}</div><div class="quiz-submit-sub">${t("engine.submit.missingList")}</div>` : `<div class="quiz-submit-sub">${t("engine.submit.reviewList")}</div>`}<div class="quiz-chip-row">${(mc > 0 ? missing : reviewableIndices()).map(i => `<button class="quiz-chip ${mc > 0 ? "missing" : ""}" type="button" data-jump="${i}">Q${i + 1}</button>`).join("")}</div><div class="quiz-actions"><button class="quiz-action-btn quiz-back-btn" type="button">${t("engine.submit.back")}</button><button class="quiz-action-btn success quiz-show-score-btn" type="button">${t("engine.submit.showScore")}</button></div></div></div></div>`;
 	}
 
 	function saveResultsButtonHtml(): string {
@@ -440,28 +456,29 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 
 		let body = "";
 
-		if (isRead) {
-			// Aucun contrôle : ni options, ni champ, ni bouton de validation — le
-			// support (passageSection, plus bas) porte tout le contenu à lire.
-		}
-		else if (isTextOnly) {
+		// Carte "read" (Task 6c) : `body` reste `""` — aucun contrôle, ni
+		// options, ni champ, ni bouton de validation — le support
+		// (passageSection, plus bas) porte tout le contenu à lire. La cascade
+		// QCM/texte/ordering/matching/cloze ci-dessous est entièrement sautée
+		// (pas de branche `if (isRead) {}` vide : `!isRead` en tête suffit).
+		if (!isRead && isTextOnly) {
 			body = ctx.textOnly.questionCardBodyHtml(q, qi);
 		}
 		// Casts guidés par les prédicats isTxt/isOrd/isMatch (évalués en amont,
 		// iso-fonctionnels) : la branche garantit la variante, le cast la nomme.
-		else if (isCloze) {
+		else if (!isRead && isCloze) {
 			body = ctx.cloze.clozeCardHtml(q as ClozeQuestion, qi);
 		}
-		else if (isTxt) {
+		else if (!isRead && isTxt) {
 			body = ctx.terminal.textQuestionCardHtml(q as TextQuestion, qi);
 		}
-		else if (isOrd) {
+		else if (!isRead && isOrd) {
 			body = orderingCardHtml(q as OrderingQuestion, qi);
 		}
-		else if (isMatch) {
+		else if (!isRead && isMatch) {
 			body = matchingCardHtml(q as MatchingQuestion, qi);
 		}
-		else {
+		else if (!isRead) {
 			const qcm = q as QcmQuestion | MultiSelectQuestion;
 			const smap = (ctx.quizState.shuffleMap[qi] as number[]) || [];
 			const mi = isMulti ? `<div class="quiz-multi-indicator">${t("engine.qcm.multiHint")}</div>` : "";
@@ -493,7 +510,12 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		// vers la suite — même bloc nav prev/next que le rôle recall
 		// (questionActionsHtml), déjà câblé sans condition de rôle
 		// (bindQuestionTrackItem) : aucun nouveau mécanisme de navigation.
-		const textOnlyActions = (isTextOnly || isRead) ? (ctx.textOnly?.questionActionsHtml?.(qi) ?? "") : "";
+		// Pas de `?.` ici (revue, fix round 1) : `ctx.textOnly` est une des 17
+		// factories toujours assemblées par engine.ts, jamais absente en usage
+		// réel. Un `?.` aurait avalé une vraie régression (ctx.textOnly manquant)
+		// en cul-de-sac muet — body="" sans navigation, plutôt qu'un plantage
+		// bruyant qui pointerait vers l'assemblage cassé.
+		const textOnlyActions = (isTextOnly || isRead) ? ctx.textOnly.questionActionsHtml(qi) : "";
 		const sectionIdAttr = (typeof q?.id === "string" && q.id.trim().length > 0)
 			? ` id="${ctx.escapeHtmlAttr(q.id)}"`
 			: "";

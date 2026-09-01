@@ -612,7 +612,7 @@ await withSrcModule("src/engine/text-only.ts", ({ createTextOnlyHandlers }) => {
  * de `lessonRoleLabel` selon le rôle reçu — la fonction relit `role` à
  * chaque invocation, elle ne peut donc pas être une table figée à l'import.
  */
-await withSrcModule("src/engine/cards.ts", ({ createCardRenderers }) => {
+await withSrcModule(["src/engine/cards.ts", "src/engine/text-only.ts"], ({ createCardRenderers }, { createTextOnlyHandlers }) => {
 	const r = makeReporter("Boucle d'apprentissage — en-tete de carte compte en tranches");
 
 	// Question QCM simple : aucun champ ne declenche passage/indice/lecon-texte,
@@ -641,11 +641,27 @@ await withSrcModule("src/engine/cards.ts", ({ createCardRenderers }) => {
 		lessonSlices: () => Array.from({ length: sliceTotal }, (_, i) => ({ index: i + 1, questionIndexes: [] })),
 		roleOfQuestion: () => role,
 		isLessonMode: () => quizMode === "lesson" && sliceTotal > 0,
-		// Reutilise par la carte "read" pour son bouton "Continuer" (memes
-		// boutons prev/next que le role recall) : stub minimal, le contenu
-		// exact des boutons est deja couvert par les tests text-only.
-		textOnly: { questionActionsHtml: () => "<button class=\"quiz-next-btn\"></button>" }
+		// Etat minimal lu par createTextOnlyHandlers pour isExamAnswerPhase()
+		// (elle-meme lue par le VRAI questionActionsHtml, ci-dessous) : hors
+		// examen ici, donc toujours fausse.
+		isExamMode: false,
+		examStarted: false,
+		examEnded: false
 	});
+
+	/* FIX round 1 (revue) : la carte "read" reutilise questionActionsHtml pour
+	   son bouton "Continuer" — la premiere version de ce test le verifiait via
+	   un STUB local qui renvoyait un <button class="quiz-next-btn"> en dur,
+	   donc ne prouvait rien sur le vrai code (l'assertion passait meme si
+	   ctx.textOnly etait absent en production). Le vrai createTextOnlyHandlers
+	   (text-only.ts) est charge ici a cote de cards.ts et branche sur CHAQUE
+	   ctx via ctx.textOnly = createTextOnlyHandlers(ctx), exactement comme
+	   engine.ts assemble les deux factories par reference croisee — le HTML
+	   verifie plus bas est donc celui que produirait le moteur reel. */
+	const withRealTextOnly = (ctx) => {
+		ctx.textOnly = createTextOnlyHandlers(ctx);
+		return ctx;
+	};
 
 	// Quiz ORDINAIRE (hors Lecon) : sliceOfQuestion renvoie null (comportement
 	// de lesson.ts hors mode ou sans slice valide) -> AUCUN bloc de progression.
@@ -674,7 +690,7 @@ await withSrcModule("src/engine/cards.ts", ({ createCardRenderers }) => {
 	// Task 6b : le quatrieme role se traduit lui aussi sur sa propre cle, et
 	// dit qu'on LIT (pas qu'on repond) — sinon il retomberait sur le defaut
 	// "Check" de lessonRoleLabel, qui mentirait sur une carte sans reponse.
-	const read = createCardRenderers(makeCtx({ quizMode: "lesson", slice: 1, sliceTotal: 3, role: "read" })).questionCardHtml(0);
+	const read = createCardRenderers(withRealTextOnly(makeCtx({ quizMode: "lesson", slice: 1, sliceTotal: 3, role: "read" }))).questionCardHtml(0);
 	r.check("role 'read' -> 'Reading' (pas le defaut 'Check')", read.includes("Reading"), true);
 	r.check("role 'read' n'affiche jamais 'Check'", read.includes("Check"), false);
 
@@ -686,12 +702,73 @@ await withSrcModule("src/engine/cards.ts", ({ createCardRenderers }) => {
 	   controle de reponse dans le HTML d'une carte "read". */
 	r.check("role 'read' : aucune option QCM rendue", read.includes("quiz-option"), false);
 	r.check("role 'read' : aucun bouton d'indice", read.includes("quiz-hint-btn"), false);
-	r.check("role 'read' : aucune section d'auto-evaluation texte libre", read.includes("quiz-textonly"), false);
-	r.check("role 'read' : le bouton de continuation (nav prev/next reutilisee) est present", read.includes("quiz-next-btn"), true);
+	// "quiz-textonly-nav-actions" est le SEUL fragment "quiz-textonly*" legitime
+	// sur une carte "read" (classe du wrapper nav, partagee avec questionActionsHtml
+	// reutilise pour "Continuer") : la reponse libre et l'auto-evaluation ont
+	// chacune leur propre classe, verifiees ici nommement plutot que par un
+	// substring "quiz-textonly" trop large qui aurait aussi matche la nav.
+	r.check("role 'read' : aucun champ de reponse libre", read.includes("quiz-textonly-textarea"), false);
+	r.check("role 'read' : aucun bouton de check de reponse libre", read.includes("quiz-textonly-check-btn"), false);
+	r.check("role 'read' : aucun bouton d'auto-evaluation", read.includes("quiz-textonly-rating-btn"), false);
+	// Vrai rendu (plus un mannequin) : question unique (qi=0 est aussi la
+	// derniere), donc le VRAI questionActionsHtml produit un quiz-results-btn,
+	// pas un quiz-next-btn — ce cas etait auparavant invisible au stub.
+	r.check("role 'read' : question unique -> le vrai rendu produit quiz-results-btn (derniere carte)", read.includes("quiz-results-btn"), true);
+	r.check("role 'read' : pas de quiz-next-btn quand c'est la derniere carte", read.includes("quiz-next-btn"), false);
+
+	// Meme verification avec une tranche a DEUX questions, pour eprouver le
+	// vrai quiz-next-btn (carte "read" qui n'est PAS la derniere du quiz).
+	const twoQ = [q, q];
+	const readNotLast = createCardRenderers(withRealTextOnly({
+		quiz: twoQ,
+		quizMode: "lesson",
+		quizState: { current: 0, locked: false, selections: [null, null], shuffleMap: [[0, 1], [0, 1]] },
+		isTextQuestion: () => false,
+		isClozeQuestion: () => false,
+		isOrderingQuestion: () => false,
+		isMatchingQuestion: () => false,
+		sanitize: {
+			renderInlineText: (s) => s,
+			resourceButtonHtml: () => "",
+			renderTextWithEmbeds: (s) => s,
+			renderRawHtmlWithEmbeds: (s) => s
+		},
+		passage: { passageHtml: () => "" },
+		sliceOfQuestion: () => 1,
+		lessonSlices: () => [{ index: 1, questionIndexes: [0, 1] }],
+		roleOfQuestion: () => "read",
+		isLessonMode: () => true,
+		isExamMode: false,
+		examStarted: false,
+		examEnded: false
+	})).questionCardHtml(0);
+	r.check("role 'read', pas la derniere carte du quiz : le vrai rendu produit bien quiz-next-btn",
+		readNotLast.includes("quiz-next-btn"), true);
 
 	// Contre-cas : le role 'test' (meme question QCM) affiche bien ses options
 	// -> prouve que l'absence ci-dessus vient de la branche 'read', pas du stub.
 	r.check("role 'test' (temoin) : les options QCM restent rendues", test.includes("quiz-option"), true);
+
+	/* Revue round 1, FINDING 1 (rapport task 6c) : `getMissingIndices()` exclut
+	   deja "read" (state.ts), mais l'ecran de soumission listait TOUTES les
+	   cartes (`ctx.quiz.map((_, i) => i)`) des qu'il ne restait rien a
+	   completer -> la carte de lecture y apparaissait comme une pastille "Q_"
+	   a revoir, alors qu'elle n'a jamais rien a repondre. Quiz de 2 questions,
+	   'read' + 'test', 'test' deja repondue : getMissingIndices() renvoie []
+	   -> on tombe dans la branche "rien ne manque" de submitSlideHtml, celle
+	   qui utilisait le calcul en dur. */
+	const submitCtx = {
+		quiz: [q, q],
+		getMissingIndices: () => [],
+		isLessonMode: () => true,
+		roleOfQuestion: (i) => (i === 0 ? "read" : "test"),
+		textOnly: undefined
+	};
+	const submitHtml = createCardRenderers(submitCtx).submitSlideHtml();
+	r.check("submitSlideHtml, rien ne manque : la carte 'read' n'apparait pas en pastille a revoir",
+		submitHtml.includes('data-jump="0"'), false);
+	r.check("submitSlideHtml, rien ne manque : la carte 'test' reste proposee",
+		submitHtml.includes('data-jump="1"'), true);
 
 	r.done();
 });

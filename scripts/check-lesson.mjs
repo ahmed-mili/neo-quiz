@@ -1338,3 +1338,24 @@ await withSrcModule("src/engine/interactions.ts", (interactions) => {
 
 	r.done();
 });
+
+/**
+ * Task 8 du lot mode leçon : une note Quiz qui pointe vers une note Lesson
+ * via `source` ne rejoue que les questions de rôle "test" (ou sans rôle).
+ * `selectQuizQuestions` est la fonction PURE de filtrage — testable sans
+ * l'app Obsidian, cf. brief task-8-brief.md Step 1.
+ */
+await withSrcModule("src/quiz-source-ref.ts", ({ selectQuizQuestions }) => {
+	const r = makeReporter("Note Quiz vers Lesson (source) — sélection pure");
+
+	const source = [
+		{ slice: 1, role: "pre", prompt: "A", type: "text", answer: "x" },
+		{ slice: 1, role: "recall", prompt: "B", type: "text", answer: "y" },
+		{ slice: 1, role: "test", prompt: "C", options: ["1", "2"], correctIndex: 0 },
+		{ prompt: "D", options: ["1", "2"], correctIndex: 0 }
+	];
+	r.check("seules les questions 'test' ou sans role sont reprises",
+		selectQuizQuestions(source).map(q => q.prompt), ["C", "D"]);
+
+	r.done();
+});

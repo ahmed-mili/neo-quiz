@@ -144,4 +144,8 @@ export const EN_PLUGIN = {
 	"plugin.notice.openError": "Could not open the quiz",
 	"plugin.block.error": "⚠️ Unable to load the quiz: {error}",
 	"plugin.block.unknownError": "unknown error",
+	/* ── Résolution d'une note Quiz vers sa note Lesson (source) ── */
+	"plugin.sourceRef.notFound": "Quiz source not found: {link}",
+	"plugin.sourceRef.noBlock": "No quiz-blocks block in {link}",
+	"plugin.sourceRef.chained": "{link} points to another note — chained references are not supported",
 } as const;

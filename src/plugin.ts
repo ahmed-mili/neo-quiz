@@ -18,7 +18,8 @@ import type {
 
 import { parseQuizSource, renderInteractiveQuiz } from "./engine";
 import { QuizBuilderView, VIEW_TYPE } from "./editor";
-import { QUIZ_BLOCK_RE } from "./quiz-utils";
+import { QUIZ_BLOCK_RE, findQuizModeConfigIndex } from "./quiz-utils";
+import { resolveQuizSourceRef } from "./quiz-source-ref";
 import { QuizDashboardView, VIEW_TYPE_DASHBOARD } from "./dashboard";
 import { createScanner } from "./dashboard/scanner";
 import type { Scanner } from "./dashboard/scanner";
@@ -1099,11 +1100,40 @@ export default class InteractiveQuizPlugin extends Plugin {
 				try {
 					const quiz = parseQuizSource(source);
 
+					/* Note Quiz qui pointe vers une note Lesson (task 8, lot mode
+					   leçon) : `source` est lu sur l'objet de configuration AVANT le
+					   rendu, jamais par le moteur lui-même — un bloc sans `source`
+					   (l'immense majorité) ne passe jamais par ce chemin et se
+					   comporte exactement comme avant. */
+					const configIdx = findQuizModeConfigIndex(quiz);
+					const config = configIdx >= 0 ? quiz[configIdx] as { source?: unknown } : undefined;
+					const sourceRef = typeof config?.source === "string" ? config.source.trim() : "";
+
+					let quizToRender = quiz;
+					if (sourceRef) {
+						const resolved = await resolveQuizSourceRef(this.app, sourceRef, mdCtx.sourcePath);
+						if ("error" in resolved) {
+							const key = resolved.error === "not-found" ? "plugin.sourceRef.notFound"
+								: resolved.error === "no-block" ? "plugin.sourceRef.noBlock"
+									: "plugin.sourceRef.chained";
+							const message = t(key, { link: resolved.link });
+							new Notice(message);
+							host.empty();
+							host.createEl("p", { text: message });
+							return;
+						}
+						/* On conserve l'objet de configuration d'origine (mode, options
+						   d'examen…) : seules les QUESTIONS viennent de la note Lesson. */
+						quizToRender = configIdx >= 0
+							? [...resolved.questions, quiz[configIdx]]
+							: resolved.questions;
+					}
+
 					await renderInteractiveQuiz({
 						app: this.app,
 						plugin: this,
 						container: host,
-						quiz,
+						quiz: quizToRender,
 						sourcePath: mdCtx.sourcePath,
 						Notice: Notice
 					});

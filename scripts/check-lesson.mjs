@@ -546,6 +546,50 @@ await withSrcModule("src/engine/text-only.ts", ({ createTextOnlyHandlers }) => {
 });
 
 /**
+ * FINDING 3 (round 1 de revue task 6b, 2026-09-01) : `computeResults`
+ * (src/engine/text-only.ts) itere sur TOUT `ctx.quiz.length` — une carte
+ * "read" (jamais notee, elle n'a rien a evaluer) y apparaissait donc en
+ * "pending", comme une auto-evaluation en attente. Corrige par exclusion
+ * explicite (meme garde `isLessonMode() && roleOfQuestion(i) === "read"`
+ * que partout ailleurs dans ce lot), plutot que de compter sur le fait que
+ * la portee de ce chemin soit reduite par `isTextOnlyForAll`.
+ */
+await withSrcModule("src/engine/text-only.ts", ({ createTextOnlyHandlers }) => {
+	const r = makeReporter("Boucle d'apprentissage — computeResults exclut 'read', comme une auto-evaluation qui n'a rien a evaluer");
+
+	// ctx factice : une carte "read" (jamais notee) a cote d'une carte "recall"
+	// deja evaluee "understood" — seuls les champs lus par computeResults et
+	// normalizeRating sont fournis.
+	const roles = ["read", "recall"];
+	const ctx = {
+		quiz: roles.map(() => ({})),
+		quizState: { practiceMode: "qcm", textOnlyRatings: { 1: "understood" } },
+		isLessonMode: () => true,
+		roleOfQuestion: (i) => roles[i]
+	};
+	const results = createTextOnlyHandlers(ctx).computeResults();
+
+	r.check("la carte 'read' n'entre pas dans 'total' (1, pas 2)", results.total, 1);
+	r.check("la carte 'read' n'est jamais comptee 'pending' : la seule carte restante est deja notee",
+		results.pending, 0);
+	r.check("la carte 'recall' notee reste bien comptee 'understood'", results.understood, 1);
+
+	// Non-regression explicite hors mode Lecon : un quiz ordinaire (mode texte
+	// historique) ne doit rien perdre a ce filtre.
+	const rolesHorsLecon = ["test", "test"];
+	const ctxHorsLecon = {
+		quiz: rolesHorsLecon.map(() => ({})),
+		quizState: { practiceMode: "text", textOnlyRatings: {} },
+		isLessonMode: () => false,
+		roleOfQuestion: () => "test"
+	};
+	r.check("hors mode Lecon, aucune carte n'est exclue : total reste ctx.quiz.length",
+		createTextOnlyHandlers(ctxHorsLecon).computeResults().total, 2);
+
+	r.done();
+});
+
+/**
  * Task 6 du lot mode leçon (2026-08-31) : en mode Leçon, l'en-tête de carte
  * compte en TRANCHES ("Tranche X sur Y" + le rôle de la question en
  * sous-titre), jamais en questions — src/engine/cards.ts, fonctions
@@ -698,6 +742,149 @@ await withSrcModule("src/engine/state.ts", ({ createStateHandlers }) => {
 	const horsLecon = createStateHandlers(ctxHorsLecon);
 	r.check("hors mode Lecon, 'read' non repondue est INCOMPLETE comme n'importe quelle question sans role",
 		horsLecon.isComplete(0), false);
+
+	/* FINDING 4 (round 1 de revue task 6b, 2026-09-01) : un quiz VRAIMENT vide
+	   (0 carte, aucun rapport avec "read") doit garder EXACTEMENT son
+	   comportement d'avant cette tache (NaN, 0/0) — seule une tranche qui
+	   EXISTE mais est entierement "read" a droit au repli a 100 (cas
+	   precedent). Une regression ici ferait deborder ce repli sur un quiz
+	   ordinaire vide, qui n'a jamais porte le moindre role. */
+	const ctxVraimentVide = makeCtx([]);
+	const scoreVraimentVide = createStateHandlers(ctxVraimentVide).computeScorePercent();
+	r.check("quiz VRAIMENT vide (0 carte) : pct reste NaN, comme avant la tache 6b",
+		Number.isNaN(scoreVraimentVide.pct), true);
+	r.check("quiz VRAIMENT vide (0 carte) : total reste 0 (comportement historique, pas de read en jeu)",
+		scoreVraimentVide.total, 0);
+
+	r.done();
+});
+
+/**
+ * FINDING 1 (round 1 de revue task 6b, 2026-09-01) : `goToResults`
+ * (src/engine/state.ts) ecrit `questionsDone`/`totalQuestions` au tableau de
+ * bord — avant ce correctif, `questionsDone` comptait TOUTES les cartes
+ * (`isComplete` vaut toujours vrai pour "read") tandis que `totalQuestions`
+ * recevait le `total` de `computeScorePercent`, qui les EXCLUT deja : une
+ * tranche read+test ecrivait "2/1", une progression superieure a 100% dans
+ * le tableau de bord. Ce cas cable le VRAI `goToResults` sur un ctx factice
+ * minimal (seuls les champs qu'il lit ou appelle reellement) et capture
+ * l'appel a `updateRecord` pour verifier que les deux compteurs portent sur
+ * le MEME ensemble.
+ */
+await withSrcModule("src/engine/state.ts", ({ createStateHandlers }) => {
+	const r = makeReporter("Boucle d'apprentissage — goToResults : questionsDone et totalQuestions comptent le meme ensemble");
+
+	let recorded = null;
+	const ctx = {
+		quiz: [
+			{ role: "read", correctIndex: 0 },
+			{ role: "test", correctIndex: 0 }
+		],
+		quizState: {
+			current: 0,
+			selections: [null, 0], // "read" jamais repondue ; "test" repondue juste
+			resultsCounted: false,
+			pendingResultsLock: false,
+			isSliding: false,
+			slideToken: 0
+		},
+		isQuestionSlideIndex: () => false,
+		slideMap: [],
+		isExamMode: false,
+		examStarted: false,
+		examEnded: false,
+		stopExamTimer() {},
+		updateExamTimerDisplay() {},
+		textOnly: { isTextOnlyMode: () => false, isTextOnlyForAny: () => false },
+		plugin: { _statsStore: { updateRecord: (path, update) => { recorded = update; } } },
+		sourcePath: "note.md",
+		isLessonMode: () => true,
+		roleOfQuestion: (i) => ctx.quiz[i].role,
+		isTextQuestion: () => false,
+		isClozeQuestion: () => false,
+		isOrderingQuestion: () => false,
+		isMatchingQuestion: () => false,
+		terminal: {},
+		SLIDE_RESULTS_INDEX: 99,
+		// Ce que `goToSlide` (appele en interne par `goToResults`, PAS ctx.goToSlide)
+		// lit ou appelle reellement, pour parcourir tout le vrai chemin sans DOM.
+		closeHintModal() {},
+		clampSlideIndex: (i) => i,
+		render() {},
+		setSlidingClass() {},
+		async warmSlideForAccurateHeight() {},
+		track: {
+			getSlideTranslateX: () => 0,
+			animateTrackToIndex() {},
+			cancelRunningTrackAnimation: () => ({ x: 0, height: 0 })
+		},
+		viewport: {
+			getSlideStableHeight: () => 0,
+			getTrackElements: () => ({ viewport: { getBoundingClientRect: () => ({ height: 0 }), clientHeight: 0 } })
+		},
+		// updateNavHighlight (appelee en interne, elle aussi PAS ctx.*) lit
+		// ctx.container ; querySelectorAll/querySelector renvoient un ensemble
+		// vide, ce qui evite d'avoir a fournir ctx.cards/isSubmitSlideIndex/etc.
+		container: { querySelectorAll: () => [], querySelector: () => null }
+	};
+
+	createStateHandlers(ctx).goToResults();
+
+	r.check("questionsDone et totalQuestions portent sur le meme ensemble (1 carte notable, pas 2)",
+		recorded && recorded.questionsDone === recorded.totalQuestions, true);
+	r.check("la carte 'read' n'est comptee ni dans questionsDone ni dans totalQuestions",
+		recorded, { bestScore: 100, questionsDone: 1, totalQuestions: 1 });
+
+	r.done();
+});
+
+/**
+ * FINDING 2 (round 1 de revue task 6b, 2026-09-01) : `buildSummary`
+ * (src/engine/results-save.ts) ecrit `answered` via `hasAnyAnswer`, qui
+ * n'excluait pas les cartes "read" — alors que `total` du MEME payload
+ * (`computeScorePercent`, fondu dans `...score`) les exclut deja. Le
+ * fichier de resultats (artefact de donnees versionne, lu par de
+ * l'outillage externe) se contredisait donc lui-meme. Ce cas cable le VRAI
+ * `createResultsSaver` sur un ctx factice minimal et appelle `buildPayload()`
+ * (methode publique de `ResultsSaverHandlers`), exactement comme le fait
+ * `saveCurrentResults` en vrai, pour verifier `summary.answered` et
+ * `summary.total` sur le payload REEL, pas une reimplementation.
+ */
+await withSrcModule("src/engine/results-save.ts", ({ createResultsSaver }) => {
+	const r = makeReporter("Boucle d'apprentissage — payload de resultats : answered et total comptent le meme ensemble");
+
+	const ctx = {
+		quiz: [
+			{ role: "read", correctIndex: 0, prompt: "Support" },
+			{ role: "test", correctIndex: 0, prompt: "Question" }
+		],
+		quizMode: "lesson",
+		quizState: { selections: [null, 0] }, // "read" jamais repondue ; "test" repondue juste
+		isExamMode: false,
+		examStarted: false,
+		examEnded: false,
+		examOptions: null,
+		examStartTime: 0,
+		examTimeRemaining: NaN,
+		sourcePath: "note.md",
+		isLessonMode: () => true,
+		roleOfQuestion: (i) => ctx.quiz[i].role,
+		isTextQuestion: () => false,
+		isClozeQuestion: () => false,
+		isOrderingQuestion: () => false,
+		isMatchingQuestion: () => false,
+		hasAnyAnswer: (i) => ctx.quizState.selections[i] !== null,
+		isCorrect: (i) => ctx.quizState.selections[i] === ctx.quiz[i].correctIndex,
+		computeScorePercent: () => ({ pct: 100, correct: 1, total: 1 }),
+		textOnly: { isTextOnlyMode: () => false },
+	};
+
+	const payload = createResultsSaver(ctx).buildPayload();
+
+	r.check("answered et total portent sur le meme ensemble (1 carte notable, pas 2)",
+		payload.summary.answered === payload.summary.total, true);
+	r.check("la carte 'read' n'est comptee ni dans answered ni dans total",
+		{ answered: payload.summary.answered, total: payload.summary.total }, { answered: 1, total: 1 });
 
 	r.done();
 });

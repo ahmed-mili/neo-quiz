@@ -155,13 +155,28 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 	}
 
 	function computeResults(): TextOnlyResults {
+		/* FIX round 1 de revue task 6b (2026-09-01) : cette fonction itere sur
+		   TOUT `ctx.quiz.length`, donc une carte "read" (jamais notee — elle
+		   n'a rien a evaluer) y apparaissait en "pending", comme si l'eleve
+		   avait une auto-evaluation en attente. La portee reelle de ce chemin
+		   est reduite (isTextOnlyForAll — le seul appelant de ce resultat via
+		   results-save.ts — devient deja faux des qu'une carte "read" existe,
+		   puisqu'isTextOnlyFor ne route jamais "read" vers l'auto-evaluation),
+		   mais rien n'empeche `computeResults` d'etre appelee directement avec
+		   des cartes "read" dans le lot (mode texte historique force sur un
+		   quiz Lecon, `practiceMode === "text"`, hors du controle de
+		   `isTextOnlyForAll`) : on l'exclut donc explicitement plutot que de
+		   compter sur l'appelant pour ne jamais l'atteindre. */
 		const counts = { understood: 0, partial: 0, review: 0, pending: 0 };
+		let total = 0;
 		for (let i = 0; i < ctx.quiz.length; i++) {
+			if (ctx.isLessonMode() && ctx.roleOfQuestion(i) === "read") continue;
+			total++;
 			const rating = normalizeRating(ctx.quizState.textOnlyRatings?.[i]);
 			if (rating) counts[rating]++;
 			else counts.pending++;
 		}
-		return { ...counts, total: ctx.quiz.length, rated: ctx.quiz.length - counts.pending };
+		return { ...counts, total, rated: total - counts.pending };
 	}
 
 	function getCorrectOptionIndices(q: QuizQuestion): number[] {

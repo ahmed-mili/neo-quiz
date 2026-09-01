@@ -356,8 +356,16 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 		}
 
 		const score = ctx.computeScorePercent();
+		/* FIX round 1 de revue task 6b (2026-09-01) : `answered` comptait TOUTES
+		   les cartes via `hasAnyAnswer` — une carte "read" (jamais "repondue",
+		   elle n'a rien a repondre) y valait toujours faux, alors que `total`
+		   du MEME payload (`score.total`, computeScorePercent) l'exclut deja.
+		   Le fichier de resultats se contredisait donc lui-meme (un artefact de
+		   donnees versionne, lu par de l'outillage externe) : on saute une carte
+		   "read" ici aussi, pour rester sur le MEME ensemble que `total`. */
 		let answered = 0;
 		for (let i = 0; i < ctx.quiz.length; i++) {
+			if (ctx.isLessonMode() && ctx.roleOfQuestion(i) === "read") continue;
 			if (ctx.hasAnyAnswer(i)) answered++;
 		}
 		return {

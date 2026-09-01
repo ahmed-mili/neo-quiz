@@ -149,7 +149,16 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 			total++;
 			if (isCorrect(i)) correct++;
 		}
-		return { pct: total > 0 ? Math.round((correct / total) * 100) : 100, correct, total };
+		/* FIX round 1 de revue task 6b (2026-09-01), FINDING 4 : un quiz VRAIMENT
+		   vide (`ctx.quiz.length === 0`, aucune carte du tout) valait `NaN` AVANT
+		   cette tâche (0/0 * 100) — ce chemin n'a rien à voir avec "read" et ne
+		   doit STRICTEMENT rien changer ("hors mode leçon, rien ne change").
+		   Le `pct: 100` n'est un choix assumé que pour une tranche qui existe
+		   mais est ENTIÈREMENT "read" (`ctx.quiz.length > 0`, `total === 0`) :
+		   distinction nécessaire pour ne pas faire déborder le cas générique
+		   sur un quiz ordinaire vide, qui n'a jamais eu de rôle "read". */
+		const pct = total > 0 ? Math.round((correct / total) * 100) : (ctx.quiz.length > 0 ? 100 : Math.round((correct / total) * 100));
+		return { pct, correct, total };
 	}
 
 	const getSubmitSlideSignature = (): string => JSON.stringify({
@@ -359,8 +368,16 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 			ctx.quizState.resultsCounted = true;
 			const modeTexte = !!ctx.textOnly?.isTextOnlyForAny?.();
 			const { pct, total } = computeScorePercent();
+			/* FIX round 1 de revue task 6b (2026-09-01) : `questionsDone` comptait
+			   TOUTES les cartes (0..ctx.quiz.length), alors que `total` ci-dessus
+			   EXCLUT deja les cartes "read" (elles n'ont pas de reponse) —
+			   une tranche read+test produisait "2/1", une progression au-dessus
+			   de 100% au tableau de bord. Les deux compteurs doivent porter sur
+			   le MEME ensemble : on saute une carte "read" ici aussi, exactement
+			   comme `computeScorePercent` le fait pour `total`. */
 			let questionsDone = 0;
 			for (let i = 0; i < ctx.quiz.length; i++) {
+				if (ctx.isLessonMode() && ctx.roleOfQuestion(i) === "read") continue;
 				if (isComplete(i)) questionsDone++;
 			}
 			statsStore.updateRecord(ctx.sourcePath, {

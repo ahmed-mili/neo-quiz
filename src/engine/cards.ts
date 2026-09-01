@@ -500,7 +500,12 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		// (engine/state.ts isBlockedBySkippedPreQuestion) — une tentative VIDE
 		// mais EXPLICITE. Gardée par !ctx.quizState.locked comme hintBtn/
 		// lessonContent : un quiz déjà soumis n'a plus rien à "laisser passer".
-		const dontKnowBtn = (!isRead && !isTextOnly && ctx.isLessonMode() && ctx.roleOfQuestion(qi) === "pre" && !ctx.quizState.locked)
+		// Round 1 de revue (Finding 4) : masqué dès que lessonPreSkipped[qi] est
+		// déjà vrai — sur la DERNIÈRE question (aucune navigation suivante
+		// possible), le clic ne produisait sinon aucun effet visible ; sa
+		// disparition EST l'effet visible attendu, en plus du re-rendu qui la
+		// déclenche (interactions.ts markLessonPreSkipped).
+		const dontKnowBtn = (!isRead && !isTextOnly && ctx.isLessonMode() && ctx.roleOfQuestion(qi) === "pre" && !ctx.quizState.locked && !ctx.quizState.lessonPreSkipped[qi])
 			? `<button class="quiz-action-btn quiz-lesson-dontknow-btn" type="button">${t("engine.lesson.dontKnow")}</button>`
 			: "";
 		// Mode leçon (ex "learn") : la leçon s'affiche AVANT que la question soit

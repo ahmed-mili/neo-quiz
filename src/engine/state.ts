@@ -245,14 +245,43 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 	 * automatique après une réponse texte dans engine/terminal.ts) — un garde
 	 * dupliqué à chaque appelant aurait laissé passer le premier chemin oublié.
 	 */
+	/**
+	 * Round 1 de revue (Finding 3) : une garde qui n'examine que la slide
+	 * COURANTE se contourne par un saut direct (onglet de question, data-jump
+	 * du récapitulatif) par-dessus une "pre" restée plus loin — depuis la
+	 * question 1, cliquer l'onglet Q5 sautait une "pre" en Q3 sans jamais
+	 * l'afficher. Choix retenu : la garde SCANNE toute la plage franchie
+	 * (de la question courante à la question cible, exclusive) plutôt que de
+	 * limiter la navigation par onglets à la première "pre" — ce choix couvre
+	 * TOUS les appelants (onglets, flèches, soumission, résultats) depuis ce
+	 * seul point, sans exiger un traitement séparé du clic sur un onglet.
+	 */
+	function firstUnattemptedPreBetween(targetIndex: number): number | null {
+		if (!ctx.isLessonMode()) return null;
+		// Round 1 de revue (Finding 2) : un quiz VERROUILLÉ est en consultation,
+		// il n'y a plus rien à forcer — et le bouton « Je ne sais pas » disparaît
+		// déjà dans cet état (cards.ts). Sans cette sortie, une revue après
+		// soumission ne laissait plus que la marche arrière sur une "pre" restée
+		// sans tentative.
+		if (ctx.quizState.locked) return null;
+		if (targetIndex <= ctx.quizState.current) return null;
+		if (!ctx.isQuestionSlideIndex(ctx.quizState.current)) return null;
+		const fromQi = (ctx.slideMap[ctx.quizState.current] as { questionIndex: number }).questionIndex;
+		// Borne exclusive : la question du slide cible si c'est une question
+		// (elle a le droit d'être une "pre" qu'on arrive tout juste à tenter),
+		// sinon la fin du quiz (soumission/résultats doivent avoir franchi
+		// TOUTES les questions, "pre" comprises).
+		const toQiExclusive = ctx.isQuestionSlideIndex(targetIndex)
+			? (ctx.slideMap[targetIndex] as { questionIndex: number }).questionIndex
+			: ctx.quiz.length;
+		for (let qi = fromQi; qi < toQiExclusive; qi++) {
+			if (ctx.roleOfQuestion(qi) === "pre" && !ctx.hasAnyAnswer(qi) && !ctx.quizState.lessonPreSkipped[qi]) return qi;
+		}
+		return null;
+	}
+
 	function isBlockedBySkippedPreQuestion(targetIndex: number): boolean {
-		if (!ctx.isLessonMode()) return false;
-		if (targetIndex <= ctx.quizState.current) return false;
-		const cur = ctx.quizState.current;
-		if (!ctx.isQuestionSlideIndex(cur)) return false;
-		const qi = (ctx.slideMap[cur] as { questionIndex: number }).questionIndex;
-		if (ctx.roleOfQuestion(qi) !== "pre") return false;
-		return !ctx.hasAnyAnswer(qi) && !ctx.quizState.lessonPreSkipped[qi];
+		return firstUnattemptedPreBetween(targetIndex) !== null;
 	}
 
 	function warnSkipBlocked(): void {
@@ -359,12 +388,29 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 	};
 
 	function goToSubmit(): void {
+		// Round 1 de revue (Finding 1) : le refus doit intervenir AVANT tout
+		// effet de bord, pas seulement au `goToSlide` final - sinon
+		// `lastQuestionIndex`/`pendingResultsLock` étaient déjà mutés alors que
+		// la navigation elle-même était refusée.
+		if (isBlockedBySkippedPreQuestion(ctx.SLIDE_SUBMIT_INDEX)) { warnSkipBlocked(); return; }
 		if (ctx.isQuestionSlideIndex(ctx.quizState.current)) ctx.quizState.lastQuestionIndex = (ctx.slideMap[ctx.quizState.current] as { questionIndex: number }).questionIndex;
 		ctx.quizState.pendingResultsLock = false;
 		goToSlide(ctx.SLIDE_SUBMIT_INDEX, { forceRender: false });
 	}
 
 	function goToResults(): void {
+		/* Round 1 de revue (Finding 1 — CRITIQUE) : `goToResults` écrivait ses
+		   effets de bord (resultsCounted, statsStore.updateRecord, examEnded,
+		   pendingResultsLock) AVANT le `goToSlide` final, que la garde peut
+		   refuser — un clic sur l'onglet Résultats depuis une "pre" non tentée
+		   enregistrait alors une tentative ET un score au tableau de bord SANS
+		   naviguer, et le comptage légitime ultérieur était perdu
+		   (`resultsCounted` déjà vrai). Le refus doit donc intervenir ICI, avant
+		   toute mutation — `isBlockedBySkippedPreQuestion` lit `ctx.quizState.locked`
+		   (Finding 2) : un examen qui vient de se verrouiller lui-même
+		   (`handleExamTimeUp`, engine/exam.ts) n'a donc plus rien de bloqué à ce
+		   stade et atteint bien ses résultats. */
+		if (isBlockedBySkippedPreQuestion(ctx.SLIDE_RESULTS_INDEX)) { warnSkipBlocked(); return; }
 		if (ctx.isQuestionSlideIndex(ctx.quizState.current)) ctx.quizState.lastQuestionIndex = (ctx.slideMap[ctx.quizState.current] as { questionIndex: number }).questionIndex;
 		ctx.quizState.pendingResultsLock = !ctx.textOnly?.isTextOnlyMode?.();
 

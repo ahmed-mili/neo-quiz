@@ -16,6 +16,9 @@ export interface InteractionHandlers {
 	bindMatchingQuestion(trackItem: HTMLElement, qi: number, q: MatchingQuestion): void;
 	bindStartModeControls(rootEl?: HTMLElement | null): void;
 	bindQuestionTrackItem(trackItem: HTMLElement | null): void;
+	/** Task 7 (mode Lesson) : extrait du binding DOM (round 1 de revue, Finding 5)
+	 * pour rester testable sans document (scripts/check-lesson.mjs). */
+	markLessonPreSkipped(qi: number): void;
 	bindSubmitSlideControls(rootEl: Element | null): void;
 	bindResultsSlideControls(rootEl: Element | null): void;
 	bindExamStartButton(): void;
@@ -38,6 +41,24 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		if (slideIdx >= 0) ctx.__quizSlideHeightCache?.delete(slideIdx);
 		ctx.refreshQuestionSlide(qi, { syncHeight });
 		ctx.refreshMetaSlides();
+	}
+
+	/**
+	 * Task 7 (mode Lesson) : « Je ne sais pas » verrouille la pré-question avec
+	 * une tentative VIDE mais EXPLICITE (lessonPreSkipped), comme une validation
+	 * ordinaire verrouillerait une réponse — re-rendu via commitQuestionInteraction
+	 * (le bouton disparaît, cards.ts) puis avance. Round 1 de revue (Finding 4) :
+	 * le re-rendu a lieu MÊME sur la dernière question, où il n'y a nulle part où
+	 * avancer — la disparition du bouton reste le seul effet visible attendu.
+	 * Extraite de bindQuestionTrackItem (Finding 5) : aucune dépendance au DOM,
+	 * donc testable directement par scripts/check-lesson.mjs.
+	 */
+	function markLessonPreSkipped(qi: number): void {
+		// invalidateSavedResults est deja appele par commitQuestionInteraction -
+		// pas de doublon ici, meme convention que bindBinaryQuestion/trySelect.
+		ctx.quizState.lessonPreSkipped[qi] = true;
+		commitQuestionInteraction(qi, { syncHeight: true });
+		if (qi < ctx.quiz.length - 1) ctx.goToQuestion(qi + 1);
 	}
 
 	function bindBinaryQuestion(trackItem: HTMLElement, qi: number, isMulti: boolean): void {
@@ -357,19 +378,21 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			});
 		}
 
-		// Task 7 (mode Lesson) : « Je ne sais pas » verrouille la pré-question
-		// avec une tentative vide (lessonPreSkipped) puis avance directement —
-		// une carte "pre" ne rend aucun bouton suivant/précédent (réservés aux
-		// cartes "read"/"recall", en réponse libre), c'est donc le seul contrôle
-		// de navigation propre à cette carte.
+		// Task 7 (mode Lesson) : « Je ne sais pas » — une carte "pre" ne rend
+		// aucun bouton suivant/précédent (réservés aux cartes "read"/"recall", en
+		// réponse libre), c'est donc le seul contrôle de navigation propre à cette
+		// carte. Logique déportée dans markLessonPreSkipped (testable sans DOM).
 		const dontKnowBtn = trackItem.querySelector(".quiz-lesson-dontknow-btn");
 		if (dontKnowBtn) {
 			dontKnowBtn.addEventListener("click", e => {
 				e.preventDefault();
+				// Ignoré EN SILENCE pendant une transition de slide : geste voulu,
+				// même garde qu'ailleurs sur ce fichier (bindBinaryQuestion, etc.) —
+				// un clic pendant l'animation retomberait sur une carte qui a déjà
+				// commencé à quitter l'écran, aucune Notice n'est nécessaire pour un
+				// double-clic accidentel sans conséquence.
 				if (ctx.quizState.isSliding) return;
-				ctx.invalidateSavedResults?.();
-				ctx.quizState.lessonPreSkipped[qi] = true;
-				if (qi < ctx.quiz.length - 1) ctx.goToQuestion(qi + 1);
+				markLessonPreSkipped(qi);
 			});
 		}
 
@@ -667,6 +690,7 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		bindMatchingQuestion,
 		bindStartModeControls,
 		bindQuestionTrackItem,
+		markLessonPreSkipped,
 		bindSubmitSlideControls,
 		bindResultsSlideControls,
 		bindExamStartButton,

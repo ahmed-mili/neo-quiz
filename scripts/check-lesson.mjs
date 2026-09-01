@@ -376,6 +376,8 @@ await withSrcModule(["src/engine/passage.ts", "src/engine/state.ts"], (passage, 
 		},
 		clearBackgroundWarmIdleHandle() {},
 		cancelEnsureTrackVisibleRaf() {},
+		// Task 7 : resetQuiz reinitialise aussi lessonPreSkipped via ctx.quiz.map.
+		quiz: [],
 		quizState: {},
 		initSelections: () => [],
 		initTextOnlyAnswers: () => [],
@@ -985,6 +987,102 @@ await withSrcModule("src/engine/results-save.ts", ({ createResultsSaver }) => {
 		payload.summary.answered === payload.summary.total, true);
 	r.check("la carte 'read' n'est comptee ni dans answered ni dans total",
 		{ answered: payload.summary.answered, total: payload.summary.total }, { answered: 1, total: 1 });
+
+	r.done();
+});
+
+/**
+ * Task 7 : la pré-question ("pre") ne peut pas être sautée sans tentative.
+ *
+ * `isBlockedBySkippedPreQuestion` (engine/state.ts) est un garde interne, non
+ * exporté, posé UNE SEULE FOIS dans `goToSlide`/`redirectSlide` — le seul point
+ * de passage commun à tous les chemins de navigation du moteur (bouton, flèches,
+ * onglets, avance auto d'une question texte). Ce cas l'éprouve via l'API
+ * publique `goToSlide` : le garde s'exécute avant tout accès à `ctx.container`/
+ * `ctx.track`/`ctx.viewport`, donc un ctx minimal suffit pour le cas BLOQUÉ ;
+ * pour le cas DÉBLOQUÉ, la mutation synchrone de `quizState.current` (avant le
+ * premier `await`) suffit à prouver que la navigation a démarré, même si le
+ * reste du pipeline d'animation (non fourni ici) rejette ensuite en silence.
+ */
+await withSrcModule("src/engine/state.ts", (state) => {
+	const r = makeReporter("Boucle d'apprentissage — la pre-question bloque la navigation avant (Task 7)");
+
+	function makeCtx({ role, hasAnyAnswer, lessonPreSkipped, current = 0 }) {
+		const notices = [];
+		return {
+			notices,
+			closeHintModal() {},
+			clampSlideIndex: (i) => i,
+			isLessonMode: () => true,
+			isQuestionSlideIndex: (i) => i === 0,
+			slideMap: [{ type: "question", questionIndex: 0 }],
+			roleOfQuestion: () => role,
+			hasAnyAnswer: () => hasAnyAnswer,
+			quizState: { current, isSliding: false, slideToken: 0, prevCurrent: 0, lastQuestionIndex: 0, lessonPreSkipped: [lessonPreSkipped] },
+			Notice: class { constructor(msg) { notices.push(msg); } },
+			// Pipeline d'animation : jamais atteint dans le cas BLOQUE ; dans le
+			// cas DEBLOQUE, la mutation de `current` a déjà eu lieu avant que ces
+			// stubs manquants ne fassent rejeter la promesse (avalée par .catch).
+			updateNavHighlight() {},
+			setSlidingClass() {},
+			warmSlideForAccurateHeight: () => Promise.resolve(),
+			track: { animateTrackToIndex() {}, getSlideTranslateX: () => 0, cancelRunningTrackAnimation: () => ({ x: 0, height: 0 }) },
+			viewport: { getSlideStableHeight: () => 0, getTrackElements: () => ({}) }
+		};
+	}
+
+	// Pré-question jamais tentée : la navigation vers l'avant est refusée, avec une Notice.
+	{
+		const ctx = makeCtx({ role: "pre", hasAnyAnswer: false, lessonPreSkipped: false, current: 0 });
+		const { goToSlide } = state.createStateHandlers(ctx);
+		goToSlide(1).catch(() => {});
+		r.check("index inchangé (bloqué)", ctx.quizState.current, 0);
+		r.check("une Notice a prévenu l'utilisateur", ctx.notices.length > 0, true);
+	}
+
+	// Une vraie réponse débloque la navigation.
+	{
+		const ctx = makeCtx({ role: "pre", hasAnyAnswer: true, lessonPreSkipped: false, current: 0 });
+		const { goToSlide } = state.createStateHandlers(ctx);
+		goToSlide(1).catch(() => {});
+		r.check("index avancé (répondu)", ctx.quizState.current, 1);
+		r.check("aucune Notice (répondu)", ctx.notices.length, 0);
+	}
+
+	// "Je ne sais pas" (lessonPreSkipped) débloque tout autant qu'une vraie réponse.
+	{
+		const ctx = makeCtx({ role: "pre", hasAnyAnswer: false, lessonPreSkipped: true, current: 0 });
+		const { goToSlide } = state.createStateHandlers(ctx);
+		goToSlide(1).catch(() => {});
+		r.check("index avancé (Je ne sais pas)", ctx.quizState.current, 1);
+	}
+
+	// Le retour en arrière n'est JAMAIS bloqué, même sur une pré-question jamais tentée.
+	{
+		const ctx = makeCtx({ role: "pre", hasAnyAnswer: false, lessonPreSkipped: false, current: 1 });
+		const { goToSlide } = state.createStateHandlers(ctx);
+		ctx.isQuestionSlideIndex = (i) => i === 1;
+		ctx.slideMap = [{ type: "question", questionIndex: 0 }, { type: "question", questionIndex: 0 }];
+		goToSlide(0).catch(() => {});
+		r.check("index reculé (retour libre)", ctx.quizState.current, 0);
+	}
+
+	// Un rôle autre que "pre" (le défaut "test") ne bloque jamais, même sans réponse.
+	{
+		const ctx = makeCtx({ role: "test", hasAnyAnswer: false, lessonPreSkipped: false, current: 0 });
+		const { goToSlide } = state.createStateHandlers(ctx);
+		goToSlide(1).catch(() => {});
+		r.check("index avancé (role 'test')", ctx.quizState.current, 1);
+	}
+
+	// Hors mode Leçon, aucun garde ne s'applique, même sur un rôle "pre" fantôme.
+	{
+		const ctx = makeCtx({ role: "pre", hasAnyAnswer: false, lessonPreSkipped: false, current: 0 });
+		ctx.isLessonMode = () => false;
+		const { goToSlide } = state.createStateHandlers(ctx);
+		goToSlide(1).catch(() => {});
+		r.check("index avancé (hors mode Leçon)", ctx.quizState.current, 1);
+	}
 
 	r.done();
 });

@@ -1,5 +1,6 @@
 import type { EngineCtx } from "../types/engine-ctx";
 import type { PracticeMode, QuizResult, StatsRecord } from "../types/quiz";
+import { t } from "../i18n";
 
 /** Sous-ensemble du store de stats (dashboard/stats-store) réellement lu ici. */
 type StatsStoreLike = { updateRecord(path: string, update: StatsRecord): unknown };
@@ -229,9 +230,39 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		});
 	}
 
+	/**
+	 * Task 7, mode Lesson : la tentative sur une pré-question ("pre") est le
+	 * mécanisme qui produit l'effet (Richland 2009) — pas la simple lecture de
+	 * la question. Bloque donc UNIQUEMENT la navigation VERS L'AVANT tant que
+	 * la pré-question affichée n'a reçu ni réponse (`hasAnyAnswer`) ni un clic
+	 * explicite sur « Je ne sais pas » (`lessonPreSkipped`). Le retour en
+	 * arrière (index <= courant) n'est jamais concerné.
+	 *
+	 * Posé ici plutôt que dans chaque bouton/flèche/onglet : `goToSlide` et
+	 * `redirectSlide` sont le SEUL point de passage commun à tous les chemins
+	 * de navigation du moteur (bouton suivant, flèches clavier, onglets de
+	 * question, `goToQuestion`/`goToSubmit`/`goToResults`, et l'avance
+	 * automatique après une réponse texte dans engine/terminal.ts) — un garde
+	 * dupliqué à chaque appelant aurait laissé passer le premier chemin oublié.
+	 */
+	function isBlockedBySkippedPreQuestion(targetIndex: number): boolean {
+		if (!ctx.isLessonMode()) return false;
+		if (targetIndex <= ctx.quizState.current) return false;
+		const cur = ctx.quizState.current;
+		if (!ctx.isQuestionSlideIndex(cur)) return false;
+		const qi = (ctx.slideMap[cur] as { questionIndex: number }).questionIndex;
+		if (ctx.roleOfQuestion(qi) !== "pre") return false;
+		return !ctx.hasAnyAnswer(qi) && !ctx.quizState.lessonPreSkipped[qi];
+	}
+
+	function warnSkipBlocked(): void {
+		if (typeof ctx.Notice === "function") new ctx.Notice(t("engine.lesson.skipBlocked"));
+	}
+
 	async function goToSlide(index: number, { forceRender = false }: { forceRender?: boolean } = {}): Promise<void> {
 		ctx.closeHintModal();
 		const next = ctx.clampSlideIndex(index);
+		if (isBlockedBySkippedPreQuestion(next)) { warnSkipBlocked(); return; }
 		if (next === ctx.quizState.current && !ctx.quizState.isSliding) return;
 		if (ctx.quizState.isSliding) return ctx.redirectSlide(next, { forceRender });
 		++ctx.quizState.slideToken;
@@ -262,6 +293,7 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 
 	async function redirectSlide(next: number, { forceRender = false }: { forceRender?: boolean } = {}): Promise<void> {
 		const targetIndex = ctx.clampSlideIndex(next);
+		if (isBlockedBySkippedPreQuestion(targetIndex)) { warnSkipBlocked(); return; }
 		if (targetIndex === ctx.quizState.current) return;
 		const snapshot = ctx.track.cancelRunningTrackAnimation();
 		++ctx.quizState.slideToken;
@@ -416,6 +448,9 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		ctx.quizState.shuffleMap = ctx.buildShuffleMap();
 		ctx.quizState.orderingPick = ctx.initOrderingPicks();
 		ctx.quizState.matchPick = ctx.initMatchPicks();
+		// Recommencer, c'est une NOUVELLE tentative : une pré-question déjà
+		// passée en « Je ne sais pas » redevient bloquante (Task 7).
+		ctx.quizState.lessonPreSkipped = ctx.quiz.map(() => false);
 		ctx.quizState.slideToken++;
 
 		if (!preserveSliding) ctx.quizState.isSliding = false;

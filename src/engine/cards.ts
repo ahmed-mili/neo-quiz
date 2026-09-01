@@ -496,6 +496,13 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		}
 
 		const hintBtn = (!isRead && !isTextOnly && q.hint && String(q.hint).trim()) ? `<button class="quiz-hint-btn" type="button">${t("engine.hint.button")}</button>` : "";
+		// Task 7 (mode Lesson) : seule échappatoire à la pré-question bloquante
+		// (engine/state.ts isBlockedBySkippedPreQuestion) — une tentative VIDE
+		// mais EXPLICITE. Gardée par !ctx.quizState.locked comme hintBtn/
+		// lessonContent : un quiz déjà soumis n'a plus rien à "laisser passer".
+		const dontKnowBtn = (!isRead && !isTextOnly && ctx.isLessonMode() && ctx.roleOfQuestion(qi) === "pre" && !ctx.quizState.locked)
+			? `<button class="quiz-action-btn quiz-lesson-dontknow-btn" type="button">${t("engine.lesson.dontKnow")}</button>`
+			: "";
 		// Mode leçon (ex "learn") : la leçon s'affiche AVANT que la question soit
 		// verrouillée, jamais après (revoir la leçon une fois corrigé n'a pas de
 		// sens). Classes CSS `quiz-learn-*` conservées telles quelles. Une carte
@@ -539,6 +546,7 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 				${body}
 				${learnSection}
 				${hintBtn}
+				${dontKnowBtn}
 				${textOnlyActions}
 				${!isRead && !isTextOnly && ctx.quizState.locked ? explanationHtml(qi) : ""}
 			</section>

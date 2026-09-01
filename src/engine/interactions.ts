@@ -357,6 +357,22 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			});
 		}
 
+		// Task 7 (mode Lesson) : « Je ne sais pas » verrouille la pré-question
+		// avec une tentative vide (lessonPreSkipped) puis avance directement —
+		// une carte "pre" ne rend aucun bouton suivant/précédent (réservés aux
+		// cartes "read"/"recall", en réponse libre), c'est donc le seul contrôle
+		// de navigation propre à cette carte.
+		const dontKnowBtn = trackItem.querySelector(".quiz-lesson-dontknow-btn");
+		if (dontKnowBtn) {
+			dontKnowBtn.addEventListener("click", e => {
+				e.preventDefault();
+				if (ctx.quizState.isSliding) return;
+				ctx.invalidateSavedResults?.();
+				ctx.quizState.lessonPreSkipped[qi] = true;
+				if (qi < ctx.quiz.length - 1) ctx.goToQuestion(qi + 1);
+			});
+		}
+
 		const prevBtn = trackItem.querySelector(".quiz-prev-btn");
 		if (prevBtn) prevBtn.addEventListener("click", () => ctx.goToQuestion(qi - 1));
 

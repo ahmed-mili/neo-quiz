@@ -339,6 +339,17 @@ export interface QuizState {
 	matchPick: Array<number | null>;
 	isSliding: boolean;
 	slideToken: number;
+	/**
+	 * Task 7, mode Lesson : une question `role: "pre"` marquée « Je ne sais pas »
+	 * (engine/interactions.ts). Distinct de `selections`/`textOnlyAnswers` — la
+	 * tentative y est explicitement VIDE, ce que ces tableaux ne peuvent pas
+	 * représenter sans y écrire une valeur sentinelle qui s'afficherait comme
+	 * une vraie réponse. Ne compte QUE pour débloquer la navigation vers
+	 * l'avant (state.ts) ; une carte ainsi marquée reste "sans réponse" pour
+	 * `hasAnyAnswer`/`isComplete`, les statistiques et l'écran de soumission —
+	 * c'est la seule concession du brief, elle ne doit pas se propager ailleurs.
+	 */
+	lessonPreSkipped: boolean[];
 }
 
 /**

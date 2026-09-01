@@ -356,6 +356,8 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		shuffleMap: buildShuffleMap(),
 		orderingPick: initOrderingPicks(),
 		matchPick: initMatchPicks(),
+		// Task 7, mode Lesson : cf. QuizState.lessonPreSkipped (src/types/quiz.ts).
+		lessonPreSkipped: quiz.map(() => false),
 		isSliding: false,
 		slideToken: 0
 	};

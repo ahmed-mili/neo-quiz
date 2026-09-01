@@ -422,9 +422,14 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 
 	function questionCardHtml(qi: number): string {
 		const q = ctx.quiz[qi];
+		// Rôle "read" (Task 6c) : étape de LECTURE du support, sans rien à
+		// répondre. `isLessonMode()` garde cette branche fermée sur les quiz
+		// ordinaires (roleOfQuestion lit `q.role` sans condition de mode, donc
+		// resterait exploitable même hors Leçon si un champ `role` traînait).
+		const isRead = ctx.isLessonMode() && ctx.roleOfQuestion(qi) === "read";
 		// Décision PAR QUESTION : une tranche de Leçon mélange des rôles ("test"
 		// en QCM à côté de "recall" en réponse libre) — jamais un bascule globale.
-		const isTextOnly = ctx.textOnly?.isTextOnlyFor?.(qi);
+		const isTextOnly = !isRead && ctx.textOnly?.isTextOnlyFor?.(qi);
 		const isTxt = ctx.isTextQuestion(q);
 		const isCloze = ctx.isClozeQuestion(q);
 		const isOrd = ctx.isOrderingQuestion(q);
@@ -435,7 +440,11 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 
 		let body = "";
 
-		if (isTextOnly) {
+		if (isRead) {
+			// Aucun contrôle : ni options, ni champ, ni bouton de validation — le
+			// support (passageSection, plus bas) porte tout le contenu à lire.
+		}
+		else if (isTextOnly) {
 			body = ctx.textOnly.questionCardBodyHtml(q, qi);
 		}
 		// Casts guidés par les prédicats isTxt/isOrd/isMatch (évalués en amont,
@@ -469,17 +478,22 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			body = mi + `<div class="quiz-options-wrap${hasImg ? " quiz-options-image-grid" : ""}">${optionsHtml}</div>`;
 		}
 
-		const hintBtn = (!isTextOnly && q.hint && String(q.hint).trim()) ? `<button class="quiz-hint-btn" type="button">${t("engine.hint.button")}</button>` : "";
+		const hintBtn = (!isRead && !isTextOnly && q.hint && String(q.hint).trim()) ? `<button class="quiz-hint-btn" type="button">${t("engine.hint.button")}</button>` : "";
 		// Mode leçon (ex "learn") : la leçon s'affiche AVANT que la question soit
 		// verrouillée, jamais après (revoir la leçon une fois corrigé n'a pas de
-		// sens). Classes CSS `quiz-learn-*` conservées telles quelles.
-		const lessonContent = (!isTextOnly && ctx.quizMode === "lesson" && !ctx.quizState.locked)
+		// sens). Classes CSS `quiz-learn-*` conservées telles quelles. Une carte
+		// "read" n'a rien à corriger : ce bloc n'a pas de sens dessus non plus.
+		const lessonContent = (!isRead && !isTextOnly && ctx.quizMode === "lesson" && !ctx.quizState.locked)
 			? renderLessonHtml(q, ctx.sanitize)
 			: "";
 		const learnSection = lessonContent
 			? `<div class="quiz-learn-section"><div class="quiz-learn-label">${t("engine.lesson.label")}</div><div class="quiz-learn-content">${lessonContent}</div></div>`
 			: "";
-		const textOnlyActions = isTextOnly ? ctx.textOnly.questionActionsHtml(qi) : "";
+		// "Continuer" : la carte "read" n'a rien à valider, seulement à quitter
+		// vers la suite — même bloc nav prev/next que le rôle recall
+		// (questionActionsHtml), déjà câblé sans condition de rôle
+		// (bindQuestionTrackItem) : aucun nouveau mécanisme de navigation.
+		const textOnlyActions = (isTextOnly || isRead) ? (ctx.textOnly?.questionActionsHtml?.(qi) ?? "") : "";
 		const sectionIdAttr = (typeof q?.id === "string" && q.id.trim().length > 0)
 			? ` id="${ctx.escapeHtmlAttr(q.id)}"`
 			: "";
@@ -504,7 +518,7 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 				${learnSection}
 				${hintBtn}
 				${textOnlyActions}
-				${!isTextOnly && ctx.quizState.locked ? explanationHtml(qi) : ""}
+				${!isRead && !isTextOnly && ctx.quizState.locked ? explanationHtml(qi) : ""}
 			</section>
 		</div>`;
 	}

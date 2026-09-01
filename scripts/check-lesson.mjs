@@ -633,10 +633,18 @@ await withSrcModule("src/engine/cards.ts", ({ createCardRenderers }) => {
 			renderRawHtmlWithEmbeds: (s) => s
 		},
 		passage: { passageHtml: () => "" },
-		// Les trois accessors de lesson.ts, exactement ceux que lessonProgressHtml lit.
+		// Les trois accessors de lesson.ts, exactement ceux que lessonProgressHtml lit,
+		// plus isLessonMode (Task 6c) : questionCardHtml le lit desormais pour
+		// decider de la branche "read" (meme garde que partout ailleurs dans le
+		// moteur, isLessonMode() && roleOfQuestion(qi) === "read").
 		sliceOfQuestion: () => slice,
 		lessonSlices: () => Array.from({ length: sliceTotal }, (_, i) => ({ index: i + 1, questionIndexes: [] })),
-		roleOfQuestion: () => role
+		roleOfQuestion: () => role,
+		isLessonMode: () => quizMode === "lesson" && sliceTotal > 0,
+		// Reutilise par la carte "read" pour son bouton "Continuer" (memes
+		// boutons prev/next que le role recall) : stub minimal, le contenu
+		// exact des boutons est deja couvert par les tests text-only.
+		textOnly: { questionActionsHtml: () => "<button class=\"quiz-next-btn\"></button>" }
 	});
 
 	// Quiz ORDINAIRE (hors Lecon) : sliceOfQuestion renvoie null (comportement
@@ -669,6 +677,21 @@ await withSrcModule("src/engine/cards.ts", ({ createCardRenderers }) => {
 	const read = createCardRenderers(makeCtx({ quizMode: "lesson", slice: 1, sliceTotal: 3, role: "read" })).questionCardHtml(0);
 	r.check("role 'read' -> 'Reading' (pas le defaut 'Check')", read.includes("Reading"), true);
 	r.check("role 'read' n'affiche jamais 'Check'", read.includes("Check"), false);
+
+	/* Task 6c : la carte "read" n'a RIEN a repondre. Le harnais utilise une
+	   question QCM (q, ci-dessus) pour composer chaque cas -> sans la branche
+	   ajoutee dans cards.ts, cette meme question rendrait "quiz-option" et
+	   "quiz-options-wrap" comme le cas 'test' juste au-dessus. Ces quatre
+	   assertions sont le "cas qui prouve" demande par le brief : aucun
+	   controle de reponse dans le HTML d'une carte "read". */
+	r.check("role 'read' : aucune option QCM rendue", read.includes("quiz-option"), false);
+	r.check("role 'read' : aucun bouton d'indice", read.includes("quiz-hint-btn"), false);
+	r.check("role 'read' : aucune section d'auto-evaluation texte libre", read.includes("quiz-textonly"), false);
+	r.check("role 'read' : le bouton de continuation (nav prev/next reutilisee) est present", read.includes("quiz-next-btn"), true);
+
+	// Contre-cas : le role 'test' (meme question QCM) affiche bien ses options
+	// -> prouve que l'absence ci-dessus vient de la branche 'read', pas du stub.
+	r.check("role 'test' (temoin) : les options QCM restent rendues", test.includes("quiz-option"), true);
 
 	r.done();
 });

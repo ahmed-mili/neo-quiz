@@ -321,10 +321,19 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		const isMatch = ctx.isMatchingQuestion(q);
 		const isMulti = !!(q as { multiSelect?: boolean }).multiSelect;
 
+		// Carte de rôle "read" (Task 6c) : aucun contrôle de réponse n'est
+		// rendu (cards.ts), donc rien à binder ici — les querySelector des
+		// binders type par type retomberaient tous sur `null`. Le seul
+		// contrôle réel de cette carte est la nav prev/next, câblée plus bas
+		// sans condition de rôle.
+		const isReadCard = ctx.isLessonMode() && ctx.roleOfQuestion(qi) === "read";
+
 		// Décision PAR QUESTION (isTextOnlyFor) : le binder attaché à CETTE
 		// carte suit son propre rôle, pas un mode global — une tranche de Leçon
 		// mélange "test" (binders QCM/texte habituels) et "recall" (auto-évaluation).
-		if (ctx.textOnly?.isTextOnlyFor?.(qi)) {
+		if (isReadCard) {
+			// rien à binder : pas d'options, pas de champ, pas de bouton de validation.
+		} else if (ctx.textOnly?.isTextOnlyFor?.(qi)) {
 			ctx.textOnly.bindTextOnlyQuestion(trackItem, qi);
 		} else {
 			// isTxt/isOrd/isMatch garantissent la variante ⇒ casts documentés.

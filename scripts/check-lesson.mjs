@@ -1467,23 +1467,61 @@ await withSrcModule("src/quiz-utils.ts", ({ findQuizModeConfigIndex }) => {
 });
 
 /**
- * Commande "Créer la note quiz depuis cette leçon" (task 9, 2026-08-31) :
- * les deux fonctions PURES qui décident du nom créé, du contenu écrit, et de
- * la visibilité de la commande. La partie branchée (lecture de l'éditeur
- * actif, écriture/ouverture du fichier) n'est pas testable sans Obsidian et
- * reste dans plugin.ts, réduite au minimum (règle du brief).
+ * Commande "Créer la note quiz depuis cette leçon" (task 9, 2026-08-31).
+ * Fonctions PURES qui décident du nom créé, du contenu écrit, et de la
+ * visibilité de la commande. La partie branchée (lecture de l'éditeur actif,
+ * écriture/ouverture du fichier, résolution du chemin racine du vault via
+ * `TFolder.isRoot()`) n'est pas testable sans Obsidian et reste dans
+ * plugin.ts, réduite au minimum (règle du brief).
  */
 await withSrcModule("src/quiz-from-lesson.ts", ({ deriveQuizNoteName, buildQuizRefBlockContent, isLessonNoteContent }) => {
 	const r = makeReporter("Créer la note quiz depuis la leçon");
 
-	r.check("suffixe '— Lesson' remplacé par '— Quiz'",
+	r.check("suffixe '— Lesson' (cadratin) remplacé par '— Quiz'",
 		deriveQuizNoteName("Chapitre 1 — Lesson"), "Chapitre 1 — Quiz");
+	// FIX round 1 de revue, finding 5 : tiret SIMPLE aussi reconnu.
+	r.check("suffixe '- Lesson' (tiret simple) remplacé par '— Quiz'",
+		deriveQuizNoteName("Chapitre 1 - Lesson"), "Chapitre 1 — Quiz");
 	r.check("nom sans suffixe reconnu : '— Quiz' simplement ajouté",
 		deriveQuizNoteName("Chapitre 1"), "Chapitre 1 — Quiz");
 
-	r.check("contenu du bloc de référence généré",
+	r.check("contenu du bloc de référence généré (nom sage)",
 		buildQuizRefBlockContent("Chapitre 1 — Lesson"),
 		"```quiz-blocks\n[{ mode: \"quiz\", source: \"[[Chapitre 1 — Lesson]]\" }]\n```\n");
+
+	/* FIX round 1 de revue, finding 1 (Critical) : noms HOSTILES — la revue
+	   reprochait à la version précédente d'écrire un JSON5 invalide (silence,
+	   note illisible à l'ouverture) ou un lien cassé. Chaque cas ci-dessous
+	   PARSE réellement le bloc généré avec JSON5 (comme `parseQuizSource` le
+	   ferait) et vérifie que le `source` qui en ressort, une fois passé par
+	   `toLinkpath`, redonne EXACTEMENT le nom de départ — la seule preuve
+	   qui vaille, pas une relecture de la grammaire. */
+	const nomsHostiles = [
+		"Chapitre [1]",                 // crochets : cassent un wikilink lu par une regex non ancrée
+		"Cours \"spécial\"",             // guillemet double : illégal sur Windows, légal ailleurs
+		"Dossier\Note",                // contre-oblique : idem
+		"Chapitre 1 — Lesson",          // cas sage, doit rester correct après le fix
+	];
+	for (const nom of nomsHostiles) {
+		const bloc = buildQuizRefBlockContent(nom);
+		const match = bloc.match(/```quiz-blocks\n([\s\S]*?)\n```/);
+		let parsed;
+		let erreurParse = null;
+		try {
+			parsed = JSON5.parse(match[1]);
+		} catch (err) {
+			erreurParse = err.message;
+		}
+		r.check(`nom hostile ${JSON.stringify(nom)} -> JSON5 valide`, erreurParse, null);
+		if (!erreurParse) {
+			const source = parsed[0].source;
+			// toLinkpath (quiz-source-ref.ts) ne retire que les 2 premiers et 2
+			// derniers caractères de la chaîne complète (regex ancrées) : le nom
+			// interne doit ressortir intact quels que soient ses crochets.
+			const linkpath = source.replace(/^!/, "").replace(/^\[\[/, "").replace(/\]\]$/, "");
+			r.check(`nom hostile ${JSON.stringify(nom)} -> lien résolu vers le nom exact`, linkpath, nom);
+		}
+	}
 
 	r.check("note en mode lesson -> commande visible",
 		isLessonNoteContent("```quiz-blocks\n[{ mode: 'lesson' }]\n```"), true);
@@ -1493,6 +1531,19 @@ await withSrcModule("src/quiz-from-lesson.ts", ({ deriveQuizNoteName, buildQuizR
 		isLessonNoteContent("# Une note ordinaire, sans bloc."), false);
 	r.check("bloc JSON5 invalide -> commande masquée, pas d'exception",
 		isLessonNoteContent("```quiz-blocks\n[{ mode: 'lesson\n```"), false);
+
+	/* FIX round 1 de revue, finding 4 : la mémoïsation (longueur + préfixe de
+	   200 caractères) ne doit jamais figer un résultat périmé pour un contenu
+	   RÉELLEMENT différent — y compris deux contenus qui partagent leurs 200
+	   premiers caractères mais divergent après (le bloc quiz-blocks plus loin
+	   dans la note). */
+	const prefixeCommun = "# ".padEnd(210, "x") + "\n";
+	r.check("mémoïsation : deux contenus au même préfixe mais mode différent (lesson) sont distingués",
+		isLessonNoteContent(prefixeCommun + "```quiz-blocks\n[{ mode: 'lesson' }]\n```"), true);
+	r.check("mémoïsation : deux contenus au même préfixe mais mode différent (quiz) sont distingués",
+		isLessonNoteContent(prefixeCommun + "```quiz-blocks\n[{ mode: 'quiz' }]\n```"), false);
+	r.check("mémoïsation : ré-appel sur le même contenu redonne le même résultat (cache exercé)",
+		isLessonNoteContent(prefixeCommun + "```quiz-blocks\n[{ mode: 'quiz' }]\n```"), false);
 
 	r.done();
 });

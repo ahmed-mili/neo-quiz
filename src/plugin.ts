@@ -1373,14 +1373,23 @@ export default class InteractiveQuizPlugin extends Plugin {
 					const lessonFile = activeView.file;
 					if (!lessonFile) return;
 					const quizName = deriveQuizNoteName(lessonFile.basename);
-					const quizPath = lessonFile.parent
-						? `${lessonFile.parent.path}/${quizName}.md`
-						: `${quizName}.md`;
+					/* FIX round 1 de revue (finding 2, Critical) : `TFolder.path` de
+					   la racine du vault vaut "/", pas "" — `lessonFile.parent ? … :
+					   …` protégeait un cas qui ne se produit jamais (parent toujours
+					   défini, y compris à la racine) et ratait celui qui se produit
+					   vraiment : une leçon À LA RACINE produisait `//Nom — Quiz.md`.
+					   `isRoot()` est le test correct. */
+					const parentPrefix = lessonFile.parent && !lessonFile.parent.isRoot()
+						? `${lessonFile.parent.path}/`
+						: "";
+					const quizPath = `${parentPrefix}${quizName}.md`;
 
-					// Ne JAMAIS écraser une note quiz déjà présente : on l'ouvre.
+					// Ne JAMAIS écraser une note existante : on l'ouvre, quiz ou non
+					// (finding 3 : le silence laisserait croire à une création).
 					const existing = this.app.vault.getAbstractFileByPath(quizPath);
 					if (existing instanceof TFile) {
 						await this.app.workspace.getLeaf("tab").openFile(existing);
+						new Notice(t("plugin.notice.quizNoteAlreadyExists", { name: existing.name }));
 						return;
 					}
 

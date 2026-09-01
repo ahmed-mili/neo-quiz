@@ -1359,3 +1359,83 @@ await withSrcModule("src/quiz-source-ref.ts", ({ selectQuizQuestions }) => {
 
 	r.done();
 });
+
+/**
+ * Fix round 1 de revue (task 8), FINDING 1 + FINDING 2 : `toLinkpath` doit
+ * retirer l'ancre `#...` et le `!` d'intégration en tête, en plus des
+ * crochets et de l'alias déjà couverts — un `[[Chapitre 1 — Lesson#Partie 2]]`
+ * ne doit PAS faire échouer la résolution d'une note pourtant présente.
+ */
+await withSrcModule("src/quiz-source-ref.ts", ({ toLinkpath }) => {
+	const r = makeReporter("Note Quiz vers Lesson (source) — toLinkpath");
+
+	r.check("wikilink simple", toLinkpath("[[Chapitre 1 — Lesson]]"), "Chapitre 1 — Lesson");
+	r.check("sans crochets (chemin brut)", toLinkpath("Chapitre 1 — Lesson"), "Chapitre 1 — Lesson");
+	r.check("alias apres barre verticale", toLinkpath("[[Chapitre 1 — Lesson|Chapitre 1]]"), "Chapitre 1 — Lesson");
+	r.check("ancre de titre retiree (FINDING 1)", toLinkpath("[[Chapitre 1 — Lesson#Partie 2]]"), "Chapitre 1 — Lesson");
+	r.check("ancre ET alias : l'ancre precede toujours le pipe", toLinkpath("[[Chapitre 1 — Lesson#Partie 2|Alias]]"), "Chapitre 1 — Lesson");
+	r.check("point d'exclamation d'integration retire (FINDING 1)", toLinkpath("![[Chapitre 1 — Lesson]]"), "Chapitre 1 — Lesson");
+	r.check("ancre de bloc (^) retiree comme un titre", toLinkpath("[[Chapitre 1 — Lesson#^abc123]]"), "Chapitre 1 — Lesson");
+
+	r.done();
+});
+
+/**
+ * FINDING 2 : les trois échecs de résolution et le cas de succès, sur
+ * `resolveQuizSourceRef`, avec un substitut MINIMAL de l'API du vault — il ne
+ * fait que répondre à la place d'Obsidian (getFirstLinkpathDest, cachedRead),
+ * toute la logique éprouvée reste celle de `resolveQuizSourceRef` lui-même.
+ */
+await withSrcModule("src/quiz-source-ref.ts", async ({ resolveQuizSourceRef }) => {
+	const r = makeReporter("Note Quiz vers Lesson (source) — resolveQuizSourceRef");
+
+	/** Un faux vault qui connaît un seul fichier, par son chemin. */
+	function makeApp(files) {
+		return {
+			metadataCache: {
+				getFirstLinkpathDest: (linkpath) => (files[linkpath] !== undefined ? { path: linkpath } : null)
+			},
+			vault: {
+				cachedRead: async (file) => files[file.path]
+			}
+		};
+	}
+
+	// note-cible absente
+	{
+		const app = makeApp({});
+		const res = await resolveQuizSourceRef(app, "[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
+		r.check("note absente -> not-found", res, { error: "not-found", link: "[[Chapitre 1 — Lesson]]" });
+	}
+
+	// note trouvée, mais sans bloc quiz-blocks
+	{
+		const app = makeApp({ "Chapitre 1 — Lesson": "# Chapitre 1\n\nDu texte, aucun bloc." });
+		const res = await resolveQuizSourceRef(app, "[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
+		r.check("pas de bloc -> no-block", res, { error: "no-block", link: "[[Chapitre 1 — Lesson]]" });
+	}
+
+	// note cible qui porte elle-même un `source` : pas de chaîne
+	{
+		const bloc = "```quiz-blocks\n[{ prompt: 'A', options: ['1','2'], correctIndex: 0 }, { mode: 'lesson', source: '[[Autre]]' }]\n```";
+		const app = makeApp({ "Chapitre 1 — Lesson": bloc });
+		const res = await resolveQuizSourceRef(app, "[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
+		r.check("cible chainee -> chained", res, { error: "chained", link: "[[Chapitre 1 — Lesson]]" });
+	}
+
+	// succès : ne reprend que les questions de rôle "test" ou sans rôle
+	{
+		const bloc = "```quiz-blocks\n[" +
+			"{ slice: 1, role: 'pre', prompt: 'A', type: 'text', answer: 'x' }, " +
+			"{ slice: 1, role: 'recall', prompt: 'B', type: 'text', answer: 'y' }, " +
+			"{ slice: 1, role: 'test', prompt: 'C', options: ['1','2'], correctIndex: 0 }, " +
+			"{ prompt: 'D', options: ['1','2'], correctIndex: 0 }, " +
+			"{ mode: 'lesson' }" +
+			"]\n```";
+		const app = makeApp({ "Chapitre 1 — Lesson": bloc });
+		const res = await resolveQuizSourceRef(app, "[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
+		r.check("succes -> seules C et D", "error" in res ? res : res.questions.map(q => q.prompt), ["C", "D"]);
+	}
+
+	r.done();
+});

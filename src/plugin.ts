@@ -1122,6 +1122,21 @@ export default class InteractiveQuizPlugin extends Plugin {
 							host.createEl("p", { text: message });
 							return;
 						}
+						/* FIX round 1 de revue (Finding 4) : une leçon en cours de
+						   rédaction, sans aucune question `role: "test"`, résolvait
+						   SANS erreur vers un tableau vide — transmis tel quel au
+						   moteur, ça affiche le message générique
+						   `engine.error.noQuestions`, qui ne nomme ni le lien ni la
+						   cause. Cas très probable pendant la rédaction d'un chapitre :
+						   message dédié, explicite, avant même d'atteindre le moteur. */
+						if (resolved.questions.length === 0) {
+							const message = t("plugin.sourceRef.empty", { link: sourceRef });
+							new Notice(message);
+							host.empty();
+							host.createEl("p", { text: message });
+							return;
+						}
+
 						/* On conserve l'objet de configuration d'origine (mode, options
 						   d'examen…) : seules les QUESTIONS viennent de la note Lesson. */
 						quizToRender = configIdx >= 0

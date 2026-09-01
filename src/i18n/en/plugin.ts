@@ -148,4 +148,5 @@ export const EN_PLUGIN = {
 	"plugin.sourceRef.notFound": "Quiz source not found: {link}",
 	"plugin.sourceRef.noBlock": "No quiz-blocks block in {link}",
 	"plugin.sourceRef.chained": "{link} points to another note — chained references are not supported",
+	"plugin.sourceRef.empty": "{link} has no test question yet — add role: \"test\" questions (or leave role unset) to the lesson",
 } as const;

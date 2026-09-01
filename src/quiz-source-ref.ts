@@ -35,12 +35,20 @@ export function selectQuizQuestions(questions: readonly QuizQuestion[]): QuizQue
 	});
 }
 
-/** Retire les crochets `[[...]]` et un éventuel alias `|...` d'un wikilink,
-    pour ne garder que le linkpath attendu par `getFirstLinkpathDest`. */
-function toLinkpath(ref: string): string {
-	const sansCrochets = ref.trim().replace(/^\[\[/, "").replace(/\]\]$/, "");
-	const pipeIdx = sansCrochets.indexOf("|");
-	return (pipeIdx >= 0 ? sansCrochets.slice(0, pipeIdx) : sansCrochets).trim();
+/** Retire les crochets `[[...]]`, un éventuel `!` d'intégration en tête, un
+    éventuel alias `|...`, ET une éventuelle ancre de titre/bloc `#...` en fin
+    de lien, pour ne garder que le linkpath attendu par `getFirstLinkpathDest`.
+    FIX round 1 de revue : ni l'ancre ni le `!` n'étaient retirés, si bien
+    qu'un `source: "[[Chapitre 1 — Lesson#Partie 2]]"` — un lien parfaitement
+    valide vers une section précise — faisait échouer la résolution d'une
+    note pourtant présente (« source introuvable »). L'ancre est retirée
+    AVANT l'alias : dans `[[Note#Titre|Alias]]` l'ancre précède le `|`,
+    jamais l'inverse. */
+export function toLinkpath(ref: string): string {
+	const sansCrochets = ref.trim().replace(/^!/, "").replace(/^\[\[/, "").replace(/\]\]$/, "");
+	const sansAncre = sansCrochets.replace(/#.*$/, "");
+	const pipeIdx = sansAncre.indexOf("|");
+	return (pipeIdx >= 0 ? sansAncre.slice(0, pipeIdx) : sansAncre).trim();
 }
 
 /**

@@ -73,6 +73,13 @@ function isQuizModeConfig(item: unknown): boolean {
 	/* `q.learnMode` : alias hérité de `mode: "learn"` (renommé "lesson") — lu
 	   indéfiniment, jamais écrit. */
 	if (q.examMode === true || q.learnMode === true) return true;
+	/* FIX round 1 de revue (task 8) : un bloc écrit à la main comme
+	   `[{ source: "[[...]]" }]`, SANS `mode`, n'était reconnu par aucune des
+	   deux conditions ci-dessus/dessous — l'objet devenait une question
+	   fantôme et `source` était ignoré en silence. `source` n'est le nom
+	   d'aucun champ de question (types/quiz.ts) : sa seule présence, sur un
+	   objet sans `prompt`, suffit à le désigner comme configuration. */
+	if (typeof q.source === "string" && q.source.trim() !== "") return true;
 	/* Les TROIS modes du plugin, pas « une chaîne quelconque ». Une question
 	   légitime nommée `{ title: 'Quel mode choisir ?', mode: 'transport' }`
 	   passait pour la configuration du bloc et DISPARAISSAIT à la réécriture —

@@ -147,4 +147,5 @@ export const FR_PLUGIN: Record<keyof typeof EN_PLUGIN, string> = {
 	"plugin.sourceRef.notFound": "Note source du quiz introuvable : {link}",
 	"plugin.sourceRef.noBlock": "Aucun bloc quiz-blocks dans {link}",
 	"plugin.sourceRef.chained": "{link} pointe vers une autre note — les références chaînées ne sont pas prises en charge",
+	"plugin.sourceRef.empty": "{link} ne contient encore aucune question de test — ajoute des questions role: \"test\" (ou sans role) dans la leçon",
 };

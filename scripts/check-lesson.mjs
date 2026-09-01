@@ -1439,3 +1439,29 @@ await withSrcModule("src/quiz-source-ref.ts", async ({ resolveQuizSourceRef }) =
 
 	r.done();
 });
+
+/**
+ * FIX round 2 de revue (task 8), FINDING (Important) : ajouter `source` aux
+ * marqueurs de configuration (round 1) rouvrait la régression historique de
+ * cette fonction pour une carte de rôle "read" créditant sa propre source —
+ * `{ role: "read", passage: "…", source: "Wikipédia" }` est une question
+ * légitime (aucun `prompt` ni réponse : c'est la nature même d'une carte de
+ * lecture), et `passage`/`passageHtml` n'étaient PAS dans MARQUEURS. Cet
+ * objet, exactement tel que la revue l'a signalé, doit rester une question —
+ * c'est-à-dire ne JAMAIS être choisi par `findQuizModeConfigIndex`, seul en
+ * dernière position (le cas le plus permissif) comme ailleurs.
+ */
+await withSrcModule("src/quiz-utils.ts", ({ findQuizModeConfigIndex }) => {
+	const r = makeReporter("Boucle d'apprentissage — carte 'read' sourcee (round 2, FINDING)");
+
+	const carteRead = { role: "read", passage: "…", source: "Wikipédia" };
+
+	r.check("carte 'read' sourcee, seule et en derniere position, reste une question",
+		findQuizModeConfigIndex([carteRead]), -1);
+
+	const autre = { title: "Une question", prompt: "Enonce", options: ["a", "b"], correctIndex: 0 };
+	r.check("carte 'read' sourcee au milieu du bloc reste une question",
+		findQuizModeConfigIndex([carteRead, autre, { mode: "lesson" }]), 2);
+
+	r.done();
+});

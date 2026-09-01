@@ -78,7 +78,16 @@ function isQuizModeConfig(item: unknown): boolean {
 	   deux conditions ci-dessus/dessous — l'objet devenait une question
 	   fantôme et `source` était ignoré en silence. `source` n'est le nom
 	   d'aucun champ de question (types/quiz.ts) : sa seule présence, sur un
-	   objet sans `prompt`, suffit à le désigner comme configuration. */
+	   objet sans `prompt`, suffit à le désigner comme configuration — désormais
+	   sans danger pour une carte "read" créditant sa propre source (ex.
+	   `{ role: "read", passage: "…", source: "Wikipédia" }`), fermé par l'ajout
+	   de `passage`/`passageHtml` aux MARQUEURS ci-dessous (round 2 de revue).
+	   Casse EXACTE (`source`, pas `Source`/`SOURCE`) volontairement : contrairement
+	   à `mode`, dont la VALEUR passe par `normalizeQuizMode`, ceci teste le NOM
+	   d'une clé — aucun autre marqueur de cette fonction (`options`, `promptHtml`,
+	   `examMode`…) ne tolère de variante de casse sur son nom, et une clé mal
+	   casée échoue ici DU BON CÔTÉ : l'objet reste une question ordinaire au lieu
+	   d'être pris pour une configuration. */
 	if (typeof q.source === "string" && q.source.trim() !== "") return true;
 	/* Les TROIS modes du plugin, pas « une chaîne quelconque ». Une question
 	   légitime nommée `{ title: 'Quel mode choisir ?', mode: 'transport' }`
@@ -155,7 +164,18 @@ function isStrictQuizModeConfig(item: unknown): boolean {
 		// `tolerance`, `tolerancePercent` et `unit` suffisent au moteur à
 		// déclarer une réponse numérique (engine/numeric.ts isNumericQuestion) :
 		// les omettre faisait passer une vraie question pour la configuration.
-		"tolerance", "tolerancePercent", "unit"];
+		"tolerance", "tolerancePercent", "unit",
+		// FIX round 2 de revue (task 8) : `passage`/`passageHtml` (le support
+		// affiché par une carte de rôle "read", engine/passage.ts) n'étaient
+		// PAS des marqueurs. Une carte légitimement sans `prompt` ni réponse
+		// — `{ role: "read", passage: "…", source: "Wikipédia" }`, `source`
+		// servant ici à créditer une citation, pas à référencer une leçon —
+		// satisfaisait alors `isQuizModeConfig` (ajout de `source` au round 1)
+		// ET la règle stricte, et DISPARAISSAIT du quiz : exactement la
+		// régression que ce fichier documente déjà pour `promptHtml`/`answer`.
+		// Correctif structurel : protège toute carte porteuse d'un support,
+		// quel que soit le champ ajouté par la suite pour la déclencher.
+		"passage", "passageHtml"];
 	if (MARQUEURS.some(cle => rempli(q[cle]))) return false;
 	/* `text` compte seulement s'il vaut EXACTEMENT `true` — c'est la règle du
 	   moteur (engine.ts isTextQuestion). Un `text: { variant: 'bash' }` est une

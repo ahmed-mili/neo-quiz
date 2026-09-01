@@ -115,15 +115,27 @@ Le tableau reste **plat**. Chaque question gagne deux champs optionnels :
 | Champ | Valeurs | Rôle |
 |---|---|---|
 | `slice` | entier ≥ 1 | numéro de la tranche à laquelle la question appartient |
-| `role` | `"pre"` \| `"recall"` \| `"test"` | place dans la boucle |
+| `role` | `"pre"` \| `"read"` \| `"recall"` \| `"test"` | place dans la boucle |
 
 Correspondance avec la boucle en 5 temps :
 
 | Temps | `role` | Support visible ? |
 |---|---|---|
 | 1 — pré-question | `pre` | **non** : le cours n'a pas encore été lu |
-| 2 + 3 — lecture puis rappel libre | `recall` | oui pendant la lecture, **masqué** pendant la restitution |
+| 2 — lecture | `read` | **oui**, ouvert : c'est le seul moment où l'on lit |
+| 3 — rappel libre | `recall` | **non** pendant la tentative, rouvert après validation |
 | 4 + 5 — correction et test ciblé | `test` | rouvrable à la demande |
+
+**CORRECTION DU 2026-09-01.** Ce tableau comprimait auparavant « lecture puis
+rappel libre » sur UNE ligne, donc un seul rôle `recall`. C'était intenable :
+un rôle ne peut pas être à la fois visible (pour lire) et masqué (pour
+restituer). Conséquence constatée après implémentation — l'utilisateur n'avait
+**aucune étape de lecture** et se voyait demander de restituer un texte qu'il
+n'avait jamais vu. Le rôle `read` sépare les deux moments : une carte qui
+montre le support, sans question, avec un bouton pour continuer.
+
+Écarté : faire montrer le support par `recall` jusqu'à la première frappe —
+fragile et contournable, il suffit de quitter le champ pour relire.
 
 **Compatibilité ascendante** : une question sans `slice` ni `role` est une
 question de quiz ordinaire. Tous les blocs existants du vault (67 quiz, 1176

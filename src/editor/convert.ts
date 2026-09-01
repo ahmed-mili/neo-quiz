@@ -199,14 +199,18 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	   deuxième source de vérité à resynchroniser.
 	   `role`, en revanche, doit être validé DÈS LA LECTURE (fix round 1 de
 	   revue, 2026-08-31) : `DraftQuestion.role` est typé `QuestionRole`
-	   ("pre"/"recall"/"test"), et un cast `as DraftQuestion["role"]` sur un
+	   ("pre"/"read"/"recall"/"test"), et un cast `as DraftQuestion["role"]` sur un
 	   `string` quelconque ("bogus" compris) mentait sur ce type — aucune
 	   fuite aujourd'hui puisque l'export re-valide avant d'écrire, mais un
 	   futur consommateur en mémoire (modèle de tranches, UI) ferait confiance
 	   à ce type sans reconstruire la vérification. Une appartenance aux
-	   trois valeurs suffit, sans dupliquer la règle d'écriture. */
+	   quatre valeurs suffit, sans dupliquer la règle d'écriture.
+	   `read` (task 6b) : ajouté ici EN MÊME TEMPS qu'à `QUESTION_ROLES`
+	   (types/quiz.ts) et à la liste jumelle d'export.ts — un rôle absent
+	   d'un des deux endroits est accepté à la lecture puis silencieusement
+	   effacé à la première sauvegarde (piège déjà coûté 23 champs ailleurs). */
 	if (typeof q.slice === "number") question.slice = q.slice;
-	if (q.role === "pre" || q.role === "recall" || q.role === "test") question.role = q.role;
+	if (q.role === "pre" || q.role === "read" || q.role === "recall" || q.role === "test") question.role = q.role;
 
 	if (type === "single" || type === "multi") {
 		question.options = q.options || ["", ""];

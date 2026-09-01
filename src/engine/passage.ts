@@ -41,6 +41,11 @@ export type PassageVisibility = "hidden" | "open" | "collapsible";
  * En mode Leçon, le rôle tranche :
  * - "pre" : la question est posée AVANT la lecture (Richland 2009) — montrer
  *   le support détruirait le mécanisme de la tentative faite dans l'ignorance.
+ * - "read" (task 6b, 2026-08-31) : le SEUL temps de la boucle où l'on lit —
+ *   le support est ouvert, sans repli, rien d'autre à décider. Ajoutée après
+ *   coup pour combler un trou de conception : avant elle, "pre" cachait le
+ *   support et "recall" aussi (jusqu'à correction), si bien que l'utilisateur
+ *   devait restituer de mémoire un texte qu'il n'avait jamais vu.
  * - "recall" : restitution de mémoire ; le support reste caché PENDANT la
  *   tentative (sinon le rappel ne vaut rien), puis se rouvre de lui-même une
  *   fois la question VÉRIFIÉE (auto-évaluation validée), pour la comparaison
@@ -60,6 +65,7 @@ export type PassageVisibility = "hidden" | "open" | "collapsible";
 export function passageVisibility({ role, checked, isLesson }: { role: QuestionRole; checked: boolean; isLesson: boolean }): PassageVisibility {
 	if (!isLesson) return "collapsible";
 	if (role === "pre") return "hidden";
+	if (role === "read") return "open";
 	if (role === "recall") return checked ? "open" : "hidden";
 	return "collapsible";
 }

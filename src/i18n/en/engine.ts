@@ -84,6 +84,7 @@ export const EN_ENGINE = {
 	   la ligne principale, "role*" son sous-titre selon le rôle de la question. */
 	"engine.lesson.sliceProgress": "Slice {current} of {total}",
 	"engine.lesson.rolePre": "Before reading",
+	"engine.lesson.roleRead": "Reading",
 	"engine.lesson.roleRecall": "From memory",
 	"engine.lesson.roleTest": "Check",
 

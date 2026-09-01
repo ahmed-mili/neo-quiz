@@ -271,18 +271,21 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 
 	/* Boucle d'apprentissage (mode "lesson", task 2 du lot mode leçon,
 	   2026-08-31) : `slice` (numéro de tranche, à partir de 1) et `role`
-	   ("pre"/"recall"/"test", cf. types/quiz.ts QuestionBase) ne sont écrits
-	   QUE sous leur forme VALIDE. Contrairement à `_extraFields` — qui
+	   ("pre"/"read"/"recall"/"test", cf. types/quiz.ts QuestionBase) ne sont
+	   écrits QUE sous leur forme VALIDE. Contrairement à `_extraFields` — qui
 	   recopie un champ personnalisé tel quel, quelle que soit sa forme —
 	   ces deux-là pilotent le comportement du moteur (buildLessonModel,
 	   task 3 du lot) : un `slice` non entier ou un `role` inconnu doit
 	   disparaître plutôt que casser la boucle en silence. `convertParsedToInternal`
 	   ne mémorise déjà que la forme de base (nombre / chaîne) ; la validation
-	   fine a lieu ICI, seul endroit qui écrit le bloc. */
+	   fine a lieu ICI, seul endroit qui écrit le bloc.
+	   `read` (task 6b) : quatrième valeur acceptée, jumelle de la liste de
+	   convert.ts et de `QUESTION_ROLES` (types/quiz.ts) — sans elle, un
+	   `role: 'read'` lu depuis la note disparaîtrait dès la sauvegarde suivante. */
 	if (typeof q.slice === "number" && Number.isInteger(q.slice) && q.slice >= 1) {
 		L.push(`\t\tslice: ${q.slice},`);
 	}
-	if (q.role === "pre" || q.role === "recall" || q.role === "test") {
+	if (q.role === "pre" || q.role === "read" || q.role === "recall" || q.role === "test") {
 		L.push(`\t\trole: '${e(q.role)}',`);
 	}
 

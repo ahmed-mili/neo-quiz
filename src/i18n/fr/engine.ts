@@ -70,6 +70,7 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 	   la ligne principale, "role*" son sous-titre selon le rôle de la question. */
 	"engine.lesson.sliceProgress": "Tranche {current} sur {total}",
 	"engine.lesson.rolePre": "Avant la lecture",
+	"engine.lesson.roleRead": "Lecture",
 	"engine.lesson.roleRecall": "De mémoire",
 	"engine.lesson.roleTest": "Vérification",
 

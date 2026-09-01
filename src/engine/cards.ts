@@ -391,6 +391,10 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 	   du plugin. `t()` n'est appelé qu'ici, à chaque rendu de carte. */
 	function lessonRoleLabel(role: QuestionRole): string {
 		if (role === "pre") return t("engine.lesson.rolePre");
+		// "read" (task 6b) : le libellé doit dire qu'on LIT, pas qu'on répond —
+		// sans cette branche le défaut "Check" ci-dessous mentirait sur une
+		// carte qui n'a justement aucune réponse à vérifier.
+		if (role === "read") return t("engine.lesson.roleRead");
 		if (role === "recall") return t("engine.lesson.roleRecall");
 		return t("engine.lesson.roleTest");
 	}

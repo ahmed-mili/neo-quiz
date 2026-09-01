@@ -28,7 +28,7 @@ export interface ResourceButton {
 }
 
 /** Rôles de la boucle d'apprentissage. Valeurs PERSISTÉES : jamais traduites. */
-export type QuestionRole = "pre" | "recall" | "test";
+export type QuestionRole = "pre" | "read" | "recall" | "test";
 
 /**
  * Liste canonique des rôles, dans l'ordre de la boucle en 5 temps. Source
@@ -38,8 +38,14 @@ export type QuestionRole = "pre" | "recall" | "test";
  * constante est délibérément différé à la revue finale du lot mode leçon
  * (task 3, 2026-08-31), pour ne pas élargir la tâche qui l'introduit
  * (`src/engine/lesson.ts`, seul consommateur actuel).
+ *
+ * `read` (task 6b, 2026-08-31) : le temps 2 de la boucle, ajouté après coup
+ * pour combler un trou de conception — aucune étape ne montrait jamais le
+ * support avant que "recall" en exige la restitution de mémoire. Une carte
+ * `read` n'a pas de réponse : voir `passageVisibility` (engine/passage.ts)
+ * et les branches dédiées d'`engine/state.ts`.
  */
-export const QUESTION_ROLES: readonly QuestionRole[] = ["pre", "recall", "test"];
+export const QUESTION_ROLES: readonly QuestionRole[] = ["pre", "read", "recall", "test"];
 
 /**
  * Champs communs à toutes les variantes de question. La plupart sont

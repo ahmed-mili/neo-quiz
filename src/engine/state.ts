@@ -64,6 +64,11 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 	}
 
 	function isComplete(i: number): boolean {
+		// Une carte "read" (task 6b) n'a rien à répondre : elle est toujours
+		// considérée complète, pour ne jamais apparaître dans getMissingIndices
+		// (donc ne bloquer ni la navigation, ni l'écran de soumission).
+		if (ctx.isLessonMode() && ctx.roleOfQuestion(i) === "read") return true;
+
 		// Même bascule PAR QUESTION que hasAnyAnswer ci-dessus.
 		if (ctx.textOnly?.isTextOnlyFor?.(i)) {
 			return ctx.textOnly.isRated(i);
@@ -135,9 +140,16 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 	}
 
 	function computeScorePercent(): QuizResult {
-		let correct = 0;
-		for (let i = 0; i < ctx.quiz.length; i++) if (isCorrect(i)) correct++;
-		return { pct: Math.round((correct / ctx.quiz.length) * 100), correct, total: ctx.quiz.length };
+		// Une carte "read" (task 6b) n'est ni juste ni fausse : elle sort du
+		// dénominateur ET du numérateur, sinon elle abaisserait mécaniquement
+		// le pourcentage final d'un quiz Leçon (une carte jamais "correcte").
+		let correct = 0, total = 0;
+		for (let i = 0; i < ctx.quiz.length; i++) {
+			if (ctx.isLessonMode() && ctx.roleOfQuestion(i) === "read") continue;
+			total++;
+			if (isCorrect(i)) correct++;
+		}
+		return { pct: total > 0 ? Math.round((correct / total) * 100) : 100, correct, total };
 	}
 
 	const getSubmitSlideSignature = (): string => JSON.stringify({

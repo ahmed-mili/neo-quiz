@@ -287,6 +287,17 @@ await withSrcModule("src/engine/passage.ts", ({ passageVisibility }) => {
 	r.check("pre HORS mode Lecon -> collapsible (le role n'a aucun effet hors Lecon)",
 		passageVisibility({ role: "pre", checked: false, isLesson: false }), "collapsible");
 
+	/* Task 6b : role "read", le temps 2 de la boucle — le SEUL qui doit
+	   rendre "open" independamment de `checked` (une carte "read" n'a rien a
+	   verifier, `checked` y est toujours faux en pratique mais ne doit rien
+	   changer si jamais il valait true). */
+	r.check("read, mode Lecon -> open (le seul moment ou l'on lit)",
+		passageVisibility({ role: "read", checked: false, isLesson: true }), "open");
+	r.check("read reste open meme si 'checked' vaut true (n'a aucun sens pour ce role, mais ne doit rien casser)",
+		passageVisibility({ role: "read", checked: true, isLesson: true }), "open");
+	r.check("read HORS mode Lecon -> collapsible (le role n'a aucun effet hors Lecon)",
+		passageVisibility({ role: "read", checked: false, isLesson: false }), "collapsible");
+
 	r.done();
 });
 
@@ -607,6 +618,86 @@ await withSrcModule("src/engine/cards.ts", ({ createCardRenderers }) => {
 	r.check("role 'pre' -> 'Before reading'", pre.includes("Before reading"), true);
 	const test = createCardRenderers(makeCtx({ quizMode: "lesson", slice: 1, sliceTotal: 3, role: "test" })).questionCardHtml(0);
 	r.check("role 'test' -> 'Check'", test.includes("Check"), true);
+
+	// Task 6b : le quatrieme role se traduit lui aussi sur sa propre cle, et
+	// dit qu'on LIT (pas qu'on repond) — sinon il retomberait sur le defaut
+	// "Check" de lessonRoleLabel, qui mentirait sur une carte sans reponse.
+	const read = createCardRenderers(makeCtx({ quizMode: "lesson", slice: 1, sliceTotal: 3, role: "read" })).questionCardHtml(0);
+	r.check("role 'read' -> 'Reading' (pas le defaut 'Check')", read.includes("Reading"), true);
+	r.check("role 'read' n'affiche jamais 'Check'", read.includes("Check"), false);
+
+	r.done();
+});
+
+/**
+ * Task 6b du lot mode leçon (2026-08-31) : le role "read", ajoute apres coup
+ * pour combler le temps 2 (lecture) manquant de la boucle. Deux volets :
+ * l'aller-retour du role a travers l'editeur (convert -> export), et son
+ * exclusion de la completude/du score dans engine/state.ts — une carte
+ * "read" n'a pas de reponse, elle n'est ni juste ni fausse.
+ */
+await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert, exp) => {
+	const r = makeReporter("Boucle d'apprentissage — role 'read' (aller-retour editeur)");
+
+	const q = convert.convertParsedToInternal({
+		id: "x", title: "T", prompt: "Support de lecture", options: ["a", "b"], correctIndex: 0,
+		slice: 2, role: "read",
+	});
+	r.check("role 'read' accepte a la lecture (convertParsedToInternal)", q.role, "read");
+
+	const relu = JSON5.parse(exp.exportAll([q], null))[0];
+	r.check("role 'read' survit a l'ecriture (exportAll)", relu.role, "read");
+	r.check("slice survit a cote du role 'read'", relu.slice, 2);
+
+	r.done();
+});
+
+await withSrcModule("src/engine/state.ts", ({ createStateHandlers }) => {
+	const r = makeReporter("Boucle d'apprentissage — role 'read' exclu du score et de la completude");
+
+	// ctx factice minimal : deux questions QCM, l'une "read" (jamais repondue),
+	// l'autre "test" repondue correctement. Seuls les champs lus par
+	// isComplete/computeScorePercent/getMissingIndices sont fournis.
+	const makeCtx = (roles) => ({
+		quiz: roles.map((role, i) => ({ role, correctIndex: 0, title: `Q${i}` })),
+		quizState: { selections: roles.map((role, i) => (role === "read" ? null : 0)) },
+		isLessonMode: () => true,
+		roleOfQuestion: (i) => roles[i],
+		isTextQuestion: () => false,
+		isClozeQuestion: () => false,
+		isOrderingQuestion: () => false,
+		isMatchingQuestion: () => false,
+		terminal: {},
+	});
+
+	// Tranche mixte : q0 "read" jamais repondue, q1 "test" repondue juste.
+	const ctxMixte = makeCtx(["read", "test"]);
+	const { isComplete, getMissingIndices, computeScorePercent } = createStateHandlers(ctxMixte);
+
+	r.check("une carte 'read', jamais repondue, compte quand meme comme complete", isComplete(0), true);
+	r.check("aucune carte a completer : 'read' est complete d'office, 'test' a ete repondue", getMissingIndices(), []);
+	r.check("le score exclut 'read' du denominateur : 1/1, pas 1/2", computeScorePercent(), { pct: 100, correct: 1, total: 1 });
+
+	// Meme tranche, mais la question "test" est repondue FAUSSEMENT : le score
+	// doit rester 0/1 (la carte "read" ne se glisse pas dans le compte).
+	const ctxFaux = makeCtx(["read", "test"]);
+	ctxFaux.quizState.selections[1] = 1; // faux : correctIndex vaut 0
+	const scoreFaux = createStateHandlers(ctxFaux).computeScorePercent();
+	r.check("une reponse fausse a cote d'une carte 'read' donne 0/1, pas 0/2", scoreFaux, { pct: 0, correct: 0, total: 1 });
+
+	// Tranche ENTIEREMENT "read" : aucune question notable, le pourcentage ne
+	// doit pas planter (division par zero) ni afficher un score mensonger.
+	const ctxToutRead = makeCtx(["read", "read"]);
+	const scoreVide = createStateHandlers(ctxToutRead).computeScorePercent();
+	r.check("tranche entierement 'read' : total 0, pas de NaN ni de division par zero", scoreVide, { pct: 100, correct: 0, total: 0 });
+
+	// Hors mode Lecon, un role "read" ne doit RIEN changer (non-regression
+	// absolue demandee par le brief : un quiz ordinaire n'a jamais de role).
+	const ctxHorsLecon = makeCtx(["read", "test"]);
+	ctxHorsLecon.isLessonMode = () => false;
+	const horsLecon = createStateHandlers(ctxHorsLecon);
+	r.check("hors mode Lecon, 'read' non repondue est INCOMPLETE comme n'importe quelle question sans role",
+		horsLecon.isComplete(0), false);
 
 	r.done();
 });

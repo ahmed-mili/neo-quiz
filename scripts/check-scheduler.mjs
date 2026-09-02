@@ -205,6 +205,49 @@ await withSrcModule(["src/scheduler/state.ts", "src/scheduler/params.ts"], (st, 
 	}).get("a");
 	r.check("intervalle plafonné par l'horizon", plafonne.interval <= 2.11 * JOUR, true);
 
+	/* PLAFOND HISTORIQUE (finding 1, revue task-3) : rejouer les 21 cas
+	   ci-dessus en supprimant le plafond calculé À LA DATE DE CHAQUE
+	   ÉVÉNEMENT (`plafond` dans la boucle de state.ts) les laisse tous
+	   passer — aucun n'a un examen assez proche AU MOMENT d'un succès
+	   pour que ce plafond-là morde. Ici l'examen est déjà PASSÉ au moment
+	   de `now` (plafondNow retombe sur l'horizon par défaut, 27,4 j, qui
+	   ne borne donc plus rien) : seul le plafond historique peut encore
+	   agir, et c'est le seul cas qui l'éprouve.
+	   Calcul à la main (P = DEFAULT_PARAMS, ratio(H) = a − b·ln(jours)
+	   avec jours borné à [7, 365], donc ratio(jours ≤ 7) = 0,30 exact) :
+	     succès à T0    (H = 10 j, ratio ≈ 0,2797, plafond ≈ 2,80 j)
+	       → interval = intervalleInitial = 1 j (sous le plafond)
+	     succès à T0+2j (H = 8 j,  ratio ≈ 0,2924, plafond ≈ 2,34 j)
+	       → 1 j × facteurSucces = 2 j (sous le plafond)
+	     succès à T0+5j (H = 5 j, bornée à l'ancrage 7 j → ratio = 0,30,
+	                     plafond = 0,30 × 5 j = 1,5 j)
+	       → 2 j × facteurSucces = 4 j, CLAMPÉ à 1,5 j.
+	   Sans le plafond historique, le 3ᵉ succès resterait à 4 j : l'écart
+	   avec 1,5 j est net, `interval < 2 * JOUR` les sépare sans ambiguïté. */
+	const historique = [rep("a", T0, "correct"), rep("a", T0 + j(2), "correct"), rep("a", T0 + j(5), "correct")];
+	const plafondHistorique = st.deriveStates({
+		now: T0 + j(20), items: [item("a")], events: historique,
+		horizons: { M: T0 + j(10) }, params: P,
+	}).get("a");
+	r.check("plafond historique (à la date de l'événement) resserre la trajectoire",
+		plafondHistorique.interval < 2 * JOUR, true);
+
+	/* PLANCHER QUI GAGNE SUR LE PLAFOND (finding 2, revue task-3) : aucun
+	   cas ci-dessus n'a un examen assez proche pour que le plafond tombe
+	   SOUS intervalleMin ; supprimer `Math.max(plafond, params.intervalleMin)`
+	   dans le clamp de state.ts laisse donc les 21 cas passer aussi.
+	   Ici l'examen est dans 2 h : plafond = ratio(H=2h, bornée à 7 j →
+	   ratio=0,30) × 2 h = 0,6 h, sous intervalleMin (4 h). Le commentaire
+	   du code est explicite : « le plancher gagne sur le plafond ».
+	   Calcul à la main : premier succès → interval = intervalleInitial
+	   (24 h) ; clamp = min(max(24h,4h), max(0,6h,4h)) = min(24h,4h) = 4h.
+	   Le re-bornage final (même horizon, plafondNow = 0,6 h) redonne 4h.
+	   Sans le `Math.max(plafond, intervalleMin)`, le clamp retomberait
+	   sur 0,6 h — valeur exacte attendue ici : intervalleMin, pas 0,6 h. */
+	r.check("le plancher (intervalleMin) gagne quand le plafond tombe sous lui",
+		etat([rep("a", T0, "correct")], { M: T0 + 2 * HEURE }, T0).interval,
+		P.intervalleMin);
+
 	/* JAMAIS DE SORTIE DU SYSTÈME : dix succès de suite laissent une
 	   échéance finie. Une question qui sortirait après une réussite
 	   sacrifierait exactement ce que l'espacement sert à obtenir. */
@@ -215,14 +258,39 @@ await withSrcModule(["src/scheduler/state.ts", "src/scheduler/params.ts"], (st, 
 	r.check("dix succès → toujours pas neuve", dix.isNew, false);
 
 	/* RE-BORNAGE AU PLAFOND ACTUEL : un intervalle calculé quand l'examen
-	   était loin doit se resserrer quand il approche. */
+	   était loin doit se resserrer quand il approche.
+	   (finding 3, revue task-3) `now` est ICI volontairement APRÈS le
+	   dernier événement. Avec `now` == date du dernier événement (version
+	   d'origine), plafondNow == le plafond déjà appliqué à cette même
+	   itération dans la boucle : le re-bornage final (state.ts, après la
+	   boucle) est un no-op que la suppression de son code ne change pas —
+	   aucune des deux anciennes bornes (2 × intervalleInitial) ne le
+	   remarquait. En avançant `now` à T0+4j, le plafond RECALCULÉ à
+	   aujourd'hui (horizon 1 j) devient strictement plus étroit que celui
+	   figé en fin de boucle (horizon 2 j) : le resserrement vient
+	   authentiquement de plafondNow, pas d'un hasard de bornes.
+	   Calcul à la main (ratio = 0,30 exact : tous les horizons ci-dessous
+	   sont ≤ 7 j, donc bornés à l'ancrage) :
+	     succès à T0    (H = 5 j, plafond = 0,30×5j = 1,5 j)
+	       → interval = intervalleInitial = 1 j (sous le plafond)
+	     succès à T0+1j (H = 4 j, plafond = 0,30×4j = 1,2 j)
+	       → 1 j × facteurSucces = 2 j, CLAMPÉ à 1,2 j
+	     succès à T0+3j (H = 2 j, plafond = 0,30×2j = 0,6 j)
+	       → 1,2 j × facteurSucces = 2,4 j, CLAMPÉ à 0,6 j
+	   Fin de boucle : interval = 0,6 j, lastAt = T0+3j.
+	   Re-bornage à now = T0+4j (H = 5j−4j = 1 j, plafondNow = 0,30×1j = 0,3j) :
+	     interval = min(0,6j, max(0,3j, intervalleMin)) = 0,3 j.
+	   Sans ce re-bornage, l'intervalle resterait à 0,6 j : l'encadrement
+	   serré [0,29 j ; 0,31 j] sépare 0,3 j (attendu) de 0,6 j (no-op). */
 	const large = [rep("a", T0, "correct"), rep("a", T0 + j(1), "correct"), rep("a", T0 + j(3), "correct")];
 	const proche = st.deriveStates({
-		now: T0 + j(3), items: [item("a")], events: large,
+		now: T0 + j(4), items: [item("a")], events: large,
 		horizons: { M: T0 + j(5) }, params: P,
 	}).get("a");
-	r.check("l'examen qui approche resserre l'intervalle déjà acquis",
-		proche.interval <= P.intervalleInitial * P.facteurSucces, true);
+	r.check("l'examen qui approche resserre l'intervalle déjà acquis (borne haute)",
+		proche.interval <= 0.31 * JOUR, true);
+	r.check("l'examen qui approche resserre l'intervalle déjà acquis (borne basse)",
+		proche.interval > 0.29 * JOUR, true);
 
 	// Un événement dont la question n'existe plus n'est jamais planifié.
 	const orphelin = st.deriveStates({

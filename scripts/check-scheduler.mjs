@@ -302,3 +302,134 @@ await withSrcModule(["src/scheduler/state.ts", "src/scheduler/params.ts"], (st, 
 
 	r.done();
 });
+
+await withSrcModule(["src/scheduler/index.ts"], (S) => {
+	const r = makeReporter("Ordonnanceur — plan du jour");
+	const P = S.DEFAULT_PARAMS;
+	const T0 = 1_700_000_000_000;
+	const j = (n) => n * JOUR;
+	const rep = (q, at, grade) => ({ t: "answer", q, at, grade });
+	const base = (over = {}) => ({
+		now: T0, dayStart: T0 - HEURE, horizons: {}, params: P,
+		items: [], events: [], ...over,
+	});
+
+	// Déterminisme : deux appels identiques donnent le même plan.
+	const neufs = [];
+	for (let k = 0; k < 40; k++) neufs.push({ q: "q" + k, module: "M", source: "s" + (k % 3) });
+	const a = S.planToday(base({ items: neufs }));
+	const b = S.planToday(base({ items: neufs }));
+	r.check("deux appels identiques donnent le même plan", a.today, b.today);
+
+	/* QUOTA DE NEUFS : sans lui, une génération de 80 questions noierait
+	   toutes les révisions le jour même. */
+	r.check("le quota borne les questions jamais vues",
+		a.today.length, Math.round(P.budgetJour * P.partNeuf));
+	r.check("les neufs sont comptés", a.stats.new, 40);
+
+	// Le budget est respecté, et le surplus reporté.
+	const dus = [];
+	const evts = [];
+	for (let k = 0; k < 60; k++) {
+		dus.push({ q: "d" + String(k).padStart(2, "0"), module: "M", source: "s" });
+		evts.push(rep("d" + String(k).padStart(2, "0"), T0 - j(10), "correct"));
+	}
+	const charge = S.planToday(base({ items: dus, events: evts }));
+	r.check("budget respecté", charge.today.length, P.budgetJour);
+	r.check("le surplus est reporté, pas perdu",
+		charge.today.length + charge.deferred.length, 60);
+	r.check("tout est dû", charge.stats.due, 60);
+
+	/* BUDGET DÉJÀ CONSOMMÉ : le noyau ne persiste rien, il COMPTE ce qui a
+	   été fait depuis dayStart. Rouvrir le tableau de bord après quarante
+	   questions ne doit pas en redonner quarante. */
+	const dejaFait = dus.map(it => rep(it.q, T0 - HEURE / 2, "correct"));
+	const apres = S.planToday(base({ items: dus, events: [...evts, ...dejaFait] }));
+	r.check("ce qui a déjà été fait aujourd'hui est décompté", apres.stats.spentToday, 60);
+	r.check("budget épuisé → rien de plus aujourd'hui", apres.today.length, 0);
+
+	/* Le cas précédent repasse à 0 pour DEUX raisons superposées : le budget
+	   épuisé, mais AUSSI le fait que réviser une seconde fois aujourd'hui
+	   repousse déjà l'échéance de chacun des 60 items hors de « dû » (leur
+	   propre dueAt avance dans le futur). Un noyau qui aurait perdu la
+	   soustraction spentToday donnerait le même today.length = 0 ici, pour
+	   la mauvaise raison — ce cas ne le distinguerait pas. Isoler la
+	   décrémentation : consommer le budget par des événements SANS RAPPORT
+	   avec le catalogue (une autre clé, hors de `items`), pendant que les 60
+	   items dus restent dus (leur seul événement reste à 10 jours, hors de
+	   la fenêtre d'aujourd'hui — leur état ne bouge pas). Leur exclusion ne
+	   peut alors venir QUE du budget consommé ailleurs. */
+	const ailleurs = [];
+	for (let k = 0; k < 40; k++) ailleurs.push(rep("ailleurs" + k, T0 - HEURE / 2, "correct"));
+	const consomme = S.planToday(base({ items: dus, events: [...evts, ...ailleurs] }));
+	r.check("un budget consommé ailleurs exclut aussi les items dus",
+		consomme.today.length, 0);
+
+	/* ANTICIPATION : quand le budget n'est pas atteint, on tire vers
+	   aujourd'hui ce qui tombe plus tard, JAMAIS au-delà de la marge. */
+	const futur = [{ q: "f1", module: "M", source: "s" }];
+	// Deux succès espacés d'un jour → intervalle 2 j, échéance à T0 + 0,2 j.
+	const proche = [rep("f1", T0 - j(2.8), "correct"), rep("f1", T0 - j(1.8), "correct")];
+	r.check("ce qui tombe dans la marge est avancé",
+		S.planToday(base({ items: futur, events: proche })).stats.ahead, 1);
+	// Échéance à T0 + 1,5 j sur un intervalle de 2 j : hors marge (0,4 j).
+	const loin = [rep("f1", T0 - j(1.5), "correct"), rep("f1", T0 - j(0.5), "correct")];
+	r.check("ce qui tombe hors marge n'est jamais avancé",
+		S.planToday(base({ items: futur, events: loin })).stats.ahead, 0);
+
+	/* ENTRELACEMENT : deux modules ne s'entremêlent pas — ils ne se
+	   confondent pas, les mélanger ne coûterait que du changement de
+	   contexte. À l'intérieur d'un module, les familles alternent. */
+	const deuxModules = [];
+	const evts2 = [];
+	for (let k = 0; k < 4; k++) {
+		deuxModules.push({ q: "A" + k, module: "A", source: "sA" + (k % 2) });
+		deuxModules.push({ q: "B" + k, module: "B", source: "sB" + (k % 2) });
+		evts2.push(rep("A" + k, T0 - j(10), "correct"), rep("B" + k, T0 - j(10), "correct"));
+	}
+	const ordre = S.planToday(base({ items: deuxModules, events: evts2 })).today;
+	const modules = ordre.map(q => q[0]);
+	const bascules = modules.filter((m, i) => i > 0 && m !== modules[i - 1]).length;
+	r.check("les modules ne s'entremêlent pas (une seule bascule)", bascules, 1);
+
+	const premier = ordre.filter(q => q[0] === modules[0]);
+	const familles = premier.map(q => Number(q.slice(1)) % 2);
+	r.check("les familles d'un même module alternent",
+		familles.every((f, i) => i === 0 || f !== familles[i - 1]), true);
+
+	/* Les neufs sont RÉPARTIS, pas relégués : une session écourtée doit
+	   progresser sur les deux fronts, sinon la couverture stagne et crée
+	   des angles morts permanents. */
+	const mixte = [{ q: "n1", module: "M", source: "s" }];
+	const evts3 = [];
+	for (let k = 0; k < 6; k++) {
+		mixte.push({ q: "r" + k, module: "M", source: "s" });
+		evts3.push(rep("r" + k, T0 - j(10), "correct"));
+	}
+	const repartis = S.planToday(base({ items: mixte, events: evts3 })).today;
+	r.check("le neuf n'est pas relégué en dernier", repartis[repartis.length - 1], "r5");
+	r.check("le neuf n'est pas non plus en premier", repartis[0] === "n1", false);
+	r.check("le neuf est bien présent", repartis.includes("n1"), true);
+
+	/* REJOUABILITÉ : changer un paramètre et rejouer le MÊME journal change
+	   le plan. C'est la preuve que rien n'est figé dans un état persistant. */
+	const serre = S.planToday(base({ items: dus, events: evts, params: { ...P, budgetJour: 5 } }));
+	r.check("un paramètre modifié change le plan sur le même journal",
+		serre.today.length, 5);
+
+	// Une question absente du catalogue n'apparaît jamais.
+	r.check("question absente du catalogue jamais planifiée",
+		S.planToday(base({ events: [rep("x", T0 - j(10), "correct")] })).today, []);
+
+	// Le renommage est appliqué AVANT la planification.
+	const renomme = S.planToday(base({
+		items: [{ q: "b.md::q1", module: "M", source: "s" }],
+		events: [
+			rep("a.md::q1", T0 - j(10), "correct"),
+			{ t: "rename", from: "a.md", to: "b.md", at: T0 - j(9) },
+		],
+	}));
+	r.check("l'historique suit la note renommée", renomme.stats.new, 0);
+
+	r.done();
+});

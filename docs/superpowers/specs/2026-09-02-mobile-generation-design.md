@@ -33,7 +33,7 @@ Le problème est un problème de **transport**. Et le transport existe déjà.
 | Le partage couvre **trois** appareils | en-tête de `.stignore` : « laptop, desktop, telephone » |
 | `.obsidian/` n'est PAS exclu de la synchronisation | `.stignore` n'exclut que `workspace*.json`, `appearance.json`, `.trash`, `*.sync-conflict-*`, `_to_delete` |
 | Le plugin tourne déjà sur Android | `isDesktopOnly: false` (`src/assets/manifest.json`) |
-| Le moteur sait réagir à un fichier qui apparaît | `app.vault.on("create")` (`src/dashboard/scanner.ts:265`) |
+| Le moteur sait réagir à un fichier qui apparaît | `app.vault.on("create")` (`src/dashboard/scanner.ts:265`) — **mais voir §5.3** |
 | Le plugin sait déjà écrire hors des notes | `RESULTS_DIR = ".obsidian/quiz-blocks-results"` via l'adaptateur (`src/engine/results-save.ts:66`, `:458`) |
 
 **Le vault est donc déjà un canal bidirectionnel entre les trois appareils.**
@@ -74,6 +74,21 @@ synchronisation est explicite et indépendant.
 
 **Écriture** : par `vault.adapter`, jamais par `vault.create`, qui refuse les
 chemins commençant par un point. Le précédent existe (`results-save.ts:458`).
+
+### 5.3 Détection : interrogation régulière, PAS les événements du vault
+
+**Correction du 2026-09-02, apportée pendant l'écriture du plan.** Le tableau
+du §3 laissait entendre que `app.vault.on("create")` pourrait servir de
+déclencheur. C'est faux ici : les événements du vault ne portent que sur les
+fichiers INDEXÉS par Obsidian, et un dossier commençant par un point n'est pas
+indexé. Aucun événement ne se déclencherait.
+
+Les deux côtés interrogent donc le dossier à intervalle régulier, par
+`adapter.list()`. Ce n'est pas un pis-aller : le plancher de latence est de
+toute façon celui de Syncthing, devant lequel quelques secondes d'intervalle ne
+pèsent rien. Et l'interrogation fonctionne indépendamment de la façon dont
+Obsidian remarque — ou ne remarque pas — un fichier écrit par un autre
+programme.
 
 ### Forme : un fichier par message, un seul auteur par fichier
 

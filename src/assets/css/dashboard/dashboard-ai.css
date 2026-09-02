@@ -841,7 +841,7 @@
 .qbd-ai-composer-input:hover,
 .qbd-ai-composer-input:focus,
 .qbd-ai-composer-input:active {
-	background: transparent;
+	background: transparent !important;
 	border: none;
 }
 

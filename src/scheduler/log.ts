@@ -49,7 +49,7 @@ function validate(o: unknown): LogLine | null {
 		if (typeof r.grade !== "string" || !GRADES.includes(r.grade as ReviewGrade)) return null;
 		const e: ReviewEvent = { t: "answer", q: r.q, at: r.at, grade: r.grade as ReviewGrade };
 		/* ASYMÉTRIE VOLONTAIRE : un grade inconnu rejette la ligne (sans verdict, pas
-		   d'événement). Un role inconnu est tolérĂ© et simplement omis (métadonnée
+		   d'événement). Un role inconnu est toléré et simplement omis (métadonnée
 		   optionnelle, fusion de journaux entre versions compatibles du noyau). */
 		if (typeof r.role === "string" && QUESTION_ROLES.includes(r.role as never)) {
 			e.role = r.role as ReviewEvent["role"];

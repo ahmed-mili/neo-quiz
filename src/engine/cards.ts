@@ -541,7 +541,16 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		const passageSection = ctx.passage.passageHtml(qi);
 		const lessonProgress = lessonProgressHtml(qi);
 
-		return `<div class="quiz-track-item" data-slide-kind="question" data-qi="${qi}">
+		/* Classe de RÔLE sur la carte : le CSS doit pouvoir distinguer une carte
+		   de LECTURE des autres. Sur une carte "read", le support de cours EST
+		   le contenu — il ne peut donc pas défiler dans une boîte, sous peine
+		   de couper la lecture en deux (règle posée par Ahmed le 2026-09-02 :
+		   « ici on ne doit jamais avoir à scroller, ça déconcentre »). Ailleurs
+		   le support n'est qu'une référence à côté d'une question, et son
+		   plafond de hauteur garde tout son sens. */
+		const roleClass = ctx.isLessonMode() ? ` quiz-role-${ctx.roleOfQuestion(qi)}` : "";
+
+		return `<div class="quiz-track-item${roleClass}" data-slide-kind="question" data-qi="${qi}">
 			<section class="quiz-card"${sectionIdAttr}>
 				${lessonProgress}
 				${passageSection}

@@ -185,3 +185,27 @@
 .is-mobile .quiz-passage-scope{
   display: none;
 }
+
+/* =========================================================
+   CARTE DE LECTURE — jamais de défilement interne
+   -----------------------------------------------------------
+   Règle posée par Ahmed le 2026-09-02, en jouant la démo :
+   « ici on ne doit jamais avoir à scroller, ça déconcentre ».
+
+   Le plafond de hauteur du support (min(46vh, 420px), plus haut
+   dans ce fichier) a un sens partout AILLEURS : le support y est
+   une RÉFÉRENCE posée à côté d'une question, qui doit garder de
+   la place. Sur une carte de rôle "read", le support EST le
+   contenu de la carte — rien ne lui dispute l'espace, et le faire
+   défiler dans une boîte coupe la lecture en deux.
+
+   La contrepartie est assumée et elle est structurante : c'est au
+   CONTENU de tenir dans l'écran. Un support qui déborde signale
+   une tranche trop grosse, pas un défaut d'affichage — l'unité de
+   découpage est l'écran, pas la page. Budget retenu pour la
+   démo : 900 caractères par carte de lecture.
+   ========================================================= */
+.quiz-role-read .quiz-passage-content{
+  max-height: none;
+  overflow-y: visible;
+}

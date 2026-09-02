@@ -852,7 +852,7 @@ git commit -m "feat(scheduler): etat de planification derive du journal"
 
 **Interfaces:**
 - Consumes: `deriveStates`, `signalOf` (Task 3) ; `applyRenames` (Task 2) ; tous les types (Task 1).
-- Produces: `planToday(input: PlanInput): Plan`. `src/scheduler/index.ts` réexporte `planToday`, `deriveStates`, `signalOf`, `formatLine`, `parseLog`, `applyRenames`, `DEFAULT_PARAMS`, `JOUR`, `HEURE` et tous les types. **C'est le seul point d'entrée que l'adaptateur importe.**
+- Produces: `planToday(input: PlanInput): Plan`. `src/scheduler/index.ts` réexporte `planToday`, `deriveStates`, `formatLine`, `parseLog`, `applyRenames`, `DEFAULT_PARAMS`, `JOUR`, `HEURE` et tous les types (**pas** `signalOf` : rien hors du noyau ne le consomme). **C'est le seul point d'entrée que l'adaptateur importe.**
 
 - [ ] **Step 1: Écrire les cas d'abord**
 
@@ -1149,7 +1149,10 @@ export type { SchedulerParams, RatioAnchor } from "./params";
 export { DEFAULT_PARAMS, JOUR, HEURE } from "./params";
 export { ratioCoefficients, retentionRatio, intervalCeiling, horizonFor } from "./horizon";
 export { formatLine, parseLog, applyRenames } from "./log";
-export { signalOf, deriveStates } from "./state";
+export { deriveStates } from "./state";
+// `signalOf` n'est PAS réexporté : aucun hôte n'en a besoin. La surface de
+// ce fichier est le contrat que l'application PC héritera — elle n'expose
+// que ce qui sert (ruling préflight 1, 2026-09-02).
 export { planToday } from "./plan";
 ```
 
@@ -1596,7 +1599,9 @@ void this._reviewStore.load();
 
 et dans `onunload` : `this._reviewStore?.destroy();`
 
-Déclarer le champ sur la classe, avec le commentaire qui dit pourquoi il est distinct de `_statsStore` :
+Déclarer le champ **à deux endroits** : sur la classe `InteractiveQuizPlugin`, et sur l'interface `DashboardPlugin` (`src/types/dashboard-ctx.ts:106`) à côté de `_scanner` et `_statsStore` — sans quoi la Task 10 ne peut pas lire `ctx.plugin._reviewStore`. Le moteur, lui, garde la lecture par cast qu'il utilise déjà pour `_statsStore` : `EngineCtx.plugin` reste un `Plugin` nu.
+
+Avec le commentaire qui dit pourquoi il est distinct de `_statsStore` :
 
 ```ts
 	/** Journal de révision par QUESTION (ordonnanceur). Distinct de
@@ -1613,7 +1618,7 @@ Expected: aucune erreur. `ModuleOverride.examDate` n'existe pas encore (Task 9) 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/dashboard/review-store.ts src/dashboard/quiz-modules.ts src/plugin.ts
+git add src/dashboard/review-store.ts src/dashboard/quiz-modules.ts src/types/dashboard-ctx.ts src/plugin.ts
 git commit -m "feat(review): adaptateur Obsidian du journal de revision"
 ```
 
@@ -1624,7 +1629,7 @@ git commit -m "feat(review): adaptateur Obsidian du journal de revision"
 **Files:**
 - Modify: `src/types/quiz.ts` (`QuizState.recorded`)
 - Modify: `src/types/engine-ctx.ts` (`reviewSink`)
-- Modify: `src/engine.ts` (init de `recorded`, injection du sink)
+- Modify: `src/engine.ts` (init de `recorded`, injection du sink, calcul de `questionIds`)
 - Modify: `src/engine/state.ts` (`goToResults`, `resetQuiz`)
 - Modify: `src/engine/text-only.ts` (bouton d'auto-évaluation)
 
@@ -1694,13 +1699,28 @@ où `recordReview(i, grade)` est une fonction ajoutée à `engine/state.ts` (exp
 	function recordReview(i: number, grade: ReviewGrade): void {
 		if (!ctx.reviewSink || !ctx.sourcePath) return;
 		if (ctx.quizState.recorded[i]) return;
-		const id = ctx.quiz[i]?.id;
-		if (typeof id !== "string" || !id) return;
+		const id = ctx.questionIds[i];
+		if (!id) return;
 		ctx.quizState.recorded[i] = true;
 		const role = ctx.isLessonMode() ? ctx.roleOfQuestion(i) : undefined;
 		ctx.reviewSink.record([{ q: ctx.reviewSink.keyOf(ctx.sourcePath, id), grade, ...(role ? { role } : {}) }]);
 	}
 ```
+
+**`ctx.questionIds`, et surtout PAS `ctx.quiz[i].id`** (ruling préflight 3, 2026-09-02). Les trois questions des vaults qui n'ont pas d'`id` explicite en reçoivent un du scanner (`q3`, dérivé du titre) : si le moteur lisait l'`id` brut, il ne journaliserait rien pour elles, alors qu'elles figureraient au catalogue. Éternellement neuves, elles reviendraient dans « à réviser » tous les jours sans jamais pouvoir en sortir.
+
+Le moteur dérive donc les identifiants du bloc **par la même règle que l'écriture**, à l'assemblage du `ctx` dans `engine.ts` :
+
+```ts
+	/* Identité des questions pour l'ordonnanceur. La MÊME règle qu'à
+	   l'écriture (editor/export.ts) et qu'à la lecture par le scanner :
+	   trois règles séparées divergeraient, et une question changerait de
+	   clé selon qui la regarde. `quiz-ids.ts` est un module pur — aucune
+	   dépendance ajoutée au moteur. */
+	questionIds: assignQuestionIds(quiz.map(q => ({ id: q.id, title: q.title }))),
+```
+
+et le déclare dans `types/engine-ctx.ts` : `questionIds: string[];`
 
 - [ ] **Step 4: Enregistrer le reste à la soumission (`engine/state.ts`, dans `goToResults`)**
 

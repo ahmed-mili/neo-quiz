@@ -137,3 +137,100 @@ await withSrcModule("src/scheduler/log.ts", (log) => {
 function abime2ids(log, texte) {
 	return log.parseLog(texte).lines.filter(l => l.t === "answer").map(l => l.q);
 }
+
+await withSrcModule(["src/scheduler/state.ts", "src/scheduler/params.ts"], (st, p) => {
+	const r = makeReporter("Ordonnanceur — état dérivé");
+	const P = p.DEFAULT_PARAMS;
+	const T0 = 1_700_000_000_000;
+	const j = (n) => n * JOUR;
+	const item = (q, mod = "M") => ({ q, module: mod, source: "s" });
+	const rep = (q, at, grade, role) => ({ t: "answer", q, at, grade, ...(role ? { role } : {}) });
+	const etat = (events, horizons = {}, now = T0 + j(100)) =>
+		st.deriveStates({ now, items: [item("a")], events, horizons, params: P }).get("a");
+
+	// Une question jamais répondue est NEUVE et due immédiatement.
+	const neuf = etat([]);
+	r.check("jamais répondue → isNew", neuf.isNew, true);
+	r.check("jamais répondue → pas d'échéance", neuf.dueAt, null);
+
+	// Premier succès → intervalle initial.
+	r.check("premier succès → intervalleInitial",
+		etat([rep("a", T0, "correct")]).interval, P.intervalleInitial);
+
+	/* Croissance : le second succès doit avoir lieu APRÈS l'échéance, sinon
+	   le garde-fou de double révision s'applique (cas suivant). */
+	r.check("second succès dû → ×facteurSucces",
+		etat([rep("a", T0, "correct"), rep("a", T0 + j(1), "correct")]).interval,
+		P.intervalleInitial * P.facteurSucces);
+
+	/* GARDE-FOU : rejouer le même quiz dans l'heure ne doit PAS doubler
+	   l'intervalle. Sans lui, le compteur de répétitions remplacerait
+	   l'espacement, seul mécanisme que la littérature valide. */
+	r.check("succès trop tôt → intervalle inchangé",
+		etat([rep("a", T0, "correct"), rep("a", T0 + HEURE, "correct")]).interval,
+		P.intervalleInitial);
+
+	// Échec → intervalle court, et le compteur d'échecs monte.
+	const rate = etat([rep("a", T0, "correct"), rep("a", T0 + j(1), "correct"), rep("a", T0 + j(5), "wrong")]);
+	r.check("échec → intervalleEchec", rate.interval, P.intervalleEchec);
+	r.check("échec → streak remis à zéro", rate.streak, 0);
+	r.check("échec compté", rate.lapses, 1);
+
+	// L'auto-évaluation compte, et « partiel » amortit.
+	r.check("understood = succès plein",
+		etat([rep("a", T0, "correct"), rep("a", T0 + j(1), "understood")]).interval,
+		P.intervalleInitial * P.facteurSucces);
+	r.check("partial amortit",
+		etat([rep("a", T0, "correct"), rep("a", T0 + j(1), "partial")]).interval,
+		P.intervalleInitial * P.facteurPartiel);
+	r.check("review = échec",
+		etat([rep("a", T0, "correct"), rep("a", T0 + j(1), "review")]).interval,
+		P.intervalleEchec);
+
+	/* Un `pre` raté ne raccourcit RIEN : chez Richland, Kornell & Kao,
+	   c'est le groupe qui a essayé ET échoué qui a le mieux appris. */
+	r.check("pre raté → aucun signal", etat([rep("a", T0, "wrong", "pre")]).isNew, true);
+	r.check("pre réussi → aucun signal", etat([rep("a", T0, "correct", "pre")]).isNew, true);
+	r.check("carte read → aucun signal", etat([rep("a", T0, "seen", "read")]).isNew, true);
+	r.check("abandon explicite → aucun signal", etat([rep("a", T0, "skipped")]).isNew, true);
+
+	/* PLAFOND : avec un partiel dans 7 jours, l'intervalle ne dépasse
+	   jamais 2,1 jours, quel que soit le nombre de succès. */
+	const serie = [];
+	for (let k = 0; k < 10; k++) serie.push(rep("a", T0 + j(k * 3), "correct"));
+	const now = T0 + j(27) + j(1);
+	const plafonne = st.deriveStates({
+		now, items: [item("a")], events: serie,
+		horizons: { M: now + j(7) }, params: P,
+	}).get("a");
+	r.check("intervalle plafonné par l'horizon", plafonne.interval <= 2.11 * JOUR, true);
+
+	/* JAMAIS DE SORTIE DU SYSTÈME : dix succès de suite laissent une
+	   échéance finie. Une question qui sortirait après une réussite
+	   sacrifierait exactement ce que l'espacement sert à obtenir. */
+	const dix = st.deriveStates({
+		now, items: [item("a")], events: serie, horizons: {}, params: P,
+	}).get("a");
+	r.check("dix succès → échéance toujours finie", Number.isFinite(dix.dueAt), true);
+	r.check("dix succès → toujours pas neuve", dix.isNew, false);
+
+	/* RE-BORNAGE AU PLAFOND ACTUEL : un intervalle calculé quand l'examen
+	   était loin doit se resserrer quand il approche. */
+	const large = [rep("a", T0, "correct"), rep("a", T0 + j(1), "correct"), rep("a", T0 + j(3), "correct")];
+	const proche = st.deriveStates({
+		now: T0 + j(3), items: [item("a")], events: large,
+		horizons: { M: T0 + j(5) }, params: P,
+	}).get("a");
+	r.check("l'examen qui approche resserre l'intervalle déjà acquis",
+		proche.interval <= P.intervalleInitial * P.facteurSucces, true);
+
+	// Un événement dont la question n'existe plus n'est jamais planifié.
+	const orphelin = st.deriveStates({
+		now, items: [item("a")], events: [rep("disparue", T0, "correct")],
+		horizons: {}, params: P,
+	});
+	r.check("événement orphelin ignoré", orphelin.has("disparue"), false);
+	r.check("l'item existant reste neuf", orphelin.get("a").isNew, true);
+
+	r.done();
+});

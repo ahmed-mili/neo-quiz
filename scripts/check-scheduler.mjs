@@ -78,3 +78,52 @@ await withSrcModule(["src/scheduler/horizon.ts", "src/scheduler/params.ts"], (h,
 
 	r.done();
 });
+
+await withSrcModule("src/scheduler/log.ts", (log) => {
+	const r = makeReporter("Ordonnanceur — journal");
+
+	// Aller-retour.
+	const e = { t: "answer", q: "note.md::q1", at: 1700000000000, grade: "correct", role: "test" };
+	const relu = log.parseLog(log.formatLine(e));
+	r.check("aller-retour d'un événement", relu.lines, [e]);
+	r.check("rien d'ignoré", relu.ignored, 0);
+
+	/* TOLÉRANCE : un fichier tronqué par une fermeture brutale doit perdre
+	   une révision, pas un semestre. C'est la raison de préférer le JSONL à
+	   un objet JSON unique. */
+	const abime = log.formatLine(e) + '{"t":"answer","q":"b","at":\n' + log.formatLine({ ...e, q: "c" });
+	r.check("ligne corrompue ignorée, le reste survit", abime2ids(log, abime), ["note.md::q1", "c"]);
+	r.check("la corruption est comptée", log.parseLog(abime).ignored, 1);
+
+	// Une ligne sans les champs requis n'est pas un événement.
+	r.check("ligne sans grade ignorée", log.parseLog('{"t":"answer","q":"a","at":1}\n').lines.length, 0);
+	r.check("ligne d'un type inconnu ignorée", log.parseLog('{"t":"autre"}\n').lines.length, 0);
+	r.check("ligne vide ignorée sans compter", log.parseLog("\n\n").ignored, 0);
+
+	// RENOMMAGE : la clé suit la note, y compris par préfixe de dossier.
+	const journal = [
+		log.formatLine({ t: "answer", q: "Cours/Reseaux/ch1.md::q1", at: 1, grade: "correct" }),
+		log.formatLine({ t: "rename", from: "Cours/Reseaux", to: "Cours/Réseaux", at: 2 }),
+		log.formatLine({ t: "answer", q: "Cours/Réseaux/ch1.md::q1", at: 3, grade: "wrong" }),
+	].join("");
+	const applique = log.applyRenames(log.parseLog(journal).lines);
+	r.check("renommage de dossier appliqué par préfixe",
+		applique.map(x => x.q), ["Cours/Réseaux/ch1.md::q1", "Cours/Réseaux/ch1.md::q1"]);
+	r.check("les lignes de renommage ne restent pas des réponses",
+		applique.every(x => x.t === "answer"), true);
+
+	// Un renommage n'affecte QUE les événements qui le précèdent.
+	const apres = log.applyRenames(log.parseLog([
+		log.formatLine({ t: "rename", from: "a.md", to: "b.md", at: 1 }),
+		log.formatLine({ t: "answer", q: "a.md::q1", at: 2, grade: "correct" }),
+	].join("")).lines);
+	r.check("un événement postérieur au renommage n'est pas re-déplacé",
+		apres.map(x => x.q), ["a.md::q1"]);
+
+	r.done();
+});
+
+/** Ids des événements survivants d'un journal abîmé. */
+function abime2ids(log, texte) {
+	return log.parseLog(texte).lines.filter(l => l.t === "answer").map(l => l.q);
+}

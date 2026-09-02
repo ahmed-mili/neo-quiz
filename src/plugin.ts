@@ -21,7 +21,7 @@ import { parseQuizSource, renderInteractiveQuiz } from "./engine";
 import { QuizBuilderView, VIEW_TYPE } from "./editor";
 import { QUIZ_BLOCK_RE, findQuizModeConfigIndex } from "./quiz-utils";
 import { resolveQuizSourceRef } from "./quiz-source-ref";
-import { deriveQuizNoteName, buildQuizRefBlockContent, isLessonNoteContent } from "./quiz-from-lesson";
+import { deriveQuizNoteName, buildQuizRefBlockContent, isLessonNoteContent, isLessonNoteContentExact, isLessonNameLinkSafe } from "./quiz-from-lesson";
 import { QuizDashboardView, VIEW_TYPE_DASHBOARD } from "./dashboard";
 import { createScanner } from "./dashboard/scanner";
 import type { Scanner } from "./dashboard/scanner";
@@ -1366,12 +1366,35 @@ export default class InteractiveQuizPlugin extends Plugin {
 				const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (!activeView) return false;
 				const content = activeView.editor.getValue();
-				if (!isLessonNoteContent(content)) return false;
-				if (checking) return true;
+
+				if (checking) {
+					// Visibilité de la palette : la version MÉMOÏSÉE (approximative
+					// sur de rares collisions) suffit, elle n'a aucun effet de bord.
+					return isLessonNoteContent(content);
+				}
+
+				/* FIX round 2 de revue (finding 3, Critical) : l'EXÉCUTION ne doit
+				   JAMAIS passer par le cache approximatif — une collision de
+				   longueur + préfixe entre deux notes (réaliste avec un modèle de
+				   note commun) ferait créer une note quiz référençant la mauvaise
+				   leçon, en silence. `isLessonNoteContentExact` reparse le contenu
+				   RÉEL, sans compromis, juste avant l'effet de bord. */
+				if (!isLessonNoteContentExact(content)) return false;
 
 				void (async () => {
 					const lessonFile = activeView.file;
 					if (!lessonFile) return;
+
+					/* FIX round 2 de revue (finding 1, Critical résiduel) : un nom de
+					   note contenant `#` ou `|` casse silencieusement `toLinkpath`
+					   (ancre ou alias tronquant le nom). Aucune séquence d'échappement
+					   n'existe côté wikilink : on refuse d'écrire un bloc qui pointerait
+					   ailleurs plutôt que de l'écrire quand même. */
+					if (!isLessonNameLinkSafe(lessonFile.basename)) {
+						new Notice(t("plugin.notice.lessonNameNotLinkable", { name: lessonFile.basename }));
+						return;
+					}
+
 					const quizName = deriveQuizNoteName(lessonFile.basename);
 					/* FIX round 1 de revue (finding 2, Critical) : `TFolder.path` de
 					   la racine du vault vaut "/", pas "" — `lessonFile.parent ? … :

@@ -1468,82 +1468,139 @@ await withSrcModule("src/quiz-utils.ts", ({ findQuizModeConfigIndex }) => {
 
 /**
  * Commande "Créer la note quiz depuis cette leçon" (task 9, 2026-08-31).
- * Fonctions PURES qui décident du nom créé, du contenu écrit, et de la
- * visibilité de la commande. La partie branchée (lecture de l'éditeur actif,
- * écriture/ouverture du fichier, résolution du chemin racine du vault via
- * `TFolder.isRoot()`) n'est pas testable sans Obsidian et reste dans
+ * Fonctions PURES qui décident du nom créé, du contenu écrit, de la
+ * visibilité de la commande, et de la sûreté d'un nom pour un wikilink. La
+ * partie branchée (lecture de l'éditeur actif, écriture/ouverture du
+ * fichier, résolution du chemin racine du vault via `TFolder.isRoot()`,
+ * Notice de refus) n'est pas testable sans Obsidian et reste dans
  * plugin.ts, réduite au minimum (règle du brief).
+ *
+ * FIX round 2 de revue (finding 2, Critical) : round 1 vérifiait la
+ * résolution du lien avec une régex réimplémentée À LA MAIN, tronquée (sans
+ * le découpage sur `|` ni le retrait de l'ancre `#`) — un mannequin qui ne
+ * pouvait structurellement pas révéler le défaut du finding 1. On charge ici
+ * la VRAIE `toLinkpath` de quiz-source-ref.ts, la même que `plugin.ts`
+ * appelle en pratique via `resolveQuizSourceRef`.
  */
-await withSrcModule("src/quiz-from-lesson.ts", ({ deriveQuizNoteName, buildQuizRefBlockContent, isLessonNoteContent }) => {
-	const r = makeReporter("Créer la note quiz depuis la leçon");
+await withSrcModule(
+	["src/quiz-from-lesson.ts", "src/quiz-source-ref.ts"],
+	(
+		{ deriveQuizNoteName, buildQuizRefBlockContent, isLessonNoteContent, isLessonNameLinkSafe },
+		{ toLinkpath },
+	) => {
+		const r = makeReporter("Créer la note quiz depuis la leçon");
 
-	r.check("suffixe '— Lesson' (cadratin) remplacé par '— Quiz'",
-		deriveQuizNoteName("Chapitre 1 — Lesson"), "Chapitre 1 — Quiz");
-	// FIX round 1 de revue, finding 5 : tiret SIMPLE aussi reconnu.
-	r.check("suffixe '- Lesson' (tiret simple) remplacé par '— Quiz'",
-		deriveQuizNoteName("Chapitre 1 - Lesson"), "Chapitre 1 — Quiz");
-	r.check("nom sans suffixe reconnu : '— Quiz' simplement ajouté",
-		deriveQuizNoteName("Chapitre 1"), "Chapitre 1 — Quiz");
+		r.check("suffixe '— Lesson' (cadratin) remplacé par '— Quiz'",
+			deriveQuizNoteName("Chapitre 1 — Lesson"), "Chapitre 1 — Quiz");
+		// FIX round 1 de revue, finding 5 : tiret SIMPLE aussi reconnu.
+		r.check("suffixe '- Lesson' (tiret simple) remplacé par '— Quiz'",
+			deriveQuizNoteName("Chapitre 1 - Lesson"), "Chapitre 1 — Quiz");
+		r.check("nom sans suffixe reconnu : '— Quiz' simplement ajouté",
+			deriveQuizNoteName("Chapitre 1"), "Chapitre 1 — Quiz");
 
-	r.check("contenu du bloc de référence généré (nom sage)",
-		buildQuizRefBlockContent("Chapitre 1 — Lesson"),
-		"```quiz-blocks\n[{ mode: \"quiz\", source: \"[[Chapitre 1 — Lesson]]\" }]\n```\n");
+		r.check("contenu du bloc de référence généré (nom sage)",
+			buildQuizRefBlockContent("Chapitre 1 — Lesson"),
+			"```quiz-blocks\n[{ mode: \"quiz\", source: \"[[Chapitre 1 — Lesson]]\" }]\n```\n");
 
-	/* FIX round 1 de revue, finding 1 (Critical) : noms HOSTILES — la revue
-	   reprochait à la version précédente d'écrire un JSON5 invalide (silence,
-	   note illisible à l'ouverture) ou un lien cassé. Chaque cas ci-dessous
-	   PARSE réellement le bloc généré avec JSON5 (comme `parseQuizSource` le
-	   ferait) et vérifie que le `source` qui en ressort, une fois passé par
-	   `toLinkpath`, redonne EXACTEMENT le nom de départ — la seule preuve
-	   qui vaille, pas une relecture de la grammaire. */
-	const nomsHostiles = [
-		"Chapitre [1]",                 // crochets : cassent un wikilink lu par une regex non ancrée
-		"Cours \"spécial\"",             // guillemet double : illégal sur Windows, légal ailleurs
-		"Dossier\Note",                // contre-oblique : idem
-		"Chapitre 1 — Lesson",          // cas sage, doit rester correct après le fix
-	];
-	for (const nom of nomsHostiles) {
-		const bloc = buildQuizRefBlockContent(nom);
-		const match = bloc.match(/```quiz-blocks\n([\s\S]*?)\n```/);
-		let parsed;
-		let erreurParse = null;
-		try {
-			parsed = JSON5.parse(match[1]);
-		} catch (err) {
-			erreurParse = err.message;
+		/* FIX round 1 de revue, finding 1 (Critical) : noms HOSTILES pour le
+		   JSON5 et pour les crochets internes — chaque cas ci-dessous PARSE
+		   réellement le bloc généré avec JSON5, puis rejoue la VRAIE
+		   `toLinkpath` (fix round 2, finding 2) sur le `source` obtenu, et
+		   vérifie qu'elle redonne EXACTEMENT le nom de départ. */
+		const nomsHostilesResolubles = [
+			"Chapitre [1]",              // crochets : innocents pour toLinkpath (regex ancrées)
+			"Cours \"spécial\"",          // guillemet double : illégal sur Windows, légal ailleurs
+			"Dossier\Note",              // vraie contre-oblique (échappée dans CE literal JS)
+			"Chapitre 1 — Lesson",        // cas sage, doit rester correct après le fix
+		];
+		for (const nom of nomsHostilesResolubles) {
+			const bloc = buildQuizRefBlockContent(nom);
+			const match = bloc.match(/```quiz-blocks\n([\s\S]*?)\n```/);
+			let parsed;
+			let erreurParse = null;
+			try {
+				parsed = JSON5.parse(match[1]);
+			} catch (err) {
+				erreurParse = err.message;
+			}
+			r.check(`nom hostile ${JSON.stringify(nom)} -> JSON5 valide`, erreurParse, null);
+			if (!erreurParse) {
+				const source = parsed[0].source;
+				r.check(`nom hostile ${JSON.stringify(nom)} -> toLinkpath (la VRAIE) résout vers le nom exact`,
+					toLinkpath(source), nom);
+			}
 		}
-		r.check(`nom hostile ${JSON.stringify(nom)} -> JSON5 valide`, erreurParse, null);
-		if (!erreurParse) {
-			const source = parsed[0].source;
-			// toLinkpath (quiz-source-ref.ts) ne retire que les 2 premiers et 2
-			// derniers caractères de la chaîne complète (regex ancrées) : le nom
-			// interne doit ressortir intact quels que soient ses crochets.
-			const linkpath = source.replace(/^!/, "").replace(/^\[\[/, "").replace(/\]\]$/, "");
-			r.check(`nom hostile ${JSON.stringify(nom)} -> lien résolu vers le nom exact`, linkpath, nom);
-		}
-	}
 
-	r.check("note en mode lesson -> commande visible",
-		isLessonNoteContent("```quiz-blocks\n[{ mode: 'lesson' }]\n```"), true);
-	r.check("note en mode quiz -> commande masquée",
-		isLessonNoteContent("```quiz-blocks\n[{ mode: 'quiz' }]\n```"), false);
-	r.check("note sans bloc quiz-blocks -> commande masquée",
-		isLessonNoteContent("# Une note ordinaire, sans bloc."), false);
-	r.check("bloc JSON5 invalide -> commande masquée, pas d'exception",
-		isLessonNoteContent("```quiz-blocks\n[{ mode: 'lesson\n```"), false);
+		/* FIX round 2 de revue, finding 1 (Critical résiduel) : un nom contenant
+		   `|` (alias) ou `#` (ancre) tronque le lien EN SILENCE — pas une
+		   histoire d'échappement, `isLessonNameLinkSafe` doit REFUSER ces noms
+		   pour que `plugin.ts` affiche une Notice plutôt que d'écrire un bloc
+		   qui pointe ailleurs. Preuve du défaut lui-même : sans le refus, la
+		   VRAIE `toLinkpath` tronque bel et bien le nom au premier `|`/`#`. */
+		r.check("nom avec '|' refusé (aurait tronqué le lien à toLinkpath)",
+			isLessonNameLinkSafe("Chapitre 1 | brouillon"), false);
+		r.check("nom avec '#' refusé (aurait tronqué le lien à toLinkpath)",
+			isLessonNameLinkSafe("Chapitre 1 #brouillon"), false);
+		r.check("nom sage accepté",
+			isLessonNameLinkSafe("Chapitre 1 — Lesson"), true);
+		r.check("preuve du défaut lui-même : toLinkpath tronque bien un nom avec '|'",
+			toLinkpath("[[Chapitre 1 | brouillon]]"), "Chapitre 1");
+		r.check("preuve du défaut lui-même : toLinkpath tronque bien un nom avec '#'",
+			toLinkpath("[[Chapitre 1 #brouillon]]"), "Chapitre 1");
 
-	/* FIX round 1 de revue, finding 4 : la mémoïsation (longueur + préfixe de
-	   200 caractères) ne doit jamais figer un résultat périmé pour un contenu
-	   RÉELLEMENT différent — y compris deux contenus qui partagent leurs 200
-	   premiers caractères mais divergent après (le bloc quiz-blocks plus loin
-	   dans la note). */
+		r.check("note en mode lesson -> commande visible",
+			isLessonNoteContent("```quiz-blocks\n[{ mode: 'lesson' }]\n```"), true);
+		r.check("note en mode quiz -> commande masquée",
+			isLessonNoteContent("```quiz-blocks\n[{ mode: 'quiz' }]\n```"), false);
+		r.check("note sans bloc quiz-blocks -> commande masquée",
+			isLessonNoteContent("# Une note ordinaire, sans bloc."), false);
+		r.check("bloc JSON5 invalide -> commande masquée, pas d'exception",
+			isLessonNoteContent("```quiz-blocks\n[{ mode: 'lesson\n```"), false);
+
+		/* FIX round 1 de revue, finding 4 : la mémoïsation (longueur + préfixe
+		   de 200 caractères) ne doit jamais figer un résultat périmé pour un
+		   contenu RÉELLEMENT différent — y compris deux contenus qui partagent
+		   leurs 200 premiers caractères mais divergent après (le bloc
+		   quiz-blocks plus loin dans la note). Cette fonction MÉMOÏSÉE ne sert
+		   plus qu'à la visibilité (fix round 2, finding 3) — l'exécution utilise
+		   `isLessonNoteContentExact`, testée séparément ci-dessous. */
+		const prefixeCommun = "# ".padEnd(210, "x") + "\n";
+		r.check("mémoïsation : deux contenus au même préfixe mais mode différent (lesson) sont distingués",
+			isLessonNoteContent(prefixeCommun + "```quiz-blocks\n[{ mode: 'lesson' }]\n```"), true);
+		r.check("mémoïsation : deux contenus au même préfixe mais mode différent (quiz) sont distingués",
+			isLessonNoteContent(prefixeCommun + "```quiz-blocks\n[{ mode: 'quiz' }]\n```"), false);
+		r.check("mémoïsation : ré-appel sur le même contenu redonne le même résultat (cache exercé)",
+			isLessonNoteContent(prefixeCommun + "```quiz-blocks\n[{ mode: 'quiz' }]\n```"), false);
+
+		r.done();
+	},
+);
+
+/**
+ * FIX round 2 de revue (finding 3, Critical) : `isLessonNoteContentExact`
+ * (non mémoïsée) doit donner le résultat correct pour CHAQUE appel, y
+ * compris deux appels consécutifs à contenu différent mais même longueur et
+ * même préfixe de 200 caractères — le scénario de collision qui aurait
+ * trompé la version mémoïsée si `plugin.ts` s'en était servi pour exécuter
+ * la commande.
+ */
+await withSrcModule("src/quiz-from-lesson.ts", ({ isLessonNoteContentExact }) => {
+	const r = makeReporter("isLessonNoteContentExact — jamais de collision de cache sur le chemin d'exécution");
+
 	const prefixeCommun = "# ".padEnd(210, "x") + "\n";
-	r.check("mémoïsation : deux contenus au même préfixe mais mode différent (lesson) sont distingués",
-		isLessonNoteContent(prefixeCommun + "```quiz-blocks\n[{ mode: 'lesson' }]\n```"), true);
-	r.check("mémoïsation : deux contenus au même préfixe mais mode différent (quiz) sont distingués",
-		isLessonNoteContent(prefixeCommun + "```quiz-blocks\n[{ mode: 'quiz' }]\n```"), false);
-	r.check("mémoïsation : ré-appel sur le même contenu redonne le même résultat (cache exercé)",
-		isLessonNoteContent(prefixeCommun + "```quiz-blocks\n[{ mode: 'quiz' }]\n```"), false);
+	const contenuLesson = prefixeCommun + "```quiz-blocks\n[{ mode: 'lesson' }]\n```";
+	const contenuQuiz = prefixeCommun + "```quiz-blocks\n[{ mode: 'quiz' }]\n```";
+
+	r.check("contenu 'lesson' -> true", isLessonNoteContentExact(contenuLesson), true);
+	// Même longueur et même préfixe que le cas précédent : une version
+	// mémoïsée sur (longueur, préfixe) répondrait à tort `true` ici si elle
+	// n'avait pas recalculé. `isLessonNoteContentExact` n'a pas de cache : ce
+	// second appel n'a aucun moyen de réutiliser le premier résultat.
+	r.check("contenu 'quiz' de même longueur/préfixe -> false, sans se souvenir de l'appel précédent",
+		isLessonNoteContentExact(contenuQuiz), false);
+	// Et l'inverse, pour prouver l'absence de biais dans un sens ou l'autre.
+	r.check("ré-appel sur 'lesson' -> true à nouveau",
+		isLessonNoteContentExact(contenuLesson), true);
 
 	r.done();
 });

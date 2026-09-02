@@ -144,6 +144,7 @@ export const FR_PLUGIN: Record<keyof typeof EN_PLUGIN, string> = {
 	"plugin.notice.openError": "Erreur lors de l'ouverture",
 	"plugin.notice.createQuizFailed": "Impossible de créer la note quiz",
 	"plugin.notice.quizNoteAlreadyExists": "La note quiz existe déjà, ouverture : {name}",
+	"plugin.notice.lessonNameNotLinkable": "Impossible de référencer « {name} » : un nom de note contenant # ou | ne permet pas de créer un lien fiable. Renommez la note et réessayez.",
 	"plugin.block.error": "⚠️ Impossible de charger le quiz : {error}",
 	"plugin.block.unknownError": "erreur inconnue",
 	/* ── Résolution d'une note Quiz vers sa note Lesson (source) ── */

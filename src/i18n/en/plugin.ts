@@ -145,6 +145,7 @@ export const EN_PLUGIN = {
 	"plugin.notice.openError": "Could not open the quiz",
 	"plugin.notice.createQuizFailed": "Could not create the quiz note",
 	"plugin.notice.quizNoteAlreadyExists": "Quiz note already exists, opening it: {name}",
+	"plugin.notice.lessonNameNotLinkable": "Can't reference \"{name}\": a note name containing # or | can't be turned into a reliable link. Rename the note and try again.",
 	"plugin.block.error": "⚠️ Unable to load the quiz: {error}",
 	"plugin.block.unknownError": "unknown error",
 	/* ── Résolution d'une note Quiz vers sa note Lesson (source) ── */

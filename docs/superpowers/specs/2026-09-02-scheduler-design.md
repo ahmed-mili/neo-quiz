@@ -363,9 +363,24 @@ plutôt qu'un état résumé mis à jour au fil de l'eau.
 
 ### 9.1 Enregistrer
 
-**Au verrouillage de chaque question, pas à l'écran de résultats.** Une session
-abandonnée à mi-parcours contient de vraies réponses, et les sessions abandonnées
-sont fréquentes.
+**Là où le verdict devient définitif**, ce qui n'est pas le même moment selon le
+mode. Vérifié dans le moteur le 2026-09-02, contre une première rédaction de
+cette spec qui disait « au verrouillage de chaque question » : `quizState.locked`
+est **global au quiz**, une question de QCM n'est jamais verrouillée seule.
+
+| Mode | Moment | Grade |
+|---|---|---|
+| texte / leçon | clic sur un bouton d'auto-évaluation (`engine/text-only.ts:408`) | `understood` / `partial` / `review` |
+| QCM, examen | soumission, dans `goToResults` (`engine/state.ts:401`) | `correct` / `wrong` selon `isCorrect(i)` |
+| carte `read` | soumission | `seen` |
+| `pre` abandonnée (`lessonPreSkipped`) | soumission | `skipped` |
+
+Enregistrer une réponse de QCM plus tôt n'aurait aucun sens : **avant la
+soumission, il n'y a pas de verdict**, seulement une sélection.
+
+Un tableau `recorded: boolean[]` dans `QuizState`, remis à zéro par `resetQuiz`
+comme l'est déjà `resultsCounted`, empêche qu'une question notée à la main soit
+recomptée à la soumission.
 
 Le moteur ne connaît qu'une interface, comme il ne connaît déjà `StatsStoreLike`
 que par sa forme (`src/engine/state.ts:6`) :
@@ -397,9 +412,20 @@ fera à ce moment-là, avec les données en main.
 
 `chemin::id`. L'`id` est écrit par l'éditeur pour chaque question
 (`src/editor/export.ts:107`) et figé dans `_sourceId` dès sa première
-attribution. Une note écrite à la main sans `id` reçoit la clé que
-`questionId()` lui donnerait : **une seule règle d'attribution**, partagée entre
-lecture et écriture, plutôt que deux qui divergeraient.
+attribution.
+
+**Mesure du 2026-09-02** sur les vaults réels : sur 774 questions dans 45 blocs,
+**771 portent un `id` explicite**, et les 3 restantes ont toutes un titre
+exploitable. Le repli n'est donc pas un cas courant, mais il doit être **exact** :
+si la règle de lecture divergeait de la règle d'écriture, ces questions
+changeraient de clé à la première sauvegarde depuis l'éditeur et perdraient leur
+historique en silence.
+
+D'où l'extraction de `assignQuestionIds()` dans `src/quiz-ids.ts`, appelée par
+`export.ts` (écriture) et par le scanner (lecture) : **une seule règle
+d'attribution**, y compris son mécanisme de réservation et de suffixe, plutôt que
+deux qui divergeraient. `check:export` et `audit-vaults.mjs` couvrent ce
+déplacement.
 
 Le couplage au chemin est assumé et confiné à l'adaptateur : le noyau ne voit que
 des chaînes. Un renommage émet une ligne `rename` (§4.4), sur l'événement du
@@ -410,13 +436,24 @@ comme `stats-store.ts` le fait déjà.
 repris en `test`), l'ordonnanceur suit deux items. C'est une question de contenu,
 pas de noyau, et la déduplication n'est pas de son ressort.
 
-### 9.4 La date d'examen
+### 9.4 Le catalogue vient du scanner
+
+`dashboard/scanner.ts` parse déjà chaque bloc, mais n'en retient que le
+**nombre** de questions (`QuizIndexEntry.questions`). Il retiendra en plus, par
+note, une entrée légère par question : `{ id, role?, slice? }`. Le parsing est
+déjà fait et l'invalidation incrémentale existe (`scanFile` sur `modify`) : le
+coût est celui du stockage, de l'ordre de 70 Ko pour les 774 questions mesurées.
+
+Relire les notes à chaque calcul de plan serait le seul autre moyen, et il
+refarait à chaque fois un travail déjà fait.
+
+### 9.5 La date d'examen
 
 Un champ dans le modal « Modifier dossier », stocké dans `ModuleOverride`
 (`src/dashboard/quiz-modules.ts:33`), aux côtés du nom, de l'UE, de la couleur et
 de l'icône. Aucune nouvelle surface.
 
-### 9.5 La surface de consultation
+### 9.6 La surface de consultation
 
 Une carte sur l'accueil du dashboard : ce qui est dû, par module et par quiz, et
 un lien qui ouvre le quiz concerné.

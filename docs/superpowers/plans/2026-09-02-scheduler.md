@@ -1666,7 +1666,11 @@ L'initialiser dans le littéral `quizState` d'`engine.ts` (`recorded: []`) et da
 	};
 ```
 
-Injecté dans `engine.ts` au moment de l'assemblage du `ctx` : `reviewSink: (plugin as { _reviewStore?: ... })._reviewStore`.
+Injecté dans `engine.ts` au moment de l'assemblage du `ctx`, par la même lecture indirecte que `_statsStore` (`engine/state.ts:6`) — le moteur ne dépend d'aucun type du tableau de bord :
+
+```ts
+	reviewSink: (plugin as { _reviewStore?: EngineCtx["reviewSink"] })._reviewStore,
+```
 
 - [ ] **Step 3: Enregistrer à l'auto-évaluation (`engine/text-only.ts`)**
 

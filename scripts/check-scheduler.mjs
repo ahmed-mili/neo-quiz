@@ -120,6 +120,16 @@ await withSrcModule("src/scheduler/log.ts", (log) => {
 	r.check("un événement postérieur au renommage n'est pas re-déplacé",
 		apres.map(x => x.q), ["a.md::q1"]);
 
+	// VALIDATION DU ROLE : asymétrie volontaire.
+	const avecRole = { t: "answer", q: "x", at: 1, grade: "correct", role: "pre" };
+	const relectRole = log.parseLog(log.formatLine(avecRole));
+	r.check("role valide conservé après aller-retour", relectRole.lines[0].role, "pre");
+
+	const avecRoleInconnu = log.parseLog(log.formatLine({ t: "answer", q: "y", at: 2, grade: "correct", role: "inconnu" }));
+	r.check("role inconnu : ligne présente sans role, ignored=0",
+		{ present: avecRoleInconnu.lines.length > 0, hasRole: !!avecRoleInconnu.lines[0]?.role, ignored: avecRoleInconnu.ignored },
+		{ present: true, hasRole: false, ignored: 0 });
+
 	r.done();
 });
 

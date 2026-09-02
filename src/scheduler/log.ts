@@ -1,4 +1,5 @@
 import type { LogLine, ReviewEvent, ReviewGrade } from "./types";
+import { QUESTION_ROLES } from "../types/quiz";
 
 /**
  * LE FORMAT DU JOURNAL APPARTIENT AU NOYAU.
@@ -47,7 +48,12 @@ function validate(o: unknown): LogLine | null {
 		if (typeof r.at !== "number" || !Number.isFinite(r.at)) return null;
 		if (typeof r.grade !== "string" || !GRADES.includes(r.grade as ReviewGrade)) return null;
 		const e: ReviewEvent = { t: "answer", q: r.q, at: r.at, grade: r.grade as ReviewGrade };
-		if (typeof r.role === "string") e.role = r.role as ReviewEvent["role"];
+		/* ASYMÉTRIE VOLONTAIRE : un grade inconnu rejette la ligne (sans verdict, pas
+		   d'événement). Un role inconnu est tolérĂ© et simplement omis (métadonnée
+		   optionnelle, fusion de journaux entre versions compatibles du noyau). */
+		if (typeof r.role === "string" && QUESTION_ROLES.includes(r.role as never)) {
+			e.role = r.role as ReviewEvent["role"];
+		}
 		return e;
 	}
 	if (r.t === "rename") {

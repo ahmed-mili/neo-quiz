@@ -1550,7 +1550,14 @@ export function createReviewStore(plugin: ReviewStorePlugin, scanner: Scanner): 
 			// interprété en UTC et décalerait la date d'un jour selon le fuseau.
 			const [a, m, j] = brut.split("-").map(Number);
 			if (!a || !m || !j) continue;
-			out[dossier] = new Date(a, m - 1, j).getTime();
+			const ts = new Date(a, m - 1, j).getTime();
+			/* Une date invalide vaut NaN, et NaN traverse `horizonFor` en
+			   silence (`typeof NaN === "number"`, et `NaN <= now` est faux) :
+			   tout le module se retrouverait planifié sur des échéances NaN.
+			   La garde est ICI, pas dans le noyau : c'est l'adaptateur qui
+			   touche des données saisies (revue task 1, 2026-09-02). */
+			if (!Number.isFinite(ts)) continue;
+			out[dossier] = ts;
 		}
 		return out;
 	}

@@ -13,6 +13,7 @@
     "check:export": "node scripts/check-export.mjs",
     "check:lesson": "node scripts/check-lesson.mjs",
     "check:markers": "node scripts/check-render-markers.mjs \"C:/obsidian-vaults/Personal\" \"C:/obsidian-vaults/Efrei\"",
+    "check:scheduler": "node scripts/check-scheduler.mjs",
     "test": "node --test scripts/set-version.test.mjs scripts/ship.test.mjs",
     "version:set": "node scripts/set-version.mjs",
     "version:patch": "node scripts/set-version.mjs patch",

@@ -36,6 +36,7 @@ import type { AiClient } from "../dashboard/ai-client";
 import type { AiUsageEntry } from "../dashboard/ai-usage";
 import type { AiHandlers } from "../dashboard/ai";
 import type { ModuleOverride } from "../dashboard/quiz-modules";
+import type { ReviewStore } from "../dashboard/review-store";
 
 export type { Scanner, StatsStore, AiClient, AiHandlers };
 
@@ -108,6 +109,10 @@ export interface DashboardPlugin extends Plugin {
 	saveSettings(): Promise<void>;
 	_scanner: Scanner;
 	_statsStore: StatsStore;
+	/** Journal de révision par QUESTION (ordonnanceur). Distinct de
+	    `_statsStore`, qui reste la progression par QUIZ pour l'affichage :
+	    deux systèmes, deux questions différentes, à ne pas fusionner. */
+	_reviewStore?: ReviewStore;
 }
 
 /* ════════════════════════════════════════════════════════

@@ -27,6 +27,8 @@ import { createScanner } from "./dashboard/scanner";
 import type { Scanner } from "./dashboard/scanner";
 import { createStatsStore } from "./dashboard/stats-store";
 import type { StatsStore, QuizStatRecord } from "./dashboard/stats-store";
+import { createReviewStore } from "./dashboard/review-store";
+import type { ReviewStore } from "./dashboard/review-store";
 import type { ModuleOverride } from "./dashboard/quiz-modules";
 import * as voiceInstall from "./dashboard/voice-install";
 import type { VoiceBackend, VoiceModelId, VoiceLang } from "./dashboard/voice-install";
@@ -1049,6 +1051,10 @@ export default class InteractiveQuizPlugin extends Plugin {
 	log!: Logger;
 	_scanner!: Scanner;
 	_statsStore!: StatsStore;
+	/** Journal de révision par QUESTION (ordonnanceur). Distinct de
+	    `_statsStore`, qui reste la progression par QUIZ pour l'affichage :
+	    deux systèmes, deux questions différentes, à ne pas fusionner. */
+	_reviewStore?: ReviewStore;
 	/** Icône du ribbon : conservée pour retraduire son tooltip (applyLanguage). */
 	_ribbonEl: HTMLElement | null = null;
 
@@ -1062,6 +1068,8 @@ export default class InteractiveQuizPlugin extends Plugin {
 		this._scanner = createScanner(this.app);
 		this._statsStore = createStatsStore(this);
 		this._statsStore.load();
+		this._reviewStore = createReviewStore(this, this._scanner);
+		void this._reviewStore.load();
 
 		/* ─── Quiz Dashboard View ─── */
 		this.registerView(VIEW_TYPE_DASHBOARD, (leaf) => new QuizDashboardView(leaf, this));
@@ -1174,6 +1182,7 @@ export default class InteractiveQuizPlugin extends Plugin {
 	onunload(): void {
 		this._scanner?.destroy();
 		this._statsStore?.destroy();
+		this._reviewStore?.destroy();
 		// Menus/popovers portalés au <body> (ui-select) : sans fermeture ici,
 		// un menu ouvert au moment d'un unload (update/reload du plugin)
 		// resterait orphelin dans le DOM avec ses closures mortes.

@@ -35,6 +35,11 @@ export interface ModuleOverride {
 	ue?: string | null;
 	color?: string;
 	icon?: string;
+	/** Date d'examen du module, format `AAAA-MM-JJ` (chantier ordonnanceur,
+	    UI de saisie posée par la task 9). Déclaré ici dès la task 7 —
+	    l'adaptateur du journal de révision (review-store.ts) le lit déjà en
+	    `?.`, sans attendre l'UI qui l'écrit. */
+	examDate?: string;
 }
 
 /** Applique les overrides réglages PAR-DESSUS la table issue de la note.

@@ -106,11 +106,33 @@ quotidienne.
 
 L'enveloppe qui porte le moteur, l'ordonnanceur et la génération par CLI.
 
-**La question à trancher avant toute ligne de code** : *où vivent les quiz d'un
-utilisateur qui n'a pas Obsidian ?* Dans le greffon ils vivent dans des notes.
-Dans l'application, il faut un modèle de contenu — fichiers, base locale — et
-ce choix décide de l'import, du partage entre camarades et de la
-synchronisation. Rien ne doit être écrit avant.
+**La question du modèle de contenu est TRANCHÉE** (Ahmed, 2026-09-03) : *les quiz
+restent des fichiers `.md` dans un dossier*, et ce dossier peut très bien rester
+un vault Obsidian. Pas de base locale, pas de format propriétaire.
+
+Ce que cela règle d'un coup : l'import est une copie de fichier, le partage entre
+camarades est un envoi de fichier, et la synchronisation est celle du dossier
+(Obsidian Sync, OneDrive, Syncthing, git) — donc hors du produit. Le greffon et
+les applications lisent le même corpus, sans passerelle.
+
+Ce que cela élargit : la part réutilisable ne se limite plus au moteur et à
+l'ordonnanceur. Toute la chaîne de lecture/écriture d'un bloc devient commune —
+`quiz-utils.ts` (parsing JSON5), `editor/convert.ts`, `editor/export.ts`,
+`quiz-ids.ts` (la règle d'identité) — soit nettement plus que ce que le tableau
+du §2 estimait.
+
+**Ce qui reste à trancher**, et qui découle de ce choix :
+
+- **L'accès aux fichiers sur Android.** Le stockage cloisonné interdit à une
+  application de lire un dossier arbitraire : il faut passer par le Storage
+  Access Framework (l'utilisateur désigne le dossier une fois) ou se contenter
+  d'un dossier propre à l'application. C'est la seule vraie conséquence
+  technique de « des fichiers dans un dossier », et elle se décide avant la pile.
+- **Où vit le journal de révision.** Il est aujourd'hui écrit dans le dossier du
+  greffon (`<manifest.dir>/review-log.jsonl`, chantier 1). Si les trois hôtes
+  partagent le même corpus, ils doivent partager le même historique : le journal
+  doit alors vivre à côté des quiz, pas à côté d'un greffon. Migration connue,
+  pas un défaut du chantier 1.
 
 Deuxième décision : la pile technique. Elle conditionne le chantier 3, qui doit
 partager le maximum avec celui-ci.
@@ -131,9 +153,10 @@ avant que son remplaçant existe.
 
 ## 4. Ce qui n'est pas décidé, et ne doit pas l'être par défaut
 
-- **Le modèle de contenu de l'application** (chantier 2). La question la plus
-  structurante de tout le projet.
 - **La pile technique** des deux applications.
+- **L'accès aux fichiers sur Android** (Storage Access Framework ou dossier
+  propre à l'application), conséquence directe du modèle de contenu tranché.
+- **L'emplacement du journal de révision** une fois le corpus partagé.
 - **La distribution** aux camarades : lien, fichier, dépôt.
 - **Le partage de quiz entre étudiants.** Le public visé a les mêmes cours, les
   mêmes PDF et les mêmes partiels : un quiz fait par l'un sert tel quel aux

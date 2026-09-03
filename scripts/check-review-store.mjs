@@ -35,7 +35,11 @@ function fakePlugin(options = {}) {
 	const emitRename = (file, oldPath) => {
 		for (const ref of [...renameRefs]) ref.cb(file, oldPath);
 	};
-	return { plugin, appended, emitRename, renameListenerCount: () => renameRefs.size };
+	// Callback brut, capturé indépendamment du Set : contourne le retrait
+	// simulé par `offref` pour isoler la garde `detruit` interne au module
+	// (voir le test « destruction »), plutôt que de re-tester `offref` deux fois.
+	const renameCallback = () => [...renameRefs][0]?.cb ?? null;
+	return { plugin, appended, emitRename, renameCallback, renameListenerCount: () => renameRefs.size };
 }
 
 const fakeScanner = (quizzes) => ({ getQuizzes: () => quizzes });
@@ -132,6 +136,31 @@ await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore 
 });
 
 await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
+	// Régression 2 : le listener de renommage est armé de façon SYNCHRONE,
+	// avant que `load()` (asynchrone) n'ait fini de lire le disque. Pendant
+	// cette fenêtre, `lignes` est encore vide, donc le filtre de pertinence
+	// ne peut reconnaître AUCUN chemin — sans garde, l'événement serait
+	// perdu et la clé resterait orpheline pour toujours dans le journal fusionné.
+	const r = makeReporter("Adaptateur — renommage pendant load()");
+	let resolveRead;
+	const lecture = new Promise(resolve => { resolveRead = resolve; });
+	const { plugin, appended, emitRename } = fakePlugin({ exists: async () => true, read: async () => lecture });
+	const store = createReviewStore(plugin, fakeScanner([]));
+	const loading = store.load();
+	// `lignes` est encore vide ici : `load()` n'a pas rendu la main.
+	emitRename({ path: "Cours/Réseaux" }, "Cours/Reseaux");
+	resolveRead("");
+	await loading;
+	store.destroy();
+	await tick();
+	r.check("un renommage survenu pendant la lecture est quand même écrit", appended.length, 1);
+	const ligne = appended[0] ? JSON.parse(appended[0].trim()) : null;
+	r.check("c'est bien la ligne de renommage, pas une ligne perdue", ligne?.t, "rename");
+	r.check("'from' correct malgré un journal encore vide au moment de l'événement", ligne?.from, "Cours/Reseaux");
+	r.done();
+});
+
+await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
 	const r = makeReporter("Adaptateur — erreurs de lecture");
 	const warnings = [];
 	const originalWarn = console.warn;
@@ -203,30 +232,51 @@ await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore 
 });
 
 await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
-	const r = makeReporter("Adaptateur — nouvelle tentative d'écriture");
+	// Un échec d'écriture ne doit plus se réarmer tout seul (régression 3) : le
+	// lot échoué reste en file et repart avec la prochaine vraie activité
+	// (record()/rename), jamais sur une boucle de 500 ms autonome. La console
+	// ne doit signaler qu'UNE fois un échec persistant, pas à chaque tentative.
+	const r = makeReporter("Adaptateur — échec d'écriture ne boucle pas");
 	await withManualDebounce(async clock => {
 		const appels = [];
+		// Échoue deux fois de suite (deux lots distincts, sans succès entre les
+		// deux) avant de réussir : seule une deuxième défaillance CONSÉCUTIVE
+		// distingue « log une fois » de « log à chaque tentative ».
 		const { plugin } = fakePlugin({
 			append: async (_path, texte) => {
 				appels.push(texte);
-				if (appels.length === 1) throw new Error("disque verrouillé");
+				if (appels.length < 3) throw new Error("disque verrouillé");
 			},
 		});
+		const erreurs = [];
 		const originalError = console.error;
-		console.error = (...args) => {
-			if (!String(args[0]).startsWith("[quiz-blocks]")) originalError(...args);
-		};
+		console.error = (...args) => { erreurs.push(args); };
 		try {
 			const store = createReviewStore(plugin, fakeScanner([]));
 			store.record([{ q: "Cours/a.md::q1", grade: "correct" }]);
 			clock.runNext();
 			await settle();
 			await settle();
-			r.check("un échec arme seul une nouvelle tentative", clock.count(), 1);
+			r.check("un échec n'arme plus de nouvelle tentative tout seul", clock.count(), 0);
+			r.check("l'échec est signalé une fois", erreurs.length, 1);
+
+			// Sans nouvel événement, rien ne doit jamais retenter tout seul : le
+			// lot en échec reste en attente indéfiniment, ce qui prouve l'absence
+			// de boucle plutôt qu'un simple délai plus long.
+			store.record([{ q: "Cours/b.md::q1", grade: "wrong" }]);
 			clock.runNext();
 			await settle();
-			r.check("le même lot est retenté sans nouvelle réponse", appels.length, 2);
-			r.check("le contenu retenté est identique", appels[1], appels[0]);
+			await settle();
+			r.check("un deuxième échec consécutif n'arme rien non plus", clock.count(), 0);
+			r.check("un échec persistant ne re-signale pas à chaque tentative", erreurs.length, 1);
+
+			store.record([{ q: "Cours/c.md::q1", grade: "correct" }]);
+			clock.runNext();
+			await settle();
+			r.check("le troisième essai (qui réussit) porte les trois lots en attente", appels.length, 3);
+			const questions = appels[2].trim().split("\n").map(l => JSON.parse(l).q);
+			r.check("le lot en échec repart avec chaque nouvelle activité, dans l'ordre", questions,
+				["Cours/a.md::q1", "Cours/b.md::q1", "Cours/c.md::q1"]);
 			store.destroy();
 		} finally {
 			console.error = originalError;
@@ -298,17 +348,25 @@ await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore 
 		const historique = JSON.stringify({
 			t: "answer", q: "Cours/a.md::q1", at: 1_700_000_000_000, grade: "correct",
 		}) + "\n";
-		const { plugin, emitRename, renameListenerCount } = fakePlugin({
+		const { plugin, emitRename, renameCallback, renameListenerCount } = fakePlugin({
 			exists: async () => true,
 			read: async () => historique,
 		});
 		const store = createReviewStore(plugin, fakeScanner([]));
 		await store.load();
 		r.check("le listener existe avant destroy", renameListenerCount(), 1);
+		// Capturé AVANT destroy() : appeler ce callback brut après coup contourne
+		// le retrait simulé par `offref` et isole la garde interne `detruit` de
+		// `ecrireBientot()` — sans elle, ce test resterait vert même si `offref`
+		// était le seul rempart (ce qu'il était avant cette correction : deux
+		// gardes indépendantes rendaient l'assertion increvable).
+		const cb = renameCallback();
 		store.destroy();
 		r.check("destroy détache son EventRef", renameListenerCount(), 0);
 		emitRename({ path: "Cours/b.md" }, "Cours/a.md");
-		r.check("un rename après destroy ne réarme aucun timer", clock.count(), 0);
+		r.check("un rename après destroy (par le vault) ne réarme aucun timer", clock.count(), 0);
+		cb({ path: "Cours/c.md" }, "Cours/a.md");
+		r.check("le callback brut après destroy, hors offref, n'arme rien non plus", clock.count(), 0);
 	});
 	r.done();
 });

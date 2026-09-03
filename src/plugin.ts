@@ -1068,8 +1068,17 @@ export default class InteractiveQuizPlugin extends Plugin {
 		this._scanner = createScanner(this.app);
 		this._statsStore = createStatsStore(this);
 		this._statsStore.load();
-		this._reviewStore = createReviewStore(this, this._scanner);
-		void this._reviewStore.load();
+		/* `createReviewStore` échoue si `manifest.dir` est absent (API Obsidian :
+		   PluginManifest.dir est optionnel). Ce journal n'est pas encore relié à
+		   l'UI — le dashboard, les commandes et le rendu des blocs quiz-blocks ne
+		   doivent jamais dépendre de sa réussite. `_reviewStore` reste `undefined`
+		   si la création échoue, comme le prévoit déjà son type optionnel. */
+		try {
+			this._reviewStore = createReviewStore(this, this._scanner);
+			void this._reviewStore.load();
+		} catch (e) {
+			this.log.warn("journal de révision indisponible, désactivé pour cette session", e);
+		}
 
 		/* ─── Quiz Dashboard View ─── */
 		this.registerView(VIEW_TYPE_DASHBOARD, (leaf) => new QuizDashboardView(leaf, this));

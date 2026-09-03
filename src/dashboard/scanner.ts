@@ -1,8 +1,9 @@
 import { TFile } from "obsidian";
 import type { App, EventRef } from "obsidian";
-import JSON5 from "json5";
 import type { ParsedQuizItem } from "../editor/modals";
-import { findQuizModeConfigIndex } from "../quiz-utils";
+import { assignQuestionIds } from "../quiz-ids";
+import { extractExamOptions, parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-utils";
+import type { QuestionRole } from "../types/quiz";
 
 /* ══════════════════════════════════════════════════════════
    QUIZ SCANNER — Indexeur de vault
@@ -10,9 +11,6 @@ import { findQuizModeConfigIndex } from "../quiz-utils";
    extrait les métadonnées (titre, nombre de questions, types),
    et maintient un cache à jour via les events vault.
 ══════════════════════════════════════════════════════════ */
-
-const QUIZ_FENCE_START = "```quiz-blocks";
-const QUIZ_FENCE_END = "```";
 
 /**
  * Tag de type de question détecté par le scan (parseQuizMeta ci-dessous).
@@ -34,17 +32,37 @@ export type QuestionTypeTag = "single" | "multiple" | "text" | "ordering" | "mat
  */
 export type QuizTypeTag = "mixed" | "single" | "multiple" | "text" | "ordering" | "matching";
 
-/** Forme minimale lue sur un item brut du tableau JSON5 par le scanner (pas le
- * QuizQuestion complet de types/quiz.ts : parseQuizMeta ne lit que ces 3 champs). */
-interface RawQuizItem {
+/** Forme minimale lue sur un item brut du tableau JSON5 par le scanner. */
+interface RawQuizItem extends Pick<ParsedQuizItem, "id"> {
 	examMode?: boolean;
 	multiSelect?: boolean;
 	type?: string;
+	title?: string;
+	role?: string;
+	slice?: number;
+}
+
+/**
+ * Référence légère d'une question, pour l'ORDONNANCEUR.
+ *
+ * Le scanner parse déjà chaque bloc mais n'en retenait que le NOMBRE de
+ * questions. Relire les notes à chaque calcul de plan referait un travail
+ * déjà fait ; le coût de ces entrées est d'environ 70 Ko pour les 774
+ * questions des vaults réels.
+ */
+export interface QuizItemRef {
+	/** Identifiant attribué par la MÊME règle qu'à l'écriture (quiz-ids.ts) :
+	    une clé de lecture qui divergerait ferait perdre l'historique à la
+	    première sauvegarde depuis l'éditeur. */
+	id: string;
+	role?: QuestionRole;
+	slice?: number;
 }
 
 /** Métadonnées extraites d'un bloc quiz-blocks (parseQuizMeta). */
 export interface QuizMeta {
 	questions: number;
+	items: QuizItemRef[];
 	types: QuestionTypeTag[];
 	quizType: QuizTypeTag;
 }
@@ -89,21 +107,23 @@ export function createScanner(app: App): Scanner {
 	/* ── Parse un bloc quiz-blocks pour extraire les métadonnées ── */
 	function parseQuizMeta(source: string): QuizMeta | null {
 		try {
-			const parsed: unknown = JSON5.parse(source);
-			if (!Array.isArray(parsed)) return null;
-
-			// Ignorer l'objet de mode (examen OU leçon) : c'est la configuration
-			// du bloc, pas une question. Le filtrer sur le seul `examMode`
-			// faisait compter une question de plus à tout quiz en mode leçon —
-			// « 0/6 » sur un quiz qui en montre 5. Par son INDEX, jamais élément
-			// par élément : le critère dépend de la position (quiz-utils.ts).
-			const configIdx = findQuizModeConfigIndex(parsed);
-			const questions = parsed.filter((q, i): q is RawQuizItem => {
-				if (!q || typeof q !== "object") return false;
-				return i !== configIdx;
-			});
+			// La détection de la configuration reste partagée avec le moteur : deux
+			// filtres locaux finiraient par construire des catalogues différents.
+			const sansConfig = extractExamOptions(parseQuizSource(source)).questions;
+			const questions = (sansConfig as unknown[]).filter(
+				(q): q is RawQuizItem => !!q && typeof q === "object"
+			);
 
 			if (questions.length === 0) return null;
+
+			// Les identifiants sont attribués sur le bloc ENTIER, en une passe : la
+			// déduplication dépend de l'ensemble, pas de chaque question isolée.
+			const ids = assignQuestionIds(questions.map(q => ({ id: q.id, title: q.title })));
+			const items: QuizItemRef[] = questions.map((q, i) => ({
+				id: ids[i],
+				...(typeof q.role === "string" ? { role: q.role as QuestionRole } : {}),
+				...(typeof q.slice === "number" ? { slice: q.slice } : {}),
+			}));
 
 			// Détecter les types de questions
 			const typeSet = new Set<QuestionTypeTag>();
@@ -129,6 +149,7 @@ export function createScanner(app: App): Scanner {
 			// pas de la 1re question (qui vaut souvent « Question 1 »).
 			return {
 				questions: questions.length,
+				items,
 				types: Array.from(typeSet),
 				quizType
 			};
@@ -139,19 +160,8 @@ export function createScanner(app: App): Scanner {
 
 	/* ── Extrait le premier bloc quiz-blocks d'un contenu markdown ── */
 	function extractQuizSource(content: string): string | null {
-		const startIdx = content.indexOf(QUIZ_FENCE_START);
-		if (startIdx === -1) return null;
-
-		const afterStart = startIdx + QUIZ_FENCE_START.length;
-		// Le contenu commence après le saut de ligne suivant
-		const contentStart = content.indexOf('\n', afterStart);
-		if (contentStart === -1) return null;
-
-		// Trouver la fermeture
-		const closingFence = content.indexOf('\n' + QUIZ_FENCE_END, contentStart + 1);
-		if (closingFence === -1) return null;
-
-		return content.substring(contentStart + 1, closingFence).trim();
+		const match = content.match(QUIZ_BLOCK_RE);
+		return match ? match[1].trim() : null;
 	}
 
 	/* ── Scan complet du vault ── */

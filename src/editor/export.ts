@@ -2,6 +2,7 @@ import { escHtml, esc5, md2html, isRichHtml } from "./utils";
 import type { DraftQuestion } from "./utils";
 import type { EditorExamOptions } from "../types/editor-ctx";
 import { pickLessonFields } from "../quiz-utils";
+import { assignQuestionIds } from "../quiz-ids";
 
 /**
  * Une valeur quelconque, écrite en JSON5.
@@ -99,8 +100,13 @@ function contientBaliseAttribuee(texte: string): boolean {
 	return false;
 }
 
-function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string {
-	const id = questionId(q, idx, ids);
+function exportQuestion(q: DraftQuestion, idx: number, id: string): string {
+	/* L'identifiant RETENU devient celui de la question. Sans ça, un slug
+	   dérivé du titre était écrit dans la note mais oublié en mémoire : la
+	   retouche suivante du titre le recalculait, et l'ancre HTML comme les
+	   résultats déjà sauvegardés pointaient dans le vide (revue codex
+	   2026-07-31). */
+	q._sourceId = id;
 	const e = esc5;
 	const L: string[] = [];
 	L.push("\t{");
@@ -324,74 +330,15 @@ function exportQuestion(q: DraftQuestion, idx: number, ids?: IdContext): string 
 	return L.join("\n");
 }
 
-/**
- * Identifiant d'une question dans la note.
- *
- * Celui qui y était ÉCRIT prime : il sert d'ancre HTML à la question
- * (engine/cards.ts) et figure dans les résultats déjà sauvegardés. Le dériver
- * du titre à chaque écriture le faisait changer à la moindre retouche.
- *
- * Pour une question qui n'en avait pas, le titre donne un slug — mais un slug
- * ASCII : un titre en grec, en arabe ou fait de ponctuation le vide
- * entièrement, d'où le repli sur `qN`. Et deux questions de MÊME titre
- * produisaient le même identifiant, donc deux ancres `id` identiques dans la
- * page ; `usedIds` les départage.
- */
-/** Identifiants en jeu pour UNE écriture (cf. exportAll). */
-interface IdContext {
-	/** Tous les `_sourceId` du bloc, y compris ceux à venir. */
-	reserves: Set<string>;
-	/** Ceux déjà attribués au fil de l'écriture. */
-	attribues: Set<string>;
-}
-
-function questionId(q: DraftQuestion, idx: number, ctx?: IdContext): string {
-	const explicite = q._sourceId;
-	const base = explicite
-		|| (q.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20)
-		|| `q${idx + 1}`;
-	if (!ctx) return base;
-
-	/* Un identifiant EXPLICITE a le droit de prendre SA réservation — celle-là
-	   seulement. Un slug dérivé, ou un candidat suffixé, n'appartient à
-	   personne : il doit éviter aussi les réservations à venir, sinon il prend
-	   la place d'une question plus bas. Avec `dup, dup, dup-2`, ignorer cette
-	   nuance donnait `dup, dup-2, dup-2-2` — la seule question qui avait un
-	   identifiant unique le perdait (revue codex 2026-07-31).
-	   Le suffixe, lui, s'applique même à un identifiant explicite : deux
-	   questions portant le même (un copier-coller de bloc suffit) auraient la
-	   même ancre, et la seconde deviendrait inatteignable. */
-	const libre = (id: string): boolean => {
-		if (ctx.attribues.has(id)) return false;
-		if (explicite && id === base) return true;
-		return !ctx.reserves.has(id);
-	};
-
-	let id = base;
-	let n = 2;
-	while (!libre(id)) id = `${base}-${n++}`;
-	ctx.attribues.add(id);
-	/* L'identifiant RETENU devient celui de la question. Sans ça, un slug
-	   dérivé du titre était écrit dans la note mais oublié en mémoire : la
-	   retouche suivante du titre le recalculait, et l'ancre HTML comme les
-	   résultats déjà sauvegardés pointaient dans le vide (revue codex
-	   2026-07-31). Vaut aussi pour un identifiant explicite qu'il a fallu
-	   suffixer — c'est bien celui-là, désormais, qui est son ancre. */
-	q._sourceId = id;
-	return id;
-}
-
 function exportAll(questions: DraftQuestion[], examOptions: EditorExamOptions | null = null): string {
-	/* Deux questions ne peuvent pas se retrouver avec la même ancre HTML.
-	   `reserves` retient les identifiants ÉCRITS dans la note, y compris ceux
-	   des questions qui viennent plus bas : un slug dérivé d'un titre ne doit
-	   pas prendre la place de l'un d'eux, sinon c'est l'identifiant qu'il
-	   fallait préserver qui se retrouve suffixé. */
-	const attribution: IdContext = {
-		reserves: new Set(questions.map(q => q._sourceId).filter((v): v is string => !!v)),
-		attribues: new Set<string>(),
-	};
-	const parts = questions.map((q, i) => exportQuestion(q, i, attribution));
+	/* La règle d'identité (id explicite prioritaire, repli sur un slug du
+	   titre puis `qN`, suffixe anti-collision qui respecte aussi les
+	   réservations à venir) vit désormais dans src/quiz-ids.ts, PARTAGÉE avec
+	   le scanner de l'ordonnanceur : lecture et écriture doivent s'accorder
+	   sur la même clé, sinon une question change d'identité à sa première
+	   sauvegarde depuis l'éditeur (task 5, 2026-09-02). */
+	const ids = assignQuestionIds(questions.map(q => ({ id: q._sourceId, title: q.title })));
+	const parts = questions.map((q, i) => exportQuestion(q, i, ids[i]));
 
 	/* L'objet de mode est réémis SOUS SA FORME D'ORIGINE. Un quiz importé en
 	   mode leçon ressortait en mode examen (ou perdait son mode), parce que

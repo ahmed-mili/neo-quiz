@@ -462,3 +462,32 @@ await withSrcModule("src/unique-path.ts", async ({ reserveFreePath, releaseReser
 
 	r.done();
 });
+
+/* Task 5 (2026-09-02) : la règle d'identité a été extraite dans
+   src/quiz-ids.ts pour être partagée avec le SCANNER — l'ordonnanceur a
+   besoin de la même clé en lecture et en écriture. Ces cas figent le
+   comportement que l'extraction ne doit pas avoir changé. */
+await withSrcModule("src/quiz-ids.ts", ({ assignQuestionIds }) => {
+	const r = makeReporter("Identité de question");
+
+	r.check("un id explicite est conservé",
+		assignQuestionIds([{ id: "abc" }]), ["abc"]);
+	r.check("sans id, le titre donne un slug",
+		assignQuestionIds([{ title: "Le protocole TCP" }]), ["le-protocole-tcp"]);
+	r.check("un titre non latin se replie sur qN",
+		assignQuestionIds([{ title: "Λορεμ ;;;" }]), ["q1"]);
+	r.check("deux titres identiques sont départagés",
+		assignQuestionIds([{ title: "Même" }, { title: "Même" }]), ["m-me", "m-me-2"]);
+
+	/* Le cas de la revue codex 2026-07-31 : un slug dérivé ne doit pas
+	   prendre la réservation d'une question qui vient PLUS BAS. */
+	r.check("un slug évite les réservations à venir",
+		assignQuestionIds([{ id: "dup" }, { title: "dup" }, { id: "dup-2" }]),
+		["dup", "dup-3", "dup-2"]);
+
+	// Deux ids explicites identiques : la seconde est suffixée.
+	r.check("un id explicite dupliqué est suffixé",
+		assignQuestionIds([{ id: "x" }, { id: "x" }]), ["x", "x-2"]);
+
+	r.done();
+});

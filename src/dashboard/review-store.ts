@@ -1,8 +1,11 @@
-import type { Plugin, TAbstractFile } from "obsidian";
-import type { Scanner } from "./scanner";
-import type { ModuleOverride } from "./quiz-modules";
+import type { EventRef, Plugin, TAbstractFile } from "obsidian";
+import type { QuizIndexEntry, Scanner } from "./scanner";
 import {
-	DEFAULT_PARAMS, formatLine, parseLog, planToday,
+	applyModuleOverrides, moduleForQuiz,
+	type ModuleOverride,
+} from "./quiz-modules";
+import {
+	applyRenames, DEFAULT_PARAMS, formatLine, parseLog, planToday,
 	type LogLine, type Plan, type ReviewEvent, type ReviewGrade, type ScheduledItem,
 } from "../scheduler";
 import type { QuestionRole } from "../types/quiz";
@@ -17,6 +20,7 @@ import type { QuestionRole } from "../types/quiz";
 
 const NOM_FICHIER = "review-log.jsonl";
 const DEBOUNCE_MS = 500;
+const keyOfQuestion = (path: string, id: string): string => `${path}::${id}`;
 
 export interface ReviewStorePlugin extends Plugin {
 	settings: { quizzesModuleOverrides?: Record<string, ModuleOverride> };
@@ -33,48 +37,97 @@ export interface ReviewStore {
 	destroy(): void;
 }
 
+/** Construit les seules données que le noyau comprend. `moduleForQuiz` reste
+    l'unique règle de rattachement : l'adaptateur lui fournit la même table de
+    dossiers que le dashboard, dérivée ici des overrides persistés. */
+export function buildReviewCatalogue(
+	quizzes: ReadonlyArray<QuizIndexEntry>,
+	overrides: Record<string, ModuleOverride>
+): ScheduledItem[] {
+	const map = applyModuleOverrides({ byFolder: new Map(), ueOrder: [] }, overrides);
+	const out: ScheduledItem[] = [];
+	for (const quiz of quizzes) {
+		const module = moduleForQuiz(quiz.path, map).folder;
+		for (const it of quiz.items) {
+			const item: ScheduledItem = {
+				q: keyOfQuestion(quiz.path, it.id),
+				module,
+				// La tranche sépare les familles confusables d'un même chapitre
+				// tant qu'aucun `topic` n'est déclaré par le contenu.
+				source: typeof it.slice === "number" ? `${quiz.path}#${it.slice}` : quiz.path,
+			};
+			if (it.role) item.role = it.role;
+			out.push(item);
+		}
+	}
+	return out;
+}
+
 export function createReviewStore(plugin: ReviewStorePlugin, scanner: Scanner): ReviewStore {
 	let lignes: LogLine[] = [];
 	let enAttente: LogLine[] = [];
 	let timer: ReturnType<typeof setTimeout> | null = null;
+	let enCours = false;
+	let detruit = false;
 
-	/* Le journal vit à côté du greffon, PAS dans data.json : Obsidian
-	   réécrit le fichier de réglages en ENTIER à chaque saveSettings(), et
-	   un journal d'un mégaoctet réécrit toutes les 500 ms pendant une
-	   session de révision serait mauvais. */
-	const chemin = (): string => `${plugin.manifest.dir ?? ""}/${NOM_FICHIER}`;
+	/* Sans dossier de greffon, poursuivre créerait `/review-log.jsonl` à la
+	   racine du vault. Échouer ici empêche cette écriture hors périmètre avant
+	   même que le listener ou le timer puissent être armés. */
+	const dossierPlugin = plugin.manifest.dir;
+	if (!dossierPlugin) throw new Error("[quiz-blocks] dossier du greffon introuvable pour le journal de révision");
+	const chemin = `${dossierPlugin}/${NOM_FICHIER}`;
 
 	async function load(): Promise<void> {
 		try {
-			const texte = await plugin.app.vault.adapter.read(chemin());
+			// `exists` distingue le premier démarrage d'une vraie erreur de
+			// lecture, qui ne doit jamais remettre silencieusement le semestre à zéro.
+			if (!(await plugin.app.vault.adapter.exists(chemin))) return;
+			const texte = await plugin.app.vault.adapter.read(chemin);
 			const { lines, ignored } = parseLog(texte);
-			lignes = lines;
-			// Une corruption est ANORMALE : elle doit se voir dans la console,
-			// sans jamais empêcher le reste du journal de servir.
+			// Le listener est déjà actif pendant l'I/O : les lignes arrivées entre-
+			// temps doivent suivre le fichier chargé, comme elles le feront sur disque.
+			lignes = [...lines, ...lignes];
 			if (ignored) console.warn(`[quiz-blocks] journal de révision : ${ignored} ligne(s) illisible(s), ignorée(s)`);
-		} catch {
-			lignes = []; // premier démarrage : le fichier n'existe pas encore
+		} catch (e) {
+			console.warn("[quiz-blocks] lecture du journal de révision impossible", e);
 		}
 	}
 
 	function ecrireBientot(): void {
+		if (detruit) return;
 		if (timer) clearTimeout(timer);
 		timer = setTimeout(() => { void flush(); }, DEBOUNCE_MS);
 	}
 
 	async function flush(): Promise<void> {
-		timer = null;
-		if (!enAttente.length) return;
+		if (timer) { clearTimeout(timer); timer = null; }
+		// Un second réveil pendant l'I/O laisse le premier lot finir. Le `finally`
+		// reprogramme ce qui est arrivé entre-temps, donc deux append ne se croisent jamais.
+		if (enCours || !enAttente.length) return;
+		enCours = true;
 		const lot = enAttente;
 		enAttente = [];
+		let echec = false;
 		try {
-			// AJOUT, jamais réécriture : un ajout de quelques dizaines d'octets
-			// ne court pas le risque qu'une fermeture d'Obsidian le tronque.
-			await plugin.app.vault.adapter.append(chemin(), lot.map(formatLine).join(""));
+			// Ajout seul : une fermeture ne peut tronquer que le dernier petit lot,
+			// jamais réécrire tout l'historique déjà durable.
+			await plugin.app.vault.adapter.append(chemin, lot.map(formatLine).join(""));
 		} catch (e) {
-			// Remettre en file plutôt que perdre : la prochaine écriture réessaie.
+			echec = true;
+			// Le lot échoué repasse avant les arrivées plus récentes : l'ordre du
+			// journal pilote les renommages et ne peut donc pas être inversé.
 			enAttente = [...lot, ...enAttente];
 			console.error("[quiz-blocks] écriture du journal de révision impossible", e);
+		} finally {
+			enCours = false;
+			if (!enAttente.length) return;
+			if (detruit) {
+				// À l'unload, finir immédiatement un lot arrivé pendant une écriture
+				// réussie, sans boucler si le support reste indisponible.
+				if (!echec) void flush();
+				return;
+			}
+			ecrireBientot();
 		}
 	}
 
@@ -90,36 +143,6 @@ export function createReviewStore(plugin: ReviewStorePlugin, scanner: Scanner): 
 		ecrireBientot();
 	}
 
-	const keyOf = (path: string, id: string): string => `${path}::${id}`;
-
-	/** Dossier parent d'une note : la clé de module de l'ordonnanceur. */
-	const moduleOf = (path: string): string => {
-		const i = path.lastIndexOf("/");
-		return i < 0 ? "" : path.slice(0, i);
-	};
-
-	/** Catalogue : ce qui EXISTE aujourd'hui, d'après le scanner. */
-	function catalogue(): ScheduledItem[] {
-		const out: ScheduledItem[] = [];
-		for (const quiz of scanner.getQuizzes()) {
-			const mod = moduleOf(quiz.path);
-			for (const it of quiz.items) {
-				const item: ScheduledItem = {
-					q: keyOf(quiz.path, it.id),
-					module: mod,
-					// La TRANCHE fait la famille quand elle existe : deux
-					// questions de tranches différentes d'un même chapitre sont
-					// ce qu'il y a de plus proche d'items confusables, tant
-					// qu'aucun `topic` n'est déclaré par le contenu.
-					source: typeof it.slice === "number" ? `${quiz.path}#${it.slice}` : quiz.path,
-				};
-				if (it.role) item.role = it.role;
-				out.push(item);
-			}
-		}
-		return out;
-	}
-
 	/** Horizons : la date d'examen saisie par module (Task 9). */
 	function horizons(): Record<string, number | null> {
 		const out: Record<string, number | null> = {};
@@ -127,22 +150,14 @@ export function createReviewStore(plugin: ReviewStorePlugin, scanner: Scanner): 
 		for (const [dossier, ov] of Object.entries(overrides)) {
 			const brut = ov.examDate;
 			if (typeof brut !== "string" || !brut) continue;
-			// Minuit LOCAL du jour de l'examen : `new Date("2026-01-05")` serait
-			// interprété en UTC et décalerait la date d'un jour selon le fuseau.
+			// Minuit local : le constructeur ISO texte serait UTC et pourrait
+			// déplacer l'examen d'un jour selon le fuseau de l'hôte.
 			const [a, m, j] = brut.split("-").map(Number);
 			if (!a || !m || !j) continue;
 			const t = new Date(a, m - 1, j).getTime();
-			/* GARDE : `horizonFor` (scheduler/horizon.ts) ne se protège pas
-			   contre un horizon NaN — `typeof NaN === "number"` et
-			   `NaN <= now` valent tous deux faux, donc NaN traverserait
-			   silencieusement et empoisonnerait tous les intervalles dérivés
-			   de ce module. `!a || !m || !j` n'attrape que les composants
-			   non numériques ou nuls ; une date saisie à la main peut encore
-			   produire un nombre hors du domaine représentable par `Date`
-			   (~±275 760, cf. ECMA-262 Date Time Limits) sans que ce filtre
-			   ne le voie — c'est ICI, à la frontière avec une saisie humaine,
-			   que la garde doit vivre : le noyau reçoit `number | null` et a
-			   raison de ne pas se charger de la valider lui-même. */
+			/* `typeof NaN === "number"` et `NaN <= now` est faux : sans cette
+			   frontière, une date hors domaine empoisonnerait les échéances sans
+			   erreur visible. */
 			if (!Number.isFinite(t)) continue;
 			out[dossier] = t;
 		}
@@ -154,43 +169,42 @@ export function createReviewStore(plugin: ReviewStorePlugin, scanner: Scanner): 
 		// Seul l'hôte connaît le fuseau : le noyau ne manipule aucun calendrier.
 		const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 		return planToday({
-			now, dayStart, items: catalogue(), events: lignes,
-			horizons: horizons(), params: DEFAULT_PARAMS,
+			now,
+			dayStart,
+			items: buildReviewCatalogue(scanner.getQuizzes(), plugin.settings.quizzesModuleOverrides || {}),
+			events: lignes,
+			horizons: horizons(),
+			params: DEFAULT_PARAMS,
 		});
 	}
 
-	/** Retire un éventuel « / » de fin. `applyRenames` (scheduler/log.ts)
-	    matche par préfixe EXACT `from + "::"` ; un chemin de dossier fourni
-	    avec un slash de fin produirait le préfixe « Cours// » qui ne
-	    correspond plus à aucune clé existante (« Cours/note.md::q1 ») —
-	    tout l'historique des questions du dossier deviendrait orphelin en
-	    silence. Le noyau ne peut pas s'en protéger lui-même : il ne connaît
-	    aucun format de chemin, seulement des préfixes de chaîne. */
-	const sansSlashFinal = (p: string): string => p.endsWith("/") ? p.slice(0, -1) : p;
+	/** `applyRenames` attend des préfixes exacts ; garder un slash final
+	    fabriquerait `Cours//` et orphelinerait l'historique du dossier. */
+	const sansSlashFinal = (path: string): string => path.endsWith("/") ? path.slice(0, -1) : path;
+	const correspondAuChemin = (q: string, path: string): boolean =>
+		q === path || q.startsWith(path + "/") || q.startsWith(path + "::");
 
-	/* Le renommage suit la note, comme dans stats-store.ts, et pour la même
-	   raison : la clé contient le CHEMIN. Une LIGNE de journal plutôt qu'une
-	   réécriture — le fichier reste en ajout seul, et deux appareils qui
-	   fusionnent leurs journaux n'ont rien à réconcilier.
-	   Branché sur l'événement du VAULT et non sur l'action de menu : les deux
-	   chemins de renommage sont couverts d'un coup. Typé `TAbstractFile`
-	   (pas `TFile`) : Obsidian émet ce même événement pour un DOSSIER
-	   renommé, et c'est justement ce cas — la clé de module est un dossier —
-	   que le préfixe de `applyRenames` sert à couvrir. */
-	plugin.registerEvent(plugin.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
+	/* Une ligne de renommage n'existe que si elle déplace réellement une clé.
+	   Rejouer d'abord les anciens renommages est nécessaire pour qu'un second
+	   déplacement reconnaisse le chemin courant plutôt que le chemin historique. */
+	const renameRef: EventRef = plugin.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
 		const from = sansSlashFinal(oldPath);
 		const to = sansSlashFinal(file.path);
-		if (from === to) return;
+		if (from === to || !applyRenames(lignes).some(line => correspondAuChemin(line.q, from))) return;
 		const ligne: LogLine = { t: "rename", from, to, at: Date.now() };
 		lignes.push(ligne);
 		enAttente.push(ligne);
 		ecrireBientot();
-	}));
+	});
+	plugin.registerEvent(renameRef);
 
 	function destroy(): void {
+		if (detruit) return;
+		detruit = true;
+		plugin.app.vault.offref(renameRef);
 		if (timer) { clearTimeout(timer); timer = null; }
 		void flush();
 	}
 
-	return { load, record, plan, keyOf, destroy };
+	return { load, record, plan, keyOf: keyOfQuestion, destroy };
 }

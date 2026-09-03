@@ -322,9 +322,13 @@ await withSrcModule(["src/scheduler/index.ts"], (S) => {
 	r.check("deux appels identiques donnent le même plan", a.today, b.today);
 
 	/* QUOTA DE NEUFS : sans lui, une génération de 80 questions noierait
-	   toutes les révisions le jour même. */
-	r.check("le quota borne les questions jamais vues",
-		a.today.length, Math.round(P.budgetJour * P.partNeuf));
+	   toutes les révisions le jour même.
+	   FIX minor 1 (revue round 1) : valeur calculée à la main, pas la
+	   formule du code recopiée — budgetJour=40, partNeuf=0,25 → 40×0,25=10,
+	   arrondi=10. Écrire `Math.round(P.budgetJour*P.partNeuf)` ici ferait
+	   de ce cas une tautologie : casser l'arrondi du code le laisserait
+	   vert puisque l'expression casserait de la même façon des deux côtés. */
+	r.check("le quota borne les questions jamais vues", a.today.length, 10);
 	r.check("les neufs sont comptés", a.stats.new, 40);
 
 	// Le budget est respecté, et le surplus reporté.
@@ -365,6 +369,42 @@ await withSrcModule(["src/scheduler/index.ts"], (S) => {
 	r.check("un budget consommé ailleurs exclut aussi les items dus",
 		consomme.today.length, 0);
 
+	/* FIX finding 1 (revue round 1, change de code de production) : le
+	   quota de neufs doit porter sur le budget RESTANT, pas sur le budget
+	   nominal — sinon dès que le budget est déjà entamé, les neufs
+	   prennent toute la place qui reste et aucune révision ne passe,
+	   l'inverse du but du quota (§7.2 de la spec : « Compléter avec des
+	   questions jamais vues, sous quota (partNeuf DU BUDGET) », trois
+	   lignes après le §7.1 qui vient d'expliquer que le budget se
+	   consomme au fil du jour). Scénario du rapport : 35 questions déjà
+	   faites ce matin (consommées AILLEURS, hors catalogue, pour ne pas
+	   faire bouger l'état des 20 révisions dues), budget nominal 40 →
+	   budget restant = 5. quotaNeuf = round(5×0,25) = 1 ; révisions
+	   retenues = min(20 dus, 5−1) = 4. Le plan doit contenir À LA FOIS des
+	   révisions ("p…") et un neuf ("np…") — avec l'ancienne formule
+	   (round(40×0,25)=10, plafonnée au budget=5), les 5 places partaient
+	   TOUTES aux neufs et aucune révision ne passait. */
+	const dusPartiel = [];
+	const evtsPartiel = [];
+	for (let k = 0; k < 20; k++) {
+		dusPartiel.push({ q: "p" + String(k).padStart(2, "0"), module: "M", source: "s" });
+		evtsPartiel.push(rep("p" + String(k).padStart(2, "0"), T0 - j(10), "correct"));
+	}
+	const neufsPartiel = [];
+	for (let k = 0; k < 20; k++) neufsPartiel.push({ q: "np" + String(k).padStart(2, "0"), module: "M", source: "s" });
+	const ailleurs2 = [];
+	for (let k = 0; k < 35; k++) ailleurs2.push(rep("ailleurs2-" + k, T0 - HEURE / 2, "correct"));
+	const partiel = S.planToday(base({
+		items: [...dusPartiel, ...neufsPartiel],
+		events: [...evtsPartiel, ...ailleurs2],
+	}));
+	r.check("budget restant (5) respecté avec neufs et révisions en présence",
+		partiel.today.length, 5);
+	r.check("le budget restreint laisse quand même passer des révisions",
+		partiel.today.filter(q => q.startsWith("p")).length, 4);
+	r.check("le budget restreint laisse aussi passer un neuf",
+		partiel.today.filter(q => q.startsWith("np")).length, 1);
+
 	/* ANTICIPATION : quand le budget n'est pas atteint, on tire vers
 	   aujourd'hui ce qui tombe plus tard, JAMAIS au-delà de la marge. */
 	const futur = [{ q: "f1", module: "M", source: "s" }];
@@ -377,6 +417,97 @@ await withSrcModule(["src/scheduler/index.ts"], (S) => {
 	r.check("ce qui tombe hors marge n'est jamais avancé",
 		S.planToday(base({ items: futur, events: loin })).stats.ahead, 0);
 
+	/* Chaîne de succès EXACTEMENT espacés (chaque écart == l'intervalle en
+	   cours, donc toujours « dû » à l'égalité, jamais amorti par la marge) :
+	   après k succès, l'intervalle vaut intervalleInitial × facteurSucces^(k-1),
+	   et l'échéance finale = t1 + intervalleInitial × (facteurSucces^k − 1) /
+	   (facteurSucces − 1) — ici facteurSucces = 2, donc t1 + intervalleInitial
+	   × (2^k − 1). Résoudre pour t1 permet de VISER une échéance précise sans
+	   recopier une valeur produite par le code. */
+	function chaine(q, k, dueAtVoulu) {
+		const t1 = dueAtVoulu - P.intervalleInitial * (Math.pow(P.facteurSucces, k) - 1) / (P.facteurSucces - 1);
+		const evs = [];
+		let t = t1, intervalle = P.intervalleInitial;
+		for (let n = 1; n <= k; n++) {
+			evs.push(rep(q, t, "correct"));
+			if (n < k) { t += intervalle; intervalle *= P.facteurSucces; }
+		}
+		return evs;
+	}
+
+	/* FIX finding 2a (revue round 1) : aucune des assertions précédentes ne
+	   lisait `Plan.forecast`, et le vider à des zéros les laissait toutes
+	   vertes. `forecast` décrit les ÉCHÉANCES PROJETÉES sur la fenêtre de
+	   lissage — AVANT toute décision d'anticipation (ruling du contrôleur,
+	   documenté sur `Plan.forecast` dans types.ts) : le jour 0 porte les dus
+	   (`dus.length`), PLUS les futurs dont l'échéance tombe dans les 24 h.
+	   2 dus (échéance déjà passée, jour 0) + 4 futurs visés par `chaine()` :
+	   f0 → jour 0 (T0+0,5j), f1a et f1b → jour 1 (T0+1,5j et T0+1,2j),
+	   f3 → jour 3 (T0+3j, k=3). Valeurs attendues posées à la main :
+	   jour 0 = 2 dus + f0 = 3 ; jour 1 = f1a + f1b = 2 ; jour 3 = f3 = 1 ;
+	   tous les autres jours à 0. */
+	const dusForecast = [{ q: "fd0", module: "M", source: "s" }, { q: "fd1", module: "M", source: "s" }];
+	const evtsForecast = [rep("fd0", T0 - j(10), "correct"), rep("fd1", T0 - j(10), "correct")];
+	const itemsForecast = [
+		...dusForecast,
+		{ q: "f0", module: "M", source: "s" },
+		{ q: "f1a", module: "M", source: "s" },
+		{ q: "f1b", module: "M", source: "s" },
+		{ q: "f3", module: "M", source: "s" },
+	];
+	const planForecast = S.planToday(base({
+		items: itemsForecast,
+		events: [
+			...evtsForecast,
+			...chaine("f0", 2, T0 + j(0.5)),
+			...chaine("f1a", 2, T0 + j(1.5)),
+			...chaine("f1b", 2, T0 + j(1.2)),
+			...chaine("f3", 3, T0 + j(3)),
+		],
+	}));
+	const forecastAttendu = new Array(P.fenetreLissage).fill(0);
+	forecastAttendu[0] = 3; // 2 dus (fd0, fd1) + f0 (échéance dans les 24 h)
+	forecastAttendu[1] = 2; // f1a + f1b
+	forecastAttendu[3] = 1; // f3
+	r.check("forecast projette les échéances à venir, jour par jour",
+		planForecast.forecast, forecastAttendu);
+
+	/* FIX finding 2b (revue round 1) : le tri par jour le plus chargé
+	   (`cb - ca` dans plan.ts) n'était éprouvé nulle part — les deux cas
+	   d'anticipation ci-dessus n'ont qu'UN candidat chacun, donc remplacer
+	   `cb - ca` par 0 les aurait laissés verts eux aussi. Ici DEUX
+	   candidats et un budget qui n'en laisse passer qu'UN SEUL : `busyX`
+	   tombe le jour 2 (chargé : 4 items de remplissage, hors marge donc
+	   jamais candidats eux-mêmes, + lui-même = 5), `legerY` tombe le
+	   jour 1 (seul, charge 1). Point de discrimination : `busyX` a une
+	   échéance PLUS TARDIVE que `legerY` (T0+2,5j contre T0+1,2j) — un tri
+	   neutralisé qui retomberait sur le départage par échéance choisirait
+	   `legerY` en premier ; seul le jour le plus chargé doit faire
+	   préférer `busyX`. */
+	const remplissage = [];
+	const evtsRemplissage = [];
+	for (let k = 0; k < 4; k++) {
+		remplissage.push({ q: "pad" + k, module: "M", source: "s" });
+		evtsRemplissage.push(...chaine("pad" + k, 3, T0 + j(2.3))); // jour 2, hors marge (0,8 j)
+	}
+	const ailleurs3 = [];
+	for (let k = 0; k < 39; k++) ailleurs3.push(rep("ailleurs3-" + k, T0 - HEURE / 2, "correct"));
+	const busy = S.planToday(base({
+		items: [...remplissage, { q: "busyX", module: "M", source: "s" }, { q: "legerY", module: "M", source: "s" }],
+		events: [
+			...evtsRemplissage,
+			...chaine("busyX", 5, T0 + j(2.5)),  // jour 2, dans la marge (3,2 j)
+			...chaine("legerY", 4, T0 + j(1.2)), // jour 1, dans la marge (1,6 j)
+			...ailleurs3, // budget restant = 40 − 39 = 1 : un seul avancement possible
+		],
+	}));
+	r.check("le jour le plus chargé est avancé en premier, pas l'échéance la plus proche",
+		busy.today.includes("busyX"), true);
+	r.check("le candidat du jour le moins chargé attend son tour",
+		busy.today.includes("legerY"), false);
+	r.check("un seul avancement, le budget restant ne permet que lui",
+		busy.stats.ahead, 1);
+
 	/* ENTRELACEMENT : deux modules ne s'entremêlent pas — ils ne se
 	   confondent pas, les mélanger ne coûterait que du changement de
 	   contexte. À l'intérieur d'un module, les familles alternent. */
@@ -388,6 +519,13 @@ await withSrcModule(["src/scheduler/index.ts"], (S) => {
 		evts2.push(rep("A" + k, T0 - j(10), "correct"), rep("B" + k, T0 - j(10), "correct"));
 	}
 	const ordre = S.planToday(base({ items: deuxModules, events: evts2 })).today;
+	/* FIX minor 2 (revue round 1) : ni la longueur ni l'unicité n'étaient
+	   bornées — un `ordonner` qui n'émettrait que "A0" et "B0" donnerait
+	   déjà bascules=1 et familles=[0], les deux verts. 8 items catalogués
+	   (4 par module), tous dus : les 8 doivent ressortir, une seule fois
+	   chacun. */
+	r.check("les 8 questions dues ressortent toutes", ordre.length, 8);
+	r.check("aucun doublon dans le plan", new Set(ordre).size, 8);
 	const modules = ordre.map(q => q[0]);
 	const bascules = modules.filter((m, i) => i > 0 && m !== modules[i - 1]).length;
 	r.check("les modules ne s'entremêlent pas (une seule bascule)", bascules, 1);

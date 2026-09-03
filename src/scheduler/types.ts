@@ -107,7 +107,14 @@ export interface Plan {
 	today: string[];
 	/** Dû mais reporté faute de budget, par priorité décroissante. */
 	deferred: string[];
-	/** Charge projetée, un entier par jour de la fenêtre de lissage. */
+	/** Échéances PROJETÉES sur la fenêtre de lissage, un entier par jour —
+	    et rien d'autre. `forecast` décrit l'état AVANT la décision
+	    d'anticipation (spec §7.2.3) : c'est justement cette projection qui
+	    sert à choisir quoi avancer. Elle ne redevient jamais « la charge
+	    APRÈS planification » — `forecast[0]` peut légitimement dépasser
+	    `today.length` (le budget du jour plafonne `today`, pas la
+	    projection) et rester non nul à côté d'un `deferred` non vide : ce
+	    n'est pas une incohérence à corriger, c'est le contrat. */
 	forecast: number[];
 	stats: { due: number; new: number; ahead: number; spentToday: number };
 }

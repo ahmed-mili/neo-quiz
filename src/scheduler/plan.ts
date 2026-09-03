@@ -53,7 +53,14 @@ export function planToday(input: PlanInput): Plan {
 		if (jour >= 0 && jour < forecast.length) forecast[jour]++;
 	}
 
-	const quotaNeuf = Math.min(neufs.length, Math.round(params.budgetJour * params.partNeuf), budget);
+	/* FIX revue round 1, finding 1 : le quota porte sur le budget RESTANT
+	   (`budget`), pas sur le budget nominal (`params.budgetJour`). Sur le
+	   budget nominal, dès que le budget est déjà entamé, les neufs
+	   prennent jusqu'à 100 % de ce qui reste et aucune révision ne
+	   passe — l'inverse du but du quota (spec §7.2, `partNeuf` DU
+	   BUDGET, trois lignes après le §7.1 qui explique que le budget se
+	   consomme au fil du jour). */
+	const quotaNeuf = Math.min(neufs.length, Math.round(budget * params.partNeuf), budget);
 	const retenusNeufs = neufs.slice(0, quotaNeuf);
 	const retenusRev = dus.slice(0, Math.max(0, budget - quotaNeuf));
 	const reportes = dus.slice(retenusRev.length);

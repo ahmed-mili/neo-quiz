@@ -11,7 +11,12 @@ export type {
 } from "./types";
 export type { SchedulerParams, RatioAnchor } from "./params";
 export { DEFAULT_PARAMS, JOUR, HEURE } from "./params";
-export { ratioCoefficients, retentionRatio, intervalCeiling, horizonFor } from "./horizon";
+// `ratioCoefficients`, `retentionRatio`, `intervalCeiling`, `horizonFor` ne
+// sont PAS réexportés (fix revue round 1, finding 3) : aucun brief (5 à 11)
+// ne les nomme dans ses Interfaces, et `horizon.ts` reste consommé en
+// interne par `state.ts` sans passer par ce fichier. Même ruling que
+// `signalOf` — la surface de ce fichier est le contrat que l'application PC
+// héritera, chaque export inutilisé est une dette permanente.
 export { formatLine, parseLog, applyRenames } from "./log";
 export { deriveStates } from "./state";
 // `signalOf` n'est PAS réexporté : aucun hôte n'en a besoin. La surface de

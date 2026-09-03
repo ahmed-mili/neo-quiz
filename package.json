@@ -17,6 +17,7 @@
     "check:scheduler": "node scripts/check-scheduler.mjs",
     "check:review-store": "node scripts/check-review-store.mjs",
     "check:module-edit": "node scripts/check-module-edit.mjs",
+    "report:multiblock": "node scripts/report-multiblock.mjs \"C:/obsidian-vaults/Personal\" \"C:/obsidian-vaults/Efrei\"",
     "check:engine-review": "node scripts/check-engine-review.mjs",
     "test": "node --test scripts/set-version.test.mjs scripts/ship.test.mjs",
     "version:set": "node scripts/set-version.mjs",

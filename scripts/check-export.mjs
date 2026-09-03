@@ -489,5 +489,32 @@ await withSrcModule("src/quiz-ids.ts", ({ assignQuestionIds }) => {
 	r.check("un id explicite dupliqué est suffixé",
 		assignQuestionIds([{ id: "x" }, { id: "x" }]), ["x", "x-2"]);
 
+	/* Fix round 1 (2026-09-03), revue du controleur.
+	   Le contrat d'entree laissait les deux regles diverger : `id: '   '` etait
+	   "explicite" ici (chaine non vide au sens de `!!v`) mais "absent" pour
+	   editor/convert.ts (qui exige `.trim()`), et un `id` non-chaine (JSON5 lu
+	   par le scanner de la task 6, non type a l'execution) traversait tel quel
+	   une signature qui promet un `string[]`. */
+	r.check("un id tout en espaces n'est pas explicite (miroir de convert.ts)",
+		assignQuestionIds([{ id: "   " }]), ["q1"]);
+	r.check("un id non-chaine n'est pas explicite",
+		assignQuestionIds([{ id: 42, title: "Nombre" }]), ["nombre"]);
+
+	/* STABILITE : la propriete que ce module existe pour garantir. Inserer une
+	   question EN TETE ne doit pas changer la cle de celles qui suivent — sinon
+	   leur historique de revision (task 6) se retrouverait attache a la
+	   mauvaise question a la prochaine sauvegarde. Vaut pour un id explicite
+	   (ne depend jamais de l'index) ; le repli positionnel `qN` reste, lui,
+	   sensible a la position par construction (ticket controleur, non traite
+	   dans ce lot — 3 questions sur 774, l'editeur fige la cle des la premiere
+	   sauvegarde). Les deux appels sont compares : avant et apres insertion,
+	   « a » et « b » gardent la meme cle. */
+	const avant = assignQuestionIds([{ id: "a" }, { id: "b" }]);
+	const apres = assignQuestionIds([{ id: "z" }, { id: "a" }, { id: "b" }]);
+	r.check("avant insertion", avant, ["a", "b"]);
+	r.check("apres insertion en tete, memes cles pour a et b", apres.slice(1), avant);
+
+	r.check("bloc vide", assignQuestionIds([]), []);
+
 	r.done();
 });

@@ -19,6 +19,21 @@ function slug(title: string | undefined): string {
 }
 
 /**
+ * Un `id` ne compte comme EXPLICITE que s'il reste une chaîne non vide après
+ * trim — miroir exact de la règle d'`editor/convert.ts` (`typeof q.id ===
+ * "string" && q.id.trim()`, qui pose `question._sourceId`). Sans cette
+ * normalisation ICI, `id: '   '` était explicite pour cette fonction et
+ * absent pour l'éditeur — deux règles divergentes, exactement ce que ce
+ * module existe pour empêcher. `it.id` est TYPÉ `string | undefined`, mais le
+ * scanner (task 6) lit du JSON5 non typé : un `id: 42` écrit à la main y
+ * arrive tel quel, et sans le `typeof`, un nombre traverserait la signature
+ * qui promet un `string[]`.
+ */
+function explicitId(it: { id?: string }): string | undefined {
+	return typeof it.id === "string" && it.id.trim() ? it.id : undefined;
+}
+
+/**
  * Identifiants d'un bloc entier, dans l'ordre des questions.
  *
  * Deux subtilités, chacune issue d'une revue :
@@ -34,10 +49,10 @@ function slug(title: string | undefined): string {
  *    ancre HTML, et la seconde deviendrait inatteignable.
  */
 export function assignQuestionIds(items: ReadonlyArray<{ id?: string; title?: string }>): string[] {
-	const reserves = new Set(items.map(i => i.id).filter((v): v is string => !!v));
+	const reserves = new Set(items.map(explicitId).filter((v): v is string => !!v));
 	const attribues = new Set<string>();
 	return items.map((it, idx) => {
-		const explicite = it.id;
+		const explicite = explicitId(it);
 		const base = explicite || slug(it.title) || `q${idx + 1}`;
 		const libre = (id: string): boolean => {
 			if (attribues.has(id)) return false;

@@ -374,4 +374,8 @@ function exportAllWithFence(questions: DraftQuestion[], examOptions: EditorExamO
 	return "```quiz-blocks\n" + exportAll(questions, examOptions) + "\n```";
 }
 
-export { exportQuestion, exportAll, exportAllWithFence };
+/* `exportQuestion` n'est plus exportée : sa signature a changé (le 3e
+   paramètre est désormais obligatoire, et l'affectation `q._sourceId = id`
+   n'est plus conditionnée à la présence d'un contexte) et grep sur tout le
+   repo ne lui trouve aucun appelant hors de ce fichier — revue 2026-09-03. */
+export { exportAll, exportAllWithFence };

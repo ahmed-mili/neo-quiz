@@ -52,7 +52,9 @@ import type {
 	MatchingQuestion,
 	TextQuestion,
 	ClozeQuestion,
+	QuestionRole,
 } from "./quiz";
+import type { ReviewGrade } from "../scheduler";
 import type { SanitizerHandlers } from "../engine/sanitizer";
 import type { QuestionHandlers } from "../engine/questions";
 import type { ResourceHandlers } from "../engine/resources";
@@ -104,6 +106,25 @@ export interface EngineCtx {
 	/** Constructeur Notice d'Obsidian, transmis par le contexte d'appel (engine.js:31,98). */
 	Notice: typeof import("obsidian").Notice;
 	quiz: QuizQuestion[];
+	/**
+	 * Identité des questions pour l'ordonnanceur. La MÊME règle qu'à l'écriture
+	 * (editor/export.ts) et qu'à la lecture par le scanner (dashboard/scanner.ts) :
+	 * trois règles séparées divergeraient, et une question changerait de clé
+	 * selon qui la regarde. Calculée une fois à l'assemblage du `ctx`
+	 * (engine.ts, via `assignQuestionIds` de `quiz-ids.ts`) — jamais `ctx.quiz[i].id`
+	 * brut, qui n'a ni slug de repli ni dédoublonnage.
+	 */
+	questionIds: string[];
+	/**
+	 * Puits du journal de révision. Le moteur ne connaît que cette FORME,
+	 * jamais l'implémentation — exactement comme `StatsStoreLike`. C'est ce
+	 * qui permettra au moteur de servir tel quel dans les applications PC et
+	 * Android, où le journal ne sera pas un fichier du vault.
+	 */
+	reviewSink?: {
+		record(entries: Array<{ q: string; grade: ReviewGrade; role?: QuestionRole }>): void;
+		keyOf(path: string, id: string): string;
+	};
 	/**
 	 * Jamais assigné dans le littéral `ctx` ni ailleurs dans engine.js (mort/
 	 * vestigial) ; accédé optionnellement par sanitizer.js:172 (`ctx.lucideIcons
@@ -229,6 +250,7 @@ export interface EngineCtx {
 	clearAllNavTabPressStates: StateHandlers["clearAllNavTabPressStates"];
 	setNavTabPressState: StateHandlers["setNavTabPressState"];
 	buildNavTabClass: StateHandlers["buildNavTabClass"];
+	recordReview: StateHandlers["recordReview"];
 
 	// depuis cards (engine.js:157)
 	refreshMetaSlides: CardHandlers["refreshMetaSlides"];

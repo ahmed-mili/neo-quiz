@@ -20,6 +20,7 @@ import { createPassageHandlers } from "./engine/passage";
 import { createClozeHandlers } from "./engine/cloze";
 import { createLessonHandlers } from "./engine/lesson";
 import { mathifyElement } from "./engine/mathjax";
+import { assignQuestionIds } from "./quiz-ids";
 import { t } from "./i18n";
 
 import type { App, Plugin } from "obsidian";
@@ -147,6 +148,15 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		sourcePath,
 		Notice,
 		quiz,
+		/* Identité des questions pour l'ordonnanceur. La MÊME règle qu'à
+		   l'écriture (editor/export.ts) et qu'à la lecture par le scanner :
+		   trois règles séparées divergeraient, et une question changerait de
+		   clé selon qui la regarde. `quiz-ids.ts` est un module pur — aucune
+		   dépendance ajoutée au moteur. */
+		questionIds: assignQuestionIds(quiz.map(q => ({ id: q.id, title: q.title }))),
+		// Puits du journal de révision, lu indirectement comme `_statsStore` :
+		// le moteur ne dépend d'aucun type du tableau de bord (types/engine-ctx.ts).
+		reviewSink: (plugin as { _reviewStore?: EngineCtx["reviewSink"] })._reviewStore,
 		quizMode,
 		isExamMode,
 		trainingSession: false,
@@ -279,6 +289,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		clearAllNavTabPressStates: state.clearAllNavTabPressStates,
 		setNavTabPressState: state.setNavTabPressState,
 		buildNavTabClass: state.buildNavTabClass,
+		recordReview: state.recordReview,
 		// Fonction render principale (sera assignée après sa définition pour éviter TDZ)
 		render: null
 	});
@@ -358,6 +369,9 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		matchPick: initMatchPicks(),
 		// Task 7, mode Lesson : cf. QuizState.lessonPreSkipped (src/types/quiz.ts).
 		lessonPreSkipped: quiz.map(() => false),
+		// Task 8 : cf. QuizState.recorded (src/types/quiz.ts). Vide à l'assemblage,
+		// comme resultsCounted, avant que resetQuiz() ne l'aligne sur ctx.quiz.
+		recorded: [],
 		isSliding: false,
 		slideToken: 0
 	};

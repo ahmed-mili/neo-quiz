@@ -406,6 +406,9 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 				const rating = normalizeRating(btn.dataset.textonlyRating as TextOnlyRating | undefined);
 				if (!rating) return;
 				ctx.quizState.textOnlyRatings[qi] = rating;
+				// Le verdict existe MAINTENANT : c'est ici, et pas à l'écran de
+				// résultats, qu'une restitution devient un signal de mémoire.
+				ctx.recordReview?.(qi, rating);
 				ctx.commitQuestionInteraction(qi, { syncHeight: true });
 			});
 		});

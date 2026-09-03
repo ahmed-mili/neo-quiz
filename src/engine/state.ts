@@ -1,5 +1,6 @@
 import type { EngineCtx } from "../types/engine-ctx";
 import type { PracticeMode, QuizResult, StatsRecord } from "../types/quiz";
+import type { ReviewGrade } from "../scheduler";
 import { t } from "../i18n";
 
 /** Sous-ensemble du store de stats (dashboard/stats-store) réellement lu ici. */
@@ -27,6 +28,7 @@ export interface StateHandlers {
 	goToSubmit(): void;
 	goToResults(): void;
 	resetQuiz(opts?: { preserveSliding?: boolean; resetToOriginalMode?: boolean }): void;
+	recordReview(i: number, grade: ReviewGrade): void;
 }
 
 export function createStateHandlers(ctx: EngineCtx): StateHandlers {
@@ -398,6 +400,22 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		goToSlide(ctx.SLIDE_SUBMIT_INDEX, { forceRender: false });
 	}
 
+	/**
+	 * Journalise UNE question pour l'ordonnanceur, une seule fois par
+	 * session. `sourcePath` absent (aperçu de l'éditeur, quiz en mémoire non
+	 * encore enregistré) : rien à journaliser, la question n'a pas de clé
+	 * stable.
+	 */
+	function recordReview(i: number, grade: ReviewGrade): void {
+		if (!ctx.reviewSink || !ctx.sourcePath) return;
+		if (ctx.quizState.recorded[i]) return;
+		const id = ctx.questionIds[i];
+		if (!id) return;
+		ctx.quizState.recorded[i] = true;
+		const role = ctx.isLessonMode() ? ctx.roleOfQuestion(i) : undefined;
+		ctx.reviewSink.record([{ q: ctx.reviewSink.keyOf(ctx.sourcePath, id), grade, ...(role ? { role } : {}) }]);
+	}
+
 	function goToResults(): void {
 		/* Round 1 de revue (Finding 1 — CRITIQUE) : `goToResults` écrivait ses
 		   effets de bord (resultsCounted, statsStore.updateRecord, examEnded,
@@ -463,6 +481,22 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 				questionsDone,
 				totalQuestions: total || ctx.quiz.length
 			});
+
+			/* L'ordonnanceur, lui, compte PAR QUESTION. Une carte "read" n'est
+			   ni juste ni fausse (`seen`), une pré-question abandonnée non plus
+			   (`skipped`) : ces deux-là sont journalisées pour que l'historique
+			   soit complet, mais elles ne produisent aucun signal de mémoire
+			   (scheduler/state.ts signalOf). */
+			for (let i = 0; i < ctx.quiz.length; i++) {
+				if (ctx.quizState.recorded[i]) continue;
+				const role = ctx.isLessonMode() ? ctx.roleOfQuestion(i) : undefined;
+				let grade: ReviewGrade;
+				if (role === "read") grade = "seen";
+				else if (ctx.quizState.lessonPreSkipped[i]) grade = "skipped";
+				else if (!isComplete(i)) continue; // sans réponse : rien ne s'est passé
+				else grade = isCorrect(i) ? "correct" : "wrong";
+				recordReview(i, grade);
+			}
 		}
 
 		updateNavHighlight();
@@ -497,6 +531,10 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		// Recommencer, c'est une NOUVELLE tentative : une pré-question déjà
 		// passée en « Je ne sais pas » redevient bloquante (Task 7).
 		ctx.quizState.lessonPreSkipped = ctx.quiz.map(() => false);
+		// Recommencer, c'est une NOUVELLE session pour l'ordonnanceur aussi :
+		// sans cette remise à zéro, une question déjà journalisée à la tentative
+		// précédente ne serait plus jamais recomptée (Task 8).
+		ctx.quizState.recorded = ctx.quiz.map(() => false);
 		ctx.quizState.slideToken++;
 
 		if (!preserveSliding) ctx.quizState.isSliding = false;
@@ -552,6 +590,7 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		goToQuestion,
 		goToSubmit,
 		goToResults,
-		resetQuiz
+		resetQuiz,
+		recordReview
 	};
 }

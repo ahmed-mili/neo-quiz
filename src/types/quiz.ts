@@ -350,6 +350,16 @@ export interface QuizState {
 	 * c'est la seule concession du brief, elle ne doit pas se propager ailleurs.
 	 */
 	lessonPreSkipped: boolean[];
+	/**
+	 * Questions DÉJÀ journalisées pour l'ordonnanceur pendant cette session.
+	 *
+	 * Une auto-évaluation journalise immédiatement (le verdict existe) ;
+	 * la soumission journalise tout le reste. Sans ce drapeau, une question
+	 * notée à la main serait comptée deux fois, et sa seconde entrée
+	 * ferait croître son intervalle à quelques secondes d'intervalle.
+	 * Remis à zéro par `resetQuiz`, comme `resultsCounted`.
+	 */
+	recorded: boolean[];
 }
 
 /**

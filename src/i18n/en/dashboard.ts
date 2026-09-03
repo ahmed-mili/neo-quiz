@@ -151,6 +151,10 @@ export const EN_DASHBOARD = {
 	"dashboard.quizzes.moduleIconNoResult": "No icon found",
 	"dashboard.quizzes.moduleEditCustomColor": "Custom color",
 
+	/* ── Date d'examen (ordonnanceur) ── */
+	"dashboard.module.examDate": "Exam date",
+	"dashboard.module.examDateHint": "Sets how tightly this module is reviewed. Left empty, it is scheduled for long-term retention.",
+
 	/* ── Carte de quiz (état) ── */
 	"dashboard.card.mastered": "Mastered",
 	"dashboard.card.review": "To review",

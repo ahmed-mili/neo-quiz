@@ -11,6 +11,27 @@ import { openIconPicker, DEFAULT_MODULE_ICON } from "./icon-picker";
 import { MODULE_PALETTE, hashAccent } from "./module-color";
 import { suggestIcons } from "./icon-suggest";
 
+interface ModuleEditState {
+	name: string;
+	ue: string | null;
+	color?: string;
+	icon?: string;
+	examDate?: string;
+}
+
+/** Centralise le contrat de persistance du modal pour que la date civile reste
+    identique jusqu'à l'adaptateur et que son effacement retire vraiment la clé. */
+export function buildModuleOverride(folder: string, state: ModuleEditState): ModuleOverride {
+	const ov: ModuleOverride = {};
+	if (state.name.trim() && state.name.trim() !== folder) ov.name = state.name.trim();
+	// null (Sans UE) ne se stocke que si la note, elle, donnait une UE.
+	ov.ue = state.ue;
+	if (state.color) ov.color = state.color;
+	if (state.icon) ov.icon = state.icon;
+	if (state.examDate) ov.examDate = state.examDate;
+	return ov;
+}
+
 /* ══════════════════════════════════════════════════════════
    MODULE EDIT — modal « Modifier dossier », calqué sur celui de
    StudySmarter (capture Excalidraw 2026-07-18) : nom du dossier,
@@ -30,6 +51,7 @@ export class ModuleEditModal extends QbdModal {
 	private ue: string | null;
 	private color: string | undefined;
 	private icon: string | undefined;
+	private examDate?: string;
 	/** Un changement au moins a eu lieu → onClose persiste + rafraîchit. */
 	private dirty = false;
 
@@ -44,6 +66,7 @@ export class ModuleEditModal extends QbdModal {
 		this.ue = group.ue;
 		this.color = group.color;
 		this.icon = group.icon;
+		this.examDate = ctx.plugin.settings.quizzesModuleOverrides?.[group.folder]?.examDate;
 	}
 
 	/** Auto-save : reconstruit l'override depuis l'état courant, l'écrit dans
@@ -54,12 +77,13 @@ export class ModuleEditModal extends QbdModal {
 	    écriture disque est différée à onClose (pas de martèlement I/O). */
 	private apply(): void {
 		const overrides = { ...(this.ctx.plugin.settings.quizzesModuleOverrides || {}) };
-		const ov: ModuleOverride = {};
-		if (this.name.trim() && this.name.trim() !== this.group.folder) ov.name = this.name.trim();
-		// null (Sans UE) ne se stocke que si la note, elle, donnait une UE.
-		ov.ue = this.ue;
-		if (this.color) ov.color = this.color;
-		if (this.icon) ov.icon = this.icon;
+		const ov = buildModuleOverride(this.group.folder, {
+			name: this.name,
+			ue: this.ue,
+			color: this.color,
+			icon: this.icon,
+			examDate: this.examDate,
+		});
 		overrides[this.group.folder] = ov;
 		this.ctx.plugin.settings.quizzesModuleOverrides = overrides;
 		this.dirty = true;
@@ -113,6 +137,19 @@ export class ModuleEditModal extends QbdModal {
 				onClick: () => { this.ue = ue; paintUe(); this.apply(); },
 			})));
 		});
+
+		// La date d'examen pilote l'horizon de rétention de l'ordonnanceur :
+		// 20 à 40 % de l'échéance pour une semaine, 5 à 10 % pour un an
+		// (Cepeda 2008). Vide = horizon durable, jamais deviné ailleurs.
+		const dateWrap = c.createDiv({ cls: "qbd-medit-field" });
+		dateWrap.createEl("label", { cls: "qbd-medit-label", text: t("dashboard.module.examDate") });
+		const dateInput = dateWrap.createEl("input", { cls: "qbd-medit-input", type: "date" });
+		dateInput.value = this.examDate ?? "";
+		dateInput.addEventListener("change", () => {
+			this.examDate = dateInput.value || undefined;
+			this.apply();
+		});
+		dateWrap.createEl("p", { cls: "qbd-medit-hint", text: t("dashboard.module.examDateHint") });
 
 		// ── Couleur (8 pastilles ; re-cliquer la pastille active la retire →
 		// retour au liseré par avancement) + pastille « couleur personnalisée »

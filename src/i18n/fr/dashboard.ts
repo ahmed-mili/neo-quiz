@@ -131,6 +131,10 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.quizzes.moduleIconNoResult": "Aucune icône trouvée",
 	"dashboard.quizzes.moduleEditCustomColor": "Couleur personnalisée",
 
+	/* ── Date d'examen (ordonnanceur) ── */
+	"dashboard.module.examDate": "Date d'examen",
+	"dashboard.module.examDateHint": "Détermine le resserrement des révisions. Laissée vide, la matière est révisée pour être retenue durablement.",
+
 	/* ── Carte de quiz ── */
 	"dashboard.card.mastered": "Maîtrisé",
 	"dashboard.card.review": "À revoir",

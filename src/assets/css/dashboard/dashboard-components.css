@@ -303,6 +303,14 @@
 	font-weight: 600;
 	color: var(--text-muted);
 }
+/* L'aide explique l'effet indirect sur l'ordonnanceur sans concurrencer le
+   libellé ni la valeur, qui restent les deux informations principales. */
+.qbd-medit-hint {
+	margin: 6px 0 0;
+	font-size: 11.5px;
+	line-height: 1.4;
+	color: var(--text-faint);
+}
 .qbd-medit-input,
 .qbd-medit-select {
 	width: 100%;
@@ -841,4 +849,3 @@
 	align-items: center;
 	gap: 6px;
 }
-

@@ -43,5 +43,22 @@ await withSrcModule("src/dashboard/module-edit.ts", async ({ buildModuleOverride
 		},
 	});
 	r.check("une date effacée supprime entièrement la clé", "examDate" in efface[folder], false);
+
+	const nomIdentique = buildModuleOverride(folder, {
+		name: "Reseaux",
+		ue: "UE 3",
+	});
+	r.check("un nom identique au dossier ne crée pas d'override", nomIdentique, {
+		ue: "UE 3",
+	});
+
+	const sansUe = buildModuleOverride(folder, {
+		name: "Réseaux",
+		ue: null,
+	});
+	r.check("Sans UE reste un override explicite", sansUe, {
+		name: "Réseaux",
+		ue: null,
+	});
 	r.done();
 });

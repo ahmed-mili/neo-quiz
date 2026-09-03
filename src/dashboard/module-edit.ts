@@ -11,20 +11,26 @@ import { openIconPicker, DEFAULT_MODULE_ICON } from "./icon-picker";
 import { MODULE_PALETTE, hashAccent } from "./module-color";
 import { suggestIcons } from "./icon-suggest";
 
-interface ModuleEditState {
-	name: string;
-	ue: string | null;
-	color?: string;
-	icon?: string;
-	examDate?: string;
-}
+type ModuleEditState = Required<Pick<ModuleOverride, "name" | "ue">>
+	& Omit<ModuleOverride, "name" | "ue">;
+
+// Toute extension persistée doit casser tsc tant que ce reconstructeur ne la
+// traite pas explicitement, sinon une simple édition effacerait le nouveau champ.
+const MODULE_EDIT_HANDLED_FIELDS = {
+	name: true,
+	ue: true,
+	color: true,
+	icon: true,
+	examDate: true,
+} satisfies Record<keyof ModuleOverride, true>;
 
 /** Centralise le contrat de persistance du modal pour que la date civile reste
     identique jusqu'à l'adaptateur et que son effacement retire vraiment la clé. */
 export function buildModuleOverride(folder: string, state: ModuleEditState): ModuleOverride {
+	void MODULE_EDIT_HANDLED_FIELDS;
 	const ov: ModuleOverride = {};
 	if (state.name.trim() && state.name.trim() !== folder) ov.name = state.name.trim();
-	// null (Sans UE) ne se stocke que si la note, elle, donnait une UE.
+	// `null` force « Sans UE », tandis qu'`undefined` conserverait l'UE de la note.
 	ov.ue = state.ue;
 	if (state.color) ov.color = state.color;
 	if (state.icon) ov.icon = state.icon;
@@ -141,9 +147,12 @@ export class ModuleEditModal extends QbdModal {
 		// La date d'examen pilote l'horizon de rétention de l'ordonnanceur :
 		// 20 à 40 % de l'échéance pour une semaine, 5 à 10 % pour un an
 		// (Cepeda 2008). Vide = horizon durable, jamais deviné ailleurs.
-		const dateWrap = c.createDiv({ cls: "qbd-medit-field" });
-		dateWrap.createEl("label", { cls: "qbd-medit-label", text: t("dashboard.module.examDate") });
+		const dateWrap = c.createDiv();
+		const dateLabel = dateWrap.createEl("label", { cls: "qbd-medit-label", text: t("dashboard.module.examDate") });
 		const dateInput = dateWrap.createEl("input", { cls: "qbd-medit-input", type: "date" });
+		// Le lien explicite fournit le nom accessible et rend le libellé cliquable.
+		dateInput.id = "qbd-medit-exam-date";
+		dateLabel.htmlFor = dateInput.id;
 		dateInput.value = this.examDate ?? "";
 		dateInput.addEventListener("change", () => {
 			this.examDate = dateInput.value || undefined;

@@ -21,7 +21,7 @@ const OBSIDIAN_STUB = [
 	"export const Modal = class {};",
 	"export const FuzzySuggestModal = class {};",
 	"export const setIcon = () => nope('setIcon');",
-	"export const getIconIds = () => [];",
+	"export const getIconIds = () => nope('getIconIds');",
 	"export const Platform = {};",
 	"export const requestUrl = () => nope('requestUrl');",
 	"export const MarkdownRenderer = {};",

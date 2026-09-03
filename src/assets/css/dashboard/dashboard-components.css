@@ -298,6 +298,7 @@
 	max-width: calc(100vw - 32px);
 }
 .qbd-medit-label {
+	display: block;
 	margin: 14px 0 6px;
 	font-size: 12px;
 	font-weight: 600;

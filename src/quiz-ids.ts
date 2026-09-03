@@ -12,10 +12,12 @@
  * soit exact plutôt que réinventé de deux façons.
  */
 
-/** Slug ASCII d'un titre. Un titre en grec, en arabe ou fait de
-    ponctuation le vide entièrement : l'appelant se replie alors sur `qN`. */
-function slug(title: string | undefined): string {
-	return (title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20);
+/** Slug ASCII d'un titre. Le JSON5 brut peut violer le type statique : une
+    valeur non textuelle doit produire le même repli `qN` qu'un titre absent,
+    pas faire disparaître le quiz entier pendant son scan. */
+function slug(title: unknown): string {
+	const text = typeof title === "string" ? title : "";
+	return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20);
 }
 
 /**

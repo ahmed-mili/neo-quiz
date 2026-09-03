@@ -37,7 +37,7 @@ communautaire d'Obsidian.
 ## Commandes
 
 - `npm run check` — typecheck (`tsc --noEmit`). Toujours lancer après une modif TS.
-- `npm run check:md` et `npm run check:export` — **les seuls jeux de cas du projet**,
+- `npm run check:md` et `npm run check:export` — deux jeux de cas ciblés,
   sur les deux logiques qu'une relecture n'arrive pas à juger : le rendu markdown des
   champs texte (`renderInlineText`, `stripInlineMarkdown`) et l'écriture d'un bloc
   quiz-blocks (`exportAll`). Ils chargent le CODE RÉEL via esbuild
@@ -46,6 +46,11 @@ communautaire d'Obsidian.
   objet imbriqué écrit `[object Object]` (bloc illisible, sauvegarde refusée sans un
   mot). **Pas de framework de test au-delà** ; ne pas en ajouter pour du code qu'une
   lecture suffit à juger.
+- `npm run check:scanner` — charge le vrai `createScanner` et protège l'alignement des
+  identifiants avec l'éditeur, les métadonnées légères et les suppressions du cache sur
+  bloc absent, invalide ou vide. Il existe parce qu'une clé décalée perdrait l'historique
+  de révision et qu'un autosave transitoirement invalide ne doit ni garder une ancienne
+  entrée ni polluer la console.
 - `npm run check:markers` — passe chaque champ TEXTE de chaque quiz des vaults par la
   vraie fonction de rendu et cherche le markdown qui n'a PAS été traduit (8570 champs
   au 2026-07-31, zéro fuite). Il éprouve la GRAMMAIRE, pas le CÂBLAGE : un champ que

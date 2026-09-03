@@ -3,6 +3,7 @@ import type { App, EventRef } from "obsidian";
 import type { ParsedQuizItem } from "../editor/modals";
 import { assignQuestionIds } from "../quiz-ids";
 import { extractExamOptions, parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-utils";
+import { QUESTION_ROLES } from "../types/quiz";
 import type { QuestionRole } from "../types/quiz";
 
 /* ══════════════════════════════════════════════════════════
@@ -109,25 +110,30 @@ export function createScanner(app: App): Scanner {
 		try {
 			// La détection de la configuration reste partagée avec le moteur : deux
 			// filtres locaux finiraient par construire des catalogues différents.
-			const sansConfig = extractExamOptions(parseQuizSource(source)).questions;
-			const questions = (sansConfig as unknown[]).filter(
-				(q): q is RawQuizItem => !!q && typeof q === "object"
+			const sansConfig = (
+				extractExamOptions(parseQuizSource(source, { logErrors: false })).questions
+			) as unknown as Array<RawQuizItem | null | undefined>;
+
+			// Conserver les positions du tableau BRUT est aussi important que la
+			// déduplication : l'éditeur attribue un qN même aux éléments parasites.
+			const ids = assignQuestionIds(sansConfig.map(q => ({ id: q?.id, title: q?.title })));
+			const questions = sansConfig.map((q, i) => ({ q, id: ids[i] })).filter(
+				(item): item is { q: RawQuizItem; id: string } => !!item.q && typeof item.q === "object"
 			);
 
 			if (questions.length === 0) return null;
 
-			// Les identifiants sont attribués sur le bloc ENTIER, en une passe : la
-			// déduplication dépend de l'ensemble, pas de chaque question isolée.
-			const ids = assignQuestionIds(questions.map(q => ({ id: q.id, title: q.title })));
-			const items: QuizItemRef[] = questions.map((q, i) => ({
-				id: ids[i],
-				...(typeof q.role === "string" ? { role: q.role as QuestionRole } : {}),
+			const items: QuizItemRef[] = questions.map(({ q, id }) => ({
+				id,
+				...(typeof q.role === "string" && (QUESTION_ROLES as readonly string[]).includes(q.role)
+					? { role: q.role as QuestionRole }
+					: {}),
 				...(typeof q.slice === "number" ? { slice: q.slice } : {}),
 			}));
 
 			// Détecter les types de questions
 			const typeSet = new Set<QuestionTypeTag>();
-			for (const q of questions) {
+			for (const { q } of questions) {
 				if (q.multiSelect) typeSet.add("multiple");
 				else if (q.type === "text") typeSet.add("text");
 				else if (q.type === "ordering") typeSet.add("ordering");

@@ -27,7 +27,13 @@ interface QuizModeConfig {
 	source?: string;
 }
 
-function parseQuizSource(source?: string | null): QuizQuestion[] {
+interface ParseQuizSourceOptions {
+	/** Le scanner relit pendant l'autosave : un JSON5 transitoirement incomplet
+	    n'est pas une erreur à journaliser toutes les deux secondes. */
+	logErrors?: boolean;
+}
+
+function parseQuizSource(source?: string | null, options: ParseQuizSourceOptions = {}): QuizQuestion[] {
 	const raw = String(source ?? "").trim();
 
 	if (raw.length === 0) return [];
@@ -37,14 +43,17 @@ function parseQuizSource(source?: string | null): QuizQuestion[] {
 		parsed = JSON5.parse(raw);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
-		// Log détaillé pour déboguer
-		console.error("[Quiz Blocks] JSON5 parse error:", message);
-		if (message && message.includes("position")) {
-			const match = message.match(/position (\d+)/);
-			if (match) {
-				const pos = parseInt(match[1]);
-				console.error("[Quiz Blocks] Caractère à la position", pos + ":", raw.charAt(pos));
-				console.error("[Quiz Blocks] Contexte:", raw.substring(Math.max(0, pos - 30), pos + 30));
+		if (options.logErrors !== false) {
+			// Les appels interactifs gardent le diagnostic détaillé ; seul le scan
+			// automatique le désactive pour ne pas transformer la frappe en erreurs.
+			console.error("[Quiz Blocks] JSON5 parse error:", message);
+			if (message && message.includes("position")) {
+				const match = message.match(/position (\d+)/);
+				if (match) {
+					const pos = parseInt(match[1]);
+					console.error("[Quiz Blocks] Caractère à la position", pos + ":", raw.charAt(pos));
+					console.error("[Quiz Blocks] Contexte:", raw.substring(Math.max(0, pos - 30), pos + 30));
+				}
 			}
 		}
 		throw new Error("Le bloc ```quiz-blocks doit contenir un tableau JSON5 valide.");

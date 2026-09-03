@@ -177,7 +177,16 @@ export interface DashboardCtx {
 	 * conversion de `plugin.js` lui-même (encore `.js`). Les champs non listés
 	 * existent bel et bien au runtime, simplement pas encore déclarés ici.
 	 */
-	plugin: Plugin & { settings: AiSettings; saveSettings(): Promise<void> };
+	/* `_reviewStore` est déclaré ICI en plus de `DashboardPlugin` parce que ce
+	   `plugin` est l'intersection étroite ci-dessus, pas `DashboardPlugin` :
+	   l'accueil lit le puits par `ctx.plugin._reviewStore`. Optionnel à
+	   dessein — la task 7 le fait DÉGRADER plutôt que bloquer le greffon,
+	   donc il peut réellement manquer au runtime. */
+	plugin: Plugin & {
+		settings: AiSettings;
+		saveSettings(): Promise<void>;
+		_reviewStore?: ReviewStore;
+	};
 	/** Copie de `view.scanner` au moment de la construction du ctx (dashboard.js:58). */
 	scanner: Scanner;
 	/** Copie de `view.statsStore` au moment de la construction du ctx (dashboard.js:59). */

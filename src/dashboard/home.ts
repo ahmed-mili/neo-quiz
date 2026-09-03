@@ -242,6 +242,76 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			}
 		};
 
+		/* ── À réviser aujourd'hui ──
+		   L'ordonnanceur rend des CLÉS de question (`chemin::id`) ; l'accueil
+		   les regroupe par note pour rester actionnable — le seul geste
+		   possible aujourd'hui est d'ouvrir un quiz. La session composée de
+		   questions venant de plusieurs notes est le chantier suivant.
+
+		   `_reviewStore` peut être absent : la task 7 le fait DÉGRADER plutôt
+		   que bloquer le greffon, donc l'accueil doit vivre sans lui. */
+		const plan = ctx.plugin._reviewStore?.plan(Date.now());
+		if (plan && plan.today.length) {
+			const parNote = new Map<string, number>();
+			for (const cle of plan.today) {
+				const sep = cle.lastIndexOf("::");
+				// Une clé sans séparateur ne vient pas du catalogue : on la
+				// laisse tomber plutôt que de fabriquer un chemin vide.
+				if (sep <= 0) continue;
+				const path = cle.slice(0, sep);
+				parNote.set(path, (parNote.get(path) ?? 0) + 1);
+			}
+
+			// Nombre décroissant, puis chemin : ordre TOTAL, donc stable d'un
+			// rendu à l'autre — l'ordre de `plan.today` sert la SESSION (il
+			// entrelace les familles), pas l'affichage.
+			const lignes = [...parNote.entries()]
+				.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+				.map(([path, n]) => ({ quiz: ctx.scanner?.getQuiz(path), n }))
+				// Note disparue entre le scan et le rendu : rien à ouvrir.
+				.filter((l): l is { quiz: QuizIndexEntry; n: number } => !!l.quiz);
+
+			// Une section vide n'a rien à dire : si toutes les notes dues ont
+			// disparu, on n'affiche pas un en-tête qui ne mène nulle part.
+			if (lignes.length > 0) {
+				const section = container.createDiv({ cls: "qbd-home-section" });
+				// Même helper que « À faire » et « Complétés » : rangée 52px,
+				// chevron animé, libellé, badge compteur. Un balisage écrit à
+				// la main ici serait une VARIANTE de l'anatomie, ce que le
+				// contrat visuel du 2026-07-28 interdit.
+				const body = renderCollapsibleSection(
+					collapse, section, "home:review", t("dashboard.review.title"), plan.today.length,
+					{ rowClass: "qbd-home-node-row", entryDelay, defaultOpen: true },
+				);
+
+				const liste = body.createDiv({ cls: "qbd-review-list" });
+				for (const { quiz, n } of lignes) {
+					const row = liste.createEl("button", { cls: "qbd-review-row" });
+					row.type = "button";
+					const icone = row.createSpan({ cls: "qbd-review-icon" });
+					setIcon(icone, "rotate-ccw");
+					row.createSpan({ cls: "qbd-review-title", text: quiz.title });
+					row.createSpan({
+						cls: "qbd-review-count",
+						text: t(n === 1 ? "dashboard.common.questionsOne" : "dashboard.common.questionsOther", { count: n }),
+					});
+					row.addEventListener("click", () => openQuizForPlay(ctx.app, quiz));
+				}
+
+				/* Le report est une INFORMATION, pas un reproche : il dit que le
+				   budget du jour a tenu, pas que l'utilisateur est en retard. */
+				if (plan.deferred.length) {
+					liste.createEl("p", {
+						cls: "qbd-review-deferred",
+						text: t(
+							plan.deferred.length === 1 ? "dashboard.review.deferredOne" : "dashboard.review.deferredOther",
+							{ count: plan.deferred.length },
+						),
+					});
+				}
+			}
+		}
+
 		// À faire (en cours + à commencer). La grille est PLAFONNÉE (revue design
 		// 2026-07-28) : 54 cartes faisaient de l'accueil un doublon de « Mes
 		// quiz ». Deux rangées de trois suffisent à reprendre le travail ; le

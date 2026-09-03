@@ -155,6 +155,11 @@ export const EN_DASHBOARD = {
 	"dashboard.module.examDate": "Exam date",
 	"dashboard.module.examDateHint": "Sets how tightly this module is reviewed. Left empty, it is scheduled for long-term retention.",
 
+	/* ── À réviser aujourd'hui (ordonnanceur) ── */
+	"dashboard.review.title": "Due today",
+	"dashboard.review.deferredOne": "{count} more, held back for tomorrow",
+	"dashboard.review.deferredOther": "{count} more, held back for tomorrow",
+
 	/* ── Carte de quiz (état) ── */
 	"dashboard.card.mastered": "Mastered",
 	"dashboard.card.review": "To review",

@@ -135,6 +135,11 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.module.examDate": "Date d'examen",
 	"dashboard.module.examDateHint": "Détermine le resserrement des révisions. Laissée vide, la matière est révisée pour être retenue durablement.",
 
+	/* ── À réviser aujourd'hui (ordonnanceur) ── */
+	"dashboard.review.title": "À réviser aujourd'hui",
+	"dashboard.review.deferredOne": "{count} de plus, gardée pour demain",
+	"dashboard.review.deferredOther": "{count} de plus, gardées pour demain",
+
 	/* ── Carte de quiz ── */
 	"dashboard.card.mastered": "Maîtrisé",
 	"dashboard.card.review": "À revoir",

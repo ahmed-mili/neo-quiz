@@ -111,7 +111,7 @@ export interface EngineCtx {
 	 * (editor/export.ts) et qu'à la lecture par le scanner (dashboard/scanner.ts) :
 	 * trois règles séparées divergeraient, et une question changerait de clé
 	 * selon qui la regarde. Calculée une fois à l'assemblage du `ctx`
-	 * (engine.ts, via `assignQuestionIds` de `quiz-ids.ts`) — jamais `ctx.quiz[i].id`
+	 * (engine.ts, via `idsForRawItems` de `quiz-ids.ts`) — jamais `ctx.quiz[i].id`
 	 * brut, qui n'a ni slug de repli ni dédoublonnage.
 	 */
 	questionIds: string[];

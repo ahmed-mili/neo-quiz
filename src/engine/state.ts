@@ -419,19 +419,34 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 	 * de la question, indépendamment du mode courant (engine/lesson.ts
 	 * `buildLessonModel.roleOf`) : seul le GATE qui décide de le lire dépend
 	 * ici du mode D'ORIGINE, jamais du mode courant.
+	 *
+	 * Élargissement délibéré (round de revue suivant, 2026-09-03) : le gate
+	 * teste `originalQuizMode === "lesson"`, PAS `isLessonMode()` — un bloc
+	 * `mode: 'lesson'` SANS tranche valide (`buildLessonModel.isLesson` faux,
+	 * engine/lesson.ts) obtient donc désormais un rôle dans le journal alors
+	 * qu'avant il n'en recevait aucun. C'est correct : `originalQuizMode ===
+	 * "lesson"` signifie que l'auteur a écrit une Leçon, et une question qui
+	 * y déclare `role: "pre"` reste une pré-question qui ne doit produire
+	 * aucun signal de mémoire, tranches valides ou pas. Les autres questions
+	 * reçoivent le rôle par défaut `"test"` (engine/lesson.ts `roleOf`), que
+	 * `signalOf` traite normalement — rien ne change pour elles.
 	 */
 	function recordReview(i: number, grade: ReviewGrade): void {
 		if (!ctx.reviewSink || !ctx.sourcePath) return;
 		if (ctx.quizState.recorded[i]) return;
 		const id = ctx.questionIds[i];
 		if (!id) return;
-		ctx.quizState.recorded[i] = true;
 		const role = ctx.originalQuizMode === "lesson" ? ctx.roleOfQuestion(i) : undefined;
 		try {
 			// Le puits est une FORME destinée à d'autres hôtes (types/engine-ctx.ts) :
 			// un tiers qui lève ne doit jamais casser le rendu — ni cette boucle,
 			// ni (dans goToResults) la navigation vers la slide résultats qui la suit.
 			ctx.reviewSink.record([{ q: ctx.reviewSink.keyOf(ctx.sourcePath, id), grade, ...(role ? { role } : {}) }]);
+			// Marqué APRÈS l'appel, jamais avant : un puits qui lève ne doit pas
+			// consommer la question pour la session — même précédent que le cas
+			// id vide juste au-dessus, qui laisse aussi le drapeau à faux pour
+			// permettre une nouvelle tentative.
+			ctx.quizState.recorded[i] = true;
 		} catch (e) {
 			console.error("[quiz-blocks] puits de révision : enregistrement refusé", e);
 		}

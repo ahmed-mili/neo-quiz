@@ -36,21 +36,6 @@ function explicitId(it: { id?: string }): string | undefined {
 }
 
 /**
- * Identifiants d'un bloc entier, dans l'ordre des questions.
- *
- * Deux subtilités, chacune issue d'une revue :
- *
- * 1. Un identifiant EXPLICITE a le droit de prendre SA réservation, celle-là
- *    seulement. Un slug dérivé, ou un candidat suffixé, n'appartient à
- *    personne : il doit éviter aussi les réservations à VENIR, sinon il
- *    prend la place d'une question plus bas. Avec `dup, dup, dup-2`,
- *    ignorer cette nuance donnait `dup, dup-2, dup-2-2` — la seule question
- *    qui avait un identifiant unique le perdait.
- * 2. Le suffixe s'applique MÊME à un identifiant explicite : deux questions
- *    portant le même (un copier-coller de bloc suffit) auraient la même
- *    ancre HTML, et la seconde deviendrait inatteignable.
- */
-/**
  * Identifiants d'un bloc à partir de ses éléments BRUTS — avant toute
  * validation, tels qu'ils sortent du tableau JSON5. Un bloc peut contenir un
  * élément parasite (`null`, une chaîne, un objet sans `id` ni `title`) :
@@ -77,6 +62,21 @@ export function idsForRawItems(items: ReadonlyArray<unknown>): string[] {
 	}));
 }
 
+/**
+ * Identifiants d'un bloc entier, dans l'ordre des questions.
+ *
+ * Deux subtilités, chacune issue d'une revue :
+ *
+ * 1. Un identifiant EXPLICITE a le droit de prendre SA réservation, celle-là
+ *    seulement. Un slug dérivé, ou un candidat suffixé, n'appartient à
+ *    personne : il doit éviter aussi les réservations à VENIR, sinon il
+ *    prend la place d'une question plus bas. Avec `dup, dup, dup-2`,
+ *    ignorer cette nuance donnait `dup, dup-2, dup-2-2` — la seule question
+ *    qui avait un identifiant unique le perdait.
+ * 2. Le suffixe s'applique MÊME à un identifiant explicite : deux questions
+ *    portant le même (un copier-coller de bloc suffit) auraient la même
+ *    ancre HTML, et la seconde deviendrait inatteignable.
+ */
 export function assignQuestionIds(items: ReadonlyArray<{ id?: string; title?: string }>): string[] {
 	const reserves = new Set(items.map(explicitId).filter((v): v is string => !!v));
 	const attribues = new Set<string>();

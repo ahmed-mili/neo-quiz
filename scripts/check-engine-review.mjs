@@ -25,7 +25,7 @@ import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 await withSrcModule(
 	["src/engine/state.ts", "src/quiz-ids.ts", "src/engine/text-only.ts"],
-	async ({ createStateHandlers }, { assignQuestionIds, idsForRawItems }, { createTextOnlyHandlers }) => {
+	async ({ createStateHandlers }, { idsForRawItems }, { createTextOnlyHandlers }) => {
 	/**
 	 * Construit un ctx minimal, avec le câblage croisé réel des méthodes
 	 * aplaties (même pattern qu'engine.ts).
@@ -262,14 +262,13 @@ await withSrcModule(
 		r.check("aucune levée sur un élément null/chaîne", leve, null);
 		r.check("identifiants calculés à la main", ids, ["a1", "q2", "titre-b", "q4"]);
 
-		// Preuve que la ligne de PRODUCTION d'engine.ts (`questionIds: idsForRawItems(quiz)`,
-		// reproduite ici par makeCtx qui appelle la MÊME fonction importée) survit
-		// à l'assemblage du ctx sur ce même tableau — c'est exactement l'endroit
-		// où l'ancienne ligne `quiz.map(q => ({id: q.id, ...}))` levait avant même
-		// qu'aucune slide ne soit construite.
-		let leveCtx = null;
-		try { makeCtx({ quiz: items, selections: items.map(() => null) }); } catch (e) { leveCtx = e; }
-		r.check("l'assemblage du ctx sur un bloc avec élément parasite ne lève pas", leveCtx, null);
+		// Round de revue suivant (2026-09-03) : un second cas passait `items`
+		// à `makeCtx`, qui appelle `idsForRawItems` avec les MÊMES arguments,
+		// dans le MÊME process — il passait et échouait strictement avec le
+		// cas ci-dessus, donc ne prouvait rien de plus. Aucun cas de ce script
+		// ne peut charger la ligne `questionIds: idsForRawItems(quiz)` DANS
+		// engine.ts lui-même (`renderInteractiveQuiz` a besoin d'un DOM) ;
+		// seul `check-lesson.mjs`/l'usage réel dans Obsidian couvre ce fil.
 		r.done();
 	}
 
@@ -324,7 +323,10 @@ await withSrcModule(
 		   vers "seen" : la carte est notée sur son verdict réel comme une
 		   question normale (elle est répondue, donc "correct"/"wrong"), avec
 		   son rôle "read" tout de même journalisé (utile à l'historique,
-		   inoffensif pour signalOf qui traite déjà "read" à part). */
+		   inoffensif ici : `signalOf`, scheduler/state.ts, ne distingue QUE
+		   `role === "pre"` — pour tout autre rôle il dérive le signal du seul
+		   `grade`, donc journaliser "read" à côté d'un grade "correct"/"wrong"
+		   ne change rien à ce que l'ordonnanceur en tire). */
 		const r = makeReporter("goToResults — le rôle survit à une bascule Leçon → Examen (fix 2)");
 		const quiz = [
 			{ id: "pre1", title: "Pré-question", options: ["a", "b"], correctIndex: 0 },
@@ -405,7 +407,14 @@ await withSrcModule(
 			let leveSoumission = null;
 			try { ctxSoumission.goToResults(); } catch (e) { leveSoumission = e; }
 			r.check("goToResults : rien ne remonte, la boucle va à son terme", leveSoumission, null);
-			r.check("goToResults : la session est quand même marquée comptée", ctxSoumission.quizState.resultsCounted, true);
+			// resultsCounted est posé AVANT la boucle par question (state.ts) :
+			// il resterait vrai même sans le try/catch, donc ne PROUVE rien ici.
+			// Ce qui dépend vraiment du try/catch, c'est `recorded[i]` (déplacé
+			// APRÈS l'appel au puits) : un puits qui lève ne doit pas marquer la
+			// question comme journalisée, pour qu'une nouvelle tentative reste
+			// possible — sinon la réponse serait perdue pour la session entière.
+			r.check("goToResults : un puits qui lève laisse recorded[i] à faux (nouvelle tentative possible)",
+				ctxSoumission.quizState.recorded[0], false);
 			r.check("chaque échec du puits est signalé une fois (deux appels distincts)", erreurs.length, 2);
 		} finally {
 			console.error = originalError;

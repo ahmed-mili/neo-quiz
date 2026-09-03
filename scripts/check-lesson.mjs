@@ -888,7 +888,10 @@ await withSrcModule("src/engine/state.ts", ({ createStateHandlers }) => {
 			resultsCounted: false,
 			pendingResultsLock: false,
 			isSliding: false,
-			slideToken: 0
+			slideToken: 0,
+			lessonPreSkipped: [false, false],
+			// Le vrai goToResults (Task 8) lit recorded[i] avant tout appel au puits.
+			recorded: [false, false]
 		},
 		isQuestionSlideIndex: () => false,
 		slideMap: [],
@@ -1040,7 +1043,9 @@ await withSrcModule("src/engine/state.ts", (state) => {
 			quizState: {
 				current, isSliding: false, slideToken: 0, prevCurrent: 0, lastQuestionIndex: 0,
 				locked, pendingResultsLock: false, resultsCounted: false,
-				lessonPreSkipped: lessonPreSkippedArr
+				lessonPreSkipped: lessonPreSkippedArr,
+				// Le vrai goToResults (Task 8) lit recorded[i] avant tout appel au puits.
+				recorded: roles.map(() => false)
 			},
 			Notice: class { constructor(msg) { notices.push(msg); } },
 			// Pipeline d'animation : jamais atteint dans un cas BLOQUE ; dans un
@@ -1219,7 +1224,9 @@ await withSrcModule("src/engine/state.ts", (state) => {
 				current, isSliding: false, slideToken: 0, prevCurrent: 0, lastQuestionIndex: 0,
 				locked, pendingResultsLock: false, resultsCounted: false,
 				lessonPreSkipped: [false],
-				selections: [selection]
+				selections: [selection],
+				// Le vrai goToResults (Task 8) lit recorded[i] avant tout appel au puits.
+				recorded: [false]
 			},
 			Notice: class { constructor(msg) { notices.push(msg); } },
 			updateNavHighlight() {},

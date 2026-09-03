@@ -408,7 +408,10 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 				ctx.quizState.textOnlyRatings[qi] = rating;
 				// Le verdict existe MAINTENANT : c'est ici, et pas à l'écran de
 				// résultats, qu'une restitution devient un signal de mémoire.
-				ctx.recordReview?.(qi, rating);
+				// Appel NON optionnel : `recordReview` est REQUIS sur EngineCtx
+				// (types/engine-ctx.ts) — un `?.` ici masquerait un câblage manquant
+				// au lieu d'échouer bruyamment (fix round 1, 2026-09-02).
+				ctx.recordReview(qi, rating);
 				ctx.commitQuestionInteraction(qi, { syncHeight: true });
 			});
 		});

@@ -405,6 +405,20 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 	 * session. `sourcePath` absent (aperçu de l'éditeur, quiz en mémoire non
 	 * encore enregistré) : rien à journaliser, la question n'a pas de clé
 	 * stable.
+	 *
+	 * Le rôle est celui DÉCLARÉ par la question, dès que le bloc est
+	 * D'ORIGINE Leçon (`ctx.originalQuizMode`, jamais réassigné après
+	 * l'assemblage) — PAS le mode courant (`ctx.isLessonMode()`). Fix round 1
+	 * (2026-09-02) : `switchToExamMode` bascule une Leçon en Examen
+	 * (`ctx.quizMode = "exam"`) sans jamais toucher `originalQuizMode` ; une
+	 * question `role: "pre"` répondue APRÈS cette bascule perdait son rôle
+	 * (`isLessonMode()` valait alors faux), et `signalOf` (scheduler/state.ts)
+	 * comptait cette réponse comme un succès ou un échec — ce qu'il interdit
+	 * explicitement pour une "pre" (Richland/Kornell/Kao : la tentative est
+	 * le mécanisme, pas la justesse). `roleOfQuestion` lit le champ déclaré
+	 * de la question, indépendamment du mode courant (engine/lesson.ts
+	 * `buildLessonModel.roleOf`) : seul le GATE qui décide de le lire dépend
+	 * ici du mode D'ORIGINE, jamais du mode courant.
 	 */
 	function recordReview(i: number, grade: ReviewGrade): void {
 		if (!ctx.reviewSink || !ctx.sourcePath) return;
@@ -412,8 +426,15 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		const id = ctx.questionIds[i];
 		if (!id) return;
 		ctx.quizState.recorded[i] = true;
-		const role = ctx.isLessonMode() ? ctx.roleOfQuestion(i) : undefined;
-		ctx.reviewSink.record([{ q: ctx.reviewSink.keyOf(ctx.sourcePath, id), grade, ...(role ? { role } : {}) }]);
+		const role = ctx.originalQuizMode === "lesson" ? ctx.roleOfQuestion(i) : undefined;
+		try {
+			// Le puits est une FORME destinée à d'autres hôtes (types/engine-ctx.ts) :
+			// un tiers qui lève ne doit jamais casser le rendu — ni cette boucle,
+			// ni (dans goToResults) la navigation vers la slide résultats qui la suit.
+			ctx.reviewSink.record([{ q: ctx.reviewSink.keyOf(ctx.sourcePath, id), grade, ...(role ? { role } : {}) }]);
+		} catch (e) {
+			console.error("[quiz-blocks] puits de révision : enregistrement refusé", e);
+		}
 	}
 
 	function goToResults(): void {
@@ -459,39 +480,60 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		   `resultsCounted` : `goToResults` n'etait pas protege contre un double
 		   clic, et « Voir le score » comptait alors deux tentatives pour une
 		   seule session. */
-		const statsStore = (ctx.plugin as { _statsStore?: StatsStoreLike })._statsStore;
-		if (!ctx.quizState.resultsCounted && statsStore && ctx.sourcePath) {
+		/* Un seul garde `resultsCounted` pour les DEUX effets de bord (stats du
+		   tableau de bord, journal de l'ordonnanceur) — conforme au brief
+		   (« à l'intérieur de la même garde resultsCounted »), mais les deux
+		   blocs sont sinon INDÉPENDANTS (fix round 1, 2026-09-02) : le journal
+		   ne dépend plus de la présence d'un `_statsStore`, un store sans
+		   rapport avec lui. `_statsStore` reste requis pour le SIEN, comme
+		   avant ; `recordReview` a ses propres gardes (`reviewSink`,
+		   `sourcePath`, id) et no-op proprement quand l'un manque. */
+		if (!ctx.quizState.resultsCounted) {
 			ctx.quizState.resultsCounted = true;
-			const modeTexte = !!ctx.textOnly?.isTextOnlyForAny?.();
-			const { pct, total } = computeScorePercent();
-			/* FIX round 1 de revue task 6b (2026-09-01) : `questionsDone` comptait
-			   TOUTES les cartes (0..ctx.quiz.length), alors que `total` ci-dessus
-			   EXCLUT deja les cartes "read" (elles n'ont pas de reponse) —
-			   une tranche read+test produisait "2/1", une progression au-dessus
-			   de 100% au tableau de bord. Les deux compteurs doivent porter sur
-			   le MEME ensemble : on saute une carte "read" ici aussi, exactement
-			   comme `computeScorePercent` le fait pour `total`. */
-			let questionsDone = 0;
-			for (let i = 0; i < ctx.quiz.length; i++) {
-				if (ctx.isLessonMode() && ctx.roleOfQuestion(i) === "read") continue;
-				if (isComplete(i)) questionsDone++;
+
+			const statsStore = (ctx.plugin as { _statsStore?: StatsStoreLike })._statsStore;
+			if (statsStore && ctx.sourcePath) {
+				const modeTexte = !!ctx.textOnly?.isTextOnlyForAny?.();
+				const { pct, total } = computeScorePercent();
+				/* FIX round 1 de revue task 6b (2026-09-01) : `questionsDone` comptait
+				   TOUTES les cartes (0..ctx.quiz.length), alors que `total` ci-dessus
+				   EXCLUT deja les cartes "read" (elles n'ont pas de reponse) —
+				   une tranche read+test produisait "2/1", une progression au-dessus
+				   de 100% au tableau de bord. Les deux compteurs doivent porter sur
+				   le MEME ensemble : on saute une carte "read" ici aussi, exactement
+				   comme `computeScorePercent` le fait pour `total`. */
+				let questionsDone = 0;
+				for (let i = 0; i < ctx.quiz.length; i++) {
+					if (ctx.isLessonMode() && ctx.roleOfQuestion(i) === "read") continue;
+					if (isComplete(i)) questionsDone++;
+				}
+				statsStore.updateRecord(ctx.sourcePath, {
+					bestScore: modeTexte ? 0 : pct,
+					questionsDone,
+					totalQuestions: total || ctx.quiz.length
+				});
 			}
-			statsStore.updateRecord(ctx.sourcePath, {
-				bestScore: modeTexte ? 0 : pct,
-				questionsDone,
-				totalQuestions: total || ctx.quiz.length
-			});
 
 			/* L'ordonnanceur, lui, compte PAR QUESTION. Une carte "read" n'est
 			   ni juste ni fausse (`seen`), une pré-question abandonnée non plus
 			   (`skipped`) : ces deux-là sont journalisées pour que l'historique
 			   soit complet, mais elles ne produisent aucun signal de mémoire
-			   (scheduler/state.ts signalOf). */
+			   (scheduler/state.ts signalOf).
+			   Le RÔLE journalisé est celui déclaré par la question dès que le
+			   bloc est D'ORIGINE Leçon (`originalQuizMode`), même après une
+			   bascule Leçon → Examen — voir le commentaire de `recordReview`.
+			   Le mode COURANT (`isLessonMode()`), lui, ne sert plus qu'à décider
+			   si "read" doit court-circuiter le verdict : une carte "read"
+			   redevient une question normale une fois basculée en Examen
+			   (`isComplete` la traite alors comme les autres), donc grade
+			   "seen" ne doit s'appliquer QUE tant que le mode Leçon est
+			   réellement actif — sinon une carte "read" activement répondue en
+			   Examen recevrait "seen" au lieu de son verdict réel. */
 			for (let i = 0; i < ctx.quiz.length; i++) {
 				if (ctx.quizState.recorded[i]) continue;
-				const role = ctx.isLessonMode() ? ctx.roleOfQuestion(i) : undefined;
+				const role = ctx.originalQuizMode === "lesson" ? ctx.roleOfQuestion(i) : undefined;
 				let grade: ReviewGrade;
-				if (role === "read") grade = "seen";
+				if (ctx.isLessonMode() && role === "read") grade = "seen";
 				else if (ctx.quizState.lessonPreSkipped[i]) grade = "skipped";
 				else if (!isComplete(i)) continue; // sans réponse : rien ne s'est passé
 				else grade = isCorrect(i) ? "correct" : "wrong";

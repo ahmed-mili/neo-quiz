@@ -1,7 +1,7 @@
 import { TFile } from "obsidian";
 import type { App, EventRef } from "obsidian";
 import type { ParsedQuizItem } from "../editor/modals";
-import { assignQuestionIds } from "../quiz-ids";
+import { idsForRawItems } from "../quiz-ids";
 import { extractExamOptions, parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-utils";
 import { QUESTION_ROLES } from "../types/quiz";
 import type { QuestionRole } from "../types/quiz";
@@ -116,7 +116,9 @@ export function createScanner(app: App): Scanner {
 
 			// Conserver les positions du tableau BRUT est aussi important que la
 			// déduplication : l'éditeur attribue un qN même aux éléments parasites.
-			const ids = assignQuestionIds(sansConfig.map(q => ({ id: q?.id, title: q?.title })));
+			// `idsForRawItems` (quiz-ids.ts) : la même tolérance qu'ici (`q?.id`,
+			// `q?.title`) désormais partagée avec engine.ts, plutôt que retapée.
+			const ids = idsForRawItems(sansConfig);
 			const questions = sansConfig.map((q, i) => ({ q, id: ids[i] })).filter(
 				(item): item is { q: RawQuizItem; id: string } => !!item.q && typeof item.q === "object"
 			);

@@ -50,6 +50,33 @@ function explicitId(it: { id?: string }): string | undefined {
  *    portant le même (un copier-coller de bloc suffit) auraient la même
  *    ancre HTML, et la seconde deviendrait inatteignable.
  */
+/**
+ * Identifiants d'un bloc à partir de ses éléments BRUTS — avant toute
+ * validation, tels qu'ils sortent du tableau JSON5. Un bloc peut contenir un
+ * élément parasite (`null`, une chaîne, un objet sans `id` ni `title`) :
+ * l'éditeur lui attribue quand même un `qN` pour garder l'alignement des
+ * positions (scanner.ts), et le moteur doit faire pareil plutôt que planter
+ * tout le rendu du bloc sur cet unique élément.
+ *
+ * Point de partage délibéré (fix round 1, 2026-09-02) : `assignQuestionIds`
+ * seule ne suffisait pas — chaque appelant retapait `q?.id, q?.title` à sa
+ * façon, et engine.ts avait fini par écrire `q.id` SANS le `?.` (élément non
+ * objet ⇒ TypeError à l'assemblage du ctx, bloc qui ne rend plus du tout, là
+ * où le scanner aurait simplement affiché une carte vide). Trois divergences
+ * nées de cette même expression retapée dans ce seul chantier (la règle
+ * d'identité elle-même, le filtrage des éléments non-objets, et maintenant ce
+ * `?.` manquant) : centraliser plutôt que corriger un quatrième site un jour.
+ */
+export function idsForRawItems(items: ReadonlyArray<unknown>): string[] {
+	return assignQuestionIds(items.map(raw => {
+		const it = raw as { id?: unknown; title?: unknown } | null | undefined;
+		// `explicitId`/`slug` (ci-dessus) valident déjà le TYPE de `id`/`title`
+		// à l'exécution (`typeof ... === "string"`) : seule la présence de
+		// l'élément lui-même (`raw` non nullish, un objet) reste à garder ici.
+		return { id: it?.id as string | undefined, title: it?.title as string | undefined };
+	}));
+}
+
 export function assignQuestionIds(items: ReadonlyArray<{ id?: string; title?: string }>): string[] {
 	const reserves = new Set(items.map(explicitId).filter((v): v is string => !!v));
 	const attribues = new Set<string>();

@@ -1,34 +1,54 @@
 /**
- * Vérifie que le moteur journalise correctement pour l'ordonnanceur (Task 8).
+ * Vérifie que le moteur journalise correctement pour l'ordonnanceur (Task 8,
+ * fix round 1 inclus, 2026-09-02).
  *
- * Charge le VRAI `createStateHandlers` (engine/state.ts) et le VRAI
- * `assignQuestionIds` (quiz-ids.ts), avec un `ctx` minimal mais réel — même
- * câblage croisé que `engine.ts` (`Object.assign(ctx, { hasAnyAnswer:
- * state.hasAnyAnswer, ... })`). Aucun DOM n'est nécessaire : `goToResults`
- * n'atteint jamais `render()`/l'animation de piste tant que la slide cible
- * est déjà la slide courante (`goToSlide` retourne avant tout `await`) — les
- * tests placent donc `quizState.current` sur `SLIDE_RESULTS_INDEX` dès le
- * départ, exactement comme un second clic sur « Voir le score ».
+ * Charge les VRAIS `createStateHandlers` (engine/state.ts), `createTextOnlyHandlers`
+ * (engine/text-only.ts) et `idsForRawItems`/`assignQuestionIds` (quiz-ids.ts),
+ * avec un `ctx` minimal mais réel — même câblage croisé que `engine.ts`
+ * (`Object.assign(ctx, { hasAnyAnswer: state.hasAnyAnswer, ... })`), et
+ * `ctx.questionIds` construit par le MÊME appel que `engine.ts`
+ * (`idsForRawItems(quiz)`, pas une reconstruction locale) : le round 1 de
+ * revue a signalé que la première version de ce script recalculait la ligne
+ * de production au lieu de la charger — corrigé ici.
+ *
+ * Aucun DOM n'est nécessaire pour `goToResults`/`recordReview` : `goToSlide`
+ * retourne avant tout `await`/toute manipulation DOM tant que la slide cible
+ * est déjà la slide courante — les tests placent donc `quizState.current` sur
+ * `SLIDE_RESULTS_INDEX` dès le départ, exactement comme un second clic sur
+ * « Voir le score ». Pour `text-only.ts` (auto-évaluation), un `trackItem`
+ * factice (querySelector/querySelectorAll/addEventListener en mémoire) suffit
+ * à exercer le VRAI gestionnaire de clic sans jsdom.
  *
  *     node scripts/check-engine-review.mjs
  */
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
-await withSrcModule(["src/engine/state.ts", "src/quiz-ids.ts"], async (
-	{ createStateHandlers },
-	{ assignQuestionIds }
-) => {
-	/** Construit un ctx minimal, avec le câblage croisé réel des méthodes
-	    aplaties (même pattern qu'engine.ts). */
+await withSrcModule(
+	["src/engine/state.ts", "src/quiz-ids.ts", "src/engine/text-only.ts"],
+	async ({ createStateHandlers }, { assignQuestionIds, idsForRawItems }, { createTextOnlyHandlers }) => {
+	/**
+	 * Construit un ctx minimal, avec le câblage croisé réel des méthodes
+	 * aplaties (même pattern qu'engine.ts).
+	 *
+	 * `originalQuizMode` et `isLessonMode` sont deux paramètres INDÉPENDANTS
+	 * (fix 2) : par défaut `originalQuizMode` suit `isLessonMode` (un quiz
+	 * QCM ordinaire n'a jamais été une Leçon), mais un test peut les découpler
+	 * pour simuler une Leçon basculée en Examen (`originalQuizMode: "lesson"`,
+	 * `isLessonMode: false`) — exactement l'état que `switchToExamMode`
+	 * (engine.ts) produit sans jamais toucher `originalQuizMode`.
+	 */
 	function makeCtx({
 		quiz,
 		selections,
 		isLessonMode = false,
+		originalQuizMode = isLessonMode ? "lesson" : "quiz",
 		roles = [],
 		lessonPreSkipped = [],
 		recordedInit = [],
 		sourcePath = "Cours/ch1.md",
 		reviewSink: sinkOverride,
+		statsStore = { updateRecord() {} },
+		textOnly,
 	}) {
 		const appels = [];
 		const sink = sinkOverride === undefined
@@ -37,20 +57,23 @@ await withSrcModule(["src/engine/state.ts", "src/quiz-ids.ts"], async (
 
 		const ctx = {
 			quiz,
-			questionIds: assignQuestionIds(quiz.map(q => ({ id: q.id, title: q.title }))),
+			// Même appel que la ligne de production (engine.ts) : le harness
+			// CHARGE `idsForRawItems`, il ne la reproduit pas (fix round 1).
+			questionIds: idsForRawItems(quiz),
 			reviewSink: sink,
 			sourcePath,
-			plugin: { _statsStore: { record: null, updateRecord() {} } },
+			plugin: { _statsStore: statsStore },
 			container: { querySelectorAll: () => [], querySelector: () => null },
 			isExamMode: false,
 			examStarted: false,
 			examEnded: false,
-			textOnly: undefined,
+			textOnly,
 			isTextQuestion: () => false,
 			isClozeQuestion: () => false,
 			isOrderingQuestion: () => false,
 			isMatchingQuestion: () => false,
 			isLessonMode: () => isLessonMode,
+			originalQuizMode,
 			roleOfQuestion: (i) => roles[i],
 			closeHintModal: () => {},
 			clampSlideIndex: (i) => i,
@@ -63,6 +86,7 @@ await withSrcModule(["src/engine/state.ts", "src/quiz-ids.ts"], async (
 		ctx.isQuestionSlideIndex = () => false;
 		ctx.quizState = {
 			selections,
+			textOnlyRatings: quiz.map(() => null),
 			recorded: recordedInit.length ? recordedInit : quiz.map(() => false),
 			lessonPreSkipped: lessonPreSkipped.length ? lessonPreSkipped : quiz.map(() => false),
 			locked: false,
@@ -83,8 +107,30 @@ await withSrcModule(["src/engine/state.ts", "src/quiz-ids.ts"], async (
 			goToSlide: handlers.goToSlide,
 			recordReview: handlers.recordReview,
 			goToResults: handlers.goToResults,
+			// Requis par text-only.ts (bindTextOnlyQuestion → commitQuestionInteraction) :
+			// fonction locale d'engine.ts (DOM), hors périmètre de ce test — seul
+			// l'appel à `ctx.recordReview` qui le précède nous intéresse ici.
+			commitQuestionInteraction: () => {},
+			invalidateSavedResults: () => {},
 		});
 		return { ctx, appels };
+	}
+
+	/** Bouton de note factice : capture son listener pour permettre de
+	    simuler un clic sans DOM (Node n'en fournit aucun). */
+	function fakeRatingButton(rating) {
+		const listeners = {};
+		return {
+			dataset: { textonlyRating: rating },
+			addEventListener: (type, cb) => { listeners[type] = cb; },
+			click: () => listeners.click?.({ preventDefault() {} }),
+		};
+	}
+	function fakeTrackItem(ratingButtons) {
+		return {
+			querySelector: () => null, // textarea, check-btn : hors périmètre de ce test.
+			querySelectorAll: (sel) => (sel.includes("quiz-textonly-rating-btn") ? ratingButtons : []),
+		};
 	}
 
 	/* ────────────────────────────────────────────────────────────
@@ -136,16 +182,28 @@ await withSrcModule(["src/engine/state.ts", "src/quiz-ids.ts"], async (
 	}
 
 	{
-		const r = makeReporter("recordReview — rôle inclus seulement en mode Leçon");
+		const r = makeReporter("recordReview — rôle inclus dès que le bloc est d'origine Leçon (fix 2)");
 		const quiz = [{ id: "q1", title: "T1" }];
 
 		const { ctx: horsLecon, appels: a1 } = makeCtx({ quiz, selections: [null], isLessonMode: false, roles: ["recall"] });
 		horsLecon.recordReview(0, "understood");
-		r.check("hors Leçon : pas de propriété 'role'", Object.prototype.hasOwnProperty.call(a1[0], "role"), false);
+		r.check("bloc jamais Leçon : pas de propriété 'role'", Object.prototype.hasOwnProperty.call(a1[0], "role"), false);
 
 		const { ctx: enLecon, appels: a2 } = makeCtx({ quiz, selections: [null], isLessonMode: true, roles: ["recall"] });
 		enLecon.recordReview(0, "understood");
-		r.check("en Leçon : le rôle courant est copié", a2[0]?.role, "recall");
+		r.check("en Leçon (mode courant) : le rôle déclaré est copié", a2[0]?.role, "recall");
+
+		// LE cas du fix 2 : le bloc est D'ORIGINE Leçon mais le mode COURANT a
+		// basculé en Examen (switchToExamMode, engine.ts — jamais originalQuizMode).
+		// `roleOfQuestion` renvoie le rôle déclaré quel que soit le mode courant
+		// (engine/lesson.ts buildLessonModel.roleOf) : le gate doit donc suivre
+		// `originalQuizMode`, pas `isLessonMode()`, sous peine de perdre le rôle
+		// exactement dans ce cas — celui que le brief n'avait pas prévu.
+		const { ctx: apresBascule, appels: a3 } = makeCtx({
+			quiz, selections: [null], isLessonMode: false, originalQuizMode: "lesson", roles: ["recall"],
+		});
+		apresBascule.recordReview(0, "understood");
+		r.check("bloc d'origine Leçon, mode courant Examen : le rôle SURVIT", a3[0]?.role, "recall");
 		r.done();
 	}
 
@@ -160,7 +218,7 @@ await withSrcModule(["src/engine/state.ts", "src/quiz-ids.ts"], async (
 		       = "titre-v-rifier"  (14 caractères, sous la limite de 20)
 		   Si le moteur lisait `q.id` brut, cet id serait `undefined` : le garde
 		   `if (!id) return;` empêcherait tout enregistrement pour cette question. */
-		const r = makeReporter("recordReview — clé dérivée par assignQuestionIds, jamais q.id brut");
+		const r = makeReporter("recordReview — clé dérivée par idsForRawItems, jamais q.id brut");
 		const quiz = [
 			{ title: "Titre à vérifier" },
 			{ id: "q-explicit", title: "Autre titre" },
@@ -174,6 +232,44 @@ await withSrcModule(["src/engine/state.ts", "src/quiz-ids.ts"], async (
 			appels[0]?.q, "Cours/ch1.md::titre-v-rifier");
 		r.check("clé de la question avec id explicite : chemin::id",
 			appels[1]?.q, "Cours/ch1.md::q-explicit");
+		r.done();
+	}
+
+	{
+		/* Fix 1 (round 1, 2026-09-02) : `idsForRawItems` (quiz-ids.ts) est le
+		   point de partage entre engine.ts et scanner.ts pour la TOLÉRANCE aux
+		   éléments parasites d'un bloc JSON5 (`null`, une chaîne isolée) — le
+		   scanner l'a toujours eue (`q?.id, q?.title`), engine.ts ne l'avait
+		   pas (`q.id` sans `?.`, TypeError à l'assemblage du ctx, bloc entier
+		   qui ne rend plus).
+		   Calcul À LA MAIN, aucune exécution copiée :
+		     items = [{id:"a1",title:"A"}, null, {title:"Titre B"}, "parasite"]
+		     reserves = {"a1"} (seul item0 a un id EXPLICITE, une chaîne non vide)
+		     idx0 : explicite="a1" ⇒ base="a1", id===base ⇒ libre ⇒ "a1"
+		     idx1 : (null)?.id/(null)?.title ⇒ undefined/undefined
+		            ⇒ slug(undefined)="" ⇒ base="q2" (idx+1=2) ⇒ libre ⇒ "q2"
+		     idx2 : {title:"Titre B"} ⇒ slug("Titre B") :
+		            "titre b".toLowerCase() puis [^a-z0-9]+→"-" : "titre"+"-"+"b"="titre-b"
+		            ⇒ base="titre-b" ⇒ libre ⇒ "titre-b"
+		     idx3 : "parasite"?.id ⇒ undefined (une chaîne n'a pas de propriété .id)
+		            ⇒ slug(undefined)="" ⇒ base="q4" (idx+1=4) ⇒ libre ⇒ "q4"
+		     résultat attendu : ["a1", "q2", "titre-b", "q4"] */
+		const r = makeReporter("quiz-ids — idsForRawItems tolère un élément parasite (fix 1)");
+		const items = [{ id: "a1", title: "A" }, null, { title: "Titre B" }, "parasite"];
+		let leve = null;
+		let ids = null;
+		try { ids = idsForRawItems(items); } catch (e) { leve = e; }
+		r.check("aucune levée sur un élément null/chaîne", leve, null);
+		r.check("identifiants calculés à la main", ids, ["a1", "q2", "titre-b", "q4"]);
+
+		// Preuve que la ligne de PRODUCTION d'engine.ts (`questionIds: idsForRawItems(quiz)`,
+		// reproduite ici par makeCtx qui appelle la MÊME fonction importée) survit
+		// à l'assemblage du ctx sur ce même tableau — c'est exactement l'endroit
+		// où l'ancienne ligne `quiz.map(q => ({id: q.id, ...}))` levait avant même
+		// qu'aucune slide ne soit construite.
+		let leveCtx = null;
+		try { makeCtx({ quiz: items, selections: items.map(() => null) }); } catch (e) { leveCtx = e; }
+		r.check("l'assemblage du ctx sur un bloc avec élément parasite ne lève pas", leveCtx, null);
 		r.done();
 	}
 
@@ -217,6 +313,39 @@ await withSrcModule(["src/engine/state.ts", "src/quiz-ids.ts"], async (
 	}
 
 	{
+		/* Fix 2, scénario exact demandé par le ruling : une question "pre"
+		   répondue APRÈS que la Leçon a basculé en Examen (switchToExamMode,
+		   engine.ts) doit toujours porter `role: "pre"` dans le journal — sinon
+		   `signalOf` (scheduler/state.ts) la compterait comme un succès/échec
+		   ordinaire, ce que le noyau interdit explicitement pour "pre".
+		   Une carte "read" dans le MÊME lot vérifie l'autre moitié du ruling :
+		   « le mode gate ne sert plus qu'à la branche read » — en Examen,
+		   `isLessonMode()` vaut faux, donc "read" NE doit PLUS court-circuiter
+		   vers "seen" : la carte est notée sur son verdict réel comme une
+		   question normale (elle est répondue, donc "correct"/"wrong"), avec
+		   son rôle "read" tout de même journalisé (utile à l'historique,
+		   inoffensif pour signalOf qui traite déjà "read" à part). */
+		const r = makeReporter("goToResults — le rôle survit à une bascule Leçon → Examen (fix 2)");
+		const quiz = [
+			{ id: "pre1", title: "Pré-question", options: ["a", "b"], correctIndex: 0 },
+			{ id: "read1", title: "Support répondu en Examen", options: ["a", "b"], correctIndex: 0 },
+		];
+		const roles = ["pre", "read"];
+		// Les deux cartes sont répondues (Examen : plus de "pre" ni "read" au
+		// sens Leçon, ce sont des questions QCM normales) : pre1 correcte, read1 fausse.
+		const selections = [0, 1];
+		const { ctx, appels } = makeCtx({
+			quiz, selections, isLessonMode: false, originalQuizMode: "lesson", roles,
+		});
+		ctx.goToResults();
+		r.check("la 'pre' répondue en Examen garde role:'pre' et son verdict réel (pas 'seen')",
+			appels.find(a => a.q.endsWith("::pre1")), { q: "Cours/ch1.md::pre1", grade: "correct", role: "pre" });
+		r.check("la 'read' répondue en Examen garde role:'read' mais N'EST PLUS forcée à 'seen'",
+			appels.find(a => a.q.endsWith("::read1")), { q: "Cours/ch1.md::read1", grade: "wrong", role: "read" });
+		r.done();
+	}
+
+	{
 		const r = makeReporter("goToResults — hors mode Leçon, verdict QCM ordinaire, pas de rôle");
 		const quiz = [
 			{ id: "q1", title: "Q1", options: ["a", "b"], correctIndex: 0 },
@@ -238,6 +367,88 @@ await withSrcModule(["src/engine/state.ts", "src/quiz-ids.ts"], async (
 		ctx.goToResults();
 		ctx.goToResults();
 		r.check("un deuxième 'Voir le score' n'ajoute aucune ligne", appels.length, 1);
+		r.done();
+	}
+
+	{
+		/* Minor promu : le journal de l'ordonnanceur ne doit plus dépendre de
+		   la présence d'un `_statsStore` — un store sans rapport avec lui. */
+		const r = makeReporter("goToResults — le journal ne dépend pas du statsStore (minor)");
+		const quiz = [{ id: "q1", title: "Q1", options: ["a", "b"], correctIndex: 0 }];
+		const { ctx, appels } = makeCtx({ quiz, selections: [0], isLessonMode: false, statsStore: null });
+		ctx.goToResults();
+		r.check("aucun _statsStore : la question est quand même journalisée", appels.length, 1);
+		r.check("aucun _statsStore : la session est quand même comptée une fois", ctx.quizState.resultsCounted, true);
+		r.done();
+	}
+
+	{
+		/* Minor promu : un puits tiers qui lève ne doit jamais casser le rendu
+		   — ni la boucle de goToResults, ni la navigation vers les résultats
+		   qui la suit. */
+		const r = makeReporter("goToResults / recordReview — un puits qui lève ne casse rien (minor)");
+		const quiz = [{ id: "q1", title: "Q1", options: ["a", "b"], correctIndex: 0 }];
+		const sinkQuiLeve = { keyOf: (p, id) => `${p}::${id}`, record: () => { throw new Error("puits tiers en panne"); } };
+
+		// L'erreur est attendue (loggée par le `catch` de `recordReview`) : la
+		// capturer évite de polluer la sortie du script, comme check-review-store.mjs.
+		const erreurs = [];
+		const originalError = console.error;
+		console.error = (...args) => { erreurs.push(args); };
+		try {
+			const { ctx: ctxDirect } = makeCtx({ quiz, selections: [null], reviewSink: sinkQuiLeve });
+			let leveDirect = null;
+			try { ctxDirect.recordReview(0, "correct"); } catch (e) { leveDirect = e; }
+			r.check("recordReview seul : rien ne remonte", leveDirect, null);
+
+			const { ctx: ctxSoumission } = makeCtx({ quiz, selections: [0], reviewSink: sinkQuiLeve });
+			let leveSoumission = null;
+			try { ctxSoumission.goToResults(); } catch (e) { leveSoumission = e; }
+			r.check("goToResults : rien ne remonte, la boucle va à son terme", leveSoumission, null);
+			r.check("goToResults : la session est quand même marquée comptée", ctxSoumission.quizState.resultsCounted, true);
+			r.check("chaque échec du puits est signalé une fois (deux appels distincts)", erreurs.length, 2);
+		} finally {
+			console.error = originalError;
+		}
+		r.done();
+	}
+
+	/* ────────────────────────────────────────────────────────────
+	   Case C — l'AUTRE point d'enregistrement : l'auto-évaluation
+	   (engine/text-only.ts, seul chemin resté sans couverture au round 1).
+	   ──────────────────────────────────────────────────────────── */
+	{
+		const r = makeReporter("text-only.ts — le clic sur une note appelle recordReview (fix minor : couverture)");
+		const quiz = [{ id: "recall1", title: "Restitution", role: "recall" }];
+		// `textOnly` doit exister sur ctx pour que `hasAnyAnswer`/`isComplete`/
+		// `isCorrect` (state.ts) empruntent la branche auto-évaluation — seul
+		// chemin de state.ts resté sans couverture au round 1.
+		const textOnlyStub = {
+			isTextOnlyFor: () => true,
+			hasAnyAnswer: () => true,
+			isChecked: () => true,
+			isRated: () => true,
+		};
+		const { ctx, appels } = makeCtx({
+			quiz, selections: [null], isLessonMode: true, roles: ["recall"], textOnly: textOnlyStub,
+		});
+
+		// isCorrect/isComplete empruntent bien la branche auto-évaluation :
+		// preuve que `textOnly` n'est pas un mock mort dans ce test.
+		r.check("isComplete emprunte la branche auto-évaluation (textOnly.isRated)", ctx.isComplete(0), true);
+		ctx.quizState.textOnlyRatings[0] = "understood";
+		r.check("isCorrect emprunte la branche auto-évaluation (rating 'understood')", ctx.isCorrect(0), true);
+
+		const textOnlyHandlers = createTextOnlyHandlers(ctx);
+		const bouton = fakeRatingButton("understood");
+		const trackItem = fakeTrackItem([bouton]);
+		textOnlyHandlers.bindTextOnlyQuestion(trackItem, 0);
+		bouton.click();
+
+		r.check("le clic pose la note dans quizState.textOnlyRatings", ctx.quizState.textOnlyRatings[0], "understood");
+		r.check("le clic a bien appelé recordReview (une ligne journalisée)", appels, [
+			{ q: "Cours/ch1.md::recall1", grade: "understood", role: "recall" },
+		]);
 		r.done();
 	}
 });

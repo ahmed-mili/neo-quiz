@@ -20,7 +20,7 @@ import { createPassageHandlers } from "./engine/passage";
 import { createClozeHandlers } from "./engine/cloze";
 import { createLessonHandlers } from "./engine/lesson";
 import { mathifyElement } from "./engine/mathjax";
-import { assignQuestionIds } from "./quiz-ids";
+import { idsForRawItems } from "./quiz-ids";
 import { t } from "./i18n";
 
 import type { App, Plugin } from "obsidian";
@@ -152,11 +152,20 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		   l'écriture (editor/export.ts) et qu'à la lecture par le scanner :
 		   trois règles séparées divergeraient, et une question changerait de
 		   clé selon qui la regarde. `quiz-ids.ts` est un module pur — aucune
-		   dépendance ajoutée au moteur. */
-		questionIds: assignQuestionIds(quiz.map(q => ({ id: q.id, title: q.title }))),
-		// Puits du journal de révision, lu indirectement comme `_statsStore` :
-		// le moteur ne dépend d'aucun type du tableau de bord (types/engine-ctx.ts).
-		reviewSink: (plugin as { _reviewStore?: EngineCtx["reviewSink"] })._reviewStore,
+		   dépendance ajoutée au moteur. `idsForRawItems`, pas un `.map` retapé
+		   ici : un élément parasite du tableau JSON5 (`null`, une chaîne) doit
+		   recevoir un repli `qN` comme au scan, jamais lever (fix round 1,
+		   2026-09-02 — `q.id` sans `?.` plantait tout le rendu du bloc). */
+		questionIds: idsForRawItems(quiz),
+		// Puits du journal de révision, lu indirectement comme `_statsStore`
+		// (types/engine-ctx.ts) — et, comme lui, un ACCESSOR relu à CHAQUE appel,
+		// pas une valeur figée à l'assemblage (fix round 1, 2026-09-02 : la
+		// version précédente gelait `_reviewStore` par valeur ici tout en
+		// prétendant suivre le même pattern que `_statsStore`, relu lui à l'appel
+		// dans goToResults — piège SNAPSHOT/ACCESSOR documenté par ce projet.
+		// Sans effet aujourd'hui — `_reviewStore` existe dès `onload` — mais
+		// faux le jour où sa création deviendrait tardive ou asynchrone).
+		get reviewSink() { return (plugin as { _reviewStore?: EngineCtx["reviewSink"] })._reviewStore; },
 		quizMode,
 		isExamMode,
 		trainingSession: false,

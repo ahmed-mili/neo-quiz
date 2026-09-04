@@ -75,7 +75,15 @@ function validate(o: unknown): LogLine | null {
  */
 export function applyRenames(lines: LogLine[]): ReviewEvent[] {
 	const out: ReviewEvent[] = [];
-	for (const line of lines) {
+	/* TRI PAR DATE, pas par position dans le fichier. Un journal unique est
+	   déjà dans l'ordre (chaque ligne est ajoutée avec l'heure courante), donc
+	   ce tri n'y change rien. Il devient indispensable dès qu'un journal en
+	   FUSIONNE deux : Syncthing dépose un fichier de conflit qu'on absorbe par
+	   concaténation, et un renommage arrivé en fin de fichier cesserait alors
+	   de rattraper les réponses qu'il devait suivre — leur clé resterait
+	   orpheline pour toujours, dans un fichier que rien ne recompacte.
+	   Tri STABLE : à date égale, l'ordre du fichier tranche, comme avant. */
+	for (const line of [...lines].sort((a, b) => a.at - b.at)) {
 		if (line.t === "rename") {
 			const prefixe = line.from + "/";
 			for (let i = 0; i < out.length; i++) {

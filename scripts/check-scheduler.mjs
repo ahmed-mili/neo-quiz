@@ -82,6 +82,28 @@ await withSrcModule(["src/scheduler/horizon.ts", "src/scheduler/params.ts"], (h,
 await withSrcModule("src/scheduler/log.ts", (log) => {
 	const r = makeReporter("Ordonnanceur — journal");
 
+	/* JOURNAL FUSIONNE (Syncthing) : une ligne `rename` peut se retrouver
+	   APRES la reponse qu'elle devait suivre, parce qu'on absorbe un fichier
+	   de conflit par concatenation. `applyRenames` doit donc trier par DATE et
+	   non par position, sinon la cle de cette reponse reste orpheline pour
+	   toujours dans un fichier que rien ne recompacte. */
+	{
+		const T = 1750000000000;
+		const rep = { t: "answer", q: "vieux.md::q1", at: T, grade: "correct" };
+		const ren = { t: "rename", from: "vieux.md", to: "neuf.md", at: T + 1 };
+		// Ordre du FICHIER inverse de l'ordre du TEMPS : c'est exactement ce
+		// que produit la concatenation de deux journaux d'appareils.
+		const fusionne = log.applyRenames([ren, rep]);
+		r.check("un rename posterieur en date rattrape la reponse, meme place avant elle dans le fichier",
+			fusionne[0].q, "neuf.md::q1");
+		// Et l'inverse doit rester vrai : un rename ANTERIEUR ne touche pas une
+		// reponse qui porte deja la cle nouvelle.
+		const apres = log.applyRenames([{ ...ren, at: T - 1 }, rep]);
+		r.check("un rename anterieur en date ne retouche pas une reponse posterieure",
+			apres[0].q, "vieux.md::q1");
+	}
+
+
 	// Aller-retour.
 	const e = { t: "answer", q: "note.md::q1", at: 1700000000000, grade: "correct", role: "test" };
 	const relu = log.parseLog(log.formatLine(e));

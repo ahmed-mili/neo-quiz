@@ -10,6 +10,7 @@ const DEBOUNCE_MS = 500;
     `destroy()` soit éprouvé comme dans Obsidian, pas seulement par inspection. */
 function fakePlugin(options = {}) {
 	const appended = [];
+	const removed = [];
 	const renameRefs = new Set();
 	const append = options.append ?? (async (_path, texte) => { appended.push(texte); });
 	const plugin = {
@@ -20,6 +21,10 @@ function fakePlugin(options = {}) {
 					exists: options.exists ?? (async () => false),
 					read: options.read ?? (async () => { throw new Error("ENOENT"); }),
 					append,
+					// Fichiers de conflit Syncthing : `list` les expose, `remove`
+					// note ce que le store a jugé sûr de supprimer.
+					list: options.list ?? (async () => ({ files: [], folders: [] })),
+					remove: options.remove ?? (async (p) => { removed.push(p); }),
 				},
 				on: (nom, cb) => {
 					const ref = { nom, cb };
@@ -39,7 +44,7 @@ function fakePlugin(options = {}) {
 	// simulé par `offref` pour isoler la garde `detruit` interne au module
 	// (voir le test « destruction »), plutôt que de re-tester `offref` deux fois.
 	const renameCallback = () => [...renameRefs][0]?.cb ?? null;
-	return { plugin, appended, emitRename, renameCallback, renameListenerCount: () => renameRefs.size };
+	return { plugin, appended, removed, emitRename, renameCallback, renameListenerCount: () => renameRefs.size };
 }
 
 const fakeScanner = (quizzes) => ({ getQuizzes: () => quizzes });
@@ -393,5 +398,69 @@ await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore 
 	const A = await planApres({});
 	const B = await planApres({ Reseaux: { examDate: "275761-01-01" } });
 	r.check("un horizon hors du domaine Date retombe sur le même plan qu'aucun override", B, A);
+	r.done();
+});
+
+/* ── Fichiers de conflit Syncthing ──
+   Syncthing ne fusionne pas : deux appareils qui écrivent le journal entre
+   deux synchronisations produisent un `.sync-conflict-…jsonl` à côté. Le
+   store doit ABSORBER ses lignes manquantes puis le supprimer — et ne jamais
+   supprimer ce qu'il n'a pas entièrement compris. */
+await withSrcModule("src/dashboard/review-store.ts", async (mod) => {
+	const r = makeReporter("Adaptateur — absorption des conflits Syncthing");
+	const DIR = "vault/.obsidian/plugins/quiz-blocks";
+	const T0 = 1750000000000;
+	const ligne = (q, at) => JSON.stringify({ t: "answer", q, at, grade: "correct" }) + "\n";
+
+	// Le principal porte a et b ; le conflit porte b (recouvrement, cas NORMAL)
+	// et c (la révision que l'autre appareil est seul à connaître).
+	// `formatLine` termine chaque ligne par un saut : un vrai journal finit
+	// donc TOUJOURS par un saut. Le fixture doit refleter la realite.
+	const principal = [ligne("n.md::a", T0), ligne("n.md::b", T0 + 1)].join("");
+	const conflit = [ligne("n.md::b", T0 + 1), ligne("n.md::c", T0 + 2)].join("");
+
+	const monter = async (opts = {}) => {
+		let disque = opts.principal ?? principal;
+		const f = fakePlugin({
+			exists: async () => true,
+			read: async (p) => {
+				if (p.endsWith("review-log.jsonl")) return disque;
+				if (p in (opts.conflits ?? {})) return opts.conflits[p];
+				throw new Error("ENOENT " + p);
+			},
+			append: async (_p, texte) => { disque += texte; },
+			list: async () => ({ files: [`${DIR}/review-log.jsonl`, ...Object.keys(opts.conflits ?? {})], folders: [] }),
+		});
+		const store = mod.createReviewStore(f.plugin, fakeScanner([]));
+		await store.load();
+		return { store, f, disque: () => disque };
+	};
+
+	const cheminC = `${DIR}/review-log.sync-conflict-20260904-071500-ABCDEFG.jsonl`;
+	const m = await monter({ conflits: { [cheminC]: conflit } });
+	const ecrit = m.disque().trim().split("\n");
+	// 3 lignes et non 4 : `b` est présent des deux côtés et ne doit être écrit
+	// qu'une fois, sinon `spentToday` compterait deux fois la même révision.
+	r.check("la révision connue du seul autre appareil est absorbée", ecrit.length, 3);
+	r.check("le recouvrement n'est PAS dupliqué", ecrit.filter(l => l.includes("n.md::b")).length, 1);
+	r.check("le fichier de conflit est supprimé après absorption", m.f.removed, [cheminC]);
+
+	// Une ligne illisible : on absorbe le reste, on garde le fichier.
+	const cheminD = `${DIR}/review-log.sync-conflict-20260904-081500-HIJKLMN.jsonl`;
+	const abime = ligne("n.md::d", T0 + 3) + "{ pas du json\n";
+	const m2 = await monter({ conflits: { [cheminD]: abime } });
+	r.check("la ligne lisible d'un fichier abîmé est quand même absorbée",
+		m2.disque().includes("n.md::d"), true);
+	r.check("un fichier dont une ligne échappe n'est JAMAIS supprimé", m2.f.removed, []);
+
+	/* Journal sans saut final (édité à la main, tronqué par une fermeture
+	   brutale) : sans la recolle, la dernière ligne du principal et la
+	   première absorbée fusionneraient et deviendraient TOUTES DEUX
+	   illisibles — une perte causée par le code censé empêcher les pertes. */
+	const m3 = await monter({ principal: principal.trimEnd(), conflits: { [cheminC]: conflit } });
+	const lu3 = m3.disque().trim().split(String.fromCharCode(10));
+	r.check("un journal sans saut final n'est pas corrompu par l'absorption", lu3.length, 3);
+	r.check("la ligne qui precedait la recolle reste lisible",
+		lu3.filter(l => l.includes("n.md::b")).length, 1);
 	r.done();
 });

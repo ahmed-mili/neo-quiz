@@ -90,6 +90,91 @@ export function createReviewStore(plugin: ReviewStorePlugin, scanner: Scanner): 
 	// de révision) y serait à la fois lent et fragile.
 	const chemin = `${dossierPlugin}/${NOM_FICHIER}`;
 
+	/* ── Fichiers de conflit Syncthing ──
+	   Syncthing ne FUSIONNE pas : deux appareils qui écrivent le journal entre
+	   deux synchronisations produisent `review-log.sync-conflict-<date>-<appareil>.jsonl`
+	   à côté de l'original. Rien n'est perdu sur le disque, mais le lecteur
+	   n'ouvre qu'un fichier : les réponses du perdant deviennent invisibles.
+
+	   L'ajout seul est précisément le format qui se répare : on ABSORBE les
+	   lignes manquantes par concaténation, puis on supprime la source. L'ordre
+	   des opérations est ce qui rend l'opération sûre — écrire et RELIRE avant
+	   de supprimer, jamais l'inverse — et un fichier dont une seule ligne n'a
+	   pas été comprise n'est jamais supprimé. */
+	const estConflit = (nom: string): boolean =>
+		nom.startsWith("review-log.sync-conflict-") && nom.endsWith(".jsonl");
+
+	async function absorberConflits(dejaLa: Set<string>): Promise<LogLine[]> {
+		const adapter = plugin.app.vault.adapter;
+		let listing;
+		// `dossierPlugin` est déjà prouvé non vide plus haut (le constructeur
+		// lève sans lui) ; TypeScript ne peut pas le savoir dans cette closure.
+		try { listing = await adapter.list(dossierPlugin as string); } catch { return []; }
+
+		const gagnees: LogLine[] = [];
+		const aAjouter: string[] = [];
+		const aSupprimer: string[] = [];
+
+		for (const cheminConflit of listing.files) {
+			const nom = cheminConflit.slice(cheminConflit.lastIndexOf("/") + 1);
+			if (!estConflit(nom)) continue;
+			try {
+				const { lines, ignored } = parseLog(await adapter.read(cheminConflit));
+				for (const l of lines) {
+					const cle = formatLine(l);
+					// Les deux journaux partagent un préfixe commun : le
+					// recouvrement est le cas NORMAL, pas l'exception. Sans ce
+					// dédoublonnage, `spentToday` compterait deux fois les
+					// mêmes réponses et mangerait le budget du jour.
+					if (dejaLa.has(cle)) continue;
+					dejaLa.add(cle);
+					gagnees.push(l);
+					aAjouter.push(cle);
+				}
+				/* On ne supprime JAMAIS ce qu'on n'a pas entièrement compris :
+				   mieux vaut laisser un fichier orphelin visible qu'effacer en
+				   silence des révisions illisibles. */
+				if (ignored === 0) aSupprimer.push(cheminConflit);
+				else console.warn(`[quiz-blocks] ${nom} : ${ignored} ligne(s) illisible(s), fichier conservé`);
+			} catch (e) {
+				console.warn(`[quiz-blocks] fichier de conflit illisible, conservé : ${nom}`, e);
+			}
+		}
+
+		if (aAjouter.length) {
+			// Ajout seul : une coupure au mauvais moment coûte une ligne, jamais
+			// le fichier. Une réécriture complète, elle, pourrait tout perdre.
+			// `join("")` et non `join("\n")` : `formatLine` termine DÉJÀ chaque
+			// ligne par un saut, comme le fait `flush`. Un second séparateur
+			// insérerait une ligne vide entre chaque révision absorbée.
+			/* Un journal qui ne finit PAS par un saut (édité à la main, tronqué
+			   par une fermeture brutale) collerait sa dernière ligne à la
+			   première absorbée, et les DEUX deviendraient illisibles. On
+			   recolle donc le saut manquant avant d'ajouter. */
+			const finSaine = (await adapter.read(chemin)).endsWith("\n");
+			await adapter.append(chemin, (finSaine ? "" : "\n") + aAjouter.join(""));
+			// RELIRE avant de supprimer : sans cette preuve, un échec d'écriture
+			// silencieux ferait disparaître les révisions qu'on prétend sauver.
+			// On vérifie la PRÉSENCE de chaque ligne ajoutée, pas un total —
+			// un compte ne dit pas QUOI a été écrit.
+			const relu = new Set(parseLog(await adapter.read(chemin)).lines.map(formatLine));
+			if (aAjouter.some(l => !relu.has(l))) {
+				console.warn("[quiz-blocks] absorption non confirmée à la relecture, fichiers de conflit conservés");
+				return gagnees;
+			}
+		}
+
+		for (const p of aSupprimer) {
+			try { await plugin.app.vault.adapter.remove(p); } catch (e) {
+				console.warn(`[quiz-blocks] suppression du fichier de conflit impossible : ${p}`, e);
+			}
+		}
+		if (gagnees.length || aSupprimer.length) {
+			console.info(`[quiz-blocks] journal : ${gagnees.length} révision(s) récupérée(s), ${aSupprimer.length} fichier(s) de conflit absorbé(s)`);
+		}
+		return gagnees;
+	}
+
 	async function load(): Promise<void> {
 		try {
 			// `exists` distingue le premier démarrage d'une vraie erreur de
@@ -97,6 +182,7 @@ export function createReviewStore(plugin: ReviewStorePlugin, scanner: Scanner): 
 			if (!(await plugin.app.vault.adapter.exists(chemin))) return;
 			const texte = await plugin.app.vault.adapter.read(chemin);
 			const { lines, ignored } = parseLog(texte);
+			lines.push(...await absorberConflits(new Set(lines.map(formatLine))));
 			// Le listener est déjà actif pendant l'I/O : les lignes arrivées entre-
 			// temps doivent suivre le fichier chargé, comme elles le feront sur disque.
 			lignes = [...lines, ...lignes];

@@ -26,6 +26,20 @@ jobs:
       - name: Type check
         run: npm run check
 
+      # LE CLIQUET DE LA FRONTIÈRE D'HÔTE. Le contrat `src/host/types.ts` dit
+      # que c'est ce contrôle, et non la discipline, qui tient la frontière :
+      # tant qu'il n'était lancé qu'à la main, c'était encore la discipline.
+      # Il coûte moins d'une seconde et ne lit que des fichiers du dépôt —
+      # ni vault, ni chaîne Rust, ni Obsidian installé.
+      - name: Host boundary ratchet
+        run: npm run check:host
+
+      # Même nature : lecture seule sur `src/assets/css` et le thème de l'app.
+      # Une variable CSS oubliée ne produit AUCUNE erreur, juste un texte
+      # invisible — donc elle se mesure, elle ne se relit pas.
+      - name: App theme completeness
+        run: npm run check:theme
+
       # Mêmes étapes que release.yml, sans publication : une casse de build
       # (loader manquant, import cassé) se voit au push, pas au moment du tag.
       - name: Build

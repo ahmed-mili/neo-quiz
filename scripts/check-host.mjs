@@ -11,7 +11,16 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join, posix, sep } from "node:path";
 
-const IMPORTE_OBSIDIAN = /(?:from\s*|require\s*\(\s*)["']obsidian["']/;
+/* Les TROIS formes de dépendance, pas seulement les deux statiques :
+   `from "obsidian"`, `require("obsidian")` ET `import("obsidian")`. La
+   dernière a été oubliée au premier jet alors que le dépôt avait déjà
+   l'idiome du chargement différé (`require("./dashboard/quiz-open")`) — un
+   `const o = await import("obsidian")` passait donc au vert. */
+const IMPORTE_OBSIDIAN = /(?:from\s*|require\s*\(\s*|(?<![.\w$])import\s*\(\s*)["']obsidian["']/;
+
+/* `.mts` et `.cts` comptent : un fichier qui ne finit pas par `.ts` n'était
+   pas collecté, donc jamais examiné — une échappatoire d'un caractère. */
+const EXTENSIONS_TS = [".ts", ".tsx", ".mts", ".cts"];
 
 /**
  * Fichiers de `src/` qui importent ENCORE Obsidian, avec la tranche qui les
@@ -72,8 +81,12 @@ function fichiersTs(racine) {
 	if (!existsSync(racine)) return trouves;
 	for (const nom of readdirSync(racine)) {
 		const chemin = join(racine, nom);
+		/* `node_modules`, `dist` et les artefacts Rust ne sont pas du code du
+		   dépôt : les balayer ferait échouer le contrôle sur les typages
+		   d'Obsidian eux-mêmes. */
+		if (nom === "node_modules" || nom === "dist" || nom === "target" || nom === "gen") continue;
 		if (statSync(chemin).isDirectory()) trouves.push(...fichiersTs(chemin));
-		else if (nom.endsWith(".ts") || nom.endsWith(".tsx")) trouves.push(chemin.split(sep).join(posix.sep));
+		else if (EXTENSIONS_TS.some(e => nom.endsWith(e))) trouves.push(chemin.split(sep).join(posix.sep));
 	}
 	return trouves;
 }
@@ -98,8 +111,11 @@ for (const f of attendus) {
 	else if (!importeurs.has(f)) rate(`${f} n'importe plus « obsidian » : retirez-le de RESTANTS.`);
 }
 
-// 3. L'app Windows n'a jamais rien à faire d'Obsidian.
-for (const f of fichiersTs("apps/windows/src")) {
+/* 3. L'app Windows n'a jamais rien à faire d'Obsidian.
+      On balaie TOUT `apps/windows`, pas seulement son `src/` : la config Vite,
+      `tauri.conf` ou un script racine sont des `.ts` du même projet, et un
+      fichier posé juste à côté de `src/` échappait au contrôle. */
+for (const f of fichiersTs("apps/windows")) {
 	if (IMPORTE_OBSIDIAN.test(readFileSync(f, "utf8"))) rate(`${f} importe « obsidian » : ce n'est pas son hôte.`);
 }
 

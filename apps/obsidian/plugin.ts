@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from "./branding";
+import { PRODUCT_NAME } from "../../src/branding";
 import {
 	MarkdownRenderChild,
 	MarkdownView,
@@ -18,30 +18,30 @@ import type {
 	WorkspaceLeaf,
 } from "obsidian";
 
-import { parseQuizSource, renderInteractiveQuiz } from "./engine";
-import { QuizBuilderView, VIEW_TYPE } from "./editor";
-import { QUIZ_BLOCK_RE, findQuizModeConfigIndex } from "./quiz-utils";
-import { resolveQuizSourceRef } from "./quiz-source-ref";
-import { deriveQuizNoteName, buildQuizRefBlockContent, isLessonNoteContent, isLessonNoteContentExact, isLessonNameLinkSafe } from "./quiz-from-lesson";
-import { QuizDashboardView, VIEW_TYPE_DASHBOARD } from "./dashboard";
-import { createScanner } from "./dashboard/scanner";
-import type { Scanner } from "./dashboard/scanner";
-import { createStatsStore } from "./dashboard/stats-store";
-import type { StatsStore, QuizStatRecord } from "./dashboard/stats-store";
-import { createReviewStore } from "./dashboard/review-store";
-import type { ReviewStore } from "./dashboard/review-store";
-import type { ModuleOverride } from "./dashboard/quiz-modules";
-import * as voiceInstall from "./dashboard/voice-install";
-import type { VoiceBackend, VoiceModelId, VoiceLang } from "./dashboard/voice-install";
-import * as aiProviders from "./dashboard/ai-providers";
-import type { OllamaCatalogEntry } from "./dashboard/ai-providers";
-import type { AiUsageEntry } from "./dashboard/ai-usage";
-import { formatHotkey, eventToHotkey } from "./hotkey-format";
-import type { Hotkey } from "./hotkey-format";
-import { closeAllSelects } from "./dashboard/ui-select";
-import { normalizeExternalRoot } from "./dashboard/file-sources";
-import { t, setLanguage, langSetting } from "./i18n";
-import type { LangSetting } from "./i18n";
+import { parseQuizSource, renderInteractiveQuiz } from "../../src/engine";
+import { QuizBuilderView, VIEW_TYPE } from "../../src/editor";
+import { QUIZ_BLOCK_RE, findQuizModeConfigIndex } from "../../src/quiz-utils";
+import { resolveQuizSourceRef } from "../../src/quiz-source-ref";
+import { deriveQuizNoteName, buildQuizRefBlockContent, isLessonNoteContent, isLessonNoteContentExact, isLessonNameLinkSafe } from "../../src/quiz-from-lesson";
+import { QuizDashboardView, VIEW_TYPE_DASHBOARD } from "../../src/dashboard";
+import { createScanner } from "../../src/dashboard/scanner";
+import type { Scanner } from "../../src/dashboard/scanner";
+import { createStatsStore } from "../../src/dashboard/stats-store";
+import type { StatsStore, QuizStatRecord } from "../../src/dashboard/stats-store";
+import { createReviewStore } from "../../src/dashboard/review-store";
+import type { ReviewStore } from "../../src/dashboard/review-store";
+import type { ModuleOverride } from "../../src/dashboard/quiz-modules";
+import * as voiceInstall from "../../src/dashboard/voice-install";
+import type { VoiceBackend, VoiceModelId, VoiceLang } from "../../src/dashboard/voice-install";
+import * as aiProviders from "../../src/dashboard/ai-providers";
+import type { OllamaCatalogEntry } from "../../src/dashboard/ai-providers";
+import type { AiUsageEntry } from "../../src/dashboard/ai-usage";
+import { formatHotkey, eventToHotkey } from "../../src/hotkey-format";
+import type { Hotkey } from "../../src/hotkey-format";
+import { closeAllSelects } from "../../src/dashboard/ui-select";
+import { normalizeExternalRoot } from "../../src/dashboard/file-sources";
+import { t, setLanguage, langSetting } from "../../src/i18n";
+import type { LangSetting } from "../../src/i18n";
 
 const PLUGIN_ID = "quiz-blocks";
 const PLUGIN_NAME = PRODUCT_NAME;
@@ -1314,7 +1314,7 @@ export default class InteractiveQuizPlugin extends Plugin {
 						// simplement sur le dashboard.
 						const content = await this.app.vault.cachedRead(activeFile);
 						if (QUIZ_BLOCK_RE.test(content)) {
-							const { openQuizPathInEditor } = require("./dashboard/quiz-open") as typeof import("./dashboard/quiz-open");
+							const { openQuizPathInEditor } = require("../../src/dashboard/quiz-open") as typeof import("../../src/dashboard/quiz-open");
 							await openQuizPathInEditor(this.app, activeFile.path);
 							return;
 						}

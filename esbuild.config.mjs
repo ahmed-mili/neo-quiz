@@ -71,7 +71,9 @@ async function bundleCSS() {
 }
 
 const ctx = await esbuild.context({
-	entryPoints: ["src/main.ts"],
+	// Le point d'entrée du GREFFON vit sous apps/obsidian/ : c'est un hôte,
+	// au même titre qu'apps/windows/. `src/` ne contient que le partagé.
+	entryPoints: ["apps/obsidian/main.ts"],
 	outfile: "dist/main.js",
 	bundle: true,
 	format: "cjs",

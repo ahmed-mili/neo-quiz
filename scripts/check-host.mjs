@@ -73,7 +73,6 @@ const RESTANTS = [
 	// Divers du greffon — tranche 4.
 	"src/hotkey-format.ts",
 	"src/modal-base.ts",
-	"src/plugin.ts",
 	"src/quiz-source-ref.ts",
 ];
 

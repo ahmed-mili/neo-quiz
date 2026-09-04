@@ -11,11 +11,12 @@ import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 await withSrcModule("src/dashboard/scanner.ts", async ({ createScanner }) => {
 	const r = makeReporter("Scanner — références des questions");
-	const file = {
+	const fichierHote = {
 		path: "Cours/reseau.md",
+		name: "reseau.md",
 		basename: "reseau",
 		extension: "md",
-		stat: { mtime: 1 },
+		mtime: 1,
 	};
 	let content = [
 		"Avant le quiz",
@@ -34,18 +35,25 @@ await withSrcModule("src/dashboard/scanner.ts", async ({ createScanner }) => {
 		"  ```",
 		"Apres le quiz",
 	].join("\r\n");
-	const app = {
-		vault: {
-			getMarkdownFiles: () => [file],
-			cachedRead: async () => content,
-			on: () => ({}),
-			offref: () => undefined,
+	let abonne = null;
+	const host = {
+		fs: {
+			listMarkdown: () => [fichierHote],
+			readCached: async () => content,
+			read: async () => content,
+			getFile: (p) => (p === fichierHote.path ? fichierHote : null),
+		},
+		watcher: {
+			/* Le scanner doit RENDRE son désabonnement et l'appeler au
+			   destroy : sans ça, un rechargement du greffon laisse un écouteur
+			   sur un scanner mort, qui rescanne dans le vide à chaque frappe. */
+			onChange: (cb) => { abonne = cb; return () => { abonne = null; }; },
 		},
 	};
-	const scanner = createScanner(app);
+	const scanner = createScanner(host);
 
-	await scanner.scanVault();
-	const entry = scanner.getQuiz(file.path);
+	await scanner.init();
+	const entry = scanner.getQuiz(fichierHote.path);
 
 	/* La configuration et le parasite ne sont pas des questions indexées : les
 	   sept références correspondent uniquement aux objets du bloc. */
@@ -81,7 +89,7 @@ await withSrcModule("src/dashboard/scanner.ts", async ({ createScanner }) => {
 	scanner.onChange(quizzes => notifications.push(quizzes));
 	// Seules les données du catalogue changent : le nombre et le type restent identiques.
 	content = content.replace("role: 'pre', slice: 1", "role: 'recall', slice: 9");
-	await scanner.scanFile(file);
+	await scanner.scanFile(fichierHote);
 
 	r.check("un changement de référence déclenche onChange", notifications.length, 1);
 	r.check("onChange expose immédiatement les nouvelles données",
@@ -89,36 +97,60 @@ await withSrcModule("src/dashboard/scanner.ts", async ({ createScanner }) => {
 
 	const validContent = content;
 	content = "Cette note ne contient plus de quiz.";
-	await scanner.scanFile(file);
+	await scanner.scanFile(fichierHote);
 	r.check("une note sans bloc retire son ancienne entrée du cache",
-		scanner.getQuiz(file.path), null);
+		scanner.getQuiz(fichierHote.path), null);
 
 	content = validContent;
-	await scanner.scanFile(file);
+	await scanner.scanFile(fichierHote);
 	r.check("le cache est repeuplé avant d'éprouver le JSON5 invalide",
-		scanner.getQuiz(file.path) !== null, true);
+		scanner.getQuiz(fichierHote.path) !== null, true);
 	const consoleErrors = [];
 	const originalConsoleError = console.error;
 	try {
 		console.error = (...args) => consoleErrors.push(args);
 		content = "```quiz-blocks\n[{ prompt: ]\n```";
-		await scanner.scanFile(file);
+		await scanner.scanFile(fichierHote);
 	} finally {
 		console.error = originalConsoleError;
 	}
 	r.check("un bloc JSON5 invalide retire son ancienne entrée du cache",
-		scanner.getQuiz(file.path), null);
+		scanner.getQuiz(fichierHote.path), null);
 	r.check("un bloc transitoirement invalide ne pollue pas la console",
 		consoleErrors.length, 0);
 
 	content = validContent;
-	await scanner.scanFile(file);
+	await scanner.scanFile(fichierHote);
 	r.check("le cache est repeuplé avant d'éprouver le bloc vide",
-		scanner.getQuiz(file.path) !== null, true);
+		scanner.getQuiz(fichierHote.path) !== null, true);
 	content = "```quiz-blocks\n[]\n```";
-	await scanner.scanFile(file);
+	await scanner.scanFile(fichierHote);
 	r.check("un bloc vide retire son ancienne entrée du cache",
-		scanner.getQuiz(file.path), null);
+		scanner.getQuiz(fichierHote.path), null);
+
+	/* RENOMMAGE d'une note INDEXÉE : l'ancienne clé disparaît, la nouvelle
+	   entre. Une clé qui survivrait laisserait un quiz fantôme au catalogue. */
+	const neuf = { ...fichierHote, path: "Cours/reseau2.md", basename: "reseau2", name: "reseau2.md" };
+	content = validContent;
+	await scanner.scanFile(fichierHote);
+	abonne({ kind: "rename", file: neuf, oldPath: fichierHote.path });
+	await new Promise(r2 => setTimeout(r2, 0));
+	r.check("un renommage retire l'ancienne clé", scanner.getQuiz("Cours/reseau.md"), null);
+
+	/* RENOMMAGE vers un .md JAMAIS indexé : le fichier doit quand même être
+	   scanné. Le comportement d'origine le faisait ; le perdre rendrait
+	   invisible tout quiz créé par un renommage. */
+	const neuf3 = { ...fichierHote, path: "Cours/reseau3.md", basename: "reseau3", name: "reseau3.md" };
+	abonne({ kind: "rename", file: neuf3, oldPath: "Autre/pas-indexe.md" });
+	await new Promise(r2 => setTimeout(r2, 0));
+	r.check("un renommage depuis un chemin inconnu scanne quand même",
+		!!scanner.getQuiz("Cours/reseau3.md"), true);
+
+	/* DÉSABONNEMENT : un scanner détruit ne doit plus rien écouter. Seule
+	   protection contre le rechargement du greffon, où deux scanners
+	   coexistent une fraction de seconde. */
+	scanner.destroy();
+	r.check("destroy retire l'abonnement au watcher", abonne, null);
 
 	r.done();
 });

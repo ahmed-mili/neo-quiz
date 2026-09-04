@@ -19,7 +19,7 @@ import type {
 } from "obsidian";
 
 import { createObsidianHost } from "./host";
-import { installHost, uninstallHost } from "../../src/host/current";
+import { installHost, uninstallHost, currentHost } from "../../src/host/current";
 import { parseQuizSource, renderInteractiveQuiz } from "../../src/engine";
 import { QuizBuilderView, VIEW_TYPE } from "../../src/editor";
 import { QUIZ_BLOCK_RE, findQuizModeConfigIndex } from "../../src/quiz-utils";
@@ -1074,7 +1074,9 @@ export default class InteractiveQuizPlugin extends Plugin {
 		this.log.info("plugin chargé");
 
 		/* ─── Scanner & Stats Store ─── */
-		this._scanner = createScanner(this.app);
+		/* Le MÊME hôte que celui installé au début d'onload : en construire un
+		   second donnerait deux index et deux abonnements au vault. */
+		this._scanner = createScanner(currentHost());
 		this._statsStore = createStatsStore(this);
 		this._statsStore.load();
 		/* `createReviewStore` échoue si `manifest.dir` est absent (API Obsidian :

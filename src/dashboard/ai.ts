@@ -1,6 +1,7 @@
 import { setIcon, Notice, loadPdfJs, Platform, MarkdownRenderer, TFile } from "obsidian";
 import type { App, View } from "obsidian";
 import type { DashboardCtx } from "../types/dashboard-ctx";
+import type { HostFile } from "../host/types";
 import type { EditorExamOptions } from "../types/editor-ctx";
 import * as aiProviders from "./ai-providers";
 import { createSelect, closeAllSelects, openActionMenu, openModelMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
@@ -2077,7 +2078,14 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			   part, une sur le disque — et la première retouche irait dans le
 			   vide. Le scan du seul fichier suffit à obtenir son entrée : le
 			   scan de vault complet arriverait trop tard. */
-			await ctx.scanner.scanFile(file);
+			const hostFile: HostFile = {
+				path: file.path,
+				name: file.name,
+				basename: file.basename,
+				extension: file.extension,
+				mtime: file.stat?.mtime || 0,
+			};
+			await ctx.scanner.scanFile(hostFile);
 			const entry = ctx.scanner.getQuiz(file.path);
 			if (entry) {
 				resetGeneration();

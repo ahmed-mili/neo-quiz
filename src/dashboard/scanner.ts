@@ -1,10 +1,9 @@
-import { TFile } from "obsidian";
-import type { App, EventRef } from "obsidian";
 import type { ParsedQuizItem } from "../editor/modals";
 import { idsForRawItems } from "../quiz-ids";
 import { extractExamOptions, parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-utils";
 import { QUESTION_ROLES } from "../types/quiz";
 import type { QuestionRole } from "../types/quiz";
+import type { Host, HostFile } from "../host/types";
 
 /* ══════════════════════════════════════════════════════════
    QUIZ SCANNER — Indexeur de vault
@@ -92,17 +91,17 @@ export interface Scanner {
 	init(): Promise<void>;
 	destroy(): void;
 	scanVault(): Promise<void>;
-	scanFile(file: TFile): Promise<void>;
+	scanFile(file: HostFile): Promise<void>;
 	getQuizzes(): QuizIndexEntry[];
 	getQuiz(path: string): QuizIndexEntry | null;
 	getTotalQuestions(): number;
 	onChange(callback: (quizzes: QuizIndexEntry[]) => void): () => void;
 }
 
-export function createScanner(app: App): Scanner {
+export function createScanner(host: Host): Scanner {
 	const cache = new Map<string, QuizIndexEntry>(); // path → entrée
 	const listeners: Array<(quizzes: QuizIndexEntry[]) => void> = [];
-	const vaultEventRefs: EventRef[] = []; // EventRef des app.vault.on(...) pour les retirer au destroy
+	let desabonner: (() => void) | null = null;
 	let scanning = false;
 
 	/* ── Parse un bloc quiz-blocks pour extraire les métadonnées ── */
@@ -177,11 +176,11 @@ export function createScanner(app: App): Scanner {
 		scanning = true;
 		cache.clear();
 
-		const markdownFiles = app.vault.getMarkdownFiles();
+		const markdownFiles = host.fs.listMarkdown();
 
 		for (const file of markdownFiles) {
 			try {
-				const content = await app.vault.cachedRead(file);
+				const content = await host.fs.readCached(file.path);
 				const quizSource = extractQuizSource(content);
 				if (!quizSource) continue;
 
@@ -193,7 +192,7 @@ export function createScanner(app: App): Scanner {
 					basename: file.basename,
 					title: file.basename,
 					...meta,
-					mtime: file.stat?.mtime || 0
+					mtime: file.mtime
 				});
 			} catch {
 				// Ignorer les erreurs de lecture
@@ -205,9 +204,9 @@ export function createScanner(app: App): Scanner {
 	}
 
 	/* ── Scan incrémental d'un seul fichier ── */
-	async function scanFile(file: TFile): Promise<void> {
+	async function scanFile(file: HostFile): Promise<void> {
 		try {
-			const content = await app.vault.cachedRead(file);
+			const content = await host.fs.readCached(file.path);
 			const quizSource = extractQuizSource(content);
 
 			if (!quizSource) {
@@ -228,7 +227,7 @@ export function createScanner(app: App): Scanner {
 				basename: file.basename,
 				title: file.basename,
 				...meta,
-				mtime: file.stat?.mtime || 0
+				mtime: file.mtime
 			};
 			// L'autosave d'Obsidian déclenche `modify` toutes les ~2 s
 			// pendant la frappe : ne notifier (→ re-render sidebar + vue)
@@ -278,48 +277,41 @@ export function createScanner(app: App): Scanner {
 		}
 	}
 
-	/* ── Setup des events vault ── */
-	function setupVaultListeners(): void {
-		vaultEventRefs.push(app.vault.on("create", (file) => {
-			if (file instanceof TFile && file.extension === "md" && !scanning) {
-				scanFile(file);
+	/* ── Setup du watcher ── */
+	function setupWatcher(): void {
+		/* Un SEUL abonnement, aiguillé sur `ev.kind` : le contrat unifie les
+		   quatre évènements d'Obsidian. `rename` reste un évènement DISTINCT de
+		   delete+create parce que le journal de révision suit ses clés par
+		   renommage — le reconstituer à partir de deux évènements est impossible.
+		   Le garde `scanning` remonte ici : il était répété trois fois. */
+		desabonner = host.watcher.onChange(ev => {
+			if (scanning) return;
+			if (ev.kind === "create" || ev.kind === "modify") {
+				if (ev.file.extension === "md") void scanFile(ev.file);
+				return;
 			}
-		}));
-
-		vaultEventRefs.push(app.vault.on("modify", (file) => {
-			if (file instanceof TFile && file.extension === "md" && !scanning) {
-				scanFile(file);
+			if (ev.kind === "delete") {
+				if (cache.delete(ev.path)) notifyListeners();
+				return;
 			}
-		}));
-
-		vaultEventRefs.push(app.vault.on("delete", (file) => {
-			if (cache.has(file.path)) {
-				cache.delete(file.path);
-				notifyListeners();
-			}
-		}));
-
-		vaultEventRefs.push(app.vault.on("rename", (file, oldPath) => {
-			if (cache.has(oldPath)) {
-				cache.delete(oldPath);
-				if (file instanceof TFile) scanFile(file);
-			} else if (file instanceof TFile && file.extension === "md" && !scanning) {
-				scanFile(file);
-			}
-		}));
+			/* rename : l'ancienne clé sort du cache, et la nouvelle est
+			   rescannée — y compris quand l'ancien chemin n'était PAS indexé,
+			   sinon un quiz créé par renommage resterait invisible. */
+			const avait = cache.delete(ev.oldPath);
+			if (ev.file.extension === "md") void scanFile(ev.file);
+			else if (avait) notifyListeners();
+		});
 	}
 
 	/* ── Initialisation ── */
 	async function init(): Promise<void> {
-		setupVaultListeners();
+		setupWatcher();
 		await scanVault();
 	}
 
 	function destroy(): void {
-		for (const ref of vaultEventRefs) {
-			try { app.vault.offref(ref); } catch (_) { /* ignore */ }
-		}
-		vaultEventRefs.length = 0;
+		desabonner?.();
+		desabonner = null;
 		listeners.length = 0;
 		cache.clear();
 	}

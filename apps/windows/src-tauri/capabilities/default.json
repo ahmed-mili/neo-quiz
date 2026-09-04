@@ -3,5 +3,12 @@
     "identifier": "main-capability",
     "description": "Fenêtre principale de Neo Quiz",
     "windows": ["main"],
-    "permissions": ["core:default", "window-state:default"]
+    "permissions": [
+        "core:default",
+        "window-state:default",
+        "fs:default",
+        "dialog:allow-open",
+        "store:default",
+        "opener:default"
+    ]
 }

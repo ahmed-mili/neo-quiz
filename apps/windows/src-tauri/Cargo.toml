@@ -17,5 +17,12 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2", features = [] }
+# `protocol-asset` : sans cette fonctionnalité, `Manager::asset_protocol_scope`
+# n'existe pas et `allow_folder` ne compile pas. C'est elle qui sert les images
+# des quiz au frontend (convertFileSrc).
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2.7.3"
+tauri-plugin-fs = "2.5.2"
+tauri-plugin-opener = "2.5.5"
+tauri-plugin-store = "2.4.4"
 tauri-plugin-window-state = "2"

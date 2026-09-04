@@ -19,6 +19,7 @@
     "check:scanner": "node scripts/check-scanner.mjs",
     "check:scheduler": "node scripts/check-scheduler.mjs",
     "check:host": "node scripts/check-host.mjs",
+    "check:windows-host": "node scripts/check-windows-host.mjs",
     "check:theme": "node scripts/check-theme.mjs",
     "check:obsidian-host": "node scripts/check-obsidian-host.mjs",
     "check:math-render": "node scripts/check-math-render.mjs",

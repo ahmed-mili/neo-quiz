@@ -1,0 +1,56 @@
+/* =========================================================
+   TOASTS DE L'APPLICATION
+
+   Le pendant de `Notice` d'Obsidian, que la fenêtre n'a pas. Le DOM est
+   fabriqué par `src/host/ui.ts` ; ce fichier ne fait que l'habiller, et il est
+   importé par `main.ts` — JAMAIS par `ui.ts`, dont le harnais de vérification
+   étoufferait sur un import de CSS.
+
+   PIÈGE VÉRIFIÉ À LA MAIN : `npm run check:theme` ne balaie PAS
+   `apps/windows/`. Une variable inventée ici serait invisible à ses deux
+   assertions et rendrait un toast illisible sans un mot. Chaque `var(--…)`
+   ci-dessous a donc été relu un par un dans `theme/host-vars.css`, qui les
+   définit toutes sur `:root`.
+
+   Et c'est bien `:root` qui compte : le conteneur est ajouté au `<body>`, DONC
+   HORS de `.qbd-root`. Les jetons de verre du tableau de bord
+   (`--qbd-glass-bg-dense`, `--qbd-glass-shadow`…) sont déclarés sur
+   `.qbd-root, .qbd-select-menu` (src/assets/css/tokens.css) : ils
+   résoudraient au VIDE ici. C'est le même piège que celui des menus portalés,
+   et la raison pour laquelle ce fichier n'emploie que des variables de `:root`.
+   ========================================================= */
+
+.nq-toasts {
+	position: fixed;
+	right: 16px;
+	bottom: 16px;
+	z-index: 100;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	/* Le conteneur couvre le coin de la fenêtre en permanence : sans ça, il
+	   intercepterait les clics sur ce qui est dessous, même vide. Les toasts
+	   eux-mêmes redeviennent cliquables. */
+	pointer-events: none;
+	max-width: min(420px, calc(100vw - 32px));
+}
+
+.nq-toast {
+	pointer-events: auto;
+	padding: 10px 14px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	font-family: var(--font-interface);
+	font-size: 13px;
+	line-height: 1.45;
+	/* L'ombre DÉRIVE du fond de la fenêtre plutôt que d'un noir en dur : sur un
+	   thème clair, un noir à 45 % serait une tache. `--background-primary` est
+	   la surface la plus profonde du thème, donc toujours du bon côté. */
+	box-shadow: 0 8px 24px -8px color-mix(in srgb, var(--background-primary) 75%, transparent);
+	/* Un message peut être long (un chemin de fichier, une erreur) : il passe à
+	   la ligne au lieu d'élargir la fenêtre. */
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}

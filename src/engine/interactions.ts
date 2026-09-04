@@ -437,20 +437,16 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			try {
 				const saved = await ctx.resultsSaver.saveCurrentResults();
 				ctx.quizState.savedResultsPath = saved.path;
-				if (typeof ctx.Notice === "function") {
-					new ctx.Notice(t("engine.result.savedNotice", { path: saved.path }), 5000);
-				}
+				ctx.host.ui.notice(t("engine.result.savedNotice", { path: saved.path }), 5000);
 				ctx.cards.refreshMetaSlides({ force: true });
 			} catch (error) {
 				console.error("Quiz results save error:", error);
 				saveBtn.disabled = false;
 				saveBtn.textContent = previousText || t("engine.result.save");
 				delete saveBtn.dataset.saving;
-				if (typeof ctx.Notice === "function") {
-					new ctx.Notice(t("engine.result.saveError", {
-						message: (error as { message?: string })?.message || t("engine.result.unknownError")
-					}), 6000);
-				}
+				ctx.host.ui.notice(t("engine.result.saveError", {
+					message: (error as { message?: string })?.message || t("engine.result.unknownError")
+				}));
 			}
 		});
 

@@ -23,13 +23,13 @@ export function createResourceHandlers(ctx: EngineCtx): ResourceHandlers {
 	const QUIZ_RESOURCE_NOTICE_MS = { defaultApp: 3400, androidSystem: 7200, fallbackOpen: 2400, warning: 3200, error: 3200 };
 
 	function quizNotice(msg: unknown, timeout = 4000): void {
-		try { new ctx.Notice(String(msg), timeout); } catch (_) { console.log("[Quiz]", msg); }
+		ctx.host.ui.notice(String(msg), timeout);
 	}
 
 	function findVaultFilesByExactName(fileName: string): TFile[] {
 		const target = String(fileName ?? "").trim().toLowerCase();
 		if (!target || typeof ctx.app === "undefined" || !ctx.app?.vault?.getFiles) return [];
-		return ctx.app.vault.getFiles().filter(f => String(f?.name ?? "").trim().toLowerCase() === target);
+		return ctx.app.vault.getFiles().filter((f: any) => String(f?.name ?? "").trim().toLowerCase() === target);
 	}
 
 	async function revealFileInObsidianExplorer(file: TFile | null | undefined): Promise<boolean> {

@@ -38,7 +38,7 @@
  * locales du moteur (render, destroyQuiz…) sont typées fidèlement depuis engine.ts.
  */
 
-import type { App, Plugin } from "obsidian";
+import type { Host } from "../host/types";
 import type {
 	QuizQuestion,
 	QuizState,
@@ -53,6 +53,7 @@ import type {
 	TextQuestion,
 	ClozeQuestion,
 	QuestionRole,
+	StatsRecord,
 } from "./quiz";
 import type { ReviewGrade } from "../scheduler";
 import type { SanitizerHandlers } from "../engine/sanitizer";
@@ -99,12 +100,21 @@ export type QuizMode = "lesson" | "exam" | "quiz" | "training";
 
 export interface EngineCtx {
 	/* ── Données & DOM (littéral initial, engine.js:93-99) ── */
-	app: App;
-	plugin: Plugin;
+	/**
+	 * L'HÔTE. Tout ce que le moteur demandait à Obsidian passe par là :
+	 * fichiers, liens, toasts, icônes, mathématiques, ouverture externe.
+	 * Assigné à l'assemblage depuis `currentHost()` — une seule installation,
+	 * une seule source (src/host/current.ts).
+	 */
+	host: Host;
 	container: HTMLElement;
 	sourcePath: string;
-	/** Constructeur Notice d'Obsidian, transmis par le contexte d'appel (engine.js:31,98). */
-	Notice: typeof import("obsidian").Notice;
+	/** L'instance Obsidian App. Accès direct pour les appels non encore portés sur host.
+	    Temporaire : les tâches 5 et 6 vont le retirer en passant app.vault, app.workspace, etc. via host. */
+	app?: any;
+	/** L'instance Obsidian Plugin. Accès direct pour les appels non encore portés sur host.
+	    Temporaire : les tâches 5 et 6 vont le retirer en passant plugin.* via host. */
+	plugin?: any;
 	quiz: QuizQuestion[];
 	/**
 	 * Identité des questions pour l'ordonnanceur. La MÊME règle qu'à l'écriture
@@ -125,6 +135,13 @@ export interface EngineCtx {
 		record(entries: Array<{ q: string; grade: ReviewGrade; role?: QuestionRole }>): void;
 		keyOf(path: string, id: string): string;
 	};
+	/**
+	 * Puits des statistiques du tableau de bord. Même principe que
+	 * `reviewSink` : le moteur ne connaît que la FORME. Il lisait
+	 * `plugin._statsStore`, ce qui le liait au greffon pour une seule
+	 * fonction ; l'app n'a pas de `Plugin`.
+	 */
+	statsSink?: { updateRecord(path: string, update: StatsRecord): unknown };
 	/**
 	 * Jamais assigné dans le littéral `ctx` ni ailleurs dans engine.js (mort/
 	 * vestigial) ; accédé optionnellement par sanitizer.js:172 (`ctx.lucideIcons

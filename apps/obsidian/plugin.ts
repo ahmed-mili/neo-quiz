@@ -1173,12 +1173,11 @@ export default class InteractiveQuizPlugin extends Plugin {
 					}
 
 					await renderInteractiveQuiz({
-						app: this.app,
-						plugin: this,
 						container: host,
 						quiz: quizToRender,
 						sourcePath: mdCtx.sourcePath,
-						Notice: Notice
+						statsSink: this._statsStore,
+						reviewSink: this._reviewStore,
 					});
 				} catch (error) {
 					this.log.error("erreur pendant le rendu du bloc", error);

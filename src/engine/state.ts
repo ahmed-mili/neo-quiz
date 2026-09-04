@@ -287,7 +287,7 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 	}
 
 	function warnSkipBlocked(): void {
-		if (typeof ctx.Notice === "function") new ctx.Notice(t("engine.lesson.skipBlocked"));
+		ctx.host.ui.notice(t("engine.lesson.skipBlocked"));
 	}
 
 	async function goToSlide(index: number, { forceRender = false }: { forceRender?: boolean } = {}): Promise<void> {
@@ -506,7 +506,7 @@ export function createStateHandlers(ctx: EngineCtx): StateHandlers {
 		if (!ctx.quizState.resultsCounted) {
 			ctx.quizState.resultsCounted = true;
 
-			const statsStore = (ctx.plugin as { _statsStore?: StatsStoreLike })._statsStore;
+			const statsStore = ctx.statsSink;
 			if (statsStore && ctx.sourcePath) {
 				const modeTexte = !!ctx.textOnly?.isTextOnlyForAny?.();
 				const { pct, total } = computeScorePercent();

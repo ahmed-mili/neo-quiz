@@ -9,7 +9,11 @@
    Module partagé moteur + éditeur (exports directs).
 ══════════════════════════════════════════════════════════ */
 
-import { Platform, setIcon } from "obsidian";
+/* Ce module n'a pas de `ctx` : il expose des fonctions directes appelées par
+   engine/terminal.ts et editor/question-preview.ts. Il lit donc l'hôte par
+   `currentHost()` — le MÊME objet que `ctx.host`, installé une seule fois. */
+
+import { currentHost } from "../host/current";
 import { hasMath } from "./mathjax";
 import { t } from "../i18n";
 // Import TYPE only (erased) : garde `mathlive` en chargement LAZY (require dans
@@ -170,7 +174,7 @@ function getDragCursor(): HTMLDivElement {
 	// Couleurs du curseur natif de CHAQUE OS : macOS = flèche noire à
 	// liseré blanc ; Windows/Linux = blanche à contour noir. Même
 	// silhouette, le swap reste discret pour tout utilisateur.
-	const mac = Platform.isMacOS;
+	const mac = currentHost().platform.isMacOS;
 	const c = document.createElement("div");
 	c.className = "qbd-kb-cursor";
 	c.innerHTML = '<svg width="16" height="22" viewBox="0 0 16 22">'
@@ -224,12 +228,12 @@ function makeKeyboardFloating(attempt = 0): void {
 	handle.className = "qbd-kb-handle";
 	const grip = document.createElement("span");
 	grip.className = "qbd-kb-handle-grip";
-	setIcon(grip, "grip-horizontal");
+	currentHost().ui.setIcon(grip, "grip-horizontal");
 	const close = document.createElement("button");
 	close.type = "button";
 	close.className = "qbd-kb-handle-close";
 	close.setAttribute("aria-label", t("engine.math.closeKeyboard"));
-	setIcon(close, "x");
+	currentHost().ui.setIcon(close, "x");
 	close.addEventListener("click", () => {
 		// La croix ferme le clavier ET désélectionne le champ (demande Ahmed) :
 		// blur du dernier champ focalisé → le caret et l'anneau de focus

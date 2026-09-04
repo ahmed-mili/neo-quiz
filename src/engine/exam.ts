@@ -205,9 +205,7 @@ export function createExamHandlers(ctx: EngineCtx): ExamHandlers {
     // prévient, mais on laisse l'examen OUVERT pour une validation manuelle. On ne
     // marque pas examEnded (sinon bascule en phase review) ni locked.
     if (ctx.examOptions && ctx.examOptions.autoSubmit === false) {
-        if (typeof ctx.Notice === 'function') {
-            new ctx.Notice(t("engine.exam.timeUpManual"), 6000);
-        }
+        ctx.host.ui.notice(t("engine.exam.timeUpManual"), 6000);
         return;
     }
 
@@ -220,9 +218,7 @@ export function createExamHandlers(ctx: EngineCtx): ExamHandlers {
     // 3. Transition vers les résultats (même action que "voir le score")
     ctx.goToResults();
 
-    if (typeof ctx.Notice === 'function') {
-        new ctx.Notice(t("engine.exam.timeUpLocked"), 5000);
-    }
+    ctx.host.ui.notice(t("engine.exam.timeUpLocked"), 5000);
 }
 
 

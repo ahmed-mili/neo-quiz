@@ -23,7 +23,7 @@ import { mathifyElement } from "./engine/mathjax";
 import { idsForRawItems } from "./quiz-ids";
 import { t } from "./i18n";
 
-import type { App, Plugin } from "obsidian";
+import { currentHost } from "./host/current";
 import type { EngineCtx } from "./types/engine-ctx";
 import type {
 	QuizQuestion,
@@ -38,31 +38,34 @@ import type {
 } from "./types/quiz";
 
 /**
- * Contexte d'appel du moteur, construit par le code-block processor du plugin
- * (plugin.js: renderInteractiveQuiz({ app, plugin, container, quiz, sourcePath,
- * Notice })). Ce n'est PAS le MarkdownPostProcessorContext d'Obsidian (celui-ci
- * reste `ctx` dans plugin.js et n'entre jamais ici) : le moteur ne reçoit qu'un
- * objet maison. Nommé `context` (jamais `ctx`) pour ne pas se confondre avec le
- * god-object `ctx` (EngineCtx) assemblé plus bas.
+ * Contexte d'appel du moteur, construit par l'hôte (le processeur de bloc du
+ * greffon, ou la page de quiz de l'app). Ce n'est PAS le
+ * MarkdownPostProcessorContext d'Obsidian. Nommé `context` (jamais `ctx`)
+ * pour ne pas se confondre avec le god-object assemblé plus bas.
+ *
+ * Il ne porte plus `app`, `plugin` ni `Notice` : l'hôte est LU (currentHost),
+ * pas TRANSMIS. Un hôte passé en paramètre laisserait deux hôtes coexister le
+ * jour où un appelant oublierait de le passer.
  */
 interface RenderQuizContext {
-	app: App;
-	plugin: Plugin;
 	container: HTMLElement;
 	quiz: QuizQuestion[];
 	sourcePath: string;
-	Notice: typeof import("obsidian").Notice;
+	/** Absent = jouer ce quiz ne compte simplement pas de statistiques.
+	    Ce n'est pas une erreur : la page « Générer » n'en a pas. */
+	statsSink?: EngineCtx["statsSink"];
+	/** Absent = les réponses ne sont pas journalisées. Même raison. */
+	reviewSink?: EngineCtx["reviewSink"];
 }
 
 async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> {
 
 	const {
-		app,
-		plugin,
 		container,
 		quiz: rawQuiz,
 		sourcePath,
-		Notice
+		statsSink,
+		reviewSink
 	} = context;
 
 	container.empty();
@@ -142,11 +145,9 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 	// les Object.assign / affectations 1-à-1 ci-dessous. Le cast scelle la forme
 	// finale attendue sans `any` intermédiaire (même pattern que editor.ts).
 	const ctx = {
-		app,
-		plugin,
+		host: currentHost(),
 		container,
 		sourcePath,
-		Notice,
 		quiz,
 		/* Identité des questions pour l'ordonnanceur. La MÊME règle qu'à
 		   l'écriture (editor/export.ts) et qu'à la lecture par le scanner :
@@ -157,15 +158,18 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		   recevoir un repli `qN` comme au scan, jamais lever (fix round 1,
 		   2026-09-02 — `q.id` sans `?.` plantait tout le rendu du bloc). */
 		questionIds: idsForRawItems(quiz),
-		// Puits du journal de révision, lu indirectement comme `_statsStore`
-		// (types/engine-ctx.ts) — et, comme lui, un ACCESSOR relu à CHAQUE appel,
-		// pas une valeur figée à l'assemblage (fix round 1, 2026-09-02 : la
-		// version précédente gelait `_reviewStore` par valeur ici tout en
-		// prétendant suivre le même pattern que `_statsStore`, relu lui à l'appel
-		// dans goToResults — piège SNAPSHOT/ACCESSOR documenté par ce projet.
-		// Sans effet aujourd'hui — `_reviewStore` existe dès `onload` — mais
-		// faux le jour où sa création deviendrait tardive ou asynchrone).
-		get reviewSink() { return (plugin as { _reviewStore?: EngineCtx["reviewSink"] })._reviewStore; },
+		/* `reviewSink` était un accessor parce qu'il lisait `plugin._reviewStore`,
+		   assigné après le chargement du greffon. Il arrive maintenant par le
+		   contexte d'appel, donc déjà résolu : un accessor n'aurait plus rien à
+		   différer. Les flags `__quiz*` restent copiés par VALEUR et l'état vivant
+		   reste lu par accessors de closure — cette distinction-là ne bouge pas. */
+		reviewSink,
+		statsSink,
+		/* app et plugin restent accessibles temporairement pour cards.ts,
+		   sanitizer.ts, resources.ts et results-save.ts le temps que les tâches 5 et 6
+		   les portent sur host. Assigné depuis currentHost() quand disponible (Obsidian). */
+		app: (currentHost() as any).app,
+		plugin: (currentHost() as any).plugin,
 		quizMode,
 		isExamMode,
 		trainingSession: false,

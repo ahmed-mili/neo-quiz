@@ -9,11 +9,11 @@ export const EN_APP = {
 	"app.error.startup": "Neo Quiz could not start: {error}",
 
 	/* ── La liste des quiz du dossier ──
-	   AUCUNE clé de TYPE de quiz ici : « dashboard.quizType.<tag> » existe déjà,
-	   et le scanner garde un tag stable précisément pour que la traduction se
-	   fasse au rendu. En créer un second jeu ferait deux libellés à tenir. */
+	   NI clé de TYPE de quiz, NI compte de questions ici : « dashboard.quizType.<tag> »
+	   et « dashboard.common.questionsOne/Other » existent déjà, et la liste les
+	   emprunte. En créer un second jeu donnerait deux traductions du même texte,
+	   qui divergeraient à la première retouche. */
 	"app.list.title": "My quizzes",
 	"app.list.empty": "No quiz found in this folder.",
-	"app.list.questions": "{count} questions",
 	"app.list.changeFolder": "Change folder",
 } as const;

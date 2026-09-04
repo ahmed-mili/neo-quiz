@@ -8,6 +8,5 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 
 	"app.list.title": "Mes quiz",
 	"app.list.empty": "Aucun quiz trouvé dans ce dossier.",
-	"app.list.questions": "{count} questions",
 	"app.list.changeFolder": "Changer de dossier",
 };

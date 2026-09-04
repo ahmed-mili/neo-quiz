@@ -72,7 +72,14 @@ function carte(grille: HTMLElement, entry: QuizIndexEntry, onOpen: (e: QuizIndex
 	}
 
 	const meta = creer(body, "div", "qbd-quiz-card-meta");
-	creer(meta, "span", "qbd-quiz-card-meta-item", t("app.list.questions", { count: entry.questions }));
+	/* Clés du domaine `dashboard`, empruntées volontairement : le libellé existe
+	   déjà (quiz-card.ts), singulier compris. En créer un second dans `app`
+	   afficherait « 1 questions » et donnerait deux traductions du même texte,
+	   qui divergeraient à la première retouche. */
+	creer(meta, "span", "qbd-quiz-card-meta-item", t(
+		entry.questions === 1 ? "dashboard.common.questionsOne" : "dashboard.common.questionsOther",
+		{ count: entry.questions },
+	));
 	creer(meta, "span", "qbd-quiz-card-badge", t(CLES_TYPE[entry.quizType]));
 
 	card.addEventListener("click", () => onOpen(entry));

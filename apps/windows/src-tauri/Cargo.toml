@@ -1,0 +1,21 @@
+[package]
+name = "neo-quiz-windows"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+name = "neo_quiz_windows_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "neo-quiz"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tauri-plugin-window-state = "2"

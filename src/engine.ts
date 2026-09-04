@@ -69,7 +69,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		reviewSink
 	} = context;
 
-	container.empty();
+	container.replaceChildren();
 
 	if (!Array.isArray(rawQuiz) || rawQuiz.length === 0) {
 		renderParagraph(container, t("engine.error.noQuestions"));

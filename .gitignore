@@ -5,6 +5,10 @@ node_modules/
 dist/
 build/
 release/
+apps/windows/dist/
+apps/windows/node_modules/
+apps/windows/src-tauri/target/
+apps/windows/src-tauri/gen/
 
 # Environment & secrets
 .env

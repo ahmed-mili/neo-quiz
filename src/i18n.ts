@@ -1,5 +1,6 @@
 import { EN } from "./i18n/en";
 import { FR } from "./i18n/fr";
+import { hostOrNull } from "./host/current";
 
 /* ══════════════════════════════════════════════════════════
    I18N — langue de l'interface
@@ -28,21 +29,21 @@ const DICTS: Record<Lang, Record<TransKey, string>> = { en: EN, fr: FR };
 let current: Lang = "en";
 let setting: LangSetting = "auto";
 
-/* ── Langue d'Obsidian ──
-   `window.i18next` est le moteur de traduction interne de l'app : sa
-   propriété `language` est la langue CHOISIE DANS OBSIDIAN (« fr »), pas
-   celle de l'OS ni du navigateur — c'est donc la seule source correcte pour
-   le mode auto (vérifié en direct sur Obsidian 1.12.7 : i18next.language =
-   « fr », languages = ["fr", "en"]).
-   Ce n'est pas une API publique (absente d'obsidian.d.ts) : repli sur
-   <html lang>, qu'Obsidian tient à jour, puis sur l'anglais. */
-interface I18nextLike { language?: unknown }
+/* ── Langue de l'HÔTE ──
+   Sous Obsidian, `window.i18next.language` donne la langue CHOISIE DANS
+   OBSIDIAN (« fr »), pas celle de l'OS ni du navigateur — c'est la seule
+   source correcte pour le mode auto. Ce n'est pas une API publique (absente
+   d'obsidian.d.ts), et c'est pourquoi elle est lue par l'HÔTE, qui assume ce
+   genre de chose, et exposée ici comme une simple étiquette BCP-47.
 
-function detectObsidianLang(): Lang {
+   `hostOrNull` et non `currentHost` : ce module peut être sollicité avant
+   l'installation de l'hôte (chargement des modules). Les replis —
+   `navigator.language` puis `<html lang>` puis l'anglais — couvrent ce cas
+   ET la fenêtre de l'app avant son premier rendu. */
+function detectHostLang(): Lang {
 	try {
-		const i18next = (window as unknown as { i18next?: I18nextLike }).i18next;
-		const raw = i18next && typeof i18next.language === "string" ? i18next.language : "";
-		const lang = raw || document.documentElement.lang || "";
+		const depuisHote = hostOrNull()?.platform.uiLanguage;
+		const lang = depuisHote || navigator.language || document.documentElement.lang || "";
 		// « fr », « fr-FR », « fr_FR » → fr ; tout le reste → en (seules deux
 		// langues sont traduites, inutile de deviner au-delà).
 		return /^fr\b/i.test(lang.replace(/_/g, "-")) ? "fr" : "en";
@@ -55,7 +56,7 @@ function detectObsidianLang(): Lang {
     chaque changement du réglage (les vues sont redessinées par l'appelant). */
 export function setLanguage(value?: LangSetting): void {
 	setting = value === "en" || value === "fr" ? value : "auto";
-	current = setting === "auto" ? detectObsidianLang() : setting;
+	current = setting === "auto" ? detectHostLang() : setting;
 }
 
 /** Langue affichée en ce moment (« en » / « fr ») — jamais « auto ». */

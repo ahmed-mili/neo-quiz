@@ -40,25 +40,55 @@ export async function withSrcModule(entry, run) {
 	const entries = Array.isArray(entry) ? entry : [entry];
 	const dir = mkdtempSync(join(tmpdir(), "quiz-check-"));
 	try {
-		const sorties = entries.map((_, i) => join(dir, "module" + i + ".mjs"));
-		// Un build par entrée : `outdir` déduirait les noms des chemins source,
-		// et deux modules homonymes se marcheraient dessus.
-		for (let i = 0; i < entries.length; i++) {
+		const stubPlugin = {
+			name: "obsidian-stub",
+			setup(b) {
+				b.onResolve({ filter: /^obsidian$/ }, () => ({ path: "obsidian", namespace: "stub" }));
+				b.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ contents: OBSIDIAN_STUB, loader: "js" }));
+			},
+		};
+		let sorties;
+		if (entries.length > 1) {
+			/* UN SEUL build, avec `splitting` : un module importé par plusieurs
+			   entrées (ex. `src/host/current.ts`, dont l'état d'hôte installé est
+			   un singleton) devient un chunk PARTAGÉ, chargé une seule fois — donc
+			   une seule instance de son état module-scope. Un build par entrée (la
+			   forme utilisée quand une seule est demandée) donnerait à chaque
+			   entrée sa propre copie, et un hôte installé depuis l'une resterait
+			   invisible de l'autre. */
+			const outdir = join(dir, "out");
 			await build({
-				entryPoints: [entries[i]],
+				entryPoints: entries,
+				bundle: true,
+				splitting: true,
+				format: "esm",
+				platform: "node",
+				outdir,
+				// `outbase` fixé à "src" : sans lui, esbuild le déduit du plus
+				// petit ancêtre commun des entrées demandées (parfois
+				// "src/editor/" au lieu de "src/"), et le chemin de sortie
+				// recalculé ci-dessous ne correspondrait plus au fichier réel.
+				outbase: "src",
+				logLevel: "warning",
+				plugins: [stubPlugin],
+			});
+			// `outbase: "src"` fixe la racine : "src/host/current.ts" devient
+			// toujours "<outdir>/host/current.js", quelles que soient les entrées.
+			sorties = entries.map((e) => join(outdir, e.replace(/^src\//, "").replace(/\.tsx?$/, ".js")));
+		} else {
+			// Une seule entrée : `outdir` déduirait le nom du chemin source, ce
+			// qui suffit ici (pas de risque de collision à une seule sortie).
+			const outfile = join(dir, "module0.mjs");
+			await build({
+				entryPoints: [entries[0]],
 				bundle: true,
 				format: "esm",
 				platform: "node",
-				outfile: sorties[i],
+				outfile,
 				logLevel: "warning",
-				plugins: [{
-					name: "obsidian-stub",
-					setup(b) {
-						b.onResolve({ filter: /^obsidian$/ }, () => ({ path: "obsidian", namespace: "stub" }));
-						b.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ contents: OBSIDIAN_STUB, loader: "js" }));
-					},
-				}],
+				plugins: [stubPlugin],
 			});
+			sorties = [outfile];
 		}
 		const mods = [];
 		for (const s of sorties) mods.push(await import(pathToFileURL(s).href));

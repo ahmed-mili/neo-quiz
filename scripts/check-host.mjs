@@ -62,8 +62,6 @@ const RESTANTS = [
 	"src/editor/question-preview.ts",
 	"src/editor/utils.ts",
 	"src/types/editor-ctx.ts",
-	// Moteur — tranche 1, tâche 6.
-	"src/engine/mathjax.ts",
 	// Divers du greffon — tranche 4.
 	"src/hotkey-format.ts",
 	"src/modal-base.ts",

@@ -1,30 +1,23 @@
 /* ══════════════════════════════════════════════════════════
-   MATHJAX — rendu LaTeX natif Obsidian dans le quiz
-   Syntaxe $...$ (inline) et $$...$$ (bloc), rendue via l'API
-   officielle d'Obsidian (loadMathJax / renderMath /
-   finishRenderMath — docs.obsidian.md, vérifiée 2026-07-11)
-   → apparence STRICTEMENT identique aux notes du vault.
+   MATHJAX — rendu LaTeX natif dans le quiz
+   Syntaxe $...$ (inline) et $$...$$ (bloc). La segmentation est
+   partagée entre les hôtes ; le rendu lui-même passe par
+   `currentHost().math` (MathJax sous Obsidian, MathLive dans
+   l'app Windows) → apparence STRICTEMENT identique aux notes du
+   vault sous Obsidian.
    Module partagé moteur + éditeur : exports directs, pas de
    factory ctx (aucune dépendance au contexte du quiz).
 ══════════════════════════════════════════════════════════ */
 
-// loadMathJax() est mémoïsée : MathJax n'est chargé qu'une fois par
-// session, les appels suivants réutilisent la même promesse.
-// require("obsidian") reste lazy (à l'intérieur des fonctions) : seul
-// l'appel à loadMathJax() doit être différé jusqu'au premier rendu math,
-// pas la résolution du module (déjà disponible synchrone côté Obsidian).
-let __mathJaxReady: Promise<void> | null = null;
+/* Le moteur de rendu vient de l'HÔTE : MathJax sous Obsidian (apparence
+   strictement identique aux notes du vault), MathLive dans l'app — déjà une
+   dépendance du projet, fontes déjà inlinées.
 
-function ensureMathJax(): Promise<void> {
-	if (!__mathJaxReady) {
-		__mathJaxReady = (require("obsidian") as typeof import("obsidian")).loadMathJax();
-		// Un échec ne doit pas être mémoïsé : sinon UNE erreur transitoire
-		// (appel très tôt, environnement dégradé) tue le rendu math pour
-		// toute la session. On retentera au prochain mathifyElement.
-		__mathJaxReady.catch(() => { __mathJaxReady = null; });
-	}
-	return __mathJaxReady;
-}
+   La segmentation ci-dessous, elle, reste PARTAGÉE : c'est elle qui décide ce
+   qui est une formule, et deux hôtes ne peuvent pas en avoir chacun sa
+   version. La mémoïsation de `ready()` — et la règle qu'un échec transitoire
+   ne se mémoïse pas — a déménagé dans l'hôte, qui seul sait ce qu'il charge. */
+import { currentHost } from "../host/current";
 
 /* $$...$$ (bloc, testé en premier) puis $...$ (inline). Heuristique
    d'Obsidian pour éviter les vrais dollars (« 5$ et 3$ ») : le $
@@ -67,14 +60,14 @@ async function mathifyElement(root: HTMLElement | null | undefined): Promise<voi
 
 	// Appels fire-and-forget : un échec de chargement MathJax ne doit pas
 	// remonter en unhandled rejection — les dollars restent en texte brut
-	// (dégradation douce), retentative au prochain rendu (cf. ensureMathJax).
+	// (dégradation douce), retentative au prochain rendu (cf. HostMath.ready).
 	try {
-		await ensureMathJax();
+		await currentHost().math.ready();
 	} catch (e) {
 		console.warn("[quiz-blocks] MathJax indisponible:", e);
 		return;
 	}
-	const { renderMath, finishRenderMath } = require("obsidian") as typeof import("obsidian");
+	const math = currentHost().math;
 	for (const node of jobs) {
 		// replaceWith exige un parent ; un re-render a pu orpheliner le
 		// node pendant le chargement MathJax. (Un container encore détaché
@@ -89,7 +82,7 @@ async function mathifyElement(root: HTMLElement | null | undefined): Promise<voi
 			if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
 			const display = m[1] !== undefined;
 			try {
-				frag.appendChild(renderMath(display ? m[1] : m[2], display));
+				frag.appendChild(math.render(display ? m[1] : m[2], display));
 			} catch (e) {
 				// LaTeX invalide → laisser le texte source tel quel.
 				frag.appendChild(document.createTextNode(m[0]));
@@ -100,7 +93,7 @@ async function mathifyElement(root: HTMLElement | null | undefined): Promise<voi
 		node.replaceWith(frag);
 	}
 	// Requis par l'API : flush de la feuille de style MathJax.
-	finishRenderMath();
+	math.flush();
 }
 
 export { mathifyElement, hasMath };

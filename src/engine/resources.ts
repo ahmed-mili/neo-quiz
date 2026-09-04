@@ -12,7 +12,24 @@ export interface ResourceHandlers {
 }
 
 export function createResourceHandlers(ctx: EngineCtx): ResourceHandlers {
-	const QUIZ_RESOURCE_NOTICE_MS = { defaultApp: 3400, androidSystem: 7200, fallbackOpen: 2400, warning: 3200, error: 3200 };
+	/* `fallbackOpen` a disparu avec le repli qu'il chronométrait — voir le
+	   commentaire « CAPACITÉ RETIRÉE » ci-dessous. */
+	const QUIZ_RESOURCE_NOTICE_MS = { defaultApp: 3400, androidSystem: 7200, warning: 3200, error: 3200 };
+
+	/* ── CAPACITÉ RETIRÉE : l'ouverture interne de secours ──────────────
+	   Jusqu'au passage au contrat d'hôte, un dernier repli existait ici :
+	   quand l'ouverture externe échouait, la ressource était ouverte dans un
+	   onglet d'Obsidian, ou à défaut par `window.open` de son
+	   `getResourcePath()`. Le contrat ne l'expose pas et personne ne l'a
+	   réimplémenté : c'est une PERTE ASSUMÉE, pas un oubli.
+	   Raison : ce repli ne se déclenchait que si `app.openWithDefaultApp`
+	   était absent ET que le repli Electron échouait — un chemin mort sur
+	   l'Obsidian desktop actuel. Le rétablir coûterait une méthode de
+	   contrat à porter par les trois hôtes pour toujours.
+	   À quelle condition le rétablir : si un utilisateur signale une
+	   ressource qui ne s'ouvre plus du tout. Il faudra alors ajouter
+	   `shell.openInHost(file): Promise<boolean>` à `src/host/types.ts` et
+	   l'implémenter dans les trois hôtes — une méthode, pas une refonte. */
 
 	function quizNotice(msg: unknown, timeout = 4000): void {
 		ctx.host.ui.notice(String(msg), timeout);

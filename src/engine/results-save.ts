@@ -9,6 +9,7 @@ import type {
 	MatchingQuestion,
 } from "../types/quiz";
 import { t } from "../i18n";
+import { LOG_PREFIX } from "../branding";
 import { reserveFreePath, releaseReservedPath } from "../unique-path";
 
 export interface OptionEntry {
@@ -453,9 +454,15 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 			// Le nom était réservé pour CE fichier : il redevient libre, sinon
 			// la prochaine sauvegarde sauterait un nom disponible.
 			releaseReservedPath(path);
-			// Message affiché tel quel à l'élève (Notice « Erreur sauvegarde
-			// résultats : … » dans interactions.ts) → traduit.
-			throw new Error(t("engine.result.storageUnavailable"));
+			/* On relance l'erreur D'ORIGINE au lieu d'un message maison :
+			   l'appelant (engine/interactions.ts) l'affiche déjà dans son
+			   toast « Erreur sauvegarde résultats : … », et un libellé
+			   maison masquait la cause réelle (permissions, disque plein) —
+			   en plus de parler du « vault », qui n'existe pas dans
+			   l'application. Le `mkdirs` juste au-dessus laisse déjà remonter
+			   sa vraie cause : deux pannes voisines, un seul comportement. */
+			console.warn(LOG_PREFIX, "échec d'écriture du fichier de résultats", path, e);
+			throw e;
 		}
 		try {
 			await ctx.host.fs.write(`${RESULTS_DIR}/latest.json`, `${JSON.stringify({ ...payload, savedResultPath: path }, null, 2)}\n`);

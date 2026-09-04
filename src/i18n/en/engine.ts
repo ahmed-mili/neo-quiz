@@ -146,7 +146,6 @@ export const EN_ENGINE = {
 	"engine.result.savedNotice": "Results saved: {path}",
 	"engine.result.saveError": "Could not save the results: {message}",
 	"engine.result.unknownError": "unknown error",
-	"engine.result.storageUnavailable": "Cannot reach the vault storage.",
 
 	/* ── Bouton ressource (pièce jointe) ── */
 	"engine.resource.missingName": "Missing file name.",
@@ -154,7 +153,6 @@ export const EN_ENGINE = {
 	"engine.resource.duplicate": "Several files are named {name}. Using the first match.",
 	"engine.resource.openedDefaultApp": "Opening with the default app: {name}",
 	"engine.resource.openedAndroid": "Opening with the Android system: {name}",
-	"engine.resource.openedInternal": "Opening inside Obsidian (fallback): {name}",
 	"engine.resource.noDefaultApp": "File found, but no default app is available for: {name}",
 	"engine.resource.openFailed": "Could not reveal or open the file: {name}",
 	"engine.resource.openError": "Something went wrong while opening the file.",

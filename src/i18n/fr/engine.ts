@@ -131,7 +131,6 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 	"engine.result.savedNotice": "Résultats sauvegardés : {path}",
 	"engine.result.saveError": "Erreur sauvegarde résultats : {message}",
 	"engine.result.unknownError": "erreur inconnue",
-	"engine.result.storageUnavailable": "Impossible d'accéder au stockage du vault.",
 
 	/* ── Bouton ressource (pièce jointe) ── */
 	"engine.resource.missingName": "Nom de fichier manquant.",
@@ -139,7 +138,6 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 	"engine.resource.duplicate": "Plusieurs fichiers portent ce nom ({name}). Premier résultat utilisé.",
 	"engine.resource.openedDefaultApp": "Ouverture avec l'application par défaut : {name}",
 	"engine.resource.openedAndroid": "Ouverture via le système Android : {name}",
-	"engine.resource.openedInternal": "Ouverture interne (fallback) : {name}",
 	"engine.resource.noDefaultApp": "Fichier localisé, mais aucune application par défaut trouvée pour : {name}",
 	"engine.resource.openFailed": "Impossible de révéler ou d'ouvrir le fichier : {name}",
 	"engine.resource.openError": "Erreur pendant l'ouverture du fichier.",

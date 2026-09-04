@@ -2618,6 +2618,17 @@ import { join, sep, posix } from "node:path";
 
 const THEME = "apps/windows/src/theme/host-vars.css";
 
+/** Les `.ts` de `src/`, pour y trouver les variables posées à l'exécution. */
+function fichiersTs(racine) {
+	const trouves = [];
+	for (const nom of readdirSync(racine)) {
+		const chemin = join(racine, nom);
+		if (statSync(chemin).isDirectory()) trouves.push(...fichiersTs(chemin));
+		else if (nom.endsWith(".ts")) trouves.push(chemin.split(sep).join(posix.sep));
+	}
+	return trouves;
+}
+
 function fichiersCss(racine) {
 	const trouves = [];
 	for (const nom of readdirSync(racine)) {
@@ -2636,10 +2647,30 @@ for (const f of fichiersCss("src/assets/css")) {
 	for (const m of css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gim)) definies.add(m[1]);
 }
 
+/* TROIS catégories, pas deux. Une variable référencée sans être définie dans
+   l'arbre CSS n'est pas forcément héritée d'Obsidian : certaines sont posées
+   À L'EXÉCUTION par le JavaScript, sur un élément précis
+   (`el.style.setProperty("--mod-color", …)`). Exiger du thème qu'il les
+   définisse serait FAUX — leur valeur est propre à chaque élément, et une
+   valeur globale les figerait toutes à la même.
+   Mesuré le 2026-09-04 : six sont dans ce cas (`--mod-color`, `--qbd-p`,
+   `--qbd-drift`, `--qbd-card-delay`, `--qbd-donut-mastered-end`,
+   `--qbd-donut-review-end`). On les détecte, on ne les code pas en dur : une
+   septième apparaîtra un jour. */
+const posesParJs = new Set();
+for (const f of fichiersTs("src")) {
+	for (const m of readFileSync(f, "utf8").matchAll(/setProperty\(\s*["'`](--[a-z0-9-]+)/gi)) {
+		posesParJs.add(m[1]);
+	}
+}
+
 /* Ce qu'Obsidian fournissait : référencé par l'arbre partagé, défini nulle
-   part dedans. Une variable AVEC valeur de repli compte quand même — un repli
-   est un dernier recours, pas une couleur choisie. */
-const attendues = [...referencees].filter(v => !definies.has(v)).sort();
+   part dedans, et pas posé par le JS. Une variable AVEC valeur de repli
+   compte quand même — un repli est un dernier recours, pas une couleur
+   choisie. */
+const attendues = [...referencees]
+	.filter(v => !definies.has(v) && !posesParJs.has(v))
+	.sort();
 
 const theme = readFileSync(THEME, "utf8");
 const fournies = new Set([...theme.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gim)].map(m => m[1]));
@@ -2678,8 +2709,9 @@ un `apps/windows/src/theme/host-vars.css` vide puis :
 ```bash
 npm run check:theme
 ```
-Attendu : la liste EXACTE des variables à définir (~33 d'après la mesure du
-2026-09-04 : `--background-primary`, `--background-primary-alt`,
+Attendu : la liste EXACTE des variables à définir — **34** d'après la mesure
+du contrôleur le 2026-09-04 (40 référencées non définies, moins les 6 posées par
+le JS) : `--background-primary`, `--background-primary-alt`,
 `--background-secondary`, `--background-modifier-border`,
 `--background-modifier-border-hover`, `--background-modifier-form-field`,
 `--background-modifier-form-field-hover`, `--background-modifier-hover`,

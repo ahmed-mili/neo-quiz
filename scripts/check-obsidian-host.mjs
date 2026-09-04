@@ -9,6 +9,7 @@
  *
  *     npm run check:obsidian-host
  */
+import { readFileSync } from "node:fs";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 /** Fausse App : la surface EXACTE que l'hôte consomme, rien de plus. */
@@ -125,6 +126,14 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	r.check("aucune méthode du contrat ne manque", manquantes, []);
 	r.check("platform est renseigné",
 		["isMobile", "isMacOS", "uiLanguage"].filter(k => !(k in host.platform)), []);
+
+	/* La regex de cards.ts décide quelles URL sont DÉJÀ résolues. Un préfixe
+	   oublié fait réécrire une URL bonne — et le défaut n'apparaîtrait que
+	   dans l'app, à l'exécution. Rien d'autre ne le verrait. */
+	const cards = readFileSync("src/engine/cards.ts", "utf8");
+	const ligne = cards.split("\n").find(l => l.includes("data:") && l.includes("app:"));
+	r.check("les préfixes déjà résolus couvrent les deux hôtes",
+		["https?:", "data:", "app:", "asset:", "tauri:"].filter(p => !ligne?.includes(p)), []);
 
 	r.done();
 });

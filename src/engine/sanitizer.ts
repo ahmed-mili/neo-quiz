@@ -1,9 +1,9 @@
-import type { TAbstractFile, TFile } from "obsidian";
+import type { HostFile } from "../host/types";
 import type { EngineCtx } from "../types/engine-ctx";
 import type { QuestionBase } from "../types/quiz";
 import { pickLessonFields } from "../quiz-utils";
 
-/** Spec `![[lien|100x50|alt]]` décomposée (buildEmbedImgHtml, resolveObsidianEmbedFile). */
+/** Spec `![[lien|100x50|alt]]` décomposée (buildEmbedImgHtml, resolveEmbedFile). */
 interface ParsedEmbedSpec {
 	linkPath: string;
 	width: number | null;
@@ -25,7 +25,7 @@ export interface SanitizerHandlers {
 	sanitizeQuizHtml(html: unknown): string;
 	renderInlineQuizHtml(raw: unknown): string;
 	resourceButtonHtml(q: QuestionBase | null | undefined): string;
-	resolveObsidianEmbedFile(linkPath: unknown): TAbstractFile | null;
+	resolveEmbedFile(linkPath: unknown): HostFile | null;
 	parseObsidianEmbedSpec(spec: unknown): ParsedEmbedSpec;
 	buildEmbedImgHtml(embedSpec: unknown, opts?: EmbedClassOptions): string;
 	restoreAllowedInlineTags(html: unknown): string;
@@ -425,29 +425,16 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 		return `<button class="quiz-resource-btn" type="button" data-resource-file="${escapeHtmlAttr(rb.fileName)}"><span class="quiz-resource-btn-icon" aria-hidden="true">${ctx.lucideIcons?.paperclip || "⬇" }</span><span class="quiz-resource-btn-label">${renderInlineText(rb.label)}</span></button>`;
 	}
 
-	function resolveObsidianEmbedFile(linkPath: unknown): TAbstractFile | null {
+	/**
+	 * Résolution d'un `![[lien]]`. L'ordre (index des liens d'abord, chemin nu
+	 * ensuite) et ses `try/catch` vivent désormais dans l'hôte : c'est
+	 * précisément ce qui diffère entre Obsidian, qui tient un index de liens,
+	 * et un dossier nu, qui doit chercher par nom.
+	 */
+	function resolveEmbedFile(linkPath: unknown): HostFile | null {
 		const raw = String(linkPath ?? "").trim();
 		if (!raw) return null;
-
-		const currentFilePath = ctx.sourcePath || "";
-
-		try {
-			if (ctx.app?.metadataCache?.getFirstLinkpathDest) {
-				const f = ctx.app.metadataCache.getFirstLinkpathDest(raw, currentFilePath);
-				if (f) return f;
-			}
-		} catch (e) {
-			console.warn("[Quiz] resolveObsidianEmbedFile erreur:", e);
-		}
-
-		try {
-			const f2 = ctx.app?.vault?.getAbstractFileByPath?.(raw);
-			if (f2) return f2;
-		} catch (e) {
-			console.warn("[Quiz] getAbstractFileByPath erreur:", e);
-		}
-
-		return null;
+		return ctx.host.links.resolve(raw, ctx.sourcePath || "");
 	}
 
 	function parseObsidianEmbedSpec(spec: unknown): ParsedEmbedSpec {
@@ -469,12 +456,14 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 
 	function buildEmbedImgHtml(embedSpec: unknown, { wrapClass = "quiz-question-embed-wrap", imgClass = "quiz-question-embed" }: EmbedClassOptions = {}): string {
 		const parsed = parseObsidianEmbedSpec(embedSpec);
-		const file = resolveObsidianEmbedFile(parsed.linkPath);
-		if (file && typeof ctx.app?.vault?.getResourcePath === "function") {
-			// file est un TAbstractFile (peut être un TFolder si getAbstractFileByPath
-			// a résolu un dossier) : le JS original ne vérifiait jamais instanceof TFile
-			// avant d'appeler getResourcePath — comportement runtime préservé tel quel.
-			const src = ctx.app.vault.getResourcePath(file as TFile);
+		const file = resolveEmbedFile(parsed.linkPath);
+		/* La garde porte sur l'URL, pas sur le fichier : `resourceUrl` rend
+		   `null` quand rien ne sort, et c'est pour ça qu'il ne rend JAMAIS "".
+		   Un `src=""` fait recharger la page courante comme image ; tester
+		   seulement `file` produirait `src="null"` au lieu du `<code>` lisible
+		   qui dit à l'élève quel lien est mort. */
+		const src = file ? ctx.host.links.resourceUrl(file) : null;
+		if (src && file) {
 			const widthAttr = parsed.width ? ` width="${parsed.width}"` : "";
 			const heightAttr = parsed.height ? ` height="${parsed.height}"` : "";
 			const altAttr = escapeHtmlAttr(parsed.alt || file.name || "Image");
@@ -606,7 +595,7 @@ export function createSanitizer(ctx: EngineCtx): SanitizerHandlers {
 		sanitizeQuizHtml,
 		renderInlineQuizHtml,
 		resourceButtonHtml,
-		resolveObsidianEmbedFile,
+		resolveEmbedFile,
 		parseObsidianEmbedSpec,
 		buildEmbedImgHtml,
 		restoreAllowedInlineTags,

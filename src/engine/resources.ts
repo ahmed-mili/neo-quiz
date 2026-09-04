@@ -1,20 +1,12 @@
-import type { App, DataAdapter, TFile, View, WorkspaceLeaf } from "obsidian";
+import type { HostFile } from "../host/types";
 import type { EngineCtx } from "../types/engine-ctx";
 import { t } from "../i18n";
-
-/** Shell Electron minimal (surface réellement consommée : shell.openPath). */
-interface ElectronShellLike {
-	openPath(path: string): Promise<string>;
-}
 
 export type ResourceOpenMode = "default-app" | "system-chooser" | "failed";
 
 export interface ResourceHandlers {
 	quizNotice(msg: unknown, timeout?: number): void;
-	findVaultFilesByExactName(fileName: string): TFile[];
-	revealFileInObsidianExplorer(file: TFile | null | undefined): Promise<boolean>;
-	openVaultFileFallback(file: TFile): Promise<boolean>;
-	openWithDefaultAppFromVault(file: TFile | null | undefined): Promise<{ ok: boolean; mode: ResourceOpenMode }>;
+	findFilesByExactName(fileName: string): HostFile[];
 	handleQuizResourceButtonClick(fileName: string | undefined): Promise<void>;
 	bindQuizResourceButtons(rootEl?: Element | null): void;
 }
@@ -26,102 +18,38 @@ export function createResourceHandlers(ctx: EngineCtx): ResourceHandlers {
 		ctx.host.ui.notice(String(msg), timeout);
 	}
 
-	function findVaultFilesByExactName(fileName: string): TFile[] {
-		const target = String(fileName ?? "").trim().toLowerCase();
-		if (!target || typeof ctx.app === "undefined" || !ctx.app?.vault?.getFiles) return [];
-		return ctx.app.vault.getFiles().filter(f => String(f?.name ?? "").trim().toLowerCase() === target);
-	}
-
-	async function revealFileInObsidianExplorer(file: TFile | null | undefined): Promise<boolean> {
-		if (!file) return false;
-		try {
-			let leaf: WorkspaceLeaf | null = (ctx.app.workspace?.getLeavesOfType?.("file-explorer") || [])[0];
-			if (!leaf && typeof ctx.app.workspace?.getLeftLeaf === "function") {
-				leaf = ctx.app.workspace.getLeftLeaf(false);
-				if (leaf && typeof leaf.setViewState === "function") await leaf.setViewState({ type: "file-explorer", active: false });
-			}
-			if (!leaf) return false;
-			await new Promise<void>(r => setTimeout(r, 60));
-			const view = leaf?.view as (View & { revealInFolder?: (file: TFile) => Promise<void> }) | undefined;
-			if (view && typeof view.revealInFolder === "function") {
-				await view.revealInFolder(file);
-				try { ctx.app.workspace?.revealLeaf?.(leaf); } catch (_) {}
-				return true;
-			}
-		} catch (e) {
-			console.warn("[Quiz] revealInFolder a échoué:", e);
-		}
-		return false;
-	}
-
-	async function openVaultFileFallback(file: TFile): Promise<boolean> {
-		try {
-			const leaf = ctx.app.workspace?.getLeaf?.(true);
-			if (leaf && typeof leaf.openFile === "function") {
-				await leaf.openFile(file);
-				return true;
-			}
-		} catch (e) {
-			console.warn("[Quiz] leaf.openFile a échoué:", e);
-		}
-		try {
-			const url = ctx.app.vault?.getResourcePath?.(file);
-			if (url) {
-				window.open(url, "_blank");
-				return true;
-			}
-		} catch (e) {
-			console.warn("[Quiz] getResourcePath/window.open a échoué:", e);
-		}
-		return false;
-	}
-
-	async function openWithDefaultAppFromVault(file: TFile | null | undefined): Promise<{ ok: boolean; mode: ResourceOpenMode }> {
-		if (!file) return { ok: false, mode: "failed" };
-		// app.isMobile / app.openWithDefaultApp : API non documentée dans obsidian.d.ts
-		// mais bien présente au runtime (même convention de cast que dashboard/ai.ts:144).
-		const isMobile = !!(ctx.app as App & { isMobile?: boolean }).isMobile;
-		try {
-			const appWithOpen = ctx.app as App & { openWithDefaultApp?: (path: string) => Promise<void> };
-			if (typeof appWithOpen.openWithDefaultApp === "function") {
-				await appWithOpen.openWithDefaultApp(file.path);
-				return { ok: true, mode: isMobile ? "system-chooser" : "default-app" };
-			}
-		} catch (e) {
-			console.warn("[Quiz] app.openWithDefaultApp a échoué:", e);
-		}
-		try {
-			// DataAdapter.getFullPath n'est déclaré que sur les classes concrètes
-			// (FileSystemAdapter/CapacitorAdapter), pas sur l'interface générique.
-			const adapter = ctx.app?.vault?.adapter as (DataAdapter & { getFullPath?: (path: string) => string }) | undefined;
-			const absPath = adapter?.getFullPath?.(file.path);
-			const electronRequire = (window as Window & { require?: (id: string) => { shell?: ElectronShellLike } }).require;
-			const shell = electronRequire?.("electron")?.shell;
-			if (absPath && shell?.openPath) {
-				const result = await shell.openPath(absPath);
-				if (result === "") return { ok: true, mode: "default-app" };
-			}
-		} catch (e) {
-			console.warn("[Quiz] fallback Electron openPath a échoué:", e);
-		}
-		return { ok: false, mode: "failed" };
+	function findFilesByExactName(fileName: string): HostFile[] {
+		return ctx.host.fs.findByName(String(fileName ?? "").trim());
 	}
 
 	async function handleQuizResourceButtonClick(fileName: string | undefined): Promise<void> {
 		try {
 			const rawName = String(fileName ?? "").trim();
 			if (!rawName) return void quizNotice(t("engine.resource.missingName"), QUIZ_RESOURCE_NOTICE_MS.warning);
-			const matches = findVaultFilesByExactName(rawName);
+			const matches = findFilesByExactName(rawName);
 			if (matches.length === 0) return void quizNotice(t("engine.resource.notFound", { name: rawName }), QUIZ_RESOURCE_NOTICE_MS.warning);
+			/* Plusieurs homonymes : on PRÉVIENT et on ouvre quand même le
+			   premier. Refuser d'ouvrir laisserait l'élève sans son document
+			   pour une ambiguïté qu'il n'a pas créée. */
 			if (matches.length > 1) quizNotice(t("engine.resource.duplicate", { name: rawName }), QUIZ_RESOURCE_NOTICE_MS.warning);
 			const file = matches[0];
-			const revealed = await revealFileInObsidianExplorer(file);
+			const revealed = await ctx.host.shell.revealInHost(file);
+			/* Les 180 ms laissent l'explorateur d'Obsidian finir son animation
+			   avant que le fichier s'ouvre par-dessus. Sur un hôte sans
+			   explorateur (`revealInHost` rend false tout de suite) l'attente
+			   est sans effet — c'est préférable à deux enchaînements
+			   différents, qu'il faudrait garder synchrones. */
 			await new Promise<void>(r => setTimeout(r, 180));
-			const openResult = await openWithDefaultAppFromVault(file);
-			if (openResult.ok && openResult.mode === "default-app") return void quizNotice(t("engine.resource.openedDefaultApp", { name: file.name }), QUIZ_RESOURCE_NOTICE_MS.defaultApp);
-			if (openResult.ok && openResult.mode === "system-chooser") return void quizNotice(t("engine.resource.openedAndroid", { name: file.name }), QUIZ_RESOURCE_NOTICE_MS.androidSystem);
-			const openedFallback = await openVaultFileFallback(file);
-			if (openedFallback) return void quizNotice(t("engine.resource.openedInternal", { name: file.name }), QUIZ_RESOURCE_NOTICE_MS.fallbackOpen);
+			const opened = await ctx.host.shell.openExternal(file);
+			/* `openExternal` ne rend qu'un booléen ; l'ancien code distinguait
+			   « ouvert avec l'appli par défaut » de « ouvert via le sélecteur
+			   système » (Android) par un `mode` renvoyé par Obsidian. Cette
+			   seule information venait de `app.isMobile`, donc on la
+			   recalcule ici plutôt que d'élargir le contrat de l'hôte pour
+			   une distinction purement cosmétique du toast. */
+			const mode: ResourceOpenMode = opened ? (ctx.host.platform.isMobile ? "system-chooser" : "default-app") : "failed";
+			if (mode === "default-app") return void quizNotice(t("engine.resource.openedDefaultApp", { name: file.name }), QUIZ_RESOURCE_NOTICE_MS.defaultApp);
+			if (mode === "system-chooser") return void quizNotice(t("engine.resource.openedAndroid", { name: file.name }), QUIZ_RESOURCE_NOTICE_MS.androidSystem);
 			quizNotice(
 				t(revealed ? "engine.resource.noDefaultApp" : "engine.resource.openFailed", { name: file.name }),
 				QUIZ_RESOURCE_NOTICE_MS.error
@@ -154,10 +82,7 @@ export function createResourceHandlers(ctx: EngineCtx): ResourceHandlers {
 
 	return {
 		quizNotice,
-		findVaultFilesByExactName,
-		revealFileInObsidianExplorer,
-		openVaultFileFallback,
-		openWithDefaultAppFromVault,
+		findFilesByExactName,
 		handleQuizResourceButtonClick,
 		bindQuizResourceButtons
 	};

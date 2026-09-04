@@ -1,4 +1,3 @@
-import type { DataAdapter } from "obsidian";
 import type { EngineCtx, QuizMode } from "../types/engine-ctx";
 import type {
 	QuizQuestion,
@@ -53,7 +52,6 @@ export interface ResultsPayload {
 
 export interface SavedResults {
 	path: string;
-	absolutePath: string;
 }
 
 export interface ResultsSaverHandlers {
@@ -63,7 +61,11 @@ export interface ResultsSaverHandlers {
 }
 
 export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
-	const RESULTS_DIR = ".obsidian/quiz-blocks-results";
+	/* Le dossier vient de l'HÔTE : sous Obsidian il vaut toujours
+	   « .obsidian/quiz-blocks-results » et NE CHANGE PAS (les résultats déjà
+	   écrits doivent rester trouvables) ; un dossier de quiz nu n'a pas de
+	   `.obsidian/`. */
+	const RESULTS_DIR = ctx.host.paths.resultsDir;
 
 	function normalizeSpace(value: unknown): string {
 		return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -417,17 +419,6 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 		};
 	}
 
-	async function ensureFolder(adapter: DataAdapter, folderPath: string): Promise<void> {
-		const parts = folderPath.split("/").filter(Boolean);
-		let current = "";
-		for (const part of parts) {
-			current = current ? `${current}/${part}` : part;
-			if (!(await adapter.exists(current))) {
-				await adapter.mkdir(current);
-			}
-		}
-	}
-
 	/**
 	 * Chemin libre pour un fichier de résultats.
 	 *
@@ -437,50 +428,45 @@ export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
 	 * écrasait la première (revue codex 2026-07-31). Un compteur les fait
 	 * converger ; le hasard les sépare.
 	 */
-	async function uniquePath(adapter: DataAdapter, basePath: string, ext: string): Promise<string> {
+	async function uniquePath(basePath: string, ext: string): Promise<string> {
 		/* `reserveFreePath` (src/unique-path.ts) : le nom est RÉSERVÉ en mémoire
 		   en plus d'être testé sur le disque, et l'échec est bruyant. Un
 		   `exists` puis `write` laissait deux sauvegardes du même quiz choisir
 		   le même fichier, et la seconde écrasait la première. */
 		return reserveFreePath(basePath, `.${ext}`,
-			(chemin) => adapter.exists(chemin),
+			(chemin) => ctx.host.fs.exists(chemin),
 			() => `-${Math.random().toString(36).slice(2, 7)}`);
 	}
 
 	async function saveCurrentResults(): Promise<SavedResults> {
-		const adapter = ctx.app?.vault?.adapter;
-		if (!adapter || typeof adapter.write !== "function") {
-			// Message affiché tel quel à l'élève (Notice « Erreur sauvegarde
-			// résultats : … » dans interactions.ts) → traduit.
-			throw new Error(t("engine.result.storageUnavailable"));
-		}
-
-		await ensureFolder(adapter, RESULTS_DIR);
+		await ctx.host.fs.mkdirs(RESULTS_DIR);
 
 		const payload = buildPayload();
 		const timestamp = formatLocalTimestamp(new Date());
 		const fileBase = `${RESULTS_DIR}/${timestamp}_${slugify(sourceBaseName())}_${payload.practiceMode}`;
-		const path = await uniquePath(adapter, fileBase, "json");
+		const path = await uniquePath(fileBase, "json");
 		const json = `${JSON.stringify(payload, null, 2)}\n`;
 
 		try {
-			await adapter.write(path, json);
+			await ctx.host.fs.write(path, json);
 		} catch (e) {
 			// Le nom était réservé pour CE fichier : il redevient libre, sinon
 			// la prochaine sauvegarde sauterait un nom disponible.
 			releaseReservedPath(path);
-			throw e;
+			// Message affiché tel quel à l'élève (Notice « Erreur sauvegarde
+			// résultats : … » dans interactions.ts) → traduit.
+			throw new Error(t("engine.result.storageUnavailable"));
 		}
 		try {
-			await adapter.write(`${RESULTS_DIR}/latest.json`, `${JSON.stringify({ ...payload, savedResultPath: path }, null, 2)}\n`);
+			await ctx.host.fs.write(`${RESULTS_DIR}/latest.json`, `${JSON.stringify({ ...payload, savedResultPath: path }, null, 2)}\n`);
 		} catch (_) { /* le fichier latest.json est un miroir best-effort */ }
 
-		// `basePath` n'existe que sur FileSystemAdapter (desktop), absent du type DataAdapter.
-		const basePath = (adapter as { basePath?: string }).basePath;
-		return {
-			path,
-			absolutePath: basePath ? `${basePath}\\${path.replace(/\//g, "\\")}` : path
-		};
+		/* `absolutePath` est supprimé, pas rendu optionnel : il n'existait que
+		   sur le FileSystemAdapter d'Obsidian (desktop), absent du contrat.
+		   Le laisser optionnel garderait un appelant qui croit lire un chemin
+		   absolu et en affiche un relatif. Le toast de confirmation
+		   (interactions.ts) montre le chemin relatif, aussi lisible. */
+		return { path };
 	}
 
 	return {

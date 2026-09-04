@@ -152,15 +152,18 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			   manipule. */
 			const tpl = document.createElement("template");
 			tpl.innerHTML = String(q.optionHtml[oi]);
-			if (typeof ctx.app?.vault?.adapter?.getResourcePath === "function") {
-				tpl.content.querySelectorAll("img[src]").forEach(img => {
-					const src = img.getAttribute("src") || "";
-					if (/^(https?:|data:|app:)/i.test(src)) return;
-					try {
-						img.setAttribute("src", ctx.app.vault.adapter.getResourcePath(src));
-					} catch { /* chemin non résoluble : laissé tel quel, la liste blanche tranchera */ }
-				});
-			}
+			/* Préfixes DÉJÀ résolus : `app:` sous Obsidian, `asset:` et
+			   `http://asset.localhost` sous Tauri. Sans `asset:`, l'app
+			   réécrirait une URL déjà bonne au second passage — un défaut qui
+			   n'apparaîtrait qu'à l'exécution, dans l'app seulement. Un cas de
+			   check-obsidian-host garde cette liste. */
+			tpl.content.querySelectorAll("img[src]").forEach(img => {
+				const src = img.getAttribute("src") || "";
+				if (/^(https?:|data:|app:|asset:|tauri:)/i.test(src)) return;
+				const resolved = ctx.host.links.resourceUrl(src);
+				// Chemin non résoluble : laissé tel quel, la liste blanche tranchera.
+				if (resolved) img.setAttribute("src", resolved);
+			});
 			optionContentHtml = ctx.sanitize.sanitizeQuizHtml(tpl.innerHTML);
 		} else {
 			optionContentHtml = ctx.sanitize.renderRawHtmlWithEmbeds(q.options[oi], { wrapClass: "quiz-option-embed-wrap", imgClass: "quiz-option-embed" });

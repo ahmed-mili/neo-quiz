@@ -24,7 +24,6 @@ import { idsForRawItems } from "./quiz-ids";
 import { t } from "./i18n";
 
 import { currentHost } from "./host/current";
-import type { App } from "obsidian";
 import type { EngineCtx } from "./types/engine-ctx";
 import type {
 	QuizQuestion,
@@ -46,14 +45,13 @@ import type {
  *
  * Il ne porte plus `plugin` ni `Notice` : l'hôte est LU (currentHost),
  * pas TRANSMIS. Un hôte passé en paramètre laisserait deux hôtes coexister le
- * jour où un appelant oublierait de le passer. `app` reste pour cards,
- * sanitizer, resources et results-save jusqu'à la tâche 5.
+ * jour où un appelant oublierait de le passer. Depuis la tâche 5, `app` n'est
+ * plus transmis non plus : fichiers, liens et ressources passent par l'hôte.
  */
 interface RenderQuizContext {
 	container: HTMLElement;
 	quiz: QuizQuestion[];
 	sourcePath: string;
-	app: App;
 	/** Absent = jouer ce quiz ne compte simplement pas de statistiques.
 	    Ce n'est pas une erreur : la page « Générer » n'en a pas. */
 	statsSink?: EngineCtx["statsSink"];
@@ -67,7 +65,6 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		container,
 		quiz: rawQuiz,
 		sourcePath,
-		app,
 		statsSink,
 		reviewSink
 	} = context;
@@ -152,7 +149,6 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 		host: currentHost(),
 		container,
 		sourcePath,
-		app,
 		quiz,
 		/* Identité des questions pour l'ordonnanceur. La MÊME règle qu'à
 		   l'écriture (editor/export.ts) et qu'à la lecture par le scanner :

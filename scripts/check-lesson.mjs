@@ -974,6 +974,7 @@ await withSrcModule("src/engine/results-save.ts", ({ createResultsSaver }) => {
 	const r = makeReporter("Boucle d'apprentissage — payload de resultats : answered et total comptent le meme ensemble");
 
 	const ctx = {
+		host: { paths: { resultsDir: ".obsidian/quiz-blocks-results" } },
 		quiz: [
 			{ role: "read", correctIndex: 0, prompt: "Support" },
 			{ role: "test", correctIndex: 0, prompt: "Question" }

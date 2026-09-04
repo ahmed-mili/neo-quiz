@@ -1176,7 +1176,6 @@ export default class InteractiveQuizPlugin extends Plugin {
 						container: host,
 						quiz: quizToRender,
 						sourcePath: mdCtx.sourcePath,
-						app: this.app,
 						statsSink: this._statsStore,
 						reviewSink: this._reviewStore,
 					});

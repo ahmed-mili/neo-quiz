@@ -1,2 +1,84 @@
 /* Variables de thème de l'hôte Windows.
-   Remplies à la tâche 9. */
+   Remplies à la tâche 9.
+
+   =========================================================
+   LES VARIABLES QU'OBSIDIAN FOURNISSAIT
+
+   Le greffon hérite du thème d'Obsidian ; l'application n'a personne au-dessus
+   d'elle. Ces valeurs sont RELEVÉES sur le thème sombre réellement utilisé
+   (AnuPpuccin, variante ctp-mocha, mode sombre — lues par getComputedStyle sur
+   document.body dans l'Obsidian d'Ahmed le 2026-09-04), pas inventées : deux
+   jeux de couleurs qui divergent donneraient deux produits.
+
+   La première version n'a que le thème SOMBRE (spec §8) : le greffon suit le
+   thème d'Obsidian, l'app n'en propose qu'un.
+
+   `npm run check:theme` interdit d'en oublier une ET d'en garder une qui ne
+   sert plus. Une variable manquante ne casse rien : elle rend un texte
+   invisible sur un fond de la même couleur, ou fait disparaître une bordure —
+   sans aucune erreur en console. L'ordre ci-dessous est celui qu'imprime le
+   script.
+
+   Trois entrées ne sont PAS des relevés ; chacune le dit sur place :
+   `--code-border` (vide même dans Obsidian) et les deux `*-ring-16`.
+   ========================================================= */
+
+:root {
+	--background-modifier-border: rgb(49, 50, 68);
+	--background-modifier-border-hover: rgb(67, 70, 90);
+	--background-modifier-form-field: rgba(17, 17, 27, 0.3);
+	--background-modifier-hover: rgba(198, 208, 245, 0.075);
+	/* Triplet SANS rgb() : consommé par des rgba(var(--…), .2). */
+	--background-modifier-success-rgb: 0,151,26;
+	--background-primary: rgb(30, 30, 46);
+	--background-primary-alt: rgb(24, 24, 37);
+	--background-secondary: rgb(24, 24, 37);
+	--code-background: rgba(30, 30, 46, 0.75);
+	/* CHOISIE, pas relevée : ni Obsidian ni AnuPpuccin ne la définissent, elle
+	   est VIDE même dans l'Obsidian d'Ahmed — le CSS du greffon la référence
+	   dans le vide depuis toujours. Une chaîne vide se comporte comme une
+	   variable absente, donc on tranche : la même bordure discrète que
+	   --background-modifier-border. */
+	--code-border: rgb(49, 50, 68);
+	--color-green: rgb(0,151,26);
+	--color-orange: rgb(250, 179, 135);
+	--color-red: rgb(243, 139, 168);
+	--color-yellow: rgb(249, 226, 175);
+	/* Les DEUX POLICES ne se recopient pas. Le relevé commence par « Droid
+	   Arabic Naskh », qui est le réglage PERSONNEL d'Ahmed dans Obsidian
+	   (appearance.json), pas une valeur du thème : figer la police d'un
+	   utilisateur dans le code de l'application serait faux. On reprend donc
+	   les piles d'Obsidian, moins le choix personnel en tête. */
+	--font-interface: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui,
+		"Segoe UI", Roboto, "Inter", "Apple Color Emoji",
+		"Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+	--font-monospace: ui-monospace, SFMono-Regular, "Cascadia Mono", "Roboto Mono",
+		"DejaVu Sans Mono", Menlo, Monaco, "Consolas",
+		"Source Code Pro", monospace;
+	--interactive-accent: rgb(101,143,242);
+	--interactive-accent-hover: rgb(101,143,242);
+	/* Triplet SANS rgb() : consommé par des rgba(var(--…), .2). */
+	--interactive-accent-rgb: 101,143,242;
+	--interactive-normal: rgb(49, 50, 68);
+	/* CHOISIES, pas relevées. --quiz-success-ring-16 et --quiz-danger-ring-16
+	   sont référencées SANS repli par button-press.css:86,90 et définies nulle
+	   part — y compris dans Obsidian, où elles sont vides. C'est une DETTE DU
+	   GREFFON, antérieure à ce chantier, à trancher dans tokens.css et pas ici.
+	   En attendant, on complète la famille des anneaux sur le même patron que
+	   --quiz-primary-ring-16 (tokens.css:70, 18 % dans du transparent), pour
+	   que l'app n'ait pas d'anneau invisible sur les onglets juste/faux. */
+	--quiz-danger-ring-16: color-mix(in srgb, var(--quiz-danger) 18%, transparent);
+	--quiz-success-ring-16: color-mix(in srgb, var(--quiz-success) 18%, transparent);
+	--radius-l: 12px;
+	--radius-m: 8px;
+	--radius-s: 4px;
+	--scrollbar-thumb-bg: color-mix(in oklch, white 10%, transparent);
+	--text-accent: rgb(101,143,242);
+	--text-error: rgb(243, 139, 168);
+	--text-faint: rgb(161, 168, 201);
+	--text-muted: rgb(142, 149, 179);
+	--text-normal: rgb(198, 208, 245);
+	--text-on-accent: rgb(30, 30, 46);
+	--text-success: rgb(0,151,26);
+	--text-warning: rgb(250, 179, 135);
+}

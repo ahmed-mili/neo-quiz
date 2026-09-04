@@ -1,4 +1,4 @@
-# Neo Quiz [![plugin](https://img.shields.io/github/v/release/ahmed-mili/neo-quiz?label=plugin&display_name=tag&logo=obsidian&color=purple&logoColor=violet)](https://github.com/ahmed-mili/neo-quiz/releases)
+# Neo Quiz [![release](https://img.shields.io/github/v/release/ahmed-mili/neo-quiz?include_prereleases&label=release&display_name=tag&color=7c5cff)](https://github.com/ahmed-mili/neo-quiz/releases) [![Obsidian plugin](https://img.shields.io/badge/Obsidian-plugin-7c5cff?logo=obsidian&logoColor=white)](https://github.com/ahmed-mili/neo-quiz) ![platforms](https://img.shields.io/badge/apps-Windows%20%C2%B7%20Android-2a2b3b)
 
 Render ` ```quiz-blocks ` code blocks into fully interactive quizzes directly inside Obsidian notes.
 

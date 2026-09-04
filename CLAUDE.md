@@ -37,6 +37,37 @@ communautaire d'Obsidian.
 ## Commandes
 
 - `npm run check` — typecheck (`tsc --noEmit`). Toujours lancer après une modif TS.
+- `npm run check:host` — **le cliquet de la frontière d'hôte** : aucun fichier de `src/`
+  n'importe Obsidian hors d'une liste `RESTANTS` qui ne peut que RÉTRÉCIR (une entrée
+  qui n'importe plus rien fait échouer le contrôle, sinon la liste devient un tapis).
+  Il annonce le nombre de fichiers encore liés — **42** aujourd'hui. Il couvre les
+  trois formes (`from`, `require`, `import()` différé) et toutes les extensions TS ;
+  chacune de ces mailles a été une échappatoire vérifiée. Il est dans la CI : lancé à
+  la main, c'est la discipline et non le contrôle qui tiendrait la frontière.
+  Sa limite : les **extensions DOM** d'Obsidian (`createEl`, `empty`, `setText`…) ne
+  sont trahies par aucun `import`. Le seul filet contre elles est
+  `npx tsc --noEmit -p apps/windows/tsconfig.json`, d'où la règle qu'aucun fichier
+  atteint par ce typecheck ne doit tirer `obsidian.d.ts` — un simple `import type`
+  suffisait à le neutraliser.
+- `npm run check:theme` — exhaustivité du thème de l'app (`apps/windows/src/theme/
+  host-vars.css`) : le greffon hérite des variables CSS d'Obsidian, l'app doit les
+  définir. Une oubliée ne produit AUCUNE erreur — un texte invisible sur un fond de la
+  même couleur. Symétrique, comme le cliquet : une variable devenue morte dans le thème
+  doit en être retirée. Dans la CI aussi.
+- `npm run check:obsidian-host` et `check:windows-host` — les deux implémentations du
+  contrat `src/host/types.ts`, chargées avec une fausse `App` / un faux index. Une
+  méthode d'hôte qui rend `null` en silence rendrait les images, le bouton ressource ou
+  la sauvegarde inertes sans un mot. Chaque cas neuf doit être éprouvé par DISCRIMINANCE
+  (casser la règle, voir rougir, restaurer) : un cas qui passe au vert quoi qu'on fasse
+  ne prouve rien — c'est arrivé deux fois ici.
+- `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` testé avant
+  `$…$`, l'heuristique qui épargne « 5$ et 3$ ») : le code qu'aucun hôte ne réécrira,
+  puisque c'est lui qui décide ce qui EST une formule. Il tourne sur un faux `HostMath`,
+  ce qui prouve du même coup que plus rien n'appelle Obsidian — le bouchon de
+  `load-src.mjs` jetterait bruyamment.
+- `npm run check:app` — build Vite + typecheck de l'application Windows, sans compiler
+  le Rust. C'est le contrôle qui attrape une rupture du code PARTAGÉ vue depuis l'autre
+  hôte, là où `npm run check` ne voit que le greffon.
 - `npm run check:md` et `npm run check:export` — deux jeux de cas ciblés,
   sur les deux logiques qu'une relecture n'arrive pas à juger : le rendu markdown des
   champs texte (`renderInlineText`, `stripInlineMarkdown`) et l'écriture d'un bloc
@@ -119,10 +150,29 @@ Obsidian.
 - Sûr → redémarrage complet d'Obsidian, ou recharger via le CLI Obsidian
   (`obsidian plugin:reload id=quiz-blocks`).
 
+## Structure du dépôt : un code partagé, plusieurs hôtes
+
+- `src/` — **le code partagé**, qui ne connaît AUCUN hôte. Il demande à son
+  environnement ce dont il a besoin via le contrat `src/host/types.ts` (`HostFs`,
+  `HostLinks`, `HostWatcher`, `HostUi`, `HostMath`, `HostShell`, `HostPlatform`,
+  `HostPaths`), obtenu par `currentHost()` (`src/host/current.ts`). Même patron que
+  `dashboard/review-store.ts` pour l'ordonnanceur, généralisé — et **mécanique** :
+  `npm run check:host` refuse toute nouvelle dépendance à Obsidian ici.
+- `apps/obsidian/` — le greffon. `main.ts` → `plugin.ts` (`InteractiveQuizPlugin
+  extends Plugin`) et `host.ts`, la seule implémentation du contrat qui a le droit
+  d'importer Obsidian, et **le seul endroit du dépôt où un `TFile` devient un
+  `HostFile`** (une conversion recopiée à la main diverge en silence).
+- `apps/windows/` — l'application Windows (Tauri 2 + Vite). Elle consomme `src/` **par
+  chemin relatif**, sans jamais copier un fichier : une copie divergerait sans un mot.
+  Son hôte est `apps/windows/src/host/*.ts`, son thème `src/theme/host-vars.css`.
+- Une troisième application Android viendra ; elle n'aura à écrire qu'un hôte.
+
 ## Architecture (le point important)
 
-Point d'entrée : `src/main.ts` → `src/plugin.ts` (`InteractiveQuizPlugin extends Plugin`).
-`plugin.ts` porte le `SettingTab`, les settings persistés + leurs migrations, et
+Point d'entrée du greffon : `apps/obsidian/main.ts` → `apps/obsidian/plugin.ts`
+(`InteractiveQuizPlugin extends Plugin`).
+`plugin.ts` porte le `SettingTab`, les settings persistés + leurs migrations, installe
+l'hôte (`installHost` en tête d'`onload`, `uninstallHost` en fin d'`onunload`), et
 enregistre : le processeur de bloc `quiz-blocks` (→ moteur), la vue dashboard, la vue
 onglet d'un quiz (`quiz-blocks-builder`).
 
@@ -238,6 +288,13 @@ la NATURE de la destination, pas sur la confiance qu'on accorde à la donnée :
 | du texte, dans un ATTRIBUT ou un composant sans HTML (`placeholder`, `aria-label`, vignette) | `stripInlineMarkdown` — même grammaire, marqueurs RETIRÉS ; sa sortie est du texte, à ré-échapper |
 | un champ `*Html` pré-rendu (`promptHtml`, `explainHtml`, `learnHtml`, `passageHtml`, `optionHtml`) | `sanitizeQuizHtml` — liste blanche de balises/attributs |
 | du texte + des images `![[…]]` | `renderTextWithEmbeds` / `replaceObsidianEmbedsInHtml` (qui assainit déjà) |
+
+**Une cinquième porte existe, et c'est la seule** : `apps/windows/src/host/math.ts`
+pose en `innerHTML` la sortie de `convertLatexToMarkup` (MathLive) sans l'assainir.
+Ce n'est PAS un oubli — la justification est écrite sur place : ce HTML est fabriqué
+par MathLive à partir de LaTeX, qui est analysé et jamais exécuté ; l'assainir
+découperait les balises que MathLive vient de composer. Aucune autre exception : tout
+autre HTML de l'app repasse par les quatre portes ci-dessus.
 
 Deux règles qui ont chacune coûté un bug :
 

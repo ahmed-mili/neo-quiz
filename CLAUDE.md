@@ -46,6 +46,22 @@ communautaire d'Obsidian.
   objet imbriqué écrit `[object Object]` (bloc illisible, sauvegarde refusée sans un
   mot). **Pas de framework de test au-delà** ; ne pas en ajouter pour du code qu'une
   lecture suffit à juger.
+- `npm run check:scheduler` — le noyau de l'ORDONNANCEUR (`src/scheduler/`) : horizon
+  de rétention, journal, état dérivé, plan du jour. Sa première section vérifie
+  MÉCANIQUEMENT la pureté du noyau (aucun `from "obsidian"`, `document`, `window`,
+  `Date.now()`, `new Date()`, `Math.random()`) : c'est ce contrôle qui garantit que le
+  même module tournera à l'identique dans les futures applications PC et Android. Le
+  casser, c'est perdre la seule partie du code qu'on ne réécrira pas.
+- `npm run check:review-store`, `check:engine-review`, `check:module-edit` — les trois
+  câblages de l'ordonnanceur : l'adaptateur Obsidian, l'enregistrement des réponses par
+  le moteur, la date d'examen par module.
+- `npm run check:lesson` — la boucle d'apprentissage (rôles `pre`/`read`/`recall`/`test`,
+  tranches, auto-évaluation). **Il doit aller jusqu'au bout** : ce script MEURT sur une
+  exception au lieu d'échouer proprement, et une mort en cours de route masque en
+  silence tous les groupes qui suivent (c'est arrivé, onze groupes cachés).
+- `npm run report:multiblock` — ne vérifie rien, MESURE deux limites connues de
+  l'ordonnanceur (notes à plusieurs blocs, notes quiz `source:`) pour qu'elles restent
+  visibles au lieu de se redécouvrir. Sort toujours en 0.
 - `npm run check:scanner` — charge le vrai `createScanner` et protège l'alignement des
   identifiants avec l'éditeur, les métadonnées légères et les suppressions du cache sur
   bloc absent, invalide ou vide. Il existe parce qu'une clé décalée perdrait l'historique
@@ -59,8 +75,8 @@ communautaire d'Obsidian.
   de lire le DOM RENDU dans Obsidian ; la commande est dans l'en-tête du script.
 - `node scripts/audit-vaults.mjs "<vault>" […]` — **avant une release**, ou après
   toute retouche de `convertParsedToInternal` / `exportAll` : fait l'aller-retour
-  lecture → écriture → lecture sur TOUS les quiz de vrais vaults (67 quiz, 1176
-  questions au 2026-07-31). Deux garanties, pas une :
+  lecture → écriture → lecture sur TOUS les quiz de vrais vaults (39 quiz, 756
+  questions au 2026-09-04). Deux garanties, pas une :
   1. le bloc réécrit **se relit** — sinon la sauvegarde échoue EN SILENCE chez
      l'utilisateur (la page refuse d'écrire un JSON5 invalide, et le travail reste
      en mémoire jusqu'à la fermeture d'Obsidian) ;
@@ -110,7 +126,7 @@ Point d'entrée : `src/main.ts` → `src/plugin.ts` (`InteractiveQuizPlugin exte
 enregistre : le processeur de bloc `quiz-blocks` (→ moteur), la vue dashboard, la vue
 onglet d'un quiz (`quiz-blocks-builder`).
 
-Les **deux sous-systèmes** suivent le **même pattern** : une factory
+Les **deux sous-systèmes d'INTERFACE** suivent le **même pattern** : une factory
 `createXHandlers(ctx)` par module, et un **god-object `ctx` typé**, assemblé en
 plusieurs passes puis injecté dans toutes les factories (référence croisée). Le param
 d'appel externe est nommé `context`, le god-object interne `ctx` — jamais confondus
@@ -153,6 +169,39 @@ l'élargir**, c'est cette étroitesse qui rend le formulaire réutilisable.
 des questions : `src/types/quiz.ts` (variantes `single` / `multiple` / `text` /
 `ordering` / `matching`, + `ExamOptions`). Parsing JSON5 : `src/quiz-utils.ts`
 (`parseQuizSource`, `extractExamOptions`).
+
+## Ordonnanceur de révision (`src/scheduler/`) — le code qu'on ne jettera pas
+
+Troisième sous-système, et le seul qui ne suit PAS le patron `ctx` : c'est un **noyau
+pur**. Étant donné l'historique des réponses et un horizon de rétention, il décide
+quelles questions sont dues aujourd'hui et dans quel ordre les poser.
+
+**La règle qui gouverne tout** : `src/scheduler/` ne connaît ni Obsidian, ni écran, ni
+horloge, ni calendrier, ni locale. `now` et `dayStart` sont des ENTRÉES. La feuille de
+route (`docs/superpowers/specs/2026-09-02-roadmap-produit.md`) fait de ce module la
+seule partie réutilisée telle quelle par les futures applications PC et Android : toute
+dépendance introduite ici se paiera deux fois. `npm run check:scheduler` le vérifie
+mécaniquement ; la preuve complémentaire, qui couvre les imports transitifs, est
+`npx esbuild src/scheduler/index.ts --bundle --platform=neutral` sans avertissement.
+**L'unité portable est `src/scheduler/` PLUS `src/types/quiz.ts`** (importé pour
+`QUESTION_ROLES`), pas le dossier seul.
+
+- **L'état n'est jamais persisté, il est DÉRIVÉ** d'un journal JSONL en ajout seul
+  (`<manifest.dir>/review-log.jsonl`). Changer un paramètre rejoue tout l'historique ;
+  rien à migrer, rien à désynchroniser. Le format se paie en propriétés gratuites :
+  tolérance à la troncature, deux fenêtres Obsidian qui écrivent sans se corrompre.
+- **Une seule règle d'identité** (`src/quiz-ids.ts`, `assignQuestionIds` /
+  `idsForRawItems`), partagée par le scanner, l'éditeur et le moteur. Une clé qui diverge
+  d'un lecteur à l'autre rend une question éternellement neuve : elle revient tous les
+  jours sans jamais pouvoir sortir de « À réviser ». Ne jamais recomposer une clé depuis
+  `q.id`.
+- **L'adaptateur Obsidian** (`src/dashboard/review-store.ts`) est JETABLE et assumé tel
+  quel : il absorbe tout ce qui est spécifique à l'hôte (octets, fuseau, événements de
+  renommage, dates saisies), pour que le noyau n'en voie rien.
+- **Limites connues et mesurées**, pas des oublis : `npm run report:multiblock`. Le
+  scanner n'indexe que le PREMIER bloc d'une note, et une note quiz `source:` journalise
+  sous son propre chemin, absent du catalogue. Corriger l'une ou l'autre change le format
+  de clé, donc l'historique déjà écrit — décision de conception, pas correctif.
 
 ## Génération IA (`dashboard/ai*.ts`)
 

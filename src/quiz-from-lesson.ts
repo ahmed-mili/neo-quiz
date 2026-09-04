@@ -98,7 +98,11 @@ export function isLessonNoteContentExact(content: string): boolean {
 	if (!match) return false;
 	let parsed: unknown[];
 	try {
-		parsed = parseQuizSource(match[1]);
+		/* Muet À DESSEIN : cette sonde décide de la VISIBILITÉ d'une commande
+		   dans la palette, elle est donc évaluée à chaque ouverture. Un bloc
+		   transitoirement invalide — le cas normal quand on tape dedans —
+		   imprimerait sinon « JSON5 parse error » à chaque évaluation. */
+		parsed = parseQuizSource(match[1], { logErrors: false });
 	} catch {
 		return false;
 	}

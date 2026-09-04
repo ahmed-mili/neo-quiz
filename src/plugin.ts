@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "./branding";
 import {
 	MarkdownRenderChild,
 	MarkdownView,
@@ -43,7 +44,7 @@ import { t, setLanguage, langSetting } from "./i18n";
 import type { LangSetting } from "./i18n";
 
 const PLUGIN_ID = "quiz-blocks";
-const PLUGIN_NAME = "Quiz Blocks";
+const PLUGIN_NAME = PRODUCT_NAME;
 const QUIZ_BLOCK_LANGUAGE = "quiz-blocks";
 
 /** Forme complète des réglages persistés du plugin (source unique désormais que

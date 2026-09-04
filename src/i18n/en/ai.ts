@@ -236,7 +236,7 @@ export const EN_AI = {
 	"ai.voice.recordHint": "{time} · release Space to transcribe",
 	"ai.voice.micDenied": "Dictation: microphone permission denied.",
 	"ai.voice.noMic": "Dictation: no microphone available.",
-	"ai.voice.missingInstall": "Dictation: binary or model missing, see the Quiz Blocks settings.",
+	"ai.voice.missingInstall": "Dictation: binary or model missing, see the Neo Quiz settings.",
 	"ai.voice.wavFailed": "Dictation: could not write the audio file.",
 	"ai.voice.transcribeFailed": "Dictation: transcription failed (see console).",
 	"ai.voice.noText": "Dictation: no text recognized.",

@@ -1,4 +1,4 @@
-# Quiz Blocks [![plugin](https://img.shields.io/github/v/release/ahmed-mili/obsidian-quiz-blocks?label=plugin&display_name=tag&logo=obsidian&color=purple&logoColor=violet)](https://github.com/ahmed-mili/obsidian-quiz-blocks/releases)
+# Neo Quiz [![plugin](https://img.shields.io/github/v/release/ahmed-mili/neo-quiz?label=plugin&display_name=tag&logo=obsidian&color=purple&logoColor=violet)](https://github.com/ahmed-mili/neo-quiz/releases)
 
 Render ` ```quiz-blocks ` code blocks into fully interactive quizzes directly inside Obsidian notes.
 
@@ -169,22 +169,22 @@ what is left without spending anything to find out.
 
 ## Language
 
-The interface follows **your Obsidian language** by default (English, or French where translated). You can force it in **Settings → Quiz Blocks → Language**: `Automatic`, `English`, or `Français`.
+The interface follows **your Obsidian language** by default (English, or French where translated). You can force it in **Settings → Neo Quiz → Language**: `Automatic`, `English`, or `Français`.
 
 ---
 
 ## Installation
 
-The recommended way to install **Quiz Blocks** is via **BRAT** (Beta Reviewers Auto-update Tool), which handles installation and automatic updates directly from GitHub.
+The recommended way to install **Neo Quiz** is via **BRAT** (Beta Reviewers Auto-update Tool), which handles installation and automatic updates directly from GitHub.
 
 1. Install the [BRAT plugin](https://obsidian.md/plugins?id=obsidian42-brat) from the Obsidian Community Plugins.
 2. Open BRAT settings and click **Add Beta Plugin**.
 3. Paste the repository URL:
    ```
-   https://github.com/ahmed-mili/obsidian-quiz-blocks
+   https://github.com/ahmed-mili/neo-quiz
    ```
 4. Click **Add Plugin** — BRAT will install it automatically.
-5. Go to **Settings → Community plugins** and enable **Quiz Blocks**.
+5. Go to **Settings → Community plugins** and enable **Neo Quiz**.
 
 BRAT will notify you whenever a new version is available and update with one click.
 
@@ -203,7 +203,7 @@ BRAT will notify you whenever a new version is available and update with one cli
 
 ## Notes & limitations
 
-This plugin is in active beta development — bugs are possible. Feel free to [open an issue](https://github.com/ahmed-mili/obsidian-quiz-blocks/issues/new) and share feedback.
+This plugin is in active beta development — bugs are possible. Feel free to [open an issue](https://github.com/ahmed-mili/neo-quiz/issues/new) and share feedback.
 
 - Answers are not persisted between sessions
 - The `esbuild.config.mjs` build path is configured for a local Obsidian vault — adjust it for your setup
@@ -214,7 +214,7 @@ This plugin is in active beta development — bugs are possible. Feel free to [o
 
 Want to test all question types at once in your vault?
 
-👉 **[Copy the full demo template](https://github.com/ahmed-mili/obsidian-quiz-blocks/blob/main/demo-template.md)** — open the file, click the **Copy** button, paste it into a new Obsidian note, and the quiz is ready to run.
+👉 **[Copy the full demo template](https://github.com/ahmed-mili/neo-quiz/blob/main/demo-template.md)** — open the file, click the **Copy** button, paste it into a new Obsidian note, and the quiz is ready to run.
 
 ---
 

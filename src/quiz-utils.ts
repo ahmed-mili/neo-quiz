@@ -1,3 +1,4 @@
+import { LOG_PREFIX } from "./branding";
 import JSON5 from "json5";
 import type { QuizQuestion, ExamOptions } from "./types/quiz";
 
@@ -46,13 +47,13 @@ function parseQuizSource(source?: string | null, options: ParseQuizSourceOptions
 		if (options.logErrors !== false) {
 			// Les appels interactifs gardent le diagnostic détaillé ; seul le scan
 			// automatique le désactive pour ne pas transformer la frappe en erreurs.
-			console.error("[Quiz Blocks] JSON5 parse error:", message);
+			console.error(LOG_PREFIX + " JSON5 parse error:", message);
 			if (message && message.includes("position")) {
 				const match = message.match(/position (\d+)/);
 				if (match) {
 					const pos = parseInt(match[1]);
-					console.error("[Quiz Blocks] Caractère à la position", pos + ":", raw.charAt(pos));
-					console.error("[Quiz Blocks] Contexte:", raw.substring(Math.max(0, pos - 30), pos + 30));
+					console.error(LOG_PREFIX + " Caractère à la position", pos + ":", raw.charAt(pos));
+					console.error(LOG_PREFIX + " Contexte:", raw.substring(Math.max(0, pos - 30), pos + 30));
 				}
 			}
 		}

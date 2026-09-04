@@ -38,7 +38,7 @@ export const EN_DASHBOARD = {
 	"dashboard.home.resumeBtn": "Resume",
 
 	/* ── Onboarding (premier usage, aucun quiz) ── */
-	"dashboard.onboarding.title": "Welcome to Quiz Blocks",
+	"dashboard.onboarding.title": "Welcome to Neo Quiz",
 	"dashboard.onboarding.lead": "Turn your notes into interactive quizzes — multiple choice, fill in the blank, matching — to revise and test yourself.",
 	"dashboard.onboarding.generate": "Generate my first quiz",
 	"dashboard.onboarding.or": "or",

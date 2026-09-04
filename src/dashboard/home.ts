@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "../branding";
 import { setIcon } from "obsidian";
 import { t } from "../i18n";
 import type { DashboardCtx } from "../types/dashboard-ctx";
@@ -128,7 +129,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		// ── Header ──
 		const header = container.createDiv({ cls: "qbd-home-header" });
 		const headerLeft = header.createDiv({ cls: "qbd-home-header-left" });
-		headerLeft.createEl("h2", { cls: "qbd-home-title", text: "Quiz Blocks" });
+		headerLeft.createEl("h2", { cls: "qbd-home-title", text: PRODUCT_NAME });
 
 		// Sous-titre orientant : annonce les deux actions principales. (La note
 		// active reste dans le footer de la sidebar, et la vue Générer la relit.)

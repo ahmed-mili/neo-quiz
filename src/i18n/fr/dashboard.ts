@@ -33,7 +33,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.home.resumeBtn": "Reprendre",
 
 	/* ── Onboarding ── */
-	"dashboard.onboarding.title": "Bienvenue dans Quiz Blocks",
+	"dashboard.onboarding.title": "Bienvenue dans Neo Quiz",
 	"dashboard.onboarding.lead": "Transformez vos notes en quiz interactifs — QCM, texte à compléter, association — pour réviser et vous auto-évaluer.",
 	"dashboard.onboarding.generate": "Générer mon premier quiz",
 	"dashboard.onboarding.or": "ou",

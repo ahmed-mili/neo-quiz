@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "./branding";
 import { ItemView, Scope } from "obsidian";
 import type { WorkspaceLeaf, KeymapEventHandler } from "obsidian";
 
@@ -154,10 +155,10 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 	}
 
 	static getViewType(): string { return VIEW_TYPE_DASHBOARD; }
-	static getDisplayText(): string { return "Quiz Blocks"; }
+	static getDisplayText(): string { return PRODUCT_NAME; }
 
 	getViewType(): string { return VIEW_TYPE_DASHBOARD; }
-	getDisplayText(): string { return "Quiz Blocks"; }
+	getDisplayText(): string { return PRODUCT_NAME; }
 	getIcon(): string { return "graduation-cap"; }
 
 	get scanner(): Scanner { return this.plugin._scanner; }

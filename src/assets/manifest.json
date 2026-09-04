@@ -1,12 +1,12 @@
 {
   "id": "quiz-blocks",
-  "name": "Quiz Blocks",
+  "name": "Neo Quiz",
   "version": "2.5.0-beta",
   "minAppVersion": "1.5.0",
   "description": "Create fully interactive quizzes in Obsidian from code blocks, including blocks generated with any AI. Supports multiple question types, hints, scoring, navigation, and smooth transitions.",
   "author": "Ahmed Mili",
   "authorUrl": "https://github.com/ahmed-mili",
-  "helpUrl": "https://github.com/ahmed-mili/obsidian-quiz-blocks",
+  "helpUrl": "https://github.com/ahmed-mili/neo-quiz",
   "isDesktopOnly": false,
   "main": "main.js"
 }

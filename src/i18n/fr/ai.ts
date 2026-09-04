@@ -198,7 +198,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.voice.recordHint": "{time} · relâche Espace pour transcrire",
 	"ai.voice.micDenied": "Dictée : permission micro refusée.",
 	"ai.voice.noMic": "Dictée : aucun micro accessible.",
-	"ai.voice.missingInstall": "Dictée : binaire ou modèle manquant, voir les réglages de Quiz Blocks.",
+	"ai.voice.missingInstall": "Dictée : binaire ou modèle manquant, voir les réglages de Neo Quiz.",
 	"ai.voice.wavFailed": "Dictée : écriture du fichier audio impossible.",
 	"ai.voice.transcribeFailed": "Dictée : transcription échouée (voir console).",
 	"ai.voice.noText": "Dictée : aucun texte reconnu.",

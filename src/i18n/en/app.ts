@@ -16,4 +16,13 @@ export const EN_APP = {
 	"app.list.title": "My quizzes",
 	"app.list.empty": "No quiz found in this folder.",
 	"app.list.changeFolder": "Change folder",
+
+	/* ── La page d'un quiz ──
+	   NI clé de RETOUR, NI clé « aucun bloc dans cette note » ici :
+	   « dashboard.quiz.back » et « dashboard.detail.noBlockInNote » existent déjà
+	   et disent exactement la même chose, la page les emprunte. Seule la panne de
+	   LECTURE est propre à l'application : sous Obsidian le fichier est déjà
+	   ouvert par le coffre, ici il vient du disque et la cause doit être nommée —
+	   un message qui avale la cause rend la panne indiagnosticable. */
+	"app.quiz.readError": "Could not read {path}: {error}",
 } as const;

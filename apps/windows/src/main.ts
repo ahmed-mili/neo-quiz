@@ -4,11 +4,12 @@ import "./assets/toast.css";
 import { setLanguage, t } from "../../../src/i18n";
 import { PRODUCT_NAME } from "../../../src/branding";
 import { createScanner } from "../../../src/dashboard/scanner";
-import type { Scanner } from "../../../src/dashboard/scanner";
+import type { QuizIndexEntry, Scanner } from "../../../src/dashboard/scanner";
 import { currentHost, installHost } from "../../../src/host/current";
 import { createWindowsHost, createWindowsIndex } from "./host";
 import { allowFolder, pickFolder, saveFolder, savedFolder } from "./host/folder";
 import { renderList } from "./ui/list";
+import { openQuizPage } from "./ui/quiz-page";
 
 /*
  * Démarrage de l'application.
@@ -39,10 +40,32 @@ export function mount(root: HTMLElement, scanner: Scanner): void {
 	root.textContent = "";
 	demonterCourant = renderList(root, {
 		scanner,
-		/* L'OUVERTURE d'un quiz est la tâche 12. Ne rien faire ici est le seul
-		   choix honnête : simuler une ouverture afficherait un écran faux. */
-		onOpen: () => {},
+		onOpen: (entry) => { void ouvrirQuiz(root, scanner, entry); },
 		onChangeFolder: () => { void changerDossier(); },
+	});
+}
+
+/**
+ * La page d'un quiz : démonter la liste, monter la page ; au retour, démonter
+ * la page et remonter la liste. TOUJOURS par `demonterCourant`, appelé AVANT
+ * chaque changement d'écran.
+ *
+ * L'affectation de `demonterCourant` se fait APRÈS l'`await` — `openQuizPage`
+ * lit le fichier avant de rendre — mais le démontage de la liste, lui, a lieu
+ * AVANT : entre les deux, `demonterCourant` vaut `null`, et un second clic ne
+ * démonterait rien deux fois. C'est aussi pourquoi la page fait elle-même son
+ * `root.replaceChildren()` en entrée.
+ */
+async function ouvrirQuiz(root: HTMLElement, scanner: Scanner, entry: QuizIndexEntry): Promise<void> {
+	demonterCourant?.();
+	demonterCourant = null;
+	root.textContent = "";
+	/* Le démontage rendu par `openQuizPage` appelle `__quizDestroy` : sans lui,
+	   chaque aller-retour laisserait vivre une instance de moteur complète
+	   (écouteurs document/window, ResizeObserver, timers). C'est le pendant
+	   exact de l'`onunload` du MarkdownRenderChild côté greffon. */
+	demonterCourant = await openQuizPage(root, entry, () => {
+		mount(root, scanner);
 	});
 }
 

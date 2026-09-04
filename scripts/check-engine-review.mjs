@@ -62,7 +62,7 @@ await withSrcModule(
 			questionIds: idsForRawItems(quiz),
 			reviewSink: sink,
 			sourcePath,
-			plugin: { _statsStore: statsStore },
+			statsSink: statsStore,
 			container: { querySelectorAll: () => [], querySelector: () => null },
 			isExamMode: false,
 			examStarted: false,
@@ -374,13 +374,13 @@ await withSrcModule(
 
 	{
 		/* Minor promu : le journal de l'ordonnanceur ne doit plus dépendre de
-		   la présence d'un `_statsStore` — un store sans rapport avec lui. */
+		   la présence d'un `statsSink` — un store sans rapport avec lui. */
 		const r = makeReporter("goToResults — le journal ne dépend pas du statsStore (minor)");
 		const quiz = [{ id: "q1", title: "Q1", options: ["a", "b"], correctIndex: 0 }];
 		const { ctx, appels } = makeCtx({ quiz, selections: [0], isLessonMode: false, statsStore: null });
 		ctx.goToResults();
-		r.check("aucun _statsStore : la question est quand même journalisée", appels.length, 1);
-		r.check("aucun _statsStore : la session est quand même comptée une fois", ctx.quizState.resultsCounted, true);
+		r.check("aucun statsSink : la question est quand même journalisée", appels.length, 1);
+		r.check("aucun statsSink : la session est quand même comptée une fois", ctx.quizState.resultsCounted, true);
 		r.done();
 	}
 

@@ -916,7 +916,7 @@ await withSrcModule("src/engine/state.ts", ({ createStateHandlers }) => {
 		stopExamTimer() {},
 		updateExamTimerDisplay() {},
 		textOnly: { isTextOnlyMode: () => false, isTextOnlyForAny: () => false },
-		plugin: { _statsStore: { updateRecord: (path, update) => { recorded = update; } } },
+		statsSink: { updateRecord: (path, update) => { recorded = update; } },
 		sourcePath: "note.md",
 		isLessonMode: () => true,
 		roleOfQuestion: (i) => ctx.quiz[i].role,
@@ -1062,7 +1062,11 @@ await withSrcModule("src/engine/state.ts", (state) => {
 				// Le vrai goToResults (Task 8) lit recorded[i] avant tout appel au puits.
 				recorded: roles.map(() => false)
 			},
-			Notice: class { constructor(msg) { notices.push(msg); } },
+			// Hôte minimal (tâche 4) : le moteur appelle host.ui.notice via ctx.host.
+			host: {
+				ui: { notice: (msg) => notices.push(msg), setIcon: () => {} },
+				fs: {}, links: {}, watcher: {}, math: {}, shell: {}, platform: {}, paths: {}
+			},
 			// Pipeline d'animation : jamais atteint dans un cas BLOQUE ; dans un
 			// cas DEBLOQUE, la mutation de `current` a déjà eu lieu avant que ces
 			// stubs manquants ne fassent rejeter la promesse (avalée par .catch).
@@ -1077,7 +1081,7 @@ await withSrcModule("src/engine/state.ts", (state) => {
 			textOnly: { isTextOnlyMode: () => false, isTextOnlyForAny: () => false, isTextOnlyFor: () => false },
 			isTextQuestion: () => false, isClozeQuestion: () => false, isOrderingQuestion: () => false, isMatchingQuestion: () => false,
 			sourcePath: "note.md",
-			plugin: { _statsStore: { updateRecord: (...args) => statsCalls.push(args) } }
+			statsSink: { updateRecord: (...args) => statsCalls.push(args) }
 		};
 		ctx.hasAnyAnswerArr = hasAnyAnswerArr;
 		return ctx;
@@ -1258,7 +1262,7 @@ await withSrcModule("src/engine/state.ts", (state) => {
 			textOnly: { isTextOnlyMode: () => false, isTextOnlyForAny: () => false, isTextOnlyFor: () => false },
 			isTextQuestion: () => false, isClozeQuestion: () => false, isOrderingQuestion: () => false, isMatchingQuestion: () => false,
 			sourcePath: "note.md",
-			plugin: { _statsStore: { updateRecord: (...args) => statsCalls.push(args) } }
+			statsSink: { updateRecord: (...args) => statsCalls.push(args) }
 		};
 	}
 

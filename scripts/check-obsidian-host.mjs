@@ -101,6 +101,16 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		host.links.resourceUrl(fichier("Absent/parti.png", "png")), null);
 	r.check("resourceUrl d'un chemin vide rend null, pas \"\"",
 		host.links.resourceUrl("   "), null);
+	/* « RÉSOUT puis convertit » (src/host/types.ts) : un chemin INCONNU doit
+	   rendre null. L'ancienne implémentation servait
+	   `adapter.getResourcePath(chemin)` sans rien vérifier et rendait donc
+	   une URL parfaitement formée vers un fichier inexistant — ce qui rendait
+	   morte, sous Obsidian seulement, la branche « chemin non résoluble » de
+	   `src/engine/cards.ts` et faisait diverger les deux hôtes sur le même
+	   appel. C'est le SEUL cas qui distingue les deux sémantiques : tous les
+	   autres passent par un fichier qui existe. */
+	r.check("resourceUrl d'un chemin inconnu rend null (résout, ne préfixe pas)",
+		host.links.resourceUrl("Nulle/part/inexistant.png"), null);
 
 	// readCached et read sont deux chemins distincts, pas un alias.
 	r.check("readCached passe par le cache", await host.fs.readCached("Cours/ch1.md"), "cache:Cours/ch1.md");

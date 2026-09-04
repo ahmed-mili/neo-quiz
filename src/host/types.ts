@@ -69,7 +69,20 @@ export interface HostLinks {
 	    note `fromPath`. null si rien ne correspond. */
 	resolve(linkPath: string, fromPath: string): HostFile | null;
 	/** URL affichable dans un attribut `src`. null si non résoluble — jamais
-	    une chaîne vide, qui ferait charger la page courante comme image. */
+	    une chaîne vide, qui ferait charger la page courante comme image.
+
+	    SÉMANTIQUE ARRÊTÉE : « RÉSOUT puis convertit ». Une CHAÎNE est d'abord
+	    résolue en fichier existant par la même voie que `resolve` ; si rien
+	    ne correspond, la réponse est `null`. Ce n'est PAS un simple
+	    changement de préfixe sur le chemin qu'on lui donne.
+	    Pourquoi cette moitié-là : l'unique appelant
+	    (`src/engine/cards.ts`, images d'options) laisse le `src` d'origine
+	    intact quand la réponse est `null`, en comptant sur la liste blanche
+	    du sanitizer. Cette branche n'a de sens que si `null` est possible.
+	    L'implémentation Obsidian rendait autrefois `getResourcePath()` sans
+	    rien vérifier — donc jamais `null` pour une chaîne non vide, donc une
+	    URL de fichier inexistant, et un nom nu (« schema.png ») référencé
+	    depuis un sous-dossier restait cassé là où l'app l'affichait. */
 	resourceUrl(target: string | HostFile): string | null;
 }
 

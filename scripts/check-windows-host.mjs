@@ -9,8 +9,10 @@
  * Le reste de l'hôte (sélecteur, protocole d'asset, toasts, MathLive) n'existe
  * que dans la fenêtre : il se vérifie à la main, et la tâche dit comment. Les
  * modules chargés ici IMPORTENT Tauri au niveau module — c'est sans danger,
- * rien ne s'exécute au chargement — mais ce script n'APPELLE jamais une
- * fonction Tauri, qui n'aurait pas de fenêtre pour répondre.
+ * rien ne s'exécute au chargement. Une SEULE fonction Tauri est appelée, dans
+ * le dernier groupe, et derrière un double de `window.__TAURI_INTERNALS__` :
+ * la fabrication d'URL de `convertFileSrc`. Le groupe éprouve la RÉSOLUTION
+ * qui la précède, pas la conversion elle-même.
  *
  *     npm run check:windows-host
  */
@@ -82,6 +84,63 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ resolveDansIndex 
 	r.check("un lien introuvable rend null",
 		resolveDansIndex(fichiers, "rien.png", "Cours/reseau.md"), null);
 	r.check("un lien vide rend null", resolveDansIndex(fichiers, "  ", "x.md"), null);
+
+	r.done();
+});
+
+await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLinks }) => {
+	const r = makeReporter("Hôte Windows — resourceUrl");
+
+	/* SEUL endroit du script qui touche Tauri, et par un DOUBLE : la
+	   fabrication d'URL de `convertFileSrc` lit `window.__TAURI_INTERNALS__`,
+	   absent hors de la fenêtre. Sans ce double, chaque appel jetterait et
+	   `resourceUrl` rendrait `null` partout — le cas passerait au vert quelle
+	   que soit la logique, donc ne prouverait rien. Ce qui est ÉPROUVÉ ici,
+	   c'est la RÉSOLUTION qui précède la conversion, pas la conversion. */
+	const precedent = globalThis.window;
+	globalThis.window = {
+		__TAURI_INTERNALS__: {
+			convertFileSrc: (chemin, protocole) => `${protocole}://localhost/${chemin}`,
+		},
+	};
+
+	try {
+		const fichiers = [
+			f("Autre/schema.png", "png"),
+			f("Cours/reseau.md", "md"),
+			f("Cours/Images/schema.png", "png"),
+		];
+		const index = {
+			all: () => fichiers,
+			get: (p) => fichiers.find(x => x.path === p) ?? null,
+			apply: () => undefined,
+		};
+		const links = createWindowsLinks("D:/Quiz", index);
+
+		/* « RÉSOUT puis convertit » (src/host/types.ts) : un chemin connu de
+		   l'index donne une URL d'asset sur son chemin ABSOLU. */
+		r.check("resourceUrl d'un chemin connu donne l'URL d'asset absolue",
+			links.resourceUrl("Autre/schema.png"), "asset://localhost/D:/Quiz/Autre/schema.png");
+		/* Un HostFile passe par le même chemin : c'est la même sémantique, pas
+		   une seconde. */
+		r.check("resourceUrl d'un HostFile donne la même URL",
+			links.resourceUrl(f("Cours/reseau.md", "md")), "asset://localhost/D:/Quiz/Cours/reseau.md");
+		/* Un NOM NU passe par la résolution par nom, comme `resolve` : c'est ce
+		   qui distingue « résout puis convertit » d'un simple changement de
+		   préfixe, et c'est la moitié que l'hôte Obsidian a dû rejoindre. */
+		r.check("resourceUrl d'un nom nu passe par la résolution par nom",
+			links.resourceUrl("reseau.md"), "asset://localhost/D:/Quiz/Cours/reseau.md");
+		/* `null`, JAMAIS la chaîne vide : un `src=""` fait recharger la page
+		   courante comme image. L'index fait AUTORITÉ — une URL vers un fichier
+		   qu'il ne connaît pas pointerait hors du dossier autorisé. */
+		r.check("resourceUrl d'un chemin inconnu rend null",
+			links.resourceUrl("Nulle/part/inexistant.png"), null);
+		r.check("resourceUrl d'un chemin vide rend null, pas \"\"",
+			links.resourceUrl("   "), null);
+	} finally {
+		if (precedent === undefined) delete globalThis.window;
+		else globalThis.window = precedent;
+	}
 
 	r.done();
 });

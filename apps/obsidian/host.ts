@@ -9,14 +9,19 @@
    endroit du dépôt où dépendre d'`obsidian` est le but, pas une dette. C'est
    pourquoi `npm run check:host`, qui balaie `src/`, ne le voit pas.
 
-   DUPLICATION TEMPORAIRE ET VOULUE : la logique reprise ici existe encore dans
-   `src/engine/results-save.ts` (`ensureFolder`), `src/engine/resources.ts`
-   (`revealFileInObsidianExplorer`, `openWithDefaultAppFromVault`) et
-   `src/engine/mathjax.ts` (la mémoïsation de `loadMathJax`). Ce n'est pas un
-   oubli : l'hôte s'écrit et s'éprouve AVANT son premier consommateur, pour
-   qu'aucune tâche ne remplace un chemin qui marche par un chemin non éprouvé.
-   Les tâches 5 et 6 basculent ces appelants sur l'hôte et suppriment alors les
-   originaux. Tant que ce n'est pas fait, le greffon n'est à aucun moment cassé.
+   PLUS DE DOUBLE : quatre logiques ont MIGRÉ ici et n'existent plus ailleurs —
+   la création de dossier des exports (ex-`ensureFolder` de
+   `src/engine/results-save.ts`), la révélation dans l'explorateur et
+   l'ouverture par l'application par défaut (ex-`revealFileInObsidianExplorer`
+   et `openWithDefaultAppFromVault` de `src/engine/resources.ts`), et la
+   mémoïsation de `loadMathJax` (ex-`src/engine/mathjax.ts`). Le portage s'est
+   fait dans cet ordre — hôte écrit et éprouvé d'abord, appelants basculés
+   ensuite, originaux supprimés en dernier — pour que le greffon ne soit à
+   aucun moment cassé ; il est terminé.
+
+   Et c'est ici, uniquement, qu'un `TFile` devient un `HostFile` (`toHostFile`
+   ci-dessous). Toute autre conversion recopiée à la main est un défaut : elle
+   diverge en silence le jour où `HostFile` gagne un champ.
 ══════════════════════════════════════════════════════════ */
 
 import { Notice, Platform, setIcon, loadMathJax, renderMath, finishRenderMath } from "obsidian";
@@ -130,44 +135,59 @@ export function createObsidianHost(app: App): Host {
 
 	/* ─── links ─── */
 
+	/* Ordre repris tel quel de `engine/sanitizer.ts` : le `metadataCache`
+	   d'abord (lui seul comprend « schema.png » écrit depuis n'importe quelle
+	   note), le chemin nu ensuite. Les deux appels sont gardés séparément :
+	   une API interne qui jette ne doit pas emporter le repli avec elle.
+
+	   Sorti de l'objet `links` pour être partagé par `resolve` ET
+	   `resourceUrl` : le contrat impose à `resourceUrl` de RÉSOUDRE avant de
+	   convertir, et deux résolutions écrites séparément divergent. Rend le
+	   `TFile`, pas un `HostFile` : `getResourcePath` en a besoin. */
+	function resoudreTFile(linkPath: string, fromPath: string): TFile | null {
+		const raw = String(linkPath ?? "").trim();
+		if (!raw) return null;
+
+		try {
+			if (app.metadataCache?.getFirstLinkpathDest) {
+				const f = app.metadataCache.getFirstLinkpathDest(raw, fromPath || "");
+				if (f) return f;
+			}
+		} catch (e) {
+			console.warn("[Quiz] resolve (metadataCache) erreur:", e);
+		}
+
+		try {
+			const f2 = asTFile(app.vault?.getAbstractFileByPath?.(raw));
+			if (f2) return f2;
+		} catch (e) {
+			console.warn("[Quiz] resolve (getAbstractFileByPath) erreur:", e);
+		}
+
+		return null;
+	}
+
 	const links: Host["links"] = {
-		/* Ordre repris tel quel de `engine/sanitizer.ts` : le `metadataCache`
-		   d'abord (il seul comprend « schema.png » écrit depuis n'importe quelle
-		   note), le chemin nu ensuite. Les deux appels sont gardés séparément :
-		   une API interne qui jette ne doit pas emporter le repli avec elle. */
 		resolve(linkPath, fromPath) {
-			const raw = String(linkPath ?? "").trim();
-			if (!raw) return null;
-
-			try {
-				if (app.metadataCache?.getFirstLinkpathDest) {
-					const f = app.metadataCache.getFirstLinkpathDest(raw, fromPath || "");
-					if (f) return toHostFile(f);
-				}
-			} catch (e) {
-				console.warn("[Quiz] resolve (metadataCache) erreur:", e);
-			}
-
-			try {
-				const f2 = asTFile(app.vault?.getAbstractFileByPath?.(raw));
-				if (f2) return toHostFile(f2);
-			} catch (e) {
-				console.warn("[Quiz] resolve (getAbstractFileByPath) erreur:", e);
-			}
-
-			return null;
+			const f = resoudreTFile(linkPath, fromPath);
+			return f ? toHostFile(f) : null;
 		},
-		/* `null` et JAMAIS la chaîne vide : un `src=""` fait recharger la page
+		/* « RÉSOUT puis convertit » (src/host/types.ts) : une chaîne passe par
+		   `resoudreTFile` et rend `null` si rien ne correspond. L'ancien code
+		   servait `adapter().getResourcePath(chemin)` sans rien vérifier — il
+		   ne rendait donc JAMAIS `null` pour une chaîne non vide, ce qui
+		   rendait morte la branche « chemin non résoluble » de son unique
+		   appelant (`src/engine/cards.ts`) et laissait cassé un nom nu
+		   (« schema.png ») référencé depuis un sous-dossier.
+
+		   `null` et JAMAIS la chaîne vide : un `src=""` fait recharger la page
 		   courante comme image — requête inutile et image cassée. */
 		resourceUrl(target) {
 			try {
-				if (typeof target !== "string") {
-					const f = tfile(target.path);
-					return (f && app.vault.getResourcePath(f)) || null;
-				}
-				const chemin = target.trim();
-				if (!chemin) return null;
-				return adapter().getResourcePath(chemin) || null;
+				const f = typeof target === "string"
+					? resoudreTFile(target, "")
+					: tfile(target.path);
+				return (f && app.vault.getResourcePath(f)) || null;
 			} catch (e) {
 				console.warn("[Quiz] resourceUrl erreur:", e);
 				return null;

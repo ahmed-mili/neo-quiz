@@ -19,8 +19,8 @@
    sans aucune erreur en console. L'ordre ci-dessous est celui qu'imprime le
    script.
 
-   Trois entrées ne sont PAS des relevés ; chacune le dit sur place :
-   `--code-border` (vide même dans Obsidian) et les deux `*-ring-16`.
+   Une seule entrée n'est PAS un relevé, et elle le dit sur place :
+   `--code-border`, vide même dans l'Obsidian d'Ahmed.
    ========================================================= */
 
 :root {
@@ -60,15 +60,6 @@
 	/* Triplet SANS rgb() : consommé par des rgba(var(--…), .2). */
 	--interactive-accent-rgb: 101,143,242;
 	--interactive-normal: rgb(49, 50, 68);
-	/* CHOISIES, pas relevées. --quiz-success-ring-16 et --quiz-danger-ring-16
-	   sont référencées SANS repli par button-press.css:86,90 et définies nulle
-	   part — y compris dans Obsidian, où elles sont vides. C'est une DETTE DU
-	   GREFFON, antérieure à ce chantier, à trancher dans tokens.css et pas ici.
-	   En attendant, on complète la famille des anneaux sur le même patron que
-	   --quiz-primary-ring-16 (tokens.css:70, 18 % dans du transparent), pour
-	   que l'app n'ait pas d'anneau invisible sur les onglets juste/faux. */
-	--quiz-danger-ring-16: color-mix(in srgb, var(--quiz-danger) 18%, transparent);
-	--quiz-success-ring-16: color-mix(in srgb, var(--quiz-success) 18%, transparent);
 	--radius-l: 12px;
 	--radius-m: 8px;
 	--radius-s: 4px;

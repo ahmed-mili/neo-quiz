@@ -75,11 +75,19 @@ body{
   --quiz-primary-glow-40: color-mix(in srgb, var(--quiz-primary) 24%, transparent);
 
   --quiz-success-ring-14: color-mix(in srgb, var(--quiz-success) 10%, transparent);
+  /* `-16` était référencé par components/button-press.css SANS repli et
+     n'était déclaré nulle part : l'anneau de l'onglet juste résolvait au vide
+     dans TOUS les hôtes, Obsidian compris. Même forme que
+     --quiz-primary-ring-16 (18 % dans du transparent). */
+  --quiz-success-ring-16: color-mix(in srgb, var(--quiz-success) 18%, transparent);
   --quiz-success-ring-20: color-mix(in srgb, var(--quiz-success) 22%, transparent);
   --quiz-success-ring-22: color-mix(in srgb, var(--quiz-success) 26%, transparent);
   --quiz-success-glow-38: color-mix(in srgb, var(--quiz-success) 20%, transparent);
 
   --quiz-danger-ring-14: color-mix(in srgb, var(--quiz-danger) 10%, transparent);
+  /* Même correctif que --quiz-success-ring-16 ci-dessus : l'anneau de
+     l'onglet faux résolvait au vide faute de déclaration. */
+  --quiz-danger-ring-16: color-mix(in srgb, var(--quiz-danger) 18%, transparent);
   --quiz-danger-ring-20: color-mix(in srgb, var(--quiz-danger) 22%, transparent);
   --quiz-danger-ring-22: color-mix(in srgb, var(--quiz-danger) 26%, transparent);
   --quiz-danger-glow-38: color-mix(in srgb, var(--quiz-danger) 20%, transparent);

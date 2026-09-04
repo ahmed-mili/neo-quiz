@@ -259,6 +259,14 @@ entier aurait décoloré 594 fragments des quiz d'Ahmed. Mesurer avant de tranch
 
 ## Conventions & pièges
 
+- **Le PRODUIT s'appelle « Neo Quiz », le FORMAT s'appelle `quiz-blocks`.** Le nom
+  affiché vit dans `src/branding.ts` (`PRODUCT_NAME`, `LOG_PREFIX`) — seule source,
+  il était en dur à sept endroits avant. Deux valeurs ne le suivent JAMAIS, et les
+  renommer « par cohérence » détruirait des données :
+  `PLUGIN_ID = "quiz-blocks"` est le dossier de `.obsidian/plugins/`, où vivent les
+  réglages **et le journal de révision** ; `QUIZ_BLOCK_LANGUAGE = "quiz-blocks"` est
+  écrit dans **chaque note du vault**. C'est le rapport entre Obsidian et `.md`.
+
 - **`manifest.json` vit dans `src/assets/`, pas à la racine** (inhabituel pour un plugin
   Obsidian). La version **réelle** est celle de `src/assets/manifest.json`, bumpée par
   `release.yml` depuis le tag git. La version de `package.json` est statique et ignorée.

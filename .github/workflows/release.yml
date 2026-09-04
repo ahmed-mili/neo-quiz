@@ -1,4 +1,4 @@
-name: Release Quiz Blocks
+name: Release Neo Quiz
 
 on:
   push:

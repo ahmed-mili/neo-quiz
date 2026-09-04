@@ -26,6 +26,9 @@ const OBSIDIAN_STUB = [
 	"export const requestUrl = () => nope('requestUrl');",
 	"export const MarkdownRenderer = {};",
 	"export const loadPdfJs = () => nope('loadPdfJs');",
+	"export const loadMathJax = () => nope('loadMathJax');",
+	"export const renderMath = () => nope('renderMath');",
+	"export const finishRenderMath = () => nope('finishRenderMath');",
 ].join("\n");
 
 /**

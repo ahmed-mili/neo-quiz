@@ -18,6 +18,8 @@ import type {
 	WorkspaceLeaf,
 } from "obsidian";
 
+import { createObsidianHost } from "./host";
+import { installHost, uninstallHost } from "../../src/host/current";
 import { parseQuizSource, renderInteractiveQuiz } from "../../src/engine";
 import { QuizBuilderView, VIEW_TYPE } from "../../src/editor";
 import { QUIZ_BLOCK_RE, findQuizModeConfigIndex } from "../../src/quiz-utils";
@@ -1060,6 +1062,12 @@ export default class InteractiveQuizPlugin extends Plugin {
 	_ribbonEl: HTMLElement | null = null;
 
 	async onload(): Promise<void> {
+		/* L'hôte s'installe en TOUT PREMIER : le moteur, le scanner et le
+		   rendu mathématique le lisent par `currentHost()`, qui jette si rien
+		   n'est installé. Une installation tardive ne produirait pas un rendu
+		   dégradé mais une exception au premier quiz. */
+		installHost(createObsidianHost(this.app));
+
 		await this.loadSettings();
 		this.log = createLogger();
 
@@ -1198,6 +1206,10 @@ export default class InteractiveQuizPlugin extends Plugin {
 		// resterait orphelin dans le DOM avec ses closures mortes.
 		try { closeAllSelects(); } catch (e) { /* best effort */ }
 		this.log?.info("plugin déchargé");
+		/* En DERNIER : tout ce qui précède peut encore avoir besoin de l'hôte.
+		   Sans ce retrait, un rechargement du greffon laisserait un hôte pointant
+		   vers une `App` morte, et le suivant croirait avoir un hôte valide. */
+		uninstallHost();
 	}
 
 	async loadSettings(): Promise<void> {

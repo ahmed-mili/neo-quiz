@@ -15,6 +15,21 @@
 import JSON5 from "json5";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
+// Installer un hôte minimal avant d'appeler le moteur (tâche 4).
+await withSrcModule("src/host/current.ts", ({ installHost }) => {
+	const fakeHost = {
+		fs: { read: async () => "", readCached: async () => "", write: async () => {}, exists: async () => false, mkdirs: async () => {}, listMarkdown: () => [], findByName: () => [], getFile: () => null },
+		links: { resolve: () => null, resourceUrl: () => null },
+		watcher: { onChange: () => () => {} },
+		ui: { notice: () => {}, setIcon: () => {} },
+		math: { ready: async () => {}, render: () => document.createElement("div"), flush: () => {} },
+		shell: { openExternal: async () => false, revealInHost: async () => false },
+		platform: { isMobile: false, isMacOS: false, uiLanguage: "en" },
+		paths: { resultsDir: ".results" }
+	};
+	installHost(fakeHost);
+});
+
 await withSrcModule("src/quiz-utils.ts", ({ parseQuizSource, extractExamOptions }) => {
 	const r = makeReporter("Renommage lesson — mode");
 	const modeOf = (source) => extractExamOptions(parseQuizSource(source)).quizMode;
@@ -1228,7 +1243,11 @@ await withSrcModule("src/engine/state.ts", (state) => {
 				// Le vrai goToResults (Task 8) lit recorded[i] avant tout appel au puits.
 				recorded: [false]
 			},
-			Notice: class { constructor(msg) { notices.push(msg); } },
+			// Hôte minimal (tâche 4) : le moteur appelle host.ui.notice via ctx.host.
+			host: {
+				ui: { notice: (msg) => notices.push(msg), setIcon: () => {} },
+				fs: {}, links: {}, watcher: {}, math: {}, shell: {}, platform: {}, paths: {}
+			},
 			updateNavHighlight() {},
 			setSlidingClass() {},
 			warmSlideForAccurateHeight: () => Promise.resolve(),

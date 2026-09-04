@@ -39,6 +39,7 @@
  */
 
 import type { Host } from "../host/types";
+import type { App } from "obsidian";
 import type {
 	QuizQuestion,
 	QuizState,
@@ -110,11 +111,8 @@ export interface EngineCtx {
 	container: HTMLElement;
 	sourcePath: string;
 	/** L'instance Obsidian App. Accès direct pour les appels non encore portés sur host.
-	    Temporaire : les tâches 5 et 6 vont le retirer en passant app.vault, app.workspace, etc. via host. */
-	app?: any;
-	/** L'instance Obsidian Plugin. Accès direct pour les appels non encore portés sur host.
-	    Temporaire : les tâches 5 et 6 vont le retirer en passant plugin.* via host. */
-	plugin?: any;
+	    Reste jusqu'à la tâche 5, qui porte cards, sanitizer, resources et results-save sur le contrat. */
+	app: App;
 	quiz: QuizQuestion[];
 	/**
 	 * Identité des questions pour l'ordonnanceur. La MÊME règle qu'à l'écriture

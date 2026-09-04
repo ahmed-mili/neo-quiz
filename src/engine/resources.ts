@@ -29,7 +29,7 @@ export function createResourceHandlers(ctx: EngineCtx): ResourceHandlers {
 	function findVaultFilesByExactName(fileName: string): TFile[] {
 		const target = String(fileName ?? "").trim().toLowerCase();
 		if (!target || typeof ctx.app === "undefined" || !ctx.app?.vault?.getFiles) return [];
-		return ctx.app.vault.getFiles().filter((f: any) => String(f?.name ?? "").trim().toLowerCase() === target);
+		return ctx.app.vault.getFiles().filter(f => String(f?.name ?? "").trim().toLowerCase() === target);
 	}
 
 	async function revealFileInObsidianExplorer(file: TFile | null | undefined): Promise<boolean> {

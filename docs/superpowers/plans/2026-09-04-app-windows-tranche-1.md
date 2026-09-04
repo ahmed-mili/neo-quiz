@@ -570,11 +570,15 @@ Ajouter à `package.json`, dans `scripts`, après `"check:scheduler"` :
 ```
 
 Lancer `npm run check:host`.
-Attendu : `Frontière d'hôte : 49 fichier(s) encore lié(s) à Obsidian, tous déclarés.`
+Attendu : `Frontière d'hôte : 51 fichier(s) encore lié(s) à Obsidian, tous déclarés.`
 
 Si le compte diffère, c'est que `RESTANTS` ne reflète pas le dépôt : régénérer
-la liste avec `grep -rl 'from "obsidian"' src/ | sort` et la recopier, sans
-jamais retirer une entrée qui importe réellement.
+la liste avec le MÊME motif que le script (`from "obsidian"` OU
+`require("obsidian")` — `src/engine/mathjax.ts` n'a que le second) et la
+recopier, sans jamais retirer une entrée qui importe réellement.
+`src/main.ts` n'y figure PAS : il ne contient qu'un `export { default } from
+"./plugin"` et n'importe rien d'Obsidian. L'y mettre ferait échouer l'assertion
+2 en permanence.
 
 - [ ] **Étape 5 : ÉPROUVER les trois assertions (chacune doit rougir)**
 
@@ -649,8 +653,8 @@ build.
 - Déplacer : `src/plugin.ts` → `apps/obsidian/plugin.ts`
 - Modifier : `esbuild.config.mjs` (entrée)
 - Modifier : `tsconfig.json` (`include`)
-- Modifier : `scripts/check-host.mjs` (`RESTANTS` : deux entrées deviennent des
-  chemins `apps/`, donc **sortent** de la liste)
+- Modifier : `scripts/check-host.mjs` (`RESTANTS` : `src/plugin.ts` devient un
+  chemin `apps/`, donc **sort** de la liste)
 
 **Interfaces :**
 - Consomme : `check:host` de la tâche 1.
@@ -712,8 +716,9 @@ Remplacer la ligne `include` par :
 
 - [ ] **Étape 5 : mettre à jour le cliquet**
 
-Dans `scripts/check-host.mjs`, retirer de `RESTANTS` les deux lignes
-`"src/main.ts",` et `"src/plugin.ts",`. Elles ne sont plus dans `src/` ; le
+Dans `scripts/check-host.mjs`, retirer de `RESTANTS` la ligne
+`"src/plugin.ts",` (`src/main.ts` n'y a jamais figuré : il n'importe rien
+d'Obsidian). Elle n'est plus dans `src/` ; le
 contrôle ne balaie que `src/` et `apps/windows/src/`, donc `apps/obsidian/` est
 hors zone par construction — c'est exactement ce que la spec §4 demande.
 
@@ -724,7 +729,7 @@ npm run check
 npm run check:host
 npm run build
 ```
-Attendu : `tsc` sans erreur ; `Frontière d'hôte : 47 fichier(s) …` ;
+Attendu : `tsc` sans erreur ; `Frontière d'hôte : 50 fichier(s) …` ;
 `Build terminé.` avec `main.js copié dans N vault(s).`
 
 Puis **test manuel dans Obsidian** : redémarrer Obsidian, ouvrir une note
@@ -1045,7 +1050,7 @@ Ajouter à `package.json` :
 npm run check && npm run check:host && npm run check:obsidian-host && npm run build
 grep -rn 'Ă\|Â\|â€' apps/obsidian/ scripts/check-obsidian-host.mjs
 ```
-Attendu : tout vert, `grep` vide. `check:host` annonce toujours 47 fichiers —
+Attendu : tout vert, `grep` vide. `check:host` annonce toujours 50 fichiers —
 rien n'a encore migré, c'est normal.
 
 **Test manuel dans Obsidian** : redémarrer, jouer un quiz, ouvrir le tableau de
@@ -1245,7 +1250,7 @@ Attendu : `ÉCHEC  src/engine/math-input.ts n'importe plus « obsidian » : reti
 
 C'est le cliquet qui fonctionne. Retirer la ligne `"src/engine/math-input.ts",`
 de `RESTANTS`, relancer.
-Attendu : `Frontière d'hôte : 46 fichier(s) …`
+Attendu : `Frontière d'hôte : 49 fichier(s) …`
 
 - [ ] **Étape 7 : ÉPROUVER que la garde retirée ne peut pas revenir**
 
@@ -1538,7 +1543,7 @@ Attendu : des ÉCHECS « n'importe plus obsidian » pour `src/engine.ts`,
 `src/engine/resources.ts`, `src/engine/results-save.ts`,
 `src/engine/sanitizer.ts` et `src/types/engine-ctx.ts`. Les retirer de
 `RESTANTS`, relancer.
-Attendu : `Frontière d'hôte : 41 fichier(s) …`. `src/engine/mathjax.ts` reste —
+Attendu : `Frontière d'hôte : 44 fichier(s) …`. `src/engine/mathjax.ts` reste —
 c'est la tâche 6.
 
 ```bash
@@ -1758,7 +1763,7 @@ npm run check:host
 ```
 Attendu : `ÉCHEC  src/engine/mathjax.ts n'importe plus « obsidian » …`.
 Retirer l'entrée, relancer.
-Attendu : `Frontière d'hôte : 40 fichier(s) …` — **plus aucun fichier de
+Attendu : `Frontière d'hôte : 43 fichier(s) …` — **plus aucun fichier de
 `src/engine/` ni `src/engine.ts`**.
 
 - [ ] **Étape 6 : ÉPROUVER deux cas**
@@ -1976,7 +1981,7 @@ npm run check && npm run check:host
 ```
 Attendu : `ÉCHEC  src/dashboard/scanner.ts n'importe plus « obsidian » …`.
 Retirer l'entrée, relancer.
-Attendu : `Frontière d'hôte : 39 fichier(s) …`
+Attendu : `Frontière d'hôte : 42 fichier(s) …`
 
 ```bash
 npm run check:review-store && npm run check:engine-review && npm run check:module-edit
@@ -2539,7 +2544,7 @@ Redimensionner la fenêtre, la déplacer, la fermer, relancer : elle doit reveni
 npm run check && npm run check:host && npm run check:obsidian-host && npm run build
 grep -rn 'Ă\|Â\|â€' apps/windows/src src/i18n src/i18n.ts
 ```
-Attendu : tout vert, `Frontière d'hôte : 39 fichier(s) …` (inchangé),
+Attendu : tout vert, `Frontière d'hôte : 42 fichier(s) …` (inchangé),
 `grep` sans résultat.
 
 **Test manuel dans Obsidian** : le tableau de bord s'ouvre, la langue est
@@ -3190,7 +3195,7 @@ npm run check && npm run check:host && npm run check:theme \
 grep -rn 'Ă\|Â\|â€' apps/windows/src scripts/check-windows-host.mjs
 ```
 
-`check:host` doit toujours dire 39 fichiers, et surtout **ne rien signaler sous
+`check:host` doit toujours dire 42 fichiers, et surtout **ne rien signaler sous
 `apps/windows/`** : l'assertion 3 le garde.
 
 **Essai dans l'app** (`npm run app:dev`) : au premier lancement, l'écran vide
@@ -3608,7 +3613,7 @@ tranche 1 aura apprises, exactement ce que la spec §9 annonçait.
   tableau de bord, ne sont pas rencontrés par cette tranche (spec §8).
 - **L'empaquetage et la mise à jour** : `npm run app:build` produit un
   installeur NSIS, sans signature ni `AppUpdater`. Spec §8, à trancher.
-- **39 fichiers restent dans la liste du cliquet** — tout le tableau de bord,
+- **42 fichiers restent dans la liste du cliquet** — tout le tableau de bord,
   tout l'éditeur, et cinq modules du greffon. C'est le programme des tranches 2
   à 4, et `npm run check:host` en donne l'état exact à tout moment.
 

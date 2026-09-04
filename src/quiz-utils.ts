@@ -320,10 +320,16 @@ export function pickLessonFields(q: LessonFieldsSource): { text?: string; html?:
 	};
 }
 
+/* DOM standard, PAS `container.createEl()` : cette extension est posée sur
+   `HTMLElement` par Obsidian et n'existe pas dans l'application Windows, où
+   cette fonction est pourtant bundlée — elle y aurait planté si on l'avait
+   atteinte. Aucun `import` ne trahit ce genre de dépendance : c'est le
+   typecheck de l'app, pas `check:host`, qui la détecte. */
 function renderParagraph(container: HTMLElement, text?: string | null): HTMLParagraphElement {
-	return container.createEl("p", {
-		text: String(text ?? "")
-	});
+	const p = document.createElement("p");
+	p.textContent = String(text ?? "");
+	container.append(p);
+	return p;
 }
 
 /* Premier bloc ```quiz-blocks``` d'une note — groupe 1 = la source JSON5.

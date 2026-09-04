@@ -407,3 +407,74 @@ export interface StatsRecord {
 	questionsDone: number;
 	totalQuestions: number;
 }
+
+/**
+ * Question brute telle que lue du JSON5 (parseQuizSource) ou d'un marqueur
+ * mode-examen. Forme volontairement permissive (index signature) : l'import
+ * lit des champs hétérogènes et préserve les clés inconnues (_extraFields).
+ */
+export interface ParsedQuizItem {
+	[key: string]: unknown;
+	examMode?: boolean;
+	/** Raccourci hérité de `mode: "learn"` (renommé "lesson", quiz-utils.ts) —
+	    lu en repli, jamais écrit : aucun raccourci équivalent pour "lesson". */
+	learnMode?: boolean;
+	/** Mode du bloc : « quiz » | « lesson » | « exam » (ou l'alias hérité
+	    « learn », lu en repli). Marqueur de l'objet de configuration. */
+	mode?: string;
+	examDurationMinutes?: number;
+	examAutoSubmit?: boolean;
+	examShowTimer?: boolean;
+	ordering?: unknown;
+	matching?: unknown;
+	multiSelect?: boolean;
+	type?: string;
+	terminalVariant?: string;
+	textVariant?: string;
+	id?: string;
+	title?: string;
+	hint?: string;
+	prompt?: string;
+	promptHtml?: string;
+	explain?: string;
+	explainHtml?: string;
+	/** Contenu "Leçon" (mode "lesson", renommé depuis "learn") — nom canonique. */
+	lesson?: string;
+	lessonHtml?: string;
+	_lessonHtml?: string;
+	/** Alias hérités de "learn" : lus en repli par editor/convert.ts, jamais
+	    réécrits (editor/export.ts). */
+	learn?: string;
+	learnHtml?: string;
+	_learnHtml?: string;
+	resourceButton?: ResourceButton;
+	options?: string[];
+	correctIndex?: number;
+	correctIndices?: number[];
+	slots?: string[];
+	possibilities?: string[];
+	correctOrder?: number[];
+	rows?: string[];
+	choices?: string[];
+	correctMap?: number[];
+	/** Gabarit du texte à trous (engine/cloze.ts). */
+	cloze?: string;
+	/** Réponse numérique et ses marges (engine/numeric.ts). */
+	numeric?: boolean;
+	tolerance?: number;
+	tolerancePercent?: number;
+	unit?: string;
+	/** Boucle d'apprentissage (mode "lesson", task 1 du lot mode leçon,
+	    2026-08-31) — cf. types/quiz.ts QuestionBase.slice/.role. Type large
+	    (`string`, pas `QuestionRole`) : c'est la forme BRUTE lue dans la note,
+	    pas encore validée — cette étape a lieu à l'écriture (editor/export.ts). */
+	slice?: number;
+	role?: string;
+	acceptedAnswers?: string[];
+	acceptableAnswers?: string[];
+	correctText?: unknown;
+	answer?: unknown;
+	caseSensitive?: boolean;
+	placeholder?: string;
+	commandPrefix?: string;
+}

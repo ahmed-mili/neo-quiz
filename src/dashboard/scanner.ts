@@ -1,4 +1,4 @@
-import type { ParsedQuizItem } from "../editor/modals";
+import type { ParsedQuizItem } from "../types/quiz";
 import { idsForRawItems } from "../quiz-ids";
 import { extractExamOptions, parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-utils";
 import { QUESTION_ROLES } from "../types/quiz";

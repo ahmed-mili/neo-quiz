@@ -30,6 +30,70 @@ fn allow_folder(app: tauri::AppHandle, chemin: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Un vault Obsidian connu de la machine.
+#[derive(serde::Serialize)]
+struct VaultConnu {
+    chemin: String,
+    nom: String,
+}
+
+/// Les vaults qu'Obsidian connaît sur cette machine.
+///
+/// Obsidian tient leur liste dans `%APPDATA%/obsidian/obsidian.json`. La lire
+/// EN RUST plutôt que depuis le frontend n'est pas un caprice : la portée du
+/// greffon `fs` ne couvre que le dossier choisi par l'utilisateur, et l'ouvrir
+/// jusqu'au dossier de configuration d'Obsidian pour lire un seul fichier
+/// donnerait à la fenêtre bien plus de droits qu'elle n'en a besoin.
+///
+/// Un vault dont le dossier a disparu est ÉCARTÉ : le proposer mènerait à une
+/// liste de quiz vide sans que rien n'explique pourquoi. Une liste vide est
+/// donc un état normal — pas une erreur — et le frontend n'affiche alors que
+/// le sélecteur natif.
+#[tauri::command]
+fn obsidian_vaults() -> Vec<VaultConnu> {
+    let Some(base) = dirs_appdata() else {
+        return Vec::new();
+    };
+    let fichier = base.join("obsidian").join("obsidian.json");
+    let Ok(texte) = std::fs::read_to_string(&fichier) else {
+        return Vec::new();
+    };
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(&texte) else {
+        return Vec::new();
+    };
+    let mut trouves = Vec::new();
+    if let Some(vaults) = json.get("vaults").and_then(|v| v.as_object()) {
+        for (_, v) in vaults {
+            let Some(chemin) = v.get("path").and_then(|p| p.as_str()) else {
+                continue;
+            };
+            let p = std::path::Path::new(chemin);
+            // Le dossier doit exister ET porter un `.obsidian` : un chemin
+            // encore listé après un déplacement n'est plus un vault.
+            if !p.join(".obsidian").is_dir() {
+                continue;
+            }
+            let nom = p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(chemin)
+                .to_string();
+            trouves.push(VaultConnu {
+                chemin: chemin.to_string(),
+                nom,
+            });
+        }
+    }
+    trouves.sort_by(|a, b| a.nom.to_lowercase().cmp(&b.nom.to_lowercase()));
+    trouves
+}
+
+/// `%APPDATA%` (Roaming). `std::env::var` suffit : Tauri n'expose que le
+/// dossier de données de l'APPLICATION, pas celui d'un autre logiciel.
+fn dirs_appdata() -> Option<std::path::PathBuf> {
+    std::env::var_os("APPDATA").map(std::path::PathBuf::from)
+}
+
 /// Point d'entrée de l'application.
 ///
 /// Les greffons servent le frontend : `fs` (index et lecture des notes),
@@ -44,7 +108,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![allow_folder])
+        .invoke_handler(tauri::generate_handler![allow_folder, obsidian_vaults])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de l'application Tauri");
 }

@@ -9,7 +9,7 @@ import type { QuizIndexEntry, Scanner } from "../../../src/dashboard/scanner";
 import { currentHost, installHost } from "../../../src/host/current";
 import { createWindowsHost, createWindowsIndex } from "./host";
 import { poserIcone } from "./host/ui";
-import { allowFolder, pickFolder, saveFolder, savedFolder } from "./host/folder";
+import { allowFolder, estVaultObsidian, obsidianVaults, pickFolder, saveFolder, savedFolder } from "./host/folder";
 import { renderList } from "./ui/list";
 import { openQuizPage } from "./ui/quiz-page";
 
@@ -83,10 +83,22 @@ async function ouvrirQuiz(root: HTMLElement, scanner: Scanner, entry: QuizIndexE
 async function changerDossier(): Promise<boolean> {
 	const choix = await pickFolder();
 	if (!choix) return false;
-	await saveFolder(choix);
-	await allowFolder(choix);
-	location.reload();
+	await choisirDossier(choix);
 	return true;
+}
+
+/**
+ * Retient un dossier et repart dessus.
+ *
+ * Le rechargement plutôt qu'un remontage à chaud : l'hôte est un singleton
+ * installé une seule fois, et repartir de zéro est la façon la plus honnête
+ * d'en obtenir un neuf. Un second `installHost` laisserait le premier index et
+ * son surveillant vivants, sur l'ancien dossier.
+ */
+async function choisirDossier(chemin: string): Promise<void> {
+	await saveFolder(chemin);
+	await allowFolder(chemin);
+	location.reload();
 }
 
 /**
@@ -113,12 +125,25 @@ function mountSansDossier(root: HTMLElement): void {
 	ajouter(ecran, "h1", "nq-accueil-titre", t("app.empty.title"));
 	ajouter(ecran, "p", "nq-accueil-texte", t("app.empty.body"));
 
-	/* Le bouton reprend la pilule du tableau de bord : deux apparences pour le
-	   même geste donneraient deux produits. */
+	/* Les vaults d'Obsidian, s'il y en a : les proposer d'un clic évite de
+	   faire naviguer l'utilisateur jusqu'à un dossier qu'il ouvre tous les
+	   jours. La liste arrive de façon asynchrone et s'insère AVANT le bouton —
+	   l'écran reste utilisable pendant ce temps, le sélecteur natif étant déjà
+	   là. Une liste vide est un état NORMAL (pas d'Obsidian sur la machine). */
+	const listeVaults = ajouter(ecran, "div", "nq-accueil-vaults");
+
 	const bouton = ajouter(ecran, "button", "qbd-btn qbd-btn--create");
 	bouton.type = "button";
 	poserIcone(ajouter(bouton, "span", "qbd-btn-icon"), "folder-open");
 	bouton.appendChild(document.createTextNode(t("app.empty.pickFolder")));
+
+	function echouer(e: unknown): void {
+		/* La cause est NOMMÉE, jamais résumée : cet écran est le seul endroit
+		   où l'utilisateur peut lire pourquoi le démarrage a échoué. */
+		ecran.replaceChildren();
+		ajouter(ecran, "p", "nq-accueil-erreur",
+			t("app.error.startup", { error: e instanceof Error ? e.message : String(e) }));
+	}
 
 	bouton.addEventListener("click", () => {
 		void (async () => {
@@ -127,17 +152,36 @@ function mountSansDossier(root: HTMLElement): void {
 				// Annulation : ce n'est pas une erreur, l'écran reste tel quel.
 				await changerDossier();
 			} catch (e) {
-				/* La cause est NOMMÉE, jamais résumée : cet écran est le seul
-				   endroit où l'utilisateur peut lire pourquoi le démarrage a
-				   échoué. */
-				ecran.replaceChildren();
-				ajouter(ecran, "p", "nq-accueil-erreur",
-					t("app.error.startup", { error: e instanceof Error ? e.message : String(e) }));
+				echouer(e);
 			} finally {
 				bouton.disabled = false;
 			}
 		})();
 	});
+
+	void (async () => {
+		const vaults = await obsidianVaults();
+		if (vaults.length === 0) return;
+		ajouter(listeVaults, "p", "nq-accueil-vaults-titre", t("app.empty.yourVaults"));
+		for (const v of vaults) {
+			const ligne = ajouter(listeVaults, "button", "nq-vault");
+			ligne.type = "button";
+			poserIcone(ajouter(ligne, "span", "nq-vault-icone"), "library");
+			const texte = ajouter(ligne, "span", "nq-vault-texte");
+			// `textContent` : un nom de dossier vient du disque de l'utilisateur.
+			ajouter(texte, "span", "nq-vault-nom", v.nom);
+			ajouter(texte, "span", "nq-vault-chemin", v.chemin);
+			ligne.addEventListener("click", () => {
+				void (async () => {
+					try {
+						await choisirDossier(v.chemin);
+					} catch (e) {
+						echouer(e);
+					}
+				})();
+			});
+		}
+	})();
 }
 
 async function demarrer(): Promise<void> {
@@ -154,8 +198,12 @@ async function demarrer(): Promise<void> {
 		   sont DEUX (fichiers et protocole d'asset) — voir `allow_folder` dans
 		   `src-tauri/src/lib.rs`. */
 		await allowFolder(racine);
+		/* APRÈS `allowFolder` : sans la portée, la détection échoue. Elle décide
+		   où vont les résultats — dans un vault, à l'endroit où le greffon les
+		   écrit déjà, pour que les deux hôtes n'aient pas chacun leur moitié. */
+		const estVault = await estVaultObsidian(racine);
 		const index = await createWindowsIndex(racine);
-		installHost(createWindowsHost(racine, index));
+		installHost(createWindowsHost(racine, index, estVault));
 		/* Le scanner PARTAGÉ, sur l'hôte Windows : c'est lui qui décide ce
 		   qu'est un quiz, sous Obsidian comme ici. `init()` branche le
 		   surveillant PUIS scanne, dans cet ordre — l'inverse manquerait les

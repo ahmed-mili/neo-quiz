@@ -8,6 +8,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { exists } from "@tauri-apps/plugin-fs";
 import { load } from "@tauri-apps/plugin-store";
 import type { Store } from "@tauri-apps/plugin-store";
 import { LOG_PREFIX } from "../../../../src/branding";
@@ -71,4 +72,52 @@ export async function saveFolder(chemin: string): Promise<void> {
  */
 export async function allowFolder(chemin: string): Promise<void> {
 	await invoke("allow_folder", { chemin });
+}
+
+/** Un vault Obsidian connu de la machine. */
+export interface VaultConnu {
+	chemin: string;
+	nom: string;
+}
+
+/**
+ * Les vaults qu'Obsidian connaît sur cette machine, pour les proposer d'un
+ * clic plutôt que de faire naviguer l'utilisateur dans le sélecteur natif.
+ *
+ * La lecture se fait EN RUST (`obsidian_vaults`) : le fichier vit dans le
+ * dossier de configuration d'Obsidian, hors de la portée du greffon `fs`, et
+ * l'y étendre donnerait à la fenêtre bien plus de droits que nécessaire.
+ *
+ * Une liste vide est un état NORMAL — Obsidian n'est pas installé, ou aucun
+ * de ses vaults n'existe plus. L'écran n'affiche alors que le sélecteur.
+ */
+export async function obsidianVaults(): Promise<VaultConnu[]> {
+	try {
+		return await invoke<VaultConnu[]>("obsidian_vaults");
+	} catch (e) {
+		console.warn(LOG_PREFIX, "liste des vaults Obsidian illisible:", e);
+		return [];
+	}
+}
+
+/**
+ * Le dossier est-il un vault Obsidian ?
+ *
+ * La question n'est pas cosmétique : elle décide OÙ vont les résultats de quiz.
+ * Dans un vault, le greffon écrit déjà dans `.obsidian/quiz-blocks-results` ;
+ * l'application doit y écrire aussi, sinon les deux hôtes tiennent chacun leur
+ * moitié de l'historique sur le même corpus. Hors d'un vault, il n'y a pas de
+ * `.obsidian/` et les résultats vont dans `.neo-quiz/`.
+ *
+ * À appeler APRÈS `allowFolder` : sans la portée, `exists` échoue.
+ */
+export async function estVaultObsidian(racine: string): Promise<boolean> {
+	try {
+		return await exists(`${racine.replace(/[\/]+$/, "")}/.obsidian`);
+	} catch (e) {
+		// Dossier illisible : on le traite comme un dossier ordinaire plutôt
+		// que d'empêcher son ouverture.
+		console.warn(LOG_PREFIX, "détection du vault impossible:", e);
+		return false;
+	}
 }

@@ -24,7 +24,7 @@ import { createWindowsUi } from "./ui";
 export { createWindowsIndex } from "./fs";
 export type { WindowsIndex } from "./fs";
 
-export function createWindowsHost(racine: string, index: WindowsIndex): Host {
+export function createWindowsHost(racine: string, index: WindowsIndex, estVault = false): Host {
 	const shell: Host["shell"] = {
 		/* `openPath` de plugin-opener : l'application par défaut du système,
 		   exactement comme `app.openWithDefaultApp` sous Obsidian. Le contrat
@@ -67,15 +67,17 @@ export function createWindowsHost(racine: string, index: WindowsIndex): Host {
 	};
 
 	const paths: Host["paths"] = {
-		/* `.neo-quiz/results` et non `.obsidian/…` : un dossier de quiz n'est pas
-		   forcément un vault, et écrire dans `.obsidian` d'un dossier qui n'en a
-		   pas créerait un dossier de configuration Obsidian fantôme. C'est aussi
-		   l'emplacement où la TRANCHE 2 mettra le journal de révision (spec §5) —
-		   le préfixe est posé ici, la migration ne l'est pas.
-		   Côté Obsidian, `paths.resultsDir` reste `.obsidian/quiz-blocks-results`
-		   et NE CHANGE PAS : les résultats déjà écrits doivent rester
-		   trouvables. */
-		resultsDir: ".neo-quiz/results",
+		/* OÙ VONT LES RÉSULTATS — la réponse dépend du dossier, pas de l'hôte.
+		   Dans un VAULT, le greffon écrit déjà dans
+		   `.obsidian/quiz-blocks-results` ; l'application doit y écrire AUSSI,
+		   sinon les deux hôtes tiennent chacun leur moitié de l'historique sur
+		   le même corpus, et rien ne le signale — c'est exactement le défaut que
+		   la spec §5 décrit pour le journal de révision.
+		   Hors d'un vault il n'y a pas de `.obsidian/`, et en créer un serait
+		   poser un dossier de configuration Obsidian fantôme dans un dossier
+		   que l'utilisateur n'a jamais ouvert avec Obsidian. C'est aussi le
+		   préfixe où la TRANCHE 2 mettra le journal — posé ici, pas migré. */
+		resultsDir: estVault ? ".obsidian/quiz-blocks-results" : ".neo-quiz/results",
 	};
 
 	return {

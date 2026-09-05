@@ -24,13 +24,37 @@ html,
 body {
 	height: 100%;
 	margin: 0;
-	background: var(--background-primary);
 	color: var(--text-normal);
 	font-family: var(--font-interface);
 }
 
+/* ── LE FOND D'ÉCRAN ──
+   Le système de verre du tableau de bord a été dessiné POUR un fond : ses
+   tokens le disent (« l'ombre décolle la surface du wallpaper »). Sous
+   Obsidian ce fond vient du thème ; dans la fenêtre il n'y avait rien
+   derrière, et les surfaces de verre tombaient à plat sur un aplat uni.
+
+   Le voile sombre par-dessus n'est pas une coquetterie : il tient le
+   CONTRASTE du texte quelle que soit l'image. Sans lui, un fond clair rendrait
+   `--text-muted` illisible, et on ne s'en apercevrait que sur cette image-là.
+   `background-attachment: fixed` garde le paysage immobile quand une liste
+   défile — c'est un décor, pas un contenu. */
+body {
+	background:
+		linear-gradient(
+			color-mix(in srgb, var(--background-primary) 78%, transparent),
+			color-mix(in srgb, var(--background-primary) 88%, transparent)
+		),
+		var(--background-primary) url("/wallpaper.jpg") center / cover no-repeat fixed;
+}
+
 #neo-quiz-root {
 	height: 100%;
+	/* `.qbd-root` (CSS partagé) pose `background: var(--background-primary)`,
+	   opaque : sous Obsidian la vue doit couvrir le fond de l'application.
+	   Ici cet aplat masquerait le fond d'écran, et le verre n'aurait plus rien
+	   sur quoi se poser. */
+	background: transparent;
 }
 
 /* ── L'écran de choix de dossier ──
@@ -117,4 +141,85 @@ body {
 	color: var(--text-error);
 	font-size: 13.5px;
 	line-height: 1.55;
+}
+
+/* ── Les vaults Obsidian de la machine ──
+   Proposés d'un clic : l'utilisateur ouvre ces dossiers tous les jours, le
+   faire naviguer jusqu'à eux dans le sélecteur natif serait un détour.
+   Chaque ligne est une SURFACE DE VERRE, comme les cartes du tableau de bord —
+   c'est ce que le fond d'écran derrière rend enfin lisible. */
+.nq-accueil-vaults {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	width: 100%;
+	max-width: 420px;
+}
+
+.nq-accueil-vaults-titre {
+	margin: 4px 0 2px;
+	font-size: 11.5px;
+	color: var(--text-faint);
+}
+
+.nq-vault {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	width: 100%;
+	padding: 10px 14px;
+	border-radius: 12px;
+	border: 1px solid var(--qbd-glass-edge);
+	background: var(--qbd-glass-bg);
+	backdrop-filter: var(--qbd-glass-blur);
+	box-shadow: var(--qbd-glass-sheen);
+	color: var(--text-normal);
+	font-family: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.15s ease, transform 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.nq-vault:hover {
+	background: var(--qbd-glass-bg-dense);
+}
+
+/* Le même appui que la pilule du tableau de bord : deux gestes identiques
+   doivent se répondre de la même façon. */
+.nq-vault:active {
+	transform: scale(0.985);
+}
+
+.nq-vault-icone {
+	display: grid;
+	place-items: center;
+	flex: none;
+	color: var(--text-accent);
+}
+
+.nq-vault-icone svg {
+	width: 17px;
+	height: 17px;
+}
+
+.nq-vault-texte {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.nq-vault-nom {
+	font-size: 13px;
+	font-weight: 600;
+}
+
+/* Le chemin est une INFORMATION de désambiguïsation (deux vaults peuvent
+   porter le même nom), pas un ornement : il reste lisible mais s'efface. */
+.nq-vault-chemin {
+	font-size: 11px;
+	color: var(--text-faint);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }

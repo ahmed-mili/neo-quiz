@@ -6,10 +6,10 @@ import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { renderQuizCard as renderSharedQuizCard } from "./quiz-card";
 import { isFolderArchived, buildQuizCardMenu } from "./quiz-menu";
-import { moduleForQuiz, applyModuleOverrides, parseModuleMap } from "./quiz-modules";
+import { moduleForQuiz, applyModuleOverrides } from "./quiz-modules";
 import type { ModuleMap } from "./quiz-modules";
 import { moduleAccent } from "./module-color";
-import { openQuizForPlay } from "./quiz-open";
+import { lireModuleMap } from "./module-map-note";
 import { renderCollapsibleSection } from "./collapsible";
 import { markViewEnter } from "./view-enter";
 
@@ -65,13 +65,12 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		// en cours, qui peindrait ensuite une seconde copie par-dessus (piège
 		// documenté au long dans quizzes.ts).
 		await Promise.resolve();
-		try {
-			const name = ctx.plugin.settings.quizzesModuleMapNote || "Dashboard";
-			const file = ctx.app.metadataCache.getFirstLinkpathDest(name, "");
-			moduleMap = file ? parseModuleMap(await ctx.app.vault.cachedRead(file)) : { byFolder: new Map(), ueOrder: [] };
-		} catch {
-			moduleMap = { byFolder: new Map(), ueOrder: [] };
-		}
+		// Le brief demandait `|| ""` : passer une chaîne vide aurait fait
+		// perdre le repli sur la note « Dashboard » (DEFAULT_SETTINGS,
+		// plugin.ts) que l'ancien bloc appliquait — un comportement différent
+		// si le réglage est vide ou pas encore migré. `"Dashboard"` restaure
+		// exactement l'ancien fallback (bug du plan, corrigé).
+		moduleMap = await lireModuleMap(ctx.settings.quizzesModuleMapNote || "Dashboard");
 		if (containerRef) render(containerRef, lastEntering);
 	}
 
@@ -100,7 +99,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		if (!moduleMapLoaded) { void loadModuleMap(); }
 		const map: ModuleMap = applyModuleOverrides(
 			moduleMap ?? { byFolder: new Map(), ueOrder: [] },
-			ctx.plugin.settings.quizzesModuleOverrides || {}
+			ctx.settings.quizzesModuleOverrides || {}
 		);
 		const allQuizzes: QuizIndexEntry[] = ctx.scanner ? ctx.scanner.getQuizzes() : [];
 		const quizzes = allQuizzes.filter(q => !isFolderArchived(ctx, moduleForQuiz(q.path, map).folder));
@@ -197,12 +196,12 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		// 16px, badge compteur, repli persisté (contrat visuel 2026-07-28). Les
 		// micro-capitales 10px, propres à l'accueil, ont disparu avec eux.
 		const collapse = {
-			isExpanded: (key: string) => new Set(ctx.plugin.settings.quizzesExpandedFolders || []).has(key),
+			isExpanded: (key: string) => new Set(ctx.settings.quizzesExpandedFolders || []).has(key),
 			toggleExpanded: (key: string) => {
-				const set = new Set(ctx.plugin.settings.quizzesExpandedFolders || []);
+				const set = new Set(ctx.settings.quizzesExpandedFolders || []);
 				if (set.has(key)) set.delete(key); else set.add(key);
-				ctx.plugin.settings.quizzesExpandedFolders = [...set];
-				ctx.plugin.saveSettings().catch(() => {});
+				ctx.settings.quizzesExpandedFolders = [...set];
+				ctx.saveSettings().catch(() => {});
 			},
 		};
 
@@ -296,7 +295,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 						cls: "qbd-review-count",
 						text: t(n === 1 ? "dashboard.common.questionsOne" : "dashboard.common.questionsOther", { count: n }),
 					});
-					row.addEventListener("click", () => openQuizForPlay(ctx.app, quiz));
+					row.addEventListener("click", () => ctx.openQuiz(quiz));
 				}
 
 				/* Le report est une INFORMATION, pas un reproche : il dit que le
@@ -471,7 +470,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		map: ModuleMap
 	): HTMLDivElement {
 		return renderSharedQuizCard(container, quiz, stats, (q) => ctx.navigate("detail", { quiz: q }), {
-			onPlay: (q) => openQuizForPlay(ctx.app, q),
+			onPlay: (q) => ctx.openQuiz(q),
 			menu: buildQuizCardMenu(ctx, rerender),
 			accent: accentOf(quiz, map),
 		});

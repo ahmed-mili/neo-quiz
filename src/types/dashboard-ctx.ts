@@ -162,10 +162,65 @@ export interface DashboardView extends ItemView {
 }
 
 /* ════════════════════════════════════════════════════════
+   DashboardShellCtx — ce dont les pages PORTÉES (accueil, « Mes
+   quiz ») ont besoin, et RIEN de plus (plan tranche 2.5, tâche 2,
+   décision D3). `DashboardCtx` l'étend en y ajoutant `view`, `app`,
+   `plugin`, `navEl`/`contentEl` et `getActiveFile` — le reste du
+   greffon (IA, dictée, détail) en a encore besoin.
+   ════════════════════════════════════════════════════════ */
+
+/** Les cinq réglages que les pages accueil / « Mes quiz » lisent, et rien
+    d'autre — sous-ensemble nommé de `AiSettings` (mêmes clés, cf. plus haut).
+    `quizzesGrouping` reste `string` : les pages ne valident qu'un sous-axe
+    (« ue » / « recent ») au lecture, la forme complète appartient au plugin. */
+export interface DashboardPageSettings {
+	quizzesExpandedFolders?: string[];
+	quizzesGrouping?: string;
+	quizzesModuleOverrides?: Record<string, ModuleOverride>;
+	quizzesModuleMapNote?: string;
+	quizzesArchivedFolders?: string[];
+}
+
+/**
+ * Ce dont les pages Accueil et Mes quiz ont besoin, et RIEN de plus.
+ * `DashboardCtx` l'étend en y ajoutant l'IA, la dictée, le détail et le
+ * `Plugin` lui-même. Déclarer cette intersection est ce qui empêche une
+ * page portée de se remettre à lire `ctx.plugin` sans que personne ne le
+ * voie : côté application, ce champ n'existe pas.
+ */
+export interface DashboardShellCtx {
+	scanner: Scanner;
+	statsStore: StatsStore;
+	/** Les cinq réglages ci-dessus. Mutés en place puis persistés par
+	    `saveSettings()`, comme avant (même objet que `plugin.settings` côté
+	    greffon — jamais une copie, sinon un autre onglet ou un rechargement
+	    écrirait dans le vide). */
+	settings: DashboardPageSettings;
+	saveSettings(): Promise<void>;
+	/* Le plan (D3) déclarait `navigate(view: DashboardViewName): void`, sans
+	   second paramètre — mais quiz-menu.ts, ai.ts, detail.ts et
+	   folder-create.ts (hors périmètre de cette tâche, toujours typés en
+	   `DashboardCtx`) appellent TOUS `ctx.navigate("detail", { quiz, edit? })`.
+	   Perdre ce paramètre ici cassait leur compilation : signature restaurée
+	   à l'identique de l'ancienne `DashboardCtx.navigate` (bug du plan,
+	   corrigé — cf. rapport de tâche). */
+	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void;
+	/** Historique boutons souris (spec 2026-07-20-mouse-nav-history) : empile
+	    l'état de navigation COURANT avant un changement — appelé par quizzes.ts
+	    juste avant drill in/out. */
+	recordNav(): void;
+	/** Joue un quiz. L'hôte décide ce que « jouer » veut dire : ouvrir la
+	    note sous Obsidian, monter la page de quiz dans l'application. */
+	openQuiz(quiz: QuizIndexEntry): void;
+	/** Ouvre les réglages de l'hôte (l'onglet du plugin sous Obsidian). */
+	openSettings(): void;
+}
+
+/* ════════════════════════════════════════════════════════
    DashboardCtx — le ctx lui-même (dashboard.js:54-64)
    ════════════════════════════════════════════════════════ */
 
-export interface DashboardCtx {
+export interface DashboardCtx extends DashboardShellCtx {
 	/** Référence à la vue hôte — même objet que `this` dans QuizDashboardView (dashboard.js:55). */
 	view: DashboardView;
 	app: App;
@@ -187,22 +242,10 @@ export interface DashboardCtx {
 		saveSettings(): Promise<void>;
 		_reviewStore?: ReviewStore;
 	};
-	/** Copie de `view.scanner` au moment de la construction du ctx (dashboard.js:58). */
-	scanner: Scanner;
-	/** Copie de `view.statsStore` au moment de la construction du ctx (dashboard.js:59). */
-	statsStore: StatsStore;
 	/** Même référence DOM que `view.navEl` (dashboard.js:60) — déjà assignée à ce stade (onOpen l'a créée avant de construire ctx, dashboard.js:50). */
 	navEl: HTMLElement;
 	/** Même référence DOM que `view.contentEl_` (dashboard.js:61) — nommé `contentEl` dans le littéral ctx réel. */
 	contentEl: HTMLElement;
-	/** Délègue à `view.navigate(view, data)`. `edit: true` ouvre la page du
-	    quiz directement en ÉDITION (menu ⋯ « Modifier »). */
-	navigate: (view: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }) => void;
-	/** Historique boutons souris (spec 2026-07-20-mouse-nav-history) : empile
-	    l'état de navigation COURANT avant un changement — appelé par quizzes.ts
-	    juste avant drill in/out. Délègue à `view.recordNav()` (no-op pendant
-	    une restauration, garde isRestoringNav côté vue). */
-	recordNav: () => void;
 	/** dashboard.js:63, `() => this.app.workspace.getActiveFile()`. */
 	getActiveFile: () => TFile | null;
 }

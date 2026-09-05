@@ -5,7 +5,6 @@ import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { renderQuizCard } from "./quiz-card";
-import { openQuizForPlay } from "./quiz-open";
 import { buildQuizCardMenu, buildModuleCardMenu } from "./quiz-menu";
 import { renderModuleCard } from "./module-card";
 import { moduleForQuiz, buildModuleGroups, buildUeGroups } from "./quiz-modules";
@@ -58,10 +57,10 @@ function renderModuleGrid(deps: GridDeps, parent: HTMLElement, groups: ModuleGro
 	// portalé au body (pas de modal ici) → override + save + rerender.
 	const pickIcon = (group: ModuleGroup, anchor: HTMLElement) => {
 		openIconPicker(anchor, group.icon, (name) => {
-			const overrides = { ...(deps.ctx.plugin.settings.quizzesModuleOverrides || {}) };
+			const overrides = { ...(deps.ctx.settings.quizzesModuleOverrides || {}) };
 			overrides[group.folder] = { ...(overrides[group.folder] || {}), icon: name };
-			deps.ctx.plugin.settings.quizzesModuleOverrides = overrides;
-			deps.ctx.plugin.saveSettings().catch(() => {});
+			deps.ctx.settings.quizzesModuleOverrides = overrides;
+			deps.ctx.saveSettings().catch(() => {});
 			deps.rerender();
 		}, document.body, suggestIcons(group.name, group.ue));
 	};
@@ -100,7 +99,7 @@ export function renderQuizGrid(
 	// restent inertes hors .qbd-quizzes-enter (aucune animation à consommer).
 	let entryIndex = 0;
 	const entryDelay = (): string => `${100 + entryIndex++ * 45}ms`;
-	const archivedFolders = deps.ctx.plugin.settings.quizzesArchivedFolders || [];
+	const archivedFolders = deps.ctx.settings.quizzesArchivedFolders || [];
 	if (filtered.length === 0 && archivedQuizzes.length === 0 && archivedFolders.length === 0) {
 		treeEl.createDiv({ cls: "qbd-empty-state" }, el => { el.createEl("p", { text: t("dashboard.quizzes.empty") }); });
 		return;
@@ -111,7 +110,7 @@ export function renderQuizGrid(
 	// déclarés par le modal Nouveau dossier / Modifier dossier existent même
 	// sans quiz (alwaysInclude) — SAUF archivés : leur carte vit uniquement
 	// dans la section « Archivés » (sinon elle resterait en grille à 0 quiz).
-	const alwaysInclude = Object.keys(deps.ctx.plugin.settings.quizzesModuleOverrides || {})
+	const alwaysInclude = Object.keys(deps.ctx.settings.quizzesModuleOverrides || {})
 		.filter(f => !archivedFolders.includes(f));
 	const modules = buildModuleGroups(filtered, stats, map, alwaysInclude);
 
@@ -172,7 +171,7 @@ export function renderModuleDrill(
 	const grid = layout.createDiv({ cls: "qbd-home-grid qbd-quizzes-drill-grid" });
 	for (const [index, quiz] of inModule.entries()) {
 		renderQuizCard(grid, quiz, stats[quiz.path], (q) => ctx.navigate("detail", { quiz: q }), {
-			onPlay: (q) => openQuizForPlay(ctx.app, q),
+			onPlay: (q) => ctx.openQuiz(q),
 			menu: buildQuizCardMenu(ctx, rerender),
 			accent,
 			entryIndex: index,

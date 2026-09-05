@@ -4,7 +4,7 @@ import type { TransKey } from "../i18n";
 import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
-import { parseModuleMap, applyModuleOverrides, moduleForQuiz } from "./quiz-modules";
+import { applyModuleOverrides, moduleForQuiz } from "./quiz-modules";
 import { isMastered } from "./quiz-mastery";
 import type { ModuleMap } from "./quiz-modules";
 import { createSelect, openActionMenu } from "./ui-select";
@@ -13,6 +13,7 @@ import { CreateFolderModal, CreateQuizModal } from "./folder-create";
 import { renderQuizGrid, renderModuleDrill } from "./quizzes-render";
 import type { GroupingKey } from "./quizzes-render";
 import { moduleAccent } from "./module-color";
+import { lireModuleMap } from "./module-map-note";
 import { markViewEnter } from "./view-enter";
 import { DEFAULT_MODULE_ICON } from "./icon-picker";
 
@@ -46,22 +47,23 @@ export interface QuizzesHandlers {
 }
 
 export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
-	/* L'accès réel aux réglages est `ctx.plugin.settings.<clé>` (même patron
-	   qu'ai.ts). Lu à CHAQUE rendu : le réglage peut changer sous nos pieds
-	   (autre appareil, rechargement). Le réglage liste les groupes DÉPLIÉS
+	/* L'accès réel aux réglages est `ctx.settings.<clé>` (même objet que
+	   `plugin.settings`, nommé — tâche 2). Lu à CHAQUE rendu : le réglage
+	   peut changer sous nos pieds (autre appareil, rechargement). Le
+	   réglage liste les groupes DÉPLIÉS
 	   (replié = défaut) : à 200 quiz, tout déplier d'office reproduit le mur
 	   qu'on cherche à éviter — cf. défaut n°1, Ahmed 2026-07-17. */
 	function expandedSet(): Set<string> {
-		return new Set(ctx.plugin.settings.quizzesExpandedFolders || []);
+		return new Set(ctx.settings.quizzesExpandedFolders || []);
 	}
 
 	function toggleExpanded(path: string): void {
 		const set = expandedSet();
 		if (set.has(path)) set.delete(path); else set.add(path);
-		ctx.plugin.settings.quizzesExpandedFolders = [...set];
+		ctx.settings.quizzesExpandedFolders = [...set];
 		// Même canal que quizStats (stats-store.ts) ; l'échec d'écriture ne
 		// doit pas casser le rendu.
-		ctx.plugin.saveSettings().catch(() => {});
+		ctx.saveSettings().catch(() => {});
 	}
 
 	/* Axe de regroupement : DEUX axes seulement (demande Excalidraw
@@ -69,16 +71,16 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 	   et « Récent » (activité). Toute valeur historique (« module », « type »,
 	   « folder »…) migre vers « ue ». */
 	function currentGrouping(): GroupingKey {
-		const g = ctx.plugin.settings.quizzesGrouping;
+		const g = ctx.settings.quizzesGrouping;
 		return g === "recent" ? g : "ue";
 	}
 
 	function setGrouping(g: GroupingKey): void {
-		ctx.plugin.settings.quizzesGrouping = g;
+		ctx.settings.quizzesGrouping = g;
 		// La bascule d'axe reconstruit toute la grille : la cascade d'entrée
 		// accompagne le changement (décision Ahmed, spec 2026-07-20).
 		lastPaintedView = null;
-		ctx.plugin.saveSettings().catch(() => {});
+		ctx.saveSettings().catch(() => {});
 	}
 
 	/* Le conteneur du dernier rendu : sans cette référence, un clic (chevron,
@@ -122,13 +124,13 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 		// yield garantit que le render() déclencheur s'est entièrement déroulé
 		// avant toute réentrée, quelle que soit la branche empruntée plus bas.
 		await Promise.resolve();
-		try {
-			const name = ctx.plugin.settings.quizzesModuleMapNote || "Dashboard";
-			const file = ctx.app.metadataCache.getFirstLinkpathDest(name, "");
-			moduleMap = file ? parseModuleMap(await ctx.app.vault.cachedRead(file)) : { byFolder: new Map(), ueOrder: [] };
-		} catch {
-			moduleMap = { byFolder: new Map(), ueOrder: [] };
-		}
+		// Le brief demandait `|| ""` : passer une chaîne vide aurait fait
+		// perdre le repli sur la note « Dashboard » (DEFAULT_SETTINGS,
+		// plugin.ts) que l'ancien bloc appliquait — un comportement différent
+		// si le réglage est vide ou pas encore migré. `"Dashboard"` restaure
+		// exactement l'ancien fallback (bug du plan, corrigé — même correctif
+		// que home.ts).
+		moduleMap = await lireModuleMap(ctx.settings.quizzesModuleMapNote || "Dashboard");
 		// Le premier rendu (map absente) est repeint ici quelques ms plus
 		// tard : sans ré-armement, ce second rendu couperait net la transition
 		// d'entrée à peine commencée (cartes soudain opaques).
@@ -141,7 +143,7 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 	    relus à chaque rendu, ils peuvent changer sous nos pieds. */
 	function effectiveMap(): ModuleMap {
 		const base = moduleMap ?? { byFolder: new Map(), ueOrder: [] };
-		return applyModuleOverrides(base, ctx.plugin.settings.quizzesModuleOverrides || {});
+		return applyModuleOverrides(base, ctx.settings.quizzesModuleOverrides || {});
 	}
 
 	function openModule(folder: string): void {

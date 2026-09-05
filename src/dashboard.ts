@@ -1,6 +1,7 @@
 import { PRODUCT_NAME } from "./branding";
 import { ItemView, Scope } from "obsidian";
-import type { WorkspaceLeaf, KeymapEventHandler } from "obsidian";
+import type { App, WorkspaceLeaf, KeymapEventHandler } from "obsidian";
+import { openQuizForPlay } from "./dashboard/quiz-open";
 
 // C1 (plan) : les 5 factories des sous-modules dashboard/* sont désormais des
 // EXPORTS NOMMÉS (Tasks 8a–8c). L'ancien `const createX = require("./dashboard/x")`
@@ -190,7 +191,21 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 			contentEl,
 			navigate: (view, data) => this.navigate(view, data),
 			recordNav: () => this.recordNav(),
-			getActiveFile: () => this.app.workspace.getActiveFile()
+			getActiveFile: () => this.app.workspace.getActiveFile(),
+			/* Le ctx porte désormais ce que les PAGES emploient, nommé
+			   explicitement. `plugin` et `app` restent pour l'IA, la dictée et
+			   le détail — mais les pages d'accueil et « Mes quiz » ne les
+			   lisent plus, et l'application peut donc les servir sans greffon. */
+			settings: this.plugin.settings,
+			saveSettings: () => this.plugin.saveSettings(),
+			openQuiz: (quiz) => openQuizForPlay(this.app, quiz),
+			// Bloc retiré de nav.ts (tâche 2) : même API interne
+			// (Setting.open/openTabById), inchangée, juste déplacée ici.
+			openSettings: () => {
+				const setting = (this.app as App & { setting: { open(): void; openTabById(id: string): void } }).setting;
+				setting.open();
+				setting.openTabById(this.plugin.manifest.id);
+			},
 		};
 
 		this.ctx = ctx;

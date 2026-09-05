@@ -37,7 +37,6 @@ import type { AiUsageEntry } from "../dashboard/ai-usage";
 import type { AiHandlers } from "../dashboard/ai";
 import type { ModuleOverride, ModuleGroup, ModuleMap } from "../dashboard/quiz-modules";
 import type { ReviewStore } from "../review/review-store";
-import type { ActionMenuItem } from "../dashboard/ui-select";
 
 export type { Scanner, StatsStore, AiClient, AiHandlers };
 
@@ -225,20 +224,28 @@ export interface DashboardShellCtx {
 	    Absent = la section ne s'affiche pas. Le greffon le fournit depuis
 	    `plugin._reviewStore` ; l'application depuis `creerJournalApp`. */
 	reviewStore?: ReviewStore;
-	/** FABRIQUE du menu « ⋯ » d'une carte, appelée par la page avec SON
-	    propre `rerender` — le menu doit pouvoir repeindre la page qui
-	    l'affiche. Absente = pas de bouton « ⋯ », ce que `renderQuizCard`
-	    prévoit déjà par son `menu?` opt-in.
+	/** OUVRE le menu « ⋯ » d'une carte de quiz sur `anchor` (le bouton « ⋯ »),
+	    appelée par la page avec SON propre `rerender` — le menu doit pouvoir
+	    repeindre la page qui l'affiche. Absente = pas de bouton « ⋯ », ce que
+	    `renderQuizCard` prévoit déjà par son `onMenu?` opt-in.
+	    Tour de correction 1 (tâche 6) : la carte ne compose plus le menu et
+	    ne l'ouvre plus elle-même (`renderQuizCard`/`renderModuleCard`
+	    importaient `openActionMenu` d'`ui-select.ts`, donc Obsidian, de façon
+	    INCONDITIONNELLE — même quand aucun menu n'était fourni au runtime,
+	    ce qui rendait TOUTE carte, et tout ce qui la consomme, irrémédiablement
+	    liée à Obsidian). L'ouverture appartient maintenant à l'hôte : c'est
+	    lui qui importe `ui-select.ts` (le greffon le fait déjà, `dashboard.ts`
+	    reste dans RESTANTS) et compose les items AU CLIC.
 	    L'application ne la fournit pas : les menus et les modals sont la
 	    tranche 2.6, et une carte sans « ⋯ » est un état prévu, pas dégradé. */
-	buildCardMenu?: (rerender: () => void) => (quiz: QuizIndexEntry) => ActionMenuItem[];
-	/** FABRIQUE du menu « ⋯ » d'une carte de MODULE (« Mes quiz », tâche 6).
-	    Même raison d'être que `buildCardMenu` : le menu ouvre des modals
-	    (partage, « Modifier dossier », suppression) que l'application n'a pas
-	    encore. Absente = pas de bouton « ⋯ », ce que `renderModuleCard`
-	    prévoit déjà par son `menu?` opt-in — l'application ne la fournit pas
-	    (menus et modals = tranche 2.6, D5). */
-	buildModuleMenu?: (rerender: () => void, map: ModuleMap) => (g: ModuleGroup) => ActionMenuItem[];
+	openCardMenu?: (quiz: QuizIndexEntry, anchor: HTMLElement, rerender: () => void) => void;
+	/** Même rôle qu'`openCardMenu`, pour le menu « ⋯ » d'une carte de MODULE
+	    (« Mes quiz », tâche 6) : partage, « Modifier dossier », suppression —
+	    autant de modals que l'application n'a pas encore. Absente = pas de
+	    bouton « ⋯ », ce que `renderModuleCard` prévoit déjà par son `onMenu?`
+	    opt-in — l'application ne la fournit pas (menus et modals = tranche
+	    2.6, D5). */
+	openModuleMenu?: (group: ModuleGroup, anchor: HTMLElement, rerender: () => void, map: ModuleMap) => void;
 	/** Sélecteur d'icône d'un module (clic sur la pastille de la carte).
 	    Absent = la pastille n'est pas cliquable — `renderModuleCard` prévoit
 	    déjà `onPickIcon?` en opt-in. `suggestions` (calculées par la PAGE

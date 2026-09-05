@@ -6,7 +6,7 @@ import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { renderQuizCard as renderSharedQuizCard } from "./quiz-card";
-import { isFolderArchived } from "./quiz-menu";
+import { isFolderArchived } from "./folder-archive";
 import { moduleForQuiz, applyModuleOverrides } from "./quiz-modules";
 import type { ModuleMap } from "./quiz-modules";
 import { moduleAccent } from "./module-color";
@@ -469,8 +469,10 @@ export function createHomeHandlers(ctx: DashboardShellCtx): HomeHandlers {
 		return renderSharedQuizCard(container, quiz, stats, (q) => ctx.navigate("detail", { quiz: q }), {
 			onPlay: (q) => ctx.openQuiz(q),
 			// Absent côté application (menus et modals = tranche 2.6) : la carte
-			// se rend alors sans bouton « ⋯ », `menu?` étant opt-in.
-			menu: ctx.buildCardMenu?.(rerender),
+			// se rend alors sans bouton « ⋯ », `onMenu?` étant opt-in. L'hôte
+			// OUVRE le menu lui-même (tour de correction 1, tâche 6) — la carte
+			// ne fait plus que signaler le clic et son ancre.
+			onMenu: ctx.openCardMenu ? (q, anchor) => ctx.openCardMenu!(q, anchor, rerender) : undefined,
 			accent: accentOf(quiz, map),
 		});
 	}

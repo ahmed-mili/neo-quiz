@@ -1,5 +1,6 @@
 import { setIcon, getIconIds } from "obsidian";
 import { t } from "../i18n";
+import { MODULE_ICONS, DEFAULT_MODULE_ICON } from "./module-icons";
 
 /* ══════════════════════════════════════════════════════════
    ICON PICKER — sélecteur d'icône Lucide pour la carte de module
@@ -10,23 +11,11 @@ import { t } from "../i18n";
    grille curée par défaut. Un clic émet onChange + ferme.
 ══════════════════════════════════════════════════════════ */
 
-/** Grille CURÉE affichée par défaut (sans recherche) — un jeu lisible et beau
-    pour des matières / modules ; la recherche donne accès à tout le set Lucide. */
-export const MODULE_ICONS = [
-	"book", "book-text", "book-marked", "notebook", "notebook-text", "library",
-	"graduation-cap", "file-text", "folder", "layers", "brain", "lightbulb",
-	"target", "trophy", "star", "flask-conical", "atom", "microscope",
-	"calculator", "sigma", "function-square", "dna", "cpu", "circuit-board",
-	"code", "code-xml", "terminal", "braces", "binary", "bug",
-	"network", "wifi", "router", "share-2", "cloud", "boxes",
-	"shield-check", "shield", "lock", "key-round", "database", "server",
-	"server-cog", "hard-drive", "monitor-cog", "globe", "languages", "map",
-	"palette", "pen-tool", "music", "film", "briefcase", "list-checks",
-	"scale", "trending-up", "rocket", "sparkles",
-];
-
-/** Icône d'un module sans choix explicite (fallback carte + aperçu modal). */
-export const DEFAULT_MODULE_ICON = "book";
+/* `MODULE_ICONS`/`DEFAULT_MODULE_ICON` vivent désormais dans module-icons.ts
+   (données pures, tour de correction 1, tâche 6) — ré-exportées ici pour ne
+   rien changer aux appelants existants (module-edit.ts, toujours dans
+   RESTANTS) qui les importaient d'ici. */
+export { MODULE_ICONS, DEFAULT_MODULE_ICON };
 
 const COLS = 6;
 const CELL = 34;

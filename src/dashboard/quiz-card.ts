@@ -5,8 +5,6 @@ import type { TransKey } from "../i18n";
 import type { QuizIndexEntry, QuizTypeTag } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { computeQuizState } from "./quiz-mastery";
-import { openActionMenu } from "./ui-select";
-import type { ActionMenuItem } from "./ui-select";
 
 /* Tag de type de quiz (calculé au scan) → clé de traduction, résolue au rendu.
    Table explicite plutôt qu'une clé construite par concaténation : `t()` n'accepte
@@ -51,15 +49,20 @@ export function renderQuizCard(
 	   onPlay : callback de lancement direct, construite par l'appelant à
 	   partir de SON `ctx.app` (renderQuizCard n'a pas accès à `app` — même
 	   patron que `onOpen`, pas de nouveau paramètre positionnel). */
-	/* menu (opt-in, même patron que onPlay) : items du menu ⋯ façon
-	   StudySmarter, bâtis par l'appelant AU CLIC (les stats peuvent avoir
-	   changé depuis le rendu de la carte). Non fourni = pas de bouton ⋯. */
+	/* onMenu (opt-in, même patron que onPlay) : la carte ne compose plus le
+	   menu et ne l'ouvre plus — elle signale un clic sur « ⋯ » et rend son
+	   ancre. L'ouverture appartient à l'hôte (ctx.openCardMenu) : c'est ce
+	   qui évite à ce fichier d'importer `ui-select.ts`, donc Obsidian, donc
+	   de rendre TOUTE la carte (et tout ce qui la consomme — home.ts,
+	   quizzes-render.ts) inutilisable dans la fenêtre de l'application —
+	   l'import était inconditionnel là où le menu, lui, était déjà optionnel
+	   (tour de correction 1, tâche 6). Non fourni = pas de bouton ⋯. */
 	/* accent : couleur du DOSSIER PARENT. `entryIndex` pilote la cascade
 	   d'entrée (la vue qui l'anime pose `.qbd-quizzes-enter`). */
 	opts?: {
 		showPath?: boolean;
 		onPlay?: (quiz: QuizIndexEntry) => void;
-		menu?: (quiz: QuizIndexEntry) => ActionMenuItem[];
+		onMenu?: (quiz: QuizIndexEntry, anchor: HTMLElement) => void;
 		accent?: string;
 		entryIndex?: number;
 	}
@@ -147,15 +150,15 @@ export function renderQuizCard(
 
 	// Bouton ⋯ en bout de ligne meta (position StudySmarter : coin bas droit).
 	// stopPropagation : ouvrir le menu ne doit PAS aussi ouvrir la fiche.
-	if (opts?.menu) {
-		const menu = opts.menu;
+	if (opts?.onMenu) {
+		const onMenu = opts.onMenu;
 		const moreBtn = ajouter(meta, "button", "qbd-card-more");
 		moreBtn.type = "button";
 		moreBtn.title = t("dashboard.card.more");
 		currentHost().ui.setIcon(moreBtn, "ellipsis");
 		moreBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			openActionMenu(moreBtn, menu(quiz));
+			onMenu(quiz, moreBtn);
 		});
 	}
 

@@ -3,12 +3,13 @@ import { QbdModal } from "../modal-base";
 import type { App } from "obsidian";
 import { ShareModal, moduleShareSource, quizShareSource } from "./share";
 import { t } from "../i18n";
-import type { DashboardCtx, DashboardShellCtx } from "../types/dashboard-ctx";
+import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { ModuleGroup, ModuleMap } from "./quiz-modules";
 import { ModuleEditModal } from "./module-edit";
 import type { ActionMenuItem } from "./ui-select";
 import { QUIZ_BLOCK_RE } from "../quiz-utils";
+import { isFolderArchived, setFolderArchived } from "./folder-archive";
 
 /* ══════════════════════════════════════════════════════════
    QUIZ MENU — contenu du menu ⋯ des cartes de « Mes quiz ».
@@ -26,25 +27,13 @@ import { QUIZ_BLOCK_RE } from "../quiz-utils";
    resté hors du « À faire » sans aucun moyen de le reprendre.)
 ══════════════════════════════════════════════════════════ */
 
-/* ── Liste persistée — même canal que quizzesExpandedFolders (quizzes.ts) :
-   l'échec d'écriture ne casse pas l'UI. L'archivage est PAR DOSSIER (clé
-   `folder` de module) — jamais de quiz archivé individuellement (décision
-   Ahmed 2026-07-19). */
-
-/* Élargi à `DashboardShellCtx` (tâche 5, tour de correction 1) : ces deux
-   fonctions ne lisent QUE les cinq réglages déjà exposés par
-   `DashboardPageSettings`, et `DashboardCtx` l'étend — tout appelant existant
-   qui passe encore un `DashboardCtx` continue de compiler sans changement. */
-export function isFolderArchived(ctx: DashboardShellCtx, folder: string): boolean {
-	return new Set(ctx.settings.quizzesArchivedFolders || []).has(folder);
-}
-
-export function setFolderArchived(ctx: DashboardShellCtx, folder: string, on: boolean): void {
-	const set = new Set(ctx.settings.quizzesArchivedFolders || []);
-	if (on) set.add(folder); else set.delete(folder);
-	ctx.settings.quizzesArchivedFolders = [...set];
-	ctx.saveSettings().catch(() => {});
-}
+/* `isFolderArchived`/`setFolderArchived` ont déménagé dans `folder-archive.ts`
+   (tour de correction 1, tâche 6) : ces deux fonctions ne lisaient déjà QUE
+   les cinq réglages de `DashboardShellCtx` (tâche 5), sans rien d'Obsidian —
+   les garder ici forçait home.ts et quizzes.ts (qui n'en ont besoin QUE pour
+   ça) à importer transitivement `Notice`/`TFile` via ce fichier. Ce module ne
+   les utilise plus qu'en INTERNE (import ci-dessus, `buildModuleCardMenu`) ;
+   home.ts et quizzes.ts importent désormais `folder-archive.ts` directement. */
 
 /* ── Confirmations : l'ARCHIVAGE est direct dans les deux sens (demande
    Ahmed 2026-07-19), Delete confirme en rouge. ── */

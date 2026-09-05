@@ -3,9 +3,7 @@ import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { QuizIndexEntry } from "./scanner";
 import type { ModuleGroup } from "./quiz-modules";
-import { openActionMenu } from "./ui-select";
-import type { ActionMenuItem } from "./ui-select";
-import { DEFAULT_MODULE_ICON } from "./icon-picker";
+import { DEFAULT_MODULE_ICON } from "./module-icons";
 import { moduleAccent } from "./module-color";
 
 /* ══════════════════════════════════════════════════════════
@@ -23,8 +21,14 @@ export function renderModuleCard(
 	container: HTMLElement,
 	group: ModuleGroup,
 	onOpen: (group: ModuleGroup) => void,
-	/* menu (opt-in) : items du menu ⋯, bâtis par l'appelant au clic. */
-	menu?: (group: ModuleGroup) => ActionMenuItem[],
+	/* onMenu (opt-in) : la carte ne compose plus le menu et ne l'ouvre plus —
+	   elle signale un clic sur « ⋯ » et rend son ancre. L'ouverture appartient
+	   à l'hôte (ctx.openModuleMenu) : c'est ce qui évite à ce fichier
+	   d'importer `ui-select.ts`, donc Obsidian, donc de rendre TOUTE la carte
+	   (et tout ce qui la consomme) inutilisable dans la fenêtre de
+	   l'application — l'import était inconditionnel là où le menu, lui,
+	   était déjà optionnel (tour de correction 1, tâche 6). */
+	onMenu?: (group: ModuleGroup, anchor: HTMLElement) => void,
 	/* onPickIcon (opt-in) : clic sur la pastille d'icône → change l'icône
 	   directement (raccourci, sans ouvrir « Modifier dossier »). L'appelant
 	   fournit le comportement (picker + persistance) car la carte n'a pas
@@ -77,7 +81,7 @@ export function renderModuleCard(
 	ajouter(card, "div", "qbd-module-card__spacer");
 	ajouter(card, "div", "qbd-module-card__divider");
 	const footer = ajouter(card, "div", "qbd-module-card__footer");
-	if (menu) {
+	if (onMenu) {
 		const moreBtn = ajouter(footer, "button", "qbd-card-more qbd-module-card__menu");
 		moreBtn.type = "button";
 		moreBtn.title = t("dashboard.card.more");
@@ -85,7 +89,7 @@ export function renderModuleCard(
 		moreBtn.addEventListener("click", (e) => {
 			// Ouvrir le menu ne doit PAS aussi entrer dans le module.
 			e.stopPropagation();
-			openActionMenu(moreBtn, menu(group));
+			onMenu(group, moreBtn);
 		});
 	}
 

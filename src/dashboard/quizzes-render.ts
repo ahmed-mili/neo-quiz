@@ -50,11 +50,15 @@ const RECENT_GROUP_LABEL_KEYS: Record<RecentGroupKey, TransKey> = {
     garde le sous-titre d'une carte dans une section groupée). */
 function renderModuleGrid(deps: GridDeps, parent: HTMLElement, groups: ModuleGroup[], map: ModuleMap, entryDelay: () => string): void {
 	const grid = ajouter(parent, "div", "qbd-module-grid");
-	// Menu ⋯ d'une carte de module : fabrique fournie par l'hôte (elle ouvre
+	// Menu ⋯ d'une carte de module : l'hôte OUVRE lui-même le menu (il ouvre
 	// des modals — partage, « Modifier dossier », suppression — que
 	// l'application n'a pas encore, D5). Absente = pas de bouton ⋯,
-	// `renderModuleCard` le prévoit déjà par son `menu?` opt-in.
-	const menu = deps.ctx.buildModuleMenu?.(deps.rerender, map);
+	// `renderModuleCard` le prévoit déjà par son `onMenu?` opt-in. La carte
+	// ne compose plus les items ni n'importe `ui-select.ts` elle-même (tour
+	// de correction 1, tâche 6).
+	const onMenu = deps.ctx.openModuleMenu
+		? (g: ModuleGroup, anchor: HTMLElement): void => deps.ctx.openModuleMenu!(g, anchor, deps.rerender, map)
+		: undefined;
 	// Raccourci « changer l'icône » depuis la pastille de la carte : picker
 	// portalé au body (pas de modal ici) → override + save + rerender. Le
 	// picker lui-même (icon-picker.ts, `getIconIds` d'Obsidian) est fourni
@@ -72,7 +76,7 @@ function renderModuleGrid(deps: GridDeps, parent: HTMLElement, groups: ModuleGro
 		}
 		: undefined;
 	for (const g of groups) {
-		const card = renderModuleCard(grid, g, (m) => deps.openModule(m.folder), menu, pickIcon);
+		const card = renderModuleCard(grid, g, (m) => deps.openModule(m.folder), onMenu, pickIcon);
 		card.style.setProperty("--qbd-card-delay", entryDelay());
 	}
 }
@@ -182,9 +186,10 @@ export function renderModuleDrill(
 		renderQuizCard(grid, quiz, stats[quiz.path], (q) => ctx.navigate("detail", { quiz: q }), {
 			onPlay: (q) => ctx.openQuiz(q),
 			// Absent côté application (menus et modals = tranche 2.6) : la
-			// carte se rend alors sans bouton « ⋯ », `menu?` étant opt-in —
-			// même patron que home.ts.
-			menu: ctx.buildCardMenu?.(rerender),
+			// carte se rend alors sans bouton « ⋯ », `onMenu?` étant opt-in —
+			// même patron que home.ts. L'hôte ouvre le menu lui-même (tour de
+			// correction 1, tâche 6).
+			onMenu: ctx.openCardMenu ? (q, anchor) => ctx.openCardMenu!(q, anchor, rerender) : undefined,
 			accent,
 			entryIndex: index,
 		});

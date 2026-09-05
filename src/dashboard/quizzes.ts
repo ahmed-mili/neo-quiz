@@ -8,13 +8,13 @@ import type { QuizStatRecord } from "./stats-store";
 import { applyModuleOverrides, moduleForQuiz } from "./quiz-modules";
 import { isMastered } from "./quiz-mastery";
 import type { ModuleMap } from "./quiz-modules";
-import { isFolderArchived } from "./quiz-menu";
+import { isFolderArchived } from "./folder-archive";
 import { renderQuizGrid, renderModuleDrill } from "./quizzes-render";
 import type { GroupingKey } from "./quizzes-render";
 import { moduleAccent } from "./module-color";
 import { lireModuleMap } from "./module-map-note";
 import { markViewEnter } from "./view-enter";
-import { DEFAULT_MODULE_ICON } from "./icon-picker";
+import { DEFAULT_MODULE_ICON } from "./module-icons";
 
 /* ══════════════════════════════════════════════════════════
    QUIZZES VIEW — Dashboard

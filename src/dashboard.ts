@@ -5,7 +5,7 @@ import { openQuizForPlay } from "./dashboard/quiz-open";
 import { buildQuizCardMenu, buildModuleCardMenu } from "./dashboard/quiz-menu";
 import { openIconPicker } from "./dashboard/icon-picker";
 import { CreateQuizModal, CreateFolderModal } from "./dashboard/folder-create";
-import { createSelect } from "./dashboard/ui-select";
+import { createSelect, openActionMenu } from "./dashboard/ui-select";
 
 // C1 (plan) : les 5 factories des sous-modules dashboard/* sont désormais des
 // EXPORTS NOMMÉS (Tasks 8a–8c). L'ancien `const createX = require("./dashboard/x")`
@@ -219,13 +219,20 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 			   construction du littéral : `this.ctx` n'est assigné qu'après. Le
 			   menu ⋯ a besoin du ctx COMPLET (il ouvre des modals) — c'est
 			   précisément ce que l'application ne peut pas fournir, et
-			   pourquoi ce membre est optionnel. */
-			buildCardMenu: (rerender) => buildQuizCardMenu(this.ctx as DashboardCtx, rerender),
-			/* Même closure sur `this.ctx` que `buildCardMenu` ci-dessus, et même
+			   pourquoi ce membre est optionnel. Tour de correction 1 (tâche 6) :
+			   c'est désormais LE GREFFON qui ouvre le menu (openActionMenu),
+			   plutôt que la carte elle-même — les cartes (quiz-card.ts,
+			   module-card.ts) n'importent donc plus `ui-select.ts` du tout. */
+			openCardMenu: (quiz, anchor, rerender) => {
+				openActionMenu(anchor, buildQuizCardMenu(this.ctx as DashboardCtx, rerender)(quiz));
+			},
+			/* Même closure sur `this.ctx` que `openCardMenu` ci-dessus, et même
 			   raison : ces cinq membres ouvrent des modals/dropdowns qui exigent
 			   le ctx complet ou `ui-select.ts` (Obsidian) — l'application ne les
 			   fournit pas (tâche 6, « Mes quiz »). */
-			buildModuleMenu: (rerender, map) => buildModuleCardMenu(this.ctx as DashboardCtx, rerender, map),
+			openModuleMenu: (group, anchor, rerender, map) => {
+				openActionMenu(anchor, buildModuleCardMenu(this.ctx as DashboardCtx, rerender, map)(group));
+			},
 			pickIcon: (anchor, courante, onPick, suggestions) => {
 				openIconPicker(anchor, courante, onPick, document.body, suggestions ?? []);
 			},

@@ -48,6 +48,15 @@ await withSrcModule("src/review/rename-match.ts", async ({ apparierRenommages, s
 	r.check("l'ordre fait partie de la signature",
 		apparierRenommages([n("a.md", ["ip", "dns"])], [n("b.md", ["dns", "ip"])]), []);
 
+	/* LA CLÉ DOIT ÊTRE INJECTIVE. Un `id:` explicite vient du JSON5 saisi par
+	   l'utilisateur (src/quiz-ids.ts, `explicitId`) : rien n'y interdit un
+	   espace. Deux questions ["ip", "masque"] et une seule question dont
+	   l'identifiant CONTIENT un espace, ["ip masque"], sont deux notes
+	   structurellement différentes — elles ne doivent jamais partager de
+	   signature, sous peine de transporter l'historique de l'une vers l'autre. */
+	r.check("un identifiant contenant un espace ne se confond pas avec deux identifiants",
+		apparierRenommages([n("a.md", ["ip", "masque"])], [n("b.md", ["ip masque"])]), []);
+
 	r.done();
 });
 

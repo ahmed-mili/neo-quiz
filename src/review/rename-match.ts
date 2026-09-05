@@ -48,7 +48,18 @@ export function signatureForte(ids: ReadonlyArray<string>): boolean {
 	return ids.length > 0 && ids.some(id => !REPLI.test(id));
 }
 
-const cle = (ids: ReadonlyArray<string>): string => ids.join(" ");
+/* `JSON.stringify` et non `ids.join(" ")` : un `id:` explicite vient du JSON5
+   écrit à la main par l'utilisateur (`explicitId`, src/quiz-ids.ts), et rien
+   n'y interdit un espace. `join(" ")` rendrait alors ["ip", "masque"] (deux
+   questions) et ["ip masque"] (une seule question dont l'identifiant CONTIENT
+   un espace) IDENTIQUES — deux notes structurellement différentes partageant
+   la même signature. La garde d'unicité ne peut rien contre cette collision :
+   les deux notes lui apparaissent chacune comme une signature vue une seule
+   fois, donc « unique » à ses yeux. Le résultat serait un appariement FAUX —
+   le pire des deux défauts, invisible. `JSON.stringify` échappe les guillemets
+   et les séparateurs : deux tableaux de chaînes distincts y produisent
+   toujours des sérialisations distinctes. */
+const cle = (ids: ReadonlyArray<string>): string => JSON.stringify(ids);
 
 export function apparierRenommages(
 	disparus: ReadonlyArray<SignatureNote>,

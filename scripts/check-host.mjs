@@ -46,7 +46,6 @@ const RESTANTS = [
 	"src/dashboard/icon-picker.ts",
 	"src/dashboard/mention-picker.ts",
 	"src/dashboard/module-edit.ts",
-	"src/dashboard/nav.ts",
 	"src/dashboard/prompt-paths.ts",
 	"src/dashboard/quiz-menu.ts",
 	"src/dashboard/quiz-open.ts",

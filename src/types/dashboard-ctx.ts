@@ -214,6 +214,12 @@ export interface DashboardShellCtx {
 	openQuiz(quiz: QuizIndexEntry): void;
 	/** Ouvre les réglages de l'hôte (l'onglet du plugin sous Obsidian). */
 	openSettings(): void;
+	/** Pages que cet hôte sait ouvrir. Une entrée du rail absente d'ici est
+	    rendue DÉSACTIVÉE, pas masquée : la génération atterrira dans
+	    l'application (tranche 4) et y sera exclusive — le greffon la perdra.
+	    Une barre de navigation qui change de forme entre deux versions se
+	    remarque plus qu'une entrée visiblement à venir. */
+	canOpen(view: DashboardViewName): boolean;
 }
 
 /* ════════════════════════════════════════════════════════

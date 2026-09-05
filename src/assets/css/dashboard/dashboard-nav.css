@@ -75,6 +75,17 @@
 	color: var(--background-secondary) !important;
 }
 
+/* Entrée que l'hôte ne sait pas encore ouvrir (ex. « Générer » côté
+   application avant la tranche 4) : visible mais inerte — un `<button
+   disabled>` ne reçoit déjà plus de clic, ce bloc neutralise juste le survol
+   hérité de .qbd-nav-item:hover pour qu'il ne suggère pas une action possible. */
+.qbd-nav-item--disabled,
+.qbd-nav-item--disabled:hover {
+	color: var(--text-faint) !important;
+	background: transparent !important;
+	cursor: not-allowed;
+}
+
 .qbd-nav-icon {
 	display: flex;
 	align-items: center;

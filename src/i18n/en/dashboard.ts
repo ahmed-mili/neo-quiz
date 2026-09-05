@@ -16,6 +16,9 @@ export const EN_DASHBOARD = {
 	"dashboard.nav.quizzes": "My quizzes",
 	"dashboard.nav.generate": "Generate",
 	"dashboard.nav.settings": "Settings",
+	// Entrée du rail que l'hôte ne sait pas encore ouvrir (ex. « Générer »
+	// côté application avant la tranche 4) : rendue désactivée, jamais masquée.
+	"dashboard.nav.soon": "Coming soon",
 
 	/* ── Accueil ── */
 	"dashboard.home.subtitleResume": "Resume a quiz in progress, or generate a new one.",

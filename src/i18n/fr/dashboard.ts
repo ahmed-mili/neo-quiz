@@ -13,6 +13,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.nav.quizzes": "Mes quiz",
 	"dashboard.nav.generate": "Générer",
 	"dashboard.nav.settings": "Réglages",
+	"dashboard.nav.soon": "Bientôt disponible",
 
 	/* ── Accueil ── */
 	"dashboard.home.subtitleResume": "Reprenez un quiz en cours ou générez-en un nouveau.",

@@ -206,6 +206,10 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 				setting.open();
 				setting.openTabById(this.plugin.manifest.id);
 			},
+			// Le greffon sait ouvrir toutes les vues (le générateur inclus) :
+			// canOpen() n'a d'effet que côté application, qui rendra son
+			// entrée « Générer » désactivée tant que la tranche 4 n'existe pas.
+			canOpen: () => true,
 		};
 
 		this.ctx = ctx;

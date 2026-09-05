@@ -1,7 +1,8 @@
-import { setIcon } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { TransKey } from "../i18n";
-import type { DashboardCtx, DashboardViewName } from "../types/dashboard-ctx";
+import type { DashboardShellCtx, DashboardViewName } from "../types/dashboard-ctx";
 
 /* ══════════════════════════════════════════════════════════
    NAVIGATION SIDEBAR — Dashboard
@@ -23,7 +24,7 @@ export interface NavHandlers {
 	setActive(key: DashboardViewName): void;
 }
 
-export function createNavHandlers(ctx: DashboardCtx): NavHandlers {
+export function createNavHandlers(ctx: DashboardShellCtx): NavHandlers {
 	let activeNav: DashboardViewName = "home";
 	/* Boutons du rendu COURANT. setActive bascule la classe active sur ces
 	   nœuds VIVANTS au lieu de laisser la vue reconstruire le rail : sans ça
@@ -33,7 +34,7 @@ export function createNavHandlers(ctx: DashboardCtx): NavHandlers {
 	let buttons: { key: DashboardViewName; el: HTMLElement }[] = [];
 
 	function paintActive(): void {
-		for (const b of buttons) b.el.toggleClass("qbd-nav-item--active", b.key === activeNav);
+		for (const b of buttons) b.el.classList.toggle("qbd-nav-item--active", b.key === activeNav);
 	}
 
 	const NAV_ITEMS: NavItem[] = [
@@ -45,28 +46,41 @@ export function createNavHandlers(ctx: DashboardCtx): NavHandlers {
 	];
 
 	function render(container: HTMLElement): void {
-		container.empty();
+		container.replaceChildren();
 
 		// Brand : logo NU centré, sans libellé ni séparateur (rail iconique
 		// façon StudySmarter — le nom du plugin est déjà dans l'onglet).
-		const brand = container.createDiv({ cls: "qbd-nav-brand" });
-		const brandIcon = brand.createSpan({ cls: "qbd-nav-brand-icon" });
-		setIcon(brandIcon, "graduation-cap");
+		const brand = ajouter(container, "div", "qbd-nav-brand");
+		const brandIcon = ajouter(brand, "span", "qbd-nav-brand-icon");
+		currentHost().ui.setIcon(brandIcon, "graduation-cap");
 
 		// Nav items
-		const navList = container.createDiv({ cls: "qbd-nav-items" });
+		const navList = ajouter(container, "div", "qbd-nav-items");
 		buttons = [];
 
 		for (const item of NAV_ITEMS) {
-			const btn = navList.createEl("button", {
-				cls: `qbd-nav-item ${activeNav === item.key ? "qbd-nav-item--active" : ""}`
-			});
+			// Une entrée que l'hôte ne sait pas encore ouvrir (ex. « Générer »
+			// côté application avant la tranche 4) reste VISIBLE mais inerte —
+			// une barre qui change de forme entre deux hôtes se remarque plus
+			// qu'une entrée manifestement à venir.
+			const disabled = !ctx.canOpen(item.key);
+			const cls = [
+				"qbd-nav-item",
+				activeNav === item.key ? "qbd-nav-item--active" : "",
+				disabled ? "qbd-nav-item--disabled" : "",
+			].filter(Boolean).join(" ");
+			const btn = ajouter(navList, "button", cls);
 			buttons.push({ key: item.key, el: btn });
 
-			const iconWrap = btn.createSpan({ cls: "qbd-nav-icon" });
-			setIcon(iconWrap, item.icon);
+			const iconWrap = ajouter(btn, "span", "qbd-nav-icon");
+			currentHost().ui.setIcon(iconWrap, item.icon);
 
-			btn.createSpan({ cls: "qbd-nav-label", text: t(item.labelKey) });
+			ajouter(btn, "span", "qbd-nav-label", t(item.labelKey));
+
+			if (disabled) {
+				btn.disabled = true;
+				btn.title = t("dashboard.nav.soon");
+			}
 
 			btn.addEventListener("click", () => {
 				activeNav = item.key;
@@ -79,11 +93,11 @@ export function createNavHandlers(ctx: DashboardCtx): NavHandlers {
 		// de navigation — délègue à l'hôte (ctx.openSettings) : sous Obsidian,
 		// l'onglet du plugin dans les réglages ; l'application ouvrira sa
 		// propre page Réglages.
-		const footer = container.createDiv({ cls: "qbd-nav-footer" });
-		const settingsBtn = footer.createEl("button", { cls: "qbd-nav-item" });
-		const settingsIcon = settingsBtn.createSpan({ cls: "qbd-nav-icon" });
-		setIcon(settingsIcon, "settings");
-		settingsBtn.createSpan({ cls: "qbd-nav-label", text: t("dashboard.nav.settings") });
+		const footer = ajouter(container, "div", "qbd-nav-footer");
+		const settingsBtn = ajouter(footer, "button", "qbd-nav-item");
+		const settingsIcon = ajouter(settingsBtn, "span", "qbd-nav-icon");
+		currentHost().ui.setIcon(settingsIcon, "settings");
+		ajouter(settingsBtn, "span", "qbd-nav-label", t("dashboard.nav.settings"));
 		settingsBtn.addEventListener("click", () => { ctx.openSettings(); });
 	}
 

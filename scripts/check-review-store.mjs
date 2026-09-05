@@ -475,25 +475,166 @@ await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) 
 	r.done();
 });
 
+/* ── LES RENOMMAGES PERTINENTS : normalisation des chemins, et suivi de la clé
+   COURANTE. Groupe repris de l'ancien `check-review-store.mjs` et rétabli ici
+   parce que, sans lui, `sansSlashFinal` et la relecture `applyRenames` du
+   filtre de pertinence n'avaient plus AUCUNE assertion — on pouvait les
+   supprimer toutes les deux et voir le contrôle rester vert. Ce sont pourtant
+   les deux fonctions qui empêchent de fabriquer « Cours// » et d'orpheliner
+   l'historique d'un dossier entier.
+
+   Adapté au faux hôte à deux racines plutôt que recopié : les événements
+   arrivent en chemins du CONTRAT (« B/… »), les lignes écrites sont LOCALES. */
+await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
+	const r = makeReporter("Adaptateur — renommages pertinents");
+	const MAINTENANT = 1_700_000_000_000;
+	const historique = JSON.stringify({ t: "answer", q: "Cours/Reseaux/ch1.md::q1", at: MAINTENANT, grade: "correct" }) + "\n";
+	const nouveauStore = () => {
+		const faux = fauxHote({ fichiers: { "B/.neo-quiz/review-log.jsonl": historique } });
+		return {
+			faux,
+			store: createReviewStore({
+				fs: faux.host.fs, watcher: faux.host.watcher, paths: faux.host.paths,
+				catalogue: () => [], horizons: () => ({}), now: () => MAINTENANT,
+			}),
+		};
+	};
+
+	/* SLASH FINAL. Un hôte nomme un dossier tantôt « Cours/Reseaux », tantôt
+	   « Cours/Reseaux/ ». Sans `sansSlashFinal`, le préfixe cherché serait
+	   « Cours/Reseaux/ » — aucune clé du journal n'y correspond, le renommage
+	   est jugé non pertinent, et le déplacement du dossier n'est PAS journalisé
+	   du tout. L'historique du module devient orphelin en silence. */
+	await withManualDebounce(async () => {
+		const { faux, store } = nouveauStore();
+		await store.load();
+		store.renamed("B/Cours/Reseaux/", "B/Cours/Réseaux/");
+		store.destroy(); // force le flush sans attendre les 500 ms
+		await settle();
+		r.check("un renommage de dossier à slash final est bien journalisé", faux.ecritures.length, 1);
+		const ligne = faux.derniereLigne();
+		r.check("c'est une ligne de renommage", ligne?.t, "rename");
+		r.check("son 'from' est normalisé, sans slash de fin", ligne?.from, "Cours/Reseaux");
+		r.check("son 'to' est normalisé, sans slash de fin", ligne?.to, "Cours/Réseaux");
+	});
+
+	/* DEUX RENOMMAGES SUCCESSIFS. Le second porte sur un chemin que le journal
+	   ne connaît QUE par la ligne écrite au premier. Sans la relecture
+	   `applyRenames` dans le filtre de pertinence, il serait comparé aux clés
+	   HISTORIQUES, jugé non pertinent, et l'historique du dossier s'arrêterait
+	   définitivement au premier déplacement. */
+	await withManualDebounce(async () => {
+		const { faux, store } = nouveauStore();
+		await store.load();
+		store.renamed("B/Cours/Reseaux", "B/Cours/Réseaux");
+		store.renamed("B/Cours/Réseaux", "B/Cours/Networks");
+		store.destroy();
+		await settle();
+		const lignes = faux.ecritures.flatMap(([, texte]) =>
+			texte.trim().split("\n").filter(Boolean).map(l => JSON.parse(l)));
+		r.check("deux renommages successifs suivent la clé COURANTE, pas l'historique",
+			lignes.map(l => [l.from, l.to]),
+			[["Cours/Reseaux", "Cours/Réseaux"], ["Cours/Réseaux", "Cours/Networks"]]);
+	});
+
+	/* NO-OP APRÈS NORMALISATION. « Cours/ » → « Cours » n'est pas un
+	   renommage : c'est le même dossier écrit de deux façons. Une ligne
+	   `Cours → Cours` serait fausse, et chaque relecture du journal la
+	   rejouerait pour rien. */
+	await withManualDebounce(async clock => {
+		const { faux, store } = nouveauStore();
+		await store.load();
+		store.renamed("B/Cours/", "B/Cours");
+		r.check("un renommage devenu no-op après normalisation n'arme aucune écriture", clock.count(), 0);
+		store.destroy();
+		await settle();
+		r.check("et n'écrit rien", faux.ecritures.length, 0);
+	});
+	r.done();
+});
+
+/* ── LE CANAL `onChange` : renommer une NOTE. C'est le chemin le plus fréquent
+   sous Obsidian, et il n'avait aucune assertion POSITIVE :
+   `emettreRenameFichier` n'était appelé qu'APRÈS `destroy()`, là où l'attendu
+   est justement que rien ne se passe. Inverser `ev.oldPath` et `ev.file.path`
+   dans l'abonnement — ou retirer l'abonnement entier — laissait donc le
+   contrôle vert, alors que l'historique de chaque note renommée était perdu. */
+await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
+	const r = makeReporter("Adaptateur — renommage d'une note (canal onChange)");
+	const MAINTENANT = 1_700_000_000_000;
+	const historique = JSON.stringify({ t: "answer", q: "Cours/reseau.md::q1", at: MAINTENANT, grade: "correct" }) + "\n";
+	await withManualDebounce(async () => {
+		const { host, ecritures, derniereLigne, emettreRenameFichier } = fauxHote({
+			fichiers: { "B/.neo-quiz/review-log.jsonl": historique },
+		});
+		const store = createReviewStore({
+			fs: host.fs, watcher: host.watcher, paths: host.paths,
+			catalogue: () => [], horizons: () => ({}), now: () => MAINTENANT,
+		});
+		await store.load();
+		emettreRenameFichier("B/Cours/reseau.md", "B/Cours/reseaux.md");
+		store.destroy();
+		await settle();
+		r.check("renommer une note journalise une ligne de renommage", ecritures.length, 1);
+		const ligne = derniereLigne();
+		r.check("c'est bien une ligne 'rename'", ligne?.t, "rename");
+		/* LE SENS COMPTE : `from` est l'ANCIEN chemin. Champs inversés, le
+		   filtre de pertinence cherche le chemin NEUF — que le journal ne
+		   connaît pas encore — juge le renommage non pertinent, et n'écrit
+		   rien du tout. */
+		r.check("de l'ANCIEN vers le NOUVEAU chemin, et en clés locales",
+			[ligne?.from, ligne?.to], ["Cours/reseau.md", "Cours/reseaux.md"]);
+	});
+	r.done();
+});
+
 await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
 	const r = makeReporter("Adaptateur — destruction");
 	const MAINTENANT = 1_700_000_000_000;
-	const historique = JSON.stringify({ t: "answer", q: "Cours/a.md::q1", at: MAINTENANT, grade: "correct" }) + "\n";
+	const historique = JSON.stringify({ t: "answer", q: "Cours/reseau.md::q1", at: MAINTENANT, grade: "correct" }) + "\n";
 	const { host, ecritures, emettreRenameDossier, emettreRenameFichier } = fauxHote({
 		fichiers: { "B/.neo-quiz/review-log.jsonl": historique },
 	});
 	const store = createReviewStore({
 		fs: host.fs, watcher: host.watcher, paths: host.paths,
-		catalogue: () => [], horizons: () => ({}), now: () => MAINTENANT,
+		catalogue: () => [{ q: "B/Cours/reseau.md::q1", module: "B/Cours", source: "B/Cours/reseau.md" }],
+		horizons: () => ({}), now: () => MAINTENANT,
 	});
 	await store.load();
 	store.destroy();
 	await tick();
 	const avant = ecritures.length;
+
+	/* PREMIÈRE garde : le DÉSABONNEMENT. Les callbacks ont quitté le faux hôte,
+	   donc plus aucune émission ne parvient jusqu'au store. */
 	emettreRenameDossier("B/Cours", "B/Reseaux");
-	emettreRenameFichier("B/a.md", "B/b.md");
+	emettreRenameFichier("B/Cours/reseau.md", "B/Cours/b.md");
 	await tick();
 	r.check("après destroy(), plus aucun renommage (dossier ou fichier) ne s'écrit", ecritures.length, avant);
+
+	/* SECONDE garde, et c'est une AUTRE : le `if (detruit) return` en tête de
+	   `record()` et de `renamed()`. DEUX GARDES VALENT MIEUX QU'UNE parce
+	   qu'elles arrêtent des choses différentes — le désabonnement arrête
+	   l'HÔTE, la garde interne arrête les appelants DIRECTS : le moteur qui
+	   enregistre une réponse pendant que la vue se ferme n'emprunte aucun
+	   callback, et le désabonnement ne peut rien contre lui. Les deux cas
+	   ci-dessous appellent donc les méthodes SANS passer par le faux hôte ;
+	   sinon la première garde masque la seconde et celle-ci n'est éprouvée par
+	   rien. */
+	store.record([{ q: "B/Cours/reseau.md::q2", grade: "correct" }]);
+	store.renamed("B/Cours", "B/Reseaux");
+	await tick();
+	const apres = store.plan(MAINTENANT);
+	/* Observé sur le PLAN et non sur `ecritures` : le journal étant lui aussi
+	   détruit, son minuteur ne repart pas et rien n'atteindrait le disque —
+	   une réponse acceptée à tort resterait donc invisible côté écritures,
+	   tout en polluant l'état en mémoire. `spentToday` compte la réponse
+	   chargée, et elle seule ; une seconde s'y ajouterait. */
+	r.check("record() après destroy() n'enregistre plus rien", apres.stats.spentToday, 1);
+	/* `new: 0` dit que la question a toujours son historique. Un renommage
+	   accepté après `destroy()` aurait déplacé sa clé hors du catalogue, et
+	   elle serait repassée pour neuve. */
+	r.check("renamed() après destroy() ne déplace plus aucune clé", apres.stats.new, 0);
 	r.done();
 });
 

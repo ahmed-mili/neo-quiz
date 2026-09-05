@@ -190,16 +190,22 @@ body {
 	transform: scale(0.985);
 }
 
+/* Le VIOLET officiel d'Obsidian (#7C3AED), et non l'accent du produit : ce
+   logo dit « ceci est un vault Obsidian », information qu'il ne porte que s'il
+   reste reconnaissable. Un logo repeint aux couleurs de l'hôte cesse d'être un
+   logo. C'est aussi pourquoi il est légèrement plus grand que les icônes
+   Lucide voisines : une forme pleine paraît plus petite qu'un trait à taille
+   égale. */
 .nq-vault-icone {
 	display: grid;
 	place-items: center;
 	flex: none;
-	color: var(--text-accent);
+	color: #7c3aed;
 }
 
 .nq-vault-icone svg {
-	width: 17px;
-	height: 17px;
+	width: 18px;
+	height: 18px;
 }
 
 .nq-vault-texte {

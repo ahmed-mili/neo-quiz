@@ -9,6 +9,7 @@ import type { QuizIndexEntry, Scanner } from "../../../src/dashboard/scanner";
 import { currentHost, installHost } from "../../../src/host/current";
 import { createWindowsHost, createWindowsIndex } from "./host";
 import { poserIcone } from "./host/ui";
+import { poserLogoObsidian } from "./ui/marques";
 import { allowFolder, estVaultObsidian, obsidianVaults, pickFolder, saveFolder, savedFolder } from "./host/folder";
 import { renderList } from "./ui/list";
 import { openQuizPage } from "./ui/quiz-page";
@@ -166,7 +167,10 @@ function mountSansDossier(root: HTMLElement): void {
 		for (const v of vaults) {
 			const ligne = ajouter(listeVaults, "button", "nq-vault");
 			ligne.type = "button";
-			poserIcone(ajouter(ligne, "span", "nq-vault-icone"), "library");
+			/* Le LOGO d'Obsidian, pas une icône Lucide : ce que cette image
+			   transporte, c'est « ceci est un vault Obsidian » — une icône de
+			   dossier dirait seulement « ceci est un dossier ». */
+			poserLogoObsidian(ajouter(ligne, "span", "nq-vault-icone"));
 			const texte = ajouter(ligne, "span", "nq-vault-texte");
 			// `textContent` : un nom de dossier vient du disque de l'utilisateur.
 			ajouter(texte, "span", "nq-vault-nom", v.nom);

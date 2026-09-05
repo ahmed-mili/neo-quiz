@@ -1,5 +1,6 @@
 import { PRODUCT_NAME } from "../branding";
-import { setIcon } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
@@ -83,7 +84,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		containerRef = container;
 		lastEntering = entering;
 		markViewEnter(container, entering, "qbd-home-enter");
-		container.empty();
+		container.replaceChildren();
 
 		// Cascade d'entrée : UN seul compteur pour toute la page (tuiles de
 		// stats, en-têtes de section, cartes) — même formule que « Mes quiz ».
@@ -126,23 +127,23 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		});
 
 		// ── Header ──
-		const header = container.createDiv({ cls: "qbd-home-header" });
-		const headerLeft = header.createDiv({ cls: "qbd-home-header-left" });
-		headerLeft.createEl("h2", { cls: "qbd-home-title", text: PRODUCT_NAME });
+		const header = ajouter(container, "div", "qbd-home-header");
+		const headerLeft = ajouter(header, "div", "qbd-home-header-left");
+		ajouter(headerLeft, "h2", "qbd-home-title", PRODUCT_NAME);
 
 		// Sous-titre orientant : annonce les deux actions principales. (La note
 		// active reste dans le footer de la sidebar, et la vue Générer la relit.)
 		const subtitle = inProgress.length > 0
 			? t("dashboard.home.subtitleResume")
 			: t("dashboard.home.subtitleStart");
-		headerLeft.createEl("p", { cls: "qbd-home-subtitle", text: subtitle });
+		ajouter(headerLeft, "p", "qbd-home-subtitle", subtitle);
 
 		// Pilule claire IDENTIQUE à « + New folder » de « Mes quiz » : une seule
 		// grammaire d'action primaire dans le dashboard (contrat 2026-07-28).
-		const genBtn = header.createEl("button", { cls: "qbd-btn--create" });
-		const genIcon = genBtn.createSpan({ cls: "qbd-btn-icon" });
-		setIcon(genIcon, "sparkles");
-		genBtn.createSpan({ text: t("dashboard.home.generate") });
+		const genBtn = ajouter(header, "button", "qbd-btn--create");
+		const genIcon = ajouter(genBtn, "span", "qbd-btn-icon");
+		currentHost().ui.setIcon(genIcon, "sparkles");
+		ajouter(genBtn, "span", undefined, t("dashboard.home.generate"));
 		genBtn.addEventListener("click", () => ctx.navigate("ai"));
 
 		// ── Reprendre : dernier quiz en cours (action primaire du returning user) ──
@@ -158,7 +159,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		}
 
 		// ── Stats grid ──
-		const statsGrid = container.createDiv({ cls: "qbd-home-stats" });
+		const statsGrid = ajouter(container, "div", "qbd-home-stats");
 
 		const totalQuestions = ctx.scanner ? ctx.scanner.getTotalQuestions() : 0;
 		const mastered = quizzes.filter(q => {
@@ -178,17 +179,17 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		];
 
 		for (const card of statCards) {
-			const el = statsGrid.createDiv({ cls: `qbd-stat-card${card.highlight ? " qbd-stat-card--highlight" : ""}` });
+			const el = ajouter(statsGrid, "div", `qbd-stat-card${card.highlight ? " qbd-stat-card--highlight" : ""}`);
 			el.style.setProperty("--qbd-card-delay", entryDelay());
-			const head = el.createDiv({ cls: "qbd-stat-head" });
-			const icon = head.createSpan({ cls: "qbd-stat-icon" });
-			setIcon(icon, card.icon);
-			head.createEl("p", { cls: "qbd-stat-label", text: card.label });
-			el.createEl("p", { cls: "qbd-stat-value", text: card.value });
+			const head = ajouter(el, "div", "qbd-stat-head");
+			const icon = ajouter(head, "span", "qbd-stat-icon");
+			currentHost().ui.setIcon(icon, card.icon);
+			ajouter(head, "p", "qbd-stat-label", card.label);
+			ajouter(el, "p", "qbd-stat-value", card.value);
 			// Aucune barre de progression sur une tuile de stats : même règle que
 			// les cartes de dossier (contrat visuel « Mes quiz »), le chiffre porte
 			// déjà l'information.
-			el.createEl("p", { cls: "qbd-stat-sub", text: card.sub });
+			ajouter(el, "p", "qbd-stat-sub", card.sub);
 		}
 
 		// ── Sections de quiz ──
@@ -214,7 +215,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		   quiz au-delà du 6e n'auraient aucune sortie depuis l'accueil. */
 		const renderSection = (key: string, label: string, list: QuizIndexEntry[], defaultOpen: boolean): void => {
 			const shown = list.slice(0, HOME_GRID_MAX);
-			const section = container.createDiv({ cls: "qbd-home-section" });
+			const section = ajouter(container, "div", "qbd-home-section");
 			const body = renderCollapsibleSection(collapse, section, key, label, list.length, {
 				rowClass: "qbd-home-node-row",
 				entryDelay,
@@ -222,20 +223,20 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 				// « See all » vit à CÔTÉ de l'en-tête, jamais dedans : l'en-tête
 				// est lui-même un <button> (un bouton dans un bouton est invalide).
 				headRow: (row) => {
-					const seeAll = row.createEl("button", { cls: "qbd-btn qbd-btn--subtle" });
+					const seeAll = ajouter(row, "button", "qbd-btn qbd-btn--subtle");
 					seeAll.type = "button";
-					seeAll.createSpan({
-						text: list.length > shown.length
+					ajouter(seeAll, "span", undefined,
+						list.length > shown.length
 							? t("dashboard.home.seeAllCount", { count: list.length })
 							: t("dashboard.home.seeAll")
-					});
-					const chevron = seeAll.createSpan({ cls: "qbd-btn-icon qbd-btn-icon--sm" });
-					setIcon(chevron, "chevron-right");
+					);
+					const chevron = ajouter(seeAll, "span", "qbd-btn-icon qbd-btn-icon--sm");
+					currentHost().ui.setIcon(chevron, "chevron-right");
 					seeAll.addEventListener("click", () => ctx.navigate("quizzes"));
 				},
 			});
 
-			const grid = body.createDiv({ cls: "qbd-home-grid" });
+			const grid = ajouter(body, "div", "qbd-home-grid");
 			for (const quiz of shown) {
 				renderQuizCard(grid, quiz, stats[quiz.path], map).style
 					.setProperty("--qbd-card-delay", entryDelay());
@@ -274,7 +275,7 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			// Une section vide n'a rien à dire : si toutes les notes dues ont
 			// disparu, on n'affiche pas un en-tête qui ne mène nulle part.
 			if (lignes.length > 0) {
-				const section = container.createDiv({ cls: "qbd-home-section" });
+				const section = ajouter(container, "div", "qbd-home-section");
 				// Même helper que « À faire » et « Complétés » : rangée 52px,
 				// chevron animé, libellé, badge compteur. Un balisage écrit à
 				// la main ici serait une VARIANTE de l'anatomie, ce que le
@@ -284,30 +285,28 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 					{ rowClass: "qbd-home-node-row", entryDelay, defaultOpen: true },
 				);
 
-				const liste = body.createDiv({ cls: "qbd-review-list" });
+				const liste = ajouter(body, "div", "qbd-review-list");
 				for (const { quiz, n } of lignes) {
-					const row = liste.createEl("button", { cls: "qbd-review-row" });
+					const row = ajouter(liste, "button", "qbd-review-row");
 					row.type = "button";
-					const icone = row.createSpan({ cls: "qbd-review-icon" });
-					setIcon(icone, "rotate-ccw");
-					row.createSpan({ cls: "qbd-review-title", text: quiz.title });
-					row.createSpan({
-						cls: "qbd-review-count",
-						text: t(n === 1 ? "dashboard.common.questionsOne" : "dashboard.common.questionsOther", { count: n }),
-					});
+					const icone = ajouter(row, "span", "qbd-review-icon");
+					currentHost().ui.setIcon(icone, "rotate-ccw");
+					ajouter(row, "span", "qbd-review-title", quiz.title);
+					ajouter(row, "span", "qbd-review-count",
+						t(n === 1 ? "dashboard.common.questionsOne" : "dashboard.common.questionsOther", { count: n }),
+					);
 					row.addEventListener("click", () => ctx.openQuiz(quiz));
 				}
 
 				/* Le report est une INFORMATION, pas un reproche : il dit que le
 				   budget du jour a tenu, pas que l'utilisateur est en retard. */
 				if (plan.deferred.length) {
-					liste.createEl("p", {
-						cls: "qbd-review-deferred",
-						text: t(
+					ajouter(liste, "p", "qbd-review-deferred",
+						t(
 							plan.deferred.length === 1 ? "dashboard.review.deferredOne" : "dashboard.review.deferredOther",
 							{ count: plan.deferred.length },
 						),
-					});
+					);
 				}
 			}
 		}
@@ -339,82 +338,76 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		const done = stats ? stats.questionsDone : 0;
 		const pct = total > 0 ? Math.round(done / total * 100) : 0;
 
-		const hero = container.createDiv({ cls: "qbd-resume-hero" });
+		const hero = ajouter(container, "div", "qbd-resume-hero");
 		hero.style.setProperty("--accent", accent);
 		const open = () => ctx.navigate("detail", { quiz });
 		hero.addEventListener("click", open);
 
 		// Halo derrière le contenu : boîte propre, entièrement contenue (une
 		// ellipse qui dépasserait se ferait couper net par un ancêtre à scroll).
-		hero.createDiv({ cls: "qbd-resume-halo" });
+		ajouter(hero, "div", "qbd-resume-halo");
 
-		const info = hero.createDiv({ cls: "qbd-resume-info" });
+		const info = ajouter(hero, "div", "qbd-resume-info");
 
-		const label = info.createDiv({ cls: "qbd-resume-label" });
-		const labelIcon = label.createSpan({ cls: "qbd-resume-label-icon" });
-		setIcon(labelIcon, "history");
-		label.createSpan({ text: t("dashboard.home.resumeLabel") });
+		const label = ajouter(info, "div", "qbd-resume-label");
+		const labelIcon = ajouter(label, "span", "qbd-resume-label-icon");
+		currentHost().ui.setIcon(labelIcon, "history");
+		ajouter(label, "span", undefined, t("dashboard.home.resumeLabel"));
 
-		info.createEl("p", { cls: "qbd-resume-title", text: quiz.title });
+		ajouter(info, "p", "qbd-resume-title", quiz.title);
 
 		// Dossier parent, même source que la ligne des cartes : le héros dit d'où
 		// vient le quiz, sinon sa couleur d'accent n'a aucun référent à l'écran.
 		const segs = quiz.path.split("/").slice(0, -1).filter(Boolean);
 		if (segs.length > 0) {
-			info.createEl("p", { cls: "qbd-resume-path", text: segs[segs.length - 1] });
+			ajouter(info, "p", "qbd-resume-path", segs[segs.length - 1]);
 		}
 
-		const progress = info.createDiv({ cls: "qbd-resume-progress" });
-		const bar = progress.createDiv({ cls: "qbd-resume-bar" });
-		const fill = bar.createDiv({ cls: "qbd-resume-bar-fill" });
+		const progress = ajouter(info, "div", "qbd-resume-progress");
+		const bar = ajouter(progress, "div", "qbd-resume-bar");
+		const fill = ajouter(bar, "div", "qbd-resume-bar-fill");
 		fill.style.width = `${pct}%`;
 		// L'accord se joue sur le TOTAL (« 0/1 question », « 3/10 questions ») :
 		// le compteur formé est ensuite inséré tel quel dans la ligne de progression.
 		const questions = t(total === 1 ? "dashboard.common.questionsOfOne" : "dashboard.common.questionsOfOther", { done, total });
-		progress.createEl("span", { cls: "qbd-resume-progress-text", text: t("dashboard.home.resumeProgress", { questions, pct }) });
+		ajouter(progress, "span", "qbd-resume-progress-text", t("dashboard.home.resumeProgress", { questions, pct }));
 
-		const btn = hero.createEl("button", { cls: "qbd-btn qbd-resume-btn" });
-		const btnIcon = btn.createSpan({ cls: "qbd-btn-icon" });
-		setIcon(btnIcon, "play");
-		btn.createSpan({ text: t("dashboard.home.resumeBtn") });
+		const btn = ajouter(hero, "button", "qbd-btn qbd-resume-btn");
+		const btnIcon = ajouter(btn, "span", "qbd-btn-icon");
+		currentHost().ui.setIcon(btnIcon, "play");
+		ajouter(btn, "span", undefined, t("dashboard.home.resumeBtn"));
 		btn.addEventListener("click", (e) => { e.stopPropagation(); open(); });
 	}
 
 	function renderOnboarding(container: HTMLElement): void {
-		const wrap = container.createDiv({ cls: "qbd-onboarding" });
+		const wrap = ajouter(container, "div", "qbd-onboarding");
 
-		const icon = wrap.createDiv({ cls: "qbd-onboarding-icon" });
-		setIcon(icon, "graduation-cap");
+		const icon = ajouter(wrap, "div", "qbd-onboarding-icon");
+		currentHost().ui.setIcon(icon, "graduation-cap");
 
-		wrap.createEl("h2", { cls: "qbd-onboarding-title", text: t("dashboard.onboarding.title") });
-		wrap.createEl("p", {
-			cls: "qbd-onboarding-lead",
-			text: t("dashboard.onboarding.lead")
-		});
+		ajouter(wrap, "h2", "qbd-onboarding-title", t("dashboard.onboarding.title"));
+		ajouter(wrap, "p", "qbd-onboarding-lead", t("dashboard.onboarding.lead"));
 
 		// Action primaire évidente — MÊME pilule claire que l'accueil peuplé et
 		// que « + New folder » : une seule grammaire d'action primaire.
-		const primary = wrap.createEl("button", { cls: "qbd-btn--create qbd-onboarding-cta" });
-		const pIcon = primary.createSpan({ cls: "qbd-btn-icon" });
-		setIcon(pIcon, "sparkles");
-		primary.createSpan({ text: t("dashboard.onboarding.generate") });
+		const primary = ajouter(wrap, "button", "qbd-btn--create qbd-onboarding-cta");
+		const pIcon = ajouter(primary, "span", "qbd-btn-icon");
+		currentHost().ui.setIcon(pIcon, "sparkles");
+		ajouter(primary, "span", undefined, t("dashboard.onboarding.generate"));
 		primary.addEventListener("click", () => ctx.navigate("ai"));
 
 		// Séparateur
-		const divider = wrap.createDiv({ cls: "qbd-onboarding-divider" });
-		divider.createSpan({ text: t("dashboard.onboarding.or") });
+		const divider = ajouter(wrap, "div", "qbd-onboarding-divider");
+		ajouter(divider, "span", undefined, t("dashboard.onboarding.or"));
 
 		// Méthode manuelle (divulgation progressive)
-		const manual = wrap.createDiv({ cls: "qbd-onboarding-manual" });
-		const manualHead = manual.createDiv({ cls: "qbd-onboarding-manual-head" });
-		const mIcon = manualHead.createSpan({ cls: "qbd-onboarding-manual-icon" });
-		setIcon(mIcon, "code");
-		manualHead.createSpan({ text: t("dashboard.onboarding.manualTitle") });
+		const manual = ajouter(wrap, "div", "qbd-onboarding-manual");
+		const manualHead = ajouter(manual, "div", "qbd-onboarding-manual-head");
+		const mIcon = ajouter(manualHead, "span", "qbd-onboarding-manual-icon");
+		currentHost().ui.setIcon(mIcon, "code");
+		ajouter(manualHead, "span", undefined, t("dashboard.onboarding.manualTitle"));
 
-		manual.createEl("p", {
-			cls: "qbd-onboarding-manual-desc",
-			text: t("dashboard.onboarding.manualDesc")
-		});
+		ajouter(manual, "p", "qbd-onboarding-manual-desc", t("dashboard.onboarding.manualDesc"));
 
 		// Construit au rendu (et non en constante de module) : l'exemple affiché
 		// ET copié doit être dans la langue courante. ⚠️ Les 2 valeurs traduites
@@ -435,19 +428,22 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 			"```"
 		].join("\n");
 
-		const codeWrap = manual.createDiv({ cls: "qbd-onboarding-code-wrap" });
-		const pre = codeWrap.createEl("pre", { cls: "qbd-onboarding-code" });
-		pre.createEl("code", { text: CODE_SAMPLE });
+		const codeWrap = ajouter(manual, "div", "qbd-onboarding-code-wrap");
+		const pre = ajouter(codeWrap, "pre", "qbd-onboarding-code");
+		ajouter(pre, "code", undefined, CODE_SAMPLE);
 
-		const copyBtn = codeWrap.createEl("button", { cls: "qbd-onboarding-copy", attr: { "aria-label": t("dashboard.onboarding.copy") } });
-		const copyIcon = copyBtn.createSpan({ cls: "qbd-btn-icon qbd-btn-icon--sm" });
-		setIcon(copyIcon, "copy");
+		const copyBtn = ajouter(codeWrap, "button", "qbd-onboarding-copy");
+		// `aria-label` n'est pas la propriété `cls`/`text` d'`ajouter` : posée en
+		// ATTRIBUT après coup, comme `aria-expanded` dans collapsible.ts.
+		copyBtn.setAttribute("aria-label", t("dashboard.onboarding.copy"));
+		const copyIcon = ajouter(copyBtn, "span", "qbd-btn-icon qbd-btn-icon--sm");
+		currentHost().ui.setIcon(copyIcon, "copy");
 		copyBtn.addEventListener("click", async () => {
 			try {
 				await navigator.clipboard.writeText(CODE_SAMPLE);
-				copyIcon.empty();
-				setIcon(copyIcon, "check");
-				window.setTimeout(() => { copyIcon.empty(); setIcon(copyIcon, "copy"); }, 1500);
+				copyIcon.replaceChildren();
+				currentHost().ui.setIcon(copyIcon, "check");
+				window.setTimeout(() => { copyIcon.replaceChildren(); currentHost().ui.setIcon(copyIcon, "copy"); }, 1500);
 			} catch (e) { /* clipboard indisponible : sans effet */ }
 		});
 	}

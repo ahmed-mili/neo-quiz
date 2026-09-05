@@ -37,6 +37,7 @@ import type { AiUsageEntry } from "../dashboard/ai-usage";
 import type { AiHandlers } from "../dashboard/ai";
 import type { ModuleOverride } from "../dashboard/quiz-modules";
 import type { ReviewStore } from "../review/review-store";
+import type { ActionMenuItem } from "../dashboard/ui-select";
 
 export type { Scanner, StatsStore, AiClient, AiHandlers };
 
@@ -220,6 +221,17 @@ export interface DashboardShellCtx {
 	    Une barre de navigation qui change de forme entre deux versions se
 	    remarque plus qu'une entrée visiblement à venir. */
 	canOpen(view: DashboardViewName): boolean;
+	/** Le journal de révision, pour la carte « À réviser aujourd'hui ».
+	    Absent = la section ne s'affiche pas. Le greffon le fournit depuis
+	    `plugin._reviewStore` ; l'application depuis `creerJournalApp`. */
+	reviewStore?: ReviewStore;
+	/** FABRIQUE du menu « ⋯ » d'une carte, appelée par la page avec SON
+	    propre `rerender` — le menu doit pouvoir repeindre la page qui
+	    l'affiche. Absente = pas de bouton « ⋯ », ce que `renderQuizCard`
+	    prévoit déjà par son `menu?` opt-in.
+	    L'application ne la fournit pas : les menus et les modals sont la
+	    tranche 2.6, et une carte sans « ⋯ » est un état prévu, pas dégradé. */
+	buildCardMenu?: (rerender: () => void) => (quiz: QuizIndexEntry) => ActionMenuItem[];
 }
 
 /* ════════════════════════════════════════════════════════

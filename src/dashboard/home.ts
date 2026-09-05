@@ -2,11 +2,11 @@ import { PRODUCT_NAME } from "../branding";
 import { currentHost } from "../host/current";
 import { ajouter } from "../dom";
 import { t } from "../i18n";
-import type { DashboardCtx } from "../types/dashboard-ctx";
+import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { renderQuizCard as renderSharedQuizCard } from "./quiz-card";
-import { isFolderArchived, buildQuizCardMenu } from "./quiz-menu";
+import { isFolderArchived } from "./quiz-menu";
 import { moduleForQuiz, applyModuleOverrides } from "./quiz-modules";
 import type { ModuleMap } from "./quiz-modules";
 import { moduleAccent } from "./module-color";
@@ -41,7 +41,7 @@ export interface HomeHandlers {
 	render(container: HTMLElement, entering?: boolean): void;
 }
 
-export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
+export function createHomeHandlers(ctx: DashboardShellCtx): HomeHandlers {
 
 	/* Dernier conteneur peint : le menu ⋯ d'une carte (archivage, reset de
 	   stats) doit pouvoir repeindre l'accueil sans repasser par la navigation. */
@@ -249,9 +249,10 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 		   possible aujourd'hui est d'ouvrir un quiz. La session composée de
 		   questions venant de plusieurs notes est le chantier suivant.
 
-		   `_reviewStore` peut être absent : la task 7 le fait DÉGRADER plutôt
-		   que bloquer le greffon, donc l'accueil doit vivre sans lui. */
-		const plan = ctx.plugin._reviewStore?.plan(Date.now());
+		   `reviewStore` peut être absent : la task 7 le fait DÉGRADER plutôt
+		   que bloquer le greffon, donc l'accueil doit vivre sans lui — c'est
+		   pourquoi ce membre de `DashboardShellCtx` est optionnel. */
+		const plan = ctx.reviewStore?.plan(Date.now());
 		if (plan && plan.today.length) {
 			const parNote = new Map<string, number>();
 			for (const cle of plan.today) {
@@ -467,7 +468,9 @@ export function createHomeHandlers(ctx: DashboardCtx): HomeHandlers {
 	): HTMLDivElement {
 		return renderSharedQuizCard(container, quiz, stats, (q) => ctx.navigate("detail", { quiz: q }), {
 			onPlay: (q) => ctx.openQuiz(q),
-			menu: buildQuizCardMenu(ctx, rerender),
+			// Absent côté application (menus et modals = tranche 2.6) : la carte
+			// se rend alors sans bouton « ⋯ », `menu?` étant opt-in.
+			menu: ctx.buildCardMenu?.(rerender),
 			accent: accentOf(quiz, map),
 		});
 	}

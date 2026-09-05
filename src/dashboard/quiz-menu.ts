@@ -3,7 +3,7 @@ import { QbdModal } from "../modal-base";
 import type { App } from "obsidian";
 import { ShareModal, moduleShareSource, quizShareSource } from "./share";
 import { t } from "../i18n";
-import type { DashboardCtx } from "../types/dashboard-ctx";
+import type { DashboardCtx, DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { ModuleGroup, ModuleMap } from "./quiz-modules";
 import { ModuleEditModal } from "./module-edit";
@@ -31,15 +31,19 @@ import { QUIZ_BLOCK_RE } from "../quiz-utils";
    `folder` de module) — jamais de quiz archivé individuellement (décision
    Ahmed 2026-07-19). */
 
-export function isFolderArchived(ctx: DashboardCtx, folder: string): boolean {
-	return new Set(ctx.plugin.settings.quizzesArchivedFolders || []).has(folder);
+/* Élargi à `DashboardShellCtx` (tâche 5, tour de correction 1) : ces deux
+   fonctions ne lisent QUE les cinq réglages déjà exposés par
+   `DashboardPageSettings`, et `DashboardCtx` l'étend — tout appelant existant
+   qui passe encore un `DashboardCtx` continue de compiler sans changement. */
+export function isFolderArchived(ctx: DashboardShellCtx, folder: string): boolean {
+	return new Set(ctx.settings.quizzesArchivedFolders || []).has(folder);
 }
 
-export function setFolderArchived(ctx: DashboardCtx, folder: string, on: boolean): void {
-	const set = new Set(ctx.plugin.settings.quizzesArchivedFolders || []);
+export function setFolderArchived(ctx: DashboardShellCtx, folder: string, on: boolean): void {
+	const set = new Set(ctx.settings.quizzesArchivedFolders || []);
 	if (on) set.add(folder); else set.delete(folder);
-	ctx.plugin.settings.quizzesArchivedFolders = [...set];
-	ctx.plugin.saveSettings().catch(() => {});
+	ctx.settings.quizzesArchivedFolders = [...set];
+	ctx.saveSettings().catch(() => {});
 }
 
 /* ── Confirmations : l'ARCHIVAGE est direct dans les deux sens (demande

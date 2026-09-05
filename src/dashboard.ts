@@ -2,6 +2,7 @@ import { PRODUCT_NAME } from "./branding";
 import { ItemView, Scope } from "obsidian";
 import type { App, WorkspaceLeaf, KeymapEventHandler } from "obsidian";
 import { openQuizForPlay } from "./dashboard/quiz-open";
+import { buildQuizCardMenu } from "./dashboard/quiz-menu";
 
 // C1 (plan) : les 5 factories des sous-modules dashboard/* sont désormais des
 // EXPORTS NOMMÉS (Tasks 8a–8c). L'ancien `const createX = require("./dashboard/x")`
@@ -210,6 +211,13 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 			// canOpen() n'a d'effet que côté application, qui rendra son
 			// entrée « Générer » désactivée tant que la tranche 4 n'existe pas.
 			canOpen: () => true,
+			reviewStore: this.plugin._reviewStore,
+			/* Closure sur `this.ctx`, lue AU MOMENT DE L'APPEL et non à la
+			   construction du littéral : `this.ctx` n'est assigné qu'après. Le
+			   menu ⋯ a besoin du ctx COMPLET (il ouvre des modals) — c'est
+			   précisément ce que l'application ne peut pas fournir, et
+			   pourquoi ce membre est optionnel. */
+			buildCardMenu: (rerender) => buildQuizCardMenu(this.ctx as DashboardCtx, rerender),
 		};
 
 		this.ctx = ctx;

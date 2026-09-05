@@ -1,10 +1,10 @@
-import type { Plugin } from "obsidian";
 import { t } from "../i18n";
 import type { StatsRecord } from "../types/quiz";
 
 /* ══════════════════════════════════════════════════════════
    STATS STORE — Stockage persistant des scores et progression
-   Utilise plugin.settings.quizStats pour la persistance.
+   Persistance déléguée à l'hôte (StatsStoreHost) : `settings.quizStats`
+   côté greffon, les réglages de l'application côté Windows.
    Mises à jour en mémoire synchrones, sauvegarde debouncée.
 ══════════════════════════════════════════════════════════ */
 
@@ -19,15 +19,18 @@ export interface QuizStatRecord extends StatsRecord {
 }
 
 /**
- * Plugin hôte tel que réellement passé par plugin.js (`this._statsStore =
- * createStatsStore(this)`, plugin.js:766) : un `obsidian.Plugin` plus les 2
- * membres custom de InteractiveQuizPlugin lus/écrits ici. plugin.js reste en
- * .js (hors périmètre Task 8a) : ce type n'est donc vérifié qu'ici et côté
- * consommateurs .ts du store, pas au call-site réel (non typé, checkJs off).
+ * Ce dont le store a besoin de son hôte, et rien de plus.
+ *
+ * C'était un `obsidian.Plugin` entier ; il n'en employait que deux choses.
+ * Le réduire à celles-ci est ce qui permet à l'application de le servir
+ * sans fabriquer un faux greffon — et rend le store éprouvable hors
+ * d'Obsidian, ce qu'il n'était pas.
  */
-export interface StatsStorePlugin extends Plugin {
-	settings: { quizStats?: Record<string, QuizStatRecord> };
-	saveSettings(): Promise<void>;
+export interface StatsStoreHost {
+	/** Les stats persistées, ou un objet vide au premier démarrage. */
+	getStats(): Record<string, QuizStatRecord>;
+	/** Écrit la table entière. Appelée en différé (500 ms) par le store. */
+	saveStats(data: Record<string, QuizStatRecord>): Promise<void>;
 }
 
 export interface StatsStore {
@@ -37,25 +40,31 @@ export interface StatsStore {
 	getAll(): Record<string, QuizStatRecord>;
 	deleteRecord(path: string): void;
 	formatRelativeTime(timestamp: number): string;
+	/**
+	 * Les stats suivent une note renommée. PUBLIQUE, et non plus un
+	 * abonnement pris par le store lui-même (voir plus bas) : c'est l'hôte,
+	 * seul à recevoir l'évènement de renommage (vault Obsidian, ou un
+	 * détecteur côté application), qui relaie vers cette méthode.
+	 */
+	renamed(oldPath: string, newPath: string): void;
 	destroy(): void;
 }
 
-export function createStatsStore(plugin: StatsStorePlugin): StatsStore {
+export function createStatsStore(host: StatsStoreHost): StatsStore {
 	const DEBOUNCE_MS = 500;
 	let saveTimer: ReturnType<typeof setTimeout> | null = null;
 	let data: Record<string, QuizStatRecord> = {}; // path → { bestScore, questionsDone, totalQuestions, lastPlayed, attempts }
 
-	/* ── Charger les stats depuis les settings ── */
+	/* ── Charger les stats depuis l'hôte ── */
 	function load(): void {
-		data = plugin.settings.quizStats || {};
+		data = host.getStats();
 	}
 
 	/* ── Debounced save ── */
 	function scheduleSave(): void {
 		if (saveTimer) clearTimeout(saveTimer);
 		saveTimer = setTimeout(() => {
-			plugin.settings.quizStats = data;
-			plugin.saveSettings().catch(() => {});
+			host.saveStats(data).catch(() => {});
 			saveTimer = null;
 		}, DEBOUNCE_MS);
 	}
@@ -126,29 +135,33 @@ export function createStatsStore(plugin: StatsStorePlugin): StatsStore {
 	   Le store indexe par CHEMIN. Sans cette migration, renommer un quiz
 	   (menu ⋯ « Rename », ou l'explorateur d'Obsidian) remettait sa
 	   progression à zéro en apparence, et l'ancienne clé restait orpheline
-	   dans data.json. Branché sur l'event du VAULT, pas sur l'action du menu :
-	   les deux chemins de renommage sont couverts d'un coup. Un DOSSIER
-	   renommé déplace aussi toutes les notes qu'il contient — d'où le préfixe.
-	   registerEvent : le plugin détache l'écouteur à son unload. */
-	plugin.registerEvent(plugin.app.vault.on("rename", (file, oldPath) => {
+	   dans data.json. Un DOSSIER renommé déplace aussi toutes les notes qu'il
+	   contient — d'où le préfixe.
+
+	   CE N'EST PLUS UN ABONNEMENT PRIS ICI : `createStatsStore` recevait
+	   auparavant un `Plugin` entier et s'abonnait lui-même à
+	   `plugin.app.vault.on("rename", …)`. Réduit à `StatsStoreHost`, le store
+	   ne peut plus le faire — ni `app`, ni `registerEvent` n'en font partie.
+	   La méthode reste PUBLIQUE : c'est l'appelant, seul à recevoir
+	   l'évènement de renommage (le greffon, via `vault.on`), qui la relaie. */
+	function renamed(oldPath: string, newPath: string): void {
 		const prefix = oldPath + "/";
 		let moved = false;
 		for (const key of Object.keys(data)) {
 			if (key !== oldPath && !key.startsWith(prefix)) continue;
 			const rec = data[key];
 			delete data[key];
-			data[key === oldPath ? file.path : file.path + key.slice(oldPath.length)] = rec;
+			data[key === oldPath ? newPath : newPath + key.slice(oldPath.length)] = rec;
 			moved = true;
 		}
 		if (moved) scheduleSave();
-	}));
+	}
 
 	function destroy(): void {
 		if (saveTimer) {
 			clearTimeout(saveTimer);
 			// Sauvegarde immédiate des données en attente
-			plugin.settings.quizStats = data;
-			plugin.saveSettings().catch(() => {});
+			host.saveStats(data).catch(() => {});
 		}
 	}
 
@@ -159,6 +172,7 @@ export function createStatsStore(plugin: StatsStorePlugin): StatsStore {
 		getAll,
 		deleteRecord,
 		formatRelativeTime,
+		renamed,
 		destroy
 	};
 }

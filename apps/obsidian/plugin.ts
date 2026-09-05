@@ -51,7 +51,7 @@ const QUIZ_BLOCK_LANGUAGE = "quiz-blocks";
 
 /** Forme complète des réglages persistés du plugin (source unique désormais que
  *  plugin.js est converti). Le sous-ensemble « IA/dictée » est réexposé aux vues
- *  via `AiSettings` (types/dashboard-ctx.ts) ; `quizStats` via `StatsStorePlugin`. */
+ *  via `AiSettings` (types/dashboard-ctx.ts) ; `quizStats` via `StatsStoreHost`. */
 interface QuizBlocksSettings {
 	/** Langue de l'INTERFACE. « auto » = celle d'Obsidian. Sans effet sur la
 	 *  langue des quiz générés (le modèle suit celle de la demande). */
@@ -1077,8 +1077,27 @@ export default class InteractiveQuizPlugin extends Plugin {
 		/* Le MÊME hôte que celui installé au début d'onload : en construire un
 		   second donnerait deux index et deux abonnements au vault. */
 		this._scanner = createScanner(currentHost());
-		this._statsStore = createStatsStore(this);
+		/* Le store ne connaît plus le `Plugin`, seulement deux méthodes. La
+		   forme persistée ne change PAS : `settings.quizStats`, écrit par
+		   `saveSettings()` comme avant — des stats déjà accumulées chez
+		   l'utilisateur doivent rester lisibles. */
+		this._statsStore = createStatsStore({
+			getStats: () => this.settings.quizStats || {},
+			saveStats: async (data) => {
+				this.settings.quizStats = data;
+				await this.saveSettings();
+			},
+		});
 		this._statsStore.load();
+		/* Le suivi de renommage vivait DANS `createStatsStore`, abonné
+		   directement au vault tant que le store recevait un `Plugin` entier.
+		   Réduit à `StatsStoreHost`, il ne peut plus s'abonner lui-même :
+		   c'est ICI, seul endroit à recevoir l'évènement du vault, qu'on
+		   relaie vers `renamed()` — même évènement, même logique, juste
+		   déplacée d'un cran. `registerEvent` : détaché à l'unload. */
+		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+			this._statsStore.renamed(oldPath, file.path);
+		}));
 		/* Le journal de révision. Il ne dépend plus de `manifest.dir` pour
 		   VIVRE (il vit à côté des notes), seulement pour retrouver l'ANCIEN
 		   emplacement — d'où la disparition du try/catch de construction. */

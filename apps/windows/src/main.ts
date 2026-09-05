@@ -15,7 +15,9 @@ import { poserIcone } from "./host/ui";
 import { poserLogoObsidian } from "./ui/marques";
 import { addFolder, allowFolder, chargerExamDates, estVaultObsidian, obsidianVaults, pickFolder, savedFolders } from "./host/folder";
 import type { ReviewStore } from "../../../src/review/review-store";
+import type { StatsStore } from "../../../src/dashboard/stats-store";
 import { creerJournalApp } from "./review/store";
+import { creerStatsApp } from "./review/stats";
 import { createRenameDetector } from "../../../src/review/rename-match";
 import { renderList } from "./ui/list";
 import { openQuizPage } from "./ui/quiz-page";
@@ -44,15 +46,15 @@ let demonterCourant: (() => void) | null = null;
 
 /* `document.createElement`, jamais les extensions DOM d'Obsidian (`createEl`,
    `createDiv`, `empty`) : elles n'existent pas dans la fenêtre de l'app. */
-export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore): void {
+export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore, stats: StatsStore): void {
 	demonterCourant?.();
 	demonterCourant = null;
 	root.textContent = "";
 	demonterCourant = renderList(root, {
 		scanner,
 		store,
-		onOpen: (entry) => { void ouvrirQuiz(root, scanner, store, entry); },
-		onSettings: () => ouvrirReglages(root, scanner, store),
+		onOpen: (entry) => { void ouvrirQuiz(root, scanner, store, stats, entry); },
+		onSettings: () => ouvrirReglages(root, scanner, store, stats),
 	});
 }
 
@@ -61,13 +63,13 @@ export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore): 
  * démonter la page et remonter la liste. La gestion des dossiers y vit
  * désormais tout entière — la liste n'a plus qu'un bouton pour y aller.
  */
-function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore): void {
+function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore, stats: StatsStore): void {
 	demonterCourant?.();
 	demonterCourant = null;
 	root.textContent = "";
 	demonterCourant = renderSettings(root, {
 		scanner,
-		onBack: () => mount(root, scanner, store),
+		onBack: () => mount(root, scanner, store, stats),
 		/* RECHARGER : ajouter ou retirer un dossier change les racines de
 		   l'hôte, et l'hôte est installé une seule fois. Un remontage à chaud
 		   laisserait vivre l'index et le surveillant de l'ancienne liste. */
@@ -94,7 +96,7 @@ function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore)
  * démonterait rien deux fois. C'est aussi pourquoi la page fait elle-même son
  * `root.replaceChildren()` en entrée.
  */
-async function ouvrirQuiz(root: HTMLElement, scanner: Scanner, store: ReviewStore, entry: QuizIndexEntry): Promise<void> {
+async function ouvrirQuiz(root: HTMLElement, scanner: Scanner, store: ReviewStore, stats: StatsStore, entry: QuizIndexEntry): Promise<void> {
 	demonterCourant?.();
 	demonterCourant = null;
 	root.textContent = "";
@@ -102,12 +104,12 @@ async function ouvrirQuiz(root: HTMLElement, scanner: Scanner, store: ReviewStor
 	   chaque aller-retour laisserait vivre une instance de moteur complète
 	   (écouteurs document/window, ResizeObserver, timers). C'est le pendant
 	   exact de l'`onunload` du MarkdownRenderChild côté greffon.
-	   `store` PASSÉ TEL QUEL comme puits : `ReviewStore` porte déjà `record` et
-	   `keyOf`, exactement la FORME que `openQuizPage` attend — l'envelopper
-	   dans un objet littéral n'ajouterait rien. */
+	   `store` ET `stats` PASSÉS TELS QUELS comme puits : `ReviewStore` et
+	   `StatsStore` portent déjà exactement la FORME que `openQuizPage`
+	   attend — les envelopper dans un objet littéral n'ajouterait rien. */
 	demonterCourant = await openQuizPage(root, entry, () => {
-		mount(root, scanner, store);
-	}, store);
+		mount(root, scanner, store, stats);
+	}, store, stats);
 }
 
 /**
@@ -269,6 +271,12 @@ async function demarrer(): Promise<void> {
 		   matière déjà saisie lors d'une session précédente. */
 		await chargerExamDates();
 		const store = await creerJournalApp(currentHost(), scanner);
+		/* Les STATISTIQUES par quiz : à côté du journal, mais un système
+		   distinct (spec de l'ordonnanceur §9.1 — voir `review/stats.ts`).
+		   Construit ici et non dans `creerJournalApp` : les deux stores
+		   n'ont rien en commun, mélanger leur construction les lierait pour
+		   rien. */
+		const stats = await creerStatsApp();
 		/* VIDER LE TAMPON D'ÉCRITURE AVANT DE PARTIR. `store` écrit en différé
 		   (500 ms, voir `log-file.ts`) ; sans ce vidage, fermer la fenêtre ou
 		   déclencher un `location.reload()` (changement de dossier, dans
@@ -283,8 +291,11 @@ async function demarrer(): Promise<void> {
 		   ne fait que LANCER l'écriture au plus tôt, jamais garantir qu'elle se
 		   termine avant que la page parte réellement. Écrire une version
 		   synchrone serait pire : elle bloquerait l'interface pour une garantie
-		   que le navigateur ne peut de toute façon pas tenir. */
-		window.addEventListener("beforeunload", () => store.destroy());
+		   que le navigateur ne peut de toute façon pas tenir.
+		   `stats` porte le MÊME débounce de 500 ms que `store` (voir
+		   `dashboard/stats-store.ts`) : le même risque de perdre la dernière
+		   écriture s'il n'était pas vidé ici aussi. */
+		window.addEventListener("beforeunload", () => { store.destroy(); stats.destroy(); });
 		/* L'appariement des renommages que le surveillant n'a pas su nommer.
 		   BRANCHÉ CÔTÉ APPLICATION SEULEMENT : Obsidian émet un vrai `rename`, que
 		   le contrat transmet tel quel — le greffon n'a rien à deviner. */
@@ -293,7 +304,7 @@ async function demarrer(): Promise<void> {
 			now: () => Date.now(),
 		});
 		scanner.onChange(quizzes => detecteur.observer(quizzes));
-		mount(root, scanner, store);
+		mount(root, scanner, store, stats);
 	} catch (e) {
 		root.textContent = t("app.error.startup", { error: e instanceof Error ? e.message : String(e) });
 	}

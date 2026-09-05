@@ -47,7 +47,15 @@ const CLE_DOSSIER_LEGACY = "folder";
 
 let magasin: Store | null = null;
 
-async function reglages(): Promise<Store> {
+/**
+ * Le magasin Tauri des réglages de l'application, partagé par tout ce
+ * fichier (dossiers, dates d'examen) ET par `review/stats.ts` (tâche
+ * « statistiques par quiz »). EXPORTÉE : ouvrir un second magasin sur le
+ * même fichier `settings.json` ferait écrire deux instances sans savoir
+ * l'une de l'autre, chacune écrasant les changements de l'autre à sa
+ * prochaine sauvegarde.
+ */
+export async function reglagesStore(): Promise<Store> {
 	if (!magasin) magasin = await load(FICHIER_REGLAGES);
 	return magasin;
 }
@@ -138,7 +146,7 @@ export function lireDossiers(brut: { folders?: unknown; folder?: unknown }): Dos
  */
 export async function savedFolders(): Promise<DossierQuiz[]> {
 	try {
-		const store = await reglages();
+		const store = await reglagesStore();
 		const liste = lireDossiers({
 			folders: await store.get(CLE_DOSSIERS),
 			folder: await store.get(CLE_DOSSIER_LEGACY),
@@ -161,7 +169,7 @@ export async function savedFolders(): Promise<DossierQuiz[]> {
 }
 
 export async function saveFolders(liste: DossierQuiz[]): Promise<void> {
-	const store = await reglages();
+	const store = await reglagesStore();
 	await store.set(CLE_DOSSIERS, liste);
 	// `save()` explicite : l'enregistrement automatique est débouncé, et
 	// l'application recharge la fenêtre juste après ce choix.
@@ -277,7 +285,7 @@ export function examDates(): Record<string, string> {
 
 export async function chargerExamDates(): Promise<Record<string, string>> {
 	try {
-		const brut = await (await reglages()).get<Record<string, string>>(CLE_EXAM_DATES);
+		const brut = await (await reglagesStore()).get<Record<string, string>>(CLE_EXAM_DATES);
 		datesExamen = brut && typeof brut === "object" ? brut : {};
 	} catch (e) {
 		console.warn(LOG_PREFIX, "dates d'examen illisibles:", e);
@@ -308,7 +316,7 @@ export function appliquerExamDate(
 export async function setExamDate(module: string, date: string): Promise<void> {
 	const suivant = appliquerExamDate(datesExamen, module, date);
 	datesExamen = suivant;
-	const store = await reglages();
+	const store = await reglagesStore();
 	await store.set(CLE_EXAM_DATES, suivant);
 	await store.save();
 }

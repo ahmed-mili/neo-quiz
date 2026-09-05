@@ -30,7 +30,7 @@ import { ajouter } from "../../../../src/dom";
 // Types en `import type` seulement : ils viennent du noyau et de `types/quiz`,
 // et ce fichier ne doit tirer aucune implémentation de plus.
 import type { ReviewGrade } from "../../../../src/scheduler";
-import type { QuestionRole } from "../../../../src/types/quiz";
+import type { QuestionRole, StatsRecord } from "../../../../src/types/quiz";
 
 
 /**
@@ -50,6 +50,11 @@ export async function openQuizPage(
 		record(entries: Array<{ q: string; grade: ReviewGrade; role?: QuestionRole }>): void;
 		keyOf(path: string, id: string): string;
 	},
+	/* Même principe que `reviewSink` : la FORME du puits des statistiques
+	   par quiz (`types/engine-ctx.ts`), jamais son implémentation — c'est ce
+	   qui permet à `StatsStore` (obsidian.Plugin ou réglages de l'app) de
+	   servir les deux hôtes sans que le moteur sache lequel l'appelle. */
+	statsSink?: { updateRecord(path: string, update: StatsRecord): unknown },
 ): Promise<() => void> {
 	root.replaceChildren();
 	const contenu = ajouter(root, "div", "qbd-content qbd-qz");
@@ -130,10 +135,11 @@ export async function openQuizPage(
 			   pour que le greffon lise exactement la même clé sur le même
 			   dossier. Le moteur, lui, ne sait rien de tout ça : il ne connaît
 			   que la FORME du puits.
-			   `statsSink` reste absent : les statistiques par quiz sont
-			   l'affichage du tableau de bord, une autre question — spec de
-			   l'ordonnanceur §9.1, « deux systèmes distincts, à ne pas
-			   fusionner ». */
+			   `statsSink` ET `reviewSink` : deux puits, deux questions — le
+			   journal répond à « quelles questions sont dues aujourd'hui », les
+			   stats à « où en suis-je sur ce quiz » (spec de l'ordonnanceur
+			   §9.1, « deux systèmes distincts, à ne pas fusionner »). */
+			statsSink,
 			reviewSink,
 		});
 	} catch (e) {

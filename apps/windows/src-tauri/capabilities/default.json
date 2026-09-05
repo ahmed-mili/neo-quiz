@@ -7,6 +7,12 @@
         "core:default",
         "window-state:default",
         "fs:default",
+        "fs:allow-stat",
+        "fs:allow-watch",
+        "fs:allow-unwatch",
+        "fs:allow-write-text-file",
+        "fs:allow-remove",
+        "fs:allow-rename",
         "dialog:allow-open",
         "store:default",
         "opener:default"

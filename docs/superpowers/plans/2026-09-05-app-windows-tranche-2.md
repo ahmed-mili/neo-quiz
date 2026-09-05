@@ -1127,7 +1127,7 @@ relecture ne suffit pas à juger : l'ordre des opérations y est tout, et
 l'erreur ne se voit qu'une fois l'historique perdu.
 
 **Fichiers :**
-- Modifier : `src/review/paths.ts` (créé en tâche 2)
+- Lire (sans le modifier) : `src/review/paths.ts` (créé en tâche 2)
 - Créer : `src/review/migration.ts`
 - Créer : `scripts/check-review-log.mjs`
 - Modifier : `package.json` (script `check:review-log`)

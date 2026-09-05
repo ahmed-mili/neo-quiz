@@ -8,8 +8,8 @@
 ══════════════════════════════════════════════════════════ */
 
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { cheminAbsolu } from "./fs";
 import type { WindowsIndex } from "./fs";
+import type { CarteRacines } from "./roots";
 import { LOG_PREFIX } from "../../../../src/branding";
 import type { HostFile, HostLinks } from "../../../../src/host/types";
 
@@ -102,10 +102,24 @@ export function resolveDansIndex(fichiers: HostFile[], linkPath: string, fromPat
 	return trie[0] ?? null;
 }
 
-export function createWindowsLinks(racine: string, index: WindowsIndex): HostLinks {
+export function createWindowsLinks(carte: CarteRacines, index: WindowsIndex): HostLinks {
+	/* La recherche est BORNÉE à la racine de la note citante : une image du
+	   dossier A ne doit jamais être servie à une note du dossier B, exactement
+	   comme un lien ne sort pas d'un vault. Sans cette borne, un homonyme d'un
+	   autre dossier gagnerait au hasard du départage — ou, pire, serait le SEUL
+	   résultat trouvé quand la racine de la note citante n'a elle-même aucun
+	   fichier de ce nom, ce qui devrait rendre `null`, pas un fichier d'ailleurs. */
+	const dansLaRacineDe = (fromPath: string): HostFile[] => {
+		const racine = carte.pour(fromPath);
+		const tous = index.all();
+		if (!racine) return tous;
+		const prefixe = racine.id + "/";
+		return tous.filter(f => f.path.startsWith(prefixe));
+	};
+
 	return {
 		resolve(linkPath, fromPath) {
-			return resolveDansIndex(index.all(), linkPath, fromPath);
+			return resolveDansIndex(dansLaRacineDe(fromPath), linkPath, fromPath);
 		},
 		/* `null` et JAMAIS la chaîne vide : un `src=""` fait recharger la page
 		   courante comme image — requête inutile et image cassée.
@@ -119,11 +133,14 @@ export function createWindowsLinks(racine: string, index: WindowsIndex): HostLin
 				const brut = typeof target === "string" ? target : target?.path;
 				const chemin = normaliserLien(brut ?? "");
 				if (!chemin) return null;
-				// L'index fait AUTORITÉ : une URL vers un fichier qu'il ne connaît
-				// pas pointerait hors du dossier autorisé.
-				const f = index.get(chemin) ?? resolveDansIndex(index.all(), chemin, fromPath || "");
+				/* Un chemin déjà complet (donc préfixé) est cherché tel quel ;
+				   un nom nu passe par la résolution, bornée à la racine de la
+				   note citante — ou, à défaut de note citante, à celle du
+				   chemin lui-même. */
+				const f = index.get(chemin) ?? resolveDansIndex(dansLaRacineDe(fromPath || chemin), chemin, fromPath || "");
 				if (!f) return null;
-				return convertFileSrc(cheminAbsolu(racine, f.path)) || null;
+				const a = carte.absolu(f.path);
+				return a ? convertFileSrc(a) || null : null;
 			} catch (e) {
 				console.warn(LOG_PREFIX, "resourceUrl erreur:", e);
 				return null;

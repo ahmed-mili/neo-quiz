@@ -5,10 +5,12 @@ import "./assets/toast.css";
 import "./assets/shell.css";
 import { setLanguage, t } from "../../../src/i18n";
 import { ajouter } from "../../../src/dom";
+import { LOG_PREFIX } from "../../../src/branding";
 import { createScanner } from "../../../src/dashboard/scanner";
 import type { QuizIndexEntry, Scanner } from "../../../src/dashboard/scanner";
 import { currentHost, installHost } from "../../../src/host/current";
-import { createWindowsHost, createWindowsIndex } from "./host";
+import { createWindowsHost, createWindowsIndex, creerCarteRacines } from "./host";
+import type { RacineOuverte } from "./host";
 import { poserIcone } from "./host/ui";
 import { poserLogoObsidian } from "./ui/marques";
 import { addFolder, allowFolder, estVaultObsidian, obsidianVaults, pickFolder, savedFolders } from "./host/folder";
@@ -198,21 +200,28 @@ async function demarrer(): Promise<void> {
 	try {
 		const dossiers = await savedFolders();
 		if (!dossiers.length) return void mountSansDossier(root);
-		/* Une seule racine ouverte pour l'instant : l'hôte composite est la
-		   tâche suivante. La liste, elle, est déjà au pluriel et persistée —
-		   la conversion du réglage ne se refera pas. */
-		const dossier = dossiers[0];
 		/* Les portées natives ne survivent pas au redémarrage : les rouvrir
-		   AVANT la première lecture, même sur un dossier déjà persisté. Elles
-		   sont DEUX (fichiers et protocole d'asset) — voir `allow_folder` dans
-		   `src-tauri/src/lib.rs`. */
-		await allowFolder(dossier.path);
-		/* APRÈS `allowFolder` : sans la portée, la détection échoue. Elle décide
-		   où vont les résultats — dans un vault, à l'endroit où le greffon les
-		   écrit déjà, pour que les deux hôtes n'aient pas chacun leur moitié. */
-		const estVault = await estVaultObsidian(dossier.path);
-		const index = await createWindowsIndex(dossier.path);
-		installHost(createWindowsHost(dossier.path, index, estVault));
+		   AVANT toute lecture, pour CHAQUE dossier. Un dossier disparu (clé USB
+		   retirée, dossier supprimé) ne doit pas empêcher les autres de
+		   s'ouvrir — d'où le `catch` par dossier plutôt qu'un `Promise.all`
+		   qui rejetterait en bloc. */
+		const ouvertes: RacineOuverte[] = [];
+		for (const d of dossiers) {
+			try {
+				await allowFolder(d.path);
+				/* APRÈS `allowFolder` : sans la portée, la détection échoue. Elle
+				   décide où vont les résultats de CE dossier — dans un vault, à
+				   l'endroit où le greffon les écrit déjà, pour que les deux hôtes
+				   n'aient pas chacun leur moitié. */
+				ouvertes.push({ ...d, vault: await estVaultObsidian(d.path) });
+			} catch (e) {
+				console.warn(LOG_PREFIX, "dossier inaccessible, ignoré:", d.path, e);
+			}
+		}
+		if (!ouvertes.length) return void mountSansDossier(root);
+		const carte = creerCarteRacines(ouvertes);
+		const index = await createWindowsIndex(carte);
+		installHost(createWindowsHost(carte, index));
 		/* Le scanner PARTAGÉ, sur l'hôte Windows : c'est lui qui décide ce
 		   qu'est un quiz, sous Obsidian comme ici. `init()` branche le
 		   surveillant PUIS scanne, dans cet ordre — l'inverse manquerait les

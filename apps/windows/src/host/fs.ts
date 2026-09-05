@@ -7,9 +7,12 @@
    scanner et le sanitizer les appellent en plein rendu, où une promesse
    obligerait à rendre tout le rendu asynchrone.
 
-   RÈGLE QUI GOUVERNE CE FICHIER : les chemins du contrat sont RELATIFS à la
-   racine du dossier, séparateurs `/`, jamais absolus. La conversion
-   relatif ↔ absolu vit ICI et nulle part ailleurs. Un chemin absolu qui
+   RÈGLE QUI GOUVERNE CE FICHIER : les chemins du contrat sont ceux de
+   `CarteRacines` (`./roots.ts`) — un premier segment qui nomme la racine,
+   puis un chemin `/` relatif à elle — jamais des chemins absolus. La
+   conversion chemin du contrat ↔ chemin absolu disque vit dans `roots.ts` et
+   NULLE PART ailleurs : ce fichier ne fait que la CONSOMMER (`carte.absolu`,
+   `carte.depuisAbsolu`), jamais la recomposer à la main. Un chemin absolu qui
    fuirait dans le code partagé casserait les clés du journal de révision, qui
    doivent être identiques sous les trois hôtes — et le défaut ne se verrait
    qu'à la tranche 2, quand l'historique de révision ne se retrouverait plus.
@@ -22,6 +25,7 @@ import {
 import type { WatchEvent } from "@tauri-apps/plugin-fs";
 import { LOG_PREFIX } from "../../../../src/branding";
 import type { HostFile, HostFileEvent, HostFs, HostWatcher } from "../../../../src/host/types";
+import type { CarteRacines } from "./roots";
 
 /** L'index en mémoire du dossier. Volontairement minuscule : c'est ce qui le
     rend éprouvable hors de la fenêtre (`npm run check:windows-host`). */
@@ -39,24 +43,17 @@ function normaliser(chemin: string): string {
 	return String(chemin ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
-/** Le chemin ABSOLU d'un chemin du contrat. Seule sortie autorisée d'un chemin
-    absolu hors de ce module : `links.ts` s'en sert pour `convertFileSrc`. */
-export function cheminAbsolu(racine: string, relatif: string): string {
+/** Le chemin absolu D'UNE SEULE RACINE (son dossier disque + un chemin
+    INTERNE à ce dossier, jamais encore préfixé). Utilisé seulement pendant
+    le PARCOURS d'une racine, avant que `carte.contrat` ne pose le préfixe :
+    ce n'est PAS la conversion chemin du contrat ↔ absolu, qui vit désormais
+    dans `roots.ts` (`CarteRacines.absolu` / `.depuisAbsolu`) et nulle part
+    ailleurs — ici, la racine à utiliser n'est jamais ambiguë, elle est
+    l'unique argument reçu. */
+function joindreDansRacine(racineDisque: string, relatif: string): string {
 	const rel = normaliser(relatif).replace(/^\/+/, "");
-	const base = normaliser(racine);
+	const base = normaliser(racineDisque);
 	return rel ? `${base}/${rel}` : base;
-}
-
-/** Le chemin du contrat d'un chemin absolu, ou `null` s'il est HORS de la
-    racine. La comparaison ignore la casse : Windows la ignore aussi, et un
-    surveillant qui rendrait « C:\\Users… » là où la racine dit « c:\\users… »
-    ferait tomber tous les évènements dans le vide, sans un mot. */
-export function cheminRelatif(racine: string, absolu: string): string | null {
-	const base = normaliser(racine);
-	const abs = normaliser(absolu);
-	if (abs.toLowerCase() === base.toLowerCase()) return "";
-	if (!abs.toLowerCase().startsWith(base.toLowerCase() + "/")) return null;
-	return abs.slice(base.length + 1);
 }
 
 /** Le `HostFile` d'un chemin du contrat. `mtime` vaut 0 quand l'hôte l'ignore,
@@ -148,7 +145,7 @@ async function parcourir(racine: string, relatif: string, sortie: string[]): Pro
 	try {
 		// Pas de `baseDir` : la racine est un chemin ABSOLU choisi par
 		// l'utilisateur, pas un dossier standard de l'application.
-		entrees = await readDir(cheminAbsolu(racine, relatif));
+		entrees = await readDir(joindreDansRacine(racine, relatif));
 	} catch (e) {
 		// Un sous-dossier illisible (droits, disque réseau absent) ne doit pas
 		// vider l'index entier : on le signale et on continue.
@@ -171,28 +168,39 @@ async function parcourir(racine: string, relatif: string, sortie: string[]): Pro
 }
 
 /**
- * Construit l'index du dossier.
+ * Construit l'index de TOUTES les racines ouvertes.
  *
  * `DirEntry` ne porte AUCUN chemin (Tauri 2) et `readDir` n'a pas d'option
  * récursive : les chemins sont composés en descendant, la récursion est à
  * notre charge.
  *
- * `stat` n'est appelé que sur les `.md`. C'est un aller-retour IPC par
+ * Le parcours de chaque racine produit des chemins INTERNES à elle (pas
+ * encore de préfixe) ; le préfixe de racine est posé ICI, une seule fois, via
+ * `carte.contrat` — tout ce qui sort de l'index est déjà un chemin du
+ * contrat, et plus rien en aval n'a à savoir qu'il y a plusieurs racines.
+ *
+ * `stat` n'est appelé que sur les `.md`, désormais via `carte.absolu` (le
+ * chemin collecté porte déjà son préfixe). C'est un aller-retour IPC par
  * fichier, et seul le catalogue de quiz se sert de `mtime` (tri « récents »,
  * `dashboard/quiz-recent.ts`) : le payer pour chaque image d'un dossier de
  * cours serait une dépense sans acheteur. Les autres fichiers gardent
  * `mtime: 0`, ce que le contrat autorise.
  */
-export async function createWindowsIndex(racine: string): Promise<WindowsIndex> {
-	const chemins: string[] = [];
-	await parcourir(racine, "", chemins);
+export async function createWindowsIndex(carte: CarteRacines): Promise<WindowsIndex> {
+	const fichiers: HostFile[] = [];
+	for (const racine of carte.toutes()) {
+		const chemins: string[] = [];
+		await parcourir(racine.path, "", chemins);
+		for (const c of chemins) fichiers.push(toHostFile(carte.contrat(racine.id, c)));
+	}
 
-	const fichiers: HostFile[] = chemins.map(c => toHostFile(c));
 	const aDater = fichiers.filter(f => f.extension === "md");
 	for (let i = 0; i < aDater.length; i += LOTS_STAT) {
 		await Promise.all(aDater.slice(i, i + LOTS_STAT).map(async f => {
 			try {
-				const info = await stat(cheminAbsolu(racine, f.path));
+				const absolu = carte.absolu(f.path);
+				if (!absolu) return; // chemin hors racines : ne peut pas arriver ici.
+				const info = await stat(absolu);
 				// FileInfo.mtime est `Date | null` ; HostFile.mtime est un nombre.
 				f.mtime = info.mtime ? info.mtime.getTime() : 0;
 			} catch (e) {
@@ -206,8 +214,15 @@ export async function createWindowsIndex(racine: string): Promise<WindowsIndex> 
 
 /* ─────────── le contrat HostFs ─────────── */
 
-export function createWindowsFs(racine: string, index: WindowsIndex): HostFs {
-	const abs = (chemin: string): string => cheminAbsolu(racine, chemin);
+export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostFs {
+	const abs = (chemin: string): string => {
+		const a = carte.absolu(chemin);
+		/* Un chemin hors racines ne doit pas devenir un chemin absolu
+		   plausible : il sortirait de la portée native et échouerait avec un
+		   message incompréhensible. Mieux vaut nommer la cause. */
+		if (!a) throw new Error(`chemin hors des dossiers ouverts : ${chemin}`);
+		return a;
+	};
 
 	return {
 		async read(path) {
@@ -289,12 +304,18 @@ export function createWindowsFs(racine: string, index: WindowsIndex): HostFs {
 /* ─────────── le surveillant ─────────── */
 
 /**
- * Surveille le dossier et tient l'index à jour.
+ * Surveille TOUTES les racines ouvertes et tient l'index à jour.
  *
  * `watch` (débouncé) et non `watchImmediate` : un éditeur écrit souvent une
  * note en plusieurs passes (fichier temporaire, remplacement, métadonnées), et
  * la version immédiate ferait alors trois `stat` et trois notifications pour
  * une seule sauvegarde. Le délai est le prix d'une seule notification juste.
+ *
+ * UN `watch` PAR RACINE : Tauri surveille un dossier à la fois, et les
+ * évènements qui en sortent portent des chemins absolus déjà distincts par
+ * construction (deux racines ne partagent pas de sous-arbre disque) —
+ * `carte.depuisAbsolu` retrouve la bonne racine sans jamais avoir besoin de
+ * savoir laquelle des surveillances a déclenché l'évènement.
  *
  * LIMITE MESURÉE, pas un oubli : plugin-fs signale un renommage par
  * `modify: { kind: "rename", mode: "from" | "to" | "both" }`. Seul `both`
@@ -304,7 +325,7 @@ export function createWindowsFs(racine: string, index: WindowsIndex): HostFs {
  * appariement faux. Le journal de révision perdra la clé dans ce cas — c'est
  * la tranche 2, qui le branchera, qui décidera quoi en faire.
  */
-export function createWindowsWatcher(racine: string, index: WindowsIndex): HostWatcher {
+export function createWindowsWatcher(carte: CarteRacines, index: WindowsIndex): HostWatcher {
 	const abonnes = new Set<(ev: HostFileEvent) => void>();
 	const abonnesDossier = new Set<(ev: { from: string; to: string }) => void>();
 
@@ -324,9 +345,13 @@ export function createWindowsWatcher(racine: string, index: WindowsIndex): HostW
 
 	/** Un chemin absolu, remis en état par ce qu'en dit le disque. */
 	async function reconcilier(absolu: string): Promise<void> {
-		const rel = cheminRelatif(racine, absolu);
-		if (rel === null || rel === "") return;
-		if (rel.split("/").slice(0, -1).some(dossierIgnore)) return;
+		const rel = carte.depuisAbsolu(absolu);
+		if (rel === null) return;
+		const segments = rel.split("/");
+		// Le premier segment est l'identifiant de la racine, jamais un dossier :
+		// un chemin qui s'y réduit (la racine elle-même) n'est pas un fichier.
+		if (segments.length < 2) return;
+		if (segments.slice(1, -1).some(dossierIgnore)) return;
 
 		let info = null;
 		try {
@@ -353,8 +378,8 @@ export function createWindowsWatcher(racine: string, index: WindowsIndex): HostW
 			type.modify.kind === "rename" && type.modify.mode === "both" &&
 			ev.paths.length === 2
 		) {
-			const avant = cheminRelatif(racine, ev.paths[0]);
-			const apres = cheminRelatif(racine, ev.paths[1]);
+			const avant = carte.depuisAbsolu(ev.paths[0]);
+			const apres = carte.depuisAbsolu(ev.paths[1]);
 			if (avant && apres) {
 				let mtime = 0;
 				try {
@@ -395,9 +420,13 @@ export function createWindowsWatcher(racine: string, index: WindowsIndex): HostW
 	/* Le surveillant démarre TOUT DE SUITE, pas au premier abonnement, et ne
 	   s'arrête jamais : l'index doit rester juste même quand personne n'écoute,
 	   sinon la première vue montée après une modification afficherait un
-	   catalogue périmé. Il vit aussi longtemps que la fenêtre. */
-	void watch(racine, ev => void traiter(ev), { recursive: true, delayMs: 300 })
-		.catch(e => console.warn(LOG_PREFIX, "surveillance du dossier impossible:", e));
+	   catalogue périmé. Il vit aussi longtemps que la fenêtre — UNE surveillance
+	   par racine, une racine illisible (droits, disque retiré) ne doit pas
+	   empêcher les autres d'être suivies. */
+	for (const racine of carte.toutes()) {
+		void watch(racine.path, ev => void traiter(ev), { recursive: true, delayMs: 300 })
+			.catch(e => console.warn(LOG_PREFIX, "surveillance impossible:", racine.name, e));
+	}
 
 	return {
 		onChange(cb) {

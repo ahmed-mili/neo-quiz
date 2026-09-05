@@ -6,13 +6,19 @@
  * qui doit rester juste après un renommage ou une suppression. Un index qui
  * dérive ne produit pas d'erreur : il fait disparaître des quiz du catalogue.
  *
+ * Depuis la tâche 6, l'hôte est COMPOSITE : les chemins du contrat portent un
+ * premier segment qui nomme la racine (`apps/windows/src/host/roots.ts`,
+ * `CarteRacines`). Un groupe dédié éprouve cette carte, PURE, indépendamment
+ * de tout le reste ; les groupes « liens » qui suivent la consomment comme un
+ * appelant réel le ferait.
+ *
  * Le reste de l'hôte (sélecteur, protocole d'asset, toasts, MathLive) n'existe
  * que dans la fenêtre : il se vérifie à la main, et la tâche dit comment. Les
  * modules chargés ici IMPORTENT Tauri au niveau module — c'est sans danger,
  * rien ne s'exécute au chargement. Une SEULE fonction Tauri est appelée, dans
- * le dernier groupe, et derrière un double de `window.__TAURI_INTERNALS__` :
- * la fabrication d'URL de `convertFileSrc`. Le groupe éprouve la RÉSOLUTION
- * qui la précède, pas la conversion elle-même.
+ * les groupes « resourceUrl », et derrière un double de
+ * `window.__TAURI_INTERNALS__` : la fabrication d'URL de `convertFileSrc`. Ces
+ * groupes éprouvent la RÉSOLUTION qui la précède, pas la conversion elle-même.
  *
  *     npm run check:windows-host
  */
@@ -88,6 +94,67 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ resolveDansIndex 
 	r.done();
 });
 
+/* Capturée hors du module chargé : la SEULE utilité de charger `roots.ts` à
+   nouveau, plus bas, serait de reconstruire le même bundle pour rien — la
+   fonction déjà importée reste valide même une fois le dossier temporaire de
+   `withSrcModule` effacé (le code est déjà en mémoire, Node ne relit rien). */
+let creerCarteRacines;
+
+await withSrcModule("apps/windows/src/host/roots.ts", async (mod) => {
+	creerCarteRacines = mod.creerCarteRacines;
+	const r = makeReporter("Hôte Windows — racines");
+	const carte = creerCarteRacines([
+		{ id: "Efrei", name: "Efrei", path: "C:/obsidian-vaults/Efrei", vault: true },
+		{ id: "Perso", name: "Perso", path: "D:/Notes", vault: false },
+	]);
+
+	/* LA CLÉ DU JOURNAL. C'est le cas le plus important du fichier : elle doit
+	   valoir exactement ce que le greffon écrit pour la même note. */
+	r.check("local() retire le préfixe de racine",
+		carte.local("Efrei/Cours/reseau.md"), "Cours/reseau.md");
+	r.check("contrat() le remet", carte.contrat("Efrei", "Cours/reseau.md"), "Efrei/Cours/reseau.md");
+	r.check("les deux se composent en identité",
+		carte.local(carte.contrat("Perso", "a/b.md")), "a/b.md");
+	/* Un identifiant VIDE (l'hôte Obsidian) laisse les chemins intacts. */
+	r.check("un identifiant vide ne préfixe rien", carte.contrat("", "a/b.md"), "a/b.md");
+
+	r.check("pour() trouve la racine", carte.pour("Perso/x.md")?.name, "Perso");
+	r.check("pour() d'un chemin hors racines rend null", carte.pour("Inconnu/x.md"), null);
+	/* Rendu TEL QUEL, pas vidé : une chaîne vide donnerait la clé « ::id »,
+	   qui ressemble à une vraie clé et polluerait l'historique. */
+	r.check("local() d'un chemin hors racines le rend tel quel",
+		carte.local("Inconnu/x.md"), "Inconnu/x.md");
+
+	r.check("absolu() compose le chemin disque",
+		carte.absolu("Efrei/Cours/reseau.md"), "C:/obsidian-vaults/Efrei/Cours/reseau.md");
+	r.check("depuisAbsolu() fait l'inverse",
+		carte.depuisAbsolu("D:/Notes/a/b.md"), "Perso/a/b.md");
+	/* Windows ignore la casse : un surveillant qui rendrait « D:/NOTES/… »
+	   ferait sinon tomber tous ses évènements dans le vide. */
+	r.check("depuisAbsolu() ignore la casse", carte.depuisAbsolu("d:/notes/a/b.md"), "Perso/a/b.md");
+	r.check("depuisAbsolu() hors racines rend null", carte.depuisAbsolu("E:/ailleurs/x.md"), null);
+
+	/* Un dossier ouvert DANS un autre : la plus longue racine gagne, sinon le
+	   même fichier aurait deux chemins du contrat selon l'ordre de la liste —
+	   donc deux entrées au catalogue pour un seul quiz. */
+	const imbrique = creerCarteRacines([
+		{ id: "Vault", name: "Vault", path: "C:/V", vault: true },
+		{ id: "Cours", name: "Cours", path: "C:/V/Cours", vault: false },
+	]);
+	r.check("la racine la plus longue gagne",
+		imbrique.depuisAbsolu("C:/V/Cours/ch1.md"), "Cours/ch1.md");
+
+	/* Le journal est sous la racine, au même endroit qu'elle soit un vault ou
+	   non — contrairement aux résultats. */
+	const hr = carte.hostRoots();
+	r.check("le journal de chaque racine", hr.map(h => h.reviewLog),
+		["Efrei/.neo-quiz/review-log.jsonl", "Perso/.neo-quiz/review-log.jsonl"]);
+	r.check("l'ancien journal est celui du greffon", hr[0].legacyReviewLog,
+		"Efrei/.obsidian/plugins/quiz-blocks/review-log.jsonl");
+
+	r.done();
+});
+
 await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLinks }) => {
 	const r = makeReporter("Hôte Windows — resourceUrl");
 
@@ -105,26 +172,31 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 	};
 
 	try {
+		/* Une seule racine, « Quiz » : les chemins du contrat portent quand
+		   même son préfixe (l'hôte Windows préfixe TOUJOURS, même à un seul
+		   dossier — seul le greffon a un identifiant vide). */
 		const fichiers = [
-			f("Autre/schema.png", "png"),
-			f("Cours/reseau.md", "md"),
-			f("Cours/Images/schema.png", "png"),
+			f("Quiz/Autre/schema.png", "png"),
+			f("Quiz/Cours/reseau.md", "md"),
+			f("Quiz/Cours/Images/schema.png", "png"),
 		];
 		const index = {
 			all: () => fichiers,
 			get: (p) => fichiers.find(x => x.path === p) ?? null,
 			apply: () => undefined,
 		};
-		const links = createWindowsLinks("D:/Quiz", index);
+		const carte = creerCarteRacines([{ id: "Quiz", name: "Quiz", path: "D:/Quiz", vault: false }]);
+		const links = createWindowsLinks(carte, index);
 
 		/* « RÉSOUT puis convertit » (src/host/types.ts) : un chemin connu de
-		   l'index donne une URL d'asset sur son chemin ABSOLU. */
+		   l'index (déjà un chemin du contrat, préfixé) donne une URL d'asset
+		   sur son chemin ABSOLU. */
 		r.check("resourceUrl d'un chemin connu donne l'URL d'asset absolue",
-			links.resourceUrl("Autre/schema.png"), "asset://localhost/D:/Quiz/Autre/schema.png");
+			links.resourceUrl("Quiz/Autre/schema.png"), "asset://localhost/D:/Quiz/Autre/schema.png");
 		/* Un HostFile passe par le même chemin : c'est la même sémantique, pas
 		   une seconde. */
 		r.check("resourceUrl d'un HostFile donne la même URL",
-			links.resourceUrl(f("Cours/reseau.md", "md")), "asset://localhost/D:/Quiz/Cours/reseau.md");
+			links.resourceUrl(f("Quiz/Cours/reseau.md", "md")), "asset://localhost/D:/Quiz/Cours/reseau.md");
 		/* Un NOM NU passe par la résolution par nom, comme `resolve` : c'est ce
 		   qui distingue « résout puis convertit » d'un simple changement de
 		   préfixe, et c'est la moitié que l'hôte Obsidian a dû rejoindre. */
@@ -140,11 +212,56 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 		/* `fromPath` BORNE la résolution : sans lui, un nom nu tombe sur
 		   l'homonyme le plus proche de la RACINE, pas de la note citante. */
 		r.check("resourceUrl passe la note citante à la résolution par nom",
-			links.resourceUrl("schema.png", "Cours/reseau.md"), "asset://localhost/D:/Quiz/Cours/Images/schema.png");
+			links.resourceUrl("schema.png", "Quiz/Cours/reseau.md"), "asset://localhost/D:/Quiz/Cours/Images/schema.png");
 	} finally {
 		if (precedent === undefined) delete globalThis.window;
 		else globalThis.window = precedent;
 	}
+
+	r.done();
+});
+
+await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLinks }) => {
+	const r = makeReporter("Hôte Windows — liens bornés aux racines");
+
+	/* DEUX racines, chacune avec un fichier NOMMÉ PAREIL. La borne
+	   (`dansLaRacineDe`, dans links.ts) doit empêcher un homonyme de l'une de
+	   répondre pour une note de l'autre — exactement comme un wikilink
+	   Obsidian ne sort pas du vault. */
+	const fichiers = [
+		f("Quiz/schema.png", "png"),
+		f("Quiz/ailleurs.png", "png"),
+		f("Perso/notes.md", "md"),
+		f("Perso/img/schema.png", "png"),
+	];
+	const index = {
+		all: () => fichiers,
+		get: (p) => fichiers.find(x => x.path === p) ?? null,
+		apply: () => undefined,
+	};
+	const carte = creerCarteRacines([
+		{ id: "Quiz", name: "Quiz", path: "D:/Quiz", vault: false },
+		{ id: "Perso", name: "Perso", path: "D:/Notes", vault: false },
+	]);
+	const links = createWindowsLinks(carte, index);
+
+	/* Un homonyme d'une AUTRE racine ne doit jamais gagner : sous Obsidian un
+	   lien ne sort pas du vault, et ici il ne sort pas de son dossier. */
+	r.check("la résolution par nom ne franchit pas les racines",
+		links.resolve("schema.png", "Perso/notes.md")?.path, "Perso/img/schema.png");
+
+	/* LE CAS RÉELLEMENT DISCRIMINANT pour la borne : « schema.png » existe
+	   dans les DEUX racines, et le tri par proximité de `resolveDansIndex`
+	   fait déjà gagner le fichier de la bonne racine tout seul (son premier
+	   segment de chemin, l'identifiant de racine, est commun avec celui de la
+	   note citante — un homonyme d'ailleurs ne partage jamais ce segment).
+	   Le cas ci-dessus resterait donc VERT même sans `dansLaRacineDe`. Ici,
+	   « ailleurs.png » n'existe QUE dans « Quiz » : sans la borne,
+	   `resolveDansIndex` chercherait dans TOUT l'index, le trouverait, et le
+	   rendrait pour une note de « Perso » qui n'a rien de ce nom — exactement
+	   la fuite que la borne existe pour empêcher. */
+	r.check("un homonyme d'une autre racine ne comble pas une absence dans la racine de la note",
+		links.resolve("ailleurs.png", "Perso/notes.md"), null);
 
 	r.done();
 });

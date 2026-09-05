@@ -36,7 +36,7 @@ import type { AiClient } from "../dashboard/ai-client";
 import type { AiUsageEntry } from "../dashboard/ai-usage";
 import type { AiHandlers } from "../dashboard/ai";
 import type { ModuleOverride } from "../dashboard/quiz-modules";
-import type { ReviewStore } from "../dashboard/review-store";
+import type { ReviewStore } from "../review/review-store";
 
 export type { Scanner, StatsStore, AiClient, AiHandlers };
 

@@ -30,8 +30,9 @@ import { createScanner } from "../../src/dashboard/scanner";
 import type { Scanner } from "../../src/dashboard/scanner";
 import { createStatsStore } from "../../src/dashboard/stats-store";
 import type { StatsStore, QuizStatRecord } from "../../src/dashboard/stats-store";
-import { createReviewStore } from "../../src/dashboard/review-store";
-import type { ReviewStore } from "../../src/dashboard/review-store";
+import { createReviewStore, buildReviewCatalogue, parseExamDate } from "../../src/review/review-store";
+import type { ReviewStore } from "../../src/review/review-store";
+import { migrateReviewLog } from "../../src/review/migration";
 import type { ModuleOverride } from "../../src/dashboard/quiz-modules";
 import * as voiceInstall from "../../src/dashboard/voice-install";
 import type { VoiceBackend, VoiceModelId, VoiceLang } from "../../src/dashboard/voice-install";
@@ -1078,17 +1079,47 @@ export default class InteractiveQuizPlugin extends Plugin {
 		this._scanner = createScanner(currentHost());
 		this._statsStore = createStatsStore(this);
 		this._statsStore.load();
-		/* `createReviewStore` échoue si `manifest.dir` est absent (API Obsidian :
-		   PluginManifest.dir est optionnel). Ce journal n'est pas encore relié à
-		   l'UI — le dashboard, les commandes et le rendu des blocs quiz-blocks ne
-		   doivent jamais dépendre de sa réussite. `_reviewStore` reste `undefined`
-		   si la création échoue, comme le prévoit déjà son type optionnel. */
-		try {
-			this._reviewStore = createReviewStore(this, this._scanner);
-			void this._reviewStore.load();
-		} catch (e) {
-			this.log.warn("journal de révision indisponible, désactivé pour cette session", e);
-		}
+		/* Le journal de révision. Il ne dépend plus de `manifest.dir` pour
+		   VIVRE (il vit à côté des notes), seulement pour retrouver l'ANCIEN
+		   emplacement — d'où la disparition du try/catch de construction. */
+		this._reviewStore = createReviewStore({
+			fs: currentHost().fs,
+			watcher: currentHost().watcher,
+			paths: currentHost().paths,
+			catalogue: () => buildReviewCatalogue(
+				this._scanner.getQuizzes(),
+				this.settings.quizzesModuleOverrides || {},
+			),
+			horizons: () => {
+				const out: Record<string, number | null> = {};
+				for (const [dossier, ov] of Object.entries(this.settings.quizzesModuleOverrides || {})) {
+					const t = parseExamDate(ov.examDate);
+					if (t !== null) out[dossier] = t;
+				}
+				return out;
+			},
+			now: () => Date.now(),
+		});
+		/* MIGRER D'ABORD, CHARGER ENSUITE : l'inverse lirait un journal neuf
+		   encore vide et le tableau de bord annoncerait « rien à réviser » à
+		   quelqu'un qui a un semestre derrière lui. La migration est
+		   idempotente : la refaire à chaque démarrage ne coûte qu'une lecture,
+		   et c'est ce qui permet à l'application de la déclencher aussi. */
+		void (async () => {
+			for (const root of currentHost().paths.roots()) {
+				try {
+					const res = await migrateReviewLog(currentHost().fs, root.legacyReviewLog, root.reviewLog);
+					if (!res.skipped) {
+						this.log.info(`journal migré : ${res.absorbed} ligne(s) absorbée(s), ${res.duplicates} déjà présente(s), ${res.ignored} illisible(s), ancien ${res.renamed ? "rangé" : "conservé"}`);
+					}
+				} catch (e) {
+					// Le démarrage ne dépend PAS de la migration : au pire
+					// l'historique reste à son ancienne place, et on réessaiera.
+					this.log.warn("migration du journal impossible", e);
+				}
+			}
+			await this._reviewStore?.load();
+		})();
 
 		/* ─── Quiz Dashboard View ─── */
 		this.registerView(VIEW_TYPE_DASHBOARD, (leaf) => new QuizDashboardView(leaf, this));

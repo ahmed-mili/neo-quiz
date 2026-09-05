@@ -6,7 +6,7 @@
    fournissent chacun une implémentation ; aucun d'eux n'apparaît ici.
 
    C'est la généralisation d'un patron déjà éprouvé dans ce dépôt :
-   `dashboard/review-store.ts` absorbe tout ce qui est spécifique à Obsidian
+   `review/review-store.ts` absorbe tout ce qui est spécifique à Obsidian
    pour que l'ordonnanceur n'en voie rien. La différence est mécanique :
    `npm run check:host` refuse toute nouvelle dépendance à `obsidian` dans
    `src/`, et c'est ce contrôle — pas la discipline — qui tient la frontière.

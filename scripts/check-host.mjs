@@ -55,7 +55,6 @@ const RESTANTS = [
 	"src/dashboard/quiz-open.ts",
 	"src/dashboard/quizzes-render.ts",
 	"src/dashboard/quizzes.ts",
-	"src/dashboard/review-store.ts",
 	"src/dashboard/share.ts",
 	"src/dashboard/stats-store.ts",
 	"src/dashboard/ui-select.ts",

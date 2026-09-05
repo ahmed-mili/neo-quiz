@@ -1,57 +1,25 @@
-/** Vérifie les frontières Obsidian où review-store pourrait perdre ou
- * fabriquer silencieusement des événements. Ce script a donc le droit de
- * toucher Obsidian, Date et setTimeout, contrairement au noyau pur. */
+/** Vérifie les frontières où review-store pourrait perdre ou fabriquer
+ * silencieusement des événements. Ce script a donc le droit de toucher
+ * Date et setTimeout, contrairement au noyau pur.
+ *
+ * DEUX MODULES, DEUX NIVEAUX DE FAUX :
+ * - `src/review/log-file.ts` (« un journal = un fichier ») : mécanique d'UN
+ *   fichier — chargement, écriture différée, absorption des conflits
+ *   Syncthing. Éprouvé avec un faux `LogFileFs` minimal (6 méthodes), sans
+ *   racine ni routage : ce niveau n'en a pas à connaître.
+ * - `src/review/review-store.ts` (l'adaptateur) : le ROUTAGE entre
+ *   plusieurs journaux, la conversion clé locale ⇄ clé du contrat, les
+ *   renommages. Éprouvé avec un faux HÔTE à deux racines (`fauxHote`).
+ */
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 const JOUR = 86400000;
 const DEBOUNCE_MS = 500;
 
-/** Plugin hôte minimal : le faux émetteur conserve les EventRef afin que
-    `destroy()` soit éprouvé comme dans Obsidian, pas seulement par inspection. */
-function fakePlugin(options = {}) {
-	const appended = [];
-	const removed = [];
-	const renameRefs = new Set();
-	const append = options.append ?? (async (_path, texte) => { appended.push(texte); });
-	const plugin = {
-		manifest: options.dir === undefined ? { dir: "vault/.obsidian/plugins/quiz-blocks" } : options.dir === null ? {} : { dir: options.dir },
-		app: {
-			vault: {
-				adapter: {
-					exists: options.exists ?? (async () => false),
-					read: options.read ?? (async () => { throw new Error("ENOENT"); }),
-					append,
-					// Fichiers de conflit Syncthing : `list` les expose, `remove`
-					// note ce que le store a jugé sûr de supprimer.
-					list: options.list ?? (async () => ({ files: [], folders: [] })),
-					remove: options.remove ?? (async (p) => { removed.push(p); }),
-				},
-				on: (nom, cb) => {
-					const ref = { nom, cb };
-					if (nom === "rename") renameRefs.add(ref);
-					return ref;
-				},
-				offref: (ref) => { renameRefs.delete(ref); },
-			},
-		},
-		registerEvent: () => {},
-		settings: { quizzesModuleOverrides: {} },
-	};
-	const emitRename = (file, oldPath) => {
-		for (const ref of [...renameRefs]) ref.cb(file, oldPath);
-	};
-	// Callback brut, capturé indépendamment du Set : contourne le retrait
-	// simulé par `offref` pour isoler la garde `detruit` interne au module
-	// (voir le test « destruction »), plutôt que de re-tester `offref` deux fois.
-	const renameCallback = () => [...renameRefs][0]?.cb ?? null;
-	return { plugin, appended, removed, emitRename, renameCallback, renameListenerCount: () => renameRefs.size };
-}
-
-const fakeScanner = (quizzes) => ({ getQuizzes: () => quizzes });
 const tick = () => new Promise(resolve => setTimeout(resolve, 20));
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
-/** Pilote uniquement le délai de 500 ms du store. Les autres timers Node
+/** Pilote uniquement le délai de 500 ms du journal. Les autres timers Node
     restent réels, afin que les promesses puissent continuer à se vider. */
 async function withManualDebounce(run) {
 	const realSetTimeout = globalThis.setTimeout;
@@ -86,16 +54,333 @@ async function withManualDebounce(run) {
 	}
 }
 
-await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
+/* ══════════════════════════════════════════════════════════
+   PARTIE 1 — `src/review/log-file.ts` : UN fichier de journal.
+══════════════════════════════════════════════════════════ */
+
+/** Faux `LogFileFs` (6 méthodes, la forme exacte que consomme `createLogFile`).
+    Chaque méthode est overridable via `options` pour simuler une lecture en
+    attente, un échec d'écriture ou un dossier de conflits — même idiome que
+    `scripts/check-review-log.mjs` pour `MigrationFs`. */
+function fauxFsJournal(initial = {}, options = {}) {
+	const fichiers = new Map(Object.entries(initial));
+	const trace = [];
+	return {
+		fichiers,
+		trace,
+		exists: options.exists ?? (async (p) => { trace.push(["exists", p]); return fichiers.has(p); }),
+		read: options.read ?? (async (p) => {
+			trace.push(["read", p]);
+			if (!fichiers.has(p)) throw new Error("ENOENT " + p);
+			return fichiers.get(p);
+		}),
+		append: options.append ?? (async (p, d) => {
+			trace.push(["append", p, d]);
+			fichiers.set(p, (fichiers.get(p) ?? "") + d);
+		}),
+		list: options.list ?? (async (dir) => { trace.push(["list", dir]); return []; }),
+		remove: async (p) => { trace.push(["remove", p]); fichiers.delete(p); },
+		mkdirs: async (p) => { trace.push(["mkdirs", p]); },
+	};
+}
+
+await withSrcModule("src/review/log-file.ts", async ({ createLogFile }) => {
+	const r = makeReporter("Journal (fichier) — écritures différées et ordre des lots après échec");
+	await withManualDebounce(async clock => {
+		const appels = [];
+		let libererPremier;
+		const premier = new Promise(resolve => { libererPremier = resolve; });
+		const fs = fauxFsJournal({}, {
+			append: async (_p, texte) => {
+				appels.push(texte);
+				if (appels.length === 1) await premier;
+			},
+		});
+		const fichier = createLogFile({ fs, path: "Cours/.neo-quiz/review-log.jsonl" });
+		fichier.append([{ t: "answer", q: "Cours/a.md::q1", at: 1, grade: "correct" }]);
+		clock.runNext();
+		await settle();
+		fichier.append([{ t: "answer", q: "Cours/b.md::q1", at: 2, grade: "wrong" }]);
+		clock.runNext();
+		await settle();
+		r.check("un seul append est en vol", appels.length, 1);
+		libererPremier();
+		await settle();
+		await settle();
+		r.check("le lot suivant est reprogrammé après le premier", clock.count(), 1);
+		clock.runNext();
+		await settle();
+		const questions = appels.map(texte => JSON.parse(texte.trim()).q);
+		r.check("les lots atteignent append dans l'ordre d'arrivée", questions, ["Cours/a.md::q1", "Cours/b.md::q1"]);
+		fichier.destroy();
+	});
+	r.done();
+});
+
+await withSrcModule("src/review/log-file.ts", async ({ createLogFile }) => {
+	// Un échec d'écriture ne doit pas se réarmer tout seul : le lot échoué
+	// reste en file et repart avec la prochaine vraie activité (append()),
+	// jamais sur une boucle de 500 ms autonome. La console ne doit signaler
+	// qu'UNE fois un échec persistant, pas à chaque tentative.
+	const r = makeReporter("Journal (fichier) — échec d'écriture ne boucle pas");
+	await withManualDebounce(async clock => {
+		const appels = [];
+		const fs = fauxFsJournal({}, {
+			append: async (_p, texte) => {
+				appels.push(texte);
+				if (appels.length < 3) throw new Error("disque verrouillé");
+			},
+		});
+		const erreurs = [];
+		const originalError = console.error;
+		console.error = (...args) => { erreurs.push(args); };
+		try {
+			const fichier = createLogFile({ fs, path: "Cours/.neo-quiz/review-log.jsonl" });
+			fichier.append([{ t: "answer", q: "Cours/a.md::q1", at: 1, grade: "correct" }]);
+			clock.runNext();
+			await settle();
+			await settle();
+			r.check("un échec n'arme plus de nouvelle tentative tout seul", clock.count(), 0);
+			r.check("l'échec est signalé une fois", erreurs.length, 1);
+
+			fichier.append([{ t: "answer", q: "Cours/b.md::q1", at: 2, grade: "wrong" }]);
+			clock.runNext();
+			await settle();
+			await settle();
+			r.check("un deuxième échec consécutif n'arme rien non plus", clock.count(), 0);
+			r.check("un échec persistant ne re-signale pas à chaque tentative", erreurs.length, 1);
+
+			fichier.append([{ t: "answer", q: "Cours/c.md::q1", at: 3, grade: "correct" }]);
+			clock.runNext();
+			await settle();
+			r.check("le troisième essai (qui réussit) porte les trois lots en attente", appels.length, 3);
+			const questions = appels[2].trim().split("\n").map(l => JSON.parse(l).q);
+			r.check("le lot en échec repart avec chaque nouvelle activité, dans l'ordre", questions,
+				["Cours/a.md::q1", "Cours/b.md::q1", "Cours/c.md::q1"]);
+			fichier.destroy();
+		} finally {
+			console.error = originalError;
+		}
+	});
+	r.done();
+});
+
+/* ── Fichiers de conflit Syncthing ──
+   Syncthing ne fusionne pas : deux appareils qui écrivent le journal entre
+   deux synchronisations produisent un `.sync-conflict-…jsonl` à côté. Le
+   fichier doit ABSORBER ses lignes manquantes puis le supprimer — et ne
+   jamais supprimer ce qu'il n'a pas entièrement compris. */
+await withSrcModule("src/review/log-file.ts", async ({ createLogFile }) => {
+	const r = makeReporter("Journal (fichier) — absorption des conflits Syncthing");
+	const DIR = "Cours/.neo-quiz";
+	const CHEMIN = `${DIR}/review-log.jsonl`;
+	const T0 = 1750000000000;
+	const ligne = (q, at) => JSON.stringify({ t: "answer", q, at, grade: "correct" }) + "\n";
+
+	// Le principal porte a et b ; le conflit porte b (recouvrement, cas NORMAL)
+	// et c (la révision que l'autre appareil est seul à connaître).
+	const principal = [ligne("n.md::a", T0), ligne("n.md::b", T0 + 1)].join("");
+	const conflit = [ligne("n.md::b", T0 + 1), ligne("n.md::c", T0 + 2)].join("");
+
+	const monter = async (opts = {}) => {
+		const fichiers = { [CHEMIN]: opts.principal ?? principal, ...(opts.conflits ?? {}) };
+		const fs = fauxFsJournal(fichiers, {
+			list: async () => [CHEMIN, ...Object.keys(opts.conflits ?? {})],
+		});
+		const fichier = createLogFile({ fs, path: CHEMIN });
+		await fichier.load();
+		return { fichier, fs };
+	};
+
+	const cheminC = `${DIR}/review-log.sync-conflict-20260904-071500-ABCDEFG.jsonl`;
+	const m = await monter({ conflits: { [cheminC]: conflit } });
+	const ecrit = m.fs.fichiers.get(CHEMIN).trim().split("\n");
+	// 3 lignes et non 4 : `b` est présent des deux côtés et ne doit être écrit
+	// qu'une fois, sinon `spentToday` compterait deux fois la même révision.
+	r.check("la révision connue du seul autre appareil est absorbée", ecrit.length, 3);
+	r.check("le recouvrement n'est PAS dupliqué", ecrit.filter(l => l.includes("n.md::b")).length, 1);
+	r.check("le fichier de conflit est supprimé après absorption", m.fs.fichiers.has(cheminC), false);
+
+	// Une ligne illisible : on absorbe le reste, on garde le fichier.
+	const cheminD = `${DIR}/review-log.sync-conflict-20260904-081500-HIJKLMN.jsonl`;
+	const abime = ligne("n.md::d", T0 + 3) + "{ pas du json\n";
+	const m2 = await monter({ conflits: { [cheminD]: abime } });
+	r.check("la ligne lisible d'un fichier abîmé est quand même absorbée",
+		m2.fs.fichiers.get(CHEMIN).includes("n.md::d"), true);
+	r.check("un fichier dont une ligne échappe n'est JAMAIS supprimé", m2.fs.fichiers.has(cheminD), true);
+
+	/* Journal sans saut final (édité à la main, tronqué par une fermeture
+	   brutale) : sans la recolle, la dernière ligne du principal et la
+	   première absorbée fusionneraient et deviendraient TOUTES DEUX
+	   illisibles. */
+	const m3 = await monter({ principal: principal.trimEnd(), conflits: { [cheminC]: conflit } });
+	const lu3 = m3.fs.fichiers.get(CHEMIN).trim().split("\n");
+	r.check("un journal sans saut final n'est pas corrompu par l'absorption", lu3.length, 3);
+	r.check("la ligne qui précédait la recolle reste lisible",
+		lu3.filter(l => l.includes("n.md::b")).length, 1);
+	r.done();
+});
+
+await withSrcModule("src/review/log-file.ts", async ({ createLogFile }) => {
+	const r = makeReporter("Journal (fichier) — chargement concurrent");
+	let resolveRead;
+	const lecture = new Promise(resolve => { resolveRead = resolve; });
+	const CHEMIN = "Cours/.neo-quiz/review-log.jsonl";
+	const fs = fauxFsJournal({}, { exists: async () => true, read: async () => lecture });
+	const fichier = createLogFile({ fs, path: CHEMIN });
+	const loading = fichier.load();
+	// `load()` n'a pas encore rendu la main : une ligne qui arrive maintenant
+	// ne doit pas être effacée par le fichier (vide) qui va être chargé.
+	fichier.append([{ t: "answer", q: "Cours/ch1.md::q1", at: 1, grade: "correct" }]);
+	resolveRead("");
+	await loading;
+	r.check("une ligne arrivée pendant load() n'est pas effacée",
+		fichier.lines().map(l => l.q), ["Cours/ch1.md::q1"]);
+	fichier.destroy();
+	await tick();
+	r.done();
+});
+
+/* ── Dédoublonnage (exigence ajoutée à la tâche 4, absente du brief) ──
+   Deux lignes identiques au caractère près SONT la même révision : le
+   moteur interdit d'enregistrer deux fois la même question dans une
+   session (son tableau `recorded[]`), et deux sessions ne se croisent
+   jamais à la milliseconde. Un doublon ne peut donc venir que d'ailleurs :
+   deux migrations entrelacées (`src/review/migration.ts`, qui l'annonce
+   explicitement comme NON garanti) ou une absorption de conflit Syncthing
+   qui recouvre partiellement le principal. Sans ce filtre, `spentToday`
+   compterait deux fois les mêmes réponses et mangerait le budget du jour. */
+await withSrcModule("src/review/log-file.ts", async ({ createLogFile }) => {
+	const r = makeReporter("Journal (fichier) — dédoublonnage au chargement");
+	const CHEMIN = "Cours/.neo-quiz/review-log.jsonl";
+	const doublon = JSON.stringify({ t: "answer", q: "Cours/ch1.md::q1", at: 1_700_000_000_000, grade: "correct" }) + "\n";
+	const fs = fauxFsJournal({ [CHEMIN]: doublon + doublon });
+	const fichier = createLogFile({ fs, path: CHEMIN });
+	await fichier.load();
+	r.check("deux lignes identiques au caractère près ne comptent que pour une seule",
+		fichier.lines().length, 1);
+	fichier.destroy();
+	r.done();
+});
+
+await withSrcModule("src/review/log-file.ts", async ({ createLogFile }) => {
+	const r = makeReporter("Journal (fichier) — erreurs de lecture");
+	const warnings = [];
+	const originalWarn = console.warn;
+	console.warn = (...args) => { warnings.push(args); };
+	try {
+		{
+			const fs = fauxFsJournal({}, { exists: async () => false });
+			const fichier = createLogFile({ fs, path: "Cours/.neo-quiz/review-log.jsonl" });
+			await fichier.load();
+			fichier.destroy();
+			r.check("l'absence normale du journal n'avertit pas", warnings.length, 0);
+		}
+		{
+			const fs = fauxFsJournal({}, { exists: async () => true, read: async () => { throw new Error("EACCES"); } });
+			const fichier = createLogFile({ fs, path: "Cours/.neo-quiz/review-log.jsonl" });
+			await fichier.load();
+			fichier.destroy();
+			r.check("une lecture refusée est signalée", warnings.length, 1);
+		}
+	} finally {
+		console.warn = originalWarn;
+	}
+	r.done();
+});
+
+/* ══════════════════════════════════════════════════════════
+   PARTIE 2 — `src/review/review-store.ts` : l'adaptateur (routage).
+══════════════════════════════════════════════════════════ */
+
+/** Un faux hôte à DEUX racines : c'est le multi-racines qui est éprouvé ici,
+    et un hôte à une seule racine laisserait passer un routage qui écrit
+    toujours dans le premier journal. `withManualDebounce` (ci-dessus) reste
+    inchangé : il pilote le délai de 500 ms.
+
+    EXTENSION par rapport au brief : `options.read` et `options.exists` sont
+    overridables, même idiome que `options.append`/`options.list` déjà
+    présents. Sans eux, le cas « renommage pendant load() » (garde `loaded()`,
+    l'un des cas explicitement à conserver) ne peut pas simuler une lecture
+    en attente — la garde qu'il éprouve deviendrait increvable. */
+function fauxHote(options = {}) {
+	const ecritures = [];
+	const fichiers = new Map(Object.entries(options.fichiers ?? {}));
+	const abonnesFichier = new Set();
+	const abonnesDossier = new Set();
+	const racines = [
+		{ id: "A", name: "A", reviewLog: "A/.neo-quiz/review-log.jsonl", legacyReviewLog: null },
+		{ id: "B", name: "B", reviewLog: "B/.neo-quiz/review-log.jsonl", legacyReviewLog: null },
+	];
+	const teteDe = (p) => String(p ?? "").split("/")[0];
+	const host = {
+		fs: {
+			exists: options.exists ?? (async (p) => fichiers.has(p)),
+			read: options.read ?? (async (p) => {
+				if (!fichiers.has(p)) throw new Error("ENOENT " + p);
+				return fichiers.get(p);
+			}),
+			append: options.append ?? (async (p, d) => {
+				ecritures.push([p, d]);
+				fichiers.set(p, (fichiers.get(p) ?? "") + d);
+			}),
+			list: options.list ?? (async () => []),
+			remove: async (p) => { fichiers.delete(p); },
+			mkdirs: async () => {},
+			write: async (p, d) => { fichiers.set(p, d); },
+			rename: async () => {},
+			listMarkdown: () => [],
+			findByName: () => [],
+			getFile: () => null,
+			readCached: async (p) => fichiers.get(p) ?? "",
+		},
+		watcher: {
+			onChange: (cb) => { abonnesFichier.add(cb); return () => abonnesFichier.delete(cb); },
+			onRenameDir: (cb) => { abonnesDossier.add(cb); return () => abonnesDossier.delete(cb); },
+		},
+		paths: {
+			roots: () => racines,
+			rootOf: (p) => racines.find(r => r.id === teteDe(p)) ?? null,
+			localPath: (p) => String(p ?? "").split("/").slice(1).join("/"),
+			contractPath: (id, l) => (id ? `${id}/${l}` : l),
+			resultsDirFor: () => "",
+		},
+	};
+	return {
+		host,
+		ecritures,
+		fichiers,
+		/** La DERNIÈRE ligne JSONL réellement écrite, déjà parsée. On lit la
+		    dernière LIGNE et non le dernier bloc parce qu'un lot différé peut en
+		    porter plusieurs : `JSON.parse` sur le bloc entier ferait MOURIR le
+		    script sur une SyntaxError là où on attend une assertion rouge et
+		    lisible — et une mort en route masque tous les groupes suivants. */
+		derniereLigne: () => {
+			const lignes = (ecritures[ecritures.length - 1]?.[1] ?? "").trim().split("\n").filter(Boolean);
+			return lignes.length ? JSON.parse(lignes[lignes.length - 1]) : null;
+		},
+		emettreRenameFichier: (oldPath, path) => {
+			for (const cb of [...abonnesFichier]) cb({ kind: "rename", oldPath, file: { path, name: "", basename: "", extension: "md", mtime: 0 } });
+		},
+		emettreRenameDossier: (from, to) => {
+			for (const cb of [...abonnesDossier]) cb({ from, to });
+		},
+	};
+}
+
+await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
 	const r = makeReporter("Adaptateur — clé opaque");
-	const { plugin } = fakePlugin();
-	const store = createReviewStore(plugin, fakeScanner([]));
+	const { host } = fauxHote();
+	const store = createReviewStore({
+		fs: host.fs, watcher: host.watcher, paths: host.paths,
+		catalogue: () => [], horizons: () => ({}), now: () => Date.now(),
+	});
 	r.check("keyOf assemble chemin et id par ::", store.keyOf("Cours/ch1.md", "q1"), "Cours/ch1.md::q1");
 	store.destroy();
 	r.done();
 });
 
-await withSrcModule("src/dashboard/review-store.ts", async ({ buildReviewCatalogue }) => {
+await withSrcModule("src/review/review-store.ts", async ({ buildReviewCatalogue }) => {
 	const r = makeReporter("Adaptateur — catalogue depuis le scanner");
 	const quizzes = [
 		{
@@ -120,347 +405,213 @@ await withSrcModule("src/dashboard/review-store.ts", async ({ buildReviewCatalog
 	r.done();
 });
 
-await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
-	const r = makeReporter("Adaptateur — chargement concurrent");
+await withSrcModule("src/review/review-store.ts", async ({ parseExamDate }) => {
+	const r = makeReporter("Adaptateur — parseExamDate (garde NaN)");
+	r.check("une date valide donne un timestamp fini", typeof parseExamDate("2027-06-01"), "number");
+	// 275761 dépasse la plage représentable par `Date`, mais ses trois
+	// composants non nuls passent le premier filtre (`!a || !m || !j`) : sans
+	// la garde `Number.isFinite`, ce cas produirait un timestamp NaN qui
+	// empoisonnerait silencieusement toutes les échéances du module.
+	r.check("une année hors du domaine Date retombe sur null, pas NaN", parseExamDate("275761-01-01"), null);
+	r.check("une entrée non-string rend null", parseExamDate(undefined), null);
+	r.done();
+});
+
+await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
+	// Régression : le listener de renommage est armé de façon SYNCHRONE, à la
+	// construction du store — avant que `load()` (asynchrone) n'ait fini de
+	// lire le disque. Pendant cette fenêtre, `journal.fichier.lines()` est
+	// encore vide, donc le filtre de pertinence (`correspondAuChemin`) ne
+	// peut reconnaître AUCUN chemin — sans la garde `loaded()`, l'événement
+	// serait perdu et la clé resterait orpheline pour toujours.
+	const r = makeReporter("Adaptateur — renommage pendant load() (garde loaded())");
 	let resolveRead;
 	const lecture = new Promise(resolve => { resolveRead = resolve; });
-	const { plugin } = fakePlugin({ exists: async () => true, read: async () => lecture });
-	const quiz = { path: "B1 (2025-2026)/Reseaux/ch1.md", items: [{ id: "q1" }] };
-	const store = createReviewStore(plugin, fakeScanner([quiz]));
+	const { host, ecritures, emettreRenameDossier } = fauxHote({
+		read: async (p) => {
+			if (p === "B/.neo-quiz/review-log.jsonl") return lecture;
+			throw new Error("ENOENT " + p);
+		},
+		exists: async (p) => p === "B/.neo-quiz/review-log.jsonl",
+	});
+	const store = createReviewStore({
+		fs: host.fs, watcher: host.watcher, paths: host.paths,
+		catalogue: () => [], horizons: () => ({}), now: () => 1_700_000_000_000,
+	});
 	const loading = store.load();
-	store.record([{ q: store.keyOf(quiz.path, "q1"), grade: "correct" }]);
+	// `journal.fichier.lines()` est encore vide ici : `load()` n'a pas rendu la main.
+	emettreRenameDossier("B/Cours", "B/Reseaux");
 	resolveRead("");
 	await loading;
-	const plan = store.plan(Date.now() + 2 * JOUR);
-	// La réponse arrivée pendant l'I/O reste une réponse : sans fusion, le
-	// remplacement par le fichier vide fabriquerait une question neuve.
-	r.check("une réponse arrivée pendant load n'est pas effacée", plan.stats.new, 0);
+	// `destroy()` force le flush immédiatement (il ne dépend pas du minuteur
+	// de 500 ms) ; `tick()` APRÈS laisse ses propres `await` (mkdirs, append)
+	// se dérouler avant qu'on inspecte `ecritures`.
 	store.destroy();
 	await tick();
+	r.check("un renommage survenu pendant le chargement est quand même écrit", ecritures.length, 1);
+	const ligne = ecritures[0] ? JSON.parse(ecritures[0][1].trim()) : null;
+	r.check("c'est bien une ligne de renommage, pas un événement perdu", ligne?.t, "rename");
+	r.check("ses deux chemins sont LOCAUX malgré la racine B", [ligne?.from, ligne?.to], ["Cours", "Reseaux"]);
 	r.done();
 });
 
-await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
-	// Régression 2 : le listener de renommage est armé de façon SYNCHRONE,
-	// avant que `load()` (asynchrone) n'ait fini de lire le disque. Pendant
-	// cette fenêtre, `lignes` est encore vide, donc le filtre de pertinence
-	// ne peut reconnaître AUCUN chemin — sans garde, l'événement serait
-	// perdu et la clé resterait orpheline pour toujours dans le journal fusionné.
-	const r = makeReporter("Adaptateur — renommage pendant load()");
-	let resolveRead;
-	const lecture = new Promise(resolve => { resolveRead = resolve; });
-	const { plugin, appended, emitRename } = fakePlugin({ exists: async () => true, read: async () => lecture });
-	const store = createReviewStore(plugin, fakeScanner([]));
-	const loading = store.load();
-	// `lignes` est encore vide ici : `load()` n'a pas rendu la main.
-	emitRename({ path: "Cours/Réseaux" }, "Cours/Reseaux");
-	resolveRead("");
-	await loading;
-	store.destroy();
+await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
+	// Une fois `load()` terminé, le filtre de pertinence reprend la main :
+	// un renommage sans rapport avec une question suivie ne doit RIEN écrire,
+	// sous peine de gonfler le journal indéfiniment.
+	const r = makeReporter("Adaptateur — renommage non pertinent (après chargement)");
+	const MAINTENANT = 1_700_000_000_000;
+	const historique = JSON.stringify({ t: "answer", q: "Cours/reseau.md::q1", at: MAINTENANT, grade: "correct" }) + "\n";
+	const { host, ecritures } = fauxHote({ fichiers: { "B/.neo-quiz/review-log.jsonl": historique } });
+	const store = createReviewStore({
+		fs: host.fs, watcher: host.watcher, paths: host.paths,
+		catalogue: () => [], horizons: () => ({}), now: () => MAINTENANT,
+	});
+	await store.load();
+	store.renamed("B/Images/logo.png", "B/Images/logo-2.png");
 	await tick();
-	r.check("un renommage survenu pendant la lecture est quand même écrit", appended.length, 1);
-	const ligne = appended[0] ? JSON.parse(appended[0].trim()) : null;
-	r.check("c'est bien la ligne de renommage, pas une ligne perdue", ligne?.t, "rename");
-	r.check("'from' correct malgré un journal encore vide au moment de l'événement", ligne?.from, "Cours/Reseaux");
+	r.check("un fichier sans rapport avec une question suivie ne gonfle pas le journal", ecritures.length, 0);
+	store.destroy();
 	r.done();
 });
 
-await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
-	const r = makeReporter("Adaptateur — erreurs de lecture");
-	const warnings = [];
-	const originalWarn = console.warn;
-	console.warn = (...args) => { warnings.push(args); };
-	try {
-		{
-			const { plugin } = fakePlugin({ exists: async () => false });
-			const store = createReviewStore(plugin, fakeScanner([]));
-			await store.load();
-			store.destroy();
-			r.check("l'absence normale du journal n'avertit pas", warnings.length, 0);
-		}
-		{
-			const { plugin } = fakePlugin({
-				exists: async () => true,
-				read: async () => { throw new Error("EACCES"); },
-			});
-			const store = createReviewStore(plugin, fakeScanner([]));
-			await store.load();
-			store.destroy();
-			r.check("une lecture refusée est signalée", warnings.length, 1);
-		}
-	} finally {
-		console.warn = originalWarn;
-	}
-	r.done();
-});
-
-await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
-	const r = makeReporter("Adaptateur — chemin du journal");
-	const { plugin } = fakePlugin({ dir: null });
-	let erreur = null;
-	try { createReviewStore(plugin, fakeScanner([])); } catch (e) { erreur = e; }
-	r.check("un manifest.dir absent fait échouer la création", erreur instanceof Error, true);
-	r.done();
-});
-
-await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
-	const r = makeReporter("Adaptateur — écritures sérialisées");
-	await withManualDebounce(async clock => {
-		const appels = [];
-		let libererPremier;
-		const premier = new Promise(resolve => { libererPremier = resolve; });
-		const { plugin } = fakePlugin({
-			append: async (_path, texte) => {
-				appels.push(texte);
-				if (appels.length === 1) await premier;
-			},
-		});
-		const store = createReviewStore(plugin, fakeScanner([]));
-		store.record([{ q: "Cours/a.md::q1", grade: "correct" }]);
-		clock.runNext();
-		await settle();
-		store.record([{ q: "Cours/b.md::q1", grade: "wrong" }]);
-		clock.runNext();
-		await settle();
-		r.check("un seul append est en vol", appels.length, 1);
-		libererPremier();
-		await settle();
-		await settle();
-		r.check("le lot suivant est reprogrammé après le premier", clock.count(), 1);
-		clock.runNext();
-		await settle();
-		const questions = appels.map(texte => JSON.parse(texte.trim()).q);
-		r.check("les lots atteignent append dans l'ordre de record", questions, ["Cours/a.md::q1", "Cours/b.md::q1"]);
-		store.destroy();
-	});
-	r.done();
-});
-
-await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
-	// Un échec d'écriture ne doit plus se réarmer tout seul (régression 3) : le
-	// lot échoué reste en file et repart avec la prochaine vraie activité
-	// (record()/rename), jamais sur une boucle de 500 ms autonome. La console
-	// ne doit signaler qu'UNE fois un échec persistant, pas à chaque tentative.
-	const r = makeReporter("Adaptateur — échec d'écriture ne boucle pas");
-	await withManualDebounce(async clock => {
-		const appels = [];
-		// Échoue deux fois de suite (deux lots distincts, sans succès entre les
-		// deux) avant de réussir : seule une deuxième défaillance CONSÉCUTIVE
-		// distingue « log une fois » de « log à chaque tentative ».
-		const { plugin } = fakePlugin({
-			append: async (_path, texte) => {
-				appels.push(texte);
-				if (appels.length < 3) throw new Error("disque verrouillé");
-			},
-		});
-		const erreurs = [];
-		const originalError = console.error;
-		console.error = (...args) => { erreurs.push(args); };
-		try {
-			const store = createReviewStore(plugin, fakeScanner([]));
-			store.record([{ q: "Cours/a.md::q1", grade: "correct" }]);
-			clock.runNext();
-			await settle();
-			await settle();
-			r.check("un échec n'arme plus de nouvelle tentative tout seul", clock.count(), 0);
-			r.check("l'échec est signalé une fois", erreurs.length, 1);
-
-			// Sans nouvel événement, rien ne doit jamais retenter tout seul : le
-			// lot en échec reste en attente indéfiniment, ce qui prouve l'absence
-			// de boucle plutôt qu'un simple délai plus long.
-			store.record([{ q: "Cours/b.md::q1", grade: "wrong" }]);
-			clock.runNext();
-			await settle();
-			await settle();
-			r.check("un deuxième échec consécutif n'arme rien non plus", clock.count(), 0);
-			r.check("un échec persistant ne re-signale pas à chaque tentative", erreurs.length, 1);
-
-			store.record([{ q: "Cours/c.md::q1", grade: "correct" }]);
-			clock.runNext();
-			await settle();
-			r.check("le troisième essai (qui réussit) porte les trois lots en attente", appels.length, 3);
-			const questions = appels[2].trim().split("\n").map(l => JSON.parse(l).q);
-			r.check("le lot en échec repart avec chaque nouvelle activité, dans l'ordre", questions,
-				["Cours/a.md::q1", "Cours/b.md::q1", "Cours/c.md::q1"]);
-			store.destroy();
-		} finally {
-			console.error = originalError;
-		}
-	});
-	r.done();
-});
-
-await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
-	const r = makeReporter("Adaptateur — renommages pertinents");
-	const historique = JSON.stringify({
-		t: "answer", q: "Cours/Reseaux/ch1.md::q1", at: 1_700_000_000_000, grade: "correct",
-	}) + "\n";
-
-	await withManualDebounce(async clock => {
-		const { plugin, emitRename } = fakePlugin({ exists: async () => true, read: async () => historique });
-		const store = createReviewStore(plugin, fakeScanner([]));
-		await store.load();
-		emitRename({ path: "Images/logo-2.png" }, "Images/logo.png");
-		r.check("un fichier sans question ne gonfle pas le journal", clock.count(), 0);
-		store.destroy();
-	});
-
-	await withManualDebounce(async () => {
-		const { plugin, appended, emitRename } = fakePlugin({ exists: async () => true, read: async () => historique });
-		const store = createReviewStore(plugin, fakeScanner([]));
-		await store.load();
-		emitRename({ path: "Cours/Réseaux/" }, "Cours/Reseaux/");
-		store.destroy();
-		await settle();
-		r.check("une ligne pertinente a bien été écrite", appended.length, 1);
-		const ligne = JSON.parse(appended[0].trim());
-		r.check("type 'rename'", ligne.t, "rename");
-		r.check("'from' sans slash de fin", ligne.from, "Cours/Reseaux");
-		r.check("'to' sans slash de fin", ligne.to, "Cours/Réseaux");
-	});
-
-	await withManualDebounce(async () => {
-		const { plugin, appended, emitRename } = fakePlugin({ exists: async () => true, read: async () => historique });
-		const store = createReviewStore(plugin, fakeScanner([]));
-		await store.load();
-		emitRename({ path: "Cours/Réseaux" }, "Cours/Reseaux");
-		emitRename({ path: "Cours/Networks" }, "Cours/Réseaux");
-		store.destroy();
-		await settle();
-		const lignes = appended.flatMap(texte => texte.trim().split("\n").map(JSON.parse));
-		r.check("deux renommages successifs suivent la clé courante", lignes.map(l => [l.from, l.to]), [
-			["Cours/Reseaux", "Cours/Réseaux"],
-			["Cours/Réseaux", "Cours/Networks"],
-		]);
-	});
-
-	{
-		const { plugin, appended, emitRename } = fakePlugin({ exists: async () => true, read: async () => historique });
-		const store = createReviewStore(plugin, fakeScanner([]));
-		await store.load();
-		emitRename({ path: "Cours" }, "Cours/");
-		store.destroy();
-		await tick();
-		r.check("un renommage no-op après normalisation n'écrit rien", appended.length, 0);
-	}
-
-	r.done();
-});
-
-await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
+await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
 	const r = makeReporter("Adaptateur — destruction");
-	await withManualDebounce(async clock => {
-		const historique = JSON.stringify({
-			t: "answer", q: "Cours/a.md::q1", at: 1_700_000_000_000, grade: "correct",
-		}) + "\n";
-		const { plugin, emitRename, renameCallback, renameListenerCount } = fakePlugin({
-			exists: async () => true,
-			read: async () => historique,
-		});
-		const store = createReviewStore(plugin, fakeScanner([]));
-		await store.load();
-		r.check("le listener existe avant destroy", renameListenerCount(), 1);
-		// Capturé AVANT destroy() : appeler ce callback brut après coup contourne
-		// le retrait simulé par `offref` et isole la garde interne `detruit` de
-		// `ecrireBientot()` — sans elle, ce test resterait vert même si `offref`
-		// était le seul rempart (ce qu'il était avant cette correction : deux
-		// gardes indépendantes rendaient l'assertion increvable).
-		const cb = renameCallback();
-		store.destroy();
-		r.check("destroy détache son EventRef", renameListenerCount(), 0);
-		emitRename({ path: "Cours/b.md" }, "Cours/a.md");
-		r.check("un rename après destroy (par le vault) ne réarme aucun timer", clock.count(), 0);
-		cb({ path: "Cours/c.md" }, "Cours/a.md");
-		r.check("le callback brut après destroy, hors offref, n'arme rien non plus", clock.count(), 0);
+	const MAINTENANT = 1_700_000_000_000;
+	const historique = JSON.stringify({ t: "answer", q: "Cours/a.md::q1", at: MAINTENANT, grade: "correct" }) + "\n";
+	const { host, ecritures, emettreRenameDossier, emettreRenameFichier } = fauxHote({
+		fichiers: { "B/.neo-quiz/review-log.jsonl": historique },
 	});
+	const store = createReviewStore({
+		fs: host.fs, watcher: host.watcher, paths: host.paths,
+		catalogue: () => [], horizons: () => ({}), now: () => MAINTENANT,
+	});
+	await store.load();
+	store.destroy();
+	await tick();
+	const avant = ecritures.length;
+	emettreRenameDossier("B/Cours", "B/Reseaux");
+	emettreRenameFichier("B/a.md", "B/b.md");
+	await tick();
+	r.check("après destroy(), plus aucun renommage (dossier ou fichier) ne s'écrit", ecritures.length, avant);
 	r.done();
 });
 
-await withSrcModule("src/dashboard/review-store.ts", async ({ createReviewStore }) => {
-	const r = makeReporter("Adaptateur — horizon (garde NaN, decision 2)");
-	const item = { path: "B1 (2025-2026)/Reseaux/ch1.md", items: [{ id: "q1" }] };
-	const now = Date.now();
-
-	async function planApres(overrides) {
-		const { plugin } = fakePlugin();
-		plugin.settings.quizzesModuleOverrides = overrides;
-		const store = createReviewStore(plugin, fakeScanner([item]));
-		await store.load();
-		store.record([{ q: store.keyOf(item.path, "q1"), grade: "correct" }]);
-		const plan = store.plan(now + 2 * JOUR);
-		store.destroy();
-		return plan;
-	}
-
-	// 275761 dépasse la plage Date mais ses trois composants non nuls passent
-	// le premier filtre. La garde doit donc produire le même repli que l'absence
-	// totale d'override, une valeur calculée indépendamment du chemin NaN.
-	const A = await planApres({});
-	const B = await planApres({ Reseaux: { examDate: "275761-01-01" } });
-	r.check("un horizon hors du domaine Date retombe sur le même plan qu'aucun override", B, A);
+/* ── Dédoublonnage, vu depuis l'adaptateur : le plan ne doit pas compter la
+   révision deux fois (`spentToday`, src/scheduler/plan.ts). Le test au
+   niveau `log-file.ts` prouve le chargement ; celui-ci prouve l'EFFET sur
+   le budget du jour, ce que `spentToday` (spec §6) exige explicitement. */
+await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
+	const r = makeReporter("Adaptateur — dédoublonnage : le plan ne compte pas deux fois");
+	const MAINTENANT = 1_700_000_000_000;
+	const doublon = JSON.stringify({ t: "answer", q: "Cours/reseau.md::q1", at: MAINTENANT, grade: "correct" }) + "\n";
+	const { host } = fauxHote({ fichiers: { "B/.neo-quiz/review-log.jsonl": doublon + doublon } });
+	const store = createReviewStore({
+		fs: host.fs, watcher: host.watcher, paths: host.paths,
+		catalogue: () => [{ q: "B/Cours/reseau.md::q1", module: "B/Cours", source: "B/Cours/reseau.md" }],
+		horizons: () => ({}),
+		now: () => MAINTENANT,
+	});
+	await store.load();
+	const plan = store.plan(MAINTENANT);
+	r.check("une ligne dupliquée dans le journal ne compte qu'une fois dans le budget du jour",
+		plan.stats.spentToday, 1);
+	store.destroy();
 	r.done();
 });
 
-/* ── Fichiers de conflit Syncthing ──
-   Syncthing ne fusionne pas : deux appareils qui écrivent le journal entre
-   deux synchronisations produisent un `.sync-conflict-…jsonl` à côté. Le
-   store doit ABSORBER ses lignes manquantes puis le supprimer — et ne jamais
-   supprimer ce qu'il n'a pas entièrement compris. */
-await withSrcModule("src/dashboard/review-store.ts", async (mod) => {
-	const r = makeReporter("Adaptateur — absorption des conflits Syncthing");
-	const DIR = "vault/.obsidian/plugins/quiz-blocks";
-	const T0 = 1750000000000;
-	const ligne = (q, at) => JSON.stringify({ t: "answer", q, at, grade: "correct" }) + "\n";
-
-	// Le principal porte a et b ; le conflit porte b (recouvrement, cas NORMAL)
-	// et c (la révision que l'autre appareil est seul à connaître).
-	// `formatLine` termine chaque ligne par un saut : un vrai journal finit
-	// donc TOUJOURS par un saut. Le fixture doit refleter la realite.
-	const principal = [ligne("n.md::a", T0), ligne("n.md::b", T0 + 1)].join("");
-	const conflit = [ligne("n.md::b", T0 + 1), ligne("n.md::c", T0 + 2)].join("");
-
-	const monter = async (opts = {}) => {
-		let disque = opts.principal ?? principal;
-		const f = fakePlugin({
-			exists: async () => true,
-			read: async (p) => {
-				if (p.endsWith("review-log.jsonl")) return disque;
-				if (p in (opts.conflits ?? {})) return opts.conflits[p];
-				throw new Error("ENOENT " + p);
-			},
-			append: async (_p, texte) => { disque += texte; },
-			list: async () => ({ files: [`${DIR}/review-log.jsonl`, ...Object.keys(opts.conflits ?? {})], folders: [] }),
+/* ── Les quatre cas neufs du brief (routage multi-racines) ──
+   Enveloppé dans `withManualDebounce` : sans lui, `record()` arme un VRAI
+   minuteur de 500 ms, et rien dans ce test ne le déclenche autrement (à la
+   différence du cas « renommage pendant load() », qui force le flush via
+   `destroy()`) — un simple `tick()` de quelques dizaines de ms le laisserait
+   filer et ferait rougir le cas pour une raison qui n'a rien à voir avec le
+   routage. */
+await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
+	const r = makeReporter("Adaptateur — routage multi-racines");
+	await withManualDebounce(async clock => {
+		const { host, ecritures, derniereLigne, emettreRenameDossier } = fauxHote();
+		const MAINTENANT = 1_700_000_000_000;
+		const store = createReviewStore({
+			fs: host.fs, watcher: host.watcher, paths: host.paths,
+			catalogue: () => [{ q: "B/Cours/reseau.md::q1", module: "B/Cours", source: "B/Cours/reseau.md" }],
+			horizons: () => ({}),
+			now: () => MAINTENANT,
 		});
-		const store = mod.createReviewStore(f.plugin, fakeScanner([]));
 		await store.load();
-		return { store, f, disque: () => disque };
-	};
+		store.record([{ q: store.keyOf("B/Cours/reseau.md", "q1"), grade: "wrong" }]);
+		clock.runNext(); // déclenche le lot différé (au lieu d'attendre les 500 ms réels)
+		await settle();
+		/* DEUX JOURS PLUS TARD : une réponse fausse replace la question à un jour
+		   (`intervalleEchec`), donc au moment même de la réponse elle n'est PAS
+		   due — un plan calculé à `MAINTENANT` serait vide, et le cas ci-dessous
+		   passerait au vert pour une raison qui n'a rien à voir avec les clés.
+		   Cette vacuité-là n'est pas perdue pour autant : elle prouve AUTRE
+		   chose, et le plan du jour juste en dessous s'en sert. */
+		const plan = store.plan(MAINTENANT + 2 * JOUR);
+		/* ET LE PLAN DU JOUR MÊME, sans lequel le cas des clés ne garde rien.
+		   Éprouvé : neutraliser `paths.contractPath` dans `versContrat` laisse
+		   « le plan voit la clé préfixée » au VERT. La raison est que l'échec
+		   se déguise en son contraire — l'événement ne rejoint plus sa
+		   question, celle-ci passe pour NEUVE, et une question neuve est due à
+		   deux jours exactement comme une question dont l'échec est à revoir.
+		   Les deux plans distinguent ce qu'un seul confond. */
+		const planDuJour = store.plan(MAINTENANT);
 
-	const cheminC = `${DIR}/review-log.sync-conflict-20260904-071500-ABCDEFG.jsonl`;
-	const m = await monter({ conflits: { [cheminC]: conflit } });
-	const ecrit = m.disque().trim().split("\n");
-	// 3 lignes et non 4 : `b` est présent des deux côtés et ne doit être écrit
-	// qu'une fois, sinon `spentToday` compterait deux fois la même révision.
-	r.check("la révision connue du seul autre appareil est absorbée", ecrit.length, 3);
-	r.check("le recouvrement n'est PAS dupliqué", ecrit.filter(l => l.includes("n.md::b")).length, 1);
-	r.check("le fichier de conflit est supprimé après absorption", m.f.removed, [cheminC]);
+		/* Le ROUTAGE. Une réponse va dans le journal du dossier auquel appartient
+		   sa question — jamais dans le premier venu. Sans ce cas, un store
+		   multi-racines qui écrirait tout dans le premier journal passerait pour
+		   sain : les réponses seraient bien là, dans le mauvais fichier, et le
+		   greffon ne les retrouverait jamais. */
+		r.check("une réponse est écrite dans le journal de SA racine",
+			ecritures.map(([p]) => p), ["B/.neo-quiz/review-log.jsonl"]);
+		/* La clé écrite est LOCALE : c'est elle que le greffon lira sur le même
+		   dossier. Une clé préfixée serait invisible depuis Obsidian. */
+		/* `?.` et non `ecritures[0][1]` : si rien n'était écrit du tout, l'accès
+		   direct lèverait une TypeError et TUERAIT le script au lieu de le faire
+		   rougir — on perdrait le diagnostic au moment où on en a le plus besoin. */
+		r.check("et la clé écrite n'a pas le préfixe de la racine",
+			JSON.parse(ecritures[0]?.[1] ?? "{}").q, "Cours/reseau.md::q1");
+		/* La lecture fait le chemin inverse : le plan travaille sur des clés
+		   préfixées, sinon deux dossiers portant « Cours/ch1.md » se
+		   confondraient — et l'historique de l'un compterait pour l'autre. */
+		r.check("le plan voit la clé préfixée", plan.today, ["B/Cours/reseau.md::q1"]);
+		/* `new: 0` dit que la réponse a bien REJOINT sa question. Sans la
+		   conversion inverse elle resterait orpheline, la question compterait
+		   pour neuve (`new: 1`) et tout son historique serait perdu en
+		   silence. Ce 0 ne peut pas venir d'un catalogue vide : le cas
+		   ci-dessus vient de prouver que la question y est. */
+		r.check("et l'historique rejoint sa question au lieu de la laisser neuve",
+			planDuJour.stats.new, 0);
+		/* Un déplacement d'une racine à une autre n'écrit RIEN : deux journaux
+		   distincts, et une ligne dans l'un ne déplacerait rien dans l'autre.
+		   Inventer un renommage inter-racines transporterait une clé vers un
+		   journal qui ne la contient pas — un mensonge, silencieux. */
+		store.renamed("B/Cours/reseau.md", "A/Cours/reseau.md");
+		/* VIDER LE DIFFÉRÉ AVANT DE COMPTER. Éprouvé : sans ce `runNext()`, le
+		   cas reste VERT quand on retire la garde inter-racines — la ligne
+		   fabriquée à tort dort encore dans la file des 500 ms, `ecritures`
+		   vaut 1 quand même, et l'assertion couvre exactement le défaut
+		   qu'elle prétend attraper. Quand la garde tient, `append` n'est jamais
+		   appelé, aucun minuteur n'est armé, et `runNext()` ne fait rien. */
+		clock.runNext();
+		await settle();
+		r.check("un déplacement entre racines n'écrit pas de renommage", ecritures.length, 1);
 
-	// Une ligne illisible : on absorbe le reste, on garde le fichier.
-	const cheminD = `${DIR}/review-log.sync-conflict-20260904-081500-HIJKLMN.jsonl`;
-	const abime = ligne("n.md::d", T0 + 3) + "{ pas du json\n";
-	const m2 = await monter({ conflits: { [cheminD]: abime } });
-	r.check("la ligne lisible d'un fichier abîmé est quand même absorbée",
-		m2.disque().includes("n.md::d"), true);
-	r.check("un fichier dont une ligne échappe n'est JAMAIS supprimé", m2.f.removed, []);
-
-	/* Journal sans saut final (édité à la main, tronqué par une fermeture
-	   brutale) : sans la recolle, la dernière ligne du principal et la
-	   première absorbée fusionneraient et deviendraient TOUTES DEUX
-	   illisibles — une perte causée par le code censé empêcher les pertes. */
-	const m3 = await monter({ principal: principal.trimEnd(), conflits: { [cheminC]: conflit } });
-	const lu3 = m3.disque().trim().split(String.fromCharCode(10));
-	r.check("un journal sans saut final n'est pas corrompu par l'absorption", lu3.length, 3);
-	r.check("la ligne qui precedait la recolle reste lisible",
-		lu3.filter(l => l.includes("n.md::b")).length, 1);
+		/* Un DOSSIER renommé déplace toutes ses notes en UNE ligne, par préfixe.
+		   Sans le canal `onRenameDir`, tout un module perdrait son historique d'un
+		   coup — et le contrat n'a ce second canal que pour ça. */
+		emettreRenameDossier("B/Cours", "B/Reseaux");
+		clock.runNext();
+		await settle();
+		r.check("un dossier renommé produit une ligne de renommage",
+			derniereLigne()?.t, "rename");
+		/* La ligne écrite est LOCALE des deux côtés : « Cours » → « Reseaux »,
+		   jamais « B/Cours » → « B/Reseaux ». */
+		r.check("et ses deux chemins sont locaux",
+			[derniereLigne()?.from, derniereLigne()?.to],
+			["Cours", "Reseaux"]);
+		store.destroy();
+	});
 	r.done();
 });

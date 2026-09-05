@@ -1,0 +1,256 @@
+import type { HostFs, HostPaths, HostRoot, HostWatcher } from "../host/types";
+import type { QuizIndexEntry } from "../dashboard/scanner";
+import { applyModuleOverrides, moduleForQuiz, type ModuleOverride } from "../dashboard/quiz-modules";
+import {
+	applyRenames, DEFAULT_PARAMS, planToday,
+	type LogLine, type Plan, type ReviewEvent, type ReviewGrade, type ScheduledItem, type SchedulerParams,
+} from "../scheduler";
+import type { QuestionRole } from "../types/quiz";
+import { createLogFile, type LogFile } from "./log-file";
+import { LOG_PREFIX } from "../branding";
+
+/* ══════════════════════════════════════════════════════════
+   L'ADAPTATEUR DE L'ORDONNANCEUR
+
+   Le noyau (`src/scheduler/`) ne voit que des chaînes opaques et des
+   nombres. Ce module lit et écrit les octets, construit le catalogue, suit
+   les renommages — et depuis la tranche 2, ROUTE entre plusieurs journaux.
+
+   IL A CHANGÉ DE STATUT, et il faut le dire plutôt que de le laisser
+   deviner. La spec de l'ordonnanceur (§3) le rangeait dans `dashboard/`
+   « par choix : c'est le dossier que le chantier 4 supprime », et le
+   qualifiait de JETABLE. À partir du moment où l'application écrit le même
+   journal, ce n'est plus l'adaptateur d'un hôte : c'est le format d'un
+   fichier partagé. Le supprimer avec le tableau de bord emporterait
+   l'application avec lui.
+
+   LA CLÉ DU JOURNAL EST LOCALE, JAMAIS PRÉFIXÉE. Sur le disque, une clé
+   vaut « Cours/reseau.md::adressage-ip » : relative à SA racine, identique
+   sous les deux hôtes. En mémoire, quand l'application ouvre plusieurs
+   dossiers, les clés portent le préfixe de leur racine pour ne pas se
+   confondre. La conversion se fait ICI et nulle part ailleurs
+   (`paths.localPath` / `paths.contractPath`) : une clé recomposée à la main
+   ferait diverger les deux historiques sans que personne ne le voie.
+══════════════════════════════════════════════════════════ */
+
+const keyOfQuestion = (path: string, id: string): string => `${path}::${id}`;
+
+/** Le chemin d'une clé de question (`chemin::id` → `chemin`). */
+function cheminDeCle(q: string): string {
+	const i = q.lastIndexOf("::");
+	return i > 0 ? q.slice(0, i) : q;
+}
+
+export interface ReviewStoreDeps {
+	fs: HostFs;
+	watcher: HostWatcher;
+	paths: HostPaths;
+	/** Le catalogue du moment, en clés du CONTRAT. Appelé à chaque plan :
+	    une question supprimée d'une note disparaît du plan le jour même. */
+	catalogue(): ScheduledItem[];
+	/** module → date d'examen (ms) ou null. Appelé à chaque plan. */
+	horizons(): Record<string, number | null>;
+	/** L'heure. INJECTÉE, pas lue : c'est ce qui rend les jeux de cas
+	    reproductibles, et c'est déjà la règle du noyau. */
+	now(): number;
+	params?: SchedulerParams;
+}
+
+export interface ReviewStore {
+	load(): Promise<void>;
+	record(entries: Array<{ q: string; grade: ReviewGrade; role?: QuestionRole }>): void;
+	/** Un renommage OBSERVÉ (fichier ou dossier), en chemins du contrat. */
+	renamed(from: string, to: string): void;
+	plan(now: number): Plan;
+	keyOf(path: string, id: string): string;
+	destroy(): void;
+}
+
+export function createReviewStore(deps: ReviewStoreDeps): ReviewStore {
+	const params = deps.params ?? DEFAULT_PARAMS;
+	let detruit = false;
+
+	/* UN JOURNAL PAR RACINE. Les racines sont figées à la construction : en
+	   ajouter une exige de reconstruire le store, ce que l'application fait
+	   déjà en rechargeant sa fenêtre (l'hôte est un singleton). */
+	const journaux = new Map<string, { root: HostRoot; fichier: LogFile }>();
+	for (const root of deps.paths.roots()) {
+		journaux.set(root.id, { root, fichier: createLogFile({ fs: deps.fs, path: root.reviewLog }) });
+	}
+
+	/** La clé LOCALE (ce qui est écrit) d'une clé du contrat, avec sa racine. */
+	function versLocal(q: string): { rootId: string; local: string } | null {
+		const chemin = cheminDeCle(q);
+		const root = deps.paths.rootOf(chemin);
+		if (!root) return null;
+		const suffixe = q.slice(chemin.length); // « ::id », ou "" pour un chemin nu
+		return { rootId: root.id, local: deps.paths.localPath(chemin) + suffixe };
+	}
+
+	/** L'inverse, pour ce qui sort d'un journal. */
+	function versContrat(rootId: string, q: string): string {
+		const chemin = cheminDeCle(q);
+		const suffixe = q.slice(chemin.length);
+		return deps.paths.contractPath(rootId, chemin) + suffixe;
+	}
+
+	/* Toutes les lignes, en clés du CONTRAT. La conversion se fait AVANT la
+	   concaténation, et c'est ce qui empêche un renommage d'une racine de
+	   rattraper une clé d'une autre : préfixées, elles ne se ressemblent plus. */
+	function toutesLesLignes(): LogLine[] {
+		const out: LogLine[] = [];
+		for (const [rootId, { fichier }] of journaux) {
+			for (const l of fichier.lines()) {
+				out.push(l.t === "rename"
+					? { ...l, from: versContrat(rootId, l.from), to: versContrat(rootId, l.to) }
+					: { ...l, q: versContrat(rootId, l.q) });
+			}
+		}
+		return out;
+	}
+
+	async function load(): Promise<void> {
+		/* En parallèle : dix dossiers sur un disque réseau, en série, feraient
+		   attendre le premier rendu pour rien. Une racine illisible ne doit pas
+		   emporter les autres — d'où le `catch` par racine. */
+		await Promise.all([...journaux.values()].map(async ({ root, fichier }) => {
+			try {
+				await fichier.load();
+			} catch (e) {
+				console.warn(LOG_PREFIX, "journal illisible pour", root.name, e);
+			}
+		}));
+	}
+
+	function record(entries: Array<{ q: string; grade: ReviewGrade; role?: QuestionRole }>): void {
+		if (detruit || !entries.length) return;
+		const at = deps.now();
+		/* Regroupées par racine : une réponse est écrite dans le journal du
+		   dossier auquel appartient sa question (spec §6), jamais ailleurs. */
+		const parRacine = new Map<string, LogLine[]>();
+		for (const e of entries) {
+			const cible = versLocal(e.q);
+			if (!cible) { console.warn(LOG_PREFIX, "clé hors de toute racine, ignorée:", e.q); continue; }
+			const ligne: ReviewEvent = { t: "answer", q: cible.local, at, grade: e.grade };
+			if (e.role) ligne.role = e.role;
+			const lot = parRacine.get(cible.rootId);
+			if (lot) lot.push(ligne); else parRacine.set(cible.rootId, [ligne]);
+		}
+		for (const [rootId, lot] of parRacine) journaux.get(rootId)?.fichier.append(lot);
+	}
+
+	/* `applyRenames` attend des préfixes exacts ; garder un slash final
+	   fabriquerait « Cours// » et orphelinerait l'historique du dossier. */
+	const sansSlashFinal = (path: string): string => path.endsWith("/") ? path.slice(0, -1) : path;
+	const correspondAuChemin = (q: string, path: string): boolean =>
+		q === path || q.startsWith(path + "/") || q.startsWith(path + "::");
+
+	function renamed(fromBrut: string, toBrut: string): void {
+		if (detruit) return;
+		const from = sansSlashFinal(fromBrut);
+		const to = sansSlashFinal(toBrut);
+		if (from === to) return;
+		const source = deps.paths.rootOf(from);
+		const cible = deps.paths.rootOf(to);
+		/* Un déplacement d'une racine à une AUTRE n'est pas un renommage : les
+		   deux journaux sont distincts, et une ligne écrite dans l'un ne
+		   déplacerait rien dans l'autre. On ne fabrique donc rien — l'historique
+		   reste attaché à l'ancien dossier, ce qui est au moins vrai. */
+		if (!source || !cible || source.id !== cible.id) return;
+
+		const journal = journaux.get(source.id);
+		if (!journal) return;
+		/* Une ligne de renommage n'existe que si elle DÉPLACE réellement une
+		   clé. Rejouer d'abord les renommages déjà journalisés est nécessaire
+		   pour qu'un second déplacement reconnaisse le chemin COURANT plutôt
+		   que le chemin historique.
+
+		   GARDE : tant que `fichier.loaded()` n'est pas vrai, `lines()` peut
+		   être vide alors que le fichier sur disque contient déjà de
+		   l'historique — le filtre de pertinence ne doit alors filtrer AUCUN
+		   événement, sous peine de l'ignorer pour de bon (même piège que
+		   l'ancien `dashboard/review-store.ts`, régression qu'un test dédié
+		   éprouve). Une ligne inutile ne coûte rien ; un renommage perdu est
+		   irréversible. */
+		const local = deps.paths.localPath(from);
+		const localTo = deps.paths.localPath(to);
+		if (journal.fichier.loaded() && !applyRenames(journal.fichier.lines()).some(line => correspondAuChemin(line.q, local))) return;
+		journal.fichier.append([{ t: "rename", from: local, to: localTo, at: deps.now() }]);
+	}
+
+	/* Les renommages que l'HÔTE sait nommer : fichiers (`onChange`) et
+	   dossiers (`onRenameDir`). Le second canal n'est pas un luxe — un dossier
+	   renommé déplace toutes ses notes en une seule ligne, et sans lui
+	   l'historique de tout un module deviendrait orphelin d'un coup. */
+	const desabonner: Array<() => void> = [
+		deps.watcher.onChange(ev => { if (ev.kind === "rename") renamed(ev.oldPath, ev.file.path); }),
+		deps.watcher.onRenameDir(ev => renamed(ev.from, ev.to)),
+	];
+
+	function plan(now: number): Plan {
+		const d = new Date(now);
+		// Seul l'hôte connaît le fuseau : le noyau ne manipule aucun calendrier.
+		const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+		return planToday({
+			now, dayStart,
+			items: deps.catalogue(),
+			events: toutesLesLignes(),
+			horizons: deps.horizons(),
+			params,
+		});
+	}
+
+	function destroy(): void {
+		if (detruit) return;
+		detruit = true;
+		for (const d of desabonner) { try { d(); } catch (e) { /* best effort */ } }
+		desabonner.length = 0;
+		for (const { fichier } of journaux.values()) fichier.destroy();
+	}
+
+	return { load, record, renamed, plan, keyOf: keyOfQuestion, destroy };
+}
+
+/** Construit les seules données que le noyau comprend. `moduleForQuiz` reste
+    l'unique règle de rattachement : l'adaptateur lui fournit la même table de
+    dossiers que le dashboard, dérivée ici des overrides persistés. */
+export function buildReviewCatalogue(
+	quizzes: ReadonlyArray<QuizIndexEntry>,
+	overrides: Record<string, ModuleOverride>
+): ScheduledItem[] {
+	const map = applyModuleOverrides({ byFolder: new Map(), ueOrder: [] }, overrides);
+	const out: ScheduledItem[] = [];
+	for (const quiz of quizzes) {
+		const module = moduleForQuiz(quiz.path, map).folder;
+		for (const it of quiz.items) {
+			const item: ScheduledItem = {
+				q: keyOfQuestion(quiz.path, it.id),
+				module,
+				// La tranche sépare les familles confusables d'un même chapitre
+				// tant qu'aucun `topic` n'est déclaré par le contenu.
+				source: typeof it.slice === "number" ? `${quiz.path}#${it.slice}` : quiz.path,
+			};
+			if (it.role) item.role = it.role;
+			out.push(item);
+		}
+	}
+	return out;
+}
+
+/**
+ * Une date d'examen saisie (`AAAA-MM-JJ`) en epoch ms, à MINUIT LOCAL.
+ *
+ * Le constructeur ISO texte serait UTC et pourrait déplacer l'examen d'un
+ * jour selon le fuseau. Et la garde `Number.isFinite` n'est pas décorative :
+ * `horizonFor` (le noyau) ne se protège pas d'un horizon NaN — il a raison,
+ * il ne reçoit qu'un `number | null` déjà validé. Une année à six chiffres
+ * passe le premier filtre et produit un timestamp NaN, qui empoisonnerait
+ * silencieusement toutes les échéances du module.
+ */
+export function parseExamDate(brut: unknown): number | null {
+	if (typeof brut !== "string" || !brut) return null;
+	const [a, m, j] = brut.split("-").map(Number);
+	if (!a || !m || !j) return null;
+	const t = new Date(a, m - 1, j).getTime();
+	return Number.isFinite(t) ? t : null;
+}

@@ -229,3 +229,126 @@ body {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+
+/* ── La page Réglages ──
+   Structure de section réutilisable : la tâche 10 en ajoute une seconde
+   (« Dates d'examen ») sous celle-ci, avec le même patron titre + aide + corps.
+   Seules les variables déjà FOURNIES par `theme/host-vars.css` sont employées
+   ici — `npm run check:theme` ne balaie pas `apps/windows/`, donc une variable
+   inventée y serait invisible aux deux assertions et rendrait l'écran
+   illisible sans un mot. */
+.nq-reglages-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 24px 0;
+}
+
+.nq-reglages-titre {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.nq-reglages-aide {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--text-muted);
+}
+
+.nq-reglages-liste {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+/* Une rangée par dossier : icône, nom + chemin, bouton de retrait. */
+.nq-reglages-dossier {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 14px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+}
+
+.nq-reglages-icone {
+	display: grid;
+	place-items: center;
+	flex: none;
+	color: var(--text-muted);
+}
+
+.nq-reglages-icone svg {
+	width: 18px;
+	height: 18px;
+}
+
+/* Le logo Obsidian, posé à la place de l'icône générique une fois la
+   détection résolue : même taille, pour ne pas faire sauter la rangée. */
+.nq-reglages-icone .nq-logo-obsidian {
+	width: 18px;
+	height: 18px;
+	color: #7c3aed;
+}
+
+.nq-reglages-texte {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	flex: 1;
+}
+
+.nq-reglages-nom {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.nq-reglages-chemin {
+	font-size: 11px;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Bouton de retrait : une icône seule, pas un bouton pilule — un dossier de
+   plus dans la liste ne doit pas pousser une rangée d'actions à l'échelle. */
+.nq-reglages-retirer {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 28px;
+	height: 28px;
+	border-radius: var(--radius-m);
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.nq-reglages-retirer:hover {
+	background: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.nq-reglages-retirer svg {
+	width: 16px;
+	height: 16px;
+}
+
+.nq-reglages-actions {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	margin-top: 6px;
+}

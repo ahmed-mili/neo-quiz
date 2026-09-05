@@ -81,11 +81,11 @@ function carte(grille: HTMLElement, entry: QuizIndexEntry, onOpen: (e: QuizIndex
 
 export function renderList(
 	root: HTMLElement,
-	deps: { scanner: Scanner; onOpen(entry: QuizIndexEntry): void; onChangeFolder(): void },
+	deps: { scanner: Scanner; onOpen(entry: QuizIndexEntry): void; onSettings(): void },
 ): () => void {
 	const contenu = ajouter(root, "div", "qbd-content");
 
-	// ── En-tête : titre + « Changer de dossier » ──
+	// ── En-tête : titre + « Réglages » ──
 	// `t()` est appelé ICI, au rendu, jamais dans une constante de module : une
 	// chaîne traduite au chargement serait figée à la langue du démarrage.
 	const entete = ajouter(contenu, "div", "qbd-quizzes-header");
@@ -95,9 +95,10 @@ export function renderList(
 	const bouton = ajouter(actions, "button", "qbd-btn--create");
 	bouton.type = "button";
 	// Icône LUCIDE par l'hôte, jamais d'emoji : même silhouette que le greffon.
-	currentHost().ui.setIcon(ajouter(bouton, "span", "qbd-btn-icon"), "folder");
-	ajouter(bouton, "span", undefined, t("app.list.changeFolder"));
-	bouton.addEventListener("click", () => deps.onChangeFolder());
+	// Clé empruntée : « review.settings.title » nomme déjà cette page.
+	currentHost().ui.setIcon(ajouter(bouton, "span", "qbd-btn-icon"), "settings");
+	ajouter(bouton, "span", undefined, t("review.settings.title"));
+	bouton.addEventListener("click", () => deps.onSettings());
 
 	const zone = ajouter(contenu, "div", "qbd-quizzes-tree");
 

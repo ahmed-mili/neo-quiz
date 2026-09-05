@@ -18,10 +18,11 @@ export const EN_APP = {
 	   NI clé de TYPE de quiz, NI compte de questions ici : « dashboard.quizType.<tag> »
 	   et « dashboard.common.questionsOne/Other » existent déjà, et la liste les
 	   emprunte. En créer un second jeu donnerait deux traductions du même texte,
-	   qui divergeraient à la première retouche. */
+	   qui divergeraient à la première retouche.
+	   NI clé « changer de dossier » ici non plus : la gestion des dossiers a
+	   désormais sa page (« review.settings.title »), le bouton l'ouvre. */
 	"app.list.title": "My quizzes",
 	"app.list.empty": "No quiz found in this folder.",
-	"app.list.changeFolder": "Change folder",
 
 	/* ── La page d'un quiz ──
 	   NI clé de RETOUR, NI clé « aucun bloc dans cette note » ici :

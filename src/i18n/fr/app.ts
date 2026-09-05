@@ -10,7 +10,6 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 
 	"app.list.title": "Mes quiz",
 	"app.list.empty": "Aucun quiz trouvé dans ce dossier.",
-	"app.list.changeFolder": "Changer de dossier",
 
 	"app.quiz.readError": "Impossible de lire {path} : {error}",
 };

@@ -5,6 +5,7 @@ import { FR_EDITOR } from "./fr/editor";
 import { FR_ENGINE } from "./fr/engine";
 import { FR_PLUGIN } from "./fr/plugin";
 import { FR_APP } from "./fr/app";
+import { FR_REVIEW } from "./fr/review";
 import type { EN } from "./en";
 
 /* Dictionnaire FRANÇAIS — même découpage que l'anglais.
@@ -19,4 +20,5 @@ export const FR: Record<keyof typeof EN, string> = {
 	...FR_ENGINE,
 	...FR_PLUGIN,
 	...FR_APP,
+	...FR_REVIEW,
 };

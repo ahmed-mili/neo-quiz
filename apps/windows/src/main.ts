@@ -16,6 +16,7 @@ import { poserLogoObsidian } from "./ui/marques";
 import { addFolder, allowFolder, estVaultObsidian, obsidianVaults, pickFolder, savedFolders } from "./host/folder";
 import { renderList } from "./ui/list";
 import { openQuizPage } from "./ui/quiz-page";
+import { renderSettings } from "./ui/settings";
 
 /*
  * Démarrage de l'application.
@@ -47,7 +48,25 @@ export function mount(root: HTMLElement, scanner: Scanner): void {
 	demonterCourant = renderList(root, {
 		scanner,
 		onOpen: (entry) => { void ouvrirQuiz(root, scanner, entry); },
-		onChangeFolder: () => { void changerDossier(); },
+		onSettings: () => ouvrirReglages(root, scanner),
+	});
+}
+
+/**
+ * La page « Réglages » : démonter la liste, monter la page ; au retour,
+ * démonter la page et remonter la liste. La gestion des dossiers y vit
+ * désormais tout entière — la liste n'a plus qu'un bouton pour y aller.
+ */
+function ouvrirReglages(root: HTMLElement, scanner: Scanner): void {
+	demonterCourant?.();
+	demonterCourant = null;
+	root.textContent = "";
+	demonterCourant = renderSettings(root, {
+		onBack: () => mount(root, scanner),
+		/* RECHARGER : ajouter ou retirer un dossier change les racines de
+		   l'hôte, et l'hôte est installé une seule fois. Un remontage à chaud
+		   laisserait vivre l'index et le surveillant de l'ancienne liste. */
+		onFoldersChanged: () => location.reload(),
 	});
 }
 

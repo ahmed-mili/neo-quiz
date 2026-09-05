@@ -26,6 +26,20 @@ body {
 	margin: 0;
 	color: var(--text-normal);
 	font-family: var(--font-interface);
+	/* SANS CETTE LIGNE, les CONTRÔLES NATIFS du navigateur (le sélecteur de
+	   `<input type="date">` des dates d'examen, une future barre de défilement,
+	   un futur `<select>`) sont peints en CLAIR par défaut — une icône de
+	   calendrier sombre sur notre fond sombre devient invisible, sans la
+	   moindre erreur pour le dire. Sous Obsidian, le greffon n'a jamais eu ce
+	   problème : c'est Obsidian, coquille Electron à thème sombre, qui pose
+	   `color-scheme` à la racine de SON document — la fenêtre Tauri n'a aucun
+	   ancêtre équivalent, elle part d'un document vierge.
+	   `dark` FIXE, et non `light dark` : la spec (§8) n'a, en première
+	   version, QUE le thème sombre — le clair n'existe pas, ce n'est pas un
+	   oubli à couvrir par un repli. Posé ICI, à la racine, une seule fois :
+	   tout contrôle natif futur en hérite, sans qu'aucun ajout n'ait à y
+	   repenser. */
+	color-scheme: dark;
 }
 
 /* ── LE FOND D'ÉCRAN ──

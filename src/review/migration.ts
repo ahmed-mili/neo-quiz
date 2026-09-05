@@ -17,10 +17,27 @@ import { formatLine, parseLog } from "../scheduler";
    perdu ne se rattrape pas.
 
    Et ce n'est pas une copie, c'est une ABSORPTION : les lignes déjà
-   présentes sont ignorées. C'est ce qui rend l'opération idempotente, donc
-   sûre à exécuter par les DEUX hôtes — l'ordre des installations n'a alors
-   plus d'importance, et deux exécutions simultanées sur un dossier
-   synchronisé ne peuvent rien perdre.
+   présentes dans `nouveau` sont ignorées. Une exécution qui retrouve tout
+   déjà là ne réécrit rien : c'est ce qui rend une migration UNIQUE
+   idempotente EN SÉQUENCE — un redémarrage, ou le second hôte qui migre
+   après que le premier a fini, ne retrouvent plus rien à faire.
+
+   CE QUE DEUX HÔTES QUI MIGRENT EN MÊME TEMPS NE PEUVENT PAS CASSER : rien
+   n'est PERDU. `ancien` n'est jamais supprimé — seulement renommé, et
+   seulement après confirmation — et `nouveau` n'est jamais réécrit, jamais
+   qu'AJOUTÉ : ni l'un ni l'autre des deux hôtes ne peut effacer ce que
+   l'autre vient d'écrire.
+
+   CE QUE CE MODULE NE GARANTIT PAS : l'absence de doublons. La lecture de
+   `nouveau` qui alimente `dejaLa` et `finSaine` se fait AVANT l'`append`,
+   sans verrou entre les deux. Deux migrations qui s'ENTRELACENT — chacune
+   lit `nouveau` avant qu'aucune des deux n'ait écrit — absorbent alors les
+   mêmes lignes de `ancien` chacune de son côté, et les écrivent toutes les
+   deux : le journal récolte des lignes en double. Ce module ne les empêche
+   pas ; c'est au LECTEUR du journal de les dédoublonner (le même `Set` par
+   `formatLine` que pratique déjà l'absorption des conflits Syncthing dans
+   `dashboard/review-store.ts`), pas à cette migration. Pas de promesse de
+   verrou ici : ce dépôt préfère une limite écrite à une garantie inventée.
 ══════════════════════════════════════════════════════════ */
 
 /** Le sous-ensemble de `HostFs` dont la migration a besoin. Déclaré ici, et
@@ -67,10 +84,17 @@ function dossierDe(chemin: string): string {
 /**
  * Absorbe `ancien` dans `nouveau`, puis range `ancien`.
  *
- * Les erreurs d'entrée/sortie REMONTENT : c'est l'appelant qui décide, et il
- * décide toujours la même chose — journaliser et continuer à démarrer. Les
- * avaler ici ferait passer une migration impossible pour une migration
- * faite.
+ * La plupart des erreurs d'entrée/sortie REMONTENT : c'est l'appelant qui
+ * décide, et il décide toujours la même chose — journaliser et continuer à
+ * démarrer. Deux échecs précis n'y remontent PAS, et c'est délibéré : celui
+ * de la RELECTURE de confirmation, dégradé en `confirmed: false` (c'est tout
+ * son rôle — transformer une écriture silencieusement ratée en décision,
+ * pas en panne), et celui du RENOMMAGE, dégradé en `renamed: false` (les
+ * données sont déjà dans le nouveau journal ; l'échec du rangement n'est pas
+ * un échec de migration). Les avaler PARTOUT ferait passer une migration
+ * impossible pour une migration faite ; ne les avaler NULLE PART ferait
+ * remonter comme une panne fatale deux situations que ce module sait gérer
+ * sans perdre une ligne.
  */
 export async function migrateReviewLog(
 	fs: MigrationFs,

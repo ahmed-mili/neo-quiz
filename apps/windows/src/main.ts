@@ -16,6 +16,7 @@ import { poserLogoObsidian } from "./ui/marques";
 import { addFolder, allowFolder, chargerExamDates, estVaultObsidian, obsidianVaults, pickFolder, savedFolders } from "./host/folder";
 import type { ReviewStore } from "../../../src/review/review-store";
 import { creerJournalApp } from "./review/store";
+import { createRenameDetector } from "../../../src/review/rename-match";
 import { renderList } from "./ui/list";
 import { openQuizPage } from "./ui/quiz-page";
 import { renderSettings } from "./ui/settings";
@@ -258,6 +259,14 @@ async function demarrer(): Promise<void> {
 		   matière déjà saisie lors d'une session précédente. */
 		await chargerExamDates();
 		const store = await creerJournalApp(currentHost(), scanner);
+		/* L'appariement des renommages que le surveillant n'a pas su nommer.
+		   BRANCHÉ CÔTÉ APPLICATION SEULEMENT : Obsidian émet un vrai `rename`, que
+		   le contrat transmet tel quel — le greffon n'a rien à deviner. */
+		const detecteur = createRenameDetector({
+			onRename: (from, to) => store.renamed(from, to),
+			now: () => Date.now(),
+		});
+		scanner.onChange(quizzes => detecteur.observer(quizzes));
 		mount(root, scanner, store);
 	} catch (e) {
 		root.textContent = t("app.error.startup", { error: e instanceof Error ? e.message : String(e) });

@@ -94,14 +94,17 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ resolveDansIndex 
 	r.done();
 });
 
-/* Capturée hors du module chargé : la SEULE utilité de charger `roots.ts` à
-   nouveau, plus bas, serait de reconstruire le même bundle pour rien — la
-   fonction déjà importée reste valide même une fois le dossier temporaire de
-   `withSrcModule` effacé (le code est déjà en mémoire, Node ne relit rien). */
+/* Capturées hors du module chargé : la SEULE utilité de charger `roots.ts` à
+   nouveau, plus bas, serait de reconstruire le même bundle pour rien — les
+   fonctions déjà importées restent valides même une fois le dossier
+   temporaire de `withSrcModule` effacé (le code est déjà en mémoire, Node ne
+   relit rien). */
 let creerCarteRacines;
+let resultsDirFor;
 
 await withSrcModule("apps/windows/src/host/roots.ts", async (mod) => {
 	creerCarteRacines = mod.creerCarteRacines;
+	resultsDirFor = mod.resultsDirFor;
 	const r = makeReporter("Hôte Windows — racines");
 	const carte = creerCarteRacines([
 		{ id: "Efrei", name: "Efrei", path: "C:/obsidian-vaults/Efrei", vault: true },
@@ -124,6 +127,13 @@ await withSrcModule("apps/windows/src/host/roots.ts", async (mod) => {
 	   qui ressemble à une vraie clé et polluerait l'historique. */
 	r.check("local() d'un chemin hors racines le rend tel quel",
 		carte.local("Inconnu/x.md"), "Inconnu/x.md");
+	/* Un chemin NU réduit au seul identifiant de racine (« Efrei », sans
+	   sous-chemin) désigne la racine ELLE-MÊME : `local()` en rend la chaîne
+	   VIDE, symétrique de `contrat(id, "")` qui rend `id` seul. Ce n'est PAS
+	   le même vide que « hors racines » ci-dessus — ici la racine EST connue,
+	   simplement sans sous-chemin à en retirer. */
+	r.check("local() d'un chemin nu réduit à l'identifiant de racine rend une chaîne vide",
+		carte.local("Efrei"), "");
 
 	r.check("absolu() compose le chemin disque",
 		carte.absolu("Efrei/Cours/reseau.md"), "C:/obsidian-vaults/Efrei/Cours/reseau.md");
@@ -152,6 +162,20 @@ await withSrcModule("apps/windows/src/host/roots.ts", async (mod) => {
 	r.check("l'ancien journal est celui du greffon", hr[0].legacyReviewLog,
 		"Efrei/.obsidian/plugins/quiz-blocks/review-log.jsonl");
 
+	/* RÈGLE SANS FILET (revue 1) : aucun cas n'éprouvait `resultsDirFor` —
+	   une erreur y écrirait les résultats d'un quiz du dossier B dans le
+	   dossier A, ou dans un `.obsidian/` fantôme hors d'un vault. Réutilise
+	   `carte` (Efrei = vault, Perso = pas un vault). */
+	r.check("resultsDirFor dans un vault écrit où le greffon écrit déjà",
+		resultsDirFor(carte, "Efrei/Cours/x.md"), "Efrei/.obsidian/quiz-blocks-results");
+	r.check("resultsDirFor hors vault écrit sous .neo-quiz",
+		resultsDirFor(carte, "Perso/Cours/x.md"), "Perso/.neo-quiz/results");
+	/* Une racine INCONNUE (chemin hors de toute racine ouverte) ne doit pas
+	   fabriquer un dossier préfixé n'importe comment : elle retombe sur le
+	   sous-chemin nu, sans préfixe — jamais `undefined/…`. */
+	r.check("resultsDirFor d'une racine inconnue retombe sur le sous-chemin nu",
+		resultsDirFor(carte, "Inconnu/x.md"), ".neo-quiz/results");
+
 	r.done();
 });
 
@@ -174,11 +198,17 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 	try {
 		/* Une seule racine, « Quiz » : les chemins du contrat portent quand
 		   même son préfixe (l'hôte Windows préfixe TOUJOURS, même à un seul
-		   dossier — seul le greffon a un identifiant vide). */
+		   dossier — seul le greffon a un identifiant vide). L'INDEX contient
+		   toujours des chemins PRÉFIXÉS (c'est ce que produit réellement
+		   `createWindowsIndex`) ; les LIENS passés à `resourceUrl`/`resolve`,
+		   eux, imitent ce qu'une note écrit — jamais préfixés. Confondre les
+		   deux dans un même test masquerait la régression ci-dessous. */
 		const fichiers = [
 			f("Quiz/Autre/schema.png", "png"),
 			f("Quiz/Cours/reseau.md", "md"),
 			f("Quiz/Cours/Images/schema.png", "png"),
+			f("Quiz/Autre/ch1.md", "md"),
+			f("Quiz/Cours/ch1.md", "md"),
 		];
 		const index = {
 			all: () => fichiers,
@@ -188,15 +218,34 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 		const carte = creerCarteRacines([{ id: "Quiz", name: "Quiz", path: "D:/Quiz", vault: false }]);
 		const links = createWindowsLinks(carte, index);
 
-		/* « RÉSOUT puis convertit » (src/host/types.ts) : un chemin connu de
-		   l'index (déjà un chemin du contrat, préfixé) donne une URL d'asset
-		   sur son chemin ABSOLU. */
-		r.check("resourceUrl d'un chemin connu donne l'URL d'asset absolue",
-			links.resourceUrl("Quiz/Autre/schema.png"), "asset://localhost/D:/Quiz/Autre/schema.png");
-		/* Un HostFile passe par le même chemin : c'est la même sémantique, pas
-		   une seconde. */
-		r.check("resourceUrl d'un HostFile donne la même URL",
+		/* « RÉSOUT puis convertit » (src/host/types.ts) : un chemin DÉJÀ connu
+		   de l'index — le `.path` d'un `HostFile` déjà résolu, JAMAIS ce qu'une
+		   note écrit elle-même — donne une URL d'asset sur son chemin ABSOLU,
+		   par le chemin RAPIDE (`index.get`), sans passer par la résolution. */
+		r.check("resourceUrl d'un HostFile (déjà un chemin du contrat) donne l'URL d'asset absolue",
 			links.resourceUrl(f("Quiz/Cours/reseau.md", "md")), "asset://localhost/D:/Quiz/Cours/reseau.md");
+
+		/* RÉGRESSION DU PREMIER TOUR DE REVUE, ici rétablie : le tour précédent
+		   avait remplacé ce cas par un lien DÉJÀ PRÉFIXÉ (« Quiz/Autre/
+		   schema.png »), qui ne passe JAMAIS par la résolution (il matche
+		   `index.get` directement) — masquant que l'étape 1 de
+		   `resolveDansIndex` (chemin exact) ne matche plus JAMAIS un lien
+		   ÉCRIT COMME DANS UNE NOTE (sans préfixe), une fois l'index préfixé.
+		   Sans la conversion vers l'espace du contrat (`versContrat`, dans
+		   `links.ts`), ce cas retombait sur la recherche par NOM et rendait
+		   l'homonyme « Cours/Images/schema.png » — plus proche par PROXIMITÉ
+		   de dossier de la note citante que le fichier réellement désigné,
+		   perdant la règle n°1 : « le fichier explicitement désigné gagne
+		   toujours ». */
+		r.check("un chemin exact écrit SANS préfixe (comme dans une note) gagne sur un homonyme plus proche",
+			links.resourceUrl("Autre/schema.png", "Quiz/Cours/reseau.md"), "asset://localhost/D:/Quiz/Autre/schema.png");
+		/* Même régression, à l'étape 2 (extension implicite) : sans la
+		   conversion, « Autre/ch1 » complète son extension en espace NU
+		   (« Autre/ch1.md », absent d'un index préfixé), échoue, et retombe
+		   sur l'homonyme « Cours/ch1.md », plus proche par proximité. */
+		r.check("une extension implicite se complète dans l'espace du contrat (lien sans préfixe)",
+			links.resourceUrl("Autre/ch1", "Quiz/Cours/reseau.md"), "asset://localhost/D:/Quiz/Autre/ch1.md");
+
 		/* Un NOM NU passe par la résolution par nom, comme `resolve` : c'est ce
 		   qui distingue « résout puis convertit » d'un simple changement de
 		   préfixe, et c'est la moitié que l'hôte Obsidian a dû rejoindre. */

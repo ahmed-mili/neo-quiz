@@ -303,6 +303,14 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 
 /* ─────────── le surveillant ─────────── */
 
+/** Vrai si `path` est un sous-dossier STRICT de `autre` (comparaison
+    insensible à la casse, comme partout ailleurs dans ce fichier). */
+function estSousDossierDe(path: string, autre: string): boolean {
+	const a = normaliser(path).toLowerCase();
+	const b = normaliser(autre).toLowerCase();
+	return a !== b && a.startsWith(b + "/");
+}
+
 /**
  * Surveille TOUTES les racines ouvertes et tient l'index à jour.
  *
@@ -311,11 +319,20 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
  * la version immédiate ferait alors trois `stat` et trois notifications pour
  * une seule sauvegarde. Le délai est le prix d'une seule notification juste.
  *
- * UN `watch` PAR RACINE : Tauri surveille un dossier à la fois, et les
- * évènements qui en sortent portent des chemins absolus déjà distincts par
- * construction (deux racines ne partagent pas de sous-arbre disque) —
- * `carte.depuisAbsolu` retrouve la bonne racine sans jamais avoir besoin de
- * savoir laquelle des surveillances a déclenché l'évènement.
+ * UN `watch` PAR RACINE — SAUF une racine CONTENUE dans une autre déjà
+ * ouverte. `depuisAbsolu` traite exprès ce cas (« la racine la plus longue
+ * gagne », `roots.ts`), donc DEUX racines peuvent partager un sous-arbre
+ * disque (un dossier ouvert à l'intérieur d'un autre). `watch(..., {
+ * recursive: true })` couvre déjà tout le sous-arbre de la racine
+ * englobante : ouvrir un second surveillant sur la racine imbriquée ferait
+ * réconcilier CHAQUE évènement de ce sous-arbre DEUX FOIS (une fois par
+ * surveillant), sans jamais se tromper de racine pour autant — `depuisAbsolu`
+ * retrouve toujours la bonne, quel que soit le surveillant qui a réagi — mais
+ * en dépensant le double de travail, et en risquant d'émettre deux lignes de
+ * renommage de dossier pour un seul renommage. Cette racine reste malgré tout
+ * PLEINEMENT fonctionnelle : ses fichiers sont indexés à l'ouverture par
+ * `createWindowsIndex` comme n'importe quelle autre, seul son PROPRE
+ * surveillant redondant est sauté ici.
  *
  * LIMITE MESURÉE, pas un oubli : plugin-fs signale un renommage par
  * `modify: { kind: "rename", mode: "from" | "to" | "both" }`. Seul `both`
@@ -422,8 +439,11 @@ export function createWindowsWatcher(carte: CarteRacines, index: WindowsIndex): 
 	   sinon la première vue montée après une modification afficherait un
 	   catalogue périmé. Il vit aussi longtemps que la fenêtre — UNE surveillance
 	   par racine, une racine illisible (droits, disque retiré) ne doit pas
-	   empêcher les autres d'être suivies. */
-	for (const racine of carte.toutes()) {
+	   empêcher les autres d'être suivies — SAUF une racine contenue dans une
+	   autre déjà ouverte, dont le sous-arbre est déjà couvert (voir ci-dessus). */
+	const toutes = carte.toutes();
+	for (const racine of toutes) {
+		if (toutes.some(autre => autre !== racine && estSousDossierDe(racine.path, autre.path))) continue;
 		void watch(racine.path, ev => void traiter(ev), { recursive: true, delayMs: 300 })
 			.catch(e => console.warn(LOG_PREFIX, "surveillance impossible:", racine.name, e));
 	}

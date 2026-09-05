@@ -18,10 +18,10 @@
 
 import { openPath } from "@tauri-apps/plugin-opener";
 import { LOG_PREFIX } from "../../../../src/branding";
-import { REVIEW_DIR } from "../../../../src/review/paths";
 import type { Host } from "../../../../src/host/types";
 import { createWindowsFs, createWindowsWatcher } from "./fs";
 import type { WindowsIndex } from "./fs";
+import { resultsDirFor as resultsDirForRacine } from "./roots";
 import type { CarteRacines } from "./roots";
 import { createWindowsLinks } from "./links";
 import { createWindowsMath } from "./math";
@@ -81,12 +81,11 @@ export function createWindowsHost(carte: CarteRacines, index: WindowsIndex): Hos
 		   constante enverrait les résultats d'un quiz du dossier B dans le
 		   dossier A. Dans un vault, on écrit là où le greffon écrit déjà ;
 		   hors d'un vault, il n'y a pas de `.obsidian/` et en créer un serait
-		   poser un dossier de configuration Obsidian fantôme. */
-		resultsDirFor(sourcePath) {
-			const r = carte.pour(sourcePath);
-			const sous = r?.vault ? ".obsidian/quiz-blocks-results" : `${REVIEW_DIR}/results`;
-			return r ? `${r.id}/${sous}` : sous;
-		},
+		   poser un dossier de configuration Obsidian fantôme.
+		   Logique extraite dans `roots.ts` (PURE, donc éprouvable) : ce
+		   fichier-ci importe MathLive et Tauri, qu'esbuild ne charge pas hors
+		   de la fenêtre. */
+		resultsDirFor(sourcePath) { return resultsDirForRacine(carte, sourcePath); },
 		roots() { return carte.hostRoots(); },
 		rootOf(path) {
 			const r = carte.pour(path);

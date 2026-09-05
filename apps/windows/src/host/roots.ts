@@ -118,3 +118,27 @@ export function creerCarteRacines(racines: RacineOuverte[]): CarteRacines {
 		},
 	};
 }
+
+/**
+ * Où vont les résultats d'un quiz de CE chemin : dans un vault, à
+ * l'emplacement où le greffon écrit déjà (`.obsidian/quiz-blocks-results`) ;
+ * hors d'un vault, sous `.neo-quiz/results` — jamais un `.obsidian/` fantôme
+ * dans un dossier que l'utilisateur n'a jamais ouvert avec Obsidian.
+ *
+ * Fonction LIBRE et non méthode de `CarteRacines` : elle ne fait que LIRE la
+ * carte (`pour`, `contrat`), elle n'a rien à ajouter à son contrat public.
+ * Le préfixe passe par `carte.contrat`, jamais par une concaténation à la
+ * main — c'est ce qui a dû être corrigé au premier tour de revue (`index.ts`
+ * composait `${r.id}/${sous}` lui-même).
+ *
+ * PURE, comme le reste de ce fichier : `createWindowsHost` (`./index.ts`)
+ * importe MathLive et Tauri, qu'esbuild ne sait pas charger hors de la
+ * fenêtre (build-testé : « No matching export ... MathfieldElement » dans
+ * la variante SSR) — cette fonction, extraite ici, reste éprouvable par
+ * `npm run check:windows-host` alors que le reste de l'hôte ne l'est pas.
+ */
+export function resultsDirFor(carte: CarteRacines, sourcePath: string): string {
+	const r = carte.pour(sourcePath);
+	const sous = r?.vault ? ".obsidian/quiz-blocks-results" : `${REVIEW_DIR}/results`;
+	return r ? carte.contrat(r.id, sous) : sous;
+}

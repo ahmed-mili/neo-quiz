@@ -108,18 +108,36 @@ export function createWindowsLinks(carte: CarteRacines, index: WindowsIndex): Ho
 	   comme un lien ne sort pas d'un vault. Sans cette borne, un homonyme d'un
 	   autre dossier gagnerait au hasard du départage — ou, pire, serait le SEUL
 	   résultat trouvé quand la racine de la note citante n'a elle-même aucun
-	   fichier de ce nom, ce qui devrait rendre `null`, pas un fichier d'ailleurs. */
+	   fichier de ce nom, ce qui devrait rendre `null`, pas un fichier d'ailleurs.
+	   L'appartenance à une racine se lit via `carte.pour`, jamais par un
+	   préfixe recomposé à la main : c'est la carte qui sait ce qu'est un
+	   chemin du contrat, pas cette fonction. */
 	const dansLaRacineDe = (fromPath: string): HostFile[] => {
 		const racine = carte.pour(fromPath);
 		const tous = index.all();
 		if (!racine) return tous;
-		const prefixe = racine.id + "/";
-		return tous.filter(f => f.path.startsWith(prefixe));
+		return tous.filter(f => carte.pour(f.path)?.id === racine.id);
 	};
+
+	/* RÉGRESSION du premier tour de revue, corrigée ici : un lien ÉCRIT DANS
+	   UNE NOTE (« Autre/schema.png ») n'est JAMAIS préfixé — c'est la forme
+	   que l'utilisateur tape en Markdown. L'index, lui, ne contient plus que
+	   des chemins du CONTRAT (« Quiz/Autre/schema.png »). Sans cette
+	   conversion, les étapes 1 (chemin exact) et 2 (extension implicite) de
+	   `resolveDansIndex` comparent un lien nu à un index préfixé et ne
+	   matchent donc plus JAMAIS : tout retombe sur la recherche par NOM, qui
+	   perd la règle n°1 de `resolveDansIndex` — « le fichier explicitement
+	   désigné gagne toujours » — dès qu'un homonyme existe ailleurs, plus
+	   proche par la seule proximité de dossier.
+	   `carte.contrat` est le SEUL endroit qui pose ce préfixe ; une racine
+	   introuvable pour `fromPath` (chaîne vide) laisse le lien inchangé,
+	   exactement comme sous l'hôte Obsidian (identifiant de racine vide). */
+	const versContrat = (chemin: string, fromPath: string): string =>
+		carte.contrat(carte.pour(fromPath)?.id ?? "", chemin);
 
 	return {
 		resolve(linkPath, fromPath) {
-			return resolveDansIndex(dansLaRacineDe(fromPath), linkPath, fromPath);
+			return resolveDansIndex(dansLaRacineDe(fromPath), versContrat(linkPath, fromPath), fromPath);
 		},
 		/* `null` et JAMAIS la chaîne vide : un `src=""` fait recharger la page
 		   courante comme image — requête inutile et image cassée.
@@ -133,11 +151,14 @@ export function createWindowsLinks(carte: CarteRacines, index: WindowsIndex): Ho
 				const brut = typeof target === "string" ? target : target?.path;
 				const chemin = normaliserLien(brut ?? "");
 				if (!chemin) return null;
-				/* Un chemin déjà complet (donc préfixé) est cherché tel quel ;
-				   un nom nu passe par la résolution, bornée à la racine de la
+				/* Un chemin déjà complet (donc préfixé — le `.path` d'un
+				   `HostFile` déjà résolu) est cherché tel quel, par le chemin
+				   RAPIDE (`index.get`) ; un lien écrit dans une note passe par
+				   la même conversion que `resolve`, bornée à la racine de la
 				   note citante — ou, à défaut de note citante, à celle du
 				   chemin lui-même. */
-				const f = index.get(chemin) ?? resolveDansIndex(dansLaRacineDe(fromPath || chemin), chemin, fromPath || "");
+				const depuis = fromPath || chemin;
+				const f = index.get(chemin) ?? resolveDansIndex(dansLaRacineDe(depuis), versContrat(chemin, depuis), depuis);
 				if (!f) return null;
 				const a = carte.absolu(f.path);
 				return a ? convertFileSrc(a) || null : null;

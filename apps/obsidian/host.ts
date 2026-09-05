@@ -144,7 +144,13 @@ export function createObsidianHost(
 				if (await adapter().exists(path)) throw e;
 			}
 		},
+		/* Garde EXPLICITE, pas une confiance en `adapter().rename` : la
+		   migration du journal (tâche 3) s'appuie sur ce rejet pour ne jamais
+		   écraser une sauvegarde `.migrated` déjà posée — un `rename` qui
+		   écraserait la destination en silence détruirait la sauvegarde que
+		   la migration vient de créer. */
 		async rename(from, to) {
+			if (await adapter().exists(to)) throw new Error(`${to} existe déjà`);
 			await adapter().rename(from, to);
 		},
 		listMarkdown() {

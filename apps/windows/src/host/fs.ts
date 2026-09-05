@@ -131,7 +131,7 @@ export function buildIndex(fichiers: HostFile[]): WindowsIndex {
  * un dossier de cours de quelques centaines d'entrées à des dizaines de
  * milliers, dont pas une seule n'est un quiz — le démarrage s'allonge, la
  * mémoire monte, et `findByName` doit balayer tout ça à chaque image.
- * `.obsidian` et `.neo-quiz` (les résultats, cf. `paths.resultsDir`) tombent
+ * `.obsidian` et `.neo-quiz` (les résultats, cf. `paths.resultsDirFor`) tombent
  * sous la même règle ; ils restent LISIBLES par chemin, ils ne sont
  * simplement pas au catalogue.
  */
@@ -363,9 +363,16 @@ export function createWindowsWatcher(racine: string, index: WindowsIndex): HostW
 						/* Un DOSSIER renommé. Le journal de révision déplace ses
 						   clés par préfixe : une seule ligne suffit, et sans elle
 						   toutes les notes du dossier perdraient leur historique
-						   d'un coup. L'index, lui, n'a rien à faire ici — ses
-						   entrées sont des fichiers, et le surveillant les
-						   remontera une à une. */
+						   d'un coup.
+						   L'index, lui, N'EST PAS recalé ici : ce bloc ne touche
+						   qu'au journal. Ce que `ReadDirectoryChangesW` (via
+						   plugin-fs) remonte ensuite pour les FICHIERS du dossier
+						   déplacé n'est pas mesuré dans cette tâche (pas
+						   d'affichage disponible pour l'éprouver) — l'index peut
+						   donc garder des chemins PÉRIMÉS pour ces fichiers tant
+						   que rien ne les recale. C'est une LIMITE non mesurée,
+						   pas une garantie ; la tâche 9 (l'appariement des
+						   renommages) la traite sur preuve. */
 						for (const cb of [...abonnesDossier]) {
 							try { cb({ from: avant, to: apres }); } catch (e) { console.warn(LOG_PREFIX, "onRenameDir: rappel en erreur:", e); }
 						}

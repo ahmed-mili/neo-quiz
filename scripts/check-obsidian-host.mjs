@@ -170,7 +170,16 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 				return { files: ["dir/a.jsonl", "dir/b.jsonl"], folders: ["dir/sous"] };
 			},
 			exists: async (p) => existants.has(p),
-			remove: async (p) => { supprimes.push(p); existants.delete(p); },
+			/* Reproduit le comportement RÉEL de l'adaptateur Obsidian : `remove`
+			   jette pour un chemin absent. Sans ce jet, le cas « ne lève pas »
+			   restait vert même si le try/catch de l'hôte disparaissait — il ne
+			   prouvait alors que la transmission du chemin, jamais la tolérance
+			   annoncée (revue tâche 2, tour 1). */
+			remove: async (p) => {
+				if (!existants.has(p)) throw new Error("ENOENT: " + p);
+				supprimes.push(p);
+				existants.delete(p);
+			},
 			rename: async (a, b) => { renommes.push([a, b]); },
 		},
 	});
@@ -186,13 +195,37 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	   exception ici ferait échouer tout le chargement du journal. */
 	r.check("list d'un dossier absent rend []", await host.fs.list("absent"), []);
 
-	/* Deux fenêtres Obsidian peuvent absorber le même fichier de conflit :
-	   le perdant ne doit pas lever. */
-	await host.fs.remove("deja-parti.jsonl");
-	r.check("remove d'un fichier absent ne lève pas", supprimes, ["deja-parti.jsonl"]);
+	/* Le succès : le fichier est dans `existants`, l'adaptateur ne jette pas. */
+	await host.fs.remove("journal.jsonl");
+	r.check("remove d'un fichier présent le retire", supprimes, ["journal.jsonl"]);
+
+	/* Deux fenêtres Obsidian peuvent absorber le même fichier de conflit : le
+	   perdant ne doit pas lever — même si l'adaptateur SOUS-JACENT, lui, jette
+	   bien pour un chemin absent (le faux `remove` ci-dessus le reproduit
+	   exprès). Sans le try/catch de l'hôte, ce jet remonterait ici. */
+	let removeLeve = false;
+	try {
+		await host.fs.remove("deja-parti.jsonl");
+	} catch (e) {
+		removeLeve = true;
+	}
+	r.check("remove d'un fichier absent ne lève pas", removeLeve, false);
 
 	await host.fs.rename("a", "b");
 	r.check("rename transmet les deux chemins", renommes, [["a", "b"]]);
+
+	/* Garde EXPLICITE, avant même d'appeler l'adaptateur : une destination
+	   déjà présente doit rejeter, sans quoi la migration du journal (tâche 3)
+	   écraserait une sauvegarde `.migrated` qu'elle vient de créer. */
+	existants.add("deja-la.jsonl");
+	let renameRejette = false;
+	try {
+		await host.fs.rename("c", "deja-la.jsonl");
+	} catch (e) {
+		renameRejette = true;
+	}
+	r.check("rename rejette si la destination existe", renameRejette, true);
+	r.check("rename rejette AVANT d'appeler l'adaptateur", renommes, [["a", "b"]]);
 
 	/* UNE racine, d'identifiant VIDE, et `localPath` est l'identité : c'est
 	   ce qui garantit qu'une clé de journal déjà écrite ne change pas. */

@@ -44,14 +44,17 @@
 	--color-orange: rgb(250, 179, 135);
 	--color-red: rgb(243, 139, 168);
 	--color-yellow: rgb(249, 226, 175);
-	/* Les DEUX POLICES ne se recopient pas. Le relevé commence par « Droid
-	   Arabic Naskh », qui est le réglage PERSONNEL d'Ahmed dans Obsidian
-	   (appearance.json), pas une valeur du thème : figer la police d'un
-	   utilisateur dans le code de l'application serait faux. On reprend donc
-	   les piles d'Obsidian, moins le choix personnel en tête. */
-	--font-interface: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui,
-		"Segoe UI", Roboto, "Inter", "Apple Color Emoji",
-		"Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+	/* NEO SANS STD en tête : c'est la police de la marque « Neo », et l'app
+	   l'EMBARQUE (fonts.css) pour l'avoir ailleurs que sur la machine de son
+	   auteur. La pile d'Obsidian reste derrière — un repli n'est pas une
+	   décoration ici : si un fichier de police manquait au bundle, l'interface
+	   resterait lisible au lieu de tomber sur la police par défaut du système.
+	   Le relevé d'Obsidian, lui, ne se recopie toujours pas : il commence par
+	   « Droid Arabic Naskh », qui est le réglage PERSONNEL d'Ahmed
+	   (appearance.json) et non une valeur du thème. */
+	--font-interface: "Neo Sans Std", ui-sans-serif, -apple-system,
+		BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Inter",
+		"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
 	--font-monospace: ui-monospace, SFMono-Regular, "Cascadia Mono", "Roboto Mono",
 		"DejaVu Sans Mono", Menlo, Monaco, "Consolas",
 		"Source Code Pro", monospace;

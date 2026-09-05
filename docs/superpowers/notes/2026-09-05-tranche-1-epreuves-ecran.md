@@ -11,6 +11,14 @@ Lancer avec `npm run app:dev`, ou directement
 
 ---
 
+> **2026-09-05 — le point 1 est VÉRIFIÉ.** Ahmed a ouvert un quiz de son vault
+> Efrei dans la fenêtre : il tourne. Le livrable de la tranche 1 — « jouer un
+> quiz de ses notes sans Obsidian » — est donc atteint et constaté, pas
+> seulement déduit des contrôles.
+>
+> Les points 2 à 14 restent à éprouver au fil de l'usage. Ils ne bloquent plus
+> la tranche : ce sont désormais des vérifications de non-régression.
+
 ## À ÉPROUVER À L'ÉCRAN
 
 Par ordre de priorité. `npm run app:dev`, dossier = un vrai vault.

@@ -1,11 +1,10 @@
-import { setIcon } from "obsidian";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { TransKey } from "../i18n";
-import type { DashboardCtx } from "../types/dashboard-ctx";
+import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { renderQuizCard } from "./quiz-card";
-import { buildQuizCardMenu, buildModuleCardMenu } from "./quiz-menu";
 import { renderModuleCard } from "./module-card";
 import { moduleForQuiz, buildModuleGroups, buildUeGroups } from "./quiz-modules";
 import type { ModuleMap, ModuleGroup, UeGroup } from "./quiz-modules";
@@ -14,7 +13,6 @@ import { buildRecentModuleGroups } from "./quiz-recent";
 import type { RecentGroupKey } from "./quiz-recent";
 import { moduleAccent } from "./module-color";
 import { renderCollapsibleSection } from "./collapsible";
-import { openIconPicker } from "./icon-picker";
 import { suggestIcons } from "./icon-suggest";
 
 /* ══════════════════════════════════════════════════════════
@@ -32,7 +30,7 @@ export type GroupingKey = "ue" | "recent";
 /** Dépendances d'ÉTAT fournies par le contrôleur (réglages, recherche,
     re-rendu) — tout ce qui n'est pas pur DOM reste côté quizzes.ts. */
 export interface GridDeps {
-	ctx: DashboardCtx;
+	ctx: DashboardShellCtx;
 	isExpanded: (key: string) => boolean;
 	toggleExpanded: (key: string) => void;
 	rerender: () => void;
@@ -51,19 +49,28 @@ const RECENT_GROUP_LABEL_KEYS: Record<RecentGroupKey, TransKey> = {
     carte façon StudySmarter, même sous un en-tête d'UE — comme StudySmarter
     garde le sous-titre d'une carte dans une section groupée). */
 function renderModuleGrid(deps: GridDeps, parent: HTMLElement, groups: ModuleGroup[], map: ModuleMap, entryDelay: () => string): void {
-	const grid = parent.createDiv({ cls: "qbd-module-grid" });
-	const menu = buildModuleCardMenu(deps.ctx, deps.rerender, map);
+	const grid = ajouter(parent, "div", "qbd-module-grid");
+	// Menu ⋯ d'une carte de module : fabrique fournie par l'hôte (elle ouvre
+	// des modals — partage, « Modifier dossier », suppression — que
+	// l'application n'a pas encore, D5). Absente = pas de bouton ⋯,
+	// `renderModuleCard` le prévoit déjà par son `menu?` opt-in.
+	const menu = deps.ctx.buildModuleMenu?.(deps.rerender, map);
 	// Raccourci « changer l'icône » depuis la pastille de la carte : picker
-	// portalé au body (pas de modal ici) → override + save + rerender.
-	const pickIcon = (group: ModuleGroup, anchor: HTMLElement) => {
-		openIconPicker(anchor, group.icon, (name) => {
-			const overrides = { ...(deps.ctx.settings.quizzesModuleOverrides || {}) };
-			overrides[group.folder] = { ...(overrides[group.folder] || {}), icon: name };
-			deps.ctx.settings.quizzesModuleOverrides = overrides;
-			deps.ctx.saveSettings().catch(() => {});
-			deps.rerender();
-		}, document.body, suggestIcons(group.name, group.ue));
-	};
+	// portalé au body (pas de modal ici) → override + save + rerender. Le
+	// picker lui-même (icon-picker.ts, `getIconIds` d'Obsidian) est fourni
+	// par l'hôte ; absent côté application, la pastille n'est simplement pas
+	// cliquable (`renderModuleCard`, `onPickIcon?` opt-in).
+	const pickIcon = deps.ctx.pickIcon
+		? (group: ModuleGroup, anchor: HTMLElement): void => {
+			deps.ctx.pickIcon!(anchor, group.icon, (name) => {
+				const overrides = { ...(deps.ctx.settings.quizzesModuleOverrides || {}) };
+				overrides[group.folder] = { ...(overrides[group.folder] || {}), icon: name };
+				deps.ctx.settings.quizzesModuleOverrides = overrides;
+				deps.ctx.saveSettings().catch(() => {});
+				deps.rerender();
+			}, suggestIcons(group.name, group.ue));
+		}
+		: undefined;
 	for (const g of groups) {
 		const card = renderModuleCard(grid, g, (m) => deps.openModule(m.folder), menu, pickIcon);
 		card.style.setProperty("--qbd-card-delay", entryDelay());
@@ -92,7 +99,7 @@ export function renderQuizGrid(
 	    l'archivage n'existe qu'au niveau dossier, Ahmed 2026-07-19). */
 	archivedQuizzes: QuizIndexEntry[] = []
 ): void {
-	treeEl.empty();
+	treeEl.replaceChildren();
 	// Cascade d'ENTRÉE globale : un seul compteur traverse toutes les
 	// sections (en-têtes ET cartes de dossier) — même formule que les cartes
 	// du drill (quiz-card.ts). Les délais sont posés à chaque rendu mais
@@ -101,7 +108,8 @@ export function renderQuizGrid(
 	const entryDelay = (): string => `${100 + entryIndex++ * 45}ms`;
 	const archivedFolders = deps.ctx.settings.quizzesArchivedFolders || [];
 	if (filtered.length === 0 && archivedQuizzes.length === 0 && archivedFolders.length === 0) {
-		treeEl.createDiv({ cls: "qbd-empty-state" }, el => { el.createEl("p", { text: t("dashboard.quizzes.empty") }); });
+		const empty = ajouter(treeEl, "div", "qbd-empty-state");
+		ajouter(empty, "p", undefined, t("dashboard.quizzes.empty"));
 		return;
 	}
 
@@ -144,7 +152,7 @@ export function renderQuizGrid(
     (calculés UNE fois par render(), cf. quizzes.ts). */
 export function renderModuleDrill(
 	treeEl: HTMLElement,
-	ctx: DashboardCtx,
+	ctx: DashboardShellCtx,
 	inModule: QuizIndexEntry[],
 	stats: Record<string, QuizStatRecord>,
 	map: ModuleMap,
@@ -152,10 +160,11 @@ export function renderModuleDrill(
 	/* Re-rendu SANS refermer le drill-down (reset de stats depuis le menu ⋯). */
 	rerender: () => void
 ): void {
-	treeEl.empty();
+	treeEl.replaceChildren();
 
 	if (inModule.length === 0) {
-		treeEl.createDiv({ cls: "qbd-empty-state" }, el => { el.createEl("p", { text: t("dashboard.quizzes.empty") }); });
+		const empty = ajouter(treeEl, "div", "qbd-empty-state");
+		ajouter(empty, "p", undefined, t("dashboard.quizzes.empty"));
 		return;
 	}
 
@@ -166,13 +175,16 @@ export function renderModuleDrill(
 
 	// ── Layout 2 colonnes : grille de cartes + panneau « Progrès » (repli 1
 	// colonne sous une largeur seuil, cf. dashboard-quizzes.css). ──
-	const layout = treeEl.createDiv({ cls: "qbd-quizzes-drill-layout" });
+	const layout = ajouter(treeEl, "div", "qbd-quizzes-drill-layout");
 	layout.style.setProperty("--accent", accent);
-	const grid = layout.createDiv({ cls: "qbd-home-grid qbd-quizzes-drill-grid" });
+	const grid = ajouter(layout, "div", "qbd-home-grid qbd-quizzes-drill-grid");
 	for (const [index, quiz] of inModule.entries()) {
 		renderQuizCard(grid, quiz, stats[quiz.path], (q) => ctx.navigate("detail", { quiz: q }), {
 			onPlay: (q) => ctx.openQuiz(q),
-			menu: buildQuizCardMenu(ctx, rerender),
+			// Absent côté application (menus et modals = tranche 2.6) : la
+			// carte se rend alors sans bouton « ⋯ », `menu?` étant opt-in —
+			// même patron que home.ts.
+			menu: ctx.buildCardMenu?.(rerender),
 			accent,
 			entryIndex: index,
 		});
@@ -187,15 +199,15 @@ export function renderModuleDrill(
 function renderDonut(container: HTMLElement, mastered: number, review: number, total: number, centerPct: number): void {
 	const masteredEnd = total > 0 ? mastered / total * 100 : 0;
 	const reviewEnd = total > 0 ? (mastered + review) / total * 100 : 0;
-	const donut = container.createDiv({ cls: "qbd-progress-donut" });
+	const donut = ajouter(container, "div", "qbd-progress-donut");
 	donut.style.setProperty("--qbd-donut-mastered-end", `${masteredEnd}%`);
 	donut.style.setProperty("--qbd-donut-review-end", `${reviewEnd}%`);
 	donut.setAttribute("role", "img");
 	donut.setAttribute("aria-label", `${centerPct}%`);
 
-	const centerLabel = donut.createDiv({ cls: "qbd-progress-donut-center" });
-	centerLabel.createEl("b", { cls: "qbd-progress-donut-pct", text: String(centerPct) });
-	centerLabel.createSpan({ cls: "qbd-progress-donut-pct-sign", text: "%" });
+	const centerLabel = ajouter(donut, "div", "qbd-progress-donut-center");
+	ajouter(centerLabel, "b", "qbd-progress-donut-pct", String(centerPct));
+	ajouter(centerLabel, "span", "qbd-progress-donut-pct-sign", "%");
 }
 
 /** Panneau « Progrès » : donut (mastered/review/à-apprendre) + légende, à
@@ -217,20 +229,20 @@ function renderProgressPanel(parent: HTMLElement, inModule: QuizIndexEntry[], st
 	}
 	const pctOf = (n: number): number => total > 0 ? Math.round(n / total * 100) : 0;
 
-	const panel = parent.createDiv({ cls: "qbd-progress-panel" });
-	const head = panel.createDiv({ cls: "qbd-progress-panel-head" });
-	head.createDiv({ cls: "qbd-progress-panel-title", text: t("dashboard.quizzes.progressTitle") });
-	head.createDiv({ cls: "qbd-progress-panel-count", text: t("dashboard.quizzes.progressCount", { done: masteredN, total }) });
+	const panel = ajouter(parent, "div", "qbd-progress-panel");
+	const head = ajouter(panel, "div", "qbd-progress-panel-head");
+	ajouter(head, "div", "qbd-progress-panel-title", t("dashboard.quizzes.progressTitle"));
+	ajouter(head, "div", "qbd-progress-panel-count", t("dashboard.quizzes.progressCount", { done: masteredN, total }));
 
-	const donutWrap = panel.createDiv({ cls: "qbd-progress-donut-wrap" });
+	const donutWrap = ajouter(panel, "div", "qbd-progress-donut-wrap");
 	renderDonut(donutWrap, masteredN, reviewN, total, pctOf(masteredN));
 
-	const legend = panel.createDiv({ cls: "qbd-progress-legend" });
+	const legend = ajouter(panel, "div", "qbd-progress-legend");
 	const addRow = (dotMod: string, label: string, n: number): void => {
-		const row = legend.createDiv({ cls: "qbd-progress-legend-row" });
-		row.createDiv({ cls: `qbd-progress-legend-dot qbd-progress-legend-dot--${dotMod}` });
-		row.createDiv({ cls: "qbd-progress-legend-label", text: label });
-		row.createDiv({ cls: "qbd-progress-legend-pct", text: `${pctOf(n)}%` });
+		const row = ajouter(legend, "div", "qbd-progress-legend-row");
+		ajouter(row, "div", `qbd-progress-legend-dot qbd-progress-legend-dot--${dotMod}`);
+		ajouter(row, "div", "qbd-progress-legend-label", label);
+		ajouter(row, "div", "qbd-progress-legend-pct", `${pctOf(n)}%`);
 	};
 	addRow("mastered", t("dashboard.card.mastered"), masteredN);
 	addRow("review", t("dashboard.card.review"), reviewN);

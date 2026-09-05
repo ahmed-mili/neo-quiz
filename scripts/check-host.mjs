@@ -48,8 +48,6 @@ const RESTANTS = [
 	"src/dashboard/prompt-paths.ts",
 	"src/dashboard/quiz-menu.ts",
 	"src/dashboard/quiz-open.ts",
-	"src/dashboard/quizzes-render.ts",
-	"src/dashboard/quizzes.ts",
 	"src/dashboard/share.ts",
 	"src/dashboard/ui-select.ts",
 	"src/dashboard/usage-modal.ts",

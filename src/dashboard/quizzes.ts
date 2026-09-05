@@ -1,15 +1,14 @@
-import { setIcon } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { TransKey } from "../i18n";
-import type { DashboardCtx } from "../types/dashboard-ctx";
+import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { applyModuleOverrides, moduleForQuiz } from "./quiz-modules";
 import { isMastered } from "./quiz-mastery";
 import type { ModuleMap } from "./quiz-modules";
-import { createSelect, openActionMenu } from "./ui-select";
 import { isFolderArchived } from "./quiz-menu";
-import { CreateFolderModal, CreateQuizModal } from "./folder-create";
 import { renderQuizGrid, renderModuleDrill } from "./quizzes-render";
 import type { GroupingKey } from "./quizzes-render";
 import { moduleAccent } from "./module-color";
@@ -46,7 +45,7 @@ export interface QuizzesHandlers {
 	openFolderOfQuiz(quizPath: string): void;
 }
 
-export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
+export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 	/* L'accès réel aux réglages est `ctx.settings.<clé>` (même objet que
 	   `plugin.settings`, nommé — tâche 2). Lu à CHAQUE rendu : le réglage
 	   peut changer sous nos pieds (autre appareil, rechargement). Le
@@ -87,7 +86,7 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 	   carte, retour) ne pourrait pas re-rendre depuis un callback capturé
 	   dans quizzes-render.ts. Même patron qu'ai.ts:179/215. Réassigné à
 	   chaque rendu — ne JAMAIS capturer un nœud DOM d'un rendu précédent,
-	   `render` fait `container.empty()`. */
+	   `render` fait `container.replaceChildren()`. */
 	let containerRef: HTMLElement | null = null;
 
 	/* Table module lue depuis la note de correspondance, mise en cache : la
@@ -119,10 +118,11 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 		// ligne ~175), avant que CE render() ait fini de construire header/
 		// recherche/sélecteur/filtres/contenu. Le render() imbriqué peint une
 		// copie complète ; le render() externe reprend ensuite et peint une
-		// SECONDE copie par-dessus, sans container.empty() entre les deux →
-		// header/recherche/sélecteur/groupe/arbre dupliqués dans le DOM. Ce
-		// yield garantit que le render() déclencheur s'est entièrement déroulé
-		// avant toute réentrée, quelle que soit la branche empruntée plus bas.
+		// SECONDE copie par-dessus, sans container.replaceChildren() entre les
+		// deux → header/recherche/sélecteur/groupe/arbre dupliqués dans le DOM.
+		// Ce yield garantit que le render() déclencheur s'est entièrement
+		// déroulé avant toute réentrée, quelle que soit la branche empruntée
+		// plus bas.
 		await Promise.resolve();
 		// Le brief demandait `|| ""` : passer une chaîne vide aurait fait
 		// perdre le repli sur la note « Dashboard » (DEFAULT_SETTINGS,
@@ -193,7 +193,7 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 
 	function render(container: HTMLElement): void {
 		containerRef = container;
-		container.empty();
+		container.replaceChildren();
 
 		// Transition d'entrée (spec 2026-07-20) : classe posée SEULEMENT quand la
 		// vue change — mécanisme partagé avec l'accueil (view-enter.ts).
@@ -226,10 +226,10 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 		// derrière le breadcrumb et le header, sans affecter la vue racine.
 		let headerParent = container;
 		if (openModuleAccent !== null) {
-			const hero = container.createDiv({ cls: "qbd-quizzes-folder-hero" });
+			const hero = ajouter(container, "div", "qbd-quizzes-folder-hero");
 			hero.style.setProperty("--accent", openModuleAccent);
-			hero.createDiv({ cls: "qbd-quizzes-folder-halo" });
-			headerParent = hero.createDiv({ cls: "qbd-quizzes-folder-hero-inner" });
+			ajouter(hero, "div", "qbd-quizzes-folder-halo");
+			headerParent = ajouter(hero, "div", "qbd-quizzes-folder-hero-inner");
 		}
 
 		// ── Header ──
@@ -237,17 +237,16 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 		// « + New folder » sur la ligne du regroupement (demande Ahmed
 		// 2026-07-20), même ligne que le chip UE/Recent.
 		if (openModuleFolder !== null) {
-			const header = headerParent.createDiv({ cls: "qbd-quizzes-header" });
+			const header = ajouter(headerParent, "div", "qbd-quizzes-header");
 
 			// Retour SUR LA LIGNE du titre, à sa gauche (comme la page d'un
 			// quiz) : une flèche seule au-dessus du titre faisait un étage de
 			// plus pour rien. Un seul bouton retour dans tout le dashboard.
-			const back = header.createEl("button", {
-				cls: "qbd-quizzes-crumb-back qbd-quizzes-header-back",
-				attr: { type: "button", "aria-label": t("dashboard.quizzes.backToModules") },
-			});
-			const backIcon = back.createSpan({ cls: "qbd-quizzes-crumb-icon" });
-			setIcon(backIcon, "arrow-left");
+			const back = ajouter(header, "button", "qbd-quizzes-crumb-back qbd-quizzes-header-back");
+			back.type = "button";
+			back.setAttribute("aria-label", t("dashboard.quizzes.backToModules"));
+			const backIcon = ajouter(back, "span", "qbd-quizzes-crumb-icon");
+			currentHost().ui.setIcon(backIcon, "arrow-left");
 			back.addEventListener("click", () => {
 				ctx.recordNav();
 				openModuleFolder = null;
@@ -257,40 +256,45 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 			// module, teinte à l'accent du dossier (comme sa carte). Le nom n'est
 			// donc plus répété dans le fil d'Ariane (cf. quizzes-render.ts).
 			// Colonne texte + soulignement dégradé (référence claude.ai) sous le nom.
-			const titleBlock = header.createDiv({ cls: "qbd-quizzes-title-block" });
-			const titleEl = titleBlock.createEl("h2", { cls: "qbd-quizzes-title" });
-			const titleIcon = titleEl.createSpan({ cls: "qbd-quizzes-title-icon" });
-			setIcon(titleIcon, openModuleInfo?.icon || DEFAULT_MODULE_ICON);
-			titleEl.createSpan({ cls: "qbd-quizzes-title-text", text: openModuleInfo?.name || openModuleFolder });
-			titleBlock.createDiv({ cls: "qbd-quizzes-title-underline" });
+			const titleBlock = ajouter(header, "div", "qbd-quizzes-title-block");
+			const titleEl = ajouter(titleBlock, "h2", "qbd-quizzes-title");
+			const titleIcon = ajouter(titleEl, "span", "qbd-quizzes-title-icon");
+			currentHost().ui.setIcon(titleIcon, openModuleInfo?.icon || DEFAULT_MODULE_ICON);
+			ajouter(titleEl, "span", "qbd-quizzes-title-text", openModuleInfo?.name || openModuleFolder);
+			ajouter(titleBlock, "div", "qbd-quizzes-title-underline");
 
 			// ── Actions du header : stats + pilule « Nouveau quiz » ── (groupées
 			// pour rester alignées à droite, comme la référence).
-			const headerActions = header.createDiv({ cls: "qbd-quizzes-header-actions" });
+			const headerActions = ajouter(header, "div", "qbd-quizzes-header-actions");
 			const masteredCount = inModule.filter(q => isMastered(q, stats)).length;
-			const statsWrap = headerActions.createDiv({ cls: "qbd-quizzes-header-stats" });
+			const statsWrap = ajouter(headerActions, "div", "qbd-quizzes-header-stats");
 			const addStat = (n: number, key: TransKey, modifier?: string): void => {
-				const item = statsWrap.createDiv({ cls: "qbd-quizzes-header-stat" });
-				if (modifier) item.addClass(modifier);
-				item.createDiv({ cls: "qbd-quizzes-header-stat-num", text: String(n) });
-				item.createDiv({ cls: "qbd-quizzes-header-stat-label", text: t(key) });
+				const item = ajouter(statsWrap, "div", "qbd-quizzes-header-stat");
+				if (modifier) item.classList.add(modifier);
+				ajouter(item, "div", "qbd-quizzes-header-stat-num", String(n));
+				ajouter(item, "div", "qbd-quizzes-header-stat-label", t(key));
 			};
 			addStat(inModule.length, "dashboard.quizzes.statQuizzes");
-			statsWrap.createDiv({ cls: "qbd-quizzes-header-divider" });
+			ajouter(statsWrap, "div", "qbd-quizzes-header-divider");
 			addStat(masteredCount, "dashboard.card.mastered", "qbd-quizzes-header-stat--mastered");
 
 			// Drill-down : créer un dossier ICI n'a pas de sens (demande Ahmed
 			// 2026-07-19) → une seule pilule « Nouveau quiz », qui ouvre le MÊME
 			// modal à trois options que « Nouveau dossier » (IA / vierge /
 			// import), décliné pour le dossier OUVERT — homogénéité demandée.
-			const folder = openModuleFolder;
-			const newQuizBtn = headerActions.createEl("button", { cls: "qbd-btn--create" });
-			const newQuizIcon = newQuizBtn.createSpan({ cls: "qbd-btn-icon" });
-			setIcon(newQuizIcon, "plus");
-			newQuizBtn.createSpan({ text: t("dashboard.quizzes.newQuiz") });
-			newQuizBtn.addEventListener("click", () => {
-				new CreateQuizModal(ctx, folder, () => { if (containerRef) render(containerRef); }).open();
-			});
+			// Absente côté application (modals = tranche 2.6, D5) : le bouton
+			// est alors MASQUÉ, pas grisé (Ruling 7 — un bouton d'action absent
+			// ne déroute personne, contrairement au rail de navigation).
+			if (ctx.createQuiz) {
+				const folder = openModuleFolder;
+				const newQuizBtn = ajouter(headerActions, "button", "qbd-btn--create");
+				const newQuizIcon = ajouter(newQuizBtn, "span", "qbd-btn-icon");
+				currentHost().ui.setIcon(newQuizIcon, "plus");
+				ajouter(newQuizBtn, "span", undefined, t("dashboard.quizzes.newQuiz"));
+				newQuizBtn.addEventListener("click", () => {
+					ctx.createQuiz!(folder, () => { if (containerRef) render(containerRef); });
+				});
+			}
 		}
 
 		// ── Regroupement (UE / Récent) ──
@@ -301,34 +305,42 @@ export function createQuizzesHandlers(ctx: DashboardCtx): QuizzesHandlers {
 		// « Par activité » croirait à un bug plutôt qu'à un mode qu'il a choisi
 		// (retour Ahmed 2026-07-17 — StudySmarter est l'inspiration, pas le contrat).
 		if (openModuleFolder === null) {
-			// Vrai SELECT (createSelect), pas un menu d'actions : options
-			// exclusives dont une active → menu d'OPTIONS à la largeur du
-			// trigger, check accent à droite, bordure accent à l'ouverture
-			// (aria-expanded) — l'état « après clic » StudySmarter
-			// (annotation Ahmed 2026-07-18). openActionMenu imposait son
-			// min-width 248px, son icône à gauche et aucun état ouvert.
-			const groupWrap = container.createDiv({ cls: "qbd-quizzes-group" });
-			const groupSelect = createSelect(groupWrap, {
+			const groupWrap = ajouter(container, "div", "qbd-quizzes-group");
+			// Vrai SELECT (createSelect, ui-select.ts), pas un menu d'actions :
+			// options exclusives dont une active → menu d'OPTIONS à la largeur
+			// du trigger, check accent à droite, bordure accent à l'ouverture
+			// (aria-expanded) — l'état « après clic » StudySmarter (annotation
+			// Ahmed 2026-07-18). openActionMenu imposait son min-width 248px,
+			// son icône à gauche et aucun état ouvert.
+			// `createSelect` (ui-select.ts) importe encore Obsidian (D5, cf.
+			// plan tranche 2.5 « ce que la tranche laisse ouvert ») : le
+			// rendu passe donc par `ctx.renderGroupingSelect`, optionnel.
+			// Absent côté application : l'axe déjà persisté reste actif, sans
+			// bouton pour le changer (bouton MASQUÉ, Ruling 7).
+			const groupSelect = ctx.renderGroupingSelect?.(groupWrap, {
 				value: currentGrouping(),
 				options: GROUPING_ORDER.map(g => ({ value: g, label: t(GROUPING_LABEL_KEYS[g]) })),
 				onChange: (v) => { setGrouping(v as GroupingKey); render(container); }
 			});
-			groupSelect.el.classList.add("qbd-quizzes-group-select");
+			groupSelect?.el.classList.add("qbd-quizzes-group-select");
 
 			// « Nouveau dossier » sur la MÊME ligne que le chip UE/Recent, calé à
 			// droite, même pilule que « Nouveau quiz » du drill (demande Ahmed
-			// 2026-07-20 — le header racine a disparu avec lui).
-			const newBtn = groupWrap.createEl("button", { cls: "qbd-btn--create" });
-			const newIcon = newBtn.createSpan({ cls: "qbd-btn-icon" });
-			setIcon(newIcon, "plus");
-			newBtn.createSpan({ text: t("dashboard.quizzes.new") });
-			newBtn.addEventListener("click", () => {
-				new CreateFolderModal(ctx, effectiveMap(), quizzes, () => { if (containerRef) render(containerRef); }).open();
-			});
+			// 2026-07-20 — le header racine a disparu avec lui). Absent côté
+			// application (modals hors périmètre, D5) : bouton MASQUÉ (Ruling 7).
+			if (ctx.createFolder) {
+				const newBtn = ajouter(groupWrap, "button", "qbd-btn--create");
+				const newIcon = ajouter(newBtn, "span", "qbd-btn-icon");
+				currentHost().ui.setIcon(newIcon, "plus");
+				ajouter(newBtn, "span", undefined, t("dashboard.quizzes.new"));
+				newBtn.addEventListener("click", () => {
+					ctx.createFolder!(effectiveMap(), quizzes, () => { if (containerRef) render(containerRef); });
+				});
+			}
 		}
 
 		// ── Contenu : grille (UE/Récent) ou drill-down d'un module ──
-		const treeEl = container.createDiv({ cls: "qbd-quizzes-tree" });
+		const treeEl = ajouter(container, "div", "qbd-quizzes-tree");
 		renderContent(treeEl, quizzes, inModule, stats);
 	}
 

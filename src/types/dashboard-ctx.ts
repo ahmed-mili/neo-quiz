@@ -35,7 +35,7 @@ import type { OllamaCatalogEntry } from "../dashboard/ai-providers";
 import type { AiClient } from "../dashboard/ai-client";
 import type { AiUsageEntry } from "../dashboard/ai-usage";
 import type { AiHandlers } from "../dashboard/ai";
-import type { ModuleOverride } from "../dashboard/quiz-modules";
+import type { ModuleOverride, ModuleGroup, ModuleMap } from "../dashboard/quiz-modules";
 import type { ReviewStore } from "../review/review-store";
 import type { ActionMenuItem } from "../dashboard/ui-select";
 
@@ -232,6 +232,41 @@ export interface DashboardShellCtx {
 	    L'application ne la fournit pas : les menus et les modals sont la
 	    tranche 2.6, et une carte sans « ⋯ » est un état prévu, pas dégradé. */
 	buildCardMenu?: (rerender: () => void) => (quiz: QuizIndexEntry) => ActionMenuItem[];
+	/** FABRIQUE du menu « ⋯ » d'une carte de MODULE (« Mes quiz », tâche 6).
+	    Même raison d'être que `buildCardMenu` : le menu ouvre des modals
+	    (partage, « Modifier dossier », suppression) que l'application n'a pas
+	    encore. Absente = pas de bouton « ⋯ », ce que `renderModuleCard`
+	    prévoit déjà par son `menu?` opt-in — l'application ne la fournit pas
+	    (menus et modals = tranche 2.6, D5). */
+	buildModuleMenu?: (rerender: () => void, map: ModuleMap) => (g: ModuleGroup) => ActionMenuItem[];
+	/** Sélecteur d'icône d'un module (clic sur la pastille de la carte).
+	    Absent = la pastille n'est pas cliquable — `renderModuleCard` prévoit
+	    déjà `onPickIcon?` en opt-in. `suggestions` (calculées par la PAGE
+	    depuis le nom/l'UE du module, pur — icon-suggest.ts) est simplement
+	    transmis : seul `openIconPicker` (icon-picker.ts, `getIconIds`
+	    d'Obsidian) exige l'hôte complet. */
+	pickIcon?: (anchor: HTMLElement, courante: string | undefined, onPick: (nom: string) => void, suggestions?: string[]) => void;
+	/** Création d'un quiz dans le dossier OUVERT (drill-down de « Mes
+	    quiz »). Absente = le bouton « Nouveau quiz » du header n'est pas
+	    rendu (`CreateQuizModal` ouvre une modal, hors périmètre). */
+	createQuiz?: (folder: string, done: () => void) => void;
+	/** Création d'un dossier (racine de « Mes quiz »). Absente = le bouton
+	    « Nouveau dossier » n'est pas rendu. `map`/`quizzes` : mêmes données
+	    que `CreateFolderModal` (l'import d'un .zip partagé cherche le parent
+	    commun des modules déjà résolus — folder-create.ts). */
+	createFolder?: (map: ModuleMap, quizzes: QuizIndexEntry[], done: () => void) => void;
+	/** Sélecteur d'axe de regroupement (UE / Récent, ligne au-dessus de la
+	    grille). `createSelect` (ui-select.ts) importe encore Obsidian — même
+	    famille D5 que les menus et l'icon-picker (le plan liste explicitement
+	    `ui-select.ts` parmi ce que la tranche 2.5 laisse ouvert). Absent côté
+	    application : l'axe déjà persisté (réglage `quizzesGrouping`) reste
+	    actif, simplement sans bouton pour le changer — l'app portera son
+	    propre dropdown en tranche 2.6. Renvoie l'élément du déclencheur pour
+	    que l'appelant y ajoute sa propre classe, comme `createSelect`. */
+	renderGroupingSelect?: (
+		container: HTMLElement,
+		opts: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void },
+	) => { el: HTMLElement };
 }
 
 /* ════════════════════════════════════════════════════════

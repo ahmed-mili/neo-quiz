@@ -2,7 +2,10 @@ import { PRODUCT_NAME } from "./branding";
 import { ItemView, Scope } from "obsidian";
 import type { App, WorkspaceLeaf, KeymapEventHandler } from "obsidian";
 import { openQuizForPlay } from "./dashboard/quiz-open";
-import { buildQuizCardMenu } from "./dashboard/quiz-menu";
+import { buildQuizCardMenu, buildModuleCardMenu } from "./dashboard/quiz-menu";
+import { openIconPicker } from "./dashboard/icon-picker";
+import { CreateQuizModal, CreateFolderModal } from "./dashboard/folder-create";
+import { createSelect } from "./dashboard/ui-select";
 
 // C1 (plan) : les 5 factories des sous-modules dashboard/* sont désormais des
 // EXPORTS NOMMÉS (Tasks 8a–8c). L'ancien `const createX = require("./dashboard/x")`
@@ -218,6 +221,21 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 			   précisément ce que l'application ne peut pas fournir, et
 			   pourquoi ce membre est optionnel. */
 			buildCardMenu: (rerender) => buildQuizCardMenu(this.ctx as DashboardCtx, rerender),
+			/* Même closure sur `this.ctx` que `buildCardMenu` ci-dessus, et même
+			   raison : ces cinq membres ouvrent des modals/dropdowns qui exigent
+			   le ctx complet ou `ui-select.ts` (Obsidian) — l'application ne les
+			   fournit pas (tâche 6, « Mes quiz »). */
+			buildModuleMenu: (rerender, map) => buildModuleCardMenu(this.ctx as DashboardCtx, rerender, map),
+			pickIcon: (anchor, courante, onPick, suggestions) => {
+				openIconPicker(anchor, courante, onPick, document.body, suggestions ?? []);
+			},
+			createQuiz: (folder, done) => {
+				new CreateQuizModal(this.ctx as DashboardCtx, folder, done).open();
+			},
+			createFolder: (map, quizzes, done) => {
+				new CreateFolderModal(this.ctx as DashboardCtx, map, quizzes, done).open();
+			},
+			renderGroupingSelect: (container, opts) => createSelect(container, opts),
 		};
 
 		this.ctx = ctx;

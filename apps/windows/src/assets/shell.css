@@ -352,3 +352,41 @@ body {
 	gap: 6px;
 	margin-top: 6px;
 }
+
+/* ── Les dates d'examen (tâche 10) ──
+   Une rangée par module : nom + racine, puis le champ de date. Pas d'icône ici
+   — contrairement à `.nq-reglages-dossier`, un module n'a rien de visuel à
+   distinguer (aucun logo, aucun type de dossier). `.nq-reglages-nom` et
+   `.nq-reglages-chemin` sont RÉUTILISÉES telles quelles : même rôle que dans
+   la liste des dossiers ci-dessus. */
+.nq-reglages-module {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 14px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+}
+
+/* Le champ de date natif : mêmes variables que `.qbd-medit-input` (modal
+   « Modifier dossier » du greffon, même contrôle) — deux champs de date qui se
+   ressemblent doivent employer les mêmes tokens, sans quoi ils divergeraient à
+   la première retouche de thème. */
+.nq-reglages-date {
+	flex: none;
+	width: 150px;
+	height: 34px;
+	padding: 0 10px;
+	font: inherit;
+	font-size: 13px;
+	color: var(--text-normal);
+	background: var(--background-modifier-form-field);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	outline: none;
+}
+
+.nq-reglages-date:focus {
+	border-color: var(--interactive-accent);
+}

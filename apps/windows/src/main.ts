@@ -65,11 +65,18 @@ function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore)
 	demonterCourant = null;
 	root.textContent = "";
 	demonterCourant = renderSettings(root, {
+		scanner,
 		onBack: () => mount(root, scanner, store),
 		/* RECHARGER : ajouter ou retirer un dossier change les racines de
 		   l'hôte, et l'hôte est installé une seule fois. Un remontage à chaud
 		   laisserait vivre l'index et le surveillant de l'ancienne liste. */
 		onFoldersChanged: () => location.reload(),
+		/* PAS de rechargement ici : `setExamDate` (host/folder.ts) met déjà à
+		   jour `datesExamen` EN MÉMOIRE, de façon synchrone. Revenir à la liste
+		   appelle `mount()`, qui la reconstruit entièrement et lira donc la
+		   date à jour — rien à invalider, contrairement à un changement de
+		   dossier qui change les racines de l'hôte lui-même. */
+		onExamDatesChanged: () => {},
 	});
 }
 

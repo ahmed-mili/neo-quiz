@@ -286,12 +286,27 @@ export async function chargerExamDates(): Promise<Record<string, string>> {
 	return datesExamen;
 }
 
-export async function setExamDate(module: string, date: string): Promise<void> {
-	const suivant = { ...datesExamen };
-	// Une date effacée est RETIRÉE, pas gardée vide : `horizonFor` retomberait
-	// de toute façon sur l'horizon par défaut, mais le réglage accumulerait
-	// des entrées mortes qu'on n'oserait plus nettoyer.
+/**
+ * La table des dates d'examen une fois celle d'un module réglée (ou effacée).
+ *
+ * PURE, et c'est délibéré : `setExamDate` est impure (elle écrit dans le
+ * magasin Tauri), donc c'est cette règle-ci que `npm run check:folders`
+ * exécute. Une date effacée RETIRE la clé, elle n'est pas gardée vide :
+ * `horizonFor` retomberait de toute façon sur l'horizon par défaut, mais le
+ * réglage accumulerait des entrées mortes qu'on n'oserait plus nettoyer.
+ */
+export function appliquerExamDate(
+	courant: Record<string, string>,
+	module: string,
+	date: string,
+): Record<string, string> {
+	const suivant = { ...courant };
 	if (date) suivant[module] = date; else delete suivant[module];
+	return suivant;
+}
+
+export async function setExamDate(module: string, date: string): Promise<void> {
+	const suivant = appliquerExamDate(datesExamen, module, date);
 	datesExamen = suivant;
 	const store = await reglages();
 	await store.set(CLE_EXAM_DATES, suivant);

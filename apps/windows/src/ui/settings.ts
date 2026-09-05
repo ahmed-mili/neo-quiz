@@ -16,14 +16,16 @@
 ══════════════════════════════════════════════════════════ */
 
 import { currentHost } from "../../../../src/host/current";
-import { t } from "../../../../src/i18n";
+import { currentLang, t } from "../../../../src/i18n";
 import { ajouter } from "../../../../src/dom";
-import { MAX_DOSSIERS, addFolder, estVaultObsidian, pickFolder, removeFolder, savedFolders } from "../host/folder";
+import type { Scanner } from "../../../../src/dashboard/scanner";
+import { MAX_DOSSIERS, addFolder, estVaultObsidian, examDates, pickFolder, removeFolder, savedFolders, setExamDate } from "../host/folder";
+import { cleModule, libelleModule } from "../review/catalogue";
 import { poserLogoObsidian } from "./marques";
 
 export function renderSettings(
 	root: HTMLElement,
-	deps: { onBack(): void; onFoldersChanged(): void },
+	deps: { scanner: Scanner; onBack(): void; onFoldersChanged(): void; onExamDatesChanged(): void },
 ): () => void {
 	const contenu = ajouter(root, "div", "qbd-content");
 
@@ -97,6 +99,55 @@ export function renderSettings(
 	}
 
 	void dessiner();
+
+	/* ── Les dates d'examen ──
+	   Section STATIQUE (pas de fonction `dessiner` propre) : la liste des
+	   modules ne peut changer qu'en ajoutant/retirant un dossier, ce qui
+	   recharge toute l'application (`onFoldersChanged`) — inutile de la
+	   recalculer ici. */
+	/* Les modules VIENNENT DU CATALOGUE, ils ne se saisissent pas : proposer
+	   une matière qui n'a aucun quiz produirait une date sans effet, et
+	   l'utilisateur croirait avoir réglé quelque chose. */
+	const modules = [...new Set(deps.scanner.getQuizzes().map(q => cleModule(q.path, currentHost().paths)))]
+		.sort((a, b) => libelleModule(a).localeCompare(libelleModule(b), currentLang()));
+
+	const exams = ajouter(contenu, "section", "nq-reglages-section");
+	ajouter(exams, "h3", "nq-reglages-titre", t("review.settings.exams"));
+	ajouter(exams, "p", "nq-reglages-aide", t("review.settings.examsHint"));
+	if (!modules.length) {
+		ajouter(exams, "p", "nq-reglages-aide", t("review.settings.noModules"));
+	}
+	for (const module of modules) {
+		const ligne = ajouter(exams, "div", "nq-reglages-module");
+		const texte = ajouter(ligne, "div", "nq-reglages-texte");
+		ajouter(texte, "span", "nq-reglages-nom", libelleModule(module));
+		// La RACINE en second : deux dossiers peuvent avoir un module homonyme,
+		// et l'utilisateur doit savoir lequel il règle.
+		ajouter(texte, "span", "nq-reglages-chemin", module);
+		/* `<input type="date">` NATIF, et c'est volontaire : la seule règle du
+		   dépôt sur les contrôles est qu'un `<select>` natif est interdit
+		   (`ui-select.ts` est le seul dropdown autorisé) — or `ui-select.ts`
+		   importe encore Obsidian, donc l'application ne peut pas s'en servir.
+		   Un champ de date n'est pas un dropdown, et c'est déjà celui que le
+		   modal « Modifier dossier » du greffon emploie (`module-edit.ts`). */
+		// Le générique de `ajouter` infère déjà `HTMLInputElement` depuis
+		// `"input"` (voir `color-picker.ts`) : un cast ici serait redondant.
+		const champ = ajouter(ligne, "input", "nq-reglages-date");
+		champ.type = "date";
+		// Valeur PERSISTÉE, jamais reformatée pour l'affichage : c'est la même
+		// chaîne `AAAA-MM-JJ` que le greffon écrit dans ses réglages.
+		champ.value = examDates()[module] ?? "";
+		champ.addEventListener("change", () => {
+			void (async () => {
+				await setExamDate(module, champ.value);
+				/* La carte « À réviser » se recalcule au prochain rendu : le
+				   plan est DÉRIVÉ, il n'y a rien à invalider. C'est la propriété
+				   qui a justifié « journal seul, état dérivé ». */
+				deps.onExamDatesChanged();
+			})();
+		});
+	}
+
 	/* Rien à désabonner : la page ne s'abonne à rien. Le démontage est rendu
 	   quand même, parce que TOUT écran en rend un — `main.ts` appelle
 	   `demonterCourant` sans savoir de quel écran il s'agit. */

@@ -15,7 +15,7 @@ réponse étant toujours non.
 - `npm run check:host` — **le cliquet de la frontière d'hôte** : aucun fichier de `src/`
   n'importe Obsidian hors d'une liste `RESTANTS` qui ne peut que RÉTRÉCIR (une entrée
   qui n'importe plus rien fait échouer le contrôle, sinon la liste devient un tapis).
-  Il annonce le nombre de fichiers encore liés — **41** aujourd'hui. Il couvre les
+  Il annonce le nombre de fichiers encore liés — **33** aujourd'hui. Il couvre les
   trois formes (`from`, `require`, `import()` différé) et toutes les extensions TS ;
   chacune de ces mailles a été une échappatoire vérifiée. Il est dans la CI : lancé à
   la main, c'est la discipline et non le contrôle qui tiendrait la frontière.
@@ -24,6 +24,16 @@ réponse étant toujours non.
   `npx tsc --noEmit -p apps/windows/tsconfig.json`, d'où la règle qu'aucun fichier
   atteint par ce typecheck ne doit tirer `obsidian.d.ts` — un simple `import type`
   suffisait à le neutraliser.
+- `npm run check:dashboard-dom` — le trou que `check:host` ne peut pas fermer seul :
+  il ne regarde les extensions DOM d'un fichier QUE tant que ce fichier reste hors
+  de `RESTANTS`. Rien n'empêche qu'une tranche future remette
+  `import { setIcon } from "obsidian"` dans une page du tableau de bord « pour
+  aller vite » et l'ajoute du même geste à `RESTANTS` — ses extensions DOM
+  redeviendraient alors invisibles au contrôle, sans qu'aucun message ne le
+  signale. Ce script nomme, indépendamment de `RESTANTS`, les pages libérées
+  POUR DE BON par la tranche 2.5 : sa liste ne peut que grandir, jamais rétrécir,
+  et un retour d'obsidian dans l'une d'elles y échoue directement, sans dépendre
+  de l'état de l'autre liste.
 - `npm run check:theme` — exhaustivité du thème de l'app (`apps/windows/src/theme/
   host-vars.css`) : le greffon hérite des variables CSS d'Obsidian, l'app doit les
   définir. Une oubliée ne produit AUCUNE erreur — un texte invisible sur un fond de la

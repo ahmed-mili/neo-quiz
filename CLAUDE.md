@@ -45,8 +45,16 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   ne peut que RÉTRÉCIR ; rien sous `apps/windows/` ; et aucun fichier déjà libéré
   n'emploie les **extensions DOM** d'Obsidian (`createEl`, `empty`, `setText`…),
   qu'aucun `import` ne trahit — passer par `ajouter` de `src/dom.ts`. Il annonce le
-  nombre de fichiers encore liés (**41**). Dans la CI : lancé à la main, ce serait
+  nombre de fichiers encore liés (**33**). Dans la CI : lancé à la main, ce serait
   la discipline et non le contrôle qui tiendrait la frontière.
+- `npm run check:dashboard-dom` — **le cliquet ne suffit pas seul** : `check:host`
+  ne protège un fichier de ses extensions DOM que TANT QU'il reste hors de
+  `RESTANTS`. Rien n'empêche qu'une tranche future y remette
+  `import { setIcon } from "obsidian"` « pour aller vite » et le fasse RENTRER
+  dans `RESTANTS` — ses extensions DOM redeviendraient alors invisibles, sans
+  qu'aucun contrôle ne le dise. Ce script nomme, en dehors de `RESTANTS`, les
+  pages du tableau de bord portées en tranche 2.5 : sa liste ne peut que
+  GRANDIR, jamais rétrécir.
 - `npm run check:theme` — le thème de l'app définit toutes les variables CSS
   qu'Obsidian fournissait. Une oubliée ne produit AUCUNE erreur : un texte
   invisible sur un fond de la même couleur. Symétrique et dans la CI.
@@ -127,8 +135,22 @@ partagé bouge, **puis** test manuel dans Obsidian.
   `src/review/review-store.ts` pour l'ordonnanceur, généralisé — et **mécanique** :
   `npm run check:host` refuse toute nouvelle dépendance à Obsidian ici.
 - **`src/review/`** est le journal de révision, **partagé par les deux hôtes** : ce
-  n'est plus l'adaptateur jetable du tableau de bord, et le chantier 4 (qui
-  supprimera `dashboard/`) ne l'emporte pas avec lui.
+  n'est plus l'adaptateur jetable du tableau de bord, et le chantier 4 ne
+  l'emporte pas avec lui (voir le point suivant : ce n'est plus le seul rescapé).
+- **`src/dashboard/` n'est plus, lui non plus, entièrement supprimable au
+  chantier 4.** La tranche 2.5 y a laissé survivre du code PARTAGÉ : ses sept
+  modules d'interface portés (rail, accueil, page « Mes quiz », cartes, sections
+  repliables), `stats-store.ts`, `scanner.ts`, et les trois modules purs nés du
+  portage (`module-map-note.ts`, `folder-archive.ts`, `module-icons.ts`) —
+  `npm run check:dashboard-dom` les protège d'un retour en arrière. Ceci
+  **contredit** la spec de l'ordonnanceur (`docs/superpowers/specs/
+  2026-09-02-scheduler-design.md`, §3 : « l'adaptateur vit dans `dashboard/`
+  **par choix** : c'est le dossier que le chantier 4 supprime ») — cette phrase
+  ne visait que l'adaptateur (déjà sorti vers `src/review/`), mais elle laissait
+  entendre que le RESTE de `dashboard/` disparaîtrait avec lui lors du chantier 4.
+  Ce n'est plus vrai : le chantier 4 devra CONTOURNER une partie de `dashboard/`,
+  pas la prendre en bloc. Les deux affirmations ne sont pas mises à jour l'une
+  dans l'autre ; celle-ci, la plus récente, l'emporte.
 - `apps/obsidian/` — le greffon. `main.ts` → `plugin.ts` (`InteractiveQuizPlugin
   extends Plugin`) et `host.ts`, la seule implémentation du contrat qui a le droit
   d'importer Obsidian, et **le seul endroit du dépôt où un `TFile` devient un

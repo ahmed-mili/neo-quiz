@@ -11,5 +11,4 @@ export const FR_REVIEW: Record<keyof typeof EN_REVIEW, string> = {
 	"review.settings.exams": "Dates d'examen",
 	"review.settings.examsHint": "Une date resserre le retour de la matière. Laissée vide, elle est révisée pour être retenue durablement.",
 	"review.settings.noModules": "Aucune matière pour l'instant — ouvrez un dossier dont les quiz sont rangés en sous-dossiers.",
-	"review.card.empty": "Rien à réviser aujourd'hui. À demain.",
 };

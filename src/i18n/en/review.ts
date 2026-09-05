@@ -19,7 +19,4 @@ export const EN_REVIEW = {
 	"review.settings.exams": "Exam dates",
 	"review.settings.examsHint": "A date tightens how often that subject comes back. Left empty, it is scheduled for long-term retention.",
 	"review.settings.noModules": "No subject yet — open a folder that has quizzes in subfolders.",
-
-	/* ── La carte « À réviser » (tâche 11) ── */
-	"review.card.empty": "Nothing due today. Come back tomorrow.",
 } as const;

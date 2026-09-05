@@ -19,7 +19,7 @@ import type { StatsStore } from "../../../src/dashboard/stats-store";
 import { creerJournalApp } from "./review/store";
 import { creerStatsApp } from "./review/stats";
 import { createRenameDetector } from "../../../src/review/rename-match";
-import { renderList } from "./ui/list";
+import { chargerReglagesPages, monterDashboard } from "./ui/dashboard-shell";
 import { openQuizPage } from "./ui/quiz-page";
 import { renderSettings } from "./ui/settings";
 
@@ -50,11 +50,12 @@ export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore, s
 	demonterCourant?.();
 	demonterCourant = null;
 	root.textContent = "";
-	demonterCourant = renderList(root, {
+	demonterCourant = monterDashboard(root, {
 		scanner,
-		store,
-		onOpen: (entry) => { void ouvrirQuiz(root, scanner, store, stats, entry); },
-		onSettings: () => ouvrirReglages(root, scanner, store, stats),
+		statsStore: stats,
+		reviewStore: store,
+		onOpenQuiz: (entry) => { void ouvrirQuiz(root, scanner, store, stats, entry); },
+		onOpenSettings: () => ouvrirReglages(root, scanner, store, stats),
 	});
 }
 
@@ -270,6 +271,11 @@ async function demarrer(): Promise<void> {
 		   avant de monter évite un premier plan calculé sans l'horizon d'une
 		   matière déjà saisie lors d'une session précédente. */
 		await chargerExamDates();
+		/* Même raison que `chargerExamDates` ci-dessus : sans ce chargement,
+		   le tout premier montage de la coquille (plus bas) verrait des
+		   réglages de page vides (aucun dossier déplié, axe par défaut) au
+		   lieu de ceux de la session précédente. */
+		await chargerReglagesPages();
 		const store = await creerJournalApp(currentHost(), scanner);
 		/* Les STATISTIQUES par quiz : à côté du journal, mais un système
 		   distinct (spec de l'ordonnanceur §9.1 — voir `review/stats.ts`).

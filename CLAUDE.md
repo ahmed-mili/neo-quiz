@@ -45,7 +45,7 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   ne peut que RÉTRÉCIR ; rien sous `apps/windows/` ; et aucun fichier déjà libéré
   n'emploie les **extensions DOM** d'Obsidian (`createEl`, `empty`, `setText`…),
   qu'aucun `import` ne trahit — passer par `ajouter` de `src/dom.ts`. Il annonce le
-  nombre de fichiers encore liés (**42**). Dans la CI : lancé à la main, ce serait
+  nombre de fichiers encore liés (**41**). Dans la CI : lancé à la main, ce serait
   la discipline et non le contrôle qui tiendrait la frontière.
 - `npm run check:theme` — le thème de l'app définit toutes les variables CSS
   qu'Obsidian fournissait. Une oubliée ne produit AUCUNE erreur : un texte
@@ -66,6 +66,11 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   réécrira pas.
 - `npm run check:review-store`, `check:engine-review`, `check:module-edit` — les
   trois câblages de l'ordonnanceur.
+- `npm run check:review-log` — l'emplacement et la migration du journal de révision.
+- `npm run check:folders` — la conversion `folder` → `folders`, et l'unicité des
+  identifiants de dossier.
+- `npm run check:rename-match` — l'appariement d'un renommage entre deux hôtes,
+  sur preuve et non sur ressemblance.
 - `npm run check:lesson` — la boucle d'apprentissage. **Il doit aller jusqu'au
   bout** : il MEURT sur une exception au lieu d'échouer proprement, et une mort en
   route masque en silence tous les groupes suivants (onze cachés, une fois).
@@ -119,8 +124,11 @@ partagé bouge, **puis** test manuel dans Obsidian.
   environnement ce dont il a besoin via le contrat `src/host/types.ts` (`HostFs`,
   `HostLinks`, `HostWatcher`, `HostUi`, `HostMath`, `HostShell`, `HostPlatform`,
   `HostPaths`), obtenu par `currentHost()` (`src/host/current.ts`). Même patron que
-  `dashboard/review-store.ts` pour l'ordonnanceur, généralisé — et **mécanique** :
+  `src/review/review-store.ts` pour l'ordonnanceur, généralisé — et **mécanique** :
   `npm run check:host` refuse toute nouvelle dépendance à Obsidian ici.
+- **`src/review/`** est le journal de révision, **partagé par les deux hôtes** : ce
+  n'est plus l'adaptateur jetable du tableau de bord, et le chantier 4 (qui
+  supprimera `dashboard/`) ne l'emporte pas avec lui.
 - `apps/obsidian/` — le greffon. `main.ts` → `plugin.ts` (`InteractiveQuizPlugin
   extends Plugin`) et `host.ts`, la seule implémentation du contrat qui a le droit
   d'importer Obsidian, et **le seul endroit du dépôt où un `TFile` devient un
@@ -208,9 +216,10 @@ mécaniquement ; la preuve complémentaire, qui couvre les imports transitifs, e
   d'un lecteur à l'autre rend une question éternellement neuve : elle revient tous les
   jours sans jamais pouvoir sortir de « À réviser ». Ne jamais recomposer une clé depuis
   `q.id`.
-- **L'adaptateur Obsidian** (`src/dashboard/review-store.ts`) est JETABLE et assumé tel
-  quel : il absorbe tout ce qui est spécifique à l'hôte (octets, fuseau, événements de
-  renommage, dates saisies), pour que le noyau n'en voie rien.
+- **`src/review/review-store.ts`** absorbe tout ce qui est spécifique à un hôte
+  (octets, fuseau, événements de renommage, dates saisies) pour que le noyau n'en
+  voie rien — voir « Structure du dépôt » ci-dessus pour son statut de fichier
+  partagé, plus jetable depuis la tranche 2.
 - **Limites connues et mesurées**, pas des oublis : `npm run report:multiblock`. Le
   scanner n'indexe que le PREMIER bloc d'une note, et une note quiz `source:` journalise
   sous son propre chemin, absent du catalogue. Corriger l'une ou l'autre change le format

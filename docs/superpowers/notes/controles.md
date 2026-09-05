@@ -15,7 +15,7 @@ réponse étant toujours non.
 - `npm run check:host` — **le cliquet de la frontière d'hôte** : aucun fichier de `src/`
   n'importe Obsidian hors d'une liste `RESTANTS` qui ne peut que RÉTRÉCIR (une entrée
   qui n'importe plus rien fait échouer le contrôle, sinon la liste devient un tapis).
-  Il annonce le nombre de fichiers encore liés — **42** aujourd'hui. Il couvre les
+  Il annonce le nombre de fichiers encore liés — **41** aujourd'hui. Il couvre les
   trois formes (`from`, `require`, `import()` différé) et toutes les extensions TS ;
   chacune de ces mailles a été une échappatoire vérifiée. Il est dans la CI : lancé à
   la main, c'est la discipline et non le contrôle qui tiendrait la frontière.
@@ -34,7 +34,11 @@ réponse étant toujours non.
   méthode d'hôte qui rend `null` en silence rendrait les images, le bouton ressource ou
   la sauvegarde inertes sans un mot. Chaque cas neuf doit être éprouvé par DISCRIMINANCE
   (casser la règle, voir rougir, restaurer) : un cas qui passe au vert quoi qu'on fasse
-  ne prouve rien — c'est arrivé deux fois ici.
+  ne prouve rien — c'est arrivé deux fois ici. `check:windows-host` couvre en plus les
+  RACINES du dossier composite : `local()` et `contrat()` doivent se composer en
+  identité (aller-retour sans perte), et une résolution de lien par nom ne doit jamais
+  franchir la racine de la note qui cite — sans cette borne, une image du dossier A
+  se servirait, en silence, à une note du dossier B.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` testé avant
   `$…$`, l'heuristique qui épargne « 5$ et 3$ ») : le code qu'aucun hôte ne réécrira,
   puisque c'est lui qui décide ce qui EST une formule. Il tourne sur un faux `HostMath`,
@@ -58,9 +62,35 @@ réponse étant toujours non.
   `Date.now()`, `new Date()`, `Math.random()`) : c'est ce contrôle qui garantit que le
   même module tournera à l'identique dans les futures applications PC et Android. Le
   casser, c'est perdre la seule partie du code qu'on ne réécrira pas.
-- `npm run check:review-store`, `check:engine-review`, `check:module-edit` — les trois
-  câblages de l'ordonnanceur : l'adaptateur Obsidian, l'enregistrement des réponses par
-  le moteur, la date d'examen par module.
+- `npm run check:review-store` — l'adaptateur de l'ordonnanceur (`src/review/
+  review-store.ts`), éprouvé sur un faux HÔTE plutôt que sur une fausse `App`
+  Obsidian depuis que l'application Windows écrit le même journal. Il couvre
+  désormais le ROUTAGE entre plusieurs journaux, un par dossier. Le cas qui compte :
+  la clé écrite sur disque est LOCALE (`Cours/ch1.md::q1`), jamais préfixée par le
+  dossier. Une clé préfixée passerait tous les autres contrôles — le plan lui-même
+  proposait un cas qui restait vert avec une clé préfixée — et rendrait l'historique
+  de l'application invisible depuis Obsidian, sans qu'aucun message ne le dise.
+- `npm run check:engine-review`, `check:module-edit` — les deux autres câblages de
+  l'ordonnanceur : l'enregistrement des réponses par le moteur, la date d'examen par
+  module.
+- `npm run check:review-log` — l'emplacement et la MIGRATION du journal. Il éprouve
+  ce qu'aucun disque ne produit sur commande : une écriture qui prétend réussir sans
+  rien écrire. Sans la relecture qu'il garde, l'ancien journal serait rangé et les
+  révisions n'existeraient plus nulle part — c'est exactement le bug que le code
+  fourni verbatim par le plan contenait (une relecture de confirmation qui LEVAIT au
+  lieu de dégrader proprement en `confirmed: false`).
+- `npm run check:folders` — la conversion du réglage `folder` → `folders` et
+  l'unicité des identifiants de dossier. Sans la première, une mise à jour renvoie
+  l'utilisateur à l'écran « Choisissez un dossier » alors que son dossier est
+  toujours là ; sans la seconde, deux dossiers homonymes confondent leurs chemins et
+  l'historique de l'un compte pour l'autre.
+- `npm run check:rename-match` — l'appariement des renommages que le surveillant ne
+  sait pas nommer lui-même. Les deux défauts qu'il empêche ne sont pas symétriques :
+  un appariement manqué coûte l'historique d'une note (au moins visible : elle
+  reprend à zéro) ; un appariement FAUX transporte l'historique d'une note vers une
+  autre, et ne se voit jamais. C'est ce second défaut, plus fin, qui a été trouvé ici
+  a posteriori : une clé de signature non injective (`ids.join(" ")`) faisait
+  collisionner `["ip","masque"]` et `["ip masque"]`.
 - `npm run check:lesson` — la boucle d'apprentissage (rôles `pre`/`read`/`recall`/`test`,
   tranches, auto-évaluation). **Il doit aller jusqu'au bout** : ce script MEURT sur une
   exception au lieu d'échouer proprement, et une mort en cours de route masque en

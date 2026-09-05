@@ -50,6 +50,7 @@ export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore): 
 	root.textContent = "";
 	demonterCourant = renderList(root, {
 		scanner,
+		store,
 		onOpen: (entry) => { void ouvrirQuiz(root, scanner, store, entry); },
 		onSettings: () => ouvrirReglages(root, scanner, store),
 	});
@@ -73,9 +74,11 @@ function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore)
 		onFoldersChanged: () => location.reload(),
 		/* PAS de rechargement ici : `setExamDate` (host/folder.ts) met déjà à
 		   jour `datesExamen` EN MÉMOIRE, de façon synchrone. Revenir à la liste
-		   appelle `mount()`, qui la reconstruit entièrement et lira donc la
-		   date à jour — rien à invalider, contrairement à un changement de
-		   dossier qui change les racines de l'hôte lui-même. */
+		   appelle `mount()`, qui la reconstruit entièrement — la carte « À
+		   réviser » (tâche 11) y relit `store.plan(Date.now())`, qui appelle
+		   `horizons()` (donc `examDates()`) À CHAQUE appel : rien à invalider,
+		   contrairement à un changement de dossier qui change les racines de
+		   l'hôte lui-même. */
 		onExamDatesChanged: () => {},
 	});
 }

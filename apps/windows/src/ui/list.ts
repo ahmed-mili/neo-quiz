@@ -18,10 +18,12 @@
 ══════════════════════════════════════════════════════════ */
 
 import type { QuizIndexEntry, QuizTypeTag, Scanner } from "../../../../src/dashboard/scanner";
+import type { ReviewStore } from "../../../../src/review/review-store";
 import { currentLang, t } from "../../../../src/i18n";
 import type { TransKey } from "../../../../src/i18n";
 import { currentHost } from "../../../../src/host/current";
 import { ajouter } from "../../../../src/dom";
+import { renderReviewCard } from "./review-card";
 
 /* Tag de type de quiz (calculé au scan) → clé de traduction, résolue au rendu.
    Table explicite plutôt qu'une clé construite par concaténation puis castée :
@@ -81,7 +83,7 @@ function carte(grille: HTMLElement, entry: QuizIndexEntry, onOpen: (e: QuizIndex
 
 export function renderList(
 	root: HTMLElement,
-	deps: { scanner: Scanner; onOpen(entry: QuizIndexEntry): void; onSettings(): void },
+	deps: { scanner: Scanner; store: ReviewStore; onOpen(entry: QuizIndexEntry): void; onSettings(): void },
 ): () => void {
 	const contenu = ajouter(root, "div", "qbd-content");
 
@@ -104,6 +106,10 @@ export function renderList(
 
 	function dessiner(quizzes: QuizIndexEntry[]): void {
 		zone.replaceChildren();
+		/* La carte AVANT la grille, et REDESSINÉE à chaque changement du
+		   catalogue : le plan est dérivé du journal, donc jouer un quiz change
+		   ce qui est dû — sans rien à invalider. */
+		renderReviewCard(zone, { store: deps.store, scanner: deps.scanner, onOpen: deps.onOpen });
 		if (quizzes.length === 0) {
 			const vide = ajouter(zone, "div", "qbd-empty-state");
 			ajouter(vide, "p", undefined, t("app.list.empty"));

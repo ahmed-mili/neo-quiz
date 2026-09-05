@@ -1,4 +1,5 @@
-import { setIcon } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { TransKey } from "../i18n";
 import type { QuizIndexEntry, QuizTypeTag } from "./scanner";
@@ -68,9 +69,9 @@ export function renderQuizCard(
 	   du hook CSS — historique, il désignait la variante du dossier ouvert
 	   quand l'accueil en avait une autre ; renommer toucherait ~40 règles pour
 	   zéro pixel de différence. */
-	const card = container.createDiv({ cls: "qbd-quiz-card qbd-quiz-card--folder" });
+	const card = ajouter(container, "div", "qbd-quiz-card qbd-quiz-card--folder");
 	card.dataset.path = quiz.path;
-	if (opts?.accent) { card.style.setProperty("--accent", opts.accent); card.addClass("qbd-quiz-card--tinted"); }
+	if (opts?.accent) { card.style.setProperty("--accent", opts.accent); card.classList.add("qbd-quiz-card--tinted"); }
 	card.style.setProperty("--qbd-card-delay", `${100 + (opts?.entryIndex ?? 0) * 45}ms`);
 
 	// ── État du quiz (calcul partagé quiz-mastery.ts) ──
@@ -86,24 +87,24 @@ export function renderQuizCard(
 		default: stateLabel = t("dashboard.card.fresh"); stateIcon = "circle-play";
 	}
 
-	const body = card.createDiv({ cls: "qbd-quiz-card-body" });
+	const body = ajouter(card, "div", "qbd-quiz-card-body");
 
 	// En-tête : pastille d'état + bouton lecture
-	const head = body.createDiv({ cls: "qbd-quiz-card-head" });
-	const pill = head.createDiv({ cls: `qbd-quiz-card-status qbd-quiz-card-status--${state}` });
-	const sIcon = pill.createSpan({ cls: "qbd-quiz-card-status-icon" });
-	setIcon(sIcon, stateIcon);
-	pill.createSpan({ text: stateLabel });
+	const head = ajouter(body, "div", "qbd-quiz-card-head");
+	const pill = ajouter(head, "div", `qbd-quiz-card-status qbd-quiz-card-status--${state}`);
+	const sIcon = ajouter(pill, "span", "qbd-quiz-card-status-icon");
+	currentHost().ui.setIcon(sIcon, stateIcon);
+	ajouter(pill, "span", undefined, stateLabel);
 	if (opts?.onPlay) {
 		const onPlay = opts.onPlay;
 		// Bouton lecture rond — lance le quiz directement, sans passer par la
 		// fiche. Pas d'aria-label (Obsidian en ferait une infobulle native
 		// flottante, cf. ai.ts) : un `title` traduit suffit, le bouton n'a pas
 		// de texte visible pour porter un nom accessible implicite.
-		const playBtn = head.createEl("button", { cls: "qbd-quiz-card-play" });
+		const playBtn = ajouter(head, "button", "qbd-quiz-card-play");
 		playBtn.type = "button";
 		playBtn.title = t("dashboard.detail.play");
-		setIcon(playBtn, "circle-play");
+		currentHost().ui.setIcon(playBtn, "circle-play");
 		playBtn.addEventListener("click", (e) => {
 			// Empêche le clic de remonter à la carte : sinon on lancerait le
 			// quiz ET on ouvrirait la fiche (deux actions pour un seul clic).
@@ -113,7 +114,7 @@ export function renderQuizCard(
 	}
 
 	// Titre
-	body.createEl("p", { cls: "qbd-quiz-card-title", text: quiz.title });
+	ajouter(body, "p", "qbd-quiz-card-title", quiz.title);
 
 	// Chemin — omis (pas masqué en CSS) quand l'appelant l'affiche déjà.
 	// N'affiche que le DOSSIER PARENT (dernier segment), jamais le chemin
@@ -127,8 +128,8 @@ export function renderQuizCard(
 		const segs = quiz.path.split("/").slice(0, -1).filter(Boolean);
 		const parentFolder = segs.length > 0 ? segs[segs.length - 1] : null;
 		if (parentFolder) {
-			const pathEl = body.createEl("p", { cls: "qbd-quiz-card-path" });
-			pathEl.createSpan({ text: parentFolder });
+			const pathEl = ajouter(body, "p", "qbd-quiz-card-path");
+			ajouter(pathEl, "span", undefined, parentFolder);
 		}
 	}
 
@@ -136,22 +137,22 @@ export function renderQuizCard(
 	// pourcentage (« In progress · 20% »), et la carte du handoff n'en a pas.
 
 	// Meta : nombre de questions + type
-	const meta = body.createDiv({ cls: "qbd-quiz-card-meta" });
-	meta.createEl("span", {
-		cls: "qbd-quiz-card-meta-item",
-		text: t(quiz.questions === 1 ? "dashboard.common.questionsOne" : "dashboard.common.questionsOther", { count: quiz.questions })
-	});
-	const badge = meta.createEl("span", { cls: "qbd-quiz-card-badge" });
+	const meta = ajouter(body, "div", "qbd-quiz-card-meta");
+	ajouter(
+		meta, "span", "qbd-quiz-card-meta-item",
+		t(quiz.questions === 1 ? "dashboard.common.questionsOne" : "dashboard.common.questionsOther", { count: quiz.questions })
+	);
+	const badge = ajouter(meta, "span", "qbd-quiz-card-badge");
 	badge.textContent = quizTypeLabel(quiz.quizType);
 
 	// Bouton ⋯ en bout de ligne meta (position StudySmarter : coin bas droit).
 	// stopPropagation : ouvrir le menu ne doit PAS aussi ouvrir la fiche.
 	if (opts?.menu) {
 		const menu = opts.menu;
-		const moreBtn = meta.createEl("button", { cls: "qbd-card-more" });
+		const moreBtn = ajouter(meta, "button", "qbd-card-more");
 		moreBtn.type = "button";
 		moreBtn.title = t("dashboard.card.more");
-		setIcon(moreBtn, "ellipsis");
+		currentHost().ui.setIcon(moreBtn, "ellipsis");
 		moreBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
 			openActionMenu(moreBtn, menu(quiz));

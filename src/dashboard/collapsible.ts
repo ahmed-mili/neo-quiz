@@ -1,4 +1,5 @@
-import { setIcon } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 
 /* ══════════════════════════════════════════════════════════
    COLLAPSIBLE — section repliable partagée (« Mes quiz » ET accueil).
@@ -31,7 +32,7 @@ export function wireCollapseToggle(
 	const collapsed = defaultOpen ? deps.isExpanded(key) : !deps.isExpanded(key);
 	// UN SEUL icône (chevron-right) : l'orientation « ouvert » est une ROTATION
 	// CSS animée, pas un second icône — c'est ce qui rend la flèche fluide.
-	setIcon(chev, "chevron-right");
+	currentHost().ui.setIcon(chev, "chevron-right");
 	nodeEl.classList.toggle("is-collapsed", collapsed);
 	head.setAttribute("aria-expanded", String(!collapsed));
 	// Un SEUL filet et un SEUL listener transitionend vivants par nœud : des
@@ -99,20 +100,20 @@ export function renderCollapsibleSection(
 		headRow?: (row: HTMLElement) => void;
 	}
 ): HTMLElement {
-	const nodeEl = parent.createDiv({ cls: "qbd-quizzes-node" });
+	const nodeEl = ajouter(parent, "div", "qbd-quizzes-node");
 	// Cran de cascade d'entrée : la variable vit sur le nœud (héritée par le
 	// head qui porte l'animation, cf. dashboard-quizzes.css).
 	if (opts?.entryDelay) nodeEl.style.setProperty("--qbd-card-delay", opts.entryDelay());
-	const row = opts?.rowClass ? nodeEl.createDiv({ cls: opts.rowClass }) : nodeEl;
-	const head = row.createEl("button", { cls: "qbd-quizzes-node-head" });
+	const row = opts?.rowClass ? ajouter(nodeEl, "div", opts.rowClass) : nodeEl;
+	const head = ajouter(row, "button", "qbd-quizzes-node-head");
 	head.type = "button";
-	const chev = head.createSpan({ cls: "qbd-quizzes-node-chevron" });
-	head.createSpan({ cls: "qbd-quizzes-node-label", text: label });
+	const chev = ajouter(head, "span", "qbd-quizzes-node-chevron");
+	ajouter(head, "span", "qbd-quizzes-node-label", label);
 	// En-tête de section — copie LITTÉRALE de StudySmarter (capture Ahmed
 	// 2026-07-18) : chevron + libellé + BADGE compteur, rien d'autre.
-	head.createSpan({ cls: "qbd-quizzes-node-badge", text: String(total) });
+	ajouter(head, "span", "qbd-quizzes-node-badge", String(total));
 	if (opts?.headRow && row !== nodeEl) opts.headRow(row);
 	wireCollapseToggle(deps, nodeEl, head, chev, key, opts?.defaultOpen ?? true);
-	const body = nodeEl.createDiv({ cls: "qbd-quizzes-node-body" });
-	return body.createDiv({ cls: "qbd-quizzes-node-clip" });
+	const body = ajouter(nodeEl, "div", "qbd-quizzes-node-body");
+	return ajouter(body, "div", "qbd-quizzes-node-clip");
 }

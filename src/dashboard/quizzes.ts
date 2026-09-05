@@ -90,7 +90,7 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 	let containerRef: HTMLElement | null = null;
 
 	/* Table module lue depuis la note de correspondance, mise en cache : la
-	   lecture est ASYNC (vault.cachedRead) alors que render() est synchrone.
+	   lecture est ASYNC (lireModuleMap) alors que render() est synchrone.
 	   null tant que non chargée → dégradation (moduleForQuiz retombe sur le
 	   dossier parent, sans UE). loadModuleMap() la peuple à l'ouverture de la
 	   vue puis re-rend. */
@@ -110,8 +110,9 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 	async function loadModuleMap(): Promise<void> {
 		moduleMapLoaded = true;
 		// Cède TOUJOURS avant de poursuivre : sans ce yield, quand la note de
-		// correspondance est absente, getFirstLinkpathDest renvoie null et la
-		// branche « map vide » ci-dessous ne traverse alors AUCUN await réel —
+		// correspondance est absente, lireModuleMap renvoie MODULE_MAP_VIDE sans
+		// jamais attendre, et la branche « map vide » ci-dessous ne traverse
+		// alors AUCUN await réel —
 		// la fonction (jusqu'à son `if (containerRef) render(...)` final)
 		// s'exécute donc de façon SYNCHRONE et RÉENTRANTE, depuis l'intérieur
 		// du render() qui vient de l'appeler (juste après `void loadModuleMap()`
@@ -206,7 +207,7 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 		const stats: Record<string, QuizStatRecord> = ctx.statsStore ? ctx.statsStore.getAll() : {};
 
 		// Chargement paresseux, UNE fois : la note de correspondance est lue en
-		// async (vault.cachedRead) alors que render() est synchrone — le premier
+		// async (lireModuleMap) alors que render() est synchrone — le premier
 		// rendu se fait donc sans UE/noms résolus, puis loadModuleMap() re-rend.
 		if (!moduleMapLoaded) { void loadModuleMap(); }
 
@@ -304,7 +305,11 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 		// sans ça, un utilisateur qui revient après plusieurs jours en mode
 		// « Par activité » croirait à un bug plutôt qu'à un mode qu'il a choisi
 		// (retour Ahmed 2026-07-17 — StudySmarter est l'inspiration, pas le contrat).
-		if (openModuleFolder === null) {
+		// `&& (...)` : le conteneur n'est créé QUE s'il aura un enfant — côté
+		// application (D5) ni renderGroupingSelect ni createFolder n'existent,
+		// et une coquille vide hériterait quand même du margin-top 61px de
+		// `.qbd-quizzes-group` (dashboard-quizzes.css), poussant la grille pour rien.
+		if (openModuleFolder === null && (ctx.renderGroupingSelect || ctx.createFolder)) {
 			const groupWrap = ajouter(container, "div", "qbd-quizzes-group");
 			// Vrai SELECT (createSelect, ui-select.ts), pas un menu d'actions :
 			// options exclusives dont une active → menu d'OPTIONS à la largeur

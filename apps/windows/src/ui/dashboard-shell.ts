@@ -220,6 +220,10 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 			return;
 		}
 		if (!ctx.canOpen(vue)) return;
+		// Même refermeture qu'au greffon (dashboard.ts, navigate()) : entrer
+		// dans un module puis revenir par le rail doit rouvrir la GRILLE, pas
+		// le module laissé ouvert.
+		if (vue === "quizzes") quizzes.resetDrilldown();
 		vueCourante = vue;
 		nav.setActive(vue);
 		peindre();
@@ -239,7 +243,7 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	const desabonner = deps.scanner.onChange(() => peindre());
 
 	/* Le retour DÉSABONNE, et l'appelant DOIT l'invoquer avant tout
-	   remontage — même contrat que `renderList`/`openQuizPage` : sans lui,
+	   remontage — même contrat que `renderSettings`/`openQuizPage` : sans lui,
 	   chaque aller-retour empilerait un abonnement de plus, et une
 	   modification de note redessinerait la page courante autant de fois
 	   qu'elle a été montée. */

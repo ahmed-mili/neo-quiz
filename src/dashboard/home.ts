@@ -140,11 +140,16 @@ export function createHomeHandlers(ctx: DashboardShellCtx): HomeHandlers {
 
 		// Pilule claire IDENTIQUE à « + New folder » de « Mes quiz » : une seule
 		// grammaire d'action primaire dans le dashboard (contrat 2026-07-28).
-		const genBtn = ajouter(header, "button", "qbd-btn--create");
-		const genIcon = ajouter(genBtn, "span", "qbd-btn-icon");
-		currentHost().ui.setIcon(genIcon, "sparkles");
-		ajouter(genBtn, "span", undefined, t("dashboard.home.generate"));
-		genBtn.addEventListener("click", () => ctx.navigate("ai"));
+		// MASQUÉ (pas grisé) si l'hôte ne sait pas servir "ai" : un bouton
+		// d'ACTION mort au clic est pire qu'absent, contrairement au rail
+		// (forme fixe et mémorisée) que canOpen se contente de griser.
+		if (ctx.canOpen("ai")) {
+			const genBtn = ajouter(header, "button", "qbd-btn--create");
+			const genIcon = ajouter(genBtn, "span", "qbd-btn-icon");
+			currentHost().ui.setIcon(genIcon, "sparkles");
+			ajouter(genBtn, "span", undefined, t("dashboard.home.generate"));
+			genBtn.addEventListener("click", () => ctx.navigate("ai"));
+		}
 
 		// ── Reprendre : dernier quiz en cours (action primaire du returning user) ──
 		const resumeQuiz = inProgress
@@ -391,11 +396,15 @@ export function createHomeHandlers(ctx: DashboardShellCtx): HomeHandlers {
 
 		// Action primaire évidente — MÊME pilule claire que l'accueil peuplé et
 		// que « + New folder » : une seule grammaire d'action primaire.
-		const primary = ajouter(wrap, "button", "qbd-btn--create qbd-onboarding-cta");
-		const pIcon = ajouter(primary, "span", "qbd-btn-icon");
-		currentHost().ui.setIcon(pIcon, "sparkles");
-		ajouter(primary, "span", undefined, t("dashboard.onboarding.generate"));
-		primary.addEventListener("click", () => ctx.navigate("ai"));
+		// MASQUÉ (pas grisé) si l'hôte ne sait pas servir "ai" : c'est ici le
+		// cas le plus grave (dossier vide, SEULE action primaire de l'écran).
+		if (ctx.canOpen("ai")) {
+			const primary = ajouter(wrap, "button", "qbd-btn--create qbd-onboarding-cta");
+			const pIcon = ajouter(primary, "span", "qbd-btn-icon");
+			currentHost().ui.setIcon(pIcon, "sparkles");
+			ajouter(primary, "span", undefined, t("dashboard.onboarding.generate"));
+			primary.addEventListener("click", () => ctx.navigate("ai"));
+		}
 
 		// Séparateur
 		const divider = ajouter(wrap, "div", "qbd-onboarding-divider");

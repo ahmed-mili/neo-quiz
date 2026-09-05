@@ -79,7 +79,7 @@ Par ordre de priorité.
 
 5. **« Générer » est visiblement désactivé** dans le rail (classe
    `qbd-nav-item--disabled`), avec une infobulle native au survol (attribut
-   `title`, texte « À venir » / « Coming soon » selon la langue). Cliquer
+   `title`, texte « Bientôt disponible » / « Coming soon » selon la langue). Cliquer
    dessus ne doit RIEN faire. Séparément, sur l'accueil, le bouton
    « Generate a quiz » (CTA d'en-tête ou d'onboarding) doit lui aussi ne mener
    nulle part au clic — silencieusement, sans page vide ni erreur console : la

@@ -11,6 +11,8 @@
    Vitesse validée : speed = 0.3.
 ══════════════════════════════════════════════════════════ */
 
+import { ajouter } from "../dom";
+
 /* Bruit déterministe par pixel — NE PAS remplacer par Math.random()
    (identités stables des points : toute l'animation en dépend). */
 function hash(x: number, y: number): number {
@@ -58,7 +60,7 @@ export function createEffortTrackFx(trackEl: HTMLElement, thumbEl: HTMLElement, 
 	const reduceMotion = !!(window.matchMedia
 		&& window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
-	const canvas = trackEl.createEl("canvas", { cls: "qbd-effort-canvas" });
+	const canvas = ajouter(trackEl, "canvas", "qbd-effort-canvas");
 	trackEl.insertBefore(canvas, thumbEl); // la mosaïque vit SOUS le pouce
 
 	let value = Math.min(1, Math.max(0, opts.value || 0)); // cible (0..1)

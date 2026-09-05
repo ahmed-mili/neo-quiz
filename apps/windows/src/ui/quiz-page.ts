@@ -26,23 +26,8 @@ import { renderInteractiveQuiz } from "../../../../src/engine";
 import { currentHost } from "../../../../src/host/current";
 import { t } from "../../../../src/i18n";
 import { parseQuizSource, QUIZ_BLOCK_RE } from "../../../../src/quiz-utils";
+import { ajouter } from "../../../../src/dom";
 
-/** `document.createElement`, jamais `createDiv`/`createEl` : les extensions DOM
-    d'Obsidian n'existent pas dans la fenêtre de l'application. Et `textContent`,
-    jamais `innerHTML` : le titre et le chemin viennent du disque de
-    l'utilisateur — une note nommée « <img src=x onerror=…>.md » exécuterait son
-    code avec les droits de la fenêtre. */
-function creer<K extends keyof HTMLElementTagNameMap>(
-	parent: HTMLElement,
-	tag: K,
-	cls?: string,
-	texte?: string,
-): HTMLElementTagNameMap[K] {
-	const el = parent.appendChild(document.createElement(tag));
-	if (cls) el.className = cls;
-	if (texte !== undefined) el.textContent = texte;
-	return el;
-}
 
 /**
  * Ouvre la page d'un quiz dans `root` et rend son DÉMONTAGE.
@@ -56,13 +41,13 @@ export async function openQuizPage(
 	onBack: () => void,
 ): Promise<() => void> {
 	root.replaceChildren();
-	const contenu = creer(root, "div", "qbd-content qbd-qz");
+	const contenu = ajouter(root, "div", "qbd-content qbd-qz");
 
 	// ── En-tête : retour · titre · chemin ──
 	// `t()` est appelé ICI, au rendu, jamais dans une constante de module : une
 	// chaîne traduite au chargement serait figée à la langue du démarrage.
-	const entete = creer(contenu, "div", "qbd-qz-header");
-	const retour = creer(entete, "button", "qbd-quizzes-crumb-back qbd-qz-back");
+	const entete = ajouter(contenu, "div", "qbd-qz-header");
+	const retour = ajouter(entete, "button", "qbd-quizzes-crumb-back qbd-qz-back");
 	retour.type = "button";
 	/* Clé du domaine `dashboard`, empruntée volontairement : « dashboard.quiz.back »
 	   est le libellé du MÊME bouton retour côté greffon (et la feuille de style dit
@@ -71,22 +56,22 @@ export async function openQuizPage(
 	retour.setAttribute("aria-label", t("dashboard.quiz.back"));
 	retour.title = t("dashboard.quiz.back");
 	// Icône LUCIDE par l'hôte, jamais d'emoji : même silhouette que le greffon.
-	currentHost().ui.setIcon(creer(retour, "span", "qbd-quizzes-crumb-icon"), "arrow-left");
+	currentHost().ui.setIcon(ajouter(retour, "span", "qbd-quizzes-crumb-icon"), "arrow-left");
 	retour.addEventListener("click", () => onBack());
 
-	const titrage = creer(entete, "div", "qbd-qz-headline");
-	const ligneTitre = creer(titrage, "div", "qbd-qz-title-row");
+	const titrage = ajouter(entete, "div", "qbd-qz-headline");
+	const ligneTitre = ajouter(titrage, "div", "qbd-qz-title-row");
 	// `title` et non `basename` : c'est le champ que `QuizIndexEntry` prévoit
 	// pour l'affichage (les deux sont égaux aujourd'hui, pas forcément demain).
-	creer(ligneTitre, "h2", "qbd-qz-title", entry.title);
-	creer(ligneTitre, "span", "qbd-qz-count", String(entry.questions));
-	creer(titrage, "p", "qbd-qz-path", entry.path);
+	ajouter(ligneTitre, "h2", "qbd-qz-title", entry.title);
+	ajouter(ligneTitre, "span", "qbd-qz-count", String(entry.questions));
+	ajouter(titrage, "p", "qbd-qz-path", entry.path);
 
 	/* Le conteneur donné au moteur, et LUI SEUL : c'est sur lui que le moteur
 	   posera `__quizDestroy`, et c'est lui que le démontage doit viser. Le
 	   greffon fait exactement pareil (`el.createDiv({ cls: "quiz-blocks-host" })`
 	   dans le processeur de bloc). */
-	const hote = creer(contenu, "div", "quiz-blocks-host");
+	const hote = ajouter(contenu, "div", "quiz-blocks-host");
 
 	/** Démontage d'un écran qui n'a PAS atteint le moteur (erreur de lecture,
 	    note sans bloc) : il n'y a pas d'instance à détruire. */

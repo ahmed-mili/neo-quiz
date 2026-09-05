@@ -12,6 +12,8 @@
    slides voisines pré-rendues à entretenir.
 ══════════════════════════════════════════════════════════ */
 
+import { ajouter } from "../dom";
+
 export interface SlideHost {
 	viewport: HTMLElement;
 	track: HTMLElement;
@@ -38,8 +40,8 @@ function prefersReducedMotion(): boolean {
 }
 
 export function mountSlideHost(panel: HTMLElement): SlideHost {
-	const viewport = panel.createDiv({ cls: "qbd-qz-viewport" });
-	const track = viewport.createDiv({ cls: "qbd-qz-track" });
+	const viewport = ajouter(panel, "div", "qbd-qz-viewport");
+	const track = ajouter(viewport, "div", "qbd-qz-track");
 	return { viewport, track, token: 0, cleanup: null };
 }
 
@@ -47,11 +49,11 @@ export function mountSlideHost(panel: HTMLElement): SlideHost {
 export function setSlide(host: SlideHost, fill: (slide: HTMLElement) => void): HTMLElement {
 	finish(host);
 	host.token++;
-	host.track.empty();
+	host.track.replaceChildren();
 	host.track.style.transition = "none";
 	host.track.style.transform = "translate3d(0,0,0)";
 	host.viewport.style.height = "";
-	const slide = host.track.createDiv({ cls: "qbd-qz-slide" });
+	const slide = ajouter(host.track, "div", "qbd-qz-slide");
 	fill(slide);
 	return slide;
 }
@@ -147,10 +149,10 @@ export function finish(host: SlideHost): void {
  * l'écran.
  */
 export function reserveTallest(host: SlideHost, fills: Array<(slide: HTMLElement) => void>, available: number): void {
-	const probe = host.viewport.createDiv({ cls: "qbd-qz-measure" });
+	const probe = ajouter(host.viewport, "div", "qbd-qz-measure");
 	let tallest = 0;
 	for (const fill of fills) {
-		const slide = probe.createDiv({ cls: "qbd-qz-slide" });
+		const slide = ajouter(probe, "div", "qbd-qz-slide");
 		try { fill(slide); } catch { /* une question illisible ne doit pas casser la mesure */ }
 		tallest = Math.max(tallest, slide.offsetHeight);
 		slide.remove();

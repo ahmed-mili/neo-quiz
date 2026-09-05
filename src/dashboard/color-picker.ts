@@ -8,6 +8,8 @@
    Portalé à document.body (au-dessus du modal et des menus).
 ══════════════════════════════════════════════════════════ */
 
+import { ajouter } from "../dom";
+
 // ── Maths couleur (hex ↔ rgb ↔ hsv) — copie neo-calendar ──
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -90,7 +92,7 @@ export function openColorPicker(
 	let { h, s, v } = rgbToHsv(init.r, init.g, init.b);
 	let hexText = color;
 
-	const root = container.createDiv({ cls: "qbd-color-picker" });
+	const root = ajouter(container, "div", "qbd-color-picker");
 	root.style.width = PICKER_W + "px";
 	// Ne pas laisser bouillonner : un mousedown intérieur fermerait le
 	// menu/modal parent (leurs listeners document sont en bubble).
@@ -105,17 +107,17 @@ export function openColorPicker(
 	root.style.left = left + "px";
 
 	// ── Zone saturation / valeur ──
-	const sv = root.createDiv({ cls: "qbd-cp-sv" });
-	const svThumb = sv.createSpan({ cls: "qbd-cp-sv-thumb" });
+	const sv = ajouter(root, "div", "qbd-cp-sv");
+	const svThumb = ajouter(sv, "span", "qbd-cp-sv-thumb");
 
 	// ── Barre de teinte ──
-	const hue = root.createDiv({ cls: "qbd-cp-hue" });
-	const hueThumb = hue.createSpan({ cls: "qbd-cp-hue-thumb" });
+	const hue = ajouter(root, "div", "qbd-cp-hue");
+	const hueThumb = ajouter(hue, "span", "qbd-cp-hue-thumb");
 
 	// ── Swatch courant + champ hex ──
-	const rowEl = root.createDiv({ cls: "qbd-cp-row" });
-	const current = rowEl.createSpan({ cls: "qbd-cp-current" });
-	const hexInput = rowEl.createEl("input", { cls: "qbd-cp-hex" });
+	const rowEl = ajouter(root, "div", "qbd-cp-row");
+	const current = ajouter(rowEl, "span", "qbd-cp-current");
+	const hexInput = ajouter(rowEl, "input", "qbd-cp-hex");
 	hexInput.spellcheck = false;
 	// Un hex vaut au plus « #RRGGBB » (7 car.) : borne la saisie pour éviter
 	// un champ qui déborde (#ffffffffff… tapé à la main).

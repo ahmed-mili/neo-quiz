@@ -21,6 +21,7 @@ import type { QuizIndexEntry, QuizTypeTag, Scanner } from "../../../../src/dashb
 import { currentLang, t } from "../../../../src/i18n";
 import type { TransKey } from "../../../../src/i18n";
 import { currentHost } from "../../../../src/host/current";
+import { ajouter } from "../../../../src/dom";
 
 /* Tag de type de quiz (calculé au scan) → clé de traduction, résolue au rendu.
    Table explicite plutôt qu'une clé construite par concaténation puis castée :
@@ -36,51 +37,35 @@ const CLES_TYPE: Record<QuizTypeTag, TransKey> = {
 	matching: "dashboard.quizType.matching",
 };
 
-/** `document.createElement`, jamais `createDiv`/`createEl` : les extensions DOM
-    d'Obsidian n'existent pas dans la fenêtre de l'application. */
-function creer<K extends keyof HTMLElementTagNameMap>(
-	parent: HTMLElement,
-	tag: K,
-	cls?: string,
-	texte?: string,
-): HTMLElementTagNameMap[K] {
-	const el = parent.appendChild(document.createElement(tag));
-	if (cls) el.className = cls;
-	// `textContent` et JAMAIS `innerHTML` : ces libellés portent des noms de
-	// fichiers de l'utilisateur. Une note nommée « <img src=x onerror=…>.md »
-	// exécuterait son code avec les droits de la fenêtre.
-	if (texte !== undefined) el.textContent = texte;
-	return el;
-}
 
 /** Une carte de quiz. AUCUN statut (`--fresh`, `--progress`, `--review`,
     `--mastered`) : ils dérivent des statistiques et du journal de révision, qui
     ne sont pas branchés en tranche 1 — un statut inventé mentirait. */
 function carte(grille: HTMLElement, entry: QuizIndexEntry, onOpen: (e: QuizIndexEntry) => void): void {
-	const card = creer(grille, "div", "qbd-quiz-card qbd-quiz-card--folder");
+	const card = ajouter(grille, "div", "qbd-quiz-card qbd-quiz-card--folder");
 	card.dataset.path = entry.path;
-	const body = creer(card, "div", "qbd-quiz-card-body");
+	const body = ajouter(card, "div", "qbd-quiz-card-body");
 
-	creer(body, "p", "qbd-quiz-card-title", entry.title);
+	ajouter(body, "p", "qbd-quiz-card-title", entry.title);
 
 	// Le DOSSIER PARENT seul, jamais le chemin complet : le préfixe commun à
 	// toutes les cartes n'apprend rien. Racine du dossier → aucune ligne.
 	const segments = entry.path.split("/").slice(0, -1).filter(Boolean);
 	if (segments.length > 0) {
-		const chemin = creer(body, "p", "qbd-quiz-card-path");
-		creer(chemin, "span", undefined, segments[segments.length - 1]);
+		const chemin = ajouter(body, "p", "qbd-quiz-card-path");
+		ajouter(chemin, "span", undefined, segments[segments.length - 1]);
 	}
 
-	const meta = creer(body, "div", "qbd-quiz-card-meta");
+	const meta = ajouter(body, "div", "qbd-quiz-card-meta");
 	/* Clés du domaine `dashboard`, empruntées volontairement : le libellé existe
 	   déjà (quiz-card.ts), singulier compris. En créer un second dans `app`
 	   afficherait « 1 questions » et donnerait deux traductions du même texte,
 	   qui divergeraient à la première retouche. */
-	creer(meta, "span", "qbd-quiz-card-meta-item", t(
+	ajouter(meta, "span", "qbd-quiz-card-meta-item", t(
 		entry.questions === 1 ? "dashboard.common.questionsOne" : "dashboard.common.questionsOther",
 		{ count: entry.questions },
 	));
-	creer(meta, "span", "qbd-quiz-card-badge", t(CLES_TYPE[entry.quizType]));
+	ajouter(meta, "span", "qbd-quiz-card-badge", t(CLES_TYPE[entry.quizType]));
 
 	card.addEventListener("click", () => onOpen(entry));
 	// Une carte cliquable doit l'être au clavier : `div` + clic seul serait
@@ -98,35 +83,35 @@ export function renderList(
 	root: HTMLElement,
 	deps: { scanner: Scanner; onOpen(entry: QuizIndexEntry): void; onChangeFolder(): void },
 ): () => void {
-	const contenu = creer(root, "div", "qbd-content");
+	const contenu = ajouter(root, "div", "qbd-content");
 
 	// ── En-tête : titre + « Changer de dossier » ──
 	// `t()` est appelé ICI, au rendu, jamais dans une constante de module : une
 	// chaîne traduite au chargement serait figée à la langue du démarrage.
-	const entete = creer(contenu, "div", "qbd-quizzes-header");
-	const blocTitre = creer(entete, "div", "qbd-quizzes-title-block");
-	creer(blocTitre, "h2", "qbd-quizzes-title", t("app.list.title"));
-	const actions = creer(entete, "div", "qbd-quizzes-header-actions");
-	const bouton = creer(actions, "button", "qbd-btn--create");
+	const entete = ajouter(contenu, "div", "qbd-quizzes-header");
+	const blocTitre = ajouter(entete, "div", "qbd-quizzes-title-block");
+	ajouter(blocTitre, "h2", "qbd-quizzes-title", t("app.list.title"));
+	const actions = ajouter(entete, "div", "qbd-quizzes-header-actions");
+	const bouton = ajouter(actions, "button", "qbd-btn--create");
 	bouton.type = "button";
 	// Icône LUCIDE par l'hôte, jamais d'emoji : même silhouette que le greffon.
-	currentHost().ui.setIcon(creer(bouton, "span", "qbd-btn-icon"), "folder");
-	creer(bouton, "span", undefined, t("app.list.changeFolder"));
+	currentHost().ui.setIcon(ajouter(bouton, "span", "qbd-btn-icon"), "folder");
+	ajouter(bouton, "span", undefined, t("app.list.changeFolder"));
 	bouton.addEventListener("click", () => deps.onChangeFolder());
 
-	const zone = creer(contenu, "div", "qbd-quizzes-tree");
+	const zone = ajouter(contenu, "div", "qbd-quizzes-tree");
 
 	function dessiner(quizzes: QuizIndexEntry[]): void {
 		zone.replaceChildren();
 		if (quizzes.length === 0) {
-			const vide = creer(zone, "div", "qbd-empty-state");
-			creer(vide, "p", undefined, t("app.list.empty"));
+			const vide = ajouter(zone, "div", "qbd-empty-state");
+			ajouter(vide, "p", undefined, t("app.list.empty"));
 			return;
 		}
 		// Tri par titre dans la langue AFFICHÉE : « é » se classe avec « e » en
 		// français, et l'ordre suit ce que l'utilisateur lit.
 		const tries = [...quizzes].sort((a, b) => a.title.localeCompare(b.title, currentLang()));
-		const grille = creer(zone, "div", "qbd-module-grid");
+		const grille = ajouter(zone, "div", "qbd-module-grid");
 		for (const entry of tries) carte(grille, entry, deps.onOpen);
 	}
 

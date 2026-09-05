@@ -119,6 +119,39 @@ for (const f of fichiersTs("apps/windows")) {
 	if (IMPORTE_OBSIDIAN.test(readFileSync(f, "utf8"))) rate(`${f} importe « obsidian » : ce n'est pas son hôte.`);
 }
 
+/* 4. LES EXTENSIONS DOM D'OBSIDIAN — le trou que les trois assertions
+      précédentes ne pouvaient pas voir.
+
+      Obsidian pose sur `HTMLElement` des méthodes bien pratiques
+      (`createDiv`, `createEl`, `empty`, `setText`…) qui n'existent nulle part
+      ailleurs. C'est une dépendance à Obsidian qu'AUCUN `import` ne trahit :
+      elle est partie une fois dans le bundle de l'application, via
+      `renderParagraph` de `quiz-utils.ts`, et y aurait planté si on l'avait
+      atteinte.
+
+      La règle se passe d'une seconde liste : un fichier qui importe encore
+      Obsidian est DÉJÀ déclaré dans RESTANTS, et ses extensions DOM partiront
+      avec lui. Ce sont les AUTRES qu'on interdit — et le jour où une tranche
+      future retire un fichier de RESTANTS, ses extensions DOM deviennent une
+      erreur du même coup. Le cliquet se referme tout seul.
+
+      `src/dom.ts` fournit le remplaçant (`ajouter`), en DOM standard. */
+const EXTENSIONS_DOM = /\.(createEl|createDiv|createSpan|empty|setText|addClass|removeClass|toggleClass|detach|appendText|setAttr)\s*\(/;
+
+/** Retire les COMMENTAIRES : une extension CITÉE dans un commentaire
+    (« DOM standard, PAS `container.createEl()` ») n'est pas un appel. */
+function codeNu(src) {
+	return src
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.replace(/\/\/[^\n]*/g, "");
+}
+
+for (const f of fichiersTs("src")) {
+	if (importeurs.has(f)) continue; // déjà déclaré : il partira avec son import
+	const m = codeNu(readFileSync(f, "utf8")).match(EXTENSIONS_DOM);
+	if (m) rate(`${f} emploie « ${m[1]} », une extension DOM d'Obsidian absente des autres hôtes : passez par « ajouter » (src/dom.ts).`);
+}
+
 if (echecs) {
 	console.error(`\nFrontière d'hôte : ${echecs} problème(s)`);
 	// exitCode, jamais exit() — cohérent avec les autres scripts du dépôt.

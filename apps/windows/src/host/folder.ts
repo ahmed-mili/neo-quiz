@@ -16,16 +16,34 @@ import { LOG_PREFIX } from "../../../../src/branding";
 /** Fichier des réglages de l'application, dans son dossier de données. */
 const FICHIER_REGLAGES = "settings.json";
 
-/**
- * La clé est au SINGULIER, et c'est délibéré.
- *
- * La spec §6 prévoit jusqu'à dix dossiers, mais c'est la TRANCHE 2. Écrire dès
- * maintenant un tableau que personne ne remplit obligerait à en lire un partout
- * — et à traiter le cas « plusieurs racines » dans l'index, les liens et les
- * chemins du journal, sans qu'aucun de ces chemins ne soit jamais parcouru.
- * Un seul dossier, une seule clé ; la migration se fera quand elle servira.
- */
-const CLE_DOSSIER = "folder";
+/** Un dossier de quiz retenu par l'application. */
+export interface DossierQuiz {
+	/**
+	 * Identifiant, et PREMIER SEGMENT des chemins du contrat qui en relèvent
+	 * (« Efrei/Cours/reseau.md »). PERSISTÉ, et jamais recalculé : un
+	 * identifiant qui changerait le jour où un dossier homonyme arrive
+	 * changerait avec lui tous les chemins affichés.
+	 *
+	 * C'est le NOM du dossier, pas un jeton opaque (« f1 ») : ces chemins
+	 * sont montrés à l'écran, et « Efrei/Cours/reseau.md » se lit là où
+	 * « f1/Cours/reseau.md » demanderait une table de traduction — donc un
+	 * second endroit où le préfixe serait connu.
+	 */
+	id: string;
+	/** Chemin ABSOLU sur le disque. La seule valeur qui ne soit pas du
+	    contrat : elle ne sort jamais de l'hôte. */
+	path: string;
+	/** Nom affiché. Modifiable un jour sans conséquence — l'identité, c'est
+	    `id`. */
+	name: string;
+}
+
+/** La limite de la spec §6. Dix dossiers, pas onze. */
+export const MAX_DOSSIERS = 10;
+
+const CLE_DOSSIERS = "folders";
+/** L'ancienne clé, au SINGULIER (tranche 1). Lue une fois, puis retirée. */
+const CLE_DOSSIER_LEGACY = "folder";
 
 let magasin: Store | null = null;
 
@@ -41,25 +59,136 @@ export async function pickFolder(): Promise<string | null> {
 	return typeof choix === "string" && choix.trim() ? choix : null;
 }
 
-/** Le dossier retenu de la session précédente, ou `null` au premier lancement. */
-export async function savedFolder(): Promise<string | null> {
+/** Le dernier segment d'un chemin, quel que soit le séparateur. */
+export function nomDeDossier(chemin: string): string {
+	return String(chemin ?? "").replace(/[\\/]+$/, "").split(/[\\/]/).pop() || String(chemin ?? "");
+}
+
+/**
+ * Un nom réduit à ce qui peut tenir dans UN segment de chemin.
+ *
+ * Les caractères interdits par Windows (`\ / : * ? " < > |`) deviennent des
+ * tirets — pas parce que l'identifiant touche le disque (il ne le touche
+ * jamais : c'est un préfixe de chemin du CONTRAT), mais parce qu'un `/` dans
+ * l'identifiant en ferait DEUX segments, et le premier ne désignerait plus
+ * aucune racine.
+ */
+export function segmentValide(nom: string): string {
+	const nu = String(nom ?? "").replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+	return nu || "dossier";
+}
+
+/** Un identifiant libre. Le suffixe est numérique et croissant : deux
+    dossiers nommés « Cours » donnent « Cours » et « Cours-2 ». */
+export function idUnique(nom: string, pris: ReadonlySet<string>): string {
+	const base = segmentValide(nom);
+	if (!pris.has(base)) return base;
+	let n = 2;
+	while (pris.has(`${base}-${n}`)) n++;
+	return `${base}-${n}`;
+}
+
+/**
+ * Les dossiers retenus, à partir de ce que le magasin contient — y compris
+ * l'ANCIENNE clé au singulier.
+ *
+ * PURE, et c'est délibéré : la conversion d'un réglage est exactement le
+ * genre de code qu'on n'ose plus toucher parce qu'on ne peut pas l'exécuter.
+ * Ici, `npm run check:folders` l'exécute.
+ */
+export function lireDossiers(brut: { folders?: unknown; folder?: unknown }): DossierQuiz[] {
+	const pris = new Set<string>();
+	const out: DossierQuiz[] = [];
+
+	if (Array.isArray(brut.folders)) {
+		for (const e of brut.folders) {
+			const o = e as Partial<DossierQuiz> | null;
+			const path = typeof o?.path === "string" ? o.path.trim() : "";
+			if (!path) continue;
+			const name = typeof o?.name === "string" && o.name.trim() ? o.name.trim() : nomDeDossier(path);
+			/* L'identifiant persisté est reconduit tel quel — sauf collision,
+			   qu'un fichier de réglages édité à la main peut produire. Le
+			   recalculer systématiquement changerait les chemins affichés à
+			   chaque renommage de dossier. */
+			const voulu = typeof o?.id === "string" && o.id.trim() ? segmentValide(o.id) : segmentValide(name);
+			const id = idUnique(voulu, pris);
+			pris.add(id);
+			out.push({ id, path, name });
+			if (out.length >= MAX_DOSSIERS) break;
+		}
+		return out;
+	}
+
+	/* MIGRATION de la clé au singulier (tranche 1). Un seul sens, exécuté une
+	   fois : `savedFolders` réécrit aussitôt sous la nouvelle clé et retire
+	   l'ancienne. Sans elle, la mise à jour de l'application ferait repartir
+	   l'utilisateur sur l'écran « Choisissez un dossier », son dossier
+	   toujours là mais oublié. */
+	if (typeof brut.folder === "string" && brut.folder.trim()) {
+		const path = brut.folder.trim();
+		const name = nomDeDossier(path);
+		return [{ id: segmentValide(name), path, name }];
+	}
+	return [];
+}
+
+/**
+ * Les dossiers retenus de la session précédente, ou `[]` au premier
+ * lancement.
+ */
+export async function savedFolders(): Promise<DossierQuiz[]> {
 	try {
-		const valeur = await (await reglages()).get<string>(CLE_DOSSIER);
-		return typeof valeur === "string" && valeur.trim() ? valeur : null;
+		const store = await reglages();
+		const liste = lireDossiers({
+			folders: await store.get(CLE_DOSSIERS),
+			folder: await store.get(CLE_DOSSIER_LEGACY),
+		});
+		/* La conversion se paie UNE fois : dès qu'on a lu l'ancienne clé, on
+		   écrit la nouvelle et on retire l'ancienne. Laisser les deux en place
+		   ferait diverger le jour où l'une des deux serait modifiée. */
+		if ((await store.get(CLE_DOSSIER_LEGACY)) !== undefined) {
+			await store.set(CLE_DOSSIERS, liste);
+			await store.delete(CLE_DOSSIER_LEGACY);
+			await store.save();
+		}
+		return liste;
 	} catch (e) {
-		// Réglages illisibles (fichier corrompu, première écriture interrompue) :
-		// on repart de l'écran de choix plutôt que d'empêcher le démarrage.
+		// Réglages illisibles : on repart de l'écran de choix plutôt que
+		// d'empêcher le démarrage.
 		console.warn(LOG_PREFIX, "réglages illisibles:", e);
-		return null;
+		return [];
 	}
 }
 
-export async function saveFolder(chemin: string): Promise<void> {
+export async function saveFolders(liste: DossierQuiz[]): Promise<void> {
 	const store = await reglages();
-	await store.set(CLE_DOSSIER, chemin);
+	await store.set(CLE_DOSSIERS, liste);
 	// `save()` explicite : l'enregistrement automatique est débouncé, et
 	// l'application recharge la fenêtre juste après ce choix.
 	await store.save();
+}
+
+/** Ajoute un dossier et rend la liste complète. Un chemin déjà présent n'est
+    pas ajouté deux fois : il rendrait deux racines sur les mêmes fichiers,
+    donc deux fois chaque quiz au catalogue. */
+export async function addFolder(chemin: string): Promise<DossierQuiz[]> {
+	const liste = await savedFolders();
+	const normalise = chemin.replace(/[\\/]+$/, "");
+	if (liste.some(d => d.path.replace(/[\\/]+$/, "").toLowerCase() === normalise.toLowerCase())) return liste;
+	if (liste.length >= MAX_DOSSIERS) return liste;
+	const nom = nomDeDossier(normalise);
+	const suivante = [...liste, { id: idUnique(nom, new Set(liste.map(d => d.id))), path: normalise, name: nom }];
+	await saveFolders(suivante);
+	return suivante;
+}
+
+/** Retire un dossier. Le JOURNAL du dossier n'est pas touché : il vit dans le
+    dossier, avec les notes qu'il décrit, et le rajouter plus tard doit rendre
+    l'historique — c'est précisément ce que son nouvel emplacement permet. */
+export async function removeFolder(id: string): Promise<DossierQuiz[]> {
+	const suivante = (await savedFolders()).filter(d => d.id !== id);
+	await saveFolders(suivante);
+	return suivante;
 }
 
 /**

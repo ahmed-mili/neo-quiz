@@ -11,7 +11,7 @@ import { currentHost, installHost } from "../../../src/host/current";
 import { createWindowsHost, createWindowsIndex } from "./host";
 import { poserIcone } from "./host/ui";
 import { poserLogoObsidian } from "./ui/marques";
-import { allowFolder, estVaultObsidian, obsidianVaults, pickFolder, saveFolder, savedFolder } from "./host/folder";
+import { addFolder, allowFolder, estVaultObsidian, obsidianVaults, pickFolder, savedFolders } from "./host/folder";
 import { renderList } from "./ui/list";
 import { openQuizPage } from "./ui/quiz-page";
 
@@ -98,7 +98,7 @@ async function changerDossier(): Promise<boolean> {
  * son surveillant vivants, sur l'ancien dossier.
  */
 async function choisirDossier(chemin: string): Promise<void> {
-	await saveFolder(chemin);
+	await addFolder(chemin);
 	await allowFolder(chemin);
 	location.reload();
 }
@@ -196,19 +196,23 @@ async function demarrer(): Promise<void> {
 	setLanguage("auto");
 	document.title = t("app.window.title");
 	try {
-		const racine = await savedFolder();
-		if (!racine) return void mountSansDossier(root);
+		const dossiers = await savedFolders();
+		if (!dossiers.length) return void mountSansDossier(root);
+		/* Une seule racine ouverte pour l'instant : l'hôte composite est la
+		   tâche suivante. La liste, elle, est déjà au pluriel et persistée —
+		   la conversion du réglage ne se refera pas. */
+		const dossier = dossiers[0];
 		/* Les portées natives ne survivent pas au redémarrage : les rouvrir
 		   AVANT la première lecture, même sur un dossier déjà persisté. Elles
 		   sont DEUX (fichiers et protocole d'asset) — voir `allow_folder` dans
 		   `src-tauri/src/lib.rs`. */
-		await allowFolder(racine);
+		await allowFolder(dossier.path);
 		/* APRÈS `allowFolder` : sans la portée, la détection échoue. Elle décide
 		   où vont les résultats — dans un vault, à l'endroit où le greffon les
 		   écrit déjà, pour que les deux hôtes n'aient pas chacun leur moitié. */
-		const estVault = await estVaultObsidian(racine);
-		const index = await createWindowsIndex(racine);
-		installHost(createWindowsHost(racine, index, estVault));
+		const estVault = await estVaultObsidian(dossier.path);
+		const index = await createWindowsIndex(dossier.path);
+		installHost(createWindowsHost(dossier.path, index, estVault));
 		/* Le scanner PARTAGÉ, sur l'hôte Windows : c'est lui qui décide ce
 		   qu'est un quiz, sous Obsidian comme ici. `init()` branche le
 		   surveillant PUIS scanne, dans cet ordre — l'inverse manquerait les

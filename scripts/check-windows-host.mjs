@@ -314,3 +314,52 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 
 	r.done();
 });
+
+await withSrcModule("apps/windows/src/review/catalogue.ts", async ({ construireCatalogue, cleModule, libelleModule }) => {
+	const r = makeReporter("App — catalogue de révision");
+	/* Un faux `paths` : deux racines, préfixe = premier segment. C'est le
+	   contrat, pas l'implémentation Windows, qui est éprouvé ici. */
+	const paths = {
+		rootOf: (p) => ({ id: p.split("/")[0], name: p.split("/")[0], reviewLog: "", legacyReviewLog: null }),
+		localPath: (p) => p.split("/").slice(1).join("/"),
+		contractPath: (id, l) => (id ? `${id}/${l}` : l),
+		resultsDirFor: () => "",
+		roots: () => [],
+	};
+
+	/* La clé de module porte la RACINE : sans elle, « Réseaux » de deux
+	   dossiers différents partageraient une date d'examen, et l'ordonnanceur
+	   resserrerait les révisions d'une matière dont l'examen n'a pas lieu. */
+	r.check("le module porte la racine", cleModule("Efrei/Reseaux/ch1.md", paths), "Efrei/Reseaux");
+	r.check("deux racines ne partagent pas un module homonyme",
+		cleModule("Perso/Reseaux/ch1.md", paths) === cleModule("Efrei/Reseaux/ch1.md", paths), false);
+	/* Un quiz posé à la racine du dossier : le module est la racine, pas une
+	   clé qui se termine par un séparateur. */
+	r.check("un quiz sans sous-dossier", cleModule("Efrei/ch1.md", paths), "Efrei");
+	r.check("le libellé est le dernier segment", libelleModule("Efrei/Reseaux"), "Reseaux");
+
+	const items = construireCatalogue([
+		{ path: "Efrei/Reseaux/ch1.md", items: [{ id: "ip" }, { id: "masque", slice: 2 }] },
+	], paths);
+	/* La clé de question est le chemin du CONTRAT + « ::id ». C'est
+	   l'adaptateur qui la localise avant écriture — ici, elle est globale. */
+	r.check("les clés de question", items.map(i => i.q),
+		["Efrei/Reseaux/ch1.md::ip", "Efrei/Reseaux/ch1.md::masque"]);
+	/* La TRANCHE devient la source : sans elle, deux tranches d'un même
+	   chapitre ne s'entrelaceraient pas. */
+	r.check("la tranche sépare les familles", items.map(i => i.source),
+		["Efrei/Reseaux/ch1.md", "Efrei/Reseaux/ch1.md#2"]);
+
+	/* SANS FILET dans le brief : le `role` (pre/read/recall/test) décide de
+	   l'entrelacement des rôles pédagogiques (spec de l'ordonnanceur). Un
+	   item sans rôle ne doit pas en fabriquer un (`undefined`, pas une chaîne
+	   vide) — sinon le noyau daterait une question comme si son rôle était
+	   connu. */
+	const avecRole = construireCatalogue([
+		{ path: "Efrei/Reseaux/ch1.md", items: [{ id: "ip", role: "recall" }, { id: "masque" }] },
+	], paths);
+	r.check("le rôle est reporté quand présent, absent sinon",
+		avecRole.map(i => i.role ?? null), ["recall", null]);
+
+	r.done();
+});

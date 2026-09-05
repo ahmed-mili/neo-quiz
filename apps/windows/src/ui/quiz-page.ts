@@ -27,6 +27,10 @@ import { currentHost } from "../../../../src/host/current";
 import { t } from "../../../../src/i18n";
 import { parseQuizSource, QUIZ_BLOCK_RE } from "../../../../src/quiz-utils";
 import { ajouter } from "../../../../src/dom";
+// Types en `import type` seulement : ils viennent du noyau et de `types/quiz`,
+// et ce fichier ne doit tirer aucune implémentation de plus.
+import type { ReviewGrade } from "../../../../src/scheduler";
+import type { QuestionRole } from "../../../../src/types/quiz";
 
 
 /**
@@ -39,6 +43,13 @@ export async function openQuizPage(
 	root: HTMLElement,
 	entry: QuizIndexEntry,
 	onBack: () => void,
+	/* La FORME du puits, pas le `ReviewStore` : cette page n'a besoin ni de
+	   `plan()` ni de `load()`, et c'est exactement le type que le moteur
+	   attend (`types/engine-ctx.ts`). */
+	reviewSink?: {
+		record(entries: Array<{ q: string; grade: ReviewGrade; role?: QuestionRole }>): void;
+		keyOf(path: string, id: string): string;
+	},
 ): Promise<() => void> {
 	root.replaceChildren();
 	const contenu = ajouter(root, "div", "qbd-content qbd-qz");
@@ -113,10 +124,17 @@ export async function openQuizPage(
 			   `Cours/ch1.md::q1`) : les deux hôtes cesseraient de partager
 			   l'historique, et personne ne le verrait avant la tranche 2. */
 			sourcePath: entry.path,
-			/* Ni `statsSink` ni `reviewSink` : les statistiques et le journal de
-			   révision sont la TRANCHE 2. Le moteur les traite comme absents sans
-			   se plaindre — c'est pourquoi ils sont optionnels. Inventer un puits
-			   ici écrirait un historique dans un format qu'on n'a pas encore arrêté. */
+			/* Le JOURNAL. `keyOf(sourcePath, id)` compose une clé du CONTRAT
+			   (préfixée par la racine quand il y en a plusieurs) ; c'est
+			   l'adaptateur qui la ramène à sa forme LOCALE avant de l'écrire,
+			   pour que le greffon lise exactement la même clé sur le même
+			   dossier. Le moteur, lui, ne sait rien de tout ça : il ne connaît
+			   que la FORME du puits.
+			   `statsSink` reste absent : les statistiques par quiz sont
+			   l'affichage du tableau de bord, une autre question — spec de
+			   l'ordonnanceur §9.1, « deux systèmes distincts, à ne pas
+			   fusionner ». */
+			reviewSink,
 		});
 	} catch (e) {
 		hote.replaceChildren();

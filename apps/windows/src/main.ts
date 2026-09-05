@@ -13,7 +13,9 @@ import { createWindowsHost, createWindowsIndex, creerCarteRacines } from "./host
 import type { RacineOuverte } from "./host";
 import { poserIcone } from "./host/ui";
 import { poserLogoObsidian } from "./ui/marques";
-import { addFolder, allowFolder, estVaultObsidian, obsidianVaults, pickFolder, savedFolders } from "./host/folder";
+import { addFolder, allowFolder, chargerExamDates, estVaultObsidian, obsidianVaults, pickFolder, savedFolders } from "./host/folder";
+import type { ReviewStore } from "../../../src/review/review-store";
+import { creerJournalApp } from "./review/store";
 import { renderList } from "./ui/list";
 import { openQuizPage } from "./ui/quiz-page";
 import { renderSettings } from "./ui/settings";
@@ -41,14 +43,14 @@ let demonterCourant: (() => void) | null = null;
 
 /* `document.createElement`, jamais les extensions DOM d'Obsidian (`createEl`,
    `createDiv`, `empty`) : elles n'existent pas dans la fenêtre de l'app. */
-export function mount(root: HTMLElement, scanner: Scanner): void {
+export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore): void {
 	demonterCourant?.();
 	demonterCourant = null;
 	root.textContent = "";
 	demonterCourant = renderList(root, {
 		scanner,
-		onOpen: (entry) => { void ouvrirQuiz(root, scanner, entry); },
-		onSettings: () => ouvrirReglages(root, scanner),
+		onOpen: (entry) => { void ouvrirQuiz(root, scanner, store, entry); },
+		onSettings: () => ouvrirReglages(root, scanner, store),
 	});
 }
 
@@ -57,12 +59,12 @@ export function mount(root: HTMLElement, scanner: Scanner): void {
  * démonter la page et remonter la liste. La gestion des dossiers y vit
  * désormais tout entière — la liste n'a plus qu'un bouton pour y aller.
  */
-function ouvrirReglages(root: HTMLElement, scanner: Scanner): void {
+function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore): void {
 	demonterCourant?.();
 	demonterCourant = null;
 	root.textContent = "";
 	demonterCourant = renderSettings(root, {
-		onBack: () => mount(root, scanner),
+		onBack: () => mount(root, scanner, store),
 		/* RECHARGER : ajouter ou retirer un dossier change les racines de
 		   l'hôte, et l'hôte est installé une seule fois. Un remontage à chaud
 		   laisserait vivre l'index et le surveillant de l'ancienne liste. */
@@ -81,17 +83,20 @@ function ouvrirReglages(root: HTMLElement, scanner: Scanner): void {
  * démonterait rien deux fois. C'est aussi pourquoi la page fait elle-même son
  * `root.replaceChildren()` en entrée.
  */
-async function ouvrirQuiz(root: HTMLElement, scanner: Scanner, entry: QuizIndexEntry): Promise<void> {
+async function ouvrirQuiz(root: HTMLElement, scanner: Scanner, store: ReviewStore, entry: QuizIndexEntry): Promise<void> {
 	demonterCourant?.();
 	demonterCourant = null;
 	root.textContent = "";
 	/* Le démontage rendu par `openQuizPage` appelle `__quizDestroy` : sans lui,
 	   chaque aller-retour laisserait vivre une instance de moteur complète
 	   (écouteurs document/window, ResizeObserver, timers). C'est le pendant
-	   exact de l'`onunload` du MarkdownRenderChild côté greffon. */
+	   exact de l'`onunload` du MarkdownRenderChild côté greffon.
+	   `store` PASSÉ TEL QUEL comme puits : `ReviewStore` porte déjà `record` et
+	   `keyOf`, exactement la FORME que `openQuizPage` attend — l'envelopper
+	   dans un objet littéral n'ajouterait rien. */
 	demonterCourant = await openQuizPage(root, entry, () => {
-		mount(root, scanner);
-	});
+		mount(root, scanner, store);
+	}, store);
 }
 
 /**
@@ -247,7 +252,13 @@ async function demarrer(): Promise<void> {
 		   fichiers modifiés pendant le premier balayage. */
 		const scanner = createScanner(currentHost());
 		await scanner.init();
-		mount(root, scanner);
+		/* MIGRER D'ABORD, CHARGER ENSUITE (voir `review/store.ts`) : les dates
+		   d'examen, elles, n'ont pas cet ordre à respecter — mais les charger
+		   avant de monter évite un premier plan calculé sans l'horizon d'une
+		   matière déjà saisie lors d'une session précédente. */
+		await chargerExamDates();
+		const store = await creerJournalApp(currentHost(), scanner);
+		mount(root, scanner, store);
 	} catch (e) {
 		root.textContent = t("app.error.startup", { error: e instanceof Error ? e.message : String(e) });
 	}

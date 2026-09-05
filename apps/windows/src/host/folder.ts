@@ -250,3 +250,50 @@ export async function estVaultObsidian(racine: string): Promise<boolean> {
 		return false;
 	}
 }
+
+/* ══════════════════════════════════════════════════════════
+   LES DATES D'EXAMEN
+
+   Indexées par la CLÉ DE MODULE (`review/catalogue.ts`, qui porte
+   l'identifiant de racine) : une date saisie pour « Efrei/Reseaux » ne doit
+   jamais resserrer les révisions de « Perso/Reseaux ». Valeur PERSISTÉE,
+   au format AAAA-MM-JJ tel que saisi — jamais traduite, jamais reformatée.
+
+   `examDates()` lit le réglage EN MÉMOIRE plutôt que le magasin à chaque
+   appel : le plan de l'ordonnanceur est recalculé souvent (chaque réponse
+   jouée), et un aller-retour disque à chaque calcul serait payé pour rien.
+   D'où `chargerExamDates()`, appelé une fois au démarrage.
+══════════════════════════════════════════════════════════ */
+
+const CLE_EXAM_DATES = "examDates";
+
+/** Les dates d'examen par module, telles que saisies (`AAAA-MM-JJ`).
+    Valeur PERSISTÉE : jamais traduite, jamais reformatée. */
+let datesExamen: Record<string, string> = {};
+
+export function examDates(): Record<string, string> {
+	return datesExamen;
+}
+
+export async function chargerExamDates(): Promise<Record<string, string>> {
+	try {
+		const brut = await (await reglages()).get<Record<string, string>>(CLE_EXAM_DATES);
+		datesExamen = brut && typeof brut === "object" ? brut : {};
+	} catch (e) {
+		console.warn(LOG_PREFIX, "dates d'examen illisibles:", e);
+		datesExamen = {};
+	}
+	return datesExamen;
+}
+
+export async function setExamDate(module: string, date: string): Promise<void> {
+	const suivant = { ...datesExamen };
+	// Une date effacée est RETIRÉE, pas gardée vide : `horizonFor` retomberait
+	// de toute façon sur l'horizon par défaut, mais le réglage accumulerait
+	// des entrées mortes qu'on n'oserait plus nettoyer.
+	if (date) suivant[module] = date; else delete suivant[module];
+	datesExamen = suivant;
+	const store = await reglages();
+	await store.set(CLE_EXAM_DATES, suivant);
+	await store.save();
+}

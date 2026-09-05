@@ -1,0 +1,120 @@
+/* =========================================================
+   LA COQUILLE DE LA FENÊTRE
+
+   Deux choses qu'Obsidian faisait pour le greffon et que personne ne faisait
+   pour l'application.
+
+   1. LE FOND NE REMPLISSAIT PAS LA FENÊTRE. `.qbd-root` (CSS partagé) porte
+      `height: 100%` et `background: var(--background-primary)` — mais un
+      pourcentage se résout contre la hauteur du PARENT, et ni `html` ni `body`
+      n'en avaient. Le fond sombre s'arrêtait donc au bas du contenu, et le
+      reste de la fenêtre restait blanc. Sous Obsidian la question ne se posait
+      pas : la vue est déjà dans un conteneur dimensionné.
+
+   2. L'ÉCRAN DE CHOIX DE DOSSIER n'avait aucune mise en page : un `h1`, un `p`
+      et un `<button>` nu, collés en haut à gauche.
+
+   Tout ici n'emploie que des variables définies par `theme/host-vars.css` ou
+   par l'arbre partagé `src/assets/css`. `npm run check:theme` ne balaie pas
+   `apps/windows/`, donc une variable inventée ici serait invisible aux deux
+   assertions et rendrait l'écran illisible sans un mot.
+   ========================================================= */
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-family: var(--font-interface);
+}
+
+#neo-quiz-root {
+	height: 100%;
+}
+
+/* ── L'écran de choix de dossier ──
+   Une invitation, pas un message d'erreur : l'écran est vide parce que
+   l'utilisateur n'a encore rien désigné, ce qui est l'état normal au premier
+   lancement. La colonne est étroite (46ch) pour rester lisible sur un écran
+   large — même raison que la colonne de lecture d'un quiz. */
+.nq-accueil {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 20px;
+	padding: 32px;
+	box-sizing: border-box;
+	text-align: center;
+}
+
+/* La toque est la SEULE image de l'écran, et c'est la même que celle de
+   l'icône dans la barre des tâches : la fenêtre et l'icône doivent se
+   reconnaître comme un seul produit. Posée sur une tuile de verre, la
+   signature de surface du tableau de bord. */
+.nq-accueil-marque {
+	display: grid;
+	place-items: center;
+	width: 84px;
+	height: 84px;
+	border-radius: 22px;
+	background: var(--qbd-glass-bg-dense);
+	backdrop-filter: var(--qbd-glass-blur-dense);
+	border: 1px solid var(--qbd-glass-edge);
+	box-shadow: var(--qbd-glass-sheen), var(--qbd-glass-shadow);
+	color: var(--text-accent);
+	margin-bottom: 4px;
+}
+
+.nq-accueil-marque svg {
+	width: 40px;
+	height: 40px;
+}
+
+.nq-accueil-titre {
+	margin: 0;
+	font-size: 22px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	color: var(--text-normal);
+}
+
+.nq-accueil-texte {
+	margin: 0;
+	max-width: 46ch;
+	font-size: 13.5px;
+	line-height: 1.55;
+	color: var(--text-muted);
+}
+
+/* Le bouton reprend `.qbd-btn--create` du tableau de bord (la pilule dont le
+   survol et l'appui ont été validés au pixel) ; seule la taille change, parce
+   qu'il est ici l'unique action de l'écran et non un bouton de barre. */
+.nq-accueil .qbd-btn--create {
+	height: 40px;
+	padding: 0 20px !important;
+	border-radius: 20px;
+	font-size: 13.5px;
+	margin-top: 4px;
+}
+
+/* Le chemin du dossier retenu, sous le bouton, en pied d'écran discret. */
+.nq-accueil-chemin {
+	margin: 0;
+	font-size: 12px;
+	color: var(--text-faint);
+	font-family: var(--font-monospace);
+	word-break: break-all;
+	max-width: 60ch;
+}
+
+/* Le message d'échec du démarrage prend la place du contenu : il doit rester
+   lisible, et nommer la cause plutôt que de la résumer. */
+.nq-accueil-erreur {
+	max-width: 60ch;
+	color: var(--text-error);
+	font-size: 13.5px;
+	line-height: 1.55;
+}

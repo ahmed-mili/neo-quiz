@@ -4,7 +4,12 @@
    dictionnaires divergeraient. */
 export const EN_APP = {
 	"app.window.title": "Neo Quiz",
-	"app.empty.noFolder": "No quiz folder yet.",
+	/* ── Le premier écran, avant tout choix de dossier ──
+	   Un écran vide est une INVITATION, pas un constat : il dit ce qu'il y a
+	   à faire, et pourquoi c'est sans risque. Une application qui demande un
+	   dossier doit dire ce qu'elle en fera. */
+	"app.empty.title": "Choose a quiz folder",
+	"app.empty.body": "Neo Quiz plays the quiz-blocks in your notes, right where they already live. Nothing is copied, nothing is moved.",
 	"app.empty.pickFolder": "Choose a folder",
 	"app.error.startup": "Neo Quiz could not start: {error}",
 

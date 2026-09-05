@@ -53,33 +53,14 @@ function conteneurToasts(): HTMLElement {
 	return conteneur;
 }
 
-export function createWindowsUi(): HostUi {
-	return {
-		/* Le message arrive DÉJÀ TRADUIT par son appelant : l'hôte n'a aucune
-		   chaîne de son cru.
-		   `textContent` et JAMAIS `innerHTML` : un message peut citer le titre
-		   d'un quiz PARTAGÉ, donc du texte écrit par quelqu'un d'autre. Une
-		   interpolation brute y exécuterait du code avec les droits de la
-		   fenêtre — la fenêtre d'une application de bureau, pas d'un onglet. */
-		notice(message, timeoutMs = DUREE_PAR_DEFAUT) {
-			try {
-				const toast = document.createElement("div");
-				toast.className = "nq-toast";
-				toast.textContent = String(message);
-				conteneurToasts().appendChild(toast);
-				window.setTimeout(() => toast.remove(), Math.max(0, timeoutMs));
-			} catch (e) {
-				// Même repli que l'hôte Obsidian : une notification perdue ne doit
-				// pas emporter le rendu avec elle.
-				console.log(LOG_PREFIX, message);
-			}
-		},
-		/* Icônes LUCIDE, jamais d'emoji : c'est la bibliothèque derrière le
-		   `setIcon` d'Obsidian, donc la même silhouette dans les deux hôtes.
-		   Un nom inconnu VIDE l'élément et écrit un avertissement : ne rien
-		   faire en silence laisserait un bouton vide sans que rien ne dise
-		   pourquoi, et c'est exactement le défaut qu'une relecture ne voit pas. */
-		setIcon(el, name) {
+/**
+ * Pose une icône LUCIDE dans l'élément, en remplaçant son contenu.
+ *
+ * Exportée à part du contrat : l'écran de choix de dossier s'affiche AVANT
+ * qu'un hôte soit installé, et `currentHost()` jette tant qu'il n'y en a pas.
+ * Passer par le contrat y serait une exception au démarrage, pas une icône.
+ */
+export function poserIcone(el: HTMLElement | null, name: string): void {
 			if (!el) return;
 			el.replaceChildren();
 			const noeud = CATALOGUE[versCleLucide(name)];
@@ -109,6 +90,36 @@ export function createWindowsUi(): HostUi {
 				svg.appendChild(enfant);
 			}
 			el.appendChild(svg);
+		}
+
+export function createWindowsUi(): HostUi {
+	return {
+		/* Le message arrive DÉJÀ TRADUIT par son appelant : l'hôte n'a aucune
+		   chaîne de son cru.
+		   `textContent` et JAMAIS `innerHTML` : un message peut citer le titre
+		   d'un quiz PARTAGÉ, donc du texte écrit par quelqu'un d'autre. Une
+		   interpolation brute y exécuterait du code avec les droits de la
+		   fenêtre — la fenêtre d'une application de bureau, pas d'un onglet. */
+		notice(message, timeoutMs = DUREE_PAR_DEFAUT) {
+			try {
+				const toast = document.createElement("div");
+				toast.className = "nq-toast";
+				toast.textContent = String(message);
+				conteneurToasts().appendChild(toast);
+				window.setTimeout(() => toast.remove(), Math.max(0, timeoutMs));
+			} catch (e) {
+				// Même repli que l'hôte Obsidian : une notification perdue ne doit
+				// pas emporter le rendu avec elle.
+				console.log(LOG_PREFIX, message);
+			}
+		},
+		/* Icônes LUCIDE, jamais d'emoji : c'est la bibliothèque derrière le
+		   `setIcon` d'Obsidian, donc la même silhouette dans les deux hôtes.
+		   Un nom inconnu VIDE l'élément et écrit un avertissement : ne rien
+		   faire en silence laisserait un bouton vide sans que rien ne dise
+		   pourquoi, et c'est exactement le défaut qu'une relecture ne voit pas. */
+		setIcon(el, name) {
+			poserIcone(el, String(name));
 		},
 	};
 }

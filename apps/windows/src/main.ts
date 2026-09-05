@@ -1,12 +1,14 @@
 import "../../../src/assets/css/index.css";
 import "./theme/host-vars.css";
 import "./assets/toast.css";
+import "./assets/shell.css";
 import { setLanguage, t } from "../../../src/i18n";
-import { PRODUCT_NAME } from "../../../src/branding";
+import { ajouter } from "../../../src/dom";
 import { createScanner } from "../../../src/dashboard/scanner";
 import type { QuizIndexEntry, Scanner } from "../../../src/dashboard/scanner";
 import { currentHost, installHost } from "../../../src/host/current";
 import { createWindowsHost, createWindowsIndex } from "./host";
+import { poserIcone } from "./host/ui";
 import { allowFolder, pickFolder, saveFolder, savedFolder } from "./host/folder";
 import { renderList } from "./ui/list";
 import { openQuizPage } from "./ui/quiz-page";
@@ -92,15 +94,32 @@ async function changerDossier(): Promise<boolean> {
  * par `changerDossier`, comme celui de la liste — un seul enchaînement.
  */
 function mountSansDossier(root: HTMLElement): void {
+	demonterCourant?.();
+	demonterCourant = null;
 	root.textContent = "";
-	const titre = root.appendChild(document.createElement("h1"));
-	titre.textContent = PRODUCT_NAME;
-	const vide = root.appendChild(document.createElement("p"));
-	// t() AU RENDU, jamais dans une constante de module.
-	vide.textContent = t("app.empty.noFolder");
-	const bouton = root.appendChild(document.createElement("button"));
+
+	const ecran = ajouter(root, "div", "nq-accueil");
+
+	/* La TOQUE, seule image de l'écran : c'est la marque de l'icône de
+	   l'application. La fenêtre et la vignette de la barre des tâches doivent
+	   se reconnaître comme un seul produit.
+	   `poserIcone` et NON `currentHost().ui.setIcon` : cet écran s'affiche
+	   AVANT qu'un hôte soit installé, et `currentHost()` jette tant qu'il n'y
+	   en a pas — ce serait une exception au démarrage, pas une icône. */
+	poserIcone(ajouter(ecran, "div", "nq-accueil-marque"), "graduation-cap");
+
+	// t() AU RENDU, jamais dans une constante de module : sinon la langue est
+	// figée à celle du démarrage.
+	ajouter(ecran, "h1", "nq-accueil-titre", t("app.empty.title"));
+	ajouter(ecran, "p", "nq-accueil-texte", t("app.empty.body"));
+
+	/* Le bouton reprend la pilule du tableau de bord : deux apparences pour le
+	   même geste donneraient deux produits. */
+	const bouton = ajouter(ecran, "button", "qbd-btn qbd-btn--create");
 	bouton.type = "button";
-	bouton.textContent = t("app.empty.pickFolder");
+	poserIcone(ajouter(bouton, "span", "qbd-btn-icon"), "folder-open");
+	bouton.appendChild(document.createTextNode(t("app.empty.pickFolder")));
+
 	bouton.addEventListener("click", () => {
 		void (async () => {
 			bouton.disabled = true;
@@ -108,7 +127,12 @@ function mountSansDossier(root: HTMLElement): void {
 				// Annulation : ce n'est pas une erreur, l'écran reste tel quel.
 				await changerDossier();
 			} catch (e) {
-				root.textContent = t("app.error.startup", { error: e instanceof Error ? e.message : String(e) });
+				/* La cause est NOMMÉE, jamais résumée : cet écran est le seul
+				   endroit où l'utilisateur peut lire pourquoi le démarrage a
+				   échoué. */
+				ecran.replaceChildren();
+				ajouter(ecran, "p", "nq-accueil-erreur",
+					t("app.error.startup", { error: e instanceof Error ? e.message : String(e) }));
 			} finally {
 				bouton.disabled = false;
 			}

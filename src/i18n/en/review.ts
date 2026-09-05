@@ -14,7 +14,6 @@ export const EN_REVIEW = {
 	   NI à l'historique de révision, qui vit dans le dossier. */
 	"review.settings.removeHint": "The folder and its review history stay on disk.",
 	"review.settings.full": "Neo Quiz reads up to {count} folders.",
-	"review.settings.quizCount": "{count} quizzes",
 
 	/* ── Les dates d'examen (tâche 10) ── */
 	"review.settings.exams": "Exam dates",

@@ -181,9 +181,9 @@ détaillées :
    l'appelle). Décision : la GARDER quand même à la tâche 7 (le type force sa
    présence dans les deux dictionnaires, une tâche suivante pouvait la
    consommer) ; la tâche 11 a ensuite confirmé qu'elle n'a AUCUN appelant
-   dans tout le dépôt. **La tranche 3 doit trancher** : soit une tâche
-   l'utilise enfin, soit elle est retirée des deux dictionnaires (`en`/`fr`)
-   — la garder orpheline indéfiniment n'a pas de justification restante.
+   dans tout le dépôt. **Tranchée à la vague de correction finale** : balayée
+   contre les 749 clés des six domaines, elle en restait l'unique orpheline —
+   retirée des deux dictionnaires (`en`/`fr`).
 
 ---
 
@@ -219,13 +219,13 @@ tranche 3 touche l'écriture, sinon peuvent attendre :**
   `REVIEW_LOG_NAME` existe désormais — cosmétique (`log-file.ts`).
 
 **Permissions Tauri (`apps/windows/src-tauri/capabilities/default.json`) — 1
-constat, à TRANCHER explicitement, pas seulement à différer :**
-- `fs:allow-unwatch` est inerte : la commande n'est dans le
+constat, tranché à la vague de correction finale :**
+- `fs:allow-unwatch` était inerte : la commande n'est dans le
   `generate_handler!` d'aucun plugin (vérifié contre `tauri-plugin-fs`
   2.5.2), le JS ferme un abonnement par `plugin:resources|close`. La
-  permission vient du brief de la tâche 1, jamais exercée par le code. À
-  trancher à la revue finale de la tranche 3 (ou avant) : la garder par
-  précaution, ou la retirer puisqu'aucun appel ne la consomme.
+  permission venait du brief de la tâche 1, jamais exercée par le code —
+  **retirée**. Les six autres permissions du fichier sont toutes réellement
+  appelées.
 
 **Hôte Windows, dossiers composites (`apps/windows/src/host/*.ts`) — 6
 constats. Pertinents pour la tranche 3, qui va réécrire dans ces fichiers :**
@@ -290,8 +290,8 @@ le premier qui a déjà sa réponse dans la note d'épreuves à l'écran (point
 - La couleur de marque `#7c3aed` en dur à deux endroits de `shell.css`
   (tâche 7) plutôt qu'une variable locale — différé, sans risque
   fonctionnel, juste une dette de cohérence.
-- `review.settings.quizCount` orpheline — décision à prendre en tranche 3,
-  voir « Les décisions du contrôleur » plus haut (tâche 7).
+- `review.settings.quizCount` orpheline — retirée à la vague de correction
+  finale, voir « Les décisions du contrôleur » plus haut (tâche 7).
 
 **Divers, un seul constat sans conséquence identifiée :**
 - La garde `exists(to)` insensible à la casse (déjà listé sous « Hôte

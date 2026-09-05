@@ -1,6 +1,7 @@
 import type { QuizIndexEntry } from "../../../../src/dashboard/scanner";
 import type { HostPaths } from "../../../../src/host/types";
 import type { ScheduledItem } from "../../../../src/scheduler";
+import { keyOfQuestion } from "../../../../src/review/review-store";
 
 /* ══════════════════════════════════════════════════════════
    LE CATALOGUE VU PAR L'APPLICATION
@@ -51,7 +52,11 @@ export function construireCatalogue(
 		const module = cleModule(quiz.path, paths);
 		for (const it of quiz.items) {
 			const item: ScheduledItem = {
-				q: `${quiz.path}::${it.id}`,
+				/* `keyOfQuestion` PARTAGÉE avec le greffon (`src/review/
+				   review-store.ts`) : c'est l'unique règle d'identité, pas une
+				   recomposition à la main qui divergerait le jour où le
+				   séparateur change. */
+				q: keyOfQuestion(quiz.path, it.id),
 				module,
 				/* La TRANCHE sépare les familles confusables d'un même chapitre
 				   tant qu'aucun `topic` n'est déclaré par le contenu — même

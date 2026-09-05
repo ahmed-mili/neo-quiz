@@ -208,9 +208,11 @@ mécaniquement ; la preuve complémentaire, qui couvre les imports transitifs, e
 `QUESTION_ROLES`), pas le dossier seul.
 
 - **L'état n'est jamais persisté, il est DÉRIVÉ** d'un journal JSONL en ajout seul
-  (`<manifest.dir>/review-log.jsonl`). Changer un paramètre rejoue tout l'historique ;
-  rien à migrer, rien à désynchroniser. Le format se paie en propriétés gratuites :
-  tolérance à la troncature, deux fenêtres Obsidian qui écrivent sans se corrompre.
+  (`<racine>/.neo-quiz/review-log.jsonl`, partagé par les deux hôtes depuis la
+  tranche 2 — voir `src/review/paths.ts`). Changer un paramètre rejoue tout
+  l'historique ; rien à migrer, rien à désynchroniser. Le format se paie en
+  propriétés gratuites : tolérance à la troncature, deux fenêtres qui écrivent
+  sans se corrompre.
 - **Une seule règle d'identité** (`src/quiz-ids.ts`, `assignQuestionIds` /
   `idsForRawItems`), partagée par le scanner, l'éditeur et le moteur. Une clé qui diverge
   d'un lecteur à l'autre rend une question éternellement neuve : elle revient tous les
@@ -294,8 +296,10 @@ entier aurait décoloré 594 fragments des quiz d'Ahmed. Mesurer avant de tranch
   il était en dur à sept endroits avant. Deux valeurs ne le suivent JAMAIS, et les
   renommer « par cohérence » détruirait des données :
   `PLUGIN_ID = "quiz-blocks"` est le dossier de `.obsidian/plugins/`, où vivent les
-  réglages **et le journal de révision** ; `QUIZ_BLOCK_LANGUAGE = "quiz-blocks"` est
-  écrit dans **chaque note du vault**. C'est le rapport entre Obsidian et `.md`.
+  réglages (le journal de révision, lui, a déménagé depuis la tranche 2 vers
+  `<racine>/.neo-quiz/`, partagé avec l'app — voir plus haut) ;
+  `QUIZ_BLOCK_LANGUAGE = "quiz-blocks"` est écrit dans **chaque note du
+  vault**. C'est le rapport entre Obsidian et `.md`.
 
 - **`manifest.json` vit dans `src/assets/`, pas à la racine** (inhabituel pour un plugin
   Obsidian). La version **réelle** est celle de `src/assets/manifest.json`, bumpée par

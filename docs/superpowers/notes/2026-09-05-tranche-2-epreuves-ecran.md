@@ -32,7 +32,7 @@ Par ordre de priorité.
    Une clé préfixée écrite par l'un des deux hôtes rendrait ses révisions
    invisibles de l'autre, sans le moindre message.
 2. **La migration sur un vrai vault.** Ouvrir dans l'app un vault qui a déjà
-   un ancien journal (`.obsidian/quiz-blocks-results/review-log.jsonl` côté
+   un ancien journal (`.obsidian/plugins/quiz-blocks/review-log.jsonl` côté
    greffon, dans un vault où des quiz ont déjà été joués sous Obsidian).
    *Bon* : au démarrage, un compte de lignes migrées est annoncé (dans les
    logs de la fenêtre / la console de dev) ; `.neo-quiz/review-log.jsonl` est
@@ -148,7 +148,7 @@ Par ordre de priorité.
 
 ## Ce que la tranche a changé DANS le greffon, et qui mérite un coup d'œil
 
-- Le journal de révision a déménagé de `.obsidian/quiz-blocks-results/
+- Le journal de révision a déménagé de `.obsidian/plugins/quiz-blocks/
   review-log.jsonl` vers `.neo-quiz/review-log.jsonl`, à la racine du vault
   — visible au point 2 ci-dessus. C'est le changement le plus profond de la
   tranche pour un vault existant : la première ouverture après mise à jour

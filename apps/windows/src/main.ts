@@ -269,6 +269,22 @@ async function demarrer(): Promise<void> {
 		   matière déjà saisie lors d'une session précédente. */
 		await chargerExamDates();
 		const store = await creerJournalApp(currentHost(), scanner);
+		/* VIDER LE TAMPON D'ÉCRITURE AVANT DE PARTIR. `store` écrit en différé
+		   (500 ms, voir `log-file.ts`) ; sans ce vidage, fermer la fenêtre ou
+		   déclencher un `location.reload()` (changement de dossier, dans
+		   `choisirDossier` / `onFoldersChanged`) dans les 500 ms qui suivent une
+		   réponse perdrait cette réponse — le pendant exact du
+		   `this._reviewStore?.destroy()` de l'`onunload` du greffon
+		   (`apps/obsidian/plugin.ts`). `beforeunload` couvre LES DEUX sorties à
+		   la fois (fermeture ET rechargement) sans dépendance Tauri neuve ;
+		   `getCurrentWindow().onCloseRequested` ne couvrirait que la première.
+		   LIMITE HONNÊTE, à ne pas dépasser : `destroy()` déclenche un `flush()`
+		   asynchrone qu'un gestionnaire `beforeunload` ne peut pas attendre — on
+		   ne fait que LANCER l'écriture au plus tôt, jamais garantir qu'elle se
+		   termine avant que la page parte réellement. Écrire une version
+		   synchrone serait pire : elle bloquerait l'interface pour une garantie
+		   que le navigateur ne peut de toute façon pas tenir. */
+		window.addEventListener("beforeunload", () => store.destroy());
 		/* L'appariement des renommages que le surveillant n'a pas su nommer.
 		   BRANCHÉ CÔTÉ APPLICATION SEULEMENT : Obsidian émet un vrai `rename`, que
 		   le contrat transmet tel quel — le greffon n'a rien à deviner. */

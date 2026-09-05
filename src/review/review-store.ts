@@ -33,7 +33,12 @@ import { LOG_PREFIX } from "../branding";
    ferait diverger les deux historiques sans que personne ne le voie.
 ══════════════════════════════════════════════════════════ */
 
-const keyOfQuestion = (path: string, id: string): string => `${path}::${id}`;
+/** Exportée : c'est la SEULE composition de clé du dépôt (le côté app la
+    consommait en la recomposant à la main dans `catalogue.ts` — un même
+    résultat aujourd'hui, mais qui aurait divergé d'un lecteur à l'autre le
+    jour où le séparateur change). Le découpage inverse, lui, reste répété à
+    plusieurs endroits — chantier différé, non repris ici. */
+export const keyOfQuestion = (path: string, id: string): string => `${path}::${id}`;
 
 /** Le chemin d'une clé de question (`chemin::id` → `chemin`). */
 function cheminDeCle(q: string): string {

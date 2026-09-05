@@ -160,7 +160,11 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			tpl.content.querySelectorAll("img[src]").forEach(img => {
 				const src = img.getAttribute("src") || "";
 				if (/^(https?:|data:|app:|asset:|tauri:)/i.test(src)) return;
-				const resolved = ctx.host.links.resourceUrl(src);
+				/* `ctx.sourcePath` : la note CITANTE. Sans elle, un nom nu
+				   (« schema.png ») se résout au hasard des homonymes du vault —
+				   et, dans l'application, potentiellement dans un AUTRE dossier
+				   que celui de la note. */
+				const resolved = ctx.host.links.resourceUrl(src, ctx.sourcePath);
 				// Chemin non résoluble : laissé tel quel, la liste blanche tranchera.
 				if (resolved) img.setAttribute("src", resolved);
 			});

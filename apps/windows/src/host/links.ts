@@ -114,14 +114,14 @@ export function createWindowsLinks(racine: string, index: WindowsIndex): HostLin
 		   ne servira QUE si le dossier est dans la portée du protocole d'asset.
 		   C'est la seconde portée ouverte par `allow_folder` : sans elle, cette
 		   URL est parfaitement formée et ne charge rien, sans erreur. */
-		resourceUrl(target) {
+		resourceUrl(target, fromPath) {
 			try {
 				const brut = typeof target === "string" ? target : target?.path;
 				const chemin = normaliserLien(brut ?? "");
 				if (!chemin) return null;
 				// L'index fait AUTORITÉ : une URL vers un fichier qu'il ne connaît
 				// pas pointerait hors du dossier autorisé.
-				const f = index.get(chemin) ?? resolveDansIndex(index.all(), chemin, "");
+				const f = index.get(chemin) ?? resolveDansIndex(index.all(), chemin, fromPath || "");
 				if (!f) return null;
 				return convertFileSrc(cheminAbsolu(racine, f.path)) || null;
 			} catch (e) {

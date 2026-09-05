@@ -25,7 +25,10 @@ await withSrcModule("src/host/current.ts", ({ installHost }) => {
 		math: { ready: async () => {}, render: () => document.createElement("div"), flush: () => {} },
 		shell: { openExternal: async () => false, revealInHost: async () => false },
 		platform: { isMobile: false, isMacOS: false, uiLanguage: "en" },
-		paths: { resultsDir: ".results" }
+		// `resultsDirFor` (tâche 2) remplace la constante `resultsDir` : ce
+		// script n'exerce pas les résultats via `currentHost()`, seule la forme
+		// compte pour ne pas casser un appelant qui y toucherait un jour.
+		paths: { resultsDirFor: () => ".results", roots: () => [], rootOf: () => null, localPath: (p) => p, contractPath: (_r, p) => p }
 	};
 	installHost(fakeHost);
 });
@@ -974,7 +977,7 @@ await withSrcModule("src/engine/results-save.ts", ({ createResultsSaver }) => {
 	const r = makeReporter("Boucle d'apprentissage — payload de resultats : answered et total comptent le meme ensemble");
 
 	const ctx = {
-		host: { paths: { resultsDir: ".obsidian/quiz-blocks-results" } },
+		host: { paths: { resultsDirFor: () => ".obsidian/quiz-blocks-results" } },
 		quiz: [
 			{ role: "read", correctIndex: 0, prompt: "Support" },
 			{ role: "test", correctIndex: 0, prompt: "Question" }

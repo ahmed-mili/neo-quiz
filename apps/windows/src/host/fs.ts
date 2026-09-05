@@ -15,7 +15,10 @@
    qu'à la tranche 2, quand l'historique de révision ne se retrouverait plus.
 ══════════════════════════════════════════════════════════ */
 
-import { exists, mkdir, readDir, readTextFile, stat, watch, writeTextFile } from "@tauri-apps/plugin-fs";
+import {
+	exists, mkdir, readDir, readTextFile, remove as removeFichier,
+	rename as renameFichier, stat, watch, writeTextFile,
+} from "@tauri-apps/plugin-fs";
 import type { WatchEvent } from "@tauri-apps/plugin-fs";
 import { LOG_PREFIX } from "../../../../src/branding";
 import type { HostFile, HostFileEvent, HostFs, HostWatcher } from "../../../../src/host/types";
@@ -234,6 +237,38 @@ export function createWindowsFs(racine: string, index: WindowsIndex): HostFs {
 				if (!(await exists(abs(path)))) throw e;
 			}
 		},
+		/* `append: true` de plugin-fs, PAS une lecture suivie d'une
+		   réécriture : c'est l'atomicité de l'ajout qui protège le journal
+		   d'une fermeture au mauvais moment. */
+		async append(path, data) {
+			await writeTextFile(abs(path), data, { append: true });
+		},
+		async list(dir) {
+			try {
+				const entrees = await readDir(abs(dir));
+				return entrees
+					.filter(e => e.isFile)
+					.map(e => (dir ? `${normaliser(dir)}/${e.name}` : e.name));
+			} catch (e) {
+				// Dossier absent : le contrat demande `[]`, pas une exception.
+				return [];
+			}
+		},
+		async remove(path) {
+			try {
+				await removeFichier(abs(path));
+			} catch (e) {
+				if (await exists(abs(path))) throw e;
+			}
+		},
+		/* Pas d'écrasement : `rename` de plugin-fs remplace la destination en
+		   silence sur Windows, et la migration du journal s'appuie sur le
+		   contraire — écraser un `review-log.jsonl.migrated` déjà là
+		   détruirait la sauvegarde qu'on venait de créer. */
+		async rename(from, to) {
+			if (await exists(abs(to))) throw new Error(`${to} existe déjà`);
+			await renameFichier(abs(from), abs(to));
+		},
 		listMarkdown() {
 			return index.all().filter(f => f.extension === "md");
 		},
@@ -271,6 +306,7 @@ export function createWindowsFs(racine: string, index: WindowsIndex): HostFs {
  */
 export function createWindowsWatcher(racine: string, index: WindowsIndex): HostWatcher {
 	const abonnes = new Set<(ev: HostFileEvent) => void>();
+	const abonnesDossier = new Set<(ev: { from: string; to: string }) => void>();
 
 	/* L'INDEX D'ABORD, les abonnés ensuite. L'ordre compte : un abonné qui
 	   interroge l'index pendant sa notification doit y voir le changement,
@@ -323,7 +359,18 @@ export function createWindowsWatcher(racine: string, index: WindowsIndex): HostW
 				let mtime = 0;
 				try {
 					const info = await stat(ev.paths[1]);
-					if (info.isDirectory) return; // un dossier renommé : rien à indexer
+					if (info.isDirectory) {
+						/* Un DOSSIER renommé. Le journal de révision déplace ses
+						   clés par préfixe : une seule ligne suffit, et sans elle
+						   toutes les notes du dossier perdraient leur historique
+						   d'un coup. L'index, lui, n'a rien à faire ici — ses
+						   entrées sont des fichiers, et le surveillant les
+						   remontera une à une. */
+						for (const cb of [...abonnesDossier]) {
+							try { cb({ from: avant, to: apres }); } catch (e) { console.warn(LOG_PREFIX, "onRenameDir: rappel en erreur:", e); }
+						}
+						return;
+					}
 					mtime = info.mtime ? info.mtime.getTime() : 0;
 				} catch (e) {
 					// Déjà reparti : on retombe sur la réconciliation ci-dessous.
@@ -351,6 +398,13 @@ export function createWindowsWatcher(racine: string, index: WindowsIndex): HostW
 			return () => {
 				abonnes.delete(cb);
 			};
+		},
+		/* Quand le système n'envoie PAS `both`, aucun rappel n'est appelé :
+		   l'hôte n'invente pas d'appariement. C'est la tâche 9 qui traite ce
+		   cas, au niveau du catalogue et sur une PREUVE. */
+		onRenameDir(cb) {
+			abonnesDossier.add(cb);
+			return () => { abonnesDossier.delete(cb); };
 		},
 	};
 }

@@ -52,6 +52,23 @@ export interface HostFs {
 	exists(path: string): Promise<boolean>;
 	/** Crée le dossier ET ses parents. Ne rejette pas s'il existe déjà. */
 	mkdirs(path: string): Promise<void>;
+	/** Ajoute à la FIN du fichier, en le créant s'il n'existe pas.
+	    L'ajout seul est ce qui rend le journal de révision sûr : une coupure
+	    ne peut tronquer que le dernier petit lot, jamais réécrire tout
+	    l'historique. Un hôte qui l'émulerait par lecture + réécriture
+	    perdrait exactement la propriété pour laquelle il existe. */
+	append(path: string, data: string): Promise<void>;
+	/** Les FICHIERS d'un dossier (chemins du contrat), sans descendre dans
+	    les sous-dossiers. Un dossier absent rend `[]` — ce n'est pas une
+	    erreur : le journal cherche des fichiers de conflit qui, la plupart
+	    du temps, n'existent pas. */
+	list(dir: string): Promise<string[]>;
+	/** Supprime un fichier. Ne rejette pas s'il est déjà absent. */
+	remove(path: string): Promise<void>;
+	/** Renomme (ou déplace) un fichier. Rejette si la destination existe :
+	    la migration du journal s'en sert pour ne jamais écraser une
+	    sauvegarde précédente. */
+	rename(from: string, to: string): Promise<void>;
 	/** Index EN MÉMOIRE des fichiers `.md`, synchrone. Obsidian tient déjà le
 	    sien ; l'app le construit au démarrage et le maintient par le watcher.
 	    Synchrone parce que le scanner et le sanitizer l'appellent en plein
@@ -82,13 +99,30 @@ export interface HostLinks {
 	    L'implémentation Obsidian rendait autrefois `getResourcePath()` sans
 	    rien vérifier — donc jamais `null` pour une chaîne non vide, donc une
 	    URL de fichier inexistant, et un nom nu (« schema.png ») référencé
-	    depuis un sous-dossier restait cassé là où l'app l'affichait. */
-	resourceUrl(target: string | HostFile): string | null;
+	    depuis un sous-dossier restait cassé là où l'app l'affichait.
+
+	    `fromPath` est la note CITANTE. Il sert deux fois : sous Obsidian, il
+	    permet à `getFirstLinkpathDest` de résoudre un nom nu comme la note
+	    l'entend ; dans l'application, il BORNE la recherche à la racine de
+	    cette note — une image du dossier A ne doit jamais être servie à une
+	    note du dossier B, exactement comme un lien ne sort pas d'un vault. */
+	resourceUrl(target: string | HostFile, fromPath?: string): string | null;
 }
 
 export interface HostWatcher {
 	/** S'abonne aux changements du dossier. Renvoie le désabonnement. */
 	onChange(cb: (ev: HostFileEvent) => void): () => void;
+	/**
+	 * Renommages de DOSSIERS, séparés des fichiers, et c'est le journal de
+	 * révision qui l'exige : ses clés se déplacent par PRÉFIXE, donc un
+	 * dossier renommé déplace toutes ses notes en une seule ligne. Sans ce
+	 * canal, renommer « Cours » en « Cours B2 » orphelinerait d'un coup
+	 * l'historique de toutes ses questions — et rien ne le signalerait.
+	 *
+	 * Un hôte qui ne sait pas distinguer un dossier renommé n'appelle
+	 * jamais le rappel ; il ne DEVINE pas.
+	 */
+	onRenameDir(cb: (ev: { from: string; to: string }) => void): () => void;
 }
 
 export interface HostUi {
@@ -128,11 +162,53 @@ export interface HostPlatform {
 	uiLanguage: string;
 }
 
+/**
+ * Une RACINE : un dossier de quiz ouvert.
+ *
+ * Le greffon n'en a qu'une (le vault) ; l'application peut en ouvrir
+ * jusqu'à dix. C'est la seule différence que le code partagé doit
+ * connaître, et il la connaît par ce type — jamais par un test d'hôte.
+ */
+export interface HostRoot {
+	/** Identifiant, et PREMIER SEGMENT des chemins du contrat qui en
+	    relèvent. Chaîne VIDE quand l'hôte n'a qu'une racine : les chemins
+	    du greffon restent alors exactement ce qu'ils ont toujours été. */
+	id: string;
+	/** Nom affichable (le dossier choisi, le vault). */
+	name: string;
+	/** Le journal de révision de cette racine, en chemin du CONTRAT. */
+	reviewLog: string;
+	/** L'ANCIEN journal (celui que le greffon écrivait à côté de lui), en
+	    chemin du contrat, ou `null` quand l'hôte sait qu'il n'y en a pas.
+	    C'est l'hôte qui le sait : le greffon lit `manifest.dir`,
+	    l'application compose le chemin conventionnel. */
+	legacyReviewLog: string | null;
+}
+
 export interface HostPaths {
-	/** Dossier des exports de résultats, relatif à la racine.
-	    Côté Obsidian il vaut « .obsidian/quiz-blocks-results » et NE CHANGE
-	    PAS : les résultats déjà écrits doivent rester trouvables. */
-	resultsDir: string;
+	/**
+	 * Dossier des exports de résultats POUR une note donnée.
+	 * Une FONCTION et non une constante depuis que l'application ouvre
+	 * plusieurs dossiers : une constante enverrait les résultats d'un quiz
+	 * du dossier B dans le dossier A.
+	 * Côté Obsidian elle ignore son argument et rend toujours
+	 * « .obsidian/quiz-blocks-results », qui NE CHANGE PAS.
+	 */
+	resultsDirFor(sourcePath: string): string;
+	/** Les racines ouvertes, dans l'ordre d'affichage. */
+	roots(): HostRoot[];
+	/** La racine dont relève un chemin du contrat, ou `null`. */
+	rootOf(path: string): HostRoot | null;
+	/**
+	 * Le chemin RELATIF À SA RACINE — c'est-à-dire la CLÉ DU JOURNAL.
+	 * Elle doit être identique sous les deux hôtes pour la même note :
+	 * « Cours/reseau.md », jamais « Efrei/Cours/reseau.md » ni un chemin
+	 * absolu. Un hôte qui recomposerait cette clé ailleurs ferait diverger
+	 * les deux historiques sans que personne ne le voie.
+	 */
+	localPath(path: string): string;
+	/** L'inverse : le chemin du contrat d'une clé locale dans une racine. */
+	contractPath(rootId: string, localPath: string): string;
 }
 
 export interface Host {

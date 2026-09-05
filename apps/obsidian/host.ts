@@ -26,7 +26,8 @@
 
 import { Notice, Platform, setIcon, loadMathJax, renderMath, finishRenderMath } from "obsidian";
 import type { App, DataAdapter, EventRef, TAbstractFile, TFile, View, WorkspaceLeaf } from "obsidian";
-import type { Host, HostFile, HostFileEvent } from "../../src/host/types";
+import type { Host, HostFile, HostFileEvent, HostRoot } from "../../src/host/types";
+import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../src/review/paths";
 
 /** Shell Electron minimal (surface réellement consommée : shell.openPath). */
 interface ElectronShellLike {
@@ -70,7 +71,13 @@ function asTFile(f: TAbstractFile | null | undefined): TFile | null {
 	return typeof (f as TFile).extension === "string" ? (f as TFile) : null;
 }
 
-export function createObsidianHost(app: App): Host {
+/** Le second paramètre est réduit à ce dont l'hôte a besoin — le manifeste,
+    pour retrouver l'ANCIEN journal. Typer `Plugin` entier obligerait le jeu
+    de cas à en fabriquer un, alors qu'un objet littéral suffit. */
+export function createObsidianHost(
+	app: App,
+	plugin: { manifest: { dir?: string } },
+): Host {
 	const adapter = (): DataAdapter => app.vault.adapter;
 
 	/** Le `TFile` d'un chemin, ou null (dossier, absent). */
@@ -114,6 +121,32 @@ export function createObsidianHost(app: App): Host {
 			return await adapter().exists(path);
 		},
 		mkdirs,
+		async append(path, data) {
+			await adapter().append(path, data);
+		},
+		/* Les FICHIERS seulement : `ListedFiles` sépare déjà `files` et
+		   `folders`. Un dossier absent n'est pas une erreur — `list` jette
+		   dans ce cas, et le contrat demande `[]`. */
+		async list(dir) {
+			try {
+				return (await adapter().list(dir)).files;
+			} catch (e) {
+				return [];
+			}
+		},
+		/* Ne rejette pas sur un fichier déjà absent : deux fenêtres Obsidian
+		   peuvent absorber le même fichier de conflit, et le perdant n'a rien
+		   fait de mal. */
+		async remove(path) {
+			try {
+				await adapter().remove(path);
+			} catch (e) {
+				if (await adapter().exists(path)) throw e;
+			}
+		},
+		async rename(from, to) {
+			await adapter().rename(from, to);
+		},
 		listMarkdown() {
 			return app.vault.getMarkdownFiles().map(toHostFile);
 		},
@@ -182,10 +215,10 @@ export function createObsidianHost(app: App): Host {
 
 		   `null` et JAMAIS la chaîne vide : un `src=""` fait recharger la page
 		   courante comme image — requête inutile et image cassée. */
-		resourceUrl(target) {
+		resourceUrl(target, fromPath) {
 			try {
 				const f = typeof target === "string"
-					? resoudreTFile(target, "")
+					? resoudreTFile(target, fromPath || "")
 					: tfile(target.path);
 				return (f && app.vault.getResourcePath(f)) || null;
 			} catch (e) {
@@ -232,6 +265,18 @@ export function createObsidianHost(app: App): Host {
 				}
 				refs.length = 0;
 			};
+		},
+		/* `asTFile` rend null pour un DOSSIER : c'est exactement le cas que
+		   `onChange` écarte, et celui dont le journal a besoin. Obsidian émet
+		   le même évènement pour les deux, avec la même signature
+		   (`TAbstractFile`) — d'où ce second abonnement plutôt qu'un champ
+		   « isDir » que l'app ne saurait pas remplir honnêtement. */
+		onRenameDir(cb) {
+			const ref = app.vault.on("rename", (f: TAbstractFile, oldPath: string) => {
+				if (asTFile(f)) return;
+				try { cb({ from: oldPath, to: f.path }); } catch (e) { console.warn("[Quiz] onRenameDir: rappel en erreur:", e); }
+			});
+			return () => { try { app.vault.offref(ref); } catch (e) { /* best effort */ } };
 		},
 	};
 
@@ -367,11 +412,39 @@ export function createObsidianHost(app: App): Host {
 
 	/* ─── paths ─── */
 
+	/* UNE SEULE RACINE, d'identifiant VIDE : les chemins du greffon restent
+	   exactement ce qu'ils ont toujours été, et `localPath` est l'identité.
+	   C'est ce qui garantit que la clé du journal ne change pas d'un octet
+	   pour les notes déjà journalisées. */
+	const racine: HostRoot = {
+		id: "",
+		name: app.vault.getName(),
+		reviewLog: `${REVIEW_DIR}/${REVIEW_LOG_NAME}`,
+		/* L'ancien journal : `manifest.dir` tel que l'API le donne, jamais
+		   recomposé. Il est optionnel (PluginManifest.dir), et son absence
+		   signifie seulement qu'il n'y a rien à migrer. */
+		legacyReviewLog: plugin.manifest.dir ? `${plugin.manifest.dir}/${REVIEW_LOG_NAME}` : null,
+	};
+
 	const paths: Host["paths"] = {
-		/* NE CHANGE PAS. Les fichiers de résultats déjà écrits chez l'utilisateur
-		   vivent là ; le renommer les rendrait introuvables sans un mot. Même
-		   nature de piège que `PLUGIN_ID` et `QUIZ_BLOCK_LANGUAGE`. */
-		resultsDir: ".obsidian/quiz-blocks-results",
+		/* NE CHANGE PAS, et ignore son argument : les fichiers de résultats
+		   déjà écrits chez l'utilisateur vivent là. Même nature de piège que
+		   `PLUGIN_ID` et `QUIZ_BLOCK_LANGUAGE`. */
+		resultsDirFor() {
+			return ".obsidian/quiz-blocks-results";
+		},
+		roots() {
+			return [racine];
+		},
+		rootOf() {
+			return racine;
+		},
+		localPath(path) {
+			return path;
+		},
+		contractPath(_rootId, localPath) {
+			return localPath;
+		},
 	};
 
 	return { fs, links, watcher, ui, math, shell, platform, paths };

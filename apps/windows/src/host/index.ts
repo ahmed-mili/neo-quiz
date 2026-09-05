@@ -13,8 +13,9 @@
 ══════════════════════════════════════════════════════════ */
 
 import { openPath } from "@tauri-apps/plugin-opener";
-import { LOG_PREFIX } from "../../../../src/branding";
-import type { Host } from "../../../../src/host/types";
+import { LOG_PREFIX, PLUGIN_ID } from "../../../../src/branding";
+import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../../../src/review/paths";
+import type { Host, HostRoot } from "../../../../src/host/types";
 import { cheminAbsolu, createWindowsFs, createWindowsWatcher } from "./fs";
 import type { WindowsIndex } from "./fs";
 import { createWindowsLinks } from "./links";
@@ -66,6 +67,20 @@ export function createWindowsHost(racine: string, index: WindowsIndex, estVault 
 		},
 	};
 
+	const root: HostRoot = {
+		id: "",
+		name: racine.split(/[\\/]/).filter(Boolean).pop() || racine,
+		reviewLog: `${REVIEW_DIR}/${REVIEW_LOG_NAME}`,
+		/* L'ancien journal du GREFFON, à son emplacement conventionnel. Le
+		   chemin est composé depuis `PLUGIN_ID` (src/branding.ts), jamais
+		   écrit en dur : c'est le même identifiant que le dossier de
+		   `.obsidian/plugins/`, et il ne change pas.
+		   L'application le lit pour la même raison que le greffon : si elle
+		   est installée d'abord, elle démarrerait sinon sur un journal vide
+		   avec un semestre d'historique juste à côté. */
+		legacyReviewLog: `.obsidian/plugins/${PLUGIN_ID}/${REVIEW_LOG_NAME}`,
+	};
+
 	const paths: Host["paths"] = {
 		/* OÙ VONT LES RÉSULTATS — la réponse dépend du dossier, pas de l'hôte.
 		   Dans un VAULT, le greffon écrit déjà dans
@@ -75,9 +90,14 @@ export function createWindowsHost(racine: string, index: WindowsIndex, estVault 
 		   la spec §5 décrit pour le journal de révision.
 		   Hors d'un vault il n'y a pas de `.obsidian/`, et en créer un serait
 		   poser un dossier de configuration Obsidian fantôme dans un dossier
-		   que l'utilisateur n'a jamais ouvert avec Obsidian. C'est aussi le
-		   préfixe où la TRANCHE 2 mettra le journal — posé ici, pas migré. */
-		resultsDir: estVault ? ".obsidian/quiz-blocks-results" : ".neo-quiz/results",
+		   que l'utilisateur n'a jamais ouvert avec Obsidian. */
+		resultsDirFor() {
+			return estVault ? ".obsidian/quiz-blocks-results" : `${REVIEW_DIR}/results`;
+		},
+		roots() { return [root]; },
+		rootOf() { return root; },
+		localPath(path) { return path; },
+		contractPath(_rootId, localPath) { return localPath; },
 	};
 
 	return {

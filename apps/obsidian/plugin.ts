@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from "../../src/branding";
+import { PRODUCT_NAME, PLUGIN_ID } from "../../src/branding";
 import {
 	MarkdownRenderChild,
 	MarkdownView,
@@ -45,7 +45,6 @@ import { normalizeExternalRoot } from "../../src/dashboard/file-sources";
 import { t, setLanguage, langSetting } from "../../src/i18n";
 import type { LangSetting } from "../../src/i18n";
 
-const PLUGIN_ID = "quiz-blocks";
 const PLUGIN_NAME = PRODUCT_NAME;
 const QUIZ_BLOCK_LANGUAGE = "quiz-blocks";
 
@@ -1066,7 +1065,7 @@ export default class InteractiveQuizPlugin extends Plugin {
 		   rendu mathématique le lisent par `currentHost()`, qui jette si rien
 		   n'est installé. Une installation tardive ne produirait pas un rendu
 		   dégradé mais une exception au premier quiz. */
-		installHost(createObsidianHost(this.app));
+		installHost(createObsidianHost(this.app, this));
 
 		await this.loadSettings();
 		this.log = createLogger();

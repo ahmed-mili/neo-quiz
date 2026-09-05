@@ -137,6 +137,10 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 			links.resourceUrl("Nulle/part/inexistant.png"), null);
 		r.check("resourceUrl d'un chemin vide rend null, pas \"\"",
 			links.resourceUrl("   "), null);
+		/* `fromPath` BORNE la résolution : sans lui, un nom nu tombe sur
+		   l'homonyme le plus proche de la RACINE, pas de la note citante. */
+		r.check("resourceUrl passe la note citante à la résolution par nom",
+			links.resourceUrl("schema.png", "Cours/reseau.md"), "asset://localhost/D:/Quiz/Cours/Images/schema.png");
 	} finally {
 		if (precedent === undefined) delete globalThis.window;
 		else globalThis.window = precedent;

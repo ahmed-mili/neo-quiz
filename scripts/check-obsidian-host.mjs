@@ -12,11 +12,17 @@
 import { readFileSync } from "node:fs";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
-/** Fausse App : la surface EXACTE que l'hôte consomme, rien de plus. */
-function fausseApp(fichiers) {
+/** Fausse App : la surface EXACTE que l'hôte consomme, rien de plus.
+    `options.adapter` complète (et peut remplacer) l'adaptateur par défaut —
+    c'est ce qui permet au jeu de cas des racines de brancher ses propres
+    `append`/`list`/`remove`/`rename` sans dupliquer tout le mock. */
+function fausseApp(fichiers, options = {}) {
 	const parChemin = new Map(fichiers.map(f => [f.path, f]));
 	return {
 		vault: {
+			// Nom de la racine (tâche 2, `paths.roots()[0].name`) : arbitraire, le
+			// contrat ne le compare à rien de précis, seul son existence compte.
+			getName: () => "MonVault",
 			getMarkdownFiles: () => fichiers.filter(f => f.extension === "md"),
 			getFiles: () => fichiers,
 			getAbstractFileByPath: (p) => parChemin.get(p) ?? null,
@@ -29,6 +35,7 @@ function fausseApp(fichiers) {
 				exists: async (p) => parChemin.has(p),
 				mkdir: async () => undefined,
 				getResourcePath: (p) => "app://vault/" + p,
+				...(options.adapter || {}),
 			},
 			on: () => ({}),
 			offref: () => undefined,
@@ -55,10 +62,9 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		fichier("Images/schema.png", "png"),
 		fichier("Autre/schema.png", "png"),
 	];
-	/* Un seul paramètre : l'hôte ne dépend PAS du greffon. Le `plugin` du
-	   brief a été retiré (décision R2) — aucun sous-contrat n'en a besoin, et
-	   un paramètre inutilisé donnerait à croire le contraire. */
-	const host = createObsidianHost(fausseApp(fichiers));
+	/* Sans manifeste ici : ce groupe n'éprouve ni `legacyReviewLog` ni les
+	   autres racines, réservés au groupe « fichiers et racines » plus bas. */
+	const host = createObsidianHost(fausseApp(fichiers), { manifest: {} });
 
 	/* HostFile est PLAT et sérialisable : un TFile ne doit jamais fuir dans le
 	   code partagé, sinon Windows devra fabriquer un faux TFile. */
@@ -117,14 +123,15 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	r.check("read passe par le disque", await host.fs.read("Cours/ch1.md"), "disque:Cours/ch1.md");
 
 	/* Le dossier de résultats NE CHANGE PAS : les fichiers déjà écrits par les
-	   versions précédentes doivent rester trouvables. */
-	r.check("resultsDir reste celui du greffon", host.paths.resultsDir, ".obsidian/quiz-blocks-results");
+	   versions précédentes doivent rester trouvables. `resultsDirFor` IGNORE
+	   son argument côté Obsidian. */
+	r.check("resultsDir reste celui du greffon", host.paths.resultsDirFor("n'importe/quoi.md"), ".obsidian/quiz-blocks-results");
 
 	// Le contrat est complet : une méthode manquante rendrait un pan inerte.
 	const attendu = {
-		fs: ["read", "readCached", "write", "exists", "mkdirs", "listMarkdown", "findByName", "getFile"],
+		fs: ["read", "readCached", "write", "exists", "mkdirs", "append", "list", "remove", "rename", "listMarkdown", "findByName", "getFile"],
 		links: ["resolve", "resourceUrl"],
-		watcher: ["onChange"],
+		watcher: ["onChange", "onRenameDir"],
 		ui: ["notice", "setIcon"],
 		math: ["ready", "render", "flush"],
 		shell: ["openExternal", "revealInHost"],
@@ -144,6 +151,68 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	const ligne = cards.split("\n").find(l => l.includes("data:") && l.includes("app:"));
 	r.check("les préfixes déjà résolus couvrent les deux hôtes",
 		["https?:", "data:", "app:", "asset:", "tauri:"].filter(p => !ligne?.includes(p)), []);
+
+	r.done();
+});
+
+await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
+	const r = makeReporter("Hôte Obsidian — fichiers et racines");
+
+	const ecrits = [];
+	const supprimes = [];
+	const renommes = [];
+	let existants = new Set(["journal.jsonl"]);
+	const app = fausseApp([], {
+		adapter: {
+			append: async (p, d) => { ecrits.push([p, d]); },
+			list: async (dir) => {
+				if (dir === "absent") throw new Error("ENOENT");
+				return { files: ["dir/a.jsonl", "dir/b.jsonl"], folders: ["dir/sous"] };
+			},
+			exists: async (p) => existants.has(p),
+			remove: async (p) => { supprimes.push(p); existants.delete(p); },
+			rename: async (a, b) => { renommes.push([a, b]); },
+		},
+	});
+	const host = createObsidianHost(app, { manifest: { dir: ".obsidian/plugins/quiz-blocks" } });
+
+	await host.fs.append("j.jsonl", "{}\n");
+	r.check("append passe la donnée telle quelle", ecrits, [["j.jsonl", "{}\n"]]);
+
+	/* Les FICHIERS seulement : rendre aussi les dossiers ferait tenter
+	   l'absorption d'un dossier comme s'il était un journal de conflit. */
+	r.check("list ne rend que les fichiers", await host.fs.list("dir"), ["dir/a.jsonl", "dir/b.jsonl"]);
+	/* Un dossier absent est le cas NORMAL (aucun conflit Syncthing) : une
+	   exception ici ferait échouer tout le chargement du journal. */
+	r.check("list d'un dossier absent rend []", await host.fs.list("absent"), []);
+
+	/* Deux fenêtres Obsidian peuvent absorber le même fichier de conflit :
+	   le perdant ne doit pas lever. */
+	await host.fs.remove("deja-parti.jsonl");
+	r.check("remove d'un fichier absent ne lève pas", supprimes, ["deja-parti.jsonl"]);
+
+	await host.fs.rename("a", "b");
+	r.check("rename transmet les deux chemins", renommes, [["a", "b"]]);
+
+	/* UNE racine, d'identifiant VIDE, et `localPath` est l'identité : c'est
+	   ce qui garantit qu'une clé de journal déjà écrite ne change pas. */
+	const roots = host.paths.roots();
+	r.check("une seule racine", roots.length, 1);
+	r.check("son identifiant est vide", roots[0].id, "");
+	r.check("le journal est à sa place fixe", roots[0].reviewLog, ".neo-quiz/review-log.jsonl");
+	r.check("l'ancien journal vient du manifeste",
+		roots[0].legacyReviewLog, ".obsidian/plugins/quiz-blocks/review-log.jsonl");
+	r.check("localPath ne touche à rien", host.paths.localPath("Cours/reseau.md"), "Cours/reseau.md");
+	r.check("contractPath ne touche à rien", host.paths.contractPath("", "Cours/reseau.md"), "Cours/reseau.md");
+	/* `resultsDirFor` IGNORE son argument côté Obsidian, et doit rendre la
+	   valeur historique : la changer rendrait introuvables les exports déjà
+	   écrits chez l'utilisateur. */
+	r.check("resultsDirFor est constant", host.paths.resultsDirFor("n'importe/quoi.md"), ".obsidian/quiz-blocks-results");
+
+	/* Sans manifeste, il n'y a rien à migrer — et surtout pas un chemin
+	   inventé, qui pointerait à côté et lirait le journal de personne. */
+	const sansManifeste = createObsidianHost(app, { manifest: {} });
+	r.check("sans manifeste, aucun ancien journal", sansManifeste.paths.roots()[0].legacyReviewLog, null);
 
 	r.done();
 });

@@ -25,3 +25,11 @@ export const PRODUCT_NAME = "Neo Quiz";
 
 /** Préfixe des messages de console. Dérivé du nom, jamais recopié. */
 export const LOG_PREFIX = `[${PRODUCT_NAME}]`;
+
+/** Le dossier de `.obsidian/plugins/`, où vivent les réglages ET le journal
+    de révision de l'utilisateur (ancien emplacement, avant migration vers
+    `<racine>/.neo-quiz/`) — l'application le lit pour retrouver cet ancien
+    journal. NE CHANGE JAMAIS, et ne suit PAS `PRODUCT_NAME` : c'était une
+    constante locale de `apps/obsidian/plugin.ts`, montée ici pour que
+    l'application compose le même chemin sans le recopier en dur. */
+export const PLUGIN_ID = "quiz-blocks";

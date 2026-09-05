@@ -62,11 +62,10 @@ export interface ResultsSaverHandlers {
 }
 
 export function createResultsSaver(ctx: EngineCtx): ResultsSaverHandlers {
-	/* Le dossier vient de l'HÔTE : sous Obsidian il vaut toujours
-	   « .obsidian/quiz-blocks-results » et NE CHANGE PAS (les résultats déjà
-	   écrits doivent rester trouvables) ; un dossier de quiz nu n'a pas de
-	   `.obsidian/`. */
-	const RESULTS_DIR = ctx.host.paths.resultsDir;
+	/* Le dossier vient de l'HÔTE, et il dépend de la NOTE : l'application peut
+	   avoir plusieurs dossiers ouverts, et les résultats d'un quiz doivent
+	   rester dans le sien. Sous Obsidian la valeur est constante. */
+	const RESULTS_DIR = ctx.host.paths.resultsDirFor(ctx.sourcePath);
 
 	function normalizeSpace(value: unknown): string {
 		return String(value ?? "").replace(/\s+/g, " ").trim();

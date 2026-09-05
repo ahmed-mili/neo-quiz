@@ -80,12 +80,13 @@ Par ordre de priorité.
 5. **« Générer » est visiblement désactivé** dans le rail (classe
    `qbd-nav-item--disabled`), avec une infobulle native au survol (attribut
    `title`, texte « Bientôt disponible » / « Coming soon » selon la langue). Cliquer
-   dessus ne doit RIEN faire. Séparément, sur l'accueil, le bouton
-   « Generate a quiz » (CTA d'en-tête ou d'onboarding) doit lui aussi ne mener
-   nulle part au clic — silencieusement, sans page vide ni erreur console : la
-   coquille refuse elle-même la navigation vers « ai » (`naviguer()` dans
-   `dashboard-shell.ts`), sans passer par `canOpen` qui ne gouverne que le
-   rail.
+   dessus ne doit RIEN faire. Le bouton « Générer un quiz » de la page d'accueil
+   (en-tête et écran d'onboarding sur dossier vide) est ABSENT, masqué par la
+   condition `ctx.canOpen("ai")`.
+   *Bon* : rail grisé avec infobulle, bouton d'accueil absent du rendu, aucune
+   action au clic sur le rail.
+   *Cassé* : un bouton d'accueil visible mais inerte, ou une entrée de rail
+   cliquable qui mène à une page vide.
 
 6. **Les cartes n'ont pas de « ⋯ »**, il n'y a ni « + Nouveau dossier » ni
    sélecteur « Recent ▾ » au-dessus de la liste des quiz : c'est ATTENDU, ces

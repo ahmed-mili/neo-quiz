@@ -42,6 +42,7 @@ const LIBERES = [
 	"src/dashboard/module-map-note.ts",
 	"src/dashboard/folder-archive.ts",
 	"src/dashboard/module-icons.ts",
+	"src/dashboard/ui-select.ts",
 ];
 
 /** Retire les commentaires : une extension CITÉE en commentaire (par exemple

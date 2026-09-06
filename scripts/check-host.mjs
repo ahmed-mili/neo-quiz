@@ -49,7 +49,6 @@ const RESTANTS = [
 	"src/dashboard/quiz-menu.ts",
 	"src/dashboard/quiz-open.ts",
 	"src/dashboard/share.ts",
-	"src/dashboard/ui-select.ts",
 	"src/dashboard/usage-modal.ts",
 	"src/dashboard/voice-input.ts",
 	"src/dashboard/voice-install.ts",

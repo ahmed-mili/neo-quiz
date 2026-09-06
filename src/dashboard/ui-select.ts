@@ -1,5 +1,5 @@
-import { setIcon } from "obsidian";
-import type { TFile } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
 import { createEffortTrackFx } from "./effort-canvas";
 import type { EffortTrackFx } from "./effort-canvas";
@@ -87,11 +87,11 @@ export function createSelect<T extends SelectOption = SelectOption>(parent: HTML
 	let disabled = !!opts.disabled;
 	const placeholder = opts.placeholder || t("dashboard.select.placeholder");
 
-	const trigger = parent.createEl("button", { cls: "qbd-select" });
+	const trigger = ajouter(parent, "button", "qbd-select");
 	trigger.type = "button";
-	const labelEl = trigger.createSpan({ cls: "qbd-select-label" });
-	const chevron = trigger.createSpan({ cls: "qbd-select-chevron" });
-	setIcon(chevron, "chevron-down");
+	const labelEl = ajouter(trigger, "span", "qbd-select-label");
+	const chevron = ajouter(trigger, "span", "qbd-select-chevron");
+	currentHost().ui.setIcon(chevron, "chevron-down");
 
 	let menuEl: HTMLDivElement | null = null;
 
@@ -102,7 +102,7 @@ export function createSelect<T extends SelectOption = SelectOption>(parent: HTML
 	function refreshLabel(): void {
 		const cur = currentOption();
 		if (opts.renderTrigger) {
-			labelEl.empty();
+			labelEl.replaceChildren();
 			opts.renderTrigger(labelEl, cur || null);
 		} else {
 			labelEl.textContent = cur ? cur.label : (value || placeholder);
@@ -145,21 +145,19 @@ export function createSelect<T extends SelectOption = SelectOption>(parent: HTML
 	   pendant que le menu est ouvert (ex. version d'un CLI re-détectée). */
 	function renderMenuOptions(): void {
 		if (!menuEl) return;
-		menuEl.empty();
+		menuEl.replaceChildren();
 		for (const o of options) {
-			const optBtn = menuEl.createEl("button", {
-				cls: "qbd-select-option" + (o.value === value ? " is-active" : "")
-			});
+			const optBtn = ajouter(menuEl, "button", "qbd-select-option" + (o.value === value ? " is-active" : ""));
 			optBtn.type = "button";
 			optBtn.setAttribute("role", "option");
 			optBtn.setAttribute("aria-selected", o.value === value ? "true" : "false");
-			const check = optBtn.createSpan({ cls: "qbd-select-check" });
-			if (o.value === value) setIcon(check, "check");
+			const check = ajouter(optBtn, "span", "qbd-select-check");
+			if (o.value === value) currentHost().ui.setIcon(check, "check");
 			if (opts.renderOption) {
 				opts.renderOption(optBtn, o);
 			} else {
-				optBtn.createSpan({ cls: "qbd-select-option-label", text: o.label });
-				if (o.hint) optBtn.createSpan({ cls: "qbd-select-option-hint", text: o.hint });
+				ajouter(optBtn, "span", "qbd-select-option-label", o.label);
+				if (o.hint) ajouter(optBtn, "span", "qbd-select-option-hint", o.hint);
 			}
 			optBtn.addEventListener("click", () => {
 				const changed = o.value !== value;
@@ -177,7 +175,7 @@ export function createSelect<T extends SelectOption = SelectOption>(parent: HTML
 		if (opts.onOpen) opts.onOpen();
 
 		const rect = trigger.getBoundingClientRect();
-		menuEl = document.body.createDiv({ cls: "qbd-select-menu" });
+		menuEl = ajouter(document.body, "div", "qbd-select-menu");
 		menuEl.setAttribute("role", "listbox");
 		// Hauteur max bornée par la place du meilleur côté. Un select bas
 		// sur écran mobile a peu de place en dessous → on ouvrira vers le
@@ -260,30 +258,28 @@ export function openActionMenu(anchorEl: HTMLElement, items: ActionMenuItem[]): 
 	closeAllSelects();
 
 	const rect = anchorEl.getBoundingClientRect();
-	const menuEl = document.body.createDiv({ cls: "qbd-select-menu qbd-action-menu" });
+	const menuEl = ajouter(document.body, "div", "qbd-select-menu qbd-action-menu");
 	menuEl.setAttribute("role", "menu");
 
 	for (const item of items) {
-		const btn = menuEl.createEl("button", {
-			cls: "qbd-select-option"
-				+ (item.disabled ? " qbd-select-option--disabled" : "")
-				+ (item.danger ? " qbd-select-option--danger" : "")
-		});
+		const btn = ajouter(menuEl, "button", "qbd-select-option"
+			+ (item.disabled ? " qbd-select-option--disabled" : "")
+			+ (item.danger ? " qbd-select-option--danger" : ""));
 		btn.type = "button";
 		btn.setAttribute("role", "menuitem");
 		if (item.disabled) btn.disabled = true;
-		const iconEl = btn.createSpan({ cls: "qbd-select-check qbd-action-menu-icon" });
-		if (item.icon) setIcon(iconEl, item.icon);
+		const iconEl = ajouter(btn, "span", "qbd-select-check qbd-action-menu-icon");
+		if (item.icon) currentHost().ui.setIcon(iconEl, item.icon);
 		// Ligne simple façon claude.ai (icône + label + accessoire à droite).
 		// `sub` reste supporté (2 lignes) pour compat, mais n'est plus utilisé ici.
 		if (item.sub) {
-			const body = btn.createDiv({ cls: "qbd-action-menu-body" });
-			body.createSpan({ cls: "qbd-select-option-label", text: item.label });
-			body.createSpan({ cls: "qbd-action-menu-sub", text: item.sub });
+			const body = ajouter(btn, "div", "qbd-action-menu-body");
+			ajouter(body, "span", "qbd-select-option-label", item.label);
+			ajouter(body, "span", "qbd-action-menu-sub", item.sub);
 		} else {
-			btn.createSpan({ cls: "qbd-select-option-label", text: item.label });
+			ajouter(btn, "span", "qbd-select-option-label", item.label);
 		}
-		if (item.hint) btn.createSpan({ cls: "qbd-action-menu-hint", text: item.hint });
+		if (item.hint) ajouter(btn, "span", "qbd-action-menu-hint", item.hint);
 		btn.addEventListener("click", () => {
 			closeMenu();
 			if (!item.disabled && item.onClick) item.onClick();
@@ -387,7 +383,7 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 	if (toggleCloseForAnchor(anchorEl)) return { close() {} };
 	closeAllSelects();
 
-	const menuEl = document.body.createDiv({ cls: "qbd-select-menu qbd-model-menu" });
+	const menuEl = ajouter(document.body, "div", "qbd-select-menu qbd-model-menu");
 	menuEl.setAttribute("role", "menu");
 	let effortFlyout: HTMLDivElement | null = null;
 	let effortCloseTimer = 0;
@@ -421,22 +417,22 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 	// modèles »). Ferme le menu et notifie onPickModel au clic.
 	function appendModelOption(parent: HTMLElement, m: ModelOption): HTMLButtonElement {
 		const active = m.value === opts.currentModel;
-		const btn = parent.createEl("button", { cls: "qbd-select-option" + (active ? " is-active" : "") });
+		const btn = ajouter(parent, "button", "qbd-select-option" + (active ? " is-active" : ""));
 		btn.type = "button";
 		btn.setAttribute("role", "menuitemradio");
 		btn.setAttribute("aria-checked", active ? "true" : "false");
-		const check = btn.createSpan({ cls: "qbd-select-check" });
-		if (active) setIcon(check, "check");
-		const body = btn.createDiv({ cls: "qbd-model-option-body" });
-		const top = body.createDiv({ cls: "qbd-model-option-top" });
-		top.createSpan({ cls: "qbd-select-option-label", text: m.label });
-		if (m.badge) top.createSpan({ cls: "qbd-model-option-badge", text: m.badge });
-		if (m.desc) body.createSpan({ cls: "qbd-model-option-desc", text: m.desc });
+		const check = ajouter(btn, "span", "qbd-select-check");
+		if (active) currentHost().ui.setIcon(check, "check");
+		const body = ajouter(btn, "div", "qbd-model-option-body");
+		const top = ajouter(body, "div", "qbd-model-option-top");
+		ajouter(top, "span", "qbd-select-option-label", m.label);
+		if (m.badge) ajouter(top, "span", "qbd-model-option-badge", m.badge);
+		if (m.desc) ajouter(body, "span", "qbd-model-option-desc", m.desc);
 		// Icône à droite (Ollama : nuage = cloud, téléchargement = local non
 		// installé, rien = local installé), calée à droite comme l'app Ollama.
 		if (m.icon) {
-			const ic = btn.createSpan({ cls: "qbd-model-option-icon" });
-			setIcon(ic, m.icon);
+			const ic = ajouter(btn, "span", "qbd-model-option-icon");
+			currentHost().ui.setIcon(ic, m.icon);
 		}
 		btn.addEventListener("click", () => {
 			const changed = m.value !== opts.currentModel;
@@ -448,27 +444,26 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 	}
 
 	function renderMain(): void {
-		menuEl.empty();
+		menuEl.replaceChildren();
 
 		// Recherche « Find model… » + liste scrollable (façon app Ollama) quand
 		// opts.searchable : la liste défile en interne (hauteur ~7 lignes),
 		// l'effort reste fixe en dessous. Sinon, liste plate directe.
 		if (opts.searchable) {
-			menuEl.addClass("qbd-model-menu--searchable");
-			const searchWrap = menuEl.createDiv({ cls: "qbd-model-menu-search" });
-			const searchInput = searchWrap.createEl("input", {
-				cls: "qbd-model-menu-search-input",
-				// L'anglais reprend la formule exacte de l'app Ollama (référence).
-				attr: { type: "text", placeholder: t("dashboard.select.findModel"), spellcheck: "false" }
-			});
-			const listEl = menuEl.createDiv({ cls: "qbd-model-menu-list" });
+			menuEl.classList.add("qbd-model-menu--searchable");
+			const searchWrap = ajouter(menuEl, "div", "qbd-model-menu-search");
+			// L'anglais reprend la formule exacte de l'app Ollama (référence).
+			const searchInput = ajouter(searchWrap, "input", "qbd-model-menu-search-input");
+			searchInput.placeholder = t("dashboard.select.findModel");
+			searchInput.spellcheck = false;
+			const listEl = ajouter(menuEl, "div", "qbd-model-menu-list");
 			const paint = (filter: string) => {
-				listEl.empty();
+				listEl.replaceChildren();
 				const f = (filter || "").trim().toLowerCase();
 				const shown = opts.models.filter(m => !f
 					|| (m.label || "").toLowerCase().includes(f)
 					|| (m.value || "").toLowerCase().includes(f));
-				if (!shown.length) listEl.createDiv({ cls: "qbd-model-menu-empty", text: t("dashboard.select.noModel") });
+				if (!shown.length) ajouter(listEl, "div", "qbd-model-menu-empty", t("dashboard.select.noModel"));
 				else for (const m of shown) appendModelOption(listEl, m);
 			};
 			paint("");
@@ -489,16 +484,16 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		// masque la ligne pour un modèle sans capability « thinking »). Au
 		// survol, ouvre un flyout latéral à droite (façon claude.ai), sans clic.
 		if (opts.efforts && opts.efforts.length) {
-			menuEl.createDiv({ cls: "qbd-model-menu-sep" });
+			ajouter(menuEl, "div", "qbd-model-menu-sep");
 
-			const effortRow = menuEl.createEl("button", { cls: "qbd-select-option qbd-model-menu-row qbd-effort-row" });
+			const effortRow = ajouter(menuEl, "button", "qbd-select-option qbd-model-menu-row qbd-effort-row");
 			effortRow.type = "button";
 			effortRow.setAttribute("role", "menuitem");
-			effortRow.createSpan({ cls: "qbd-select-check" });
-			effortRow.createSpan({ cls: "qbd-select-option-label", text: t("dashboard.select.effort") });
-			effortRow.createSpan({ cls: "qbd-model-menu-row-value", text: effortLabelOf(opts.currentEffort) });
-			const effortChev = effortRow.createSpan({ cls: "qbd-model-menu-row-chevron" });
-			setIcon(effortChev, "chevron-right");
+			ajouter(effortRow, "span", "qbd-select-check");
+			ajouter(effortRow, "span", "qbd-select-option-label", t("dashboard.select.effort"));
+			ajouter(effortRow, "span", "qbd-model-menu-row-value", effortLabelOf(opts.currentEffort));
+			const effortChev = ajouter(effortRow, "span", "qbd-model-menu-row-chevron");
+			currentHost().ui.setIcon(effortChev, "chevron-right");
 
 			effortRow.addEventListener("mouseenter", () => { cancelMoreClose(); closeMoreFlyout(); cancelEffortClose(); openEffortFlyout(effortRow); });
 			effortRow.addEventListener("mouseleave", scheduleEffortClose);
@@ -507,13 +502,13 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		// Ligne « Plus de modèles » : flyout latéral avec le reste des modèles
 		// (façon claude.ai). Rendue seulement si opts.moreModels est non vide.
 		if (opts.moreModels && opts.moreModels.length) {
-			const moreRow = menuEl.createEl("button", { cls: "qbd-select-option qbd-model-menu-row qbd-more-row" });
+			const moreRow = ajouter(menuEl, "button", "qbd-select-option qbd-model-menu-row qbd-more-row");
 			moreRow.type = "button";
 			moreRow.setAttribute("role", "menuitem");
-			moreRow.createSpan({ cls: "qbd-select-check" });
-			moreRow.createSpan({ cls: "qbd-select-option-label", text: t("dashboard.select.moreModels") });
-			const moreChev = moreRow.createSpan({ cls: "qbd-model-menu-row-chevron" });
-			setIcon(moreChev, "chevron-right");
+			ajouter(moreRow, "span", "qbd-select-check");
+			ajouter(moreRow, "span", "qbd-select-option-label", t("dashboard.select.moreModels"));
+			const moreChev = ajouter(moreRow, "span", "qbd-model-menu-row-chevron");
+			currentHost().ui.setIcon(moreChev, "chevron-right");
 
 			moreRow.addEventListener("mouseenter", () => { cancelEffortClose(); closeEffortFlyout(); cancelMoreClose(); openMoreFlyout(moreRow); });
 			moreRow.addEventListener("mouseleave", scheduleMoreClose);
@@ -544,31 +539,26 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 	function openEffortFlyout(row: HTMLElement): void {
 		if (effortFlyout) return;
 		row.classList.add("is-open");
-		const fly = document.body.createDiv({ cls: "qbd-select-menu qbd-effort-flyout" });
+		const fly = ajouter(document.body, "div", "qbd-select-menu qbd-effort-flyout");
 		effortFlyout = fly;
 		fly.setAttribute("role", "menu");
-		fly.createDiv({
-			cls: "qbd-effort-flyout-head",
-			text: t("dashboard.select.effortFlyoutHelp")
-		});
+		ajouter(fly, "div", "qbd-effort-flyout-head", t("dashboard.select.effortFlyoutHelp"));
 		for (const ef of (opts.efforts || [])) {
 			const active = ef.value === opts.currentEffort;
 			// Classe par niveau (--low/--medium/…/--ultracode) : porte la couleur
 			// du picker /effort de Claude Code, révélée seulement à l'actif/survol.
-			const b = fly.createEl("button", {
-				cls: "qbd-select-option qbd-effort-option qbd-effort-option--" + ef.value
-					+ (active ? " is-active" : "")
-			});
+			const b = ajouter(fly, "button", "qbd-select-option qbd-effort-option qbd-effort-option--" + ef.value
+				+ (active ? " is-active" : ""));
 			b.type = "button";
 			b.setAttribute("role", "menuitemradio");
 			b.setAttribute("aria-checked", active ? "true" : "false");
-			const check = b.createSpan({ cls: "qbd-select-check" });
-			if (active) setIcon(check, "check");
-			const body = b.createDiv({ cls: "qbd-effort-option-body" });
-			const top = body.createDiv({ cls: "qbd-effort-option-top" });
-			top.createSpan({ cls: "qbd-select-option-label", text: ef.label });
-			if (ef.isDefault) top.createSpan({ cls: "qbd-effort-badge", text: t("dashboard.select.effortDefault") });
-			if (ef.sub) body.createSpan({ cls: "qbd-effort-option-sub", text: ef.sub });
+			const check = ajouter(b, "span", "qbd-select-check");
+			if (active) currentHost().ui.setIcon(check, "check");
+			const body = ajouter(b, "div", "qbd-effort-option-body");
+			const top = ajouter(body, "div", "qbd-effort-option-top");
+			ajouter(top, "span", "qbd-select-option-label", ef.label);
+			if (ef.isDefault) ajouter(top, "span", "qbd-effort-badge", t("dashboard.select.effortDefault"));
+			if (ef.sub) ajouter(body, "span", "qbd-effort-option-sub", ef.sub);
 			b.addEventListener("click", () => {
 				const changed = ef.value !== opts.currentEffort;
 				opts.currentEffort = ef.value;
@@ -621,7 +611,7 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 	function openMoreFlyout(row: HTMLElement): void {
 		if (moreFlyout) return;
 		row.classList.add("is-open");
-		const fly = document.body.createDiv({ cls: "qbd-select-menu qbd-more-flyout" });
+		const fly = ajouter(document.body, "div", "qbd-select-menu qbd-more-flyout");
 		moreFlyout = fly;
 		fly.setAttribute("role", "menu");
 		for (const m of (opts.moreModels || [])) appendModelOption(fly, m);
@@ -737,9 +727,7 @@ export function openEffortSlider(anchorEl: HTMLElement, opts: OpenEffortSliderOp
 	let idx = Math.max(0, efforts.findIndex(e => e.value === opts.currentEffort));
 	let committed = efforts[idx].value;
 
-	const menuEl = document.body.createDiv({
-		cls: "qbd-select-menu qbd-effort-pop qbd-effort-pop--" + variant
-	});
+	const menuEl = ajouter(document.body, "div", "qbd-select-menu qbd-effort-pop qbd-effort-pop--" + variant);
 	menuEl.setAttribute("role", "menu");
 
 	// ── Tooltips au survol (aide, éclair, piste) ──
@@ -752,7 +740,7 @@ export function openEffortSlider(anchorEl: HTMLElement, opts: OpenEffortSliderOp
 		const hide = () => { if (tip) { tip.remove(); tips.delete(tip); tip = null; } };
 		anchor.addEventListener("mouseenter", () => {
 			if (tip || (shouldShow && !shouldShow())) return;
-			tip = document.body.createDiv({ cls: "qbd-hover-tip" });
+			tip = ajouter(document.body, "div", "qbd-hover-tip");
 			tips.add(tip);
 			build(tip);
 			const r = anchor.getBoundingClientRect();
@@ -774,60 +762,55 @@ export function openEffortSlider(anchorEl: HTMLElement, opts: OpenEffortSliderOp
 	// d'en-tête réduite à l'éclair Fast, sans titre « Advanced ») ──
 	let valueEl: HTMLSpanElement | null = null;
 	if (variant === "claude") {
-		const head = menuEl.createDiv({ cls: "qbd-effort-pop-head" });
-		const title = head.createSpan({ cls: "qbd-effort-pop-title" });
-		title.createSpan({ text: t("dashboard.select.effort") }); // gap 5px via CSS (handoff)
-		valueEl = title.createSpan({ cls: "qbd-effort-pop-value" });
+		const head = ajouter(menuEl, "div", "qbd-effort-pop-head");
+		const title = ajouter(head, "span", "qbd-effort-pop-title");
+		ajouter(title, "span", undefined, t("dashboard.select.effort")); // gap 5px via CSS (handoff)
+		valueEl = ajouter(title, "span", "qbd-effort-pop-value");
 		// Aide « ? » : cercle custom du handoff (15×15, bordure #56565c),
 		// PAS une icône Lucide — imposé par la référence validée.
-		const help = head.createSpan({ cls: "qbd-effort-pop-icon qbd-effort-pop-help" });
+		const help = ajouter(head, "span", "qbd-effort-pop-icon qbd-effort-pop-help");
 		help.setAttribute("aria-hidden", "true");
-		help.setText("?");
+		help.textContent = "?";
 		attachTip(help, (tip) => {
-			tip.addClass("qbd-hover-tip--card");
-			tip.createDiv({ cls: "qbd-hover-tip-title", text: t("dashboard.select.effort") });
-			tip.createDiv({
-				cls: "qbd-hover-tip-body",
-				text: t("dashboard.select.effortHelp")
-			});
+			tip.classList.add("qbd-hover-tip--card");
+			ajouter(tip, "div", "qbd-hover-tip-title", t("dashboard.select.effort"));
+			ajouter(tip, "div", "qbd-hover-tip-body", t("dashboard.select.effortHelp"));
 		});
-		const scale = menuEl.createDiv({ cls: "qbd-effort-pop-scale" });
-		scale.createSpan({ text: t("dashboard.select.effortFaster") });
-		scale.createSpan({ text: t("dashboard.select.effortSmarter") });
+		const scale = ajouter(menuEl, "div", "qbd-effort-pop-scale");
+		ajouter(scale, "span", undefined, t("dashboard.select.effortFaster"));
+		ajouter(scale, "span", undefined, t("dashboard.select.effortSmarter"));
 	}
 
 	// ── Slider discret (codex : l'éclair Fast vit dans une rangée
 	// d'en-tête AU-DESSUS, aligné à droite — référence 2026-07-10 —,
 	// le slider occupe seul sa ligne, pleine largeur) ──
 	const zapRow = (variant === "codex" && opts.fast)
-		? menuEl.createDiv({ cls: "qbd-effort-pop-zaprow" })
+		? ajouter(menuEl, "div", "qbd-effort-pop-zaprow")
 		: null;
-	const slider = menuEl.createDiv({ cls: "qbd-effort-slider" });
+	const slider = ajouter(menuEl, "div", "qbd-effort-slider");
 	slider.tabIndex = 0;
 	slider.setAttribute("role", "slider");
 	slider.setAttribute("aria-label", t("dashboard.select.effort"));
 	slider.setAttribute("aria-valuemin", "0");
 	slider.setAttribute("aria-valuemax", String(n - 1));
-	const track = slider.createDiv({ cls: "qbd-effort-track" });
-	const fill = track.createDiv({ cls: "qbd-effort-fill" });
+	const track = ajouter(slider, "div", "qbd-effort-track");
+	const fill = ajouter(track, "div", "qbd-effort-fill");
 	// Overlay violet (codex) : opacité pilotée par --qbd-p → le fill vire
 	// progressivement du bleu au violet, comme la source ChatGPT.
-	if (variant === "codex") fill.createDiv({ cls: "qbd-effort-fill-ultra" });
-	const rail = track.createDiv({ cls: "qbd-effort-rail" });
+	if (variant === "codex") ajouter(fill, "div", "qbd-effort-fill-ultra");
+	const rail = ajouter(track, "div", "qbd-effort-rail");
 	const dots: HTMLDivElement[] = [];
 	for (let i = 0; i < n; i++) {
 		// Le point du niveau accent (ultracode) est TOUJOURS violet dans la
 		// carte Claude Code (notchUltracode), même au repos.
-		const dot = rail.createDiv({
-			cls: "qbd-effort-dot" + (efforts[i].accent ? " qbd-effort-dot--ultra" : "")
-		});
+		const dot = ajouter(rail, "div", "qbd-effort-dot" + (efforts[i].accent ? " qbd-effort-dot--ultra" : ""));
 		dot.style.left = (n > 1 ? (i / (n - 1)) * 100 : 0) + "%";
 		dots.push(dot);
 	}
 	// Pouce claude : dans la PISTE (pas le rail) — piloté en transform par
 	// effort-canvas.js (formule du handoff : 1 + v·(W−thumbW−2)) ; codex :
 	// rail + left % (inchangé).
-	const thumb = (variant === "claude" ? track : rail).createDiv({ cls: "qbd-effort-thumb" });
+	const thumb = ajouter(variant === "claude" ? track : rail, "div", "qbd-effort-thumb");
 	// Piste claude : mosaïque de pixels animés en canvas (handoff validé
 	// « design_handoff_effort_slider ») — visible au niveau ultracode.
 	const trackFx: EffortTrackFx | null = variant === "claude"
@@ -847,10 +830,10 @@ export function openEffortSlider(anchorEl: HTMLElement, opts: OpenEffortSliderOp
 		// (TS ne retient pas `opts.fast` non-null à travers des fonctions
 		// imbriquées définies ici mais appelées plus tard).
 		const fast = opts.fast;
-		const zap = zapRow.createEl("button", { cls: "qbd-effort-fast qbd-effort-pop-zap" });
+		const zap = ajouter(zapRow, "button", "qbd-effort-fast qbd-effort-pop-zap");
 		zap.type = "button";
 		zap.setAttribute("aria-label", t("dashboard.select.fastAria"));
-		setIcon(zap, "zap");
+		currentHost().ui.setIcon(zap, "zap");
 		// Drift des étoiles Fast piloté en rAF via --qbd-drift : des keyframes
 		// CSS ne savent ni décélérer ni accélérer. Ici la VITESSE tend vers sa
 		// cible par lissage exponentiel (~0.45s) pendant que l'opacité fond en
@@ -899,8 +882,8 @@ export function openEffortSlider(anchorEl: HTMLElement, opts: OpenEffortSliderOp
 		// L'anglais reprend mot pour mot les libellés de la référence ChatGPT
 		// (« 1.5x speed » / « More usage ») ; le français les traduit.
 		attachTip(zap, (tip) => {
-			tip.createDiv({ cls: "qbd-hover-tip-title", text: t("dashboard.select.fastSpeed") });
-			tip.createDiv({ cls: "qbd-hover-tip-body", text: t("dashboard.select.fastUsage") });
+			ajouter(tip, "div", "qbd-hover-tip-title", t("dashboard.select.fastSpeed"));
+			ajouter(tip, "div", "qbd-hover-tip-body", t("dashboard.select.fastUsage"));
 		});
 	}
 
@@ -908,7 +891,7 @@ export function openEffortSlider(anchorEl: HTMLElement, opts: OpenEffortSliderOp
 	// de la piste (référence : tooltip au-dessus du slider en état ultra).
 	if (variant === "codex") {
 		attachTip(slider, (tip) => {
-			tip.createDiv({ cls: "qbd-hover-tip-title", text: t("dashboard.select.usageWarning") });
+			ajouter(tip, "div", "qbd-hover-tip-title", t("dashboard.select.usageWarning"));
 		}, () => idx >= n - 1 || ["max", "ultra"].includes(efforts[idx].value));
 	}
 
@@ -941,10 +924,10 @@ export function openEffortSlider(anchorEl: HTMLElement, opts: OpenEffortSliderOp
 			const drop = () => cur.remove();
 			cur.addEventListener("animationend", drop, { once: true });
 			setTimeout(drop, 350);
-			const next = valueEl.createSpan({ cls: "qbd-effort-pop-value-text is-in", text: label });
+			const next = ajouter(valueEl, "span", "qbd-effort-pop-value-text is-in", label);
 			next.addEventListener("animationend", () => next.classList.remove("is-in"), { once: true });
 		} else {
-			valueEl.createSpan({ cls: "qbd-effort-pop-value-text", text: label });
+			ajouter(valueEl, "span", "qbd-effort-pop-value-text", label);
 		}
 	}
 
@@ -1115,7 +1098,7 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 	if (toggleCloseForAnchor(anchorEl)) return { close() {} };
 	closeAllSelects();
 
-	const menuEl = document.body.createDiv({ cls: "qbd-select-menu qbd-options-pop" });
+	const menuEl = ajouter(document.body, "div", "qbd-select-menu qbd-options-pop");
 	menuEl.setAttribute("role", "menu");
 
 	// ── Questions : DROPDOWN à presets + « Personnalisé » (référence
@@ -1127,19 +1110,20 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 	let count = Math.min(100, Math.max(1, Math.round(Number(opts.count) || 5)));
 	let isCustom = !PRESETS.includes(count);
 
-	menuEl.createDiv({ cls: "qbd-options-pop-title", text: t("dashboard.select.optionsQuestions") });
-	const countRow = menuEl.createDiv({ cls: "qbd-options-pop-row" });
-	const ddWrap = countRow.createDiv({ cls: "qbd-opts-dd-wrap" });
-	const trigger = ddWrap.createEl("button", { cls: "qbd-opts-dd" });
+	ajouter(menuEl, "div", "qbd-options-pop-title", t("dashboard.select.optionsQuestions"));
+	const countRow = ajouter(menuEl, "div", "qbd-options-pop-row");
+	const ddWrap = ajouter(countRow, "div", "qbd-opts-dd-wrap");
+	const trigger = ajouter(ddWrap, "button", "qbd-opts-dd");
 	trigger.type = "button";
-	const trigLabel = trigger.createSpan({ cls: "qbd-opts-dd-label" });
-	const trigChev = trigger.createSpan({ cls: "qbd-select-chevron" });
-	setIcon(trigChev, "chevron-down");
-	const ddMenu = ddWrap.createDiv({ cls: "qbd-opts-dd-menu is-hidden" });
-	const field = countRow.createEl("input", {
-		type: "number", cls: "qbd-opts-count",
-		attr: { min: "1", max: "100", inputmode: "numeric" }
-	});
+	const trigLabel = ajouter(trigger, "span", "qbd-opts-dd-label");
+	const trigChev = ajouter(trigger, "span", "qbd-select-chevron");
+	currentHost().ui.setIcon(trigChev, "chevron-down");
+	const ddMenu = ajouter(ddWrap, "div", "qbd-opts-dd-menu is-hidden");
+	const field = ajouter(countRow, "input", "qbd-opts-count");
+	field.type = "number";
+	field.min = "1";
+	field.max = "100";
+	field.inputMode = "numeric";
 
 	const commitCount = (n: unknown) => {
 		count = Math.min(100, Math.max(1, Math.round(Number(n) || count)));
@@ -1153,7 +1137,7 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 		t(n === 1 ? "dashboard.common.questionsOne" : "dashboard.common.questionsOther", { count: n });
 
 	const refreshCountUI = () => {
-		trigLabel.setText(isCustom ? t("dashboard.select.optionsCustom") : countLabel(count));
+		trigLabel.textContent = isCustom ? t("dashboard.select.optionsCustom") : countLabel(count);
 		field.classList.toggle("is-hidden", !isCustom);
 		trigger.setAttribute("aria-expanded", ddMenu.classList.contains("is-hidden") ? "false" : "true");
 		for (const b of Array.from(ddMenu.querySelectorAll<HTMLButtonElement>(".qbd-opts-dd-item"))) {
@@ -1163,19 +1147,19 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 			b.classList.toggle("is-active", active);
 			const check = b.querySelector(".qbd-select-check");
 			if (!check) continue;
-			check.empty();
-			if (active) setIcon(check as HTMLElement, "check");
+			check.replaceChildren();
+			if (active) currentHost().ui.setIcon(check as HTMLElement, "check");
 		}
 	};
 
 	const closeDd = () => { ddMenu.classList.add("is-hidden"); refreshCountUI(); };
 
 	for (const p of [...PRESETS.map(String), "custom"]) {
-		const item = ddMenu.createEl("button", { cls: "qbd-opts-dd-item" });
+		const item = ajouter(ddMenu, "button", "qbd-opts-dd-item");
 		item.type = "button";
 		item.dataset.preset = p;
-		item.createSpan({ cls: "qbd-select-check" });
-		item.createSpan({ text: p === "custom" ? t("dashboard.select.optionsCustom") : countLabel(Number(p)) });
+		ajouter(item, "span", "qbd-select-check");
+		ajouter(item, "span", undefined, p === "custom" ? t("dashboard.select.optionsCustom") : countLabel(Number(p)));
 		item.addEventListener("click", () => {
 			if (p === "custom") {
 				isCustom = true;
@@ -1213,7 +1197,7 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 	refreshCountUI();
 
 	// ── Type : items à coche (même anatomie que les options de select) ──
-	menuEl.createDiv({ cls: "qbd-options-pop-title", text: t("dashboard.select.optionsType") });
+	ajouter(menuEl, "div", "qbd-options-pop-title", t("dashboard.select.optionsType"));
 	const items: Array<{ t: string; btn: HTMLButtonElement; check: HTMLElement }> = [];
 	let current = opts.type;
 	function refreshItems(): void {
@@ -1221,16 +1205,16 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 			const active = it.t === current;
 			it.btn.classList.toggle("is-active", active);
 			it.btn.setAttribute("aria-checked", active ? "true" : "false");
-			it.check.empty();
-			if (active) setIcon(it.check, "check");
+			it.check.replaceChildren();
+			if (active) currentHost().ui.setIcon(it.check, "check");
 		}
 	}
 	for (const t of opts.types) {
-		const btn = menuEl.createEl("button", { cls: "qbd-select-option" });
+		const btn = ajouter(menuEl, "button", "qbd-select-option");
 		btn.type = "button";
 		btn.setAttribute("role", "menuitemradio");
-		const check = btn.createSpan({ cls: "qbd-select-check" });
-		btn.createSpan({ cls: "qbd-select-option-label", text: t });
+		const check = ajouter(btn, "span", "qbd-select-check");
+		ajouter(btn, "span", "qbd-select-option-label", t);
 		btn.addEventListener("click", () => {
 			current = t;
 			refreshItems();
@@ -1290,49 +1274,58 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 
 /* ── openNotePicker ───────────────────────────────────────── */
 
-export interface OpenNotePickerOptions {
+/** Ce que le picker demande d'un fichier, et rien de plus. Générique plutôt
+    que `HostFile` : `onPick` rend à l'appelant l'objet QU'IL a fourni, donc
+    `ai.ts` continue de recevoir ses `TFile` et de les passer à
+    `vault.process`. Convertir ici violerait la règle du dépôt — seul
+    `apps/obsidian/host.ts` change un `TFile` en `HostFile`. */
+export interface PickableFile { path: string; basename: string; }
+
+export interface OpenNotePickerOptions<F extends PickableFile = PickableFile> {
 	/** Notes actuellement ouvertes (ordre des onglets). */
-	openFiles?: TFile[];
+	openFiles?: F[];
 	/** Toutes les notes du vault (pour la recherche). */
-	allFiles?: TFile[];
-	onPick?: (file: TFile) => void;
+	allFiles?: F[];
+	onPick?: (file: F) => void;
 }
 
 /*
  * openNotePicker(anchorEl, {
- *   openFiles: TFile[],   // notes actuellement ouvertes (ordre des onglets)
- *   allFiles: TFile[],    // toutes les notes du vault (pour la recherche)
+ *   openFiles: F[],   // notes actuellement ouvertes (ordre des onglets)
+ *   allFiles: F[],    // toutes les notes du vault (pour la recherche)
  *   onPick(file)
  * })
  * Sélecteur de note (« Insérer dans une note ») : les notes OUVERTES en
  * tête, et une recherche qui fouille tout le vault en dessous.
  */
-export function openNotePicker(anchorEl: HTMLElement, opts: OpenNotePickerOptions): MenuHandle {
+export function openNotePicker<F extends PickableFile>(anchorEl: HTMLElement, opts: OpenNotePickerOptions<F>): MenuHandle {
 	if (toggleCloseForAnchor(anchorEl)) return { close() {} };
 	closeAllSelects();
 
-	const menuEl = document.body.createDiv({
-		cls: "qbd-select-menu qbd-model-menu qbd-model-menu--searchable qbd-note-picker"
-	});
+	const menuEl = ajouter(document.body, "div", "qbd-select-menu qbd-model-menu qbd-model-menu--searchable qbd-note-picker");
 	menuEl.setAttribute("role", "listbox");
 
-	const searchWrap = menuEl.createDiv({ cls: "qbd-model-menu-search" });
-	const input = searchWrap.createEl("input", {
-		cls: "qbd-model-menu-search-input",
-		attr: { type: "text", placeholder: t("dashboard.select.noteSearch"), spellcheck: "false" }
-	});
-	const listEl = menuEl.createDiv({ cls: "qbd-model-menu-list" });
+	const searchWrap = ajouter(menuEl, "div", "qbd-model-menu-search");
+	const input = ajouter(searchWrap, "input", "qbd-model-menu-search-input");
+	input.placeholder = t("dashboard.select.noteSearch");
+	input.spellcheck = false;
+	const listEl = ajouter(menuEl, "div", "qbd-model-menu-list");
 
-	function addFile(file: TFile): void {
-		const b = listEl.createEl("button", { cls: "qbd-select-option qbd-note-picker-item" });
+	function addFile(file: F): void {
+		const b = ajouter(listEl, "button", "qbd-select-option qbd-note-picker-item");
 		b.type = "button";
 		b.setAttribute("role", "option");
-		const ic = b.createSpan({ cls: "qbd-action-menu-icon" });
-		setIcon(ic, "file-text");
-		const body = b.createDiv({ cls: "qbd-action-menu-body" });
-		body.createSpan({ cls: "qbd-select-option-label", text: file.basename });
-		const folder = file.parent && file.parent.path && file.parent.path !== "/" ? file.parent.path : "";
-		if (folder) body.createSpan({ cls: "qbd-action-menu-sub", text: folder });
+		const ic = ajouter(b, "span", "qbd-action-menu-icon");
+		currentHost().ui.setIcon(ic, "file-text");
+		const body = ajouter(b, "div", "qbd-action-menu-body");
+		ajouter(body, "span", "qbd-select-option-label", file.basename);
+		// Dérivé du chemin plutôt que lu sur `parent` : `PickableFile` n'a pas de
+		// `parent`, et à la racine `TFile.parent.path` vaut "/" (confirmé dans
+		// obsidian.d.ts), que l'ancien code excluait déjà — la chaîne vide
+		// produit exactement le même affichage.
+		const i = file.path.lastIndexOf("/");
+		const folder = i > 0 ? file.path.slice(0, i) : "";
+		if (folder) ajouter(body, "span", "qbd-action-menu-sub", folder);
 		b.addEventListener("click", () => {
 			closeMenu();
 			if (opts.onPick) opts.onPick(file);
@@ -1340,33 +1333,30 @@ export function openNotePicker(anchorEl: HTMLElement, opts: OpenNotePickerOption
 	}
 
 	function paint(query: string): void {
-		listEl.empty();
+		listEl.replaceChildren();
 		const f = (query || "").trim().toLowerCase();
-		const match = (file: TFile) => !f
+		const match = (file: F) => !f
 			|| file.basename.toLowerCase().includes(f)
 			|| file.path.toLowerCase().includes(f);
 		const open = (opts.openFiles || []).filter(match);
 		// La recherche fouille TOUT le vault ; sans requête, seules les
 		// notes ouvertes sont proposées (référence : « uniquement celles
 		// ouvertes, et on peut surtout chercher »).
-		let rest: TFile[] = [];
+		let rest: F[] = [];
 		if (f) {
 			const openPaths = new Set(open.map(x => x.path));
 			rest = (opts.allFiles || []).filter(x => !openPaths.has(x.path) && match(x)).slice(0, 30);
 		}
 		if (open.length) {
-			listEl.createDiv({ cls: "qbd-note-picker-section", text: t("dashboard.select.noteOpen") });
+			ajouter(listEl, "div", "qbd-note-picker-section", t("dashboard.select.noteOpen"));
 			open.forEach(addFile);
 		}
 		if (rest.length) {
-			listEl.createDiv({ cls: "qbd-note-picker-section", text: t("dashboard.select.noteAll") });
+			ajouter(listEl, "div", "qbd-note-picker-section", t("dashboard.select.noteAll"));
 			rest.forEach(addFile);
 		}
 		if (!open.length && !rest.length) {
-			listEl.createDiv({
-				cls: "qbd-model-menu-empty",
-				text: f ? t("dashboard.select.noteNotFound") : t("dashboard.select.noteEmpty")
-			});
+			ajouter(listEl, "div", "qbd-model-menu-empty", f ? t("dashboard.select.noteNotFound") : t("dashboard.select.noteEmpty"));
 		}
 	}
 
@@ -1460,29 +1450,27 @@ export interface MentionMenuHandle extends MenuHandle {
 export function openMentionMenu(anchorEl: HTMLElement, onClose?: () => void): MentionMenuHandle {
 	closeAllSelects();
 
-	const menuEl = document.body.createDiv({
-		cls: "qbd-select-menu qbd-model-menu qbd-note-picker qbd-mention-menu"
-	});
+	const menuEl = ajouter(document.body, "div", "qbd-select-menu qbd-model-menu qbd-note-picker qbd-mention-menu");
 	menuEl.setAttribute("role", "listbox");
-	const listEl = menuEl.createDiv({ cls: "qbd-model-menu-list" });
+	const listEl = ajouter(menuEl, "div", "qbd-model-menu-list");
 	let footerEl: HTMLElement | null = null;
 
 	let items: MentionMenuItem[] = [];
 	let sel = 0;
 
 	function paint(): void {
-		listEl.empty();
+		listEl.replaceChildren();
 		items.forEach((item, i) => {
-			if (item.separatorBefore) listEl.createDiv({ cls: "qbd-mention-sep" });
-			const b = listEl.createEl("button", { cls: "qbd-select-option qbd-note-picker-item" });
+			if (item.separatorBefore) ajouter(listEl, "div", "qbd-mention-sep");
+			const b = ajouter(listEl, "button", "qbd-select-option qbd-note-picker-item");
 			b.type = "button";
 			b.setAttribute("role", "option");
-			if (i === sel) b.addClass("is-selected");
-			const ic = b.createSpan({ cls: "qbd-action-menu-icon" });
-			setIcon(ic, item.icon);
-			const body = b.createDiv({ cls: "qbd-action-menu-body" });
-			body.createSpan({ cls: "qbd-select-option-label", text: item.label });
-			if (item.sub) body.createSpan({ cls: "qbd-action-menu-sub", text: item.sub });
+			if (i === sel) b.classList.add("is-selected");
+			const ic = ajouter(b, "span", "qbd-action-menu-icon");
+			currentHost().ui.setIcon(ic, item.icon);
+			const body = ajouter(b, "div", "qbd-action-menu-body");
+			ajouter(body, "span", "qbd-select-option-label", item.label);
+			if (item.sub) ajouter(body, "span", "qbd-action-menu-sub", item.sub);
 			// mousedown, pas click : le textarea ne doit jamais perdre le focus.
 			b.addEventListener("mousedown", (e) => {
 				e.preventDefault();
@@ -1492,13 +1480,13 @@ export function openMentionMenu(anchorEl: HTMLElement, onClose?: () => void): Me
 			b.addEventListener("mouseenter", () => { sel = i; paintSelection(); });
 		});
 		if (!items.length) {
-			listEl.createDiv({ cls: "qbd-model-menu-empty", text: t("ai.mention.noMatch") });
+			ajouter(listEl, "div", "qbd-model-menu-empty", t("ai.mention.noMatch"));
 		}
 	}
 
 	function paintSelection(): void {
 		const opts = Array.from(listEl.querySelectorAll(".qbd-select-option"));
-		opts.forEach((el, i) => el.toggleClass("is-selected", i === sel));
+		opts.forEach((el, i) => el.classList.toggle("is-selected", i === sel));
 		const cur = opts[sel] as HTMLElement | undefined;
 		if (cur) cur.scrollIntoView({ block: "nearest" });
 	}
@@ -1552,7 +1540,7 @@ export function openMentionMenu(anchorEl: HTMLElement, onClose?: () => void): Me
 			sel = 0;
 			paint();
 			if (footerEl) { footerEl.remove(); footerEl = null; }
-			if (footer) footerEl = menuEl.createDiv({ cls: "qbd-mention-footer", text: footer });
+			if (footer) footerEl = ajouter(menuEl, "div", "qbd-mention-footer", footer);
 			position();
 		},
 		moveSelection(delta: number) {

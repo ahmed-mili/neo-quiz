@@ -4,9 +4,19 @@
  * Les scripts de vérification doivent éprouver le CODE RÉEL : une réplique
  * finirait par diverger de l'originale et validerait le vide. esbuild bundle
  * le module demandé ; `obsidian`, qui n'existe qu'à l'intérieur de
- * l'application, est remplacé par un module bouchon — aucun des symboles
- * remplacés n'est appelé par les fonctions pures qu'on vérifie, et si l'un
- * l'était un jour, l'échec serait bruyant plutôt que silencieux.
+ * l'application, est remplacé par un module bouchon.
+ *
+ * DEUX RÉGIMES DANS CE BOUCHON, et il faut savoir lequel on touche :
+ * — la plupart des symboles JETTENT (`nope`). Ils ne sont appelés par aucune
+ *   des fonctions vérifiées, et si l'un l'était un jour, l'échec serait
+ *   bruyant plutôt que silencieux ;
+ * — `Modal` et `getIconIds` sont des DOUBLES DE COMPORTEMENT, parce que
+ *   `HostModals` et `HostUi.iconNames` (apps/obsidian/host.ts) passent par
+ *   eux pour de bon. Ils rendent donc une valeur au lieu de jeter, et un cas
+ *   qui les traverse ne prouve QUE ce que le double reproduit fidèlement.
+ *   Écrire un cas neuf sur ces deux-là, c'est d'abord lire le double
+ *   ci-dessous et vérifier qu'il dit encore la vérité sur Obsidian — un
+ *   double approximatif rend vert sans rien garder.
  */
 import { build } from "esbuild";
 import { mkdtempSync, rmSync } from "node:fs";

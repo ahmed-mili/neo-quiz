@@ -499,47 +499,55 @@ await withSrcModule("apps/windows/src/host/modal.ts", async ({ createWindowsModa
 
 await withSrcModule("apps/windows/src/host/ui.ts", async ({ createWindowsUi }) => {
 	const r = makeReporter("Hôte Windows — catalogue d'icônes");
+	/* `try/finally` comme le groupe des modales, et pour la raison que
+	   `CLAUDE.md` note à propos de `check:lesson` : un groupe qui MEURT sur une
+	   exception au lieu d'échouer proprement emporte en silence tous ceux qui
+	   le suivent — et laisserait ici `globalThis.document` et `window`
+	   remplacés pour eux. */
 	const dom = installerDom();
-	const ui = createWindowsUi();
-	const noms = ui.iconNames();
-
-	/* Le contrat parle KEBAB-CASE, comme Obsidian ; le paquet `lucide` expose
-	   ses clés en PascalCase. Une liste non vide ne prouve donc rien —
-	   `Object.keys(icons)` en rendrait une, pleine de noms qu'aucun `setIcon`
-	   ne sait rendre. D'où une VALEUR NOMMÉE. */
-	r.check("iconNames contient chevron-down", noms.includes("chevron-down"), true);
-	/* Le préfixe « lucide- » est une affaire d'Obsidian : la fenêtre n'a
-	   aucune raison d'en fabriquer un. */
-	r.check("iconNames ne laisse aucun préfixe lucide-",
-		noms.filter(n => n.startsWith("lucide-")), []);
-	/* Aucune majuscule ne survit : une seule suffirait à faire échouer la
-	   recherche du sélecteur, qui compare en minuscules. */
-	r.check("aucun nom ne garde de majuscule", noms.filter(n => /[A-Z]/.test(n)), []);
-
-	/* LA règle que les trois cas ci-dessus ne gardent pas : un nom listé doit
-	   être un nom que `setIcon` sait RENDRE. La conversion inverse et celle de
-	   `setIcon` doivent donc se composer en identité — ce que le `toKebabCase`
-	   de Lucide (`/([a-z0-9])([A-Z])/`) ne fait PAS : il rendrait « xcircle »
-	   pour `XCircle`, un nom que `versCleLucide` ne retrouve plus. Vérifié sur
-	   TOUT le catalogue plutôt que sur un nom cité, qui disparaîtrait le jour
-	   où Lucide retire son alias. Un nom irrésolu VIDE l'élément (ui.ts). */
-	const irresolus = [];
-	/* `poserIcone` avertit en console sur un nom inconnu — c'est voulu dans
-	   l'application, mais ici cela noierait le rapport sous 2000 lignes. Le
-	   résultat, lui, se lit sur l'élément resté vide. */
-	const avertir = console.warn;
-	console.warn = () => {};
 	try {
-		for (const nom of noms) {
-			const el = dom.document.createElement("span");
-			ui.setIcon(el, nom);
-			if (!el.firstChild) irresolus.push(nom);
-		}
-	} finally {
-		console.warn = avertir;
-	}
-	r.check("chaque nom listé est un nom que setIcon sait rendre", irresolus, []);
+		const ui = createWindowsUi();
+		const noms = ui.iconNames();
 
-	dom.retirer();
+		/* Le contrat parle KEBAB-CASE, comme Obsidian ; le paquet `lucide` expose
+		   ses clés en PascalCase. Une liste non vide ne prouve donc rien —
+		   `Object.keys(icons)` en rendrait une, pleine de noms qu'aucun `setIcon`
+		   ne sait rendre. D'où une VALEUR NOMMÉE. */
+		r.check("iconNames contient chevron-down", noms.includes("chevron-down"), true);
+		/* Le préfixe « lucide- » est une affaire d'Obsidian : la fenêtre n'a
+		   aucune raison d'en fabriquer un. */
+		r.check("iconNames ne laisse aucun préfixe lucide-",
+			noms.filter(n => n.startsWith("lucide-")), []);
+		/* Aucune majuscule ne survit : une seule suffirait à faire échouer la
+		   recherche du sélecteur, qui compare en minuscules. */
+		r.check("aucun nom ne garde de majuscule", noms.filter(n => /[A-Z]/.test(n)), []);
+
+		/* LA règle que les trois cas ci-dessus ne gardent pas : un nom listé doit
+		   être un nom que `setIcon` sait RENDRE. La conversion inverse et celle de
+		   `setIcon` doivent donc se composer en identité — ce que le `toKebabCase`
+		   de Lucide (`/([a-z0-9])([A-Z])/`) ne fait PAS : il rendrait « xcircle »
+		   pour `XCircle`, un nom que `versCleLucide` ne retrouve plus. Vérifié sur
+		   TOUT le catalogue plutôt que sur un nom cité, qui disparaîtrait le jour
+		   où Lucide retire son alias. Un nom irrésolu VIDE l'élément (ui.ts). */
+		const irresolus = [];
+		/* `poserIcone` avertit en console sur un nom inconnu — c'est voulu dans
+		   l'application, mais ici cela noierait le rapport sous 2000 lignes. Le
+		   résultat, lui, se lit sur l'élément resté vide. */
+		const avertir = console.warn;
+		console.warn = () => {};
+		try {
+			for (const nom of noms) {
+				const el = dom.document.createElement("span");
+				ui.setIcon(el, nom);
+				if (!el.firstChild) irresolus.push(nom);
+			}
+		} finally {
+			console.warn = avertir;
+		}
+		r.check("chaque nom listé est un nom que setIcon sait rendre", irresolus, []);
+	} finally {
+		dom.retirer();
+	}
+
 	r.done();
 });

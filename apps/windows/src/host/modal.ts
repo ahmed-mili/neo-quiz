@@ -65,8 +65,14 @@ function ouvrir(spec: HostModalSpec): HostModalHandle {
 	poserIcone(fermeture, "x");
 
 	const titre = ajouter(panneau, "div", "modal-title", spec.title);
-	titre.id = `nq-modal-title-${++compteurTitres}`;
-	panneau.setAttribute("aria-labelledby", titre.id);
+	/* `aria-labelledby` SEULEMENT quand il y a un titre : le désigner sans
+	   titre nommerait la boîte de dialogue par la chaîne VIDE, ce qui est pire
+	   que de ne pas la nommer — une aide technique annoncerait « dialogue »
+	   suivi de rien, sans repli sur son contenu. */
+	if (spec.title) {
+		titre.id = `nq-modal-title-${++compteurTitres}`;
+		panneau.setAttribute("aria-labelledby", titre.id);
+	}
 	const corps = ajouter(panneau, "div", "modal-content");
 
 	/* DEUX gardes, pas une. `ferme` empêche Échap et le clic sur le fond de
@@ -129,6 +135,16 @@ function ouvrir(spec: HostModalSpec): HostModalHandle {
 		setTitle: (texte) => { titre.textContent = texte; },
 		close: fermer,
 	};
+	/* LE FOCUS ENTRE DANS LE PANNEAU, sinon la première tabulation après
+	   l'ouverture atterrit DERRIÈRE la modale — `aria-modal` dit à une aide
+	   technique d'ignorer le fond, mais il ne déplace rien. `tabIndex = -1`
+	   rend le panneau focalisable au programme sans l'ajouter à l'ordre de
+	   tabulation. AVANT `onOpen` : un appelant qui préfère focaliser son
+	   propre champ l'emporte alors, au lieu de se le faire reprendre.
+	   Ce n'est PAS un piège à focus : rien ne retient la tabulation à
+	   l'intérieur, et personne ne l'a demandé. */
+	panneau.tabIndex = -1;
+	panneau.focus();
 	/* Le contenu est construit APRÈS attachement : un appelant qui mesure un
 	   élément (le sélecteur d'icônes lit un `getBoundingClientRect`) ne
 	   mesurerait que des zéros sur un panneau détaché. */

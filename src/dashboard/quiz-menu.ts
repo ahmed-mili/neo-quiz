@@ -6,7 +6,7 @@ import { t } from "../i18n";
 import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { ModuleGroup, ModuleMap } from "./quiz-modules";
-import { ModuleEditModal } from "./module-edit";
+import { openModuleEditModal } from "./module-edit";
 import type { ActionMenuItem } from "./ui-select";
 import { QUIZ_BLOCK_RE } from "../quiz-utils";
 import { isFolderArchived, setFolderArchived } from "./folder-archive";
@@ -297,7 +297,7 @@ export function buildModuleCardMenu(ctx: DashboardCtx, rerender: () => void, map
 				// Modal « Modifier dossier » calqué sur StudySmarter (nom / UE /
 				// couleur, sans le toggle public) — remplace l'ancienne ouverture
 				// de la note de correspondance, jugée non fonctionnelle.
-				onClick: () => { new ModuleEditModal(ctx, g, map, rerender).open(); },
+				onClick: () => { openModuleEditModal(ctx, g, map, rerender); },
 			},
 			{
 				icon: "archive",

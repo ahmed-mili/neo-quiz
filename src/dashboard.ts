@@ -1,10 +1,10 @@
 import { PRODUCT_NAME } from "./branding";
 import { ItemView, Scope } from "obsidian";
 import type { App, WorkspaceLeaf, KeymapEventHandler } from "obsidian";
-import { openQuizForPlay } from "./dashboard/quiz-open";
+import { openQuizForPlay, openQuizPathInEditor } from "./dashboard/quiz-open";
 import { buildQuizCardMenu, buildModuleCardMenu } from "./dashboard/quiz-menu";
 import { openIconPicker } from "./dashboard/icon-picker";
-import { CreateQuizModal, CreateFolderModal } from "./dashboard/folder-create";
+import { openCreateQuizModal, openCreateFolderModal } from "./dashboard/folder-create";
 import { createSelect, openActionMenu } from "./dashboard/ui-select";
 
 // C1 (plan) : les 5 factories des sous-modules dashboard/* sont désormais des
@@ -236,13 +236,21 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 			pickIcon: (anchor, courante, onPick, suggestions) => {
 				openIconPicker(anchor, courante, onPick, document.body, suggestions ?? []);
 			},
+			/* PLUS DE CAST : ces deux modals passent désormais par le contrat
+			   d'hôte et ne demandent que `DashboardShellCtx` — le greffon emprunte
+			   donc exactement le chemin de l'application. Le `ctx` local plutôt que
+			   `this.ctx` : c'est le MÊME objet (assigné juste en dessous), mais
+			   celui-là n'est pas optionnel, donc il n'y a rien à caster. */
 			createQuiz: (folder, done) => {
-				new CreateQuizModal(this.ctx as DashboardCtx, folder, done).open();
+				openCreateQuizModal(ctx, folder, done);
 			},
 			createFolder: (map, quizzes, done) => {
-				new CreateFolderModal(this.ctx as DashboardCtx, map, quizzes, done).open();
+				openCreateFolderModal(ctx, map, quizzes, done);
 			},
 			renderGroupingSelect: (container, opts) => createSelect(container, opts),
+			/* L'ouverture d'une note dans l'onglet d'édition reste du GREFFON
+			   (`WorkspaceLeaf`) : le code partagé la demande par le ctx. */
+			openQuizPath: (path, opts) => openQuizPathInEditor(this.app, path, opts ?? {}),
 		};
 
 		this.ctx = ctx;

@@ -1,97 +1,88 @@
-import { Modal, Notice, setIcon } from "obsidian";
-import { QbdModal } from "../modal-base";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
-import type { DashboardCtx } from "../types/dashboard-ctx";
+import type { HostModalHandle } from "../host/types";
+import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { ModuleMap } from "./quiz-modules";
-import { NewFolderModal, commonModuleParent } from "./module-edit";
+import { openNewFolderModal, commonModuleParent } from "./module-edit";
 import { parseZip } from "./zip";
 import { QUIZ_BLOCK_RE } from "../quiz-utils";
 import { makeDefault } from "../editor/utils";
 import { exportAllWithFence } from "../editor/export";
-import { openQuizPathInEditor } from "./quiz-open";
 
 /* ══════════════════════════════════════════════════════════
    CREATE FOLDER — modal « Créer un dossier » calqué sur StudySmarter
    (capture Ahmed 2026-07-19) : trois cartes-options empilées (icône
    teintée + titre + description + chevron). Créer avec l'IA → page
-   Générer ; Ensemble vide → NewFolderModal ; Importer → un zip partagé
+   Générer ; Ensemble vide → openNewFolderModal ; Importer → un zip partagé
    est dézippé et recréé dans le vault. Accents de la démo (vert/bleu/
    violet) posés inline, teinte dérivée en CSS.
 ══════════════════════════════════════════════════════════ */
 
 /** Une carte-option du modal de création (icône teintée + titre + description
-    + chevron) — partagée par CreateFolderModal ET CreateQuizModal : même DOM,
-    mêmes classes, fidélité garantie à la capture StudySmarter (2026-07-19). */
-function createOptionCard(modal: Modal, parent: HTMLElement, icon: string, accent: string, title: string, desc: string, onPick: () => void): void {
-	const card = parent.createEl("button", { cls: "qbd-create-option" });
+    + chevron) — partagée par les DEUX modals de création : même DOM, mêmes
+    classes, fidélité garantie à la capture StudySmarter (2026-07-19). */
+function createOptionCard(modal: HostModalHandle, parent: HTMLElement, icon: string, accent: string, title: string, desc: string, onPick: () => void): void {
+	const card = ajouter(parent, "button", "qbd-create-option");
 	card.type = "button";
 	card.style.setProperty("--accent", accent);
-	const ic = card.createDiv({ cls: "qbd-create-option-icon" });
-	setIcon(ic, icon);
-	const txt = card.createDiv({ cls: "qbd-create-option-text" });
-	txt.createDiv({ cls: "qbd-create-option-title", text: title });
-	txt.createDiv({ cls: "qbd-create-option-desc", text: desc });
-	const chev = card.createDiv({ cls: "qbd-create-option-chevron" });
-	setIcon(chev, "chevron-right");
+	const ic = ajouter(card, "div", "qbd-create-option-icon");
+	currentHost().ui.setIcon(ic, icon);
+	const txt = ajouter(card, "div", "qbd-create-option-text");
+	ajouter(txt, "div", "qbd-create-option-title", title);
+	ajouter(txt, "div", "qbd-create-option-desc", desc);
+	const chev = ajouter(card, "div", "qbd-create-option-chevron");
+	currentHost().ui.setIcon(chev, "chevron-right");
 	card.addEventListener("click", () => { modal.close(); onPick(); });
 }
 
-export class CreateFolderModal extends QbdModal {
-	constructor(
-		private ctx: DashboardCtx,
-		private map: ModuleMap,
-		private quizzes: QuizIndexEntry[],
-		private onDone: () => void
-	) {
-		super(ctx.app);
-	}
-
-	onOpen(): void {
-		this.modalEl.addClass("qbd-create-modal");
-		this.titleEl.setText(t("dashboard.quizzes.createFolderTitle"));
-		const c = this.contentEl;
-		createOptionCard(this, c, "sparkles", "#3ddc84", t("dashboard.quizzes.createAiTitle"), t("dashboard.quizzes.createAiDesc"),
-			() => this.ctx.navigate("ai"));
-		createOptionCard(this, c, "folder-plus", "#4573ff", t("dashboard.quizzes.createEmptyTitle"), t("dashboard.quizzes.createEmptyDesc"),
-			() => new NewFolderModal(this.ctx, this.map, this.quizzes, this.onDone).open());
-		createOptionCard(this, c, "download", "#a78bfa", t("dashboard.quizzes.createImportTitle"), t("dashboard.quizzes.createImportDesc"),
-			() => void importSharedFolder(this.ctx, this.map, this.quizzes, this.onDone));
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
+export function openCreateFolderModal(
+	ctx: DashboardShellCtx,
+	map: ModuleMap,
+	quizzes: QuizIndexEntry[],
+	onDone: () => void
+): void {
+	currentHost().modals.open({
+		className: "qbd-create-modal",
+		// t() AU RENDU (à l'ouverture du modal), jamais dans une constante de
+		// haut niveau : une chaîne figée au chargement ignorerait un changement
+		// de langue.
+		title: t("dashboard.quizzes.createFolderTitle"),
+		onOpen: (m) => {
+			const c = m.contentEl;
+			createOptionCard(m, c, "sparkles", "#3ddc84", t("dashboard.quizzes.createAiTitle"), t("dashboard.quizzes.createAiDesc"),
+				() => ctx.navigate("ai"));
+			createOptionCard(m, c, "folder-plus", "#4573ff", t("dashboard.quizzes.createEmptyTitle"), t("dashboard.quizzes.createEmptyDesc"),
+				() => openNewFolderModal(ctx, map, quizzes, onDone));
+			createOptionCard(m, c, "download", "#a78bfa", t("dashboard.quizzes.createImportTitle"), t("dashboard.quizzes.createImportDesc"),
+				() => void importSharedFolder(ctx, map, quizzes, onDone));
+		},
+	});
 }
 
 /** « Nouveau quiz » (drill-down d'un dossier) — MÊME modal à trois options que
     « Créer un dossier » (demande d'homogénéité Ahmed, capture 2026-07-19),
     décliné au niveau quiz : IA / quiz vierge dans CE dossier / import d'un
     quiz reçu dans CE dossier. */
-export class CreateQuizModal extends QbdModal {
-	constructor(
-		private ctx: DashboardCtx,
-		private folder: string,
-		private onDone: () => void
-	) {
-		super(ctx.app);
-	}
-
-	onOpen(): void {
-		this.modalEl.addClass("qbd-create-modal");
-		this.titleEl.setText(t("dashboard.quizzes.createQuizTitle"));
-		const c = this.contentEl;
-		createOptionCard(this, c, "sparkles", "#3ddc84", t("dashboard.quizzes.createAiTitle"), t("dashboard.quizzes.createAiDesc"),
-			() => this.ctx.navigate("ai"));
-		createOptionCard(this, c, "file-plus", "#4573ff", t("dashboard.quizzes.createQuizEmptyTitle"), t("dashboard.quizzes.createQuizEmptyDesc"),
-			() => void createQuizInFolder(this.ctx, this.folder));
-		createOptionCard(this, c, "download", "#a78bfa", t("dashboard.quizzes.createQuizImportTitle"), t("dashboard.quizzes.createQuizImportDesc"),
-			() => void importQuizIntoFolder(this.ctx, this.folder, this.onDone));
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
+export function openCreateQuizModal(
+	ctx: DashboardShellCtx,
+	folder: string,
+	onDone: () => void
+): void {
+	currentHost().modals.open({
+		className: "qbd-create-modal",
+		title: t("dashboard.quizzes.createQuizTitle"),
+		onOpen: (m) => {
+			const c = m.contentEl;
+			createOptionCard(m, c, "sparkles", "#3ddc84", t("dashboard.quizzes.createAiTitle"), t("dashboard.quizzes.createAiDesc"),
+				() => ctx.navigate("ai"));
+			createOptionCard(m, c, "file-plus", "#4573ff", t("dashboard.quizzes.createQuizEmptyTitle"), t("dashboard.quizzes.createQuizEmptyDesc"),
+				() => void createQuizInFolder(ctx, folder));
+			createOptionCard(m, c, "download", "#a78bfa", t("dashboard.quizzes.createQuizImportTitle"), t("dashboard.quizzes.createQuizImportDesc"),
+				() => void importQuizIntoFolder(ctx, folder, onDone));
+		},
+	});
 }
 
 /* ── Import d'un dossier partagé (.zip) : sélection cross-platform via un
@@ -113,7 +104,7 @@ function pickFile(accept: string): Promise<{ name: string; bytes: Uint8Array } |
 }
 
 export async function importSharedFolder(
-	ctx: DashboardCtx,
+	ctx: DashboardShellCtx,
 	map: ModuleMap,
 	quizzes: QuizIndexEntry[],
 	onDone: () => void
@@ -122,7 +113,7 @@ export async function importSharedFolder(
 	if (!picked) return;
 	const entries = parseZip(picked.bytes);
 	if (entries.length === 0) {
-		new Notice(t("dashboard.quizzes.importEmpty"));
+		currentHost().ui.notice(t("dashboard.quizzes.importEmpty"));
 		return;
 	}
 	// Dossier cible : base du zip, assainie, sous le parent commun des modules ;
@@ -131,28 +122,32 @@ export async function importSharedFolder(
 	const parent = commonModuleParent(quizzes, map);
 	const root = parent ? `${parent}/${base}` : base;
 	let folderPath = root;
-	for (let n = 2; ctx.app.vault.getAbstractFileByPath(folderPath); n++) folderPath = `${root} (${n})`;
+	/* `fs.exists` (le DISQUE) et non `fs.getFile` : ce dernier ne consulte que
+	   l'index des `.md`, où un DOSSIER n'est jamais. Il répondrait donc
+	   toujours « absent », la boucle ne dédoublonnerait rien, et deux dossiers
+	   du même nom se retrouveraient fondus en silence. */
+	for (let n = 2; await currentHost().fs.exists(folderPath); n++) folderPath = `${root} (${n})`;
 
 	try {
-		await ctx.app.vault.createFolder(folderPath);
+		await currentHost().fs.mkdirs(folderPath);
 		for (const e of entries) {
 			// Aplatir : on n'écrit que le nom de note (pas de sous-chemins d'archive).
 			const noteName = (e.name.split("/").pop() || e.name).replace(/[\\/:*?"<>|]/g, "-");
 			if (!noteName) continue;
-			await ctx.app.vault.create(`${folderPath}/${noteName}`, e.content);
+			await currentHost().fs.write(`${folderPath}/${noteName}`, e.content);
 		}
 	} catch {
-		new Notice(t("dashboard.quizzes.importError"));
+		currentHost().ui.notice(t("dashboard.quizzes.importError"));
 		return;
 	}
 
 	// Déclaré en override : la carte du module apparaît tout de suite.
 	const folderKey = folderPath.split("/").pop() as string;
-	const overrides = { ...(ctx.plugin.settings.quizzesModuleOverrides || {}) };
+	const overrides = { ...(ctx.settings.quizzesModuleOverrides || {}) };
 	if (!overrides[folderKey]) overrides[folderKey] = { name: base };
-	ctx.plugin.settings.quizzesModuleOverrides = overrides;
-	ctx.plugin.saveSettings().catch(() => {});
-	new Notice(t("dashboard.quizzes.importDone", { name: base, count: entries.length }));
+	ctx.settings.quizzesModuleOverrides = overrides;
+	ctx.saveSettings().catch(() => {});
+	currentHost().ui.notice(t("dashboard.quizzes.importDone", { name: base, count: entries.length }));
 	onDone();
 }
 
@@ -161,58 +156,69 @@ export async function importSharedFolder(
    demande Ahmed 2026-07-19.) ── */
 
 /** Chemin de note libre dans `folder` : « nom.md », sinon « nom (2).md »…
-    `folder` vide = racine du vault (module « racine », légitime). */
-function freeNotePath(ctx: DashboardCtx, folder: string, name: string): string {
+    `folder` vide = racine du vault (module « racine », légitime).
+
+    `fs.exists` (le DISQUE) et non `fs.getFile` (l'index des `.md`), alors même
+    qu'il s'agit d'une NOTE : les écritures qui précèdent viennent de `fs.write`,
+    que l'index n'a pas encore vu — l'hôte Obsidian l'apprend par son
+    surveillant, l'application le débounce de 300 ms. Interroger l'index
+    rendrait deux fois le même nom libre dans la boucle d'import ci-dessous, et
+    la seconde note écraserait la première. */
+async function freeNotePath(folder: string, name: string): Promise<string> {
 	const base = name.replace(/[\\/:*?"<>|]/g, "-").trim() || "quiz";
 	const prefix = folder ? `${folder}/` : "";
 	let path = `${prefix}${base}.md`;
-	for (let n = 2; ctx.app.vault.getAbstractFileByPath(path); n++) path = `${prefix}${base} (${n}).md`;
+	for (let n = 2; await currentHost().fs.exists(path); n++) path = `${prefix}${base} (${n}).md`;
 	return path;
 }
 
-/** Le dossier physique peut manquer (module déclaré par simple override). */
-async function ensureFolder(ctx: DashboardCtx, folder: string): Promise<void> {
-	if (folder && !ctx.app.vault.getAbstractFileByPath(folder)) await ctx.app.vault.createFolder(folder);
+/** Le dossier physique peut manquer (module déclaré par simple override).
+    `mkdirs` ne rejette pas s'il est déjà là : le test d'existence qui le
+    précédait n'apportait rien. */
+async function ensureFolder(folder: string): Promise<void> {
+	if (folder) await currentHost().fs.mkdirs(folder);
 }
 
 /** « New quiz » : note pré-remplie d'une question vierge (le même défaut que
     l'éditeur), puis ouverture directe dans l'éditeur visuel. */
-export async function createQuizInFolder(ctx: DashboardCtx, folder: string): Promise<void> {
+export async function createQuizInFolder(ctx: DashboardShellCtx, folder: string): Promise<void> {
 	try {
-		await ensureFolder(ctx, folder);
-		const path = freeNotePath(ctx, folder, t("dashboard.quizzes.newQuizDefaultName"));
-		await ctx.app.vault.create(path, exportAllWithFence([makeDefault("single")]) + "\n");
+		await ensureFolder(folder);
+		const path = await freeNotePath(folder, t("dashboard.quizzes.newQuizDefaultName"));
+		await currentHost().fs.write(path, exportAllWithFence([makeDefault("single")]) + "\n");
 		// En ÉDITION d'emblée : la question qu'on vient de créer est vierge.
-		await openQuizPathInEditor(ctx.app, path, { edit: true });
+		// Appel optionnel : l'application n'a pas d'éditeur avant la tranche 3,
+		// et la note créée reste alors simplement fermée.
+		await ctx.openQuizPath?.(path, { edit: true });
 	} catch {
-		new Notice(t("dashboard.quizzes.newQuizError"));
+		currentHost().ui.notice(t("dashboard.quizzes.newQuizError"));
 	}
 }
 
 /** « Import » : un .md partagé (quiz seul) ou un .zip (plusieurs notes) est
     recréé DANS le dossier ouvert — le pendant réception de quizShareSource. */
-export async function importQuizIntoFolder(ctx: DashboardCtx, folder: string, onDone: () => void): Promise<void> {
+export async function importQuizIntoFolder(ctx: DashboardShellCtx, folder: string, onDone: () => void): Promise<void> {
 	const picked = await pickFile(".md,.zip,text/markdown,application/zip");
 	if (!picked) return;
 	try {
-		await ensureFolder(ctx, folder);
+		await ensureFolder(folder);
 		if (/\.zip$/i.test(picked.name)) {
 			const entries = parseZip(picked.bytes).filter(e => QUIZ_BLOCK_RE.test(e.content));
-			if (entries.length === 0) { new Notice(t("dashboard.quizzes.importEmpty")); return; }
+			if (entries.length === 0) { currentHost().ui.notice(t("dashboard.quizzes.importEmpty")); return; }
 			for (const e of entries) {
 				const noteName = (e.name.split("/").pop() || e.name).replace(/\.md$/i, "");
-				await ctx.app.vault.create(freeNotePath(ctx, folder, noteName), e.content);
+				await currentHost().fs.write(await freeNotePath(folder, noteName), e.content);
 			}
-			new Notice(t("dashboard.quizzes.importDone", { name: folder.split("/").pop() || folder, count: entries.length }));
+			currentHost().ui.notice(t("dashboard.quizzes.importDone", { name: folder.split("/").pop() || folder, count: entries.length }));
 		} else {
 			const content = new TextDecoder().decode(picked.bytes);
-			if (!QUIZ_BLOCK_RE.test(content)) { new Notice(t("dashboard.quizzes.importNoQuiz")); return; }
+			if (!QUIZ_BLOCK_RE.test(content)) { currentHost().ui.notice(t("dashboard.quizzes.importNoQuiz")); return; }
 			const name = picked.name.replace(/\.md$/i, "");
-			await ctx.app.vault.create(freeNotePath(ctx, folder, name), content);
-			new Notice(t("dashboard.quizzes.importQuizDone", { name }));
+			await currentHost().fs.write(await freeNotePath(folder, name), content);
+			currentHost().ui.notice(t("dashboard.quizzes.importQuizDone", { name }));
 		}
 	} catch {
-		new Notice(t("dashboard.quizzes.importError"));
+		currentHost().ui.notice(t("dashboard.quizzes.importError"));
 		return;
 	}
 	onDone();

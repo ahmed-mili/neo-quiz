@@ -44,6 +44,8 @@ const LIBERES = [
 	"src/dashboard/module-icons.ts",
 	"src/dashboard/ui-select.ts",
 	"src/dashboard/icon-picker.ts",
+	"src/dashboard/folder-create.ts",
+	"src/dashboard/module-edit.ts",
 ];
 
 /** Retire les commentaires : une extension CITÉE en commentaire (par exemple

@@ -255,11 +255,11 @@ export interface DashboardShellCtx {
 	pickIcon?: (anchor: HTMLElement, courante: string | undefined, onPick: (nom: string) => void, suggestions?: string[]) => void;
 	/** Création d'un quiz dans le dossier OUVERT (drill-down de « Mes
 	    quiz »). Absente = le bouton « Nouveau quiz » du header n'est pas
-	    rendu (`CreateQuizModal` ouvre une modal, hors périmètre). */
+	    rendu (`openCreateQuizModal` ouvre une modal, hors périmètre). */
 	createQuiz?: (folder: string, done: () => void) => void;
 	/** Création d'un dossier (racine de « Mes quiz »). Absente = le bouton
 	    « Nouveau dossier » n'est pas rendu. `map`/`quizzes` : mêmes données
-	    que `CreateFolderModal` (l'import d'un .zip partagé cherche le parent
+	    que `openCreateFolderModal` (l'import d'un .zip partagé cherche le parent
 	    commun des modules déjà résolus — folder-create.ts). */
 	createFolder?: (map: ModuleMap, quizzes: QuizIndexEntry[], done: () => void) => void;
 	/** Sélecteur d'axe de regroupement (UE / Récent, ligne au-dessus de la
@@ -274,6 +274,12 @@ export interface DashboardShellCtx {
 		container: HTMLElement,
 		opts: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void },
 	) => { el: HTMLElement };
+	/** Ouvre la note d'un quiz, éventuellement en édition. Optionnel et ABSENT
+	    côté application jusqu'à la tranche 3 : ouvrir un quiz vierge qu'on ne
+	    peut pas éditer n'est pas une fonctionnalité, c'est une impasse.
+	    L'appelant garde donc son appel optionnel (`?.`) plutôt que de tester
+	    l'hôte. */
+	openQuizPath?: (path: string, opts?: { edit?: boolean }) => Promise<void>;
 }
 
 /* ════════════════════════════════════════════════════════

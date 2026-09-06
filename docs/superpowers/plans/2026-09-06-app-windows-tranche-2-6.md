@@ -79,7 +79,7 @@ Cinq fichiers quittent le cliquet, qui passe de **33 à 28**.
 Comptés avec la MÊME expression que `scripts/check-host.mjs` (assertion 4),
 commentaires retirés. Le total de 127 pour `ui-select.ts` est confirmé.
 
-`src/modal-base.ts` NE sort PAS : cinq sous-classes de `QbdModal` restent hors
+`src/modal-base.ts` NE sort PAS : six sous-classes de `QbdModal` restent hors
 périmètre (voir tâche 5). Il part avec les tranches 3 et 4.
 
 ### Deux blocages transitifs, trouvés en mesurant et non en lisant le brief
@@ -332,7 +332,7 @@ boîte illisible au milieu de l'écran. Aucun script ne peut le dire.
 
 ### La surface à couvrir, mesurée et non supposée
 
-Les huit sous-classes de `QbdModal` du dépôt n'emploient de `Modal` d'Obsidian
+Les dix sous-classes de `QbdModal` du dépôt n'emploient de `Modal` d'Obsidian
 que **six choses**, toujours les mêmes :
 
 ```
@@ -504,9 +504,18 @@ grep -rn '^\.modal\b\|^\.modal-bg\|^\.modal-container' src/assets/css/; echo "EX
 Il faut donc les écrire : centrage du conteneur, fond semi-opaque, panneau avec
 sa largeur maximale, son fond, son rayon et son ombre, corps défilant quand il
 déborde, titre, croix. **Employer les variables du thème**
-(`apps/windows/src/theme/host-vars.css`), jamais des couleurs en dur : c'est ce
-que `npm run check:theme` garde, et une couleur en dur y échapperait tout en
-cassant le jour où le thème clair arrivera.
+(`apps/windows/src/theme/host-vars.css`), jamais des couleurs en dur, pour que
+le thème clair du jour venu n'ait qu'un seul endroit à changer.
+
+**CORRECTION (2026-09-06, après exécution de la tâche 1).** La première version
+de ce paragraphe affirmait que `npm run check:theme` gardait ce fichier. **C'est
+faux dans les deux sens**, vérifié dans `scripts/check-theme.mjs` : il balaie
+`src/assets/css` et n'entre jamais dans `apps/windows/src/assets/`, donc une
+variable employée seulement ici n'est jamais vue ; et son assertion symétrique
+ferait ÉCHOUER l'ajout au thème d'une variable que l'arbre CSS partagé ne
+référence pas. **`modal.css` n'a donc AUCUN contrôle mécanique.** L'épreuve à
+l'écran (première entrée de « Ce qu'aucun script ne peut prouver ») est le seul
+filet qui existe pour ce fichier — ne pas la sauter en la croyant doublée.
 
 Importer le fichier dans `apps/windows/src/main.ts`. **L'ordre compte** — le
 commentaire de `main.ts:29` l'explique : `host-vars.css` doit précéder, et les
@@ -1134,7 +1143,7 @@ dossier. Par ordre de risque décroissant.
 
 ## Ce que cette tranche laisse ouvert
 
-- **`src/modal-base.ts` reste dans `RESTANTS`** (cinq sous-classes hors
+- **`src/modal-base.ts` reste dans `RESTANTS`** (six sous-classes hors
   périmètre). Il part avec la tranche 3, une fois `quiz-menu.ts`, `share.ts` et
   `editor/modals.ts` convertis — et avec la tranche 4 pour `usage-modal.ts`.
 - **`openCardMenu` / `openModuleMenu` restent absents côté application.** Ils

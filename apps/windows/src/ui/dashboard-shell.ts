@@ -22,6 +22,9 @@ import { ajouter } from "../../../../src/dom";
 import { createNavHandlers } from "../../../../src/dashboard/nav";
 import { createHomeHandlers } from "../../../../src/dashboard/home";
 import { createQuizzesHandlers } from "../../../../src/dashboard/quizzes";
+import { openIconPicker } from "../../../../src/dashboard/icon-picker";
+import { openCreateFolderModal } from "../../../../src/dashboard/folder-create";
+import { createSelect } from "../../../../src/dashboard/ui-select";
 import type { DashboardPageSettings, DashboardShellCtx, DashboardViewName } from "../../../../src/types/dashboard-ctx";
 import type { QuizIndexEntry, Scanner } from "../../../../src/dashboard/scanner";
 import type { StatsStore } from "../../../../src/dashboard/stats-store";
@@ -148,16 +151,22 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 		openSettings: () => deps.onOpenSettings(),
 		canOpen: (vue) => vue !== "ai",
 		reviewStore: deps.reviewStore,
-		/* openCardMenu, openModuleMenu, pickIcon, createQuiz, createFolder,
-		   renderGroupingSelect : ABSENTS À DESSEIN. Ce sont tous des menus,
-		   modals ou dropdowns (tranche 2.6) qui exigent soit le `DashboardCtx`
-		   complet du greffon (menus ⋯), soit `ui-select.ts` (le sélecteur
-		   d'axe), qui importe encore Obsidian — la contrainte D5 du plan
-		   l'exclut explicitement de cette tranche. Chaque membre est optionnel
-		   côté `DashboardShellCtx` précisément pour que cette absence soit un
-		   état PRÉVU (pas de « ⋯ », pas de « + Nouveau dossier », axe déjà
-		   persisté mais sans sélecteur pour le changer) plutôt qu'une erreur
-		   de compilation. */
+		pickIcon: (anchor, courante, onPick, suggestions) => {
+			openIconPicker(anchor, courante, onPick, document.body, suggestions ?? []);
+		},
+		createFolder: (map, quizzes, done) => openCreateFolderModal(ctx, map, quizzes, done),
+		renderGroupingSelect: (container, opts) => createSelect(container, opts),
+		/* openCardMenu, openModuleMenu, createQuiz, openQuizPath : ABSENTS À
+		   DESSEIN (tranche 3). Les trois premiers membres ci-dessus sont
+		   maintenant honorables : `icon-picker.ts` et `folder-create.ts` (tâches
+		   1-5) ne tirent plus Obsidian, et `createSelect` (ui-select.ts) non
+		   plus. Il ne reste d'absent que ce qui écrit sur le disque via l'éditeur
+		   ou ouvre une note — `openCardMenu`/`openModuleMenu` (trois de leurs
+		   quatre entrées), `createQuiz` (un quiz vierge sans éditeur pour
+		   l'éditer aussitôt n'est pas une fonctionnalité) et `openQuizPath`
+		   (aucun éditeur avant la tranche 3). Chaque membre reste optionnel côté
+		   `DashboardShellCtx` précisément pour que cette absence soit un état
+		   PRÉVU plutôt qu'une erreur de compilation. */
 	};
 
 	const nav = createNavHandlers(ctx);

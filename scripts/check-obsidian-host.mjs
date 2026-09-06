@@ -16,7 +16,11 @@ import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 /** Fausse App : la surface EXACTE que l'hôte consomme, rien de plus.
     `options.adapter` complète (et peut remplacer) l'adaptateur par défaut —
     c'est ce qui permet au jeu de cas des racines de brancher ses propres
-    `append`/`list`/`remove`/`rename` sans dupliquer tout le mock. */
+    `append`/`list`/`remove`/`rename` sans dupliquer tout le mock.
+    `options.vault` joue le même rôle un cran plus haut : le jeu de cas de
+    l'écriture y branche `create`/`modify`/`getAbstractFileByPath`, qui doivent
+    partager UN index mutable pour que « écrit » et « visible » soient deux
+    choses distinctes. */
 function fausseApp(fichiers, options = {}) {
 	const parChemin = new Map(fichiers.map(f => [f.path, f]));
 	return {
@@ -40,6 +44,7 @@ function fausseApp(fichiers, options = {}) {
 			},
 			on: () => ({}),
 			offref: () => undefined,
+			...(options.vault || {}),
 		},
 		metadataCache: {
 			getFirstLinkpathDest: (lien) => parChemin.get(lien + ".md") ?? null,
@@ -247,6 +252,91 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	   inventé, qui pointerait à côté et lirait le journal de personne. */
 	const sansManifeste = createObsidianHost(app, { manifest: {} });
 	r.check("sans manifeste, aucun ancien journal", sansManifeste.paths.roots()[0].legacyReviewLog, null);
+
+	r.done();
+});
+
+await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
+	const r = makeReporter("Hôte Obsidian — écrire sans perdre l'index");
+
+	/* DEUX états, et c'est toute la question : le DISQUE et l'INDEX du vault.
+	   `vault.create` inscrit le fichier à l'index DANS L'APPEL — c'est la
+	   propriété qu'on achète en passant par lui, et la seule qui permette
+	   d'ouvrir une note qu'on vient d'écrire. `adapter.write` ne touche que le
+	   disque : le vault ne l'apprendrait que par son surveillant, plus tard, et
+	   jamais pour un dossier caché. Le double reproduit exactement ça — sans
+	   cette séparation, les cas ci-dessous resteraient verts quelle que soit la
+	   voie choisie. */
+	const index = new Map();
+	const disque = new Set();
+	const journal = [];
+	const inscrire = (p) => {
+		index.set(p, fichier(p, p.split("/").pop().split(".").pop()));
+		disque.add(p);
+	};
+	inscrire("Cours/ch1.md");
+	// Un résultat déjà exporté : il est sur le disque, jamais à l'index.
+	disque.add(".obsidian/quiz-blocks-results/latest.json");
+
+	const app = fausseApp([], {
+		adapter: {
+			write: async (p, d) => { journal.push(["adapter", p, d]); disque.add(p); },
+			exists: async (p) => disque.has(p),
+		},
+		vault: {
+			getAbstractFileByPath: (p) => index.get(p) ?? null,
+			/* Le vault RÉEL rejette une cible existante ; sans ce jet, le cas
+			   « présent hors index » resterait vert même si l'hôte appelait
+			   `create` à tort. */
+			create: async (p, d) => {
+				if (disque.has(p)) throw new Error("File already exists: " + p);
+				journal.push(["create", p, d]);
+				inscrire(p);
+			},
+			modify: async (f, d) => { journal.push(["modify", f.path, d]); },
+		},
+	});
+	const host = createObsidianHost(app, { manifest: {} });
+
+	/* LE cas de la tranche : une note neuve doit être VISIBLE de
+	   `getAbstractFileByPath` dès que `write` a rendu la main. C'est ce dont
+	   dépend « Nouveau quiz » (folder-create.ts), qui écrit la note puis
+	   l'ouvre par son chemin. Passer par l'adaptateur fait rougir CE cas-là,
+	   et lui seul le dit. */
+	await host.fs.write("Cours/ch2.md", "neuf");
+	r.check("une note neuve est visible de l'index aussitôt écrite",
+		host.fs.getFile("Cours/ch2.md")?.path, "Cours/ch2.md");
+	r.check("elle est passée par vault.create", journal, [["create", "Cours/ch2.md", "neuf"]]);
+
+	/* Une note DÉJÀ indexée : `create` rejetterait, `write` promet de
+	   remplacer. C'est `modify` qui tient la promesse. */
+	await host.fs.write("Cours/ch1.md", "modifié");
+	r.check("une note déjà indexée passe par vault.modify",
+		journal.at(-1), ["modify", "Cours/ch1.md", "modifié"]);
+
+	/* Les RÉSULTATS exportés vivent sous « .obsidian/ », que le vault n'indexe
+	   pas : `vault.create` y échouerait, et deux ans de fichiers déjà écrits
+	   deviendraient inécrivables. L'adaptateur, et lui seul. */
+	await host.fs.write(".obsidian/quiz-blocks-results/2026.json", "{}");
+	r.check("un chemin caché passe par l'adaptateur",
+		journal.at(-1), ["adapter", ".obsidian/quiz-blocks-results/2026.json", "{}"]);
+	await host.fs.write(".obsidian/quiz-blocks-results/latest.json", "{}");
+	r.check("un résultat déjà là est REMPLACÉ, sans rejet",
+		journal.at(-1), ["adapter", ".obsidian/quiz-blocks-results/latest.json", "{}"]);
+
+	/* Sur le disque mais pas à l'index (écrit à l'instant hors d'Obsidian) :
+	   `vault.create` rejetterait « File already exists », et `write` ne promet
+	   nulle part de rejeter parce que la cible existe. */
+	disque.add("Cours/externe.md");
+	let aLeve = false;
+	try {
+		await host.fs.write("Cours/externe.md", "x");
+	} catch (e) {
+		aLeve = true;
+	}
+	r.check("un fichier présent hors index ne fait pas rejeter write", aLeve, false);
+	r.check("… et il passe par l'adaptateur",
+		journal.at(-1), ["adapter", "Cours/externe.md", "x"]);
 
 	r.done();
 });

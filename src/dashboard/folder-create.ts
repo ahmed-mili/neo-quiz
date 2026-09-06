@@ -134,7 +134,17 @@ export async function importSharedFolder(
 			// Aplatir : on n'écrit que le nom de note (pas de sous-chemins d'archive).
 			const noteName = (e.name.split("/").pop() || e.name).replace(/[\\/:*?"<>|]/g, "-");
 			if (!noteName) continue;
-			await currentHost().fs.write(`${folderPath}/${noteName}`, e.content);
+			/* Le MÊME dédoublonnage que les autres imports, et pour une raison
+			   neuve : deux entrées venues de sous-dossiers différents s'aplatissent
+			   parfois sur le même nom, et `fs.write` REMPLACE là où `vault.create`
+			   rejetait — la première note disparaissait sans un mot, là où
+			   l'utilisateur voyait autrefois une erreur d'import. L'extension est
+			   séparée puis rendue telle quelle : ce zip n'est pas forcément fait
+			   que de `.md`. */
+			const point = noteName.lastIndexOf(".");
+			const stem = point > 0 ? noteName.slice(0, point) : noteName;
+			const ext = point > 0 ? noteName.slice(point) : "";
+			await currentHost().fs.write(await freeNotePath(folderPath, stem, ext), e.content);
 		}
 	} catch {
 		currentHost().ui.notice(t("dashboard.quizzes.importError"));
@@ -155,20 +165,23 @@ export async function importSharedFolder(
    (Le header y remplace « New folder », qui n'a pas de sens dans un dossier —
    demande Ahmed 2026-07-19.) ── */
 
-/** Chemin de note libre dans `folder` : « nom.md », sinon « nom (2).md »…
-    `folder` vide = racine du vault (module « racine », légitime).
+/** Chemin libre dans `folder` : « nom.md », sinon « nom (2).md »…
+    `folder` vide = racine du vault (module « racine », légitime). `ext` n'est
+    `.md` que par défaut — l'import d'un dossier partagé recrée aussi ce qui,
+    dans le zip, n'est pas une note.
 
     `fs.exists` (le DISQUE) et non `fs.getFile` (l'index des `.md`), alors même
-    qu'il s'agit d'une NOTE : les écritures qui précèdent viennent de `fs.write`,
-    que l'index n'a pas encore vu — l'hôte Obsidian l'apprend par son
-    surveillant, l'application le débounce de 300 ms. Interroger l'index
-    rendrait deux fois le même nom libre dans la boucle d'import ci-dessous, et
-    la seconde note écraserait la première. */
-async function freeNotePath(folder: string, name: string): Promise<string> {
+    qu'il s'agit d'une NOTE : `fs.write` écrit d'abord sur le disque, et l'index
+    ne le suit pas partout. L'hôte Obsidian passe désormais par le vault, qui
+    indexe aussitôt ; l'application, elle, l'apprend par un surveillant DÉBOUNCÉ
+    de 300 ms (`apps/windows/src/host/fs.ts`). Interroger l'index y rendrait deux
+    fois le même nom libre dans les boucles d'import, et la seconde note
+    écraserait la première. Le disque, lui, dit la vérité sous les deux hôtes. */
+async function freeNotePath(folder: string, name: string, ext = ".md"): Promise<string> {
 	const base = name.replace(/[\\/:*?"<>|]/g, "-").trim() || "quiz";
 	const prefix = folder ? `${folder}/` : "";
-	let path = `${prefix}${base}.md`;
-	for (let n = 2; await currentHost().fs.exists(path); n++) path = `${prefix}${base} (${n}).md`;
+	let path = `${prefix}${base}${ext}`;
+	for (let n = 2; await currentHost().fs.exists(path); n++) path = `${prefix}${base} (${n})${ext}`;
 	return path;
 }
 

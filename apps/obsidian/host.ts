@@ -135,6 +135,19 @@ export function createObsidianHost(
 
 	/* ─── fs ─── */
 
+	/**
+	 * Un chemin qu'Obsidian n'INDEXE PAS : un segment commençant par un point
+	 * (« .obsidian/quiz-blocks-results/… », « .neo-quiz/… »). Le vault ignore
+	 * ces dossiers de bout en bout — `vault.create` y échoue, et
+	 * `getAbstractFileByPath` n'y trouvera jamais rien.
+	 *
+	 * La FORME du chemin, et pas un test d'existence : `write` doit choisir sa
+	 * voie AVANT que le fichier existe, quand il n'y a rien d'autre à regarder.
+	 * Même convention que le parcours de l'hôte Windows (`dossierIgnore`).
+	 */
+	const estCache = (path: string): boolean =>
+		path.split("/").some(segment => segment.startsWith("."));
+
 	/** Reprise telle quelle de la boucle `ensureFolder` de
 	    `engine/results-save.ts` : segment par segment, `exists` puis `mkdir`.
 	    L'adaptateur n'a pas de création récursive, et créer « a/b/c » d'un coup
@@ -164,8 +177,34 @@ export function createObsidianHost(
 			const f = tfile(path);
 			return f ? await app.vault.cachedRead(f) : await adapter().read(path);
 		},
+		/* « Créer ou remplacer » — mais en gardant l'INDEX du vault juste.
+		   `adapter().write` seul écrit sur le disque sans que le vault en sache
+		   rien : la note existe, et `getAbstractFileByPath` la cherche pourtant
+		   en vain jusqu'au passage du surveillant. C'est exactement ce qui
+		   faisait échouer l'ouverture d'un quiz qu'on venait de créer
+		   (`dashboard/folder-create.ts`, bouton « Nouveau quiz »). Le vault, lui,
+		   indexe dans l'appel ; l'adaptateur ne reste que pour ce que le vault
+		   n'indexe pas. */
 		async write(path, data) {
-			await adapter().write(path, data);
+			if (estCache(path)) {
+				await adapter().write(path, data);
+				return;
+			}
+			// `create` REJETTE une cible existante : c'est `modify` qui remplace.
+			const f = tfile(path);
+			if (f) {
+				await app.vault.modify(f, data);
+				return;
+			}
+			/* Sur le disque mais pas encore à l'index (écrit à l'instant hors
+			   d'Obsidian, ou dossier que le vault n'a pas fini de parcourir) :
+			   `vault.create` rejetterait, et `write` promet de REMPLACER, jamais
+			   de rejeter parce que la cible est là. */
+			if (await adapter().exists(path)) {
+				await adapter().write(path, data);
+				return;
+			}
+			await app.vault.create(path, data);
 		},
 		async exists(path) {
 			return await adapter().exists(path);

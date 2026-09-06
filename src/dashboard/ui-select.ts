@@ -452,8 +452,9 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		if (opts.searchable) {
 			menuEl.classList.add("qbd-model-menu--searchable");
 			const searchWrap = ajouter(menuEl, "div", "qbd-model-menu-search");
-			// L'anglais reprend la formule exacte de l'app Ollama (référence).
 			const searchInput = ajouter(searchWrap, "input", "qbd-model-menu-search-input");
+			searchInput.type = "text";
+			// L'anglais reprend la formule exacte de l'app Ollama (référence).
 			searchInput.placeholder = t("dashboard.select.findModel");
 			searchInput.spellcheck = false;
 			const listEl = ajouter(menuEl, "div", "qbd-model-menu-list");
@@ -1307,6 +1308,7 @@ export function openNotePicker<F extends PickableFile>(anchorEl: HTMLElement, op
 
 	const searchWrap = ajouter(menuEl, "div", "qbd-model-menu-search");
 	const input = ajouter(searchWrap, "input", "qbd-model-menu-search-input");
+	input.type = "text";
 	input.placeholder = t("dashboard.select.noteSearch");
 	input.spellcheck = false;
 	const listEl = ajouter(menuEl, "div", "qbd-model-menu-list");

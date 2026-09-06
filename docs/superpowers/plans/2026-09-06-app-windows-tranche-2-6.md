@@ -168,11 +168,36 @@ ces défauts :
 2. **Juger un script sur son CODE DE SORTIE.** `npm run <x>; echo "EXIT=$?"` sur
    UNE SEULE LIGNE, sans pipe. Un `| tail` rend le statut de `tail`, pas celui
    du script. Un groupe vert peut suivre trois groupes rouges.
-3. **`npm run check:app` pour tout code de `src/` destiné à l'application.**
-   `npm run check` (typecheck) ne voit QUE le greffon, avec `obsidian.d.ts`
-   chargé : une extension DOM oubliée y compile sans un mot. `check:app`
-   compile le code partagé tel que la fenêtre le verra. **Un fichier converti
-   sans `check:app` vert n'est pas converti.**
+3. **`npm run check:app` pour tout code de `src/` destiné à l'application —
+   mais SEULEMENT après l'avoir rendu ATTEIGNABLE.** `npm run check` (typecheck)
+   ne voit QUE le greffon, avec `obsidian.d.ts` chargé : une extension DOM
+   oubliée y compile sans un mot. `check:app` compile le code partagé tel que
+   la fenêtre le verra.
+
+   **CORRECTION (2026-09-06, après la revue de la tâche 2).** La formule
+   « un fichier converti sans `check:app` vert n'est pas converti » est
+   TROMPEUSE telle quelle, et elle a produit un rapport affirmant une preuve
+   qui n'existait pas. Vérifié dans `apps/windows/tsconfig.json` :
+   `"include"` ne tire de `src/` que `../../src/**/*.d.ts` — des fichiers de
+   DÉCLARATION. Tout le reste n'entre dans la compilation que s'il est
+   **importé** depuis `apps/windows/src`. Un fichier de `src/` que l'app
+   n'importe pas encore n'est donc JAMAIS compilé par `check:app`, qui reste
+   vert quoi qu'on lui fasse subir.
+
+   C'est le cas de tous les fichiers convertis par les tâches 2 à 5 : rien
+   sous `apps/windows/src` ne les importe avant la tâche 6.
+
+   **Le geste correct**, celui que cette section prescrivait déjà sans que les
+   étapes des tâches le reprennent :
+   1. ajouter un import TEMPORAIRE du fichier converti dans
+      `apps/windows/src/main.ts`, et **référencer** ce qu'on importe —
+      `isolatedModules` est actif, un import inutilisé peut être élidé ;
+   2. `npm run check:app; echo "EXIT=$?"` ;
+   3. **retirer l'import avant de commiter.**
+
+   C'est la SEULE façon de voir un import transitif d'Obsidian, et c'est
+   exactement ce qui a manqué à la tranche 2.5 : trois tâches validées vertes,
+   et la tâche 7 qui explose en important pour de vrai.
 
 ---
 

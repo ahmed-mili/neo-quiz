@@ -257,7 +257,7 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 });
 
 await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
-	const r = makeReporter("Hôte Obsidian — écrire sans perdre l'index");
+	const r = makeReporter("Hôte Obsidian — écrire et créer un dossier sans perdre l'index");
 
 	/* DEUX états, et c'est toute la question : le DISQUE et l'INDEX du vault.
 	   `vault.create` inscrit le fichier à l'index DANS L'APPEL — c'est la
@@ -282,9 +282,22 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		adapter: {
 			write: async (p, d) => { journal.push(["adapter", p, d]); disque.add(p); },
 			exists: async (p) => disque.has(p),
+			mkdir: async (p) => { journal.push(["mkdir", p]); disque.add(p); },
 		},
 		vault: {
 			getAbstractFileByPath: (p) => index.get(p) ?? null,
+			/* `createFolder` REJETTE une cible existante, comme `create`
+			   (obsidian.d.ts : « @throws Error if folder already exists ») —
+			   sans ce jet, le cas de l'idempotence resterait vert même si l'hôte
+			   cessait d'avaler. Il inscrit un objet SANS `extension` : c'est à ça,
+			   et non à un `instanceof`, que `asTFile` distingue un dossier d'un
+			   fichier. */
+			createFolder: async (p) => {
+				if (disque.has(p)) throw new Error("Folder already exists: " + p);
+				journal.push(["createFolder", p]);
+				index.set(p, { path: p });
+				disque.add(p);
+			},
 			/* Le vault RÉEL rejette une cible existante ; sans ce jet, le cas
 			   « présent hors index » resterait vert même si l'hôte appelait
 			   `create` à tort. */
@@ -337,6 +350,54 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	r.check("un fichier présent hors index ne fait pas rejeter write", aLeve, false);
 	r.check("… et il passe par l'adaptateur",
 		journal.at(-1), ["adapter", "Cours/externe.md", "x"]);
+
+	/* Un point HORS DU PREMIER segment. `estCache` teste TOUT segment, ce qui
+	   n'était jusqu'ici qu'argumenté dans un commentaire — aucun cas ne
+	   l'éprouvait, et un prédicat réduit à `path.startsWith(".")` serait resté
+	   vert tout en envoyant ce chemin à `vault.create`, qui n'indexe rien
+	   sous un dossier caché. */
+	await host.fs.write("Cours/.cache/x.json", "{}");
+	r.check("un point hors du premier segment prend aussi l'adaptateur",
+		journal.at(-1), ["adapter", "Cours/.cache/x.json", "{}"]);
+
+	/* ── mkdirs : le MÊME partage que write, et pour la même raison ──
+	   Les deux appelants de `folder-create.ts` (import d'un zip, « Nouveau
+	   quiz ») créent un dossier puis y écrivent aussitôt une note par
+	   `vault.create`, qui a besoin d'un parent connu du vault. `adapter.mkdir`
+	   pose le dossier sur le disque sans qu'aucun `TFolder` n'entre à
+	   l'index. */
+	await host.fs.mkdirs("Cours/Neuf");
+	r.check("un dossier neuf est visible de l'index aussitôt créé",
+		!!app.vault.getAbstractFileByPath("Cours/Neuf"), true);
+	r.check("chaque segment passe par vault.createFolder",
+		journal.slice(-2), [["createFolder", "Cours"], ["createFolder", "Cours/Neuf"]]);
+
+	/* Le contrat promet l'idempotence (`mkdirs` « ne rejette pas s'il existe
+	   déjà ») là où `vault.createFolder` REJETTE : c'est l'hôte qui avale, sur
+	   PREUVE d'existence et non sur le texte de l'erreur. */
+	let mkdirsALeve = false;
+	try {
+		await host.fs.mkdirs("Cours/Neuf");
+	} catch (e) {
+		mkdirsALeve = true;
+	}
+	r.check("recréer un dossier déjà là ne rejette pas", mkdirsALeve, false);
+
+	/* Les dossiers CACHÉS restent à l'adaptateur : ni « .obsidian/
+	   quiz-blocks-results » ni « .neo-quiz » ne sont indexés par le vault, et
+	   `createFolder` y échouerait — les exports et le journal de révision
+	   deviendraient inécrivables. */
+	await host.fs.mkdirs(".obsidian/quiz-blocks-results");
+	r.check("un dossier caché passe par l'adaptateur, segment par segment",
+		journal.slice(-2), [["mkdir", ".obsidian"], ["mkdir", ".obsidian/quiz-blocks-results"]]);
+
+	/* Le partage se fait sur CHAQUE PRÉFIXE, pas sur le chemin entier : dans
+	   « Notes/.cache », « Notes » est un vrai dossier du vault et lui seul est
+	   caché. Tester le chemin complet ferait échapper le PARENT à l'index par
+	   contagion — et c'est ce cas-ci, et lui seul, qui le dirait. */
+	await host.fs.mkdirs("Notes/.cache");
+	r.check("le parent visible reste au vault, seul le segment caché descend à l'adaptateur",
+		journal.slice(-2), [["createFolder", "Notes"], ["mkdir", "Notes/.cache"]]);
 
 	r.done();
 });

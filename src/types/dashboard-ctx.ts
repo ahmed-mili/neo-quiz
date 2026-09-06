@@ -198,12 +198,15 @@ export interface DashboardShellCtx {
 	settings: DashboardPageSettings;
 	saveSettings(): Promise<void>;
 	/* Le plan (D3) déclarait `navigate(view: DashboardViewName): void`, sans
-	   second paramètre — mais quiz-menu.ts, ai.ts, detail.ts et
-	   folder-create.ts (hors périmètre de cette tâche, toujours typés en
-	   `DashboardCtx`) appellent TOUS `ctx.navigate("detail", { quiz, edit? })`.
+	   second paramètre — mais `home.ts` (typé, lui, en `DashboardShellCtx`)
+	   et quiz-menu.ts, ai.ts, detail.ts (toujours typés en `DashboardCtx`,
+	   ils importent encore Obsidian) appellent TOUS
+	   `ctx.navigate("detail", { quiz, edit? })`.
 	   Perdre ce paramètre ici cassait leur compilation : signature restaurée
 	   à l'identique de l'ancienne `DashboardCtx.navigate` (bug du plan,
-	   corrigé — cf. rapport de tâche). */
+	   corrigé — cf. rapport de tâche).
+	   `folder-create.ts`, lui, est passé à `DashboardShellCtx` en tranche 2.6
+	   (il n'appelle que `navigate("ai")`, à un seul argument). */
 	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void;
 	/** Historique boutons souris (spec 2026-07-20-mouse-nav-history) : empile
 	    l'état de navigation COURANT avant un changement — appelé par quizzes.ts
@@ -250,12 +253,20 @@ export interface DashboardShellCtx {
 	    Absent = la pastille n'est pas cliquable — `renderModuleCard` prévoit
 	    déjà `onPickIcon?` en opt-in. `suggestions` (calculées par la PAGE
 	    depuis le nom/l'UE du module, pur — icon-suggest.ts) est simplement
-	    transmis : seul `openIconPicker` (icon-picker.ts, `getIconIds`
-	    d'Obsidian) exige l'hôte complet. */
+	    transmis ; c'est l'HÔTE qui appelle `openIconPicker` et lui donne son
+	    conteneur de portail (les deux passent `document.body` aujourd'hui).
+	    `icon-picker.ts` ne tire plus Obsidian depuis la tranche 2.6 — les noms
+	    d'icônes viennent d'`HostUi.iconNames()` —, et l'application fournit
+	    donc réellement ce membre. */
 	pickIcon?: (anchor: HTMLElement, courante: string | undefined, onPick: (nom: string) => void, suggestions?: string[]) => void;
 	/** Création d'un quiz dans le dossier OUVERT (drill-down de « Mes
 	    quiz »). Absente = le bouton « Nouveau quiz » du header n'est pas
-	    rendu (`openCreateQuizModal` ouvre une modal, hors périmètre). */
+	    rendu. Les modals ne sont plus la raison de cette absence (elles sont
+	    dans le contrat depuis la tranche 2.6) : c'est que « Nouveau quiz »
+	    écrit une note VIERGE puis l'ouvre en édition, et que l'application
+	    n'a pas d'éditeur avant la tranche 3 — un quiz vide qu'on ne peut pas
+	    remplir est une impasse, pas une fonctionnalité
+	    (apps/windows/src/ui/dashboard-shell.ts). */
 	createQuiz?: (folder: string, done: () => void) => void;
 	/** Création d'un dossier (racine de « Mes quiz »). Absente = le bouton
 	    « Nouveau dossier » n'est pas rendu. `map`/`quizzes` : mêmes données
@@ -263,13 +274,14 @@ export interface DashboardShellCtx {
 	    commun des modules déjà résolus — folder-create.ts). */
 	createFolder?: (map: ModuleMap, quizzes: QuizIndexEntry[], done: () => void) => void;
 	/** Sélecteur d'axe de regroupement (UE / Récent, ligne au-dessus de la
-	    grille). `createSelect` (ui-select.ts) importe encore Obsidian — même
-	    famille D5 que les menus et l'icon-picker (le plan liste explicitement
-	    `ui-select.ts` parmi ce que la tranche 2.5 laisse ouvert). Absent côté
-	    application : l'axe déjà persisté (réglage `quizzesGrouping`) reste
-	    actif, simplement sans bouton pour le changer — l'app portera son
-	    propre dropdown en tranche 2.6. Renvoie l'élément du déclencheur pour
-	    que l'appelant y ajoute sa propre classe, comme `createSelect`. */
+	    grille). `createSelect` (ui-select.ts) a été libéré d'Obsidian en
+	    tranche 2.6 et les DEUX hôtes consomment désormais le MÊME dropdown
+	    partagé — l'application n'en a pas porté un second, ce qui aurait
+	    donné deux composants à faire évoluer ensemble. Le membre reste
+	    optionnel parce qu'un hôte a le droit de ne pas offrir de bouton :
+	    l'axe déjà persisté (réglage `quizzesGrouping`) resterait actif.
+	    Renvoie l'élément du déclencheur pour que l'appelant y ajoute sa
+	    propre classe, comme `createSelect`. */
 	renderGroupingSelect?: (
 		container: HTMLElement,
 		opts: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void },

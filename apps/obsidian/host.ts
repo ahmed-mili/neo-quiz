@@ -97,7 +97,6 @@ class HoteModal extends QbdModal {
 		this.poignee = {
 			panelEl: this.modalEl,
 			contentEl: this.contentEl,
-			setTitle: (texte) => this.titleEl.setText(texte),
 			close: () => this.close(),
 		};
 	}
@@ -148,17 +147,45 @@ export function createObsidianHost(
 	const estCache = (path: string): boolean =>
 		path.split("/").some(segment => segment.startsWith("."));
 
-	/** Reprise telle quelle de la boucle `ensureFolder` de
-	    `engine/results-save.ts` : segment par segment, `exists` puis `mkdir`.
-	    L'adaptateur n'a pas de création récursive, et créer « a/b/c » d'un coup
-	    échoue si « a » manque. */
+	/** Segment par segment — ni le vault ni l'adaptateur n'ont de création
+	    récursive, et créer « a/b/c » d'un coup échoue si « a » manque.
+	    (Boucle héritée d'`ensureFolder` de `engine/results-save.ts`.)
+
+	    MÊME PARTAGE QUE `write`, et pour la même raison : `adapter().mkdir`
+	    pose le dossier sur le disque sans qu'aucun `TFolder` n'entre à
+	    l'index, alors que `vault.createFolder` en rend un. Or les deux appels
+	    de `dashboard/folder-create.ts` (import d'un zip, « Nouveau quiz »)
+	    enchaînent aussitôt sur un `fs.write` qui, lui, passe désormais par
+	    `vault.create` : le parent doit être connu du vault à cet instant
+	    précis. (`module-edit.ts` est le dernier à créer un dossier VISIBLE ;
+	    il n'écrit rien derrière, mais son dossier n'en mérite pas moins
+	    d'exister à l'index. Tous les autres appelants de `mkdirs` — journal
+	    de révision, résultats exportés, migration — visent un dossier caché
+	    et gardent donc exactement la conduite d'avant.)
+
+	    Le partage se fait sur CHAQUE PRÉFIXE et non sur le chemin entier :
+	    pour « Cours/.cache », « Cours » est un vrai dossier du vault et lui
+	    seul est caché. Tester le chemin complet ferait échapper le parent à
+	    l'index par contagion. */
 	async function mkdirs(path: string): Promise<void> {
 		const parts = path.split("/").filter(Boolean);
 		let current = "";
 		for (const part of parts) {
 			current = current ? `${current}/${part}` : part;
-			if (!(await adapter().exists(current))) {
-				await adapter().mkdir(current);
+			if (estCache(current)) {
+				if (!(await adapter().exists(current))) await adapter().mkdir(current);
+				continue;
+			}
+			try {
+				await app.vault.createFolder(current);
+			} catch (e) {
+				/* `createFolder` REJETTE un dossier déjà là, et le contrat promet
+				   l'idempotence. On avale sur PREUVE d'existence plutôt que sur le
+				   message de l'erreur : ce texte n'est ni documenté ni traduit
+				   stablement, et le comparer rendrait le contrôle dépendant d'une
+				   chaîne d'Obsidian. Tout autre échec (droits, nom invalide)
+				   remonte, comme avant. */
+				if (!(await adapter().exists(current))) throw e;
 			}
 		}
 	}

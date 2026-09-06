@@ -132,7 +132,6 @@ function ouvrir(spec: HostModalSpec): HostModalHandle {
 	const poignee: HostModalHandle = {
 		panelEl: panneau,
 		contentEl: corps,
-		setTitle: (texte) => { titre.textContent = texte; },
 		close: fermer,
 	};
 	/* LE FOCUS ENTRE DANS LE PANNEAU, sinon la première tabulation après

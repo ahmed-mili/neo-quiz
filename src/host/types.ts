@@ -48,6 +48,20 @@ export interface HostFs {
 	    de servir un cache. Obsidian a `cachedRead` ; un hôte sans cache peut
 	    renvoyer `read`. */
 	readCached(path: string): Promise<string>;
+	/** CRÉE OU REMPLACE : le contenu est écrit, que la cible existe ou non.
+	    Ne rejette JAMAIS parce qu'elle existe déjà — un hôte dont l'API de
+	    création refuse une cible présente (`vault.create` sous Obsidian) doit
+	    lui-même retomber sur un remplacement.
+
+	    Ce qu'elle NE PROMET PAS : que la cible soit AUSSITÔT visible de
+	    `getFile`. Les deux hôtes indexent différemment — le greffon inscrit
+	    la note dans l'appel (`vault.create`), l'application ne l'apprend que
+	    par un surveillant DÉBOUNCÉ de 300 ms (`apps/windows/src/host/fs.ts`).
+	    Un appelant qui vérifie ce qu'il vient d'écrire interroge donc le
+	    DISQUE (`exists`) et non l'index : c'est ce que fait `freeNotePath`
+	    (`src/dashboard/folder-create.ts`), dont les boucles d'import
+	    rendraient sinon deux fois le même nom libre et écraseraient la
+	    première note en silence. */
 	write(path: string, data: string): Promise<void>;
 	exists(path: string): Promise<boolean>;
 	/** Crée le dossier ET ses parents. Ne rejette pas s'il existe déjà. */
@@ -224,7 +238,10 @@ export interface HostModalHandle {
 	/** Le corps, où l'appelant construit son contenu. L'hôte le vide à la
 	    fermeture : aucun appelant n'a à le faire. */
 	readonly contentEl: HTMLElement;
-	setTitle(text: string): void;
+	/* PAS de `setTitle` : le titre se pose une fois par `spec.title`, et aucune
+	   des dix modales du dépôt ne se renomme en cours de route. Le membre a
+	   existé, sans appelant ni cas — donc sans preuve —, et il aurait fini
+	   implémenté une troisième fois par Android. */
 	close(): void;
 }
 

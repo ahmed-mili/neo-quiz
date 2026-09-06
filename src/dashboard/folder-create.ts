@@ -51,8 +51,16 @@ export function openCreateFolderModal(
 		title: t("dashboard.quizzes.createFolderTitle"),
 		onOpen: (m) => {
 			const c = m.contentEl;
-			createOptionCard(m, c, "sparkles", "#3ddc84", t("dashboard.quizzes.createAiTitle"), t("dashboard.quizzes.createAiDesc"),
-				() => ctx.navigate("ai"));
+			/* MASQUÉE (pas grisée) quand l'hôte ne sait pas servir « ai » : la
+			   carte FERME la modale avant de naviguer, donc un hôte qui refuse
+			   cette navigation (l'application, dont le routeur consulte le MÊME
+			   `canOpen`) laisserait l'utilisateur devant un écran inchangé, sans
+			   notice ni page. Même geste et même source de vérité unique que les
+			   CTA « Générer » de l'accueil (`home.ts`, deux fois). */
+			if (ctx.canOpen("ai")) {
+				createOptionCard(m, c, "sparkles", "#3ddc84", t("dashboard.quizzes.createAiTitle"), t("dashboard.quizzes.createAiDesc"),
+					() => ctx.navigate("ai"));
+			}
 			createOptionCard(m, c, "folder-plus", "#4573ff", t("dashboard.quizzes.createEmptyTitle"), t("dashboard.quizzes.createEmptyDesc"),
 				() => openNewFolderModal(ctx, map, quizzes, onDone));
 			createOptionCard(m, c, "download", "#a78bfa", t("dashboard.quizzes.createImportTitle"), t("dashboard.quizzes.createImportDesc"),
@@ -75,8 +83,11 @@ export function openCreateQuizModal(
 		title: t("dashboard.quizzes.createQuizTitle"),
 		onOpen: (m) => {
 			const c = m.contentEl;
-			createOptionCard(m, c, "sparkles", "#3ddc84", t("dashboard.quizzes.createAiTitle"), t("dashboard.quizzes.createAiDesc"),
-				() => ctx.navigate("ai"));
+			// Même garde, même raison qu'`openCreateFolderModal` ci-dessus.
+			if (ctx.canOpen("ai")) {
+				createOptionCard(m, c, "sparkles", "#3ddc84", t("dashboard.quizzes.createAiTitle"), t("dashboard.quizzes.createAiDesc"),
+					() => ctx.navigate("ai"));
+			}
 			createOptionCard(m, c, "file-plus", "#4573ff", t("dashboard.quizzes.createQuizEmptyTitle"), t("dashboard.quizzes.createQuizEmptyDesc"),
 				() => void createQuizInFolder(ctx, folder));
 			createOptionCard(m, c, "download", "#a78bfa", t("dashboard.quizzes.createQuizImportTitle"), t("dashboard.quizzes.createQuizImportDesc"),

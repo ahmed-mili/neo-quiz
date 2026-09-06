@@ -1,6 +1,7 @@
 import { currentHost } from "../host/current";
 import { ajouter } from "../dom";
 import { t } from "../i18n";
+import { LOG_PREFIX } from "../branding";
 import type { ResourceButton, QuestionRole } from "../types/quiz";
 
 export type QuestionTypeKey = "single" | "multi" | "ordering" | "matching" | "cloze" | "numeric" | "text" | "cmd" | "powershell" | "bash";
@@ -43,7 +44,19 @@ function loadReact(): ReactBridge {
 	return { React: null, ReactDOM: null };
 }
 
-function _setIcon(el: HTMLElement, name: string): void { try { currentHost().ui.setIcon(el, name); } catch (_) { /* noop */ } }
+/* Le `catch` est plus ANCIEN que l'hôte : il couvrait un `setIcon` d'Obsidian
+   qui rate, et une icône manquante n'a jamais valu de casser un formulaire.
+   Mais `currentHost()` JETTE quand aucun hôte n'est installé — un défaut de
+   câblage, pas une icône absente —, et il se lisait alors comme un simple
+   `<span>` vide. D'où l'avertissement : le repli reste, le signal ne se perd
+   plus. */
+function _setIcon(el: HTMLElement, name: string): void {
+	try {
+		currentHost().ui.setIcon(el, name);
+	} catch (e) {
+		console.warn(`${LOG_PREFIX} icône « ${name} » non posée`, e);
+	}
+}
 function _iconSpan(parent: HTMLElement, name: string, cls?: string): HTMLSpanElement { const s = ajouter(parent, "span", cls || "qb-icon"); _setIcon(s, name); return s; }
 
 /** Question en cours d'édition côté éditeur — champs internes (_type/_id) en plus des champs de données. */

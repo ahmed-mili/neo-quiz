@@ -1,5 +1,5 @@
 /**
- * LES PAGES DU TABLEAU DE BORD NE REVIENNENT PAS EN ARRIÈRE.
+ * LES FICHIERS LIBÉRÉS NE REVIENNENT PAS EN ARRIÈRE.
  *
  * `check:host` attrape déjà les extensions DOM d'Obsidian (assertion 4) —
  * mais SEULEMENT dans les fichiers qui n'importent plus Obsidian. Un
@@ -10,13 +10,21 @@
  *
  * `LIBERES` nomme ce qui est libéré POUR DE BON : les huit modules d'interface
  * portés en tranche 2.5 (rail, accueil, page « Mes quiz », cartes, sections
- * repliables, magasin de stats) et les trois modules purs qu'ils ont fait
+ * repliables, magasin de stats), les trois modules purs qu'ils ont fait
  * naître en cours de route (`module-map-note.ts`, tâche 2 ; `folder-archive.ts`
  * et `module-icons.ts`, tâche 6, extraits pour que l'app puisse importer ces
- * pages sans tirer `ui-select.ts`/`icon-picker.ts`). Contrairement à
- * `RESTANTS`, cette liste ne peut que GRANDIR : un fichier qui y figure sans
- * plus être libre (import d'Obsidian retrouvé, extension DOM réintroduite)
- * fait échouer le contrôle au lieu d'en sortir en silence.
+ * pages sans tirer `ui-select.ts`/`icon-picker.ts`), et les cinq fichiers
+ * libérés en tranche 2.6. Contrairement à `RESTANTS`, cette liste ne peut que
+ * GRANDIR : un fichier qui y figure sans plus être libre (import d'Obsidian
+ * retrouvé, extension DOM réintroduite) fait échouer le contrôle au lieu d'en
+ * sortir en silence.
+ *
+ * LA PORTÉE N'EST PAS `src/dashboard/` — le nom du script dit d'où il vient,
+ * pas ce qu'il garde. La liste est un simple ensemble de CHEMINS : rien dans
+ * le code ci-dessous ne les borne à un dossier, et `src/editor/utils.ts`
+ * (libéré en tranche 2.6, tâche 4) y figure pour cette raison. C'est même là
+ * que le filet compte le plus : la tranche 3 est précisément celle qui
+ * rouvrira `src/editor/`.
  *
  *     npm run check:dashboard-dom
  */
@@ -46,6 +54,7 @@ const LIBERES = [
 	"src/dashboard/icon-picker.ts",
 	"src/dashboard/folder-create.ts",
 	"src/dashboard/module-edit.ts",
+	"src/editor/utils.ts",
 ];
 
 /** Retire les commentaires : une extension CITÉE en commentaire (par exemple
@@ -75,9 +84,9 @@ for (const f of LIBERES) {
 }
 
 if (echecs) {
-	console.error(`\nFrontière du tableau de bord : ${echecs} problème(s)`);
+	console.error(`\nFrontière des fichiers libérés : ${echecs} problème(s)`);
 	// exitCode, jamais exit() — la pile doit se dérouler proprement.
 	process.exitCode = 1;
 } else {
-	console.log(`Frontière du tableau de bord : ${LIBERES.length} fichier(s) libéré(s), toujours libres.`);
+	console.log(`Frontière des fichiers libérés : ${LIBERES.length} fichier(s) libéré(s), toujours libres.`);
 }

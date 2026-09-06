@@ -478,8 +478,15 @@ await withSrcModule("apps/windows/src/host/modal.ts", async ({ createWindowsModa
 		   garde d'idempotence sur le détachement, `onClose` serait appelé deux
 		   fois, donc « Modifier dossier » écrirait deux fois sur le disque. */
 		poignee.panelEl.dispatchEvent(new Event("animationend"));
+		/* Un BOOLÉEN, pas l'élément lui-même : le rapporteur compare en
+		   `JSON.stringify`, et sur le chemin d'ÉCHEC c'est tout le panneau qui
+		   passe dedans. MESURÉ, en cassant le détachement : linkedom donne à
+		   ses nœuds un `toJSON`, donc rien ne lève et le groupe survit — mais
+		   la ligne « obtenu » devient une trentaine de valeurs illisibles qui
+		   ne disent pas ce qui a raté. Le booléen dit « détaché : non », et il
+		   ne dépend pas de ce que linkedom sérialise. */
 		r.check("animationend détache le conteneur",
-			dom.document.querySelector(".modal-container"), null);
+			!dom.document.querySelector(".modal-container"), true);
 		r.check("deux fermetures et une animation n'appellent onClose qu'une fois",
 			journal, ["onOpen", "onClose"]);
 		r.check("onClose est appelé APRÈS le détachement du panneau",

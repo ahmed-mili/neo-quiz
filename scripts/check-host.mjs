@@ -57,7 +57,6 @@ const RESTANTS = [
 	"src/editor/editor-form.ts",
 	"src/editor/modals.ts",
 	"src/editor/question-preview.ts",
-	"src/editor/utils.ts",
 	"src/types/editor-ctx.ts",
 	// Divers du greffon — tranche 4.
 	"src/hotkey-format.ts",

@@ -1,4 +1,5 @@
-import { setIcon } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { ResourceButton, QuestionRole } from "../types/quiz";
 
@@ -42,8 +43,8 @@ function loadReact(): ReactBridge {
 	return { React: null, ReactDOM: null };
 }
 
-function _setIcon(el: HTMLElement, name: string): void { try { setIcon(el, name); } catch (_) { /* noop */ } }
-function _iconSpan(parent: HTMLElement, name: string, cls?: string): HTMLSpanElement { const s = parent.createSpan({ cls: cls || "qb-icon" }); _setIcon(s, name); return s; }
+function _setIcon(el: HTMLElement, name: string): void { try { currentHost().ui.setIcon(el, name); } catch (_) { /* noop */ } }
+function _iconSpan(parent: HTMLElement, name: string, cls?: string): HTMLSpanElement { const s = ajouter(parent, "span", cls || "qb-icon"); _setIcon(s, name); return s; }
 
 /** Question en cours d'édition côté éditeur — champs internes (_type/_id) en plus des champs de données. */
 export interface DraftQuestion {

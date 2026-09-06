@@ -1,4 +1,5 @@
-import { setIcon, getIconIds } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
 import { MODULE_ICONS, DEFAULT_MODULE_ICON } from "./module-icons";
 
@@ -6,7 +7,7 @@ import { MODULE_ICONS, DEFAULT_MODULE_ICON } from "./module-icons";
    ICON PICKER — sélecteur d'icône Lucide pour la carte de module
    (« Modifier dossier »). Portalé au MODAL (comme color-picker) →
    pas de vol de focus. Trois zones : une barre de RECHERCHE (accès à
-   TOUTES les icônes via getIconIds), une section « Suggérées »
+   TOUTES les icônes via le catalogue de l'hôte), une section « Suggérées »
    (icônes proposées d'après le module, cf. icon-suggest.ts) et une
    grille curée par défaut. Un clic émet onChange + ferme.
 ══════════════════════════════════════════════════════════ */
@@ -27,13 +28,15 @@ const SCROLL_MAX = 260;
 const PICKER_H = 44 + SCROLL_MAX + 2 * PAD;
 
 /** Tout le set d'icônes disponible (Lucide + custom), normalisé et trié —
-    calculé une fois. Le préfixe « lucide- » est retiré (setIcon accepte les
-    deux, on reste cohérent avec les noms nus stockés). */
+    calculé une fois. Les noms sont déjà nus (sans préfixe « lucide- ») : le
+    contrat de l'hôte le garantit, cf. `HostUi.iconNames()`. */
 let ALL_ICONS: string[] | null = null;
 function allIcons(): string[] {
 	if (ALL_ICONS) return ALL_ICONS;
 	const seen = new Set<string>();
-	for (const id of getIconIds()) seen.add(id.replace(/^lucide-/, ""));
+	// Le retrait du préfixe « lucide- » a déménagé dans chaque hôte : le
+	// contrat promet des noms nus, et l'appelant n'a plus à y penser.
+	for (const id of currentHost().ui.iconNames()) seen.add(id);
 	ALL_ICONS = [...seen].sort();
 	return ALL_ICONS;
 }
@@ -51,7 +54,7 @@ export function openIconPicker(
 ): IconPickerHandle {
 	const anchorRect = anchorEl.getBoundingClientRect();
 
-	const root = container.createDiv({ cls: "qbd-icon-picker" });
+	const root = ajouter(container, "div", "qbd-icon-picker");
 	root.style.width = PICKER_W + "px";
 	root.addEventListener("mousedown", (e) => e.stopPropagation());
 
@@ -64,33 +67,34 @@ export function openIconPicker(
 	root.style.left = left + "px";
 
 	// ── Barre de recherche ──
-	const searchWrap = root.createDiv({ cls: "qbd-icon-search-wrap" });
-	const searchIcon = searchWrap.createSpan({ cls: "qbd-icon-search-icon" });
-	setIcon(searchIcon, "search");
-	const search = searchWrap.createEl("input", { cls: "qbd-icon-search", type: "text" });
+	const searchWrap = ajouter(root, "div", "qbd-icon-search-wrap");
+	const searchIcon = ajouter(searchWrap, "span", "qbd-icon-search-icon");
+	currentHost().ui.setIcon(searchIcon, "search");
+	const search = ajouter(searchWrap, "input", "qbd-icon-search");
+	search.type = "text";
 	search.placeholder = t("dashboard.quizzes.moduleIconSearch");
 	search.spellcheck = false;
 
 	// ── Zone scrollable (sections) ──
-	const scroll = root.createDiv({ cls: "qbd-icon-scroll" });
+	const scroll = ajouter(root, "div", "qbd-icon-scroll");
 	scroll.style.maxHeight = SCROLL_MAX + "px";
 
 	const cellFor = (grid: HTMLElement, name: string) => {
-		const cell = grid.createEl("button", { cls: "qbd-icon-cell" });
+		const cell = ajouter(grid, "button", "qbd-icon-cell");
 		cell.type = "button";
-		setIcon(cell, name);
+		currentHost().ui.setIcon(cell, name);
 		cell.title = name;
-		if (name === current) cell.addClass("is-active");
+		if (name === current) cell.classList.add("is-active");
 		cell.addEventListener("click", () => { onChange(name); close(); });
 	};
 	const section = (label: string | null, icons: string[]) => {
-		if (label) scroll.createDiv({ cls: "qbd-icon-section-label", text: label });
-		const grid = scroll.createDiv({ cls: "qbd-icon-grid" });
+		if (label) ajouter(scroll, "div", "qbd-icon-section-label", label);
+		const grid = ajouter(scroll, "div", "qbd-icon-grid");
 		for (const name of icons) cellFor(grid, name);
 	};
 
 	function render(query: string): void {
-		scroll.empty();
+		scroll.replaceChildren();
 		const q = query.trim().toLowerCase();
 		if (!q) {
 			// Vue par défaut : suggestions (si module reconnu) + grille curée.
@@ -101,7 +105,7 @@ export function openIconPicker(
 		// Recherche : tout le set Lucide, borné pour la perf.
 		const hits = allIcons().filter(n => n.includes(q)).slice(0, 60);
 		if (hits.length) section(null, hits);
-		else scroll.createDiv({ cls: "qbd-icon-empty", text: t("dashboard.quizzes.moduleIconNoResult") });
+		else ajouter(scroll, "div", "qbd-icon-empty", t("dashboard.quizzes.moduleIconNoResult"));
 	}
 	render("");
 	search.addEventListener("input", () => render(search.value));

@@ -42,7 +42,6 @@ const RESTANTS = [
 	"src/dashboard/detail.ts",
 	"src/dashboard/file-sources.ts",
 	"src/dashboard/folder-create.ts",
-	"src/dashboard/icon-picker.ts",
 	"src/dashboard/mention-picker.ts",
 	"src/dashboard/module-edit.ts",
 	"src/dashboard/prompt-paths.ts",

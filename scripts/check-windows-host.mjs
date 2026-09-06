@@ -22,6 +22,7 @@
  *
  *     npm run check:windows-host
  */
+import { Event, parseHTML } from "linkedom";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 const f = (path, extension, mtime = 1) => ({
@@ -361,5 +362,184 @@ await withSrcModule("apps/windows/src/review/catalogue.ts", async ({ construireC
 	r.check("le rôle est reporté quand présent, absent sinon",
 		avecRole.map(i => i.role ?? null), ["recall", null]);
 
+	r.done();
+});
+
+/**
+ * Installe le DOM que la modale de la fenêtre construit, et rend de quoi le
+ * retirer.
+ *
+ * `window.setTimeout` est CAPTURÉ au lieu d'être exécuté : c'est le filet de
+ * sécurité de la disparition, et le retenir permet d'observer l'état PENDANT
+ * l'animation de sortie — seul moment où l'on peut prouver que `onClose` n'a
+ * pas encore été appelé. `matchMedia` rend `matches: false` pour éprouver le
+ * chemin ANIMÉ ; le chemin `prefers-reduced-motion` détache immédiatement et
+ * ne dirait rien de cet ordre-là.
+ */
+function installerDom() {
+	const precedentDocument = globalThis.document;
+	const precedentWindow = globalThis.window;
+	const { document } = parseHTML("<!doctype html><html><body></body></html>");
+	const minuteurs = [];
+	globalThis.document = document;
+	globalThis.window = {
+		matchMedia: () => ({ matches: false }),
+		setTimeout: (fn) => minuteurs.push(fn),
+	};
+	return {
+		document,
+		minuteurs,
+		retirer() {
+			if (precedentDocument === undefined) delete globalThis.document;
+			else globalThis.document = precedentDocument;
+			if (precedentWindow === undefined) delete globalThis.window;
+			else globalThis.window = precedentWindow;
+		},
+	};
+}
+
+await withSrcModule("apps/windows/src/host/modal.ts", async ({ createWindowsModals }) => {
+	const r = makeReporter("Hôte Windows — modales");
+	const dom = installerDom();
+
+	try {
+		const modals = createWindowsModals();
+
+		/* Le journal des moments, dans l'ORDRE : c'est lui qui distingue
+		   « appelé » de « appelé au bon moment ». */
+		const journal = [];
+		let panneau = null;
+		let attacheQuandOnCloseArrive = null;
+
+		const poignee = modals.open({
+			className: "qbd-medit-modal",
+			title: "Modifier dossier",
+			onOpen: (h) => {
+				journal.push("onOpen");
+				panneau = h.panelEl;
+				h.contentEl.appendChild(document.createElement("p"));
+			},
+			onClose: () => {
+				journal.push("onClose");
+				attacheQuandOnCloseArrive = document.body.contains(panneau);
+			},
+		});
+
+		/* LA STRUCTURE D'OBSIDIAN, nom de classe par nom de classe. Le CSS
+		   PARTAGÉ la cible : `modal-anim.css` anime `.modal.qbd-anim-modal` et
+		   `.modal-container:has(> .modal.qbd-anim-modal) .modal-bg` — le fond
+		   doit donc être un FRÈRE du panneau, tous deux enfants DIRECTS du
+		   conteneur. Une structure qui dérive ne produit aucune erreur : une
+		   boîte illisible au milieu de l'écran, que rien d'autre ne dirait. */
+		const conteneur = dom.document.querySelector(".modal-container");
+		r.check("le conteneur est posé sur le body", !!conteneur, true);
+		r.check("le fond et le panneau sont enfants directs du conteneur",
+			[...(conteneur?.children ?? [])].map(e => e.className),
+			["modal-bg", "modal qbd-anim-modal qbd-medit-modal"]);
+		r.check("le panneau porte la croix, le titre et le corps",
+			[...poignee.panelEl.children].map(e => e.className),
+			["modal-close-button", "modal-title", "modal-content"]);
+
+		/* La classe va sur le PANNEAU : c'est elle que cible le CSS partagé
+		   (`.qbd-medit-modal { width: 475px }`). Posée ailleurs, la modale
+		   s'ouvrirait à une largeur quelconque sans qu'aucune erreur ne le dise. */
+		r.check("open pose la classe du spec sur le panneau",
+			poignee.panelEl.classList.contains("qbd-medit-modal"), true);
+		/* Rend le cas « onClose après le détachement » NON TRIVIAL : sans cette
+		   ligne, un panneau jamais attaché le ferait passer par accident. */
+		r.check("le panneau est attaché quand onOpen construit le contenu",
+			document.body.contains(poignee.panelEl), true);
+		r.check("onOpen n'est appelé qu'une fois, et à l'ouverture", journal, ["onOpen"]);
+
+		/* Échap et le clic sur le fond peuvent tomber quasi ensemble : deux
+		   fermetures ne doivent produire qu'une disparition. */
+		let aLeve = false;
+		try {
+			poignee.close();
+			poignee.close();
+		} catch (e) {
+			aLeve = true;
+		}
+		r.check("fermer deux fois ne lève pas", aLeve, false);
+		r.check("une seule disparition est programmée", dom.minuteurs.length, 1);
+		/* PENDANT l'animation de sortie : le panneau est encore là, et l'écriture
+		   différée de `module-edit.ts` ne doit pas avoir eu lieu. */
+		r.check("onClose n'est pas appelé pendant l'animation de sortie", journal, ["onOpen"]);
+		r.check("le panneau porte le marqueur de sortie pendant l'animation",
+			poignee.panelEl.classList.contains("qbd-closing"), true);
+		/* Le fond suit le panneau, sinon il resterait opaque le temps que le
+		   panneau disparaisse (`.modal-container.qbd-closing .modal-bg`). */
+		r.check("le conteneur aussi, pour que le fond se fonde",
+			conteneur.classList.contains("qbd-closing"), true);
+
+		/* LA DOUBLE DÉTENTE, jouée dans l'ordre réel : `animationend` arrive
+		   vers 160 ms et détache, puis le filet de sécurité de 240 ms arrive
+		   QUAND MÊME. Les deux se produisent à chaque fermeture normale — sans
+		   garde d'idempotence sur le détachement, `onClose` serait appelé deux
+		   fois, donc « Modifier dossier » écrirait deux fois sur le disque. */
+		poignee.panelEl.dispatchEvent(new Event("animationend"));
+		r.check("animationend détache le conteneur",
+			dom.document.querySelector(".modal-container"), null);
+		r.check("deux fermetures et une animation n'appellent onClose qu'une fois",
+			journal, ["onOpen", "onClose"]);
+		r.check("onClose est appelé APRÈS le détachement du panneau",
+			attacheQuandOnCloseArrive, false);
+		/* Un corps non vidé empilerait deux contenus à la réouverture. */
+		r.check("le corps est vidé à la fermeture", poignee.contentEl.childNodes.length, 0);
+
+		for (const fn of dom.minuteurs.splice(0)) fn();
+		r.check("le filet de sécurité qui suit ne rappelle pas onClose",
+			journal, ["onOpen", "onClose"]);
+	} finally {
+		dom.retirer();
+	}
+
+	r.done();
+});
+
+await withSrcModule("apps/windows/src/host/ui.ts", async ({ createWindowsUi }) => {
+	const r = makeReporter("Hôte Windows — catalogue d'icônes");
+	const dom = installerDom();
+	const ui = createWindowsUi();
+	const noms = ui.iconNames();
+
+	/* Le contrat parle KEBAB-CASE, comme Obsidian ; le paquet `lucide` expose
+	   ses clés en PascalCase. Une liste non vide ne prouve donc rien —
+	   `Object.keys(icons)` en rendrait une, pleine de noms qu'aucun `setIcon`
+	   ne sait rendre. D'où une VALEUR NOMMÉE. */
+	r.check("iconNames contient chevron-down", noms.includes("chevron-down"), true);
+	/* Le préfixe « lucide- » est une affaire d'Obsidian : la fenêtre n'a
+	   aucune raison d'en fabriquer un. */
+	r.check("iconNames ne laisse aucun préfixe lucide-",
+		noms.filter(n => n.startsWith("lucide-")), []);
+	/* Aucune majuscule ne survit : une seule suffirait à faire échouer la
+	   recherche du sélecteur, qui compare en minuscules. */
+	r.check("aucun nom ne garde de majuscule", noms.filter(n => /[A-Z]/.test(n)), []);
+
+	/* LA règle que les trois cas ci-dessus ne gardent pas : un nom listé doit
+	   être un nom que `setIcon` sait RENDRE. La conversion inverse et celle de
+	   `setIcon` doivent donc se composer en identité — ce que le `toKebabCase`
+	   de Lucide (`/([a-z0-9])([A-Z])/`) ne fait PAS : il rendrait « xcircle »
+	   pour `XCircle`, un nom que `versCleLucide` ne retrouve plus. Vérifié sur
+	   TOUT le catalogue plutôt que sur un nom cité, qui disparaîtrait le jour
+	   où Lucide retire son alias. Un nom irrésolu VIDE l'élément (ui.ts). */
+	const irresolus = [];
+	/* `poserIcone` avertit en console sur un nom inconnu — c'est voulu dans
+	   l'application, mais ici cela noierait le rapport sous 2000 lignes. Le
+	   résultat, lui, se lit sur l'élément resté vide. */
+	const avertir = console.warn;
+	console.warn = () => {};
+	try {
+		for (const nom of noms) {
+			const el = dom.document.createElement("span");
+			ui.setIcon(el, nom);
+			if (!el.firstChild) irresolus.push(nom);
+		}
+	} finally {
+		console.warn = avertir;
+	}
+	r.check("chaque nom listé est un nom que setIcon sait rendre", irresolus, []);
+
+	dom.retirer();
 	r.done();
 });

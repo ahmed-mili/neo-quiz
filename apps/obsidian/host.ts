@@ -24,9 +24,10 @@
    diverge en silence le jour où `HostFile` gagne un champ.
 ══════════════════════════════════════════════════════════ */
 
-import { Notice, Platform, setIcon, loadMathJax, renderMath, finishRenderMath } from "obsidian";
+import { Notice, Platform, setIcon, getIconIds, loadMathJax, renderMath, finishRenderMath } from "obsidian";
 import type { App, DataAdapter, EventRef, TAbstractFile, TFile, View, WorkspaceLeaf } from "obsidian";
-import type { Host, HostFile, HostFileEvent, HostRoot } from "../../src/host/types";
+import type { Host, HostFile, HostFileEvent, HostModalHandle, HostModalSpec, HostRoot } from "../../src/host/types";
+import { QbdModal } from "../../src/modal-base";
 import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../src/review/paths";
 
 /** Shell Electron minimal (surface réellement consommée : shell.openPath). */
@@ -69,6 +70,55 @@ function toHostFile(f: TFile): HostFile {
 function asTFile(f: TAbstractFile | null | undefined): TFile | null {
 	if (!f) return null;
 	return typeof (f as TFile).extension === "string" ? (f as TFile) : null;
+}
+
+/**
+ * La modale du contrat, sous Obsidian.
+ *
+ * `QbdModal` (`src/modal-base.ts`) porte DÉJÀ l'animation d'entrée et de
+ * sortie, et la garde d'idempotence qui va avec : l'hôte s'appuie dessus
+ * plutôt que de la refaire, sinon les modales du greffon s'ouvriraient
+ * sèchement là où elles glissent aujourd'hui. C'est aussi ce qui garantit que
+ * les modales passées par le contrat et celles qui héritent encore de
+ * `QbdModal` en direct se comportent exactement pareil.
+ *
+ * La poignée est construite DÈS le constructeur — `modalEl`, `titleEl` et
+ * `contentEl` existent dès celui de `Modal` — pour que `open()` puisse la
+ * rendre à l'appelant sans attendre `onOpen()`, qu'Obsidian n'appelle qu'après
+ * attachement.
+ */
+class HoteModal extends QbdModal {
+	private readonly spec: HostModalSpec;
+	readonly poignee: HostModalHandle;
+
+	constructor(app: App, spec: HostModalSpec) {
+		super(app);
+		this.spec = spec;
+		this.poignee = {
+			panelEl: this.modalEl,
+			contentEl: this.contentEl,
+			setTitle: (texte) => this.titleEl.setText(texte),
+			close: () => this.close(),
+		};
+	}
+
+	onOpen(): void {
+		if (this.spec.className) this.modalEl.addClass(this.spec.className);
+		if (this.spec.title) this.titleEl.setText(this.spec.title);
+		this.spec.onOpen(this.poignee);
+	}
+
+	/* Obsidian n'appelle `onClose()` que depuis `Modal.close()`, APRÈS avoir
+	   détaché le DOM (et `QbdModal.close()` retarde encore ce `super.close()`
+	   le temps de l'animation de sortie). C'est ce que le contrat promet, et ce
+	   dont `module-edit.ts` dépend : son écriture différée ne doit pas tomber
+	   pendant qu'un rendu est encore à l'écran.
+	   Le corps est vidé APRÈS `spec.onClose()`, pas avant : l'appelant a le
+	   droit d'y relire un champ une dernière fois. */
+	onClose(): void {
+		this.spec.onClose?.();
+		this.contentEl.empty();
+	}
 }
 
 /** Le second paramètre est réduit à ce dont l'hôte a besoin — le manifeste,
@@ -299,6 +349,13 @@ export function createObsidianHost(
 		setIcon(el, name) {
 			setIcon(el, name);
 		},
+		/* `getIconIds()` rend « lucide-x » ; le contrat veut « x ». Le préfixe
+		   est retiré ICI et nulle part ailleurs, pour que le code partagé n'ait
+		   jamais à savoir quel hôte le lui a donné (`icon-picker.ts` le faisait
+		   lui-même, donc sous Obsidian seulement). */
+		iconNames() {
+			return getIconIds().map(id => id.replace(/^lucide-/, ""));
+		},
 	};
 
 	/* ─── math ─── */
@@ -453,5 +510,15 @@ export function createObsidianHost(
 		},
 	};
 
-	return { fs, links, watcher, ui, math, shell, platform, paths };
+	/* ─── modals ─── */
+
+	const modals: Host["modals"] = {
+		open(spec) {
+			const modale = new HoteModal(app, spec);
+			modale.open();
+			return modale.poignee;
+		},
+	};
+
+	return { fs, links, watcher, ui, math, shell, platform, paths, modals };
 }

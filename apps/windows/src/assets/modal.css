@@ -1,0 +1,119 @@
+/* =========================================================
+   LES MODALES DE L'APPLICATION
+
+   Le CSS partagé (`src/assets/css/components/modal-anim.css`) ANIME le
+   panneau ; il ne le DESSINE pas. `.modal-container`, `.modal-bg`, `.modal`,
+   `.modal-title`, `.modal-content` et `.modal-close-button` sont des classes
+   d'OBSIDIAN, que le greffon héritait gratuitement et qu'aucun fichier du
+   dépôt ne définit. Ce fichier les écrit pour la fenêtre. Le DOM, lui, est
+   fabriqué par `src/host/modal.ts` — qui n'importe aucun CSS (le harnais de
+   `npm run check:windows-host` étoufferait dessus).
+
+   PIÈGE VÉRIFIÉ À LA MAIN, le même que `toast.css` : `npm run check:theme` ne
+   balaie PAS `apps/windows/`. Une variable inventée ici serait invisible à ses
+   deux assertions et rendrait une modale illisible sans un mot. Chaque
+   `var(--…)` ci-dessous a été relu un par un dans `theme/host-vars.css`, qui
+   les définit toutes sur `:root` — et c'est bien `:root` qui compte : le
+   conteneur est ajouté au `<body>`, DONC HORS de `.qbd-root`, où les jetons de
+   verre du tableau de bord résoudraient au vide.
+   Corollaire moins évident : AJOUTER une variable au thème pour ce fichier
+   FERAIT ÉCHOUER `check:theme` — son assertion symétrique refuse toute
+   variable que l'arbre `src/assets/css` ne référence pas. D'où les couleurs
+   DÉRIVÉES (`color-mix`) des variables existantes, jamais des couleurs neuves.
+
+   `:where()` SUR LES DEUX RÈGLES QUE LE CSS PARTAGÉ RETOUCHE : ce fichier est
+   importé APRÈS l'arbre partagé (`main.ts`), donc à spécificité égale il
+   gagnerait. `.qbd-medit-modal { width: 475px }` est calée au pixel sur ses
+   neuf pastilles, et `.qbd-usage-modal .modal-content { max-width: 640px }`
+   borne son écran ; un `.modal { max-width: … }` écrit ici les écraserait
+   toutes les deux. `:where()` ramène ces bases à une spécificité NULLE : toute
+   règle de classe, d'où qu'elle vienne et quel que soit l'ordre, l'emporte.
+   ========================================================= */
+
+.modal-container {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	/* SOUS les toasts (`.nq-toasts`, 100) et sous les menus portalés au body
+	   (`.qbd-select-menu`, 1000) : un message levé depuis une modale et un
+	   dropdown ouvert depuis un de ses champs doivent rester visibles. */
+	z-index: 90;
+}
+
+.modal-bg {
+	position: absolute;
+	inset: 0;
+	/* DÉRIVÉ du fond le plus profond du thème, jamais un noir en dur : sur un
+	   thème clair, un noir à 70 % serait une tache. Même raisonnement que
+	   l'ombre des toasts. */
+	background: color-mix(in srgb, var(--background-primary-alt) 70%, transparent);
+}
+
+:where(.modal) {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	/* 16 px de chaque côté, et `border-box` : c'est l'hypothèse sur laquelle
+	   les largeurs du CSS partagé sont calculées (« +32 (padding du .modal,
+	   .modal-content à 0) = 475 », dashboard-components.css). La changer
+	   décalerait les neuf pastilles de « Modifier dossier ». */
+	box-sizing: border-box;
+	padding: 16px;
+	max-width: calc(100vw - 32px);
+	/* Le panneau ne dépasse jamais la fenêtre ; c'est le CORPS qui défile. */
+	max-height: 85vh;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-family: var(--font-interface);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-l);
+	box-shadow: 0 18px 48px -12px color-mix(in srgb, var(--background-primary) 85%, transparent);
+}
+
+.modal-title {
+	margin: 0 32px 12px 0; /* la place de la croix, en haut à droite */
+	font-size: 1.1em;
+	font-weight: 600;
+	line-height: 1.3;
+	color: var(--text-normal);
+}
+/* Une modale SANS titre ne doit pas réserver sa marge : `spec.title` est
+   facultatif, et un titre vide laisserait un blanc que rien n'explique. */
+.modal-title:empty {
+	display: none;
+}
+
+:where(.modal-content) {
+	padding: 0;
+	/* `min-height: 0` : sans lui, un élément flex refuse de rétrécir sous la
+	   taille de son contenu et la barre de défilement n'apparaît jamais. */
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.modal-close-button {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: none;
+	border-radius: var(--radius-s);
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+.modal-close-button:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.modal-close-button svg {
+	width: 16px;
+	height: 16px;
+}

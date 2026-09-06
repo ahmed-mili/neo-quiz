@@ -3,6 +3,7 @@ import "../../../src/assets/css/index.css";
 import "./theme/host-vars.css";
 import "./assets/toast.css";
 import "./assets/shell.css";
+import "./assets/modal.css";
 import { setLanguage, t } from "../../../src/i18n";
 import { ajouter } from "../../../src/dom";
 import { LOG_PREFIX } from "../../../src/branding";
@@ -28,10 +29,11 @@ import { renderSettings } from "./ui/settings";
  *
  * L'ordre des imports CSS compte : `host-vars.css` définit les variables
  * qu'Obsidian fournissait, il doit donc venir APRÈS l'arbre partagé pour que
- * ses valeurs gagnent à égalité de spécificité. `toast.css` vient en dernier,
- * et c'est le SEUL endroit qui l'importe : `src/host/ui.ts` ne doit importer
- * aucun CSS, sans quoi le harnais de `npm run check:windows-host` ne peut plus
- * le charger (les fontes MathLive n'y ont pas de chargeur).
+ * ses valeurs gagnent à égalité de spécificité. Les feuilles propres à
+ * l'application viennent ensuite, et c'est le SEUL endroit qui les importe :
+ * ni `src/host/ui.ts` (toasts) ni `src/host/modal.ts` (modales) ne doivent
+ * importer de CSS, sans quoi le harnais de `npm run check:windows-host` ne
+ * peut plus les charger (les fontes MathLive n'y ont pas de chargeur).
  */
 /**
  * Le démontage de l'écran actuellement affiché, ou `null` si rien n'est monté.

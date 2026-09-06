@@ -131,6 +131,10 @@ export interface HostUi {
 	/** Pose une icône LUCIDE dans l'élément, en remplaçant son contenu.
 	    `name` est un identifiant Lucide (« grip-horizontal », « x »). */
 	setIcon(el: HTMLElement, name: string): void;
+	/** Tous les noms d'icônes disponibles, en KEBAB-CASE (« chevron-down »),
+	    la forme que le contrat emploie partout. Le sélecteur d'icônes les
+	    liste ; l'ordre n'a pas d'importance, il trie lui-même. */
+	iconNames(): string[];
 }
 
 export interface HostMath {
@@ -211,6 +215,39 @@ export interface HostPaths {
 	contractPath(rootId: string, localPath: string): string;
 }
 
+/** Ce qu'une modale ouverte rend à son ouvreur. */
+export interface HostModalHandle {
+	/** LE PANNEAU. Exposé parce qu'un menu ouvert depuis une modale doit s'y
+	    portaler et non au `body` : portalé au body, il passe DERRIÈRE le
+	    panneau et le focus retourne au fond (module-edit.ts:118 et :202). */
+	readonly panelEl: HTMLElement;
+	/** Le corps, où l'appelant construit son contenu. L'hôte le vide à la
+	    fermeture : aucun appelant n'a à le faire. */
+	readonly contentEl: HTMLElement;
+	setTitle(text: string): void;
+	close(): void;
+}
+
+export interface HostModalSpec {
+	/** Classe posée sur le PANNEAU (« qbd-create-modal », « qbd-medit-modal »).
+	    Le CSS partagé la cible déjà ; l'hôte ne la choisit pas. */
+	className?: string;
+	title?: string;
+	/** Construit le contenu. Appelé une fois, après attachement — un appelant
+	    qui mesure un élément doit pouvoir le faire ici. */
+	onOpen(handle: HostModalHandle): void;
+	/** Appelé APRÈS la disparition, jamais avant : `module-edit.ts` y écrit
+	    ses changements sur le disque, et le faire pendant l'animation
+	    rendrait l'écriture concurrente d'un rendu. */
+	onClose?(): void;
+}
+
+export interface HostModals {
+	/** Ouvre une modale. Elle est modale au sens strict : Échap et un clic sur
+	    le fond la ferment, et l'hôte rend le focus à ce qui l'avait. */
+	open(spec: HostModalSpec): HostModalHandle;
+}
+
 export interface Host {
 	fs: HostFs;
 	links: HostLinks;
@@ -220,4 +257,5 @@ export interface Host {
 	shell: HostShell;
 	platform: HostPlatform;
 	paths: HostPaths;
+	modals: HostModals;
 }

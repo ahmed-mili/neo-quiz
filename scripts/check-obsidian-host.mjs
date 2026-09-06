@@ -10,6 +10,7 @@
  *     npm run check:obsidian-host
  */
 import { readFileSync } from "node:fs";
+import { parseHTML } from "linkedom";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 /** Fausse App : la surface EXACTE que l'hôte consomme, rien de plus.
@@ -246,6 +247,129 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	   inventé, qui pointerait à côté et lirait le journal de personne. */
 	const sansManifeste = createObsidianHost(app, { manifest: {} });
 	r.check("sans manifeste, aucun ancien journal", sansManifeste.paths.roots()[0].legacyReviewLog, null);
+
+	r.done();
+});
+
+/**
+ * Installe le DOM que la modale d'Obsidian suppose, et rend de quoi le retirer.
+ *
+ * Deux emprunts au monde réel, pas des commodités :
+ * — les EXTENSIONS DOM d'Obsidian (`addClass`, `setText`, `empty`) n'existent
+ *   ni dans Node ni dans linkedom, mais elles existent bel et bien dans
+ *   Obsidian, et `QbdModal` comme l'hôte s'en servent — les poser sur chaque
+ *   élément créé est la façon la plus étroite de reproduire l'environnement ;
+ * — `window.setTimeout` est CAPTURÉ au lieu d'être exécuté. C'est le filet de
+ *   sécurité de `QbdModal.close()` : le retenir permet d'observer l'état
+ *   PENDANT l'animation de sortie, seul moment où l'on peut prouver que
+ *   `onClose` n'a pas encore été appelé. `matchMedia` rend `matches: false`
+ *   pour éprouver le chemin ANIMÉ, celui qu'Obsidian prend réellement.
+ */
+function installerDom() {
+	const precedentDocument = globalThis.document;
+	const precedentWindow = globalThis.window;
+	const { document } = parseHTML("<!doctype html><html><body></body></html>");
+	const creerElement = document.createElement.bind(document);
+	document.createElement = (tag) => {
+		const el = creerElement(tag);
+		el.addClass = (c) => el.classList.add(c);
+		el.removeClass = (c) => el.classList.remove(c);
+		el.setText = (txt) => { el.textContent = txt; };
+		el.empty = () => { while (el.firstChild) el.removeChild(el.firstChild); };
+		return el;
+	};
+	const minuteurs = [];
+	globalThis.document = document;
+	globalThis.window = {
+		matchMedia: () => ({ matches: false }),
+		setTimeout: (fn) => minuteurs.push(fn),
+	};
+	return {
+		document,
+		minuteurs,
+		retirer() {
+			if (precedentDocument === undefined) delete globalThis.document;
+			else globalThis.document = precedentDocument;
+			if (precedentWindow === undefined) delete globalThis.window;
+			else globalThis.window = precedentWindow;
+		},
+	};
+}
+
+await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
+	const r = makeReporter("Hôte Obsidian — modales et icônes");
+	const dom = installerDom();
+
+	try {
+		const host = createObsidianHost(fausseApp([]), { manifest: {} });
+
+		/* Le journal des moments, dans l'ORDRE : c'est lui qui distingue « appelé »
+		   de « appelé au bon moment ». */
+		const journal = [];
+		let panneau = null;
+		let attacheQuandOnCloseArrive = null;
+
+		const poignee = host.modals.open({
+			className: "qbd-medit-modal",
+			title: "Modifier dossier",
+			onOpen: (h) => {
+				journal.push("onOpen");
+				panneau = h.panelEl;
+				h.contentEl.appendChild(document.createElement("p"));
+			},
+			onClose: () => {
+				journal.push("onClose");
+				attacheQuandOnCloseArrive = document.body.contains(panneau);
+			},
+		});
+
+		/* La classe va sur le PANNEAU : c'est elle que cible le CSS partagé
+		   (`.qbd-medit-modal { width: 475px }`). Posée ailleurs, la modale
+		   s'ouvrirait à une largeur quelconque sans qu'aucune erreur ne le dise. */
+		r.check("open pose la classe du spec sur le panneau",
+			poignee.panelEl.classList.contains("qbd-medit-modal"), true);
+		r.check("le panneau garde aussi le marqueur d'animation de QbdModal",
+			poignee.panelEl.classList.contains("qbd-anim-modal"), true);
+		/* Rend le cas suivant NON TRIVIAL : sans cette ligne, un panneau jamais
+		   attaché ferait passer « onClose après le détachement » par accident. */
+		r.check("le panneau est attaché quand onOpen construit le contenu",
+			document.body.contains(poignee.panelEl), true);
+		r.check("onOpen n'est appelé qu'une fois, et à l'ouverture", journal, ["onOpen"]);
+
+		/* Échap et le clic sur le fond peuvent tomber quasi ensemble : deux
+		   fermetures ne doivent produire qu'une disparition. */
+		let aLeve = false;
+		try {
+			poignee.close();
+			poignee.close();
+		} catch (e) {
+			aLeve = true;
+		}
+		r.check("fermer deux fois ne lève pas", aLeve, false);
+		r.check("une seule disparition est programmée", dom.minuteurs.length, 1);
+		/* PENDANT l'animation de sortie : le panneau est encore là, et l'écriture
+		   différée de `module-edit.ts` ne doit pas avoir eu lieu. */
+		r.check("onClose n'est pas appelé pendant l'animation de sortie", journal, ["onOpen"]);
+
+		for (const fn of dom.minuteurs.splice(0)) fn();
+
+		r.check("fermer deux fois n'appelle onClose qu'une fois", journal, ["onOpen", "onClose"]);
+		r.check("onClose est appelé APRÈS le détachement du panneau",
+			attacheQuandOnCloseArrive, false);
+		/* Un corps non vidé empilerait deux contenus à la réouverture. */
+		r.check("le corps est vidé à la fermeture", poignee.contentEl.childNodes.length, 0);
+
+		/* `getIconIds()` rend « lucide-x » ; le contrat veut « x ». Le préfixe est
+		   retiré par l'hôte et par personne d'autre. */
+		const noms = host.ui.iconNames();
+		r.check("iconNames ne laisse aucun préfixe lucide-",
+			noms.filter(n => n.startsWith("lucide-")), []);
+		/* Une VALEUR NOMMÉE, pas seulement « la liste n'est pas vide » : c'est le
+		   seul cas qui rougirait si le préfixe restait collé. */
+		r.check("iconNames contient chevron-down", noms.includes("chevron-down"), true);
+	} finally {
+		dom.retirer();
+	}
 
 	r.done();
 });

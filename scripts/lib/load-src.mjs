@@ -18,10 +18,39 @@ const OBSIDIAN_STUB = [
 	"const nope = (nom) => { throw new Error('obsidian.' + nom + \" n'existe pas hors d'Obsidian\"); };",
 	"export const TFile = class {};",
 	"export const Notice = class { constructor() { nope('Notice'); } };",
-	"export const Modal = class {};",
+	/* `Modal` n'est plus une coquille vide : `HostModals` (apps/obsidian/host.ts)
+	   passe par lui, et l'ORDRE de ses deux moments — attacher PUIS `onOpen`,
+	   détacher PUIS `onClose` — est exactement ce que le contrat promet et ce
+	   dont l'écriture différée de `module-edit.ts` dépend. Le double reproduit
+	   donc le comportement RÉEL d'Obsidian, comme la fausse `App` de
+	   check-obsidian-host.mjs reproduit celui de l'adaptateur ; sans ça, le cas
+	   « onClose après le détachement » resterait vert quoi qu'on casse.
+	   `document` n'est touché qu'à la CONSTRUCTION : un script qui ne construit
+	   aucune modale n'a rien à installer. */
+	"export const Modal = class {",
+	"	constructor(app) {",
+	"		this.app = app;",
+	"		this.containerEl = document.createElement('div');",
+	"		this.containerEl.className = 'modal-container';",
+	"		this.modalEl = this.containerEl.appendChild(document.createElement('div'));",
+	"		this.modalEl.className = 'modal';",
+	"		this.titleEl = this.modalEl.appendChild(document.createElement('div'));",
+	"		this.titleEl.className = 'modal-title';",
+	"		this.contentEl = this.modalEl.appendChild(document.createElement('div'));",
+	"		this.contentEl.className = 'modal-content';",
+	"	}",
+	"	open() { document.body.appendChild(this.containerEl); this.onOpen(); }",
+	"	close() { this.containerEl.remove(); this.onClose(); }",
+	"	onOpen() {}",
+	"	onClose() {}",
+	"};",
 	"export const FuzzySuggestModal = class {};",
 	"export const setIcon = () => nope('setIcon');",
-	"export const getIconIds = () => nope('getIconIds');",
+	/* Rend une LISTE au lieu de jeter, depuis que `HostUi.iconNames()` la
+	   consomme pour de bon. Les identifiants portent le préfixe « lucide- »,
+	   comme ceux d'Obsidian : c'est ce préfixe que l'hôte doit retirer, et une
+	   liste déjà nue rendrait le cas qui le vérifie vert par construction. */
+	"export const getIconIds = () => ['lucide-chevron-down', 'lucide-search', 'lucide-x'];",
 	"export const Platform = {};",
 	"export const requestUrl = () => nope('requestUrl');",
 	"export const MarkdownRenderer = {};",

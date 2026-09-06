@@ -25,6 +25,7 @@ import { resultsDirFor as resultsDirForRacine } from "./roots";
 import type { CarteRacines } from "./roots";
 import { createWindowsLinks } from "./links";
 import { createWindowsMath } from "./math";
+import { createWindowsModals } from "./modal";
 import { createWindowsUi } from "./ui";
 
 export { createWindowsIndex } from "./fs";
@@ -102,6 +103,7 @@ export function createWindowsHost(carte: CarteRacines, index: WindowsIndex): Hos
 		watcher: createWindowsWatcher(carte, index),
 		ui: createWindowsUi(),
 		math: createWindowsMath(),
+		modals: createWindowsModals(),
 		shell,
 		platform,
 		paths,

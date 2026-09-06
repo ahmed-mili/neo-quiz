@@ -42,6 +42,21 @@ function versCleLucide(name: string): string {
 		.join("");
 }
 
+/**
+ * L'INVERSE de `versCleLucide` : la clé du catalogue (« ChevronDown ») rendue
+ * dans la forme du contrat (« chevron-down »).
+ *
+ * Une coupure devant CHAQUE majuscule, et non le `toKebabCase` de Lucide
+ * (`/([a-z0-9])([A-Z])/`), qui ne coupe pas après une majuscule isolée : il
+ * rendrait « xcircle » pour `XCircle` et « aarrowdown » pour `AArrowDown` —
+ * des noms que `versCleLucide` ne sait pas retrouver, donc des cases VIDES
+ * dans le sélecteur. Mesuré : 15 des 2062 clés du paquet sont dans ce cas ;
+ * avec cette coupure-ci, les 2062 font l'aller-retour.
+ */
+function versNomContrat(cle: string): string {
+	return cle.replace(/([A-Z])/g, "-$1").toLowerCase().replace(/^-/, "");
+}
+
 function conteneurToasts(): HTMLElement {
 	const existant = document.querySelector<HTMLElement>(".nq-toasts");
 	if (existant) return existant;
@@ -120,6 +135,13 @@ export function createWindowsUi(): HostUi {
 		   pourquoi, et c'est exactement le défaut qu'une relecture ne voit pas. */
 		setIcon(el, name) {
 			poserIcone(el, String(name));
+		},
+		/* Le catalogue COMPLET, dans la forme du contrat. Obsidian a
+		   `getIconIds()` ; ici c'est `Object.keys(icons)`, qui rend du
+		   PascalCase — d'où la conversion, sans laquelle le sélecteur listerait
+		   2062 noms qu'aucun `setIcon` ne sait rendre. */
+		iconNames() {
+			return Object.keys(CATALOGUE).map(versNomContrat);
 		},
 	};
 }

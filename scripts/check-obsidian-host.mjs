@@ -492,9 +492,15 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	   dossier commençant par un point) : `vault.process` y échouerait, et le
 	   journal de révision comme les résultats exportés deviendraient
 	   inécrivables. La lecture-écriture par l'adaptateur est la dégradation
-	   assumée, et le contrat la nomme. */
+	   assumée, et le contrat la nomme.
+	   CE CAS NE GARDE AUCUNE BRANCHE, et son libellé le dit désormais :
+	   `process` ne teste pas `estCache`, parce que `tfile` rend DÉJÀ `null` sous
+	   un segment à point — les deux voies mènent à l'adaptateur, et il n'y a
+	   rien à casser qui ferait rougir ce cas. Il CONSTATE la dégradation pour
+	   qu'une tranche future ne la prenne pas pour un oubli ; la garde qui, elle,
+	   se casse dans les deux sens est celle de `writeBinary`, plus bas. */
 	await host.fs.process(".neo-quiz/review-log.jsonl", (c) => c + "{\"a\":1}\n");
-	r.check("un chemin caché est lu puis réécrit par l'adaptateur",
+	r.check("un chemin caché est lu puis réécrit par l'adaptateur (constat, pas garde)",
 		journal.at(-1), ["adapter.write", ".neo-quiz/review-log.jsonl", "{}\n{\"a\":1}\n"]);
 
 	/* ── writeBinary ── */
@@ -569,7 +575,13 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		await host.paths.attachmentPathFor("Pasted image 1.png", "Cours/ch1.md"),
 		"[Cours/ch1.md]/Pasted image 1.png");
 	/* Sans note (quiz généré, encore en mémoire) : l'argument reste optionnel et
-	   n'est pas remplacé par une valeur inventée. */
+	   n'est pas remplacé par une valeur inventée.
+	   C'est ici que les deux hôtes DIVERGENT, et le contrat (`HostPaths`) le dit
+	   plutôt que de promettre une conduite commune : Obsidian a un fichier ACTIF
+	   sur quoi retomber, la fenêtre n'en a pas et REJETTE — l'autre moitié de
+	   cette paire est « sans note d'accueil, la fenêtre rejette en nommant la
+	   cause » (`check:windows-host`). Les deux cas bougent ENSEMBLE : si un hôte
+	   change d'avis, c'est le contrat qu'il faut rouvrir d'abord. */
 	r.check("sans note citante, rien n'est inventé à sa place",
 		await host.paths.attachmentPathFor("Pasted image 2.png"),
 		"[aucune]/Pasted image 2.png");

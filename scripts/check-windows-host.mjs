@@ -33,7 +33,7 @@ const f = (path, extension, mtime = 1) => ({
 	mtime,
 });
 
-await withSrcModule("apps/windows/src/host/fs.ts", async ({ buildIndex }) => {
+await withSrcModule("apps/windows/src/host/fs.ts", async ({ buildIndex, horsCatalogue, evenementDeRenommage }) => {
 	const r = makeReporter("Hôte Windows — index");
 	const idx = buildIndex([
 		f("Cours/reseau.md", "md"),
@@ -60,6 +60,59 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ buildIndex }) => {
 	idx.apply({ kind: "modify", file: f("Cours/ch2.md", "md", 99) });
 	r.check("une modification met la date à jour sans dupliquer",
 		idx.all().filter(x => x.path === "Cours/ch2.md").map(x => x.mtime), [99]);
+
+	/* ── ce que le catalogue doit IGNORER, et ce qu'il doit entendre d'un
+	   renommage ──
+
+	   Le surveillant lui-même n'est pas éprouvable ici (il tient un abonnement
+	   Tauri vivant) ; ces deux fonctions PURES portent la règle qu'il applique,
+	   et c'est pour ça qu'elles sont sorties de lui. Le défaut mesuré :
+	   `HostFs.trash` met à la corbeille par un `rename` vers
+	   `<racine>/.trash/…`, et la branche des renommages ne filtrait rien — le
+	   quiz supprimé RENTRAIT au catalogue sous son chemin de corbeille et
+	   restait dans « Mes quiz » jusqu'au redémarrage. Le parcours du démarrage
+	   filtrait, lui : deux copies d'une même règle avaient divergé. */
+	r.check("un chemin ordinaire est au catalogue", horsCatalogue("Quiz/Cours/ch1.md"), false);
+	r.check("un chemin qui traverse la corbeille en est dehors",
+		horsCatalogue("Quiz/.trash/Cours/ch1.md"), true);
+	r.check("… et node_modules aussi", horsCatalogue("Quiz/node_modules/x.md"), true);
+	r.check("un chemin réduit à la racine n'est pas un fichier", horsCatalogue("Quiz"), true);
+	/* Les DEUX bornes du `slice(1, -1)`, chacune tenue par un cas : le premier
+	   segment est l'identifiant de RACINE, le dernier le NOM du fichier. Sans
+	   elles, un dossier ouvert nommé « .archives » exclurait tout son contenu,
+	   et un fichier nommé « .gitignore » s'exclurait lui-même — la même règle
+	   que `toHostFile` applique déjà au point de tête. */
+	r.check("un NOM qui commence par un point reste au catalogue",
+		horsCatalogue("Quiz/Cours/.gitignore"), false);
+	r.check("une RACINE qui commence par un point n'exclut pas ses fichiers",
+		horsCatalogue(".archives/Cours/ch1.md"), false);
+
+	const ch1 = f("Cours/ch1.md", "md");
+	const jete = f("Quiz/.trash/Cours/ch1.md", "md");
+	const ailleurs = f("Quiz/Autre/ch1.md", "md");
+	/* Vers un dossier ignoré : une DISPARITION, pas un renommage. Les deux
+	   moitiés sont nécessaires — diffuser un `rename` insérerait le chemin de
+	   corbeille à l'index (`apply` ne filtre rien), et ne rien diffuser du tout
+	   y laisserait l'ANCIEN chemin, donc un quiz fantôme que plus aucun fichier
+	   ne peut mettre à jour. */
+	r.check("un renommage vers la corbeille est une suppression de l'ancien chemin",
+		evenementDeRenommage("Quiz/Cours/ch1.md", "Quiz/.trash/Cours/ch1.md", jete),
+		{ kind: "delete", path: "Quiz/Cours/ch1.md" });
+	/* Et le retour est une APPARITION : le catalogue n'a jamais connu le chemin
+	   de corbeille, un `rename` porterait un `oldPath` qu'il ne peut pas
+	   retirer. */
+	r.check("un retour de la corbeille est une création",
+		evenementDeRenommage("Quiz/.trash/Cours/ch1.md", "Quiz/Cours/ch1.md", ch1),
+		{ kind: "create", file: ch1 });
+	r.check("entre deux dossiers indexés, c'est bien un renommage",
+		evenementDeRenommage("Quiz/Cours/ch1.md", "Quiz/Autre/ch1.md", ailleurs),
+		{ kind: "rename", file: ailleurs, oldPath: "Quiz/Cours/ch1.md" });
+	/* D'un dossier ignoré à un autre : RIEN. Le catalogue ne connaît ni la
+	   source ni la destination ; une suppression y porterait un chemin qu'il
+	   n'a jamais eu. */
+	r.check("un renommage interne à la corbeille ne dit rien au catalogue",
+		evenementDeRenommage("Quiz/.trash/a.md", "Quiz/.trash/b.md", f("Quiz/.trash/b.md", "md")),
+		null);
 
 	r.done();
 });
@@ -197,16 +250,29 @@ await withSrcModule("apps/windows/src/host/roots.ts", async (mod) => {
 		await attachmentPathFor(existe, "schema.png", "Efrei/Cours/reseau.md"),
 		"Efrei/Cours/schema-2.png");
 
-	/* LE cas de la course, et celui que le contrat nomme : deux collages coup
-	   sur coup. Le second nom n'existe pas ENCORE sur le disque — c'est la
-	   réservation en mémoire (`src/unique-path.ts`) qui empêche les deux images
-	   de choisir le même chemin, donc la seconde d'effacer la première. Un
-	   `attachmentPathFor` qui se contenterait de tester l'existence rendrait ici
-	   deux fois « capture.png ». */
+	/* LE cas de la course, et le contrat le tranche dans l'autre sens : l'hôte
+	   NE RÉSERVE PAS. Deux demandes coup sur coup rendent le MÊME chemin tant
+	   que rien n'est écrit, et c'est à l'appelant de réserver
+	   (`src/unique-path.ts`) — exactement ce que fait Obsidian, dont
+	   `getAvailablePathForAttachment` déduplique contre ce qui EXISTE sans rien
+	   retenir. Le contraire coûterait cher et le défaut serait invisible ici :
+	   `reserveFreePath` réserve AVANT son premier `await`, donc l'appelant qui
+	   réserve à son tour le chemin rendu le trouverait déjà pris — par NOUS —
+	   et sauterait au suivant. Chaque image collée sortirait en
+	   « Pasted image ….-2.png », puis « -3-2 », et le nom de base resterait
+	   brûlé pour la session sans jamais être écrit. */
 	const premier = await attachmentPathFor(existe, "capture.png", "Efrei/Cours/reseau.md");
 	const second = await attachmentPathFor(existe, "capture.png", "Efrei/Cours/reseau.md");
-	r.check("deux demandes coup sur coup ne rendent pas le même chemin",
-		[premier, second], ["Efrei/Cours/capture.png", "Efrei/Cours/capture-2.png"]);
+	r.check("deux demandes coup sur coup rendent le MÊME chemin : l'hôte ne réserve pas",
+		[premier, second], ["Efrei/Cours/capture.png", "Efrei/Cours/capture.png"]);
+	/* Le corollaire, et il est nécessaire : la déduplication existe TOUJOURS,
+	   elle se fait seulement contre le DISQUE. Sans ce cas, un
+	   `attachmentPathFor` qui rendrait `name` sans jamais tester l'existence
+	   passerait le cas ci-dessus. */
+	presents.add("Efrei/Cours/capture.png");
+	r.check("… mais une fois le fichier écrit, le suivant est numéroté",
+		await attachmentPathFor(existe, "capture.png", "Efrei/Cours/reseau.md"),
+		"Efrei/Cours/capture-2.png");
 
 	/* Une note posée à la racine de son dossier : la pièce jointe reste DANS la
 	   racine. Un chemin sans son premier segment sortirait des dossiers ouverts
@@ -226,6 +292,37 @@ await withSrcModule("apps/windows/src/host/roots.ts", async (mod) => {
 	   extension, sinon « .gitignore » se numéroterait en « -2.gitignore ». */
 	r.check("un point de tête de nom n'est pas une extension",
 		couperExtension("Efrei/Cours/.gitignore"), { base: "Efrei/Cours/.gitignore", ext: "" });
+
+	/* SANS note d'accueil — la DIVERGENCE que le contrat nomme, et l'autre
+	   moitié est éprouvée côté Obsidian (« sans note citante, rien n'est inventé
+	   à sa place », `check:obsidian-host`) : là-bas Obsidian retombe sur son
+	   fichier ACTIF, ici la fenêtre n'en a pas et REJETTE.
+	   Ce que ce cas empêche : choisir une racine par défaut parmi les dix
+	   ouvertes. L'image partirait dans une racine, la note dans une autre, et la
+	   résolution de liens — BORNÉE à sa racine — ne la retrouverait jamais. Une
+	   image perdue en silence coûte plus cher qu'un refus nommé.
+	   La CAUSE est éprouvée, pas seulement le rejet : `attachmentPathFor` peut
+	   lever pour dix raisons, et un cas qui accepte n'importe quelle exception
+	   resterait vert le jour où elle lèverait sur une faute de frappe. */
+	let sansNote = null;
+	try {
+		await attachmentPathFor(existe, "capture.png", "reseau.md");
+	} catch (e) {
+		sansNote = String(e.message);
+	}
+	r.check("sans note d'accueil, la fenêtre rejette en nommant la cause",
+		sansNote && sansNote.includes("pièce jointe sans note d'accueil"), true);
+	/* Et `sourcePath` absent tout court, pas seulement sans dossier : c'est la
+	   forme que prend l'appel de la page « Générer » (`QuizDraft.file === null`),
+	   celle qu'un appelant atteindra pour de vrai. */
+	let aucuneNote = null;
+	try {
+		await attachmentPathFor(existe, "capture.png");
+	} catch (e) {
+		aucuneNote = String(e.message);
+	}
+	r.check("… et un sourcePath absent rejette de la même façon",
+		aucuneNote && aucuneNote.includes("aucune note"), true);
 
 	r.done();
 });
@@ -536,13 +633,24 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs }) =
 		/* Hors des dossiers ouverts : nommer la cause plutôt que de fabriquer un
 		   chemin absolu plausible, qui échouerait plus loin avec un message
 		   incompréhensible. */
-		let horsRacine = false;
+		/* La CAUSE, pas le seul fait de lever : `trash` traverse `carte`,
+		   `couperExtension`, `cheminLibre`, `creerDossiers` et `rename`, dont
+		   chacun peut lever pour une autre raison. Un cas qui se contente d'un
+		   `catch` vide resterait vert le jour où la fonction mourrait d'une
+		   faute de frappe AVANT d'avoir seulement regardé la racine. */
+		let horsRacine = null;
 		try {
 			await fs.trash("Inconnu/x.md");
 		} catch (e) {
-			horsRacine = true;
+			horsRacine = String(e.message);
 		}
-		r.check("trash d'un chemin hors des dossiers ouverts rejette", horsRacine, true);
+		r.check("trash d'un chemin hors des dossiers ouverts rejette en nommant la cause",
+			horsRacine && horsRacine.includes("chemin hors des dossiers ouverts"), true);
+		/* PAS de cas « et rien n'a été tenté sur le disque » : il serait vert quoi
+		   qu'on fasse. `abs()` garde CHAQUE appel natif de ce fichier et rejette
+		   sur la même cause, donc aucun réordonnancement de `trash` ne peut
+		   atteindre le disque avec un chemin hors racines. Le cas ci-dessus, lui,
+		   rougit bien — vérifié en remplaçant le message par un autre. */
 	} finally {
 		/* `try/finally` comme les groupes des modales : un groupe qui MEURT sur
 		   une exception laisserait `globalThis.window` remplacé pour tous ceux

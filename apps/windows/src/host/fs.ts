@@ -25,8 +25,7 @@ import {
 import type { WatchEvent } from "@tauri-apps/plugin-fs";
 import { LOG_PREFIX } from "../../../../src/branding";
 import type { HostFile, HostFileEvent, HostFs, HostWatcher } from "../../../../src/host/types";
-import { reserveFreePath } from "../../../../src/unique-path";
-import { couperExtension } from "./roots";
+import { cheminLibre, couperExtension } from "./roots";
 import type { CarteRacines } from "./roots";
 
 /** L'index en mémoire du dossier. Volontairement minuscule : c'est ce qui le
@@ -136,6 +135,52 @@ export function buildIndex(fichiers: HostFile[]): WindowsIndex {
  */
 function dossierIgnore(nom: string): boolean {
 	return nom.startsWith(".") || nom === "node_modules";
+}
+
+/**
+ * Un chemin du CONTRAT que le catalogue ne doit pas connaître : il traverse un
+ * dossier ignoré, ou il se réduit à la racine elle-même.
+ *
+ * Nommée et exportée pour être ÉPROUVABLE, et pour que le parcours du démarrage
+ * et le surveillant ne puissent pas diverger : c'est exactement ce qui venait
+ * d'arriver. `reconcilier` filtrait, la branche des renommages `both` non — un
+ * fichier mis à la corbeille par `HostFs.trash` (un `rename` vers
+ * `<racine>/.trash/…`) rentrait donc au catalogue sous son chemin de corbeille,
+ * et le quiz restait dans « Mes quiz » jusqu'au redémarrage. Le premier segment
+ * est l'identifiant de la racine et le dernier le NOM du fichier : ni l'un ni
+ * l'autre n'est un dossier traversé.
+ */
+export function horsCatalogue(cheminContrat: string): boolean {
+	const segments = cheminContrat.split("/");
+	if (segments.length < 2) return true;
+	return segments.slice(1, -1).some(dossierIgnore);
+}
+
+/**
+ * Ce que le CATALOGUE doit retenir d'un renommage de fichier, une fois ses deux
+ * chemins résolus dans l'espace du contrat. `null` quand il n'a rien à en
+ * faire.
+ *
+ * Un renommage qui ENTRE dans un dossier ignoré n'est pas un renommage pour le
+ * catalogue, c'est une DISPARITION ; qui en SORT, une APPARITION. Diffuser un
+ * `rename` dans le premier cas insérerait le chemin de corbeille à l'index
+ * (`buildIndex`, `apply` ne filtre rien) ; se contenter de ne rien diffuser y
+ * laisserait l'ANCIEN chemin, donc un quiz que plus aucun fichier ne peut
+ * mettre à jour — les deux moitiés sont nécessaires.
+ *
+ * PURE : c'est ce qui la rend éprouvable, le surveillant ne l'étant pas.
+ */
+export function evenementDeRenommage(
+	avant: string,
+	apres: string,
+	file: HostFile,
+): HostFileEvent | null {
+	const avantAuCatalogue = !horsCatalogue(avant);
+	const apresAuCatalogue = !horsCatalogue(apres);
+	if (!apresAuCatalogue) return avantAuCatalogue ? { kind: "delete", path: avant } : null;
+	return avantAuCatalogue
+		? { kind: "rename", file, oldPath: avant }
+		: { kind: "create", file };
 }
 
 /** Concurrence des `stat` du démarrage : un aller-retour IPC par fichier, donc
@@ -300,8 +345,15 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 			const { base, ext } = couperExtension(vise);
 			/* Un nom LIBRE : supprimer deux fois une note du même nom (recréée
 			   entre les deux) écraserait la première dans la corbeille, et la
-			   corbeille est justement l'endroit où rien ne doit disparaître. */
-			const cible = await reserveFreePath(base, ext, existe);
+			   corbeille est justement l'endroit où rien ne doit disparaître.
+			   `cheminLibre` et non `reserveFreePath` : rien à réserver ici. Une
+			   source n'a qu'UNE cible de corbeille, deux `trash` du même chemin
+			   ne peuvent pas réussir tous les deux (le second ne trouve plus sa
+			   source), et un `rename` qui échoue brûlerait sinon le nom pour
+			   toute la session — c'est pourquoi les trois sites du dépôt qui
+			   réservent vraiment appairent `releaseReservedPath` dans leur
+			   `catch`. Sans réservation, rien à appairer. */
+			const cible = await cheminLibre(existe, base, ext);
 			const barre = cible.lastIndexOf("/");
 			if (barre > 0) await creerDossiers(cible.slice(0, barre));
 			await renameFichier(abs(path), abs(cible));
@@ -420,11 +472,11 @@ export function createWindowsWatcher(carte: CarteRacines, index: WindowsIndex): 
 	async function reconcilier(absolu: string): Promise<void> {
 		const rel = carte.depuisAbsolu(absolu);
 		if (rel === null) return;
-		const segments = rel.split("/");
-		// Le premier segment est l'identifiant de la racine, jamais un dossier :
-		// un chemin qui s'y réduit (la racine elle-même) n'est pas un fichier.
-		if (segments.length < 2) return;
-		if (segments.slice(1, -1).some(dossierIgnore)) return;
+		// Un chemin qui se réduit à la racine n'est pas un fichier, et un chemin
+		// qui traverse un dossier ignoré n'a rien à faire au catalogue. Le MÊME
+		// prédicat que la branche des renommages ci-dessous : deux copies de
+		// cette règle avaient déjà divergé une fois.
+		if (horsCatalogue(rel)) return;
 
 		let info = null;
 		try {
@@ -483,7 +535,14 @@ export function createWindowsWatcher(carte: CarteRacines, index: WindowsIndex): 
 					await reconcilier(ev.paths[1]);
 					return;
 				}
-				diffuser({ kind: "rename", file: toHostFile(apres, mtime), oldPath: avant });
+				/* PAS un `diffuser` direct : un renommage vers un dossier ignoré
+				   (`HostFs.trash`, qui déplace vers `<racine>/.trash/…`) doit
+				   arriver au catalogue comme une SUPPRESSION, et le retour d'un
+				   dossier ignoré comme une CRÉATION. Sans cette traduction, la
+				   note mise à la corbeille restait dans « Mes quiz » jusqu'au
+				   redémarrage, sous son chemin de corbeille. */
+				const pourCatalogue = evenementDeRenommage(avant, apres, toHostFile(apres, mtime));
+				if (pourCatalogue) diffuser(pourCatalogue);
 				return;
 			}
 		}

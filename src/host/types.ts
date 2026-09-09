@@ -263,7 +263,21 @@ export interface HostPaths {
 	 * L'appelant reste tenu de RÉSERVER le nom (`src/unique-path.ts`) s'il en
 	 * demande deux coup sur coup : mesuré sous Obsidian, deux appels
 	 * rapprochés rendent le MÊME chemin tant que le fichier n'existe pas, et la
-	 * seconde image écrasait la première.
+	 * seconde image écrasait la première. AUCUN hôte ne réserve à sa place —
+	 * s'il le faisait, la réservation de l'appelant tomberait sur un nom déjà
+	 * pris par l'hôte lui-même et sauterait au suivant : chaque collage
+	 * sortirait en « ….-2.png », et le nom de base resterait brûlé sans jamais
+	 * être écrit.
+	 *
+	 * `sourcePath` est OPTIONNEL, et les deux hôtes n'en font PAS la même
+	 * chose — le contrat ne promet donc rien de plus que « l'hôte décide ».
+	 * Obsidian retombe sur le fichier ACTIF de sa fenêtre. L'application, elle,
+	 * REJETTE avec une cause nommée : elle n'a pas de fichier actif, et choisir
+	 * une racine parmi les dix qu'elle peut ouvrir poserait l'image hors de la
+	 * racine où la note finira — où la résolution de liens, BORNÉE à cette
+	 * racine, ne la retrouverait plus, et l'image serait perdue en silence.
+	 * Un appelant sans note (page « Générer », `QuizDraft.file === null`) doit
+	 * donc savoir où va le quiz AVANT d'y coller une image.
 	 */
 	attachmentPathFor(name: string, sourcePath?: string): Promise<string>;
 	/** Les racines ouvertes, dans l'ordre d'affichage. */

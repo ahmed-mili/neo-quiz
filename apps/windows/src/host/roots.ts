@@ -1,7 +1,6 @@
 import type { HostRoot } from "../../../../src/host/types";
 import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../../../src/review/paths";
 import { PLUGIN_ID } from "../../../../src/branding";
-import { reserveFreePath } from "../../../../src/unique-path";
 
 /* ══════════════════════════════════════════════════════════
    LES RACINES DE L'APPLICATION
@@ -165,6 +164,36 @@ export function couperExtension(chemin: string): { base: string; ext: string } {
 }
 
 /**
+ * Le premier chemin LIBRE de la forme `base`, `base-2`, `base-3`… + `ext`.
+ *
+ * Et surtout : il NE RÉSERVE RIEN, là où `reserveFreePath`
+ * (`src/unique-path.ts`) tient un registre en mémoire. Ce n'est pas un oubli,
+ * c'est le contrat : `HostPaths.attachmentPathFor` promet un chemin libre et
+ * laisse la RÉSERVATION à l'appelant. Réserver ici la ferait compter DEUX fois
+ * — l'appelant (`editor/editor-form.ts`) réserve à son tour le chemin rendu,
+ * le trouverait déjà pris par nous, et sauterait au suivant : chaque image
+ * collée sortirait en « Pasted image ….-2.png », puis « -3-2 », et le nom de
+ * base resterait brûlé pour la session sans jamais être écrit.
+ * C'est aussi la sémantique d'Obsidian, dont `getAvailablePathForAttachment`
+ * déduplique contre ce qui EXISTE sans rien réserver : les deux hôtes doivent
+ * se comporter pareil, et c'est le contrat écrit qui dit lequel a raison.
+ *
+ * Bornée, et l'échec est BRUYANT, comme `reserveFreePath` : rendre un chemin
+ * qu'on sait pris ferait écraser un fichier.
+ */
+export async function cheminLibre(
+	existe: (chemin: string) => Promise<boolean>,
+	base: string,
+	ext: string,
+): Promise<string> {
+	for (let n = 1; n <= 50; n++) {
+		const candidat = n === 1 ? base + ext : `${base}-${n}${ext}`;
+		if (!(await existe(candidat))) return candidat;
+	}
+	throw new Error("Aucun nom de fichier libre après 50 essais : " + base + ext);
+}
+
+/**
  * Chemin LIBRE d'une pièce jointe : MÊME DOSSIER QUE LA NOTE.
  *
  * L'application n'a pas de réglage « dossier des pièces jointes » et n'en
@@ -172,6 +201,13 @@ export function couperExtension(chemin: string): { base: string; ext: string } {
  * déplacement du dossier de quiz, et c'est aussi l'un des modes qu'Obsidian
  * propose. Le lien écrit dans le bloc porte le NOM seul, donc la résolution le
  * retrouvera là.
+ *
+ * SANS note d'accueil, elle REJETTE, et le contrat le dit (`HostPaths`). La
+ * fenêtre n'a pas de fichier ACTIF sur quoi retomber comme Obsidian, et
+ * choisir une racine parmi les dix qu'elle peut ouvrir poserait l'image hors
+ * de la racine où la note finira — où la résolution de liens, BORNÉE à cette
+ * racine (`links.ts`), ne la retrouverait plus. Une image perdue en silence
+ * coûte plus cher qu'un refus nommé.
  *
  * Le test d'existence est un PARAMÈTRE, et non `HostFs.exists` pris sur place :
  * c'est ce qui garde cette fonction PURE, pour la raison écrite au-dessus de
@@ -187,6 +223,11 @@ export async function attachmentPathFor(
 	const note = nettoyer(sourcePath ?? "");
 	const barre = note.lastIndexOf("/");
 	const dossier = barre > 0 ? note.slice(0, barre) : "";
-	const { base, ext } = couperExtension(dossier ? `${dossier}/${name}` : name);
-	return await reserveFreePath(base, ext, existe);
+	/* Un chemin du contrat porte TOUJOURS son identifiant de racine en premier
+	   segment : sans « / », la note ne désigne aucun dossier ouvert, et le
+	   chemin rendu sortirait des racines — `abs()` le rejetterait plus loin
+	   avec un message qui ne dirait pas pourquoi. */
+	if (!dossier) throw new Error(`pièce jointe sans note d'accueil : ${sourcePath || "aucune note"}`);
+	const { base, ext } = couperExtension(`${dossier}/${name}`);
+	return await cheminLibre(existe, base, ext);
 }

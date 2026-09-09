@@ -199,7 +199,8 @@ Treize fichiers quittent le cliquet, qui passe de **28 à 15**.
 Comptages faits avec la MÊME expression que `scripts/check-host.mjs`
 (assertion 4), commentaires retirés.
 
-Restent 15 après la tranche : `dashboard.ts`, les cinq fichiers `ai*`,
+Restent 15 après la tranche : `dashboard.ts`, les QUATRE fichiers `ai*`
+(`ai.ts`, `ai-client.ts`, `ai-providers.ts`, `ai-usage.ts`),
 `file-sources.ts`, `mention-picker.ts`, `prompt-paths.ts`, `share.ts`,
 `usage-modal.ts`, `voice-input.ts`, `voice-install.ts`,
 `types/dashboard-ctx.ts`, `hotkey-format.ts`, `modal-base.ts`.
@@ -241,19 +242,47 @@ Lancer `npm run <x>` puis afficher `$?` sur UNE SEULE LIGNE, sans pipe. Un
 `| tail` rend le statut de `tail`. Un groupe vert peut suivre trois groupes
 rouges, et c'est ainsi qu'un défaut est déjà passé dans ce dépôt.
 
-### 3. `check:app` est VERT SANS RIEN REGARDER — le piège qui a failli tout emporter
+### 3. `check:app` : ce qu'il prouve, et ce qu'il ne prouve pas
 
-`apps/windows/tsconfig.json` ne tire de `src/` que `../../src/**/*.d.ts`. Tout
-le reste n'entre dans la compilation que s'il est **importé** depuis
-`apps/windows/src`. Un fichier converti que l'application n'importe pas encore
-n'est donc JAMAIS compilé par `check:app`, qui reste vert quoi qu'on lui fasse
-subir.
+**La première version de ce plan se trompait ici**, et l'erreur a été trouvée
+par une relecture Codex le 2026-09-09, puis vérifiée deux fois. Elle est
+racontée plutôt que effacée : le raisonnement faux est instructif, et il
+ressemble beaucoup à un raisonnement juste.
 
-C'est le cas de tous les fichiers des tâches 3 à 9 : rien sous
-`apps/windows/src` ne les importe avant la tâche 10.
+`apps/windows/tsconfig.json` ne tire de `src/` que `../../src/**/*.d.ts` ; le
+reste n'entre dans la compilation que s'il est ATTEINT depuis
+`apps/windows/src`. Le plan en concluait qu'aucun fichier des tâches 3 à 9
+n'était compilé. **Faux : un `import type` suffit à l'atteindre.**
+`apps/windows/src/ui/dashboard-shell.ts:28` importe des types de
+`src/types/dashboard-ctx.ts:31`, qui importe `detail.ts`. Relevé par
+`npx tsc -p apps/windows/tsconfig.json --noEmit --listFilesOnly` :
+**sept des onze fichiers convertis ici sont DÉJÀ examinés par tsc**
+(`detail.ts`, `detail-io.ts`, `detail-exam.ts`, `detail-question.ts`,
+`detail-form-bridge.ts`, `question-preview.ts`, `editor-form.ts`). Seuls
+`editor/modals.ts`, `types/editor-ctx.ts`, `quiz-source-ref.ts` et
+`quiz-menu.ts` en sont dehors.
 
-**Le geste correct**, appliqué à chaque tâche de la 2.6 et qui a fait que la
-dernière est passée sans une seule surprise :
+**Et pourtant `check:app` ne garde pas ce qu'on lui prêtait.** `obsidian.d.ts`
+est lui-même dans le programme — par le même `dashboard-ctx.ts`, qui importe
+`type App` —, donc son augmentation globale de `HTMLElement`
+(`obsidian.d.ts:188`) est active pour TOUT le programme. **Éprouvé par
+discriminance le 2026-09-09** : un `e.createDiv({ cls: "x" })` injecté dans
+`detail-exam.ts` laisse `npx tsc -p apps/windows/tsconfig.json --noEmit` sortir
+en **0**.
+
+Deux conséquences, à tenir des deux mains :
+
+- **Le garde des extensions DOM est `check:host` (assertion 4), et lui seul.** Il
+  ne regarde un fichier QUE lorsque celui-ci a quitté `RESTANTS` : d'où la
+  recette, qui exige de retirer l'import et de convertir les extensions dans le
+  MÊME mouvement. Un `check:app` vert ne dit rien là-dessus.
+- **Ce que l'import temporaire achète, c'est l'AUTRE moitié de `check:app` : le
+  build Vite.** Il répond à une question que tsc ne pose pas — ce fichier peut-il
+  être EMPAQUETÉ pour la fenêtre sans y traîner Obsidian au RUNTIME ? C'est cette
+  moitié-là que les deltas de modules de la tranche 2.6 (+2, +1, +1, +9)
+  mesuraient, et c'est elle qui a explosé en 2.5.
+
+**Le geste reste donc le même, avec sa raison corrigée :**
 
 1. ajouter un import TEMPORAIRE du fichier converti dans
    `apps/windows/src/main.ts`, et **RÉFÉRENCER** ce qu'on importe —
@@ -1007,9 +1036,12 @@ qu'ils font le même geste par deux chemins différents, et que les unifier sur
 **Interfaces :**
 - Consomme : `currentHost().links.resolve`, `.links.resourceUrl`,
   `currentHost().fs.readCached`, `ajouter`.
-- Produit : `renderQuestionView(parent, q, index, sourcePath?)` — **le paramètre
-  `app` DISPARAÎT de la signature**. La tâche 7 en dépend directement :
-  `detail-question.ts` cesse alors d'avoir besoin d'`App`.
+- Produit : `renderQuizPreviewCard(host, q, opts)` dont les `opts` perdent leur
+  champ `app`, et `resolveImagesInHtml(html, sourcePath?)` qui perd son premier
+  paramètre. **Ce sont les deux SEULS exports de ce fichier** (`:140` et `:68`) :
+  `renderQuestionView` n'est PAS ici, il vit dans `detail-question.ts:33` et
+  appelle le premier. La tâche 7 en dépend directement : `detail-question.ts`
+  cesse alors d'avoir besoin d'`App`.
   `resolveQuizSourceRef` perd de même son paramètre `app` ; vérifie sa signature
   réelle avant de la réécrire.
 
@@ -1398,9 +1430,13 @@ tâches 3 et 4 faites.
 
 ### L'ordre est contraint, et il ne se négocie pas
 
-`detail-question.ts` n'emploie `app` que pour le passer à `renderQuestionView`
-(lignes 35 et 58, vérifié par `grep -n '\bapp\b'`). `detail-form-bridge.ts`
-n'emploie `plugin` que pour le poser dans l'`EditorHostView` (lignes 69 et 91).
+`detail-question.ts` n'emploie `app` et `plugin` que pour les TRANSMETTRE, et
+il faut nommer les VRAIS destinataires : `:35` pose `app` dans les `opts` de
+`renderQuizPreviewCard` (tâche 4), et `:58` passe `cb.app` et `cb.plugin` à
+`createFormBridge`. `detail-form-bridge.ts` les repose ensuite dans
+l'`EditorHostView` (`:69`) ET dans l'`EditorCtx` (`:91`) — les DEUX, pas
+seulement la vue.
+
 **Les deux champs n'ont donc plus de destinataire dès que les tâches 3 et 4
 sont faites** : il n'y a rien à convertir, seulement à supprimer.
 

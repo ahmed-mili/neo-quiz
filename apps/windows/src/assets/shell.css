@@ -1,7 +1,7 @@
 /* =========================================================
    LA COQUILLE DE LA FENÊTRE
 
-   Deux choses qu'Obsidian faisait pour le greffon et que personne ne faisait
+   Trois choses qu'Obsidian faisait pour le greffon et que personne ne faisait
    pour l'application.
 
    1. LE FOND NE REMPLISSAIT PAS LA FENÊTRE. `.qbd-root` (CSS partagé) porte
@@ -14,11 +14,38 @@
    2. L'ÉCRAN DE CHOIX DE DOSSIER n'avait aucune mise en page : un `h1`, un `p`
       et un `<button>` nu, collés en haut à gauche.
 
+   3. LE MODÈLE DE BOÎTE. Obsidian pose `box-sizing: border-box` sur tout son
+      document ; la fenêtre Tauri part d'un document vierge, où la règle par
+      défaut de CSS (`content-box`) s'applique. Tout le CSS PARTAGÉ a été écrit
+      sous la première hypothèse : `.qbd-medit-input` fait `width: 100%` avec
+      12px de padding et une bordure, et `.qbd-medit-colors` calcule ses neuf
+      pastilles sur « 2×18(padding) + 2(bordure) = 443 utile », un compte qui
+      n'a de sens qu'en border-box. Sans cette règle, le champ d'une modale de
+      475px en mesurait 469 dans un corps de 443 : une barre de défilement
+      HORIZONTALE sous le bouton, vue à l'écran le 2026-09-09, là où le greffon
+      n'a jamais rien montré de tel.
+      Ce n'était pas un cas isolé : sur les 106 règles de `src/assets/css` qui
+      déclarent une largeur AVEC un padding ou une bordure, 92 ne posent pas
+      `box-sizing` elles-mêmes et comptaient donc sur l'hôte. Aucun contrôle ne
+      pouvait le dire — `check:theme` ne vérifie que des VARIABLES, et une
+      largeur fausse ne lève aucune erreur : c'est l'épreuve à l'écran qui l'a
+      trouvée, comme pour `modal.css` dont elle est le seul filet.
+
    Tout ici n'emploie que des variables définies par `theme/host-vars.css` ou
    par l'arbre partagé `src/assets/css`. `npm run check:theme` ne balaie pas
    `apps/windows/`, donc une variable inventée ici serait invisible aux deux
    assertions et rendrait l'écran illisible sans un mot.
    ========================================================= */
+
+/* La règle rendue à la fenêtre. Sur `*` et les deux pseudo-éléments, comme
+   Obsidian : `box-sizing` ne s'hérite pas, une règle sur `html` seul ne
+   descendrait nulle part. Le sélecteur universel a une spécificité NULLE, donc
+   toute règle de classe qui voudrait `content-box` l'emporte encore. */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
 
 html,
 body {

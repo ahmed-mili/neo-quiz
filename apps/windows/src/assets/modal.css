@@ -64,8 +64,9 @@
 	max-width: calc(100vw - 32px);
 	/* UN PLANCHER, parce qu'Obsidian en fournissait un et que ce fichier le
 	   remplace. Toutes les modales ne portent pas de classe de largeur :
-	   `ConfirmModal` et `TypePickerModal` (src/editor/modals.ts) n'en posent
-	   aucune sur le panneau, et `.qbd-usage-modal` ne borne que son
+	   `openConfirmModal` et `openTypePickerModal` (src/editor/modals.ts) n'en
+	   posent aucune sur le panneau — leur classe va sur le CORPS
+	   (`.qb-confirm-modal`, `.qb-type-modal`) —, et `.qbd-usage-modal` ne borne que son
 	   `.modal-content` (dashboard-ai.css). Sans plancher, ces panneaux-là se
 	   rétrécissent sur leur texte — et rien ne le dirait : `check:theme` ne
 	   balaie pas ce dossier. 420 px est la plus étroite des largeurs déjà

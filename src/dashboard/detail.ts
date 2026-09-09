@@ -5,7 +5,7 @@ import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { quizTypeLabel } from "./quiz-card";
-import { TypePickerModal, ConfirmModal } from "../editor/modals";
+import { openTypePickerModal, openConfirmModal } from "../editor/modals";
 import { closeAllSelects } from "./ui-select";
 import { mathifyElement } from "../engine/mathjax";
 import { loadQuizDraft, saveQuizDraft, questionText, draftIsStale } from "./detail-io";
@@ -489,7 +489,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			// question ajoutée d'office en « choix unique » puis reconvertie
 			// perdrait ses réponses au passage.
 			add.addEventListener("click", () => {
-				new TypePickerModal(ctx.app, (key) => {
+				openTypePickerModal((key) => {
 					if (!draft) return;
 					const q = makeDefault(key);
 					// « Question N » non traduit : motif du titre auto écrit dans
@@ -502,7 +502,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 					editing = true;
 					scheduleSave();
 					repaint();
-				}).open();
+				});
 			});
 		}
 
@@ -559,7 +559,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 					// Confirmation, comme dans l'éditeur : la croix est révélée au
 					// survol, l'écriture dans la note est immédiate, et rien ne
 					// rattrape une question supprimée par erreur.
-					new ConfirmModal(ctx.app,
+					openConfirmModal(
 						t("editor.delete.title", { title }),
 						t("editor.delete.message"),
 						t("editor.action.delete"),
@@ -575,7 +575,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 							scheduleSave();
 							paint(listCol, panel, nav, spec);
 						},
-					).open();
+					);
 				});
 			}
 		});

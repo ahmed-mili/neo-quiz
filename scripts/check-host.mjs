@@ -51,11 +51,9 @@ const RESTANTS = [
 	"src/types/dashboard-ctx.ts",
 	// Éditeur — tranche 3.
 	"src/editor/modals.ts",
-	"src/editor/question-preview.ts",
 	// Divers du greffon — tranche 4.
 	"src/hotkey-format.ts",
 	"src/modal-base.ts",
-	"src/quiz-source-ref.ts",
 ];
 
 function fichiersTs(racine) {

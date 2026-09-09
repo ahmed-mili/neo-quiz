@@ -1,5 +1,6 @@
-import type { App } from "obsidian";
 import { t } from "../i18n";
+import { ajouter } from "../dom";
+import { currentHost } from "../host/current";
 import { md2html, _setIcon } from "./utils";
 import type { DraftQuestion } from "./utils";
 import { mathifyElement } from "../engine/mathjax";
@@ -23,9 +24,6 @@ import { sanitizeQuizHtml } from "../engine/sanitizer";
    d'un quiz du dashboard (dashboard/detail-question.ts).
 ══════════════════════════════════════════════════════════ */
 
-/** API interne non publique d'Obsidian : lecture d'un réglage du vault (attachmentFolderPath). */
-type VaultWithGetConfig = { getConfig(key: string): string | null };
-
 /** Sous-ensemble typé du module moteur engine/math-input.ts. */
 interface MathInputModule {
 	isMathQuestion(q: unknown): boolean;
@@ -33,14 +31,13 @@ interface MathInputModule {
 }
 
 export interface QuizPreviewOptions {
-	app: App;
 	/** Titre de repli quand la question n'en porte pas (« Question 3 »). */
 	fallbackTitle: string;
 	/** Bouton indice : rendu seulement si un handler est fourni. */
 	onHint?: (hint: string) => void;
 	/**
 	 * Chemin de la NOTE qui porte le quiz, pour résoudre ses `![[…]]` comme le
-	 * moteur le fait (`ctx.sourcePath`). Sans lui, `getFirstLinkpathDest` juge
+	 * moteur le fait (`ctx.sourcePath`). Sans lui, la résolution de l'hôte juge
 	 * sans contexte : deux pièces jointes homonymes dans des dossiers
 	 * différents donnent la mauvaise, et un lien relatif (`../images/x.png`)
 	 * ne se résout pas du tout — l'aperçu montrait alors une AUTRE image que
@@ -65,7 +62,7 @@ export interface QuizPreviewOptions {
  * nu (`schema.png`, ce que `md2html` écrit) en serait retiré — et l'aperçu
  * n'aurait plus d'images du tout.
  */
-export function resolveImagesInHtml(app: App, html: string, sourcePath = ""): string {
+export function resolveImagesInHtml(html: string, sourcePath = ""): string {
 	if (!html) return html;
 	const tpl = document.createElement("template");
 	tpl.innerHTML = html;
@@ -76,24 +73,14 @@ export function resolveImagesInHtml(app: App, html: string, sourcePath = ""): st
 		const lien = spec.split("|")[0].trim();
 		if (!lien) return;
 
-		/* `getFirstLinkpathDest` D'ABORD, comme le moteur (engine/sanitizer.ts
-		   resolveObsidianEmbedFile) : c'est la résolution d'Obsidian lui-même,
-		   qui retrouve une pièce jointe où qu'elle soit dans le vault. Le
-		   calcul par `attachmentFolderPath` ci-dessous ne marche que si la
-		   pièce jointe est EXACTEMENT dans le dossier configuré — d'où des
-		   aperçus sans image alors que le quiz, lui, les affichait. */
-		const dest = app.metadataCache?.getFirstLinkpathDest?.(lien, sourcePath);
-		if (dest) {
-			img.setAttribute("src", app.vault.getResourcePath(dest));
-			return;
-		}
-
-		const attachFolder = (app.vault as unknown as VaultWithGetConfig).getConfig("attachmentFolderPath") || "";
-		const folderPath = attachFolder.replace("${file}", "").replace(/\/$/, "") || ".";
-		const filePath = folderPath === "." ? lien : `${folderPath}/${lien}`;
-		if (app.vault.getAbstractFileByPath(filePath)) {
-			img.setAttribute("src", app.vault.adapter.getResourcePath(filePath));
-		}
+		/* `links.resourceUrl` fait les DEUX temps d'un coup, et par la même
+		   voie que le moteur (`engine/sanitizer.ts`) : il résout le lien comme
+		   la note l'entend, puis en fait une URL affichable. Rendre `null` est
+		   un cas PRÉVU (le contrat l'exige) : on laisse alors le `src` d'origine
+		   intact plutôt que d'écrire une chaîne vide, qui ferait recharger la
+		   page courante comme image. */
+		const url = currentHost().links.resourceUrl(lien, sourcePath);
+		if (url) img.setAttribute("src", url);
 	});
 	return sanitizeQuizHtml(tpl.innerHTML);
 }
@@ -103,8 +90,8 @@ export function resolveImagesInHtml(app: App, html: string, sourcePath = ""): st
     accents graves d'une adresse IP là où le quiz montre du code. Le `<p>`
     que md2html ajoute autour d'un texte d'une ligne est retiré : ces
     libellés vivent dans une cellule, pas dans un paragraphe. */
-function inlineInto(el: HTMLElement, app: App, raw: string, sourcePath?: string): void {
-	el.innerHTML = resolveImagesInHtml(app, md2html(raw).replace(/^<p>|<\/p>$/g, ""), sourcePath);
+function inlineInto(el: HTMLElement, raw: string, sourcePath?: string): void {
+	el.innerHTML = resolveImagesInHtml(md2html(raw).replace(/^<p>|<\/p>$/g, ""), sourcePath);
 }
 
 /** Le SUPPORT de compréhension, au-dessus de la question — mêmes classes que
@@ -113,7 +100,7 @@ function inlineInto(el: HTMLElement, app: App, raw: string, sourcePath?: string)
     pouvait pas la relire. Toujours déplié ici (l'aperçu n'a pas d'état) et
     sans le compte « questions 2 à 4 », qui demanderait de connaître tout le
     quiz alors que la carte ne voit qu'une question. */
-function renderPassage(card: HTMLElement, q: DraftQuestion, app: App, sourcePath?: string): void {
+function renderPassage(card: HTMLElement, q: DraftQuestion, sourcePath?: string): void {
 	const extras = q._extraFields || {};
 	const text = typeof extras.passage === "string" ? extras.passage : "";
 	const html = typeof extras.passageHtml === "string" ? extras.passageHtml : "";
@@ -123,87 +110,89 @@ function renderPassage(card: HTMLElement, q: DraftQuestion, app: App, sourcePath
 		? extras.passageTitle
 		: t("editor.passage.section");
 
-	const wrap = card.createDiv({ cls: "quiz-passage" });
-	const head = wrap.createDiv({ cls: "quiz-passage-head" });
-	const icon = head.createSpan({ cls: "quiz-passage-icon" });
+	const wrap = ajouter(card, "div", "quiz-passage");
+	const head = ajouter(wrap, "div", "quiz-passage-head");
+	const icon = ajouter(head, "span", "quiz-passage-icon");
 	icon.setAttribute("aria-hidden", "true");
 	_setIcon(icon, "book-open-text");
-	// `inlineInto` et non `text:` — le titre d'un document cite volontiers une
-	// commande entre accents graves, et le moteur, lui, la rend.
-	inlineInto(head.createSpan({ cls: "quiz-passage-title" }), app, title, sourcePath);
-	const body = wrap.createDiv({ cls: "quiz-passage-body" });
-	const content = body.createDiv({ cls: "quiz-passage-content" });
-	content.innerHTML = resolveImagesInHtml(app, html || md2html(text), sourcePath);
+	// `inlineInto` et non un texte posé tel quel — le titre d'un document cite
+	// volontiers une commande entre accents graves, et le moteur, lui, la rend.
+	inlineInto(ajouter(head, "span", "quiz-passage-title"), title, sourcePath);
+	const body = ajouter(wrap, "div", "quiz-passage-body");
+	const content = ajouter(body, "div", "quiz-passage-content");
+	content.innerHTML = resolveImagesInHtml(html || md2html(text), sourcePath);
 }
 
 /** Construit la carte de question dans `host` et la renvoie. */
 export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts: QuizPreviewOptions): HTMLElement {
-	const { app, fallbackTitle } = opts;
+	const { fallbackTitle } = opts;
 	const type = q._type;
-	const wrap = host.createDiv({ cls: "quiz-blocks-host" });
-	const card = wrap.createEl("section", { cls: "quiz-card" });
+	const wrap = ajouter(host, "div", "quiz-blocks-host");
+	const card = ajouter(wrap, "section", "quiz-card");
 
-	renderPassage(card, q, app, opts.sourcePath);
+	renderPassage(card, q, opts.sourcePath);
 
 	// Le TITRE aussi rend son markdown : le moteur le fait (engine/cards.ts),
 	// et un titre de question technique cite volontiers une commande entre
 	// accents graves — ils s'affichaient bruts dans l'aperçu.
-	inlineInto(card.createEl("h2"), app, q.title || fallbackTitle, opts.sourcePath);
+	inlineInto(ajouter(card, "h2"), q.title || fallbackTitle, opts.sourcePath);
 
 	if (q.resourceButton) {
-		const rbtn = card.createEl("button", { cls: "quiz-resource-btn" });
-		const icon = rbtn.createSpan({ cls: "quiz-resource-btn-icon" });
+		const rbtn = ajouter(card, "button", "quiz-resource-btn");
+		const icon = ajouter(rbtn, "span", "quiz-resource-btn-icon");
 		_setIcon(icon, "paperclip");
 		// Même raison : le moteur rend ce libellé (sanitizer.ts resourceButtonHtml).
-		inlineInto(rbtn.createSpan({ cls: "quiz-resource-btn-label" }), app,
+		inlineInto(ajouter(rbtn, "span", "quiz-resource-btn-label"),
 			q.resourceButton.label || t("editor.preview.resourceFallback"), opts.sourcePath);
 	}
 
 	if (q._promptHtml || q.prompt) {
-		const promptEl = card.createDiv({ cls: "quiz-question" });
+		const promptEl = ajouter(card, "div", "quiz-question");
 		const raw = q._promptHtml
 			? q._promptHtml.replace(/!\[\[([^\]]+)\]\]/g, '<img src="$1" class="qb-md-img" />')
 			: md2html(q.prompt);
-		promptEl.innerHTML = resolveImagesInHtml(app, raw, opts.sourcePath);
+		promptEl.innerHTML = resolveImagesInHtml(raw, opts.sourcePath);
 	}
 
 	if (type === "single" || type === "multi") {
 		const isMulti = type === "multi";
-		if (isMulti) card.createDiv({ cls: "quiz-multi-indicator", text: t("editor.preview.multiHint") });
+		if (isMulti) ajouter(card, "div", "quiz-multi-indicator", t("editor.preview.multiHint"));
 		// .quiz-options-wrap : le conteneur du moteur (colonne flex) — sans lui
 		// les options perdent leur rythme vertical.
-		const list = card.createDiv({ cls: "quiz-options-wrap" });
+		const list = ajouter(card, "div", "quiz-options-wrap");
 		(q.options || []).forEach((o) => {
-			const opt = list.createDiv({ cls: `quiz-option ${isMulti ? "multi" : ""}`.trim(), attr: { role: "button", tabindex: "0" } });
-			opt.innerHTML = resolveImagesInHtml(app, md2html(o || "..."), opts.sourcePath);
+			const opt = ajouter(list, "div", `quiz-option ${isMulti ? "multi" : ""}`.trim());
+			opt.setAttribute("role", "button");
+			opt.setAttribute("tabindex", "0");
+			opt.innerHTML = resolveImagesInHtml(md2html(o || "..."), opts.sourcePath);
 		});
 	}
 
 	if (type === "ordering") {
-		card.createDiv({ cls: "quiz-multi-indicator", text: t("editor.preview.orderingHint") });
-		const orderingWrap = card.createDiv({ cls: "quiz-ordering" });
-		const slotsWrap = orderingWrap.createDiv({ cls: "quiz-ordering-slots" });
+		ajouter(card, "div", "quiz-multi-indicator", t("editor.preview.orderingHint"));
+		const orderingWrap = ajouter(card, "div", "quiz-ordering");
+		const slotsWrap = ajouter(orderingWrap, "div", "quiz-ordering-slots");
 		(q.slots || []).forEach((slotLabel) => {
-			const slot = slotsWrap.createDiv({ cls: "quiz-slot" });
-			inlineInto(slot.createDiv({ cls: "quiz-slot-label" }), app, slotLabel, opts.sourcePath);
-			slot.createDiv({ cls: "quiz-slot-value", text: "…" });
+			const slot = ajouter(slotsWrap, "div", "quiz-slot");
+			inlineInto(ajouter(slot, "div", "quiz-slot-label"), slotLabel, opts.sourcePath);
+			ajouter(slot, "div", "quiz-slot-value", "…");
 		});
 		// Pool dans l'ordre STOCKÉ (celui montré à l'élève), pas l'ordre correct.
-		const pool = orderingWrap.createDiv({ cls: "quiz-ordering-pool" });
-		(q.possibilities || []).forEach(p => inlineInto(pool.createSpan({ cls: "quiz-pool-item" }), app, p, opts.sourcePath));
+		const pool = ajouter(orderingWrap, "div", "quiz-ordering-pool");
+		(q.possibilities || []).forEach(p => inlineInto(ajouter(pool, "span", "quiz-pool-item"), p, opts.sourcePath));
 	}
 
 	if (type === "matching") {
-		card.createDiv({ cls: "quiz-multi-indicator", text: t("editor.preview.matchingHint") });
-		const matchWrap = card.createDiv({ cls: "quiz-ordering" });
-		const slotsWrap = matchWrap.createDiv({ cls: "quiz-ordering-slots" });
+		ajouter(card, "div", "quiz-multi-indicator", t("editor.preview.matchingHint"));
+		const matchWrap = ajouter(card, "div", "quiz-ordering");
+		const slotsWrap = ajouter(matchWrap, "div", "quiz-ordering-slots");
 		(q.rows || []).forEach((row, ri) => {
-			const slot = slotsWrap.createDiv({ cls: "quiz-slot" });
-			inlineInto(slot.createDiv({ cls: "quiz-slot-label" }), app, row || t("editor.matching.rowFallback", { n: ri }), opts.sourcePath);
-			slot.createDiv({ cls: "quiz-slot-value", text: "…" });
+			const slot = ajouter(slotsWrap, "div", "quiz-slot");
+			inlineInto(ajouter(slot, "div", "quiz-slot-label"), row || t("editor.matching.rowFallback", { n: ri }), opts.sourcePath);
+			ajouter(slot, "div", "quiz-slot-value", "…");
 		});
-		const pool = matchWrap.createDiv({ cls: "quiz-ordering-pool" });
-		(q.choices || []).forEach(c => inlineInto(pool.createSpan({ cls: "quiz-pool-item" }), app, c, opts.sourcePath));
+		const pool = ajouter(matchWrap, "div", "quiz-ordering-pool");
+		(q.choices || []).forEach(c => inlineInto(ajouter(pool, "span", "quiz-pool-item"), c, opts.sourcePath));
 	}
 
 	if (type === "cloze") {
@@ -215,10 +204,10 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		   moteur : rendre chaque segment séparément couperait les paires
 		   markdown qui enjambent un trou (`` `git {{checkout}} -b` ``). */
 		const { marked, blanks } = markSlots(q.cloze);
-		card.createDiv({ cls: "quiz-multi-indicator", text: t("engine.cloze.instructions", { count: blanks.length }) });
-		const body = card.createDiv({ cls: "quiz-cloze" });
+		ajouter(card, "div", "quiz-multi-indicator", t("engine.cloze.instructions", { count: blanks.length }));
+		const body = ajouter(card, "div", "quiz-cloze");
 		body.innerHTML = fillSlots(
-			resolveImagesInHtml(app, md2html(marked).replace(/^<p>|<\/p>$/g, ""), opts.sourcePath),
+			resolveImagesInHtml(md2html(marked).replace(/^<p>|<\/p>$/g, ""), opts.sourcePath),
 			(index) => `<span class="quiz-cloze-slot"><input class="quiz-cloze-input" type="text" readonly `
 				+ `aria-label="${t("engine.cloze.blankAria", { n: index + 1 }).replace(/"/g, "&quot;")}"></span>`,
 		);
@@ -230,11 +219,12 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		   au même titre que la marge de tolérance et les réponses. L'afficher
 		   ici montrerait à l'auteur un élément que l'apprenant ne voit pas, et
 		   soufflerait la forme attendue de la réponse. */
-		const wrap = card.createDiv({ cls: "qcm-options quiz-text-wrap" });
-		const ta = wrap.createEl("textarea", {
-			cls: "quiz-textarea",
-			attr: { readonly: true, "aria-readonly": "true", rows: "1", placeholder: q.placeholder || "" },
-		});
+		const wrap = ajouter(card, "div", "qcm-options quiz-text-wrap");
+		const ta = ajouter(wrap, "textarea", "quiz-textarea");
+		ta.readOnly = true;
+		ta.setAttribute("aria-readonly", "true");
+		ta.rows = 1;
+		ta.placeholder = q.placeholder || "";
 		ta.value = "";
 	}
 
@@ -243,40 +233,41 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 		if (mathInput.isMathQuestion(q)) {
 			// Question math : le même éditeur d'équations que le quiz, en
 			// lecture seule, gabarit affiché s'il existe.
-			const mathWrap = card.createDiv({ cls: "qcm-options quiz-text-wrap quiz-math-wrap" });
+			const mathWrap = ajouter(card, "div", "qcm-options quiz-text-wrap quiz-math-wrap");
 			mathInput.createMathField(mathWrap, {
 				readOnly: true,
 				template: (q._extraFields && q._extraFields.answerTemplate) || q.answerTemplate || "",
 			});
 		} else {
-			const textWrap = card.createDiv({ cls: "qcm-options quiz-text-wrap" });
-			const ta = textWrap.createEl("textarea", {
-				cls: "quiz-textarea",
-				attr: { readonly: true, "aria-readonly": "true", placeholder: q.placeholder || t("editor.text.defaultPlaceholder") },
-			});
+			const textWrap = ajouter(card, "div", "qcm-options quiz-text-wrap");
+			const ta = ajouter(textWrap, "textarea", "quiz-textarea");
+			ta.readOnly = true;
+			ta.setAttribute("aria-readonly", "true");
+			ta.placeholder = q.placeholder || t("editor.text.defaultPlaceholder");
 			ta.value = "";
 		}
 	}
 
 	if (type === "cmd" || type === "powershell" || type === "bash") {
-		const shellWrap = card.createDiv({ cls: "qcm-options quiz-text-wrap quiz-text-wrap-command" });
-		const shell = shellWrap.createDiv({ cls: "quiz-command-shell quiz-terminal-variant-" + type });
+		const shellWrap = ajouter(card, "div", "qcm-options quiz-text-wrap quiz-text-wrap-command");
+		const shell = ajouter(shellWrap, "div", "quiz-command-shell quiz-terminal-variant-" + type);
 		if (type === "bash") {
-			const prefixSpan = shell.createSpan({ cls: "quiz-command-prefix quiz-command-prefix-bash" });
+			const prefixSpan = ajouter(shell, "span", "quiz-command-prefix quiz-command-prefix-bash");
 			prefixSpan.innerHTML = '<span class="quiz-bash-prefix-userhost">user@hostname</span><span class="quiz-bash-prefix-colon">:</span><span class="quiz-bash-prefix-path">~</span><span class="quiz-bash-prefix-dollar">$ </span>';
 		} else {
-			shell.createSpan({ cls: "quiz-command-prefix", text: q.commandPrefix || (type === "cmd" ? "C:\\>" : "PS>") });
+			ajouter(shell, "span", "quiz-command-prefix", q.commandPrefix || (type === "cmd" ? "C:\\>" : "PS>"));
 		}
-		const inputWrap = shell.createDiv({ cls: "quiz-command-input-wrap" });
-		inputWrap.createEl("textarea", {
-			cls: "quiz-textarea quiz-textarea-command",
-			attr: { readonly: true, rows: "1", wrap: "off" },
-		});
+		const inputWrap = ajouter(shell, "div", "quiz-command-input-wrap");
+		const cmdTa = ajouter(inputWrap, "textarea", "quiz-textarea quiz-textarea-command");
+		cmdTa.readOnly = true;
+		cmdTa.rows = 1;
+		cmdTa.wrap = "off";
 	}
 
 	if (opts.onHint && q.hint && q.hint.trim()) {
 		const hint = q.hint;
-		const hintBtn = card.createEl("button", { cls: "quiz-hint-btn", text: t("editor.hint.label"), type: "button" });
+		const hintBtn = ajouter(card, "button", "quiz-hint-btn", t("editor.hint.label"));
+		hintBtn.type = "button";
 		hintBtn.addEventListener("click", () => opts.onHint?.(hint));
 	}
 

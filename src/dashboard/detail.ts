@@ -635,7 +635,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			// relatifs à la note. Absent pour un quiz encore en mémoire.
 			}, draft?.file?.path);
 		} else {
-			renderQuestionView(content, q, ctx.app, index, draft?.file?.path);
+			renderQuestionView(content, q, index, draft?.file?.path);
 		}
 	}
 

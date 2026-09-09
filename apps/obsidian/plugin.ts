@@ -1190,7 +1190,7 @@ export default class InteractiveQuizPlugin extends Plugin {
 
 					let quizToRender = quiz;
 					if (sourceRef) {
-						const resolved = await resolveQuizSourceRef(this.app, sourceRef, mdCtx.sourcePath);
+						const resolved = await resolveQuizSourceRef(sourceRef, mdCtx.sourcePath);
 						if ("error" in resolved) {
 							const key = resolved.error === "not-found" ? "plugin.sourceRef.notFound"
 								: resolved.error === "no-block" ? "plugin.sourceRef.noBlock"

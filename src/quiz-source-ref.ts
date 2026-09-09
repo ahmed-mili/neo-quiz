@@ -6,11 +6,12 @@
  * référencée, une seule source de vérité pour le contenu.
  *
  * Séparation PUR / BRANCHÉ (règle du brief) : `selectQuizQuestions` ne
- * dépend d'aucune API Obsidian et se vérifie sans DOM ni `app`
+ * dépend d'aucun hôte et se vérifie sans DOM ni faux vault
  * (`scripts/check-lesson.mjs`) ; `resolveQuizSourceRef` fait le travail
- * asynchrone (lecture du vault, résolution du lien) par-dessus.
+ * asynchrone (lecture du dossier, résolution du lien) par-dessus, à travers
+ * le contrat d'hôte (`src/host/types.ts`).
  */
-import type { App, TFile } from "obsidian";
+import { currentHost } from "./host/current";
 import type { QuizQuestion } from "./types/quiz";
 import { QUIZ_BLOCK_RE, parseQuizSource, extractExamOptions, findQuizModeConfigIndex } from "./quiz-utils";
 
@@ -37,7 +38,7 @@ export function selectQuizQuestions(questions: readonly QuizQuestion[]): QuizQue
 
 /** Retire les crochets `[[...]]`, un éventuel `!` d'intégration en tête, un
     éventuel alias `|...`, ET une éventuelle ancre de titre/bloc `#...` en fin
-    de lien, pour ne garder que le linkpath attendu par `getFirstLinkpathDest`.
+    de lien, pour ne garder que le linkpath attendu par `links.resolve`.
     FIX round 1 de revue : ni l'ancre ni le `!` n'étaient retirés, si bien
     qu'un `source: "[[Chapitre 1 — Lesson#Partie 2]]"` — un lien parfaitement
     valide vers une section précise — faisait échouer la résolution d'une
@@ -54,15 +55,18 @@ export function toLinkpath(ref: string): string {
 /**
  * Résolution asynchrone d'un `source` de note Quiz vers les questions de sa
  * note Lesson. `fromPath` est le chemin de la note QUI PORTE le `source`
- * (celle affichée), passé à `getFirstLinkpathDest` pour résoudre les liens
+ * (celle affichée), passé à `links.resolve` pour résoudre les liens
  * relatifs comme le fait le moteur (cf. `engine/sanitizer.ts`).
  */
-export async function resolveQuizSourceRef(app: App, ref: string, fromPath: string): Promise<QuizSourceRefResult> {
+export async function resolveQuizSourceRef(ref: string, fromPath: string): Promise<QuizSourceRefResult> {
 	const linkpath = toLinkpath(ref);
-	const file: TFile | null = app.metadataCache.getFirstLinkpathDest(linkpath, fromPath);
+	const file = currentHost().links.resolve(linkpath, fromPath);
 	if (!file) return { error: "not-found", link: ref };
 
-	const content = await app.vault.cachedRead(file);
+	/* `readCached` et non `read` : c'est le chemin d'un BALAYAGE (la note est
+	   relue à chaque rendu du bloc), et le contrat autorise l'hôte à y servir
+	   son cache — ce que faisait déjà `vault.cachedRead` sous Obsidian. */
+	const content = await currentHost().fs.readCached(file.path);
 	const match = QUIZ_BLOCK_RE.exec(content);
 	if (!match) return { error: "no-block", link: ref };
 

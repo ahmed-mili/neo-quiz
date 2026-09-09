@@ -1421,63 +1421,74 @@ await withSrcModule("src/quiz-source-ref.ts", ({ toLinkpath }) => {
 
 /**
  * FINDING 2 : les trois échecs de résolution et le cas de succès, sur
- * `resolveQuizSourceRef`, avec un substitut MINIMAL de l'API du vault — il ne
- * fait que répondre à la place d'Obsidian (getFirstLinkpathDest, cachedRead),
- * toute la logique éprouvée reste celle de `resolveQuizSourceRef` lui-même.
+ * `resolveQuizSourceRef`, avec un substitut MINIMAL de l'HÔTE — il ne fait que
+ * répondre à la place du greffon (`links.resolve`, `fs.readCached`), toute la
+ * logique éprouvée reste celle de `resolveQuizSourceRef` lui-même.
+ *
+ * DEUX ENTRÉES et non une (tranche 3, tâche 4) : depuis que la résolution passe
+ * par `currentHost()`, le faux hôte doit être installé dans LA MÊME instance de
+ * `src/host/current.ts` que celle que voit `quiz-source-ref.ts`. Un
+ * `withSrcModule` à entrée unique construit un bundle par entrée, donc une
+ * copie du singleton par entrée — l'hôte installé en tête de ce script (ligne
+ * 19) reste invisible d'ici. C'est `splitting` qui fait le chunk partagé.
  */
-await withSrcModule("src/quiz-source-ref.ts", async ({ resolveQuizSourceRef }) => {
-	const r = makeReporter("Note Quiz vers Lesson (source) — resolveQuizSourceRef");
+await withSrcModule(
+	["src/quiz-source-ref.ts", "src/host/current.ts"],
+	async ({ resolveQuizSourceRef }, { installHost }) => {
+		const r = makeReporter("Note Quiz vers Lesson (source) — resolveQuizSourceRef");
 
-	/** Un faux vault qui connaît un seul fichier, par son chemin. */
-	function makeApp(files) {
-		return {
-			metadataCache: {
-				getFirstLinkpathDest: (linkpath) => (files[linkpath] !== undefined ? { path: linkpath } : null)
-			},
-			vault: {
-				cachedRead: async (file) => files[file.path]
-			}
-		};
-	}
+		/** Un faux hôte qui connaît un seul fichier, par son chemin. Le reste du
+		    contrat est absent VOLONTAIREMENT : aucun cas d'ici ne le touche, et
+		    une méthode manquante MEURT bruyamment plutôt que de rendre vert. */
+		function installFakeHost(files) {
+			installHost({
+				links: {
+					resolve: (linkpath) => (files[linkpath] !== undefined ? { path: linkpath, name: linkpath, basename: linkpath, extension: "md", mtime: 0 } : null),
+					resourceUrl: () => null,
+				},
+				fs: { readCached: async (path) => files[path] },
+			});
+		}
 
-	// note-cible absente
-	{
-		const app = makeApp({});
-		const res = await resolveQuizSourceRef(app, "[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
-		r.check("note absente -> not-found", res, { error: "not-found", link: "[[Chapitre 1 — Lesson]]" });
-	}
+		// note-cible absente
+		{
+			installFakeHost({});
+			const res = await resolveQuizSourceRef("[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
+			r.check("note absente -> not-found", res, { error: "not-found", link: "[[Chapitre 1 — Lesson]]" });
+		}
 
-	// note trouvée, mais sans bloc quiz-blocks
-	{
-		const app = makeApp({ "Chapitre 1 — Lesson": "# Chapitre 1\n\nDu texte, aucun bloc." });
-		const res = await resolveQuizSourceRef(app, "[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
-		r.check("pas de bloc -> no-block", res, { error: "no-block", link: "[[Chapitre 1 — Lesson]]" });
-	}
+		// note trouvée, mais sans bloc quiz-blocks
+		{
+			installFakeHost({ "Chapitre 1 — Lesson": "# Chapitre 1\n\nDu texte, aucun bloc." });
+			const res = await resolveQuizSourceRef("[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
+			r.check("pas de bloc -> no-block", res, { error: "no-block", link: "[[Chapitre 1 — Lesson]]" });
+		}
 
-	// note cible qui porte elle-même un `source` : pas de chaîne
-	{
-		const bloc = "```quiz-blocks\n[{ prompt: 'A', options: ['1','2'], correctIndex: 0 }, { mode: 'lesson', source: '[[Autre]]' }]\n```";
-		const app = makeApp({ "Chapitre 1 — Lesson": bloc });
-		const res = await resolveQuizSourceRef(app, "[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
-		r.check("cible chainee -> chained", res, { error: "chained", link: "[[Chapitre 1 — Lesson]]" });
-	}
+		// note cible qui porte elle-même un `source` : pas de chaîne
+		{
+			const bloc = "```quiz-blocks\n[{ prompt: 'A', options: ['1','2'], correctIndex: 0 }, { mode: 'lesson', source: '[[Autre]]' }]\n```";
+			installFakeHost({ "Chapitre 1 — Lesson": bloc });
+			const res = await resolveQuizSourceRef("[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
+			r.check("cible chainee -> chained", res, { error: "chained", link: "[[Chapitre 1 — Lesson]]" });
+		}
 
-	// succès : ne reprend que les questions de rôle "test" ou sans rôle
-	{
-		const bloc = "```quiz-blocks\n[" +
-			"{ slice: 1, role: 'pre', prompt: 'A', type: 'text', answer: 'x' }, " +
-			"{ slice: 1, role: 'recall', prompt: 'B', type: 'text', answer: 'y' }, " +
-			"{ slice: 1, role: 'test', prompt: 'C', options: ['1','2'], correctIndex: 0 }, " +
-			"{ prompt: 'D', options: ['1','2'], correctIndex: 0 }, " +
-			"{ mode: 'lesson' }" +
-			"]\n```";
-		const app = makeApp({ "Chapitre 1 — Lesson": bloc });
-		const res = await resolveQuizSourceRef(app, "[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
-		r.check("succes -> seules C et D", "error" in res ? res : res.questions.map(q => q.prompt), ["C", "D"]);
-	}
+		// succès : ne reprend que les questions de rôle "test" ou sans rôle
+		{
+			const bloc = "```quiz-blocks\n[" +
+				"{ slice: 1, role: 'pre', prompt: 'A', type: 'text', answer: 'x' }, " +
+				"{ slice: 1, role: 'recall', prompt: 'B', type: 'text', answer: 'y' }, " +
+				"{ slice: 1, role: 'test', prompt: 'C', options: ['1','2'], correctIndex: 0 }, " +
+				"{ prompt: 'D', options: ['1','2'], correctIndex: 0 }, " +
+				"{ mode: 'lesson' }" +
+				"]\n```";
+			installFakeHost({ "Chapitre 1 — Lesson": bloc });
+			const res = await resolveQuizSourceRef("[[Chapitre 1 — Lesson]]", "Chapitre 1 — Quiz.md");
+			r.check("succes -> seules C et D", "error" in res ? res : res.questions.map(q => q.prompt), ["C", "D"]);
+		}
 
-	r.done();
-});
+		r.done();
+	},
+);
 
 /**
  * FIX round 2 de revue (task 8), FINDING (Important) : ajouter `source` aux

@@ -1,7 +1,7 @@
 import { PRODUCT_NAME } from "./branding";
 import { ItemView, Scope } from "obsidian";
 import type { App, WorkspaceLeaf, KeymapEventHandler } from "obsidian";
-import { openQuizForPlay, openQuizPathInEditor } from "./dashboard/quiz-open";
+import { openQuizForPlay, openQuizPathInEditor } from "../apps/obsidian/quiz-open";
 import { buildQuizCardMenu, buildModuleCardMenu } from "./dashboard/quiz-menu";
 import { openIconPicker } from "./dashboard/icon-picker";
 import { openCreateQuizModal, openCreateFolderModal } from "./dashboard/folder-create";

@@ -21,7 +21,7 @@ import type {
 import { createObsidianHost } from "./host";
 import { installHost, uninstallHost, currentHost } from "../../src/host/current";
 import { parseQuizSource, renderInteractiveQuiz } from "../../src/engine";
-import { QuizBuilderView, VIEW_TYPE } from "../../src/editor";
+import { QuizBuilderView, VIEW_TYPE } from "./editor";
 import { QUIZ_BLOCK_RE, findQuizModeConfigIndex } from "../../src/quiz-utils";
 import { resolveQuizSourceRef } from "../../src/quiz-source-ref";
 import { deriveQuizNoteName, buildQuizRefBlockContent, isLessonNoteContent, isLessonNoteContentExact, isLessonNameLinkSafe } from "../../src/quiz-from-lesson";
@@ -1376,7 +1376,7 @@ export default class InteractiveQuizPlugin extends Plugin {
 						// simplement sur le dashboard.
 						const content = await this.app.vault.cachedRead(activeFile);
 						if (QUIZ_BLOCK_RE.test(content)) {
-							const { openQuizPathInEditor } = require("../../src/dashboard/quiz-open") as typeof import("../../src/dashboard/quiz-open");
+							const { openQuizPathInEditor } = require("./quiz-open") as typeof import("./quiz-open");
 							await openQuizPathInEditor(this.app, activeFile.path);
 							return;
 						}

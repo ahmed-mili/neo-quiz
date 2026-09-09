@@ -5,7 +5,6 @@ import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { quizTypeLabel } from "./quiz-card";
-import { openQuizForPlay } from "./quiz-open";
 import { TypePickerModal, ConfirmModal } from "../editor/modals";
 import { closeAllSelects } from "./ui-select";
 import { mathifyElement } from "../engine/mathjax";
@@ -125,7 +124,13 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 				start: {
 					label: t("dashboard.detail.play"),
 					icon: "play",
-					onClick: () => void openQuizForPlay(ctx.app, quiz),
+					// `ctx.openQuiz` et non un appel direct : c'est L'HÔTE qui
+					// décide ce que « jouer » veut dire. Sous Obsidian il vaut
+					// exactement l'ancien appel (`src/dashboard.ts:205`) ; dans
+					// la fenêtre il monte la page du moteur. Le fichier qui
+					// portait cet appel est parti dans `apps/obsidian/` : il ne
+					// parlait que d'onglets.
+					onClick: () => ctx.openQuiz(quiz),
 				},
 				isStale: () => ctx.view.currentView !== "detail",
 				startEditing,

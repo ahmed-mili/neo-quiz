@@ -44,14 +44,12 @@ const RESTANTS = [
 	"src/dashboard/mention-picker.ts",
 	"src/dashboard/prompt-paths.ts",
 	"src/dashboard/quiz-menu.ts",
-	"src/dashboard/quiz-open.ts",
 	"src/dashboard/share.ts",
 	"src/dashboard/usage-modal.ts",
 	"src/dashboard/voice-input.ts",
 	"src/dashboard/voice-install.ts",
 	"src/types/dashboard-ctx.ts",
 	// Éditeur — tranche 3.
-	"src/editor.ts",
 	"src/editor/editor-form.ts",
 	"src/editor/modals.ts",
 	"src/editor/question-preview.ts",
@@ -136,6 +134,23 @@ for (const f of fichiersTs("src")) {
 	if (importeurs.has(f)) continue; // déjà déclaré : il partira avec son import
 	const m = codeNu(readFileSync(f, "utf8")).match(EXTENSIONS_DOM);
 	if (m) rate(`${f} emploie « ${m[1]} », une extension DOM d'Obsidian absente des autres hôtes : passez par « ajouter » (src/dom.ts).`);
+}
+
+/* 5. LE SENS DES DÉPENDANCES. `src/` est le code partagé : il ne connaît pas
+      ses hôtes. La tranche 3 a déplacé `editor.ts` et `quiz-open.ts` vers
+      `apps/obsidian/` parce qu'ils ne décrivaient qu'un onglet — et
+      `src/dashboard.ts`, qui est lui-même un `ItemView` en instance de départ,
+      les importe désormais de là. C'est la SEULE exception, et elle est
+      nommée : sans cette assertion, « juste un import depuis apps/ » serait la
+      façon la plus rapide de contourner tout le reste du contrôle, sans
+      qu'aucune des quatre assertions précédentes ne s'en aperçoive. */
+const IMPORTE_APPS = /(?:from\s*|require\s*\(\s*|(?<![.\w$])import\s*\(\s*)["'][^"']*\bapps\//;
+const EXCEPTIONS_APPS = new Set(["src/dashboard.ts"]);
+for (const f of fichiersTs("src")) {
+	if (EXCEPTIONS_APPS.has(f)) continue;
+	if (IMPORTE_APPS.test(codeNu(readFileSync(f, "utf8")))) {
+		rate(`${f} importe depuis apps/ : le code partagé ne connaît pas ses hôtes.`);
+	}
 }
 
 if (echecs) {

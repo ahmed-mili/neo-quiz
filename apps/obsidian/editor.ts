@@ -1,9 +1,9 @@
 import { ItemView, Notice, TFile } from "obsidian";
 import type { Plugin, WorkspaceLeaf } from "obsidian";
-import { t } from "./i18n";
-import { createQuizPage } from "./dashboard/detail";
-import type { QuizPageHandlers } from "./dashboard/detail";
-import { loadQuizDraft, saveQuizDraft } from "./dashboard/detail-io";
+import { t } from "../../src/i18n";
+import { createQuizPage } from "../../src/dashboard/detail";
+import type { QuizPageHandlers } from "../../src/dashboard/detail";
+import { loadQuizDraft, saveQuizDraft } from "../../src/dashboard/detail-io";
 
 export const VIEW_TYPE = "quiz-blocks-builder";
 

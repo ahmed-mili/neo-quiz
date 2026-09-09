@@ -1,9 +1,9 @@
 import { Notice, TFile } from "obsidian";
 import type { App, WorkspaceLeaf } from "obsidian";
-import { VIEW_TYPE } from "../editor";
-import { t } from "../i18n";
-import type { QuizIndexEntry } from "./scanner";
-import { QUIZ_BLOCK_RE } from "../quiz-utils";
+import { VIEW_TYPE } from "./editor";
+import { t } from "../../src/i18n";
+import type { QuizIndexEntry } from "../../src/dashboard/scanner";
+import { QUIZ_BLOCK_RE } from "../../src/quiz-utils";
 
 /* ══════════════════════════════════════════════════════════
    QUIZ OPEN — lancement direct d'un quiz (ouverture de sa note)

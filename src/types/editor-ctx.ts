@@ -14,9 +14,15 @@
  * la page. Le garder aussi étroit qu'il l'est vraiment est ce qui a permis
  * cette réutilisation ; l'élargir « au cas où » ramènerait l'éditeur par la
  * fenêtre.
+ *
+ * Il l'est devenu DAVANTAGE à la tranche 3 : `app` et `plugin` ont quitté les
+ * deux interfaces. Ils ne portaient qu'une capacité d'ÉCRITURE — le chemin
+ * d'une pièce jointe et l'écriture de ses octets —, que l'hôte fournit
+ * désormais (`HostPaths.attachmentPathFor`, `HostFs.writeBinary`). Les garder
+ * aurait obligé la fenêtre à fabriquer une fausse `App` d'Obsidian pour
+ * satisfaire un type dont plus personne ne lisait le contenu.
  */
 
-import type { App, Plugin } from "obsidian";
 import type { ExamOptions } from "./quiz";
 import type * as EditorUtils from "../editor/utils";
 import type { DraftQuestion } from "../editor/utils";
@@ -59,8 +65,6 @@ export interface EditorExamOptions extends ExamOptions {
  * - `render` : un ajout/retrait a changé la structure, repeindre le panneau.
  */
 export interface EditorHostView {
-	app: App;
-	plugin: Plugin;
 	/** Conteneur du formulaire — inutilisé par le pont, qui ne rend que les
 	    champs d'un TYPE et jamais le formulaire entier. */
 	editorInnerEl: HTMLElement;
@@ -70,6 +74,12 @@ export interface EditorHostView {
 	 * jointes » a des modes RELATIFS à la note (`./`, `./images`), et sans ce
 	 * chemin Obsidian se rabat sur le fichier ACTIF — qui, depuis un onglet de
 	 * quiz ou le dashboard, n'est pas la note du quiz.
+	 *
+	 * OPTIONNEL, mais les deux hôtes ne traitent pas son absence pareil, et le
+	 * contrat l'assume (`HostPaths.attachmentPathFor`) : la fenêtre REJETTE là
+	 * où Obsidian retombe sur son fichier actif. Un appelant qui n'a pas encore
+	 * de note (page « Générer », `QuizDraft.file === null`) doit donc savoir
+	 * qu'y coller une image échouera dans l'application.
 	 */
 	sourcePath?: string;
 	renderCode(): void;
@@ -80,12 +90,12 @@ export interface EditorHostView {
 
 /**
  * Le contexte que `createEditorFormHandlers(ctx)` consomme. Sept champs, tous
- * vérifiables d'un `grep "ctx\."` sur editor/editor-form.ts.
+ * vérifiables d'un `grep "ctx\."` sur editor/editor-form.ts — et depuis la
+ * tranche 3, littéralement sept : `app` et `plugin` étaient déclarés sans
+ * qu'aucun `ctx.app` n'existe, le formulaire ne lisant que `ctx.plugin.app`.
  */
 export interface EditorCtx {
 	view: EditorHostView;
-	app: App;
-	plugin: Plugin;
 	/** Questions du quiz édité, et l'index de celle qu'on modifie. */
 	questions: DraftQuestion[];
 	activeIdx: number;

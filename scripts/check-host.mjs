@@ -50,10 +50,8 @@ const RESTANTS = [
 	"src/dashboard/voice-install.ts",
 	"src/types/dashboard-ctx.ts",
 	// Éditeur — tranche 3.
-	"src/editor/editor-form.ts",
 	"src/editor/modals.ts",
 	"src/editor/question-preview.ts",
-	"src/types/editor-ctx.ts",
 	// Divers du greffon — tranche 4.
 	"src/hotkey-format.ts",
 	"src/modal-base.ts",

@@ -1,24 +1,9 @@
-import { Notice } from "obsidian";
 import { t } from "../i18n";
+import { ajouter } from "../dom";
+import { currentHost } from "../host/current";
 import { reserveFreePath, releaseReservedPath } from "../unique-path";
 import type { EditorCtx } from "../types/editor-ctx";
 import type { DraftQuestion } from "./utils";
-
-/** API vault utilisée par l'éditeur : getConfig (non public) + writeBinary (accepte aussi une vue typée). */
-type EditorVault = {
-	getConfig(key: string): string | null;
-	adapter: {
-		writeBinary(path: string, data: ArrayBuffer | ArrayBufferView): Promise<void>;
-		exists(path: string): Promise<boolean>;
-	};
-};
-
-/** Ce que l'éditeur utilise de l'app : le vault, et le gestionnaire de fichiers
-    qui sait où ranger une pièce jointe selon les réglages de l'utilisateur. */
-type EditorApp = {
-	vault: EditorVault;
-	fileManager: { getAvailablePathForAttachment(filename: string, sourcePath?: string): Promise<string> };
-};
 
 /** Handlers du formulaire d'édition d'une question (champs, ressource, éditeurs par type, éditeur de tableau). */
 export interface EditorFormHandlers {
@@ -30,20 +15,23 @@ export interface EditorFormHandlers {
 }
 
 /**
- * Chemin où écrire une image collée, décidé par OBSIDIAN.
+ * Chemin où écrire une image collée, décidé par L'HÔTE.
  *
- * `getAvailablePathForAttachment` (API publique depuis 1.5.7) résout le réglage
- * « dossier des pièces jointes » — y compris ses modes relatifs `./` (le
- * dossier de la note) et `./sous-dossier` —, crée le parent au besoin et
- * déduplique le nom. Le calculer à la main donnait `.//Pasted image….png`, et
- * écrivait à la RACINE du vault ce qui devait aller à côté de la note (revue
- * codex 2026-07-31).
+ * `paths.attachmentPathFor` (`src/host/types.ts`) résout ce que l'hôte est
+ * seul à savoir : sous Obsidian le réglage « dossier des pièces jointes » — y
+ * compris ses modes relatifs `./` (le dossier de la note) et `./sous-dossier`
+ * —, dans la fenêtre le dossier de la note elle-même. Le calculer à la main
+ * donnait `.//Pasted image….png`, et écrivait à la RACINE du vault ce qui
+ * devait aller à côté de la note (revue codex 2026-07-31).
  *
- * `sourcePath` est la note à laquelle l'image appartient ; sans elle, Obsidian
- * prend le fichier actif, ce qui reste le comportement attendu quand l'éditeur
- * n'a pas de note (quiz généré, encore en mémoire).
+ * `sourcePath` est la note à laquelle l'image appartient. Les deux hôtes n'en
+ * font PAS la même chose quand elle manque, et le contrat le dit plutôt que de
+ * l'uniformiser : Obsidian retombe sur son fichier ACTIF ; la fenêtre REJETTE
+ * avec une cause nommée, n'ayant pas de fichier actif et ne pouvant pas
+ * choisir une racine sans risquer de poser l'image hors de celle où la note
+ * finira. Le `catch` de l'appelant transforme ce rejet en message.
  */
-async function cheminImageCollee(app: EditorApp, ext: string, sourcePath?: string): Promise<{ fileName: string; filePath: string }> {
+async function cheminImageCollee(ext: string, sourcePath?: string): Promise<{ fileName: string; filePath: string }> {
 	const now = new Date();
 	const ts = now.getFullYear().toString() +
 		String(now.getMonth() + 1).padStart(2, "0") +
@@ -51,18 +39,22 @@ async function cheminImageCollee(app: EditorApp, ext: string, sourcePath?: strin
 		String(now.getHours()).padStart(2, "0") +
 		String(now.getMinutes()).padStart(2, "0") +
 		String(now.getSeconds()).padStart(2, "0");
-	/* Obsidian décide du DOSSIER (et déduplique contre ce qui existe déjà), la
+	/* L'HÔTE décide du DOSSIER (et déduplique contre ce qui EXISTE déjà), la
 	   réservation décide du NOM quand deux collages se suivent : mesuré, deux
-	   appels rapprochés à `getAvailablePathForAttachment` rendent le MÊME
-	   chemin tant que le fichier n'existe pas encore, et la seconde image
-	   écrasait la première. */
-	const propose = await app.fileManager.getAvailablePathForAttachment(
+	   appels rapprochés rendent le MÊME chemin tant que le fichier n'existe pas
+	   encore, et la seconde image écrasait la première.
+	   Elle reste ici et NON dans l'hôte, parce que le contrat le dit
+	   (`HostPaths.attachmentPathFor`) : un hôte qui réserverait à notre place
+	   ferait tomber CETTE réservation sur un nom déjà pris par lui, chaque
+	   collage sortirait en « ….-2.png » et le nom de base resterait brûlé sans
+	   jamais être écrit. */
+	const propose = await currentHost().paths.attachmentPathFor(
 		`Pasted image ${ts}.${ext}`, sourcePath);
 	const point = propose.lastIndexOf(".");
 	const filePath = await reserveFreePath(
 		point > 0 ? propose.slice(0, point) : propose,
 		point > 0 ? propose.slice(point) : "",
-		(c) => app.vault.adapter.exists(c));
+		(c) => currentHost().fs.exists(c));
 	/* Le lien `![[…]]` porte le NOM, pas le chemin : c'est la forme qu'Obsidian
 	   résout lui-même, et celle que le moteur attend (engine/sanitizer.ts
 	   resolveObsidianEmbedFile). */
@@ -85,20 +77,21 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 		if (!q) return;
 		const ti = Q_TYPES.find(t => t.key === q._type) || Q_TYPES[0];
 		const wrap = view.editorInnerEl;
-		wrap.empty();
+		wrap.replaceChildren();
 
-		const badge = wrap.createDiv({ cls: "qb-type-badge" });
-		const badgeIcon = badge.createDiv({ cls: "qb-type-icon" }); _setIcon(badgeIcon, ti.lucide);
-		const badgeText = badge.createDiv();
-		badgeText.createDiv({ cls: "qb-type-label", text: ti.label });
-		badgeText.createDiv({ cls: "qb-type-desc", text: ti.desc });
+		const badge = ajouter(wrap, "div", "qb-type-badge");
+		const badgeIcon = ajouter(badge, "div", "qb-type-icon"); _setIcon(badgeIcon, ti.lucide);
+		const badgeText = ajouter(badge, "div");
+		ajouter(badgeText, "div", "qb-type-label", ti.label);
+		ajouter(badgeText, "div", "qb-type-desc", ti.desc);
 
 		// Section Énoncé (toujours déployée par défaut)
-		const promptSection = wrap.createEl("details", { cls: "qb-section-collapsible", attr: { open: "" } });
-		const promptSummary = promptSection.createEl("summary", { cls: "qb-section-header" });
+		const promptSection = ajouter(wrap, "details", "qb-section-collapsible");
+		promptSection.open = true;
+		const promptSummary = ajouter(promptSection, "summary", "qb-section-header");
 		ctx._setIcon(promptSummary, "file-question");
-		promptSummary.createSpan({ text: t("editor.form.promptSection") });
-		const promptContent = promptSection.createDiv({ cls: "qb-section-content" });
+		ajouter(promptSummary, "span", undefined, t("editor.form.promptSection"));
+		const promptContent = ajouter(promptSection, "div", "qb-section-content");
 
 		_field(promptContent, "", (q._promptHtml || '').replace(/<br\s*\/?>/gi, '\n'), t("editor.form.promptPlaceholder"), true, v => {
 			q._promptHtml = v; // Garde les \n tels quels
@@ -109,15 +102,15 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 
 		_resourceSection(wrap, q);
 
-		const box = wrap.createDiv({ cls: "qb-section-box" });
+		const box = ajouter(wrap, "div", "qb-section-box");
 		_renderTypeFields(box, q);
 
 		// Section Indice (optionnelle)
-		const hintSection = wrap.createEl("details", { cls: "qb-section-collapsible" });
-		const hintSummary = hintSection.createEl("summary", { cls: "qb-section-header" });
+		const hintSection = ajouter(wrap, "details", "qb-section-collapsible");
+		const hintSummary = ajouter(hintSection, "summary", "qb-section-header");
 		ctx._setIcon(hintSummary, "lightbulb");
-		hintSummary.createSpan({ text: t("editor.hint.label") });
-		const hintContent = hintSection.createDiv({ cls: "qb-section-content" });
+		ajouter(hintSummary, "span", undefined, t("editor.hint.label"));
+		const hintContent = ajouter(hintSection, "div", "qb-section-content");
 
 		_field(hintContent, "", (q.hint || '').replace(/<br\s*\/?>/gi, '\n'), t("editor.hint.placeholder"), true, v => {
 			q.hint = v; // Garde les \n tels quels
@@ -125,11 +118,11 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 		});
 
 		// Section Explication (optionnelle)
-		const explainSection = wrap.createEl("details", { cls: "qb-section-collapsible" });
-		const explainSummary = explainSection.createEl("summary", { cls: "qb-section-header" });
+		const explainSection = ajouter(wrap, "details", "qb-section-collapsible");
+		const explainSummary = ajouter(explainSection, "summary", "qb-section-header");
 		ctx._setIcon(explainSummary, "book-open");
-		explainSummary.createSpan({ text: t("editor.form.explainSection") });
-		const explainContent = explainSection.createDiv({ cls: "qb-section-content" });
+		ajouter(explainSummary, "span", undefined, t("editor.form.explainSection"));
+		const explainContent = ajouter(explainSection, "div", "qb-section-content");
 
 		_field(explainContent, "", (q.explain || '').replace(/<br\s*\/?>/gi, '\n'), t("editor.form.explainPlaceholder"), true, v => {
 			q.explain = v; // Garde les \n tels quels
@@ -159,16 +152,14 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 		// Ouverte d'emblée si la question porte déjà un document : on ne cache pas
 		// à l'auteur le texte sur lequel porte sa question.
 		const hasPassage = !!(read("passage") || read("passageId"));
-		const section = parent.createEl("details", {
-			cls: "qb-section-collapsible",
-			attr: hasPassage ? { open: "" } : {}
-		});
-		const summary = section.createEl("summary", { cls: "qb-section-header" });
+		const section = ajouter(parent, "details", "qb-section-collapsible");
+		section.open = hasPassage;
+		const summary = ajouter(section, "summary", "qb-section-header");
 		ctx._setIcon(summary, "book-open-text");
-		summary.createSpan({ text: t("editor.passage.section") });
-		const content = section.createDiv({ cls: "qb-section-content" });
+		ajouter(summary, "span", undefined, t("editor.passage.section"));
+		const content = ajouter(section, "div", "qb-section-content");
 
-		content.createDiv({ cls: "qb-field-help", text: t("editor.passage.help") });
+		ajouter(content, "div", "qb-field-help", t("editor.passage.help"));
 
 		_field(content, t("editor.passage.textLabel"), read("passage"), t("editor.passage.textPlaceholder"), true,
 			v => write("passage", v));
@@ -214,15 +205,19 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 	}
 
 	function _field(parent: HTMLElement, label: string, value: string | undefined, placeholder: string, multiline: boolean, onChange: (value: string) => void, opts: Record<string, unknown> = {}): HTMLElement {
-		const wrap = parent.createDiv();
-		wrap.createEl("label", { cls: "qb-field-label", text: label });
+		const wrap = ajouter(parent, "div");
+		ajouter(wrap, "label", "qb-field-label", label);
 		if (multiline) {
 			// Toolbar entités
-			const toolbar = wrap.createDiv({ cls: "qb-entity-toolbar" });
-			const ta = wrap.createEl("textarea", { cls: "qb-field-textarea qb-prompt-editor", placeholder, text: value ?? "" });
+			const toolbar = ajouter(wrap, "div", "qb-entity-toolbar");
+			/* Le texte passe par le CONTENU du `<textarea>`, comme le faisait
+			   `createEl({ text })` : c'est sa valeur initiale, et l'affecter par
+			   `value` la rendrait « sale » avant la moindre frappe. */
+			const ta = ajouter(wrap, "textarea", "qb-field-textarea qb-prompt-editor", value ?? "");
+			ta.placeholder = placeholder;
 
 			entities().forEach(ent => {
-				const btn = toolbar.createEl("button", { cls: "qb-entity-btn", text: ent.label });
+				const btn = ajouter(toolbar, "button", "qb-entity-btn", ent.label);
 				btn.title = ent.title;
 				btn.addEventListener("click", (e) => { e.preventDefault(); _insertAt(ta, ent.insert, onChange); _autoResize(ta); });
 			});
@@ -263,25 +258,26 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 						   coller ne faisait simplement rien. */
 						try {
 							const ext = item.type.split("/")[1] || "png";
-							const app = ctx.plugin.app as unknown as EditorApp;
-							const { fileName, filePath } = await cheminImageCollee(app, ext, view.sourcePath);
+							const { fileName, filePath } = await cheminImageCollee(ext, view.sourcePath);
 							const buffer = await file.arrayBuffer();
 							try {
-								await app.vault.adapter.writeBinary(filePath, new Uint8Array(buffer));
+								await currentHost().fs.writeBinary(filePath, new Uint8Array(buffer));
 							} catch (err) { releaseReservedPath(filePath); throw err; }
 							_insertAt(ta, `![[${fileName}]]`, onChange);
 							_autoResize(ta);
 							view.schedulePreview();
 						} catch (err) {
 							console.error("[quiz-blocks] collage d'image impossible :", err);
-							new Notice(t("editor.paste.imageFailed"));
+							currentHost().ui.notice(t("editor.paste.imageFailed"));
 						}
 						break;
 					}
 				}
 			});
 		} else {
-			const inp = wrap.createEl("input", { cls: "qb-field-input", placeholder, value: value ?? "" });
+			const inp = ajouter(wrap, "input", "qb-field-input");
+			inp.placeholder = placeholder;
+			inp.value = value ?? "";
 			inp.addEventListener("input", () => onChange(inp.value));
 		}
 		return wrap;
@@ -293,14 +289,17 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 		const fileName = rb0 && rb0.fileName ? rb0.fileName : "";
 		const summaryText = has && fileName ? t("editor.form.resourceSectionWithFile", { file: fileName }) : t("editor.form.resourceSection");
 
-		const details = parent.createEl("details", { cls: "qb-section-collapsible" + (has ? "" : " qb-section-locked"), attr: has ? { open: "" } : {} });
-		const summary = details.createEl("summary", { cls: "qb-section-header" });
+		const details = ajouter(parent, "details", "qb-section-collapsible" + (has ? "" : " qb-section-locked"));
+		details.open = has;
+		const summary = ajouter(details, "summary", "qb-section-header");
 		ctx._setIcon(summary, "paperclip");
-		const summaryLabel = summary.createSpan({ text: summaryText, cls: "qb-resource-summary-text" });
+		const summaryLabel = ajouter(summary, "span", "qb-resource-summary-text", summaryText);
 
 		// Toggle dans le header pour activer/désactiver
-		const toggle = summary.createEl("button", { cls: "qb-resource-toggle-btn", attr: { type: "button", title: t(has ? "editor.toggle.disable" : "editor.toggle.enable") } });
-		toggle.createSpan({ cls: "qb-resource-toggle-dot" + (has ? " is-on" : "") });
+		const toggle = ajouter(summary, "button", "qb-resource-toggle-btn");
+		toggle.type = "button";
+		toggle.title = t(has ? "editor.toggle.disable" : "editor.toggle.enable");
+		ajouter(toggle, "span", "qb-resource-toggle-dot" + (has ? " is-on" : ""));
 		toggle.addEventListener("click", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
@@ -312,8 +311,8 @@ export function createEditorFormHandlers(ctx: EditorCtx): EditorFormHandlers {
 		});
 
 		if (!rb0) return;
-		const contentDiv = details.createDiv({ cls: "qb-section-content" });
-const group = contentDiv.createDiv({ cls: "qb-resource-group" });
+		const contentDiv = ajouter(details, "div", "qb-section-content");
+const group = ajouter(contentDiv, "div", "qb-resource-group");
 const updateSummary = () => {
     const fn = q.resourceButton?.fileName || "";
     summaryLabel.textContent = fn ? t("editor.form.resourceSectionWithFile", { file: fn }) : t("editor.form.resourceSection");
@@ -322,8 +321,8 @@ _field(group, t("editor.form.resourceLabel"), rb0.label, t("editor.form.resource
 _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.resourceFilePlaceholder"), false, v => { rb0.fileName = v; onEdit(); updateSummary(); });
 
 
-		const helpNote = contentDiv.createEl("p", { cls: "qb-resource-help-note" });
-		helpNote.createSpan({ text: t("editor.form.resourceHelp") });
+		const helpNote = ajouter(contentDiv, "p", "qb-resource-help-note");
+		ajouter(helpNote, "span", undefined, t("editor.form.resourceHelp"));
 	}
 
 	function _renderTypeFields(box: HTMLElement, q: DraftQuestion): void {
@@ -338,29 +337,29 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 			   être réussie par personne, et rien ne le disait : elle
 			   s'enregistrait comme les autres (revue codex 2026-07-31). Même
 			   avertissement que le texte à trous sans trou. */
-			const alerteMulti = isMulti ? box.createDiv({ cls: "qb-field-help" }) : null;
+			const alerteMulti = isMulti ? ajouter(box, "div", "qb-field-help") : null;
 			const majAlerte = (): void => {
 				if (!alerteMulti) return;
 				const aucune = (q.correctIndices || []).length === 0;
-				alerteMulti.toggleClass("qb-field-help--warn", aucune);
-				alerteMulti.setText(aucune ? t("editor.answer.noneCorrect") : "");
+				alerteMulti.classList.toggle("qb-field-help--warn", aucune);
+				alerteMulti.textContent = aucune ? t("editor.answer.noneCorrect") : "";
 			};
-			const cardsContainer = box.createDiv({ cls: "qb-answer-cards" });
+			const cardsContainer = ajouter(box, "div", "qb-answer-cards");
 
 			const renderCards = () => {
 				majAlerte();
-				cardsContainer.empty();
+				cardsContainer.replaceChildren();
 
 				q.options!.forEach((o, i) => {
 					const isCorrect = isMulti ? (q.correctIndices || []).includes(i) : i === q.correctIndex;
-					const card = cardsContainer.createDiv({ cls: `qb-answer-card ${isCorrect ? "qb-answer-correct" : "qb-answer-wrong"}` });
+					const card = ajouter(cardsContainer, "div", `qb-answer-card ${isCorrect ? "qb-answer-correct" : "qb-answer-wrong"}`);
 
-					const toggleRow = card.createDiv({ cls: "qb-answer-toggle-row" });
-					toggleRow.createSpan({ cls: "qb-answer-toggle-label", text: t(isCorrect ? "editor.answer.correct" : "editor.answer.wrong") });
+					const toggleRow = ajouter(card, "div", "qb-answer-toggle-row");
+					ajouter(toggleRow, "span", "qb-answer-toggle-label", t(isCorrect ? "editor.answer.correct" : "editor.answer.wrong"));
 
-					const toggle = toggleRow.createDiv({ cls: "qb-answer-toggle" });
-					const track = toggle.createDiv({ cls: "qb-answer-toggle-track" });
-					const thumb = track.createDiv({ cls: "qb-answer-toggle-thumb" });
+					const toggle = ajouter(toggleRow, "div", "qb-answer-toggle");
+					const track = ajouter(toggle, "div", "qb-answer-toggle-track");
+					const thumb = ajouter(track, "div", "qb-answer-toggle-thumb");
 					_setIcon(thumb, isCorrect ? "check" : "x");
 
 					const triggerFlash = (toCorrect: boolean) => {
@@ -395,12 +394,10 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 						}
 					});
 
-					const input = card.createEl("input", {
-						cls: "qb-answer-input",
-						type: "text",
-						value: o || "",
-						placeholder: t("editor.answer.placeholder")
-					});
+					const input = ajouter(card, "input", "qb-answer-input");
+					input.type = "text";
+					input.value = o || "";
+					input.placeholder = t("editor.answer.placeholder");
 
 					input.addEventListener("input", () => {
 						q.options![i] = input.value;
@@ -419,12 +416,11 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 
 								try {
 									const ext = file.type?.split("/")[1] || "png";
-									const app = ctx.plugin.app as unknown as EditorApp;
-									const { fileName, filePath: path } = await cheminImageCollee(app, ext, view.sourcePath);
+									const { fileName, filePath: path } = await cheminImageCollee(ext, view.sourcePath);
 
 									const buf = await file.arrayBuffer();
 									try {
-										await app.vault.adapter.writeBinary(path, new Uint8Array(buf));
+										await currentHost().fs.writeBinary(path, new Uint8Array(buf));
 									} catch (err) { releaseReservedPath(path); throw err; }
 
 									const before = input.value.slice(0, input.selectionStart ?? 0);
@@ -438,7 +434,7 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 									view.renderCode();
 								} catch (err) {
 									console.error("[quiz-blocks] collage d'image impossible :", err);
-									new Notice(t("editor.paste.imageFailed"));
+									currentHost().ui.notice(t("editor.paste.imageFailed"));
 								}
 								break;
 							}
@@ -446,7 +442,7 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 					});
 
 					if (!isCorrect && q.options!.length > 2) {
-						const delBtn = card.createEl("button", { cls: "qb-answer-delete" });
+						const delBtn = ajouter(card, "button", "qb-answer-delete");
 						_setIcon(delBtn, "x");
 						delBtn.addEventListener("click", () => {
 							q.options!.splice(i, 1);
@@ -461,7 +457,7 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 					}
 				});
 
-				const addBtn = box.createEl("button", { cls: "qb-answer-add" });
+				const addBtn = ajouter(box, "button", "qb-answer-add");
 				addBtn.appendChild(document.createTextNode(t("editor.answer.add")));
 				addBtn.addEventListener("click", () => {
 					q.options!.push("");
@@ -485,11 +481,13 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 			}, t("editor.ordering.itemPlaceholder"), t("editor.action.add"));
 			_arrayEditor(box, t("editor.ordering.slotLabels"), q.slots!, rerender, t("editor.ordering.slotPlaceholder"), t("editor.action.add"));
 
-			box.createEl("label", { cls: "qb-field-label", text: t("editor.ordering.correctOrder") });
+			ajouter(box, "label", "qb-field-label", t("editor.ordering.correctOrder"));
 			(q.correctOrder || []).forEach((val, i) => {
-				const row = box.createDiv({ cls: "qb-arr-row" });
-				row.createSpan({ cls: "qb-arr-idx", text: (q.slots?.[i] || `S${i}`) + " →" });
-				const inp = row.createEl("input", { cls: "qb-field-input qb-field-sm", type: "number", value: String(val) });
+				const row = ajouter(box, "div", "qb-arr-row");
+				ajouter(row, "span", "qb-arr-idx", (q.slots?.[i] || `S${i}`) + " →");
+				const inp = ajouter(row, "input", "qb-field-input qb-field-sm");
+				inp.type = "number";
+				inp.value = String(val);
 				inp.min = "0"; inp.max = String(q.possibilities!.length - 1); inp.style.width = "55px";
 				inp.addEventListener("input", () => { q.correctOrder![i] = parseInt(inp.value) || 0; rerender(); });
 			});
@@ -506,14 +504,18 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 				rerender();
 			}, t("editor.matching.choicePlaceholder"), t("editor.action.add"));
 
-			box.createEl("label", { cls: "qb-field-label", text: t("editor.matching.mapping") });
+			ajouter(box, "label", "qb-field-label", t("editor.matching.mapping"));
 			(q.rows || []).forEach((row, i) => {
-				const r = box.createDiv({ cls: "qb-match-row" });
-				r.createSpan({ cls: "qb-match-label", text: row || t("editor.matching.rowFallback", { n: i }) });
+				const r = ajouter(box, "div", "qb-match-row");
+				ajouter(r, "span", "qb-match-label", row || t("editor.matching.rowFallback", { n: i }));
 				_iconSpan(r, "arrow-right", "qb-match-arrow");
-				const sel = r.createEl("select", { cls: "qb-field-select" });
+				const sel = ajouter(r, "select", "qb-field-select");
 				(q.choices || []).forEach((c, ci) => {
-					const opt = sel.createEl("option", { text: c || "...", value: String(ci) });
+					/* `value` APRÈS le texte : sans attribut `value`, un `<option>`
+					   vaut son propre texte — l'index doit donc être posé une fois
+					   le contenu en place. */
+					const opt = ajouter(sel, "option", undefined, c || "...");
+					opt.value = String(ci);
 					if ((q.correctMap?.[i] ?? 0) === ci) opt.selected = true;
 				});
 				sel.addEventListener("change", () => { q.correctMap![i] = parseInt(sel.value) || 0; rerender(); });
@@ -523,27 +525,26 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 		if (qType === "cloze") {
 			// Le gabarit EST la question : un seul champ, multiligne, avec la
 			// syntaxe rappelée au-dessus — personne ne devine les doubles accolades.
-			box.createDiv({ cls: "qb-field-help", text: t("editor.cloze.help") });
+			ajouter(box, "div", "qb-field-help", t("editor.cloze.help"));
 			_field(box, t("editor.cloze.templateLabel"), q.cloze, t("editor.cloze.templatePlaceholder"), true,
 				v => { q.cloze = v; rerender(); });
 
 			// Compte des trous : la seule vérification qui compte, et elle dit
 			// aussi si la syntaxe a été comprise (0 trou = accolades ratées).
 			const blanks = (String(q.cloze || "").match(/\{\{[^{}]*\}\}/g) || []).length;
-			box.createDiv({
-				cls: "qb-field-help" + (blanks === 0 ? " qb-field-help--warn" : ""),
-				text: t(blanks === 0 ? "editor.cloze.noBlank" : "editor.cloze.blankCount", { n: blanks })
-			});
+			ajouter(box, "div",
+				"qb-field-help" + (blanks === 0 ? " qb-field-help--warn" : ""),
+				t(blanks === 0 ? "editor.cloze.noBlank" : "editor.cloze.blankCount", { n: blanks }));
 
-			const czWrap = box.createDiv({ cls: "qb-toggle-wrap" });
-			const czTrack = czWrap.createDiv({ cls: `qb-toggle-track ${q.caseSensitive ? "on" : ""}` });
-			czTrack.createDiv({ cls: "qb-toggle-thumb" });
+			const czWrap = ajouter(box, "div", "qb-toggle-wrap");
+			const czTrack = ajouter(czWrap, "div", `qb-toggle-track ${q.caseSensitive ? "on" : ""}`);
+			ajouter(czTrack, "div", "qb-toggle-thumb");
 			czWrap.appendChild(document.createTextNode(t("editor.text.caseSensitive")));
 			czWrap.addEventListener("click", () => { q.caseSensitive = !q.caseSensitive; view.render(); view.scheduleSave?.(); });
 		}
 
 		if (qType === "numeric") {
-			box.createDiv({ cls: "qb-field-help", text: t("editor.numeric.help") });
+			ajouter(box, "div", "qb-field-help", t("editor.numeric.help"));
 			_arrayEditor(box, t("editor.numeric.answers"), q.acceptedAnswers!, rerender, t("editor.numeric.answerPlaceholder"), t("editor.action.add"));
 			_field(box, t("editor.numeric.unit"), q.unit, t("editor.numeric.unitPlaceholder"), false,
 				v => { q.unit = v; rerender(); });
@@ -580,28 +581,30 @@ _field(group, t("editor.form.resourceFileName"), rb0.fileName, t("editor.form.re
 			}
 			_field(box, t("editor.text.placeholderLabel"), q.placeholder, t("editor.text.placeholderHint"), false, v => { q.placeholder = v; rerender(); });
 			_arrayEditor(box, t("editor.text.acceptedAnswers"), q.acceptedAnswers!, rerender, t("editor.text.answerPlaceholder"), t("editor.action.add"));
-			const toggleWrap = box.createDiv({ cls: "qb-toggle-wrap" });
-			const track = toggleWrap.createDiv({ cls: `qb-toggle-track ${q.caseSensitive ? "on" : ""}` });
-			track.createDiv({ cls: "qb-toggle-thumb" });
+			const toggleWrap = ajouter(box, "div", "qb-toggle-wrap");
+			const track = ajouter(toggleWrap, "div", `qb-toggle-track ${q.caseSensitive ? "on" : ""}`);
+			ajouter(track, "div", "qb-toggle-thumb");
 			toggleWrap.appendChild(document.createTextNode(t("editor.text.caseSensitive")));
 			toggleWrap.addEventListener("click", () => { q.caseSensitive = !q.caseSensitive; view.render(); view.scheduleSave?.(); });
 		}
 	}
 
 	function _arrayEditor(parent: HTMLElement, label: string, items: string[], onChange: () => void, placeholder: string, addLabel: string): void {
-		parent.createEl("label", { cls: "qb-field-label", text: label });
-		const container = parent.createDiv();
+		ajouter(parent, "label", "qb-field-label", label);
+		const container = ajouter(parent, "div");
 		const renderItems = () => {
-			container.empty();
+			container.replaceChildren();
 			items.forEach((item, i) => {
-				const row = container.createDiv({ cls: "qb-arr-row" });
-				const inp = row.createEl("input", { cls: "qb-field-input", placeholder: `${placeholder} ${i + 1}`, value: item ?? "" });
+				const row = ajouter(container, "div", "qb-arr-row");
+				const inp = ajouter(row, "input", "qb-field-input");
+				inp.placeholder = `${placeholder} ${i + 1}`;
+				inp.value = item ?? "";
 				inp.addEventListener("input", () => { items[i] = inp.value; onChange(); });
-				const del = row.createEl("button", { cls: "qb-btn-icon qb-btn-sm qb-btn-danger" }); _setIcon(del, "x");
+				const del = ajouter(row, "button", "qb-btn-icon qb-btn-sm qb-btn-danger"); _setIcon(del, "x");
 				if (items.length <= 1) del.disabled = true;
 				del.addEventListener("click", () => { if (items.length <= 1) return; items.splice(i, 1); onChange(); renderItems(); });
 			});
-			const addBtn = container.createEl("button", { cls: "qb-arr-add" });
+			const addBtn = ajouter(container, "button", "qb-arr-add");
 			_iconSpan(addBtn, "plus", "qb-arr-add-icon");
 			addBtn.appendChild(document.createTextNode(addLabel));
 			addBtn.addEventListener("click", () => { items.push(""); onChange(); renderItems(); });

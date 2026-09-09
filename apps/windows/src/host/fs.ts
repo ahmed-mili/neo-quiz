@@ -20,11 +20,13 @@
 
 import {
 	exists, mkdir, readDir, readTextFile, remove as removeFichier,
-	rename as renameFichier, stat, watch, writeTextFile,
+	rename as renameFichier, stat, watch, writeFile, writeTextFile,
 } from "@tauri-apps/plugin-fs";
 import type { WatchEvent } from "@tauri-apps/plugin-fs";
 import { LOG_PREFIX } from "../../../../src/branding";
 import type { HostFile, HostFileEvent, HostFs, HostWatcher } from "../../../../src/host/types";
+import { reserveFreePath } from "../../../../src/unique-path";
+import { couperExtension } from "./roots";
 import type { CarteRacines } from "./roots";
 
 /** L'index en mémoire du dossier. Volontairement minuscule : c'est ce qui le
@@ -224,6 +226,30 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 		return a;
 	};
 
+	/* NOMMÉES, hors du littéral rendu ci-dessous : `trash` a besoin d'appeler
+	   l'existence et la création de dossier, et `this` ne désigne rien
+	   d'utilisable dans un objet rendu par une fabrique (l'appelant reçoit
+	   `host.fs`, mais rien n'oblige à l'appeler comme une méthode). Même patron
+	   que le `mkdirs` de `apps/obsidian/host.ts`. Les noms diffèrent de ceux du
+	   contrat parce que `exists` est déjà celui de plugin-fs, importé ci-dessus :
+	   deux `exists` dans la même portée, c'est une erreur de compilation — et,
+	   pire, un piège si l'un des deux venait à masquer l'autre en silence. */
+	async function existe(path: string): Promise<boolean> {
+		return await exists(abs(path));
+	}
+
+	/* `recursive: true` crée le dossier ET ses parents. Le contrat exige de
+	   ne pas rejeter quand il existe déjà : on ne re-jette que si le dossier
+	   n'est toujours pas là après l'échec — sinon une course entre deux
+	   écritures de résultats ferait échouer un export parfaitement valide. */
+	async function creerDossiers(path: string): Promise<void> {
+		try {
+			await mkdir(abs(path), { recursive: true });
+		} catch (e) {
+			if (!(await exists(abs(path)))) throw e;
+		}
+	}
+
 	return {
 		async read(path) {
 			return await readTextFile(abs(path));
@@ -238,20 +264,50 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 		async write(path, data) {
 			await writeTextFile(abs(path), data);
 		},
-		async exists(path) {
-			return await exists(abs(path));
+		/* Lecture puis écriture, et le contrat le dit : un processus unique
+		   sans autre écrivain que lui-même. Ce n'est PAS équivalent au
+		   `vault.process` d'Obsidian, et c'est pourquoi le contrat ne promet
+		   l'indivisibilité qu'à l'intérieur de la fenêtre. */
+		async process(path, mutate) {
+			const p = abs(path);
+			await writeTextFile(p, mutate(await readTextFile(p)));
 		},
-		/* `recursive: true` crée le dossier ET ses parents. Le contrat exige de
-		   ne pas rejeter quand il existe déjà : on ne re-jette que si le dossier
-		   n'est toujours pas là après l'échec — sinon une course entre deux
-		   écritures de résultats ferait échouer un export parfaitement valide. */
-		async mkdirs(path) {
-			try {
-				await mkdir(abs(path), { recursive: true });
-			} catch (e) {
-				if (!(await exists(abs(path)))) throw e;
-			}
+		/* `writeFile` et non `writeTextFile` : ce dernier encode la chaîne qu'on
+		   lui donne, et une image passée par là sortirait corrompue sans qu'aucune
+		   erreur ne le dise.
+
+		   RIEN À RETAILLER ici, contrairement à l'hôte Obsidian dont l'API prend
+		   un `ArrayBuffer`, qui n'a pas d'offset : la VUE arrive entière jusqu'au
+		   Rust. RELEVÉ, pas supposé, dans `tauri-2.11.5/scripts/` —
+		   `process-ipc-message-fn.js` reconnaît `ArrayBuffer.isView` et passe la
+		   vue TELLE QUELLE, que `ipc-protocol.js` pose en `body` d'un `fetch`
+		   (un `BufferSource` n'y rend que ses propres octets) ; et sur le repli
+		   `postMessage`, `Array.from(val)` itère la vue, pas son tampon. */
+		async writeBinary(path, data) {
+			await writeFile(abs(path), data);
 		},
+		/* `<racine>/.trash/<chemin local>` : le point de tête suffit à
+		   l'exclure du parcours du catalogue (`dossierIgnore`) comme du côté
+		   Obsidian (`estCache`), donc un quiz mis à la corbeille disparaît du
+		   tableau de bord sans qu'aucun filtre neuf n'ait à le savoir. */
+		async trash(path) {
+			const racine = carte.pour(path);
+			if (!racine) throw new Error(`chemin hors des dossiers ouverts : ${path}`);
+			/* Par `carte`, jamais à la main : c'est le SEUL endroit qui convertit
+			   entre chemin du contrat et chemin local, et un préfixe recomposé
+			   ici diverge en silence (passation de la tranche 2). */
+			const vise = carte.contrat(racine.id, `.trash/${carte.local(path)}`);
+			const { base, ext } = couperExtension(vise);
+			/* Un nom LIBRE : supprimer deux fois une note du même nom (recréée
+			   entre les deux) écraserait la première dans la corbeille, et la
+			   corbeille est justement l'endroit où rien ne doit disparaître. */
+			const cible = await reserveFreePath(base, ext, existe);
+			const barre = cible.lastIndexOf("/");
+			if (barre > 0) await creerDossiers(cible.slice(0, barre));
+			await renameFichier(abs(path), abs(cible));
+		},
+		exists: existe,
+		mkdirs: creerDossiers,
 		/* `append: true` de plugin-fs, PAS une lecture suivie d'une
 		   réécriture : c'est l'atomicité de l'ajout qui protège le journal
 		   d'une fermeture au mauvais moment. */

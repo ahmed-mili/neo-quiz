@@ -21,7 +21,7 @@ import { LOG_PREFIX } from "../../../../src/branding";
 import type { Host } from "../../../../src/host/types";
 import { createWindowsFs, createWindowsWatcher } from "./fs";
 import type { WindowsIndex } from "./fs";
-import { resultsDirFor as resultsDirForRacine } from "./roots";
+import { attachmentPathFor as attachmentPathForRacine, resultsDirFor as resultsDirForRacine } from "./roots";
 import type { CarteRacines } from "./roots";
 import { createWindowsLinks } from "./links";
 import { createWindowsMath } from "./math";
@@ -34,6 +34,14 @@ export { creerCarteRacines } from "./roots";
 export type { CarteRacines, RacineOuverte } from "./roots";
 
 export function createWindowsHost(carte: CarteRacines, index: WindowsIndex): Host {
+	/* NOMMÉ ici, et non construit dans le littéral rendu en fin de fonction :
+	   `paths.attachmentPathFor` a besoin d'interroger le disque, et le seul
+	   endroit du dépôt qui sait convertir un chemin du contrat en chemin absolu
+	   est cet objet-ci. Le construire deux fois donnerait deux `HostFs` pour un
+	   seul hôte — sans conséquence aujourd'hui (il ne porte aucun état), mais
+	   c'est exactement le genre de double qui finit par en porter un. */
+	const fs = createWindowsFs(carte, index);
+
 	const shell: Host["shell"] = {
 		/* `openPath` de plugin-opener : l'application par défaut du système,
 		   exactement comme `app.openWithDefaultApp` sous Obsidian. Le contrat
@@ -87,6 +95,12 @@ export function createWindowsHost(carte: CarteRacines, index: WindowsIndex): Hos
 		   fichier-ci importe MathLive et Tauri, qu'esbuild ne charge pas hors
 		   de la fenêtre. */
 		resultsDirFor(sourcePath) { return resultsDirForRacine(carte, sourcePath); },
+		/* Même extraction, et pour la même raison : la logique vit dans
+		   `roots.ts` (PURE, donc éprouvable par `npm run check:windows-host`) et
+		   ce fichier-ci ne fait que lui passer le test d'existence de l'hôte. */
+		attachmentPathFor(name, sourcePath) {
+			return attachmentPathForRacine(c => fs.exists(c), name, sourcePath);
+		},
 		roots() { return carte.hostRoots(); },
 		rootOf(path) {
 			const r = carte.pour(path);
@@ -98,7 +112,7 @@ export function createWindowsHost(carte: CarteRacines, index: WindowsIndex): Hos
 	};
 
 	return {
-		fs: createWindowsFs(carte, index),
+		fs,
 		links: createWindowsLinks(carte, index),
 		watcher: createWindowsWatcher(carte, index),
 		ui: createWindowsUi(),

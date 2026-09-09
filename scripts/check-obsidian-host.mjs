@@ -46,6 +46,12 @@ function fausseApp(fichiers, options = {}) {
 			offref: () => undefined,
 			...(options.vault || {}),
 		},
+		/* `fileManager` : la corbeille (`trashFile`) et le chemin d'une pièce
+		   jointe (`getAvailablePathForAttachment`). VIDE par défaut — un groupe
+		   qui n'y touche pas n'a rien à en dire, et un double posé « au cas où »
+		   ferait passer pour vérifié ce que personne n'exerce. Le groupe qui les
+		   éprouve branche `options.fileManager`. */
+		fileManager: { ...(options.fileManager || {}) },
 		metadataCache: {
 			getFirstLinkpathDest: (lien) => parChemin.get(lien + ".md") ?? null,
 		},
@@ -135,7 +141,8 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 
 	// Le contrat est complet : une méthode manquante rendrait un pan inerte.
 	const attendu = {
-		fs: ["read", "readCached", "write", "exists", "mkdirs", "append", "list", "remove", "rename", "listMarkdown", "findByName", "getFile"],
+		fs: ["read", "readCached", "write", "process", "writeBinary", "trash", "exists", "mkdirs", "append", "list", "remove", "rename", "listMarkdown", "findByName", "getFile"],
+		paths: ["resultsDirFor", "attachmentPathFor", "roots", "rootOf", "localPath", "contractPath"],
 		links: ["resolve", "resourceUrl"],
 		watcher: ["onChange", "onRenameDir"],
 		ui: ["notice", "setIcon"],
@@ -398,6 +405,174 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	await host.fs.mkdirs("Notes/.cache");
 	r.check("le parent visible reste au vault, seul le segment caché descend à l'adaptateur",
 		journal.slice(-2), [["createFolder", "Notes"], ["mkdir", "Notes/.cache"]]);
+
+	r.done();
+});
+
+await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
+	const r = makeReporter("Hôte Obsidian — process, octets, corbeille et pièces jointes");
+
+	/* Le CONTENU par chemin, pas un simple drapeau « écrit » : `process` ne se
+	   juge pas sur l'appel mais sur « a-t-il reçu ce qui EST là, et écrit ce que
+	   le rappel a rendu ». Un double qui n'enregistrerait que l'appel laisserait
+	   passer un hôte qui ignore le retour du rappel — c'est précisément le
+	   défaut que `vault.process` existe pour empêcher.
+	   Trois états, comme le groupe précédent : l'INDEX du vault, le TEXTE et les
+	   OCTETS. Sans cette séparation, les cas ci-dessous resteraient verts quelle
+	   que soit la voie choisie. */
+	const index = new Map();
+	const contenu = new Map();
+	const octets = new Map();
+	const journal = [];
+	const jetes = [];
+	const inscrire = (p) => index.set(p, fichier(p, p.split("/").pop().split(".").pop()));
+	inscrire("Cours/ch1.md");
+	contenu.set("Cours/ch1.md", "avant");
+	// Le journal de révision : sur le disque, JAMAIS à l'index du vault.
+	contenu.set(".neo-quiz/review-log.jsonl", "{}\n");
+
+	const app = fausseApp([], {
+		adapter: {
+			read: async (p) => {
+				// L'adaptateur RÉEL jette sur un chemin absent : sans ce jet, un
+				// `process` qui inventerait une chaîne vide passerait inaperçu.
+				if (!contenu.has(p)) throw new Error("ENOENT: " + p);
+				return contenu.get(p);
+			},
+			write: async (p, d) => { journal.push(["adapter.write", p, d]); contenu.set(p, d); },
+			writeBinary: async (p, d) => {
+				journal.push(["adapter.writeBinary", p, d.byteLength]);
+				octets.set(p, new Uint8Array(d));
+			},
+			exists: async (p) => contenu.has(p) || octets.has(p),
+		},
+		vault: {
+			getAbstractFileByPath: (p) => index.get(p) ?? null,
+			process: async (f, fn) => {
+				const suivant = fn(contenu.get(f.path) ?? "");
+				journal.push(["vault.process", f.path, suivant]);
+				contenu.set(f.path, suivant);
+				return suivant;
+			},
+			/* Le vault RÉEL rejette une cible existante (obsidian.d.ts :
+			   « @throws Error if file already exists ») ; sans ce jet, le cas de
+			   la seconde écriture resterait vert même si l'hôte appelait
+			   `createBinary` à tort. */
+			createBinary: async (p, d) => {
+				if (octets.has(p)) throw new Error("File already exists: " + p);
+				journal.push(["vault.createBinary", p, d.byteLength]);
+				inscrire(p);
+				octets.set(p, new Uint8Array(d));
+			},
+			modifyBinary: async (f, d) => {
+				journal.push(["vault.modifyBinary", f.path, d.byteLength]);
+				octets.set(f.path, new Uint8Array(d));
+			},
+		},
+		fileManager: {
+			trashFile: async (f) => { jetes.push(f.path); index.delete(f.path); contenu.delete(f.path); },
+			/* Rend une valeur RECONNAISSABLE qui porte les deux arguments : c'est
+			   ce qui permet de voir que la note citante a bien été transmise. Le
+			   vrai Obsidian rend un chemin du vault ; ce qui est éprouvé ici,
+			   c'est que l'hôte DÉLÈGUE sans rien recalculer. */
+			getAvailablePathForAttachment: async (nom, source) => `[${source ?? "aucune"}]/${nom}`,
+		},
+	});
+	const host = createObsidianHost(app, { manifest: {} });
+
+	/* ── process ── */
+
+	await host.fs.process("Cours/ch1.md", (c) => c + " + ajout");
+	r.check("process passe par vault.process, et le rappel voit le contenu ACTUEL",
+		journal.at(-1), ["vault.process", "Cours/ch1.md", "avant + ajout"]);
+	r.check("… et c'est bien ce que le rappel rend qui est écrit",
+		contenu.get("Cours/ch1.md"), "avant + ajout");
+
+	/* Un chemin caché n'a JAMAIS de `TFile` (le vault n'indexe rien sous un
+	   dossier commençant par un point) : `vault.process` y échouerait, et le
+	   journal de révision comme les résultats exportés deviendraient
+	   inécrivables. La lecture-écriture par l'adaptateur est la dégradation
+	   assumée, et le contrat la nomme. */
+	await host.fs.process(".neo-quiz/review-log.jsonl", (c) => c + "{\"a\":1}\n");
+	r.check("un chemin caché est lu puis réécrit par l'adaptateur",
+		journal.at(-1), ["adapter.write", ".neo-quiz/review-log.jsonl", "{}\n{\"a\":1}\n"]);
+
+	/* ── writeBinary ── */
+
+	await host.fs.writeBinary("Cours/schema.png", new Uint8Array([1, 2, 3, 4]));
+	r.check("une image neuve et indexable passe par vault.createBinary",
+		journal.at(-1), ["vault.createBinary", "Cours/schema.png", 4]);
+	/* LE défaut que cette voie évite : une image écrite par le seul adaptateur
+	   existe sur le disque sans entrer à l'index, et `getFirstLinkpathDest` ne
+	   la retrouve pas — l'aperçu afficherait une image cassée juste après le
+	   collage. */
+	r.check("… et elle est visible de l'index aussitôt écrite",
+		host.fs.getFile("Cours/schema.png")?.path, "Cours/schema.png");
+
+	await host.fs.writeBinary("Cours/schema.png", new Uint8Array([7, 7]));
+	r.check("une image déjà indexée passe par vault.modifyBinary",
+		journal.at(-1), ["vault.modifyBinary", "Cours/schema.png", 2]);
+
+	/* Une vue PARTIELLE, sur un tampon plus grand qu'elle. Un cas qui
+	   vérifierait seulement que `writeBinary` a été appelé resterait VERT avec
+	   `data.buffer` nu : pour un `Uint8Array` construit sur un tampon exact les
+	   deux formes coïncident. C'est la LONGUEUR et le CONTENU écrits qui
+	   séparent les deux — sans quoi l'image sortirait avec une queue parasite,
+	   et rien ne le dirait. */
+	const tampon = new ArrayBuffer(12);
+	new Uint8Array(tampon).set([9, 9, 9, 9, 1, 2, 3, 4, 5, 6, 7, 8]);
+	await host.fs.writeBinary("Cours/vue.png", new Uint8Array(tampon, 4, 4));
+	r.check("une vue partielle n'écrit que ses octets",
+		journal.at(-1), ["vault.createBinary", "Cours/vue.png", 4]);
+	r.check("… et ce sont les siens, pas ceux du tampon",
+		[...(octets.get("Cours/vue.png") ?? [])], [1, 2, 3, 4]);
+
+	/* Même partage que `write` : sous un dossier caché, `vault.createBinary`
+	   échouerait puisque le vault n'y indexe rien. */
+	await host.fs.writeBinary(".obsidian/quiz-blocks-results/apercu.png", new Uint8Array([5]));
+	r.check("un chemin caché passe par l'adaptateur, jamais par vault.createBinary",
+		journal.at(-1), ["adapter.writeBinary", ".obsidian/quiz-blocks-results/apercu.png", 1]);
+
+	/* ── trash ── */
+
+	/* `fileManager.trashFile` et NON `vault.delete` : lui seul respecte le
+	   réglage « Fichiers supprimés » de l'utilisateur. Choisir à sa place serait
+	   décider qu'un quiz supprimé est irrécupérable chez quelqu'un qui a demandé
+	   l'inverse. */
+	await host.fs.trash("Cours/ch1.md");
+	r.check("trash passe par fileManager.trashFile", jetes, ["Cours/ch1.md"]);
+
+	/* Le contrat ne promet que l'ABSENCE au chemin donné : rejeter ferait
+	   échouer une suppression que l'utilisateur voit comme réussie (même raison
+	   que `remove`). */
+	let trashALeve = false;
+	try {
+		await host.fs.trash("Cours/deja-parti.md");
+	} catch (e) {
+		trashALeve = true;
+	}
+	r.check("trash d'un fichier absent ne lève pas", trashALeve, false);
+	r.check("… et n'envoie rien de plus à la corbeille", jetes, ["Cours/ch1.md"]);
+
+	/* ── attachmentPathFor ── */
+
+	/* Obsidian DÉCIDE : le réglage « dossier des pièces jointes » a des modes
+	   relatifs à la note (« ./ », « ./images ») que recalculer ici rangerait
+	   l'image ailleurs que là où l'utilisateur l'a demandé. La note citante doit
+	   donc arriver jusqu'à lui — sans elle, Obsidian retombe sur le fichier
+	   ACTIF, qui n'est pas forcément le quiz qu'on édite.
+	   Ce que ce cas NE garde PAS : la LIBERTÉ du chemin rendu. Côté Obsidian
+	   c'est `getAvailablePathForAttachment` qui déduplique, pas l'hôte — il n'y
+	   a ici aucune règle de notre cru à casser. C'est l'hôte Windows qui porte
+	   ce cas-là (`check:windows-host`). */
+	r.check("attachmentPathFor laisse Obsidian décider, et lui passe la note citante",
+		await host.paths.attachmentPathFor("Pasted image 1.png", "Cours/ch1.md"),
+		"[Cours/ch1.md]/Pasted image 1.png");
+	/* Sans note (quiz généré, encore en mémoire) : l'argument reste optionnel et
+	   n'est pas remplacé par une valeur inventée. */
+	r.check("sans note citante, rien n'est inventé à sa place",
+		await host.paths.attachmentPathFor("Pasted image 2.png"),
+		"[aucune]/Pasted image 2.png");
 
 	r.done();
 });

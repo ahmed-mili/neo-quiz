@@ -1,6 +1,7 @@
 import type { HostRoot } from "../../../../src/host/types";
 import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../../../src/review/paths";
 import { PLUGIN_ID } from "../../../../src/branding";
+import { reserveFreePath } from "../../../../src/unique-path";
 
 /* ══════════════════════════════════════════════════════════
    LES RACINES DE L'APPLICATION
@@ -141,4 +142,51 @@ export function resultsDirFor(carte: CarteRacines, sourcePath: string): string {
 	const r = carte.pour(sourcePath);
 	const sous = r?.vault ? ".obsidian/quiz-blocks-results" : `${REVIEW_DIR}/results`;
 	return r ? carte.contrat(r.id, sous) : sous;
+}
+
+/**
+ * Coupe un chemin en base + EXTENSION, le point cherché dans le DERNIER
+ * SEGMENT seulement.
+ *
+ * `lastIndexOf(".")` sur le chemin ENTIER se trompe dès qu'un DOSSIER porte un
+ * point et que le fichier n'en a pas : « Quiz/.trash/notes » couperait au point
+ * de « .trash », et l'homonyme suivant mis à la corbeille deviendrait
+ * « Quiz/-2.trash/notes » — un chemin qui n'a plus rien à voir avec le premier,
+ * donc deux fichiers rangés dans deux dossiers différents au lieu d'être
+ * numérotés côte à côte. Un point de TÊTE de nom n'est pas une extension non
+ * plus (« .gitignore »), même règle que `toHostFile` (`./fs.ts`).
+ */
+export function couperExtension(chemin: string): { base: string; ext: string } {
+	const barre = chemin.lastIndexOf("/");
+	const point = chemin.lastIndexOf(".");
+	return point > barre + 1
+		? { base: chemin.slice(0, point), ext: chemin.slice(point) }
+		: { base: chemin, ext: "" };
+}
+
+/**
+ * Chemin LIBRE d'une pièce jointe : MÊME DOSSIER QUE LA NOTE.
+ *
+ * L'application n'a pas de réglage « dossier des pièces jointes » et n'en
+ * invente pas un : à côté de la note est le seul endroit qui survive au
+ * déplacement du dossier de quiz, et c'est aussi l'un des modes qu'Obsidian
+ * propose. Le lien écrit dans le bloc porte le NOM seul, donc la résolution le
+ * retrouvera là.
+ *
+ * Le test d'existence est un PARAMÈTRE, et non `HostFs.exists` pris sur place :
+ * c'est ce qui garde cette fonction PURE, pour la raison écrite au-dessus de
+ * `resultsDirFor` — `./index.ts`, qui construit `paths`, importe MathLive et
+ * Tauri qu'esbuild ne charge pas hors de la fenêtre. Écrite là-bas, elle
+ * n'aurait AUCUN cas dans `npm run check:windows-host` ; ici, elle en a.
+ */
+export async function attachmentPathFor(
+	existe: (chemin: string) => Promise<boolean>,
+	name: string,
+	sourcePath?: string,
+): Promise<string> {
+	const note = nettoyer(sourcePath ?? "");
+	const barre = note.lastIndexOf("/");
+	const dossier = barre > 0 ? note.slice(0, barre) : "";
+	const { base, ext } = couperExtension(dossier ? `${dossier}/${name}` : name);
+	return await reserveFreePath(base, ext, existe);
 }

@@ -18,7 +18,12 @@ import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 // Installer un hôte minimal avant d'appeler le moteur (tâche 4).
 await withSrcModule("src/host/current.ts", ({ installHost }) => {
 	const fakeHost = {
-		fs: { read: async () => "", readCached: async () => "", write: async () => {}, exists: async () => false, mkdirs: async () => {}, listMarkdown: () => [], findByName: () => [], getFile: () => null },
+		/* `process`, `writeBinary` et `trash` (tranche 3) ne sont exercés par
+		   aucun cas d'ici : comme `resultsDirFor` plus bas, seule leur FORME
+		   compte. Un faux hôte PARTIEL ne se plaint pas quand le contrat
+		   grandit, il MEURT sur un TypeError le jour où un appelant y touche —
+		   et une mort en route masque en silence tous les groupes suivants. */
+		fs: { read: async () => "", readCached: async () => "", write: async () => {}, process: async () => {}, writeBinary: async () => {}, trash: async () => {}, exists: async () => false, mkdirs: async () => {}, listMarkdown: () => [], findByName: () => [], getFile: () => null },
 		links: { resolve: () => null, resourceUrl: () => null },
 		watcher: { onChange: () => () => {} },
 		ui: { notice: () => {}, setIcon: () => {} },
@@ -28,7 +33,7 @@ await withSrcModule("src/host/current.ts", ({ installHost }) => {
 		// `resultsDirFor` (tâche 2) remplace la constante `resultsDir` : ce
 		// script n'exerce pas les résultats via `currentHost()`, seule la forme
 		// compte pour ne pas casser un appelant qui y toucherait un jour.
-		paths: { resultsDirFor: () => ".results", roots: () => [], rootOf: () => null, localPath: (p) => p, contractPath: (_r, p) => p }
+		paths: { resultsDirFor: () => ".results", attachmentPathFor: async (n) => n, roots: () => [], rootOf: () => null, localPath: (p) => p, contractPath: (_r, p) => p }
 	};
 	installHost(fakeHost);
 });

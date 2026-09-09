@@ -106,6 +106,7 @@ let resultsDirFor;
 await withSrcModule("apps/windows/src/host/roots.ts", async (mod) => {
 	creerCarteRacines = mod.creerCarteRacines;
 	resultsDirFor = mod.resultsDirFor;
+	const { attachmentPathFor, couperExtension } = mod;
 	const r = makeReporter("Hôte Windows — racines");
 	const carte = creerCarteRacines([
 		{ id: "Efrei", name: "Efrei", path: "C:/obsidian-vaults/Efrei", vault: true },
@@ -176,6 +177,55 @@ await withSrcModule("apps/windows/src/host/roots.ts", async (mod) => {
 	   sous-chemin nu, sans préfixe — jamais `undefined/…`. */
 	r.check("resultsDirFor d'une racine inconnue retombe sur le sous-chemin nu",
 		resultsDirFor(carte, "Inconnu/x.md"), ".neo-quiz/results");
+
+	/* ── le chemin d'une pièce jointe ──
+	   PURE comme `resultsDirFor`, et extraite ici pour la même raison : le
+	   module qui construit `paths` (`./index.ts`) importe MathLive et Tauri,
+	   qu'esbuild ne charge pas hors de la fenêtre. Écrite là-bas, cette logique
+	   n'aurait AUCUN cas ; le test d'existence est donc un PARAMÈTRE, et ces
+	   cas décrivent un disque sans toucher au vrai. */
+	const presents = new Set(["Efrei/Cours/schema.png"]);
+	const existe = async (c) => presents.has(c);
+
+	/* MÊME DOSSIER QUE LA NOTE : l'application n'a pas de réglage « dossier des
+	   pièces jointes » et n'en invente pas un. Ranger à la racine du dossier
+	   ouvert casserait le lien au premier déplacement du dossier de quiz. */
+	r.check("une pièce jointe se range à côté de la note",
+		await attachmentPathFor(existe, "Pasted image 1.png", "Efrei/Cours/reseau.md"),
+		"Efrei/Cours/Pasted image 1.png");
+	r.check("un nom déjà pris est numéroté, jamais écrasé",
+		await attachmentPathFor(existe, "schema.png", "Efrei/Cours/reseau.md"),
+		"Efrei/Cours/schema-2.png");
+
+	/* LE cas de la course, et celui que le contrat nomme : deux collages coup
+	   sur coup. Le second nom n'existe pas ENCORE sur le disque — c'est la
+	   réservation en mémoire (`src/unique-path.ts`) qui empêche les deux images
+	   de choisir le même chemin, donc la seconde d'effacer la première. Un
+	   `attachmentPathFor` qui se contenterait de tester l'existence rendrait ici
+	   deux fois « capture.png ». */
+	const premier = await attachmentPathFor(existe, "capture.png", "Efrei/Cours/reseau.md");
+	const second = await attachmentPathFor(existe, "capture.png", "Efrei/Cours/reseau.md");
+	r.check("deux demandes coup sur coup ne rendent pas le même chemin",
+		[premier, second], ["Efrei/Cours/capture.png", "Efrei/Cours/capture-2.png"]);
+
+	/* Une note posée à la racine de son dossier : la pièce jointe reste DANS la
+	   racine. Un chemin sans son premier segment sortirait des dossiers ouverts
+	   et `abs()` le rejetterait — sans que rien n'explique pourquoi. */
+	r.check("une note à la racine garde sa pièce jointe dans la racine",
+		await attachmentPathFor(existe, "img.png", "Efrei/reseau.md"), "Efrei/img.png");
+
+	/* Un nom SANS extension, dans un dossier qui porte un point : couper au
+	   dernier point du CHEMIN ENTIER rendrait « Efrei/Cours-2.B2/notes », c'est-
+	   à-dire un AUTRE dossier — le fichier partirait à côté au lieu d'être
+	   numéroté. */
+	presents.add("Efrei/Cours.B2/notes");
+	r.check("un nom sans extension ne coupe pas au point d'un dossier",
+		await attachmentPathFor(existe, "notes", "Efrei/Cours.B2/reseau.md"),
+		"Efrei/Cours.B2/notes-2");
+	/* Même règle que `toHostFile` : un point de TÊTE de nom n'est pas une
+	   extension, sinon « .gitignore » se numéroterait en « -2.gitignore ». */
+	r.check("un point de tête de nom n'est pas une extension",
+		couperExtension("Efrei/Cours/.gitignore"), { base: "Efrei/Cours/.gitignore", ext: "" });
 
 	r.done();
 });
@@ -312,6 +362,193 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 	   la fuite que la borne existe pour empêcher. */
 	r.check("un homonyme d'une autre racine ne comble pas une absence dans la racine de la note",
 		links.resolve("ailleurs.png", "Perso/notes.md"), null);
+
+	r.done();
+});
+
+/**
+ * Le DOUBLE de la FRONTIÈRE IPC de Tauri, et non des fonctions de plugin-fs.
+ *
+ * `@tauri-apps/plugin-fs` reste le VRAI module, bundlé et appelé : il finit par
+ * `window.__TAURI_INTERNALS__.invoke`, le seul point qui manque hors de la
+ * fenêtre. Doubler ce point-là laisse sous test tout ce qui est à nous — y
+ * compris la façon dont `writeFile` transmet une VUE partielle, qu'un double
+ * posé sur `writeFile` lui-même aurait masquée. Même patron que le double de
+ * `convertFileSrc` des groupes « resourceUrl » ci-dessus.
+ *
+ * Les chemins vus ici sont ABSOLUS : c'est ce que plugin-fs reçoit, une fois
+ * `abs()` passé. Le disque est un `Map` d'octets, parce que plugin-fs encode
+ * lui-même le texte et que la seule façon honnête de vérifier ce qui est écrit
+ * est de le décoder de l'autre côté.
+ *
+ * @param fichiers état initial du disque, `{ "<chemin absolu>": "<texte>" }`
+ */
+function installerTauri(fichiers = {}) {
+	const precedent = globalThis.window;
+	const disque = new Map(Object.entries(fichiers).map(([p, t]) => [p, new TextEncoder().encode(t)]));
+	const dossiers = new Set();
+	const journal = [];
+	/* `writeTextFile` et `writeFile` passent le chemin en EN-TÊTE (le corps est
+	   la donnée), et l'encodent ; les autres commandes le passent en argument. */
+	const cheminEnTete = (options) => decodeURIComponent(options.headers.path);
+
+	globalThis.window = {
+		__TAURI_INTERNALS__: {
+			invoke: async (cmd, args, options) => {
+				switch (cmd) {
+					case "plugin:fs|read_text_file": {
+						const octets = disque.get(args.path);
+						// Le vrai plugin jette sur un chemin absent : sans ce jet, un
+						// `process` qui inventerait une chaîne vide passerait inaperçu.
+						if (!octets) throw new Error("ENOENT: " + args.path);
+						return octets;
+					}
+					case "plugin:fs|write_text_file": {
+						const p = cheminEnTete(options);
+						journal.push(["write_text_file", p, new TextDecoder().decode(args)]);
+						disque.set(p, args);
+						return;
+					}
+					case "plugin:fs|write_file": {
+						const p = cheminEnTete(options);
+						/* `byteLength` de la VUE reçue, et une COPIE bornée à elle :
+						   c'est exactement ce qu'un corps de requête fait d'un
+						   `BufferSource`. Une implémentation qui enverrait
+						   `data.buffer` nu se verrait ici, et nulle part ailleurs. */
+						journal.push(["write_file", p, args.byteLength]);
+						disque.set(p, args.slice());
+						return;
+					}
+					case "plugin:fs|exists":
+						return disque.has(args.path) || dossiers.has(args.path);
+					case "plugin:fs|mkdir":
+						journal.push(["mkdir", args.path]);
+						dossiers.add(args.path);
+						return;
+					case "plugin:fs|rename": {
+						const octets = disque.get(args.oldPath);
+						if (!octets) throw new Error("ENOENT: " + args.oldPath);
+						journal.push(["rename", args.oldPath, args.newPath]);
+						disque.delete(args.oldPath);
+						/* ÉCRASE la destination, comme `rename` de plugin-fs sous
+						   Windows : sans ça, le cas de l'homonyme déjà en corbeille
+						   resterait vert même si le nom libre disparaissait. */
+						disque.set(args.newPath, octets);
+						return;
+					}
+					default:
+						throw new Error("commande Tauri non doublée : " + cmd);
+				}
+			},
+		},
+	};
+
+	return {
+		journal,
+		texte: (p) => (disque.has(p) ? new TextDecoder().decode(disque.get(p)) : null),
+		octets: (p) => (disque.has(p) ? [...disque.get(p)] : null),
+		ecrire: (p, t) => disque.set(p, new TextEncoder().encode(t)),
+		retirer() {
+			if (precedent === undefined) delete globalThis.window;
+			else globalThis.window = precedent;
+		},
+	};
+}
+
+await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs }) => {
+	const r = makeReporter("Hôte Windows — process, octets et corbeille");
+	const tauri = installerTauri({
+		"D:/Quiz/Cours/ch1.md": "avant",
+		"D:/Quiz/Cours/README": "sans extension",
+	});
+
+	try {
+		const carte = creerCarteRacines([{ id: "Quiz", name: "Quiz", path: "D:/Quiz", vault: false }]);
+		/* L'index ne sert qu'à `listMarkdown`/`getFile`, qu'aucun cas de ce
+		   groupe n'exerce : les trois primitives ajoutées ici passent toutes par
+		   le disque, jamais par le catalogue. */
+		const index = { all: () => [], get: () => null, apply: () => undefined };
+		const fs = createWindowsFs(carte, index);
+
+		/* ── process ── */
+
+		/* Lecture puis écriture, et le contrat le dit : la fenêtre est un
+		   processus unique. Ce qui est éprouvé ici, c'est que le rappel voit le
+		   contenu ACTUEL et que c'est ce qu'il REND qui part sur le disque — un
+		   hôte qui ignorerait son retour réécrirait « avant ». */
+		await fs.process("Quiz/Cours/ch1.md", (c) => c + " + ajout");
+		r.check("process écrit ce que le rappel rend, à partir de ce qui était là",
+			tauri.journal.at(-1), ["write_text_file", "D:/Quiz/Cours/ch1.md", "avant + ajout"]);
+
+		/* ── writeBinary ── */
+
+		/* `write_file` et NON `write_text_file` : ce dernier encode la chaîne
+		   qu'on lui donne, et une image y sortirait corrompue en silence.
+		   La vue est PARTIELLE, sur un tampon plus grand qu'elle : un cas qui
+		   vérifierait seulement l'appel resterait VERT avec `data.buffer` nu,
+		   puisque pour une vue construite sur un tampon exact les deux formes
+		   coïncident. C'est la LONGUEUR et le CONTENU qui les séparent. */
+		const tampon = new ArrayBuffer(12);
+		new Uint8Array(tampon).set([9, 9, 9, 9, 1, 2, 3, 4, 5, 6, 7, 8]);
+		await fs.writeBinary("Quiz/Cours/vue.png", new Uint8Array(tampon, 4, 4));
+		r.check("writeBinary passe par write_file, et n'écrit que les octets de la vue",
+			tauri.journal.at(-1), ["write_file", "D:/Quiz/Cours/vue.png", 4]);
+		r.check("… et ce sont les siens, pas ceux du tampon",
+			tauri.octets("D:/Quiz/Cours/vue.png"), [1, 2, 3, 4]);
+
+		/* ── trash ── */
+
+		/* RÉCUPÉRABLE, jamais `remove` : supprimer le quiz d'un semestre par
+		   mégarde ne doit pas être définitif. Le fichier se retrouve sous
+		   `<racine>/.trash/<chemin local>`, dont le point de tête l'exclut du
+		   parcours du catalogue (`dossierIgnore`) sans qu'aucun filtre neuf
+		   n'ait à le savoir. */
+		await fs.trash("Quiz/Cours/ch1.md");
+		r.check("le dossier de la corbeille est créé avant le déplacement",
+			tauri.journal.at(-2), ["mkdir", "D:/Quiz/.trash/Cours"]);
+		r.check("trash DÉPLACE vers .trash, il ne supprime pas",
+			tauri.journal.at(-1), ["rename", "D:/Quiz/Cours/ch1.md", "D:/Quiz/.trash/Cours/ch1.md"]);
+		r.check("… et le contenu est retrouvable là",
+			tauri.texte("D:/Quiz/.trash/Cours/ch1.md"), "avant + ajout");
+		r.check("… tandis que le chemin d'origine est vide",
+			tauri.texte("D:/Quiz/Cours/ch1.md"), null);
+
+		/* La corbeille est justement l'endroit où rien ne doit disparaître :
+		   supprimer deux fois une note du même nom (recréée entre les deux)
+		   écraserait la première — `rename` de plugin-fs remplace la destination
+		   en silence sous Windows, et le double le reproduit exprès. */
+		tauri.ecrire("D:/Quiz/Cours/ch1.md", "recréée");
+		await fs.trash("Quiz/Cours/ch1.md");
+		r.check("un homonyme déjà en corbeille n'est pas écrasé",
+			tauri.journal.at(-1), ["rename", "D:/Quiz/Cours/ch1.md", "D:/Quiz/.trash/Cours/ch1-2.md"]);
+		r.check("… et la première version est toujours là",
+			tauri.texte("D:/Quiz/.trash/Cours/ch1.md"), "avant + ajout");
+
+		/* Un fichier SANS extension : `.trash` porte un point, et couper au
+		   dernier point du chemin ENTIER numéroterait le DOSSIER
+		   (« D:/Quiz/-2.trash/Cours/README ») au lieu du fichier. */
+		await fs.trash("Quiz/Cours/README");
+		tauri.ecrire("D:/Quiz/Cours/README", "recréé");
+		await fs.trash("Quiz/Cours/README");
+		r.check("un fichier sans extension est numéroté sur son NOM, pas sur .trash",
+			tauri.journal.at(-1), ["rename", "D:/Quiz/Cours/README", "D:/Quiz/.trash/Cours/README-2"]);
+
+		/* Hors des dossiers ouverts : nommer la cause plutôt que de fabriquer un
+		   chemin absolu plausible, qui échouerait plus loin avec un message
+		   incompréhensible. */
+		let horsRacine = false;
+		try {
+			await fs.trash("Inconnu/x.md");
+		} catch (e) {
+			horsRacine = true;
+		}
+		r.check("trash d'un chemin hors des dossiers ouverts rejette", horsRacine, true);
+	} finally {
+		/* `try/finally` comme les groupes des modales : un groupe qui MEURT sur
+		   une exception laisserait `globalThis.window` remplacé pour tous ceux
+		   qui suivent. */
+		tauri.retirer();
+	}
 
 	r.done();
 });

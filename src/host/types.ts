@@ -63,6 +63,44 @@ export interface HostFs {
 	    rendraient sinon deux fois le même nom libre et écraseraient la
 	    première note en silence. */
 	write(path: string, data: string): Promise<void>;
+	/** Lecture-modification-écriture INDIVISIBLE : le rappel reçoit le contenu
+	    actuel et rend le contenu à écrire.
+
+	    C'est la seule façon sûre d'écrire dans une note dont on ne possède
+	    qu'un MORCEAU. `read` puis `write` perd toute modification faite entre
+	    les deux, et le commentaire d'`ai.ts:2058` dit ce que ça coûtait : une
+	    insertion écrasait le travail d'à côté en annonçant « Quiz inséré ».
+
+	    Le rappel peut être REJOUÉ : il doit repartir de zéro à chaque
+	    invocation et ne rien garder d'un essai abandonné. C'est la DERNIÈRE
+	    invocation qui fait foi (`detail-io.ts` en dépend, son drapeau `ecrit`
+	    est remis à faux en tête de rappel).
+
+	    Ce que les deux hôtes NE promettent pas également : Obsidian sérialise
+	    réellement les écritures de son vault ; la fenêtre est un processus
+	    unique sans autre écrivain qu'elle-même, et son implémentation lit puis
+	    écrit. Aucun des deux ne protège d'un éditeur de texte EXTÉRIEUR — c'est
+	    pourquoi l'appelant porte son propre compare-and-swap sur le CONTENU
+	    (`detail-io.ts`), qui est la seule garantie à la bonne granularité. */
+	process(path: string, mutate: (content: string) => string): Promise<void>;
+	/** Écrit des OCTETS, en créant ou en remplaçant, comme `write`.
+	    Existe pour UNE raison : coller une image dans une question
+	    (`editor/editor-form.ts`). Le texte a `write` ; un `Uint8Array` passé
+	    par `write` serait converti en chaîne et l'image serait corrompue sans
+	    qu'aucune erreur ne le dise. */
+	writeBinary(path: string, data: Uint8Array): Promise<void>;
+	/** Retire un fichier en le rendant RÉCUPÉRABLE. Ce n'est pas `remove` :
+	    supprimer le quiz d'un semestre par mégarde ne doit pas être définitif.
+
+	    Chaque hôte applique SA convention, et le contrat ne promet que le
+	    résultat : le fichier n'est plus à son chemin, et l'utilisateur peut le
+	    retrouver par les moyens habituels de son hôte. Obsidian suit le réglage
+	    de l'utilisateur (corbeille système, `.trash` du vault, ou définitif) ;
+	    l'application déplace vers `<racine>/.trash/<chemin local>`, qui est
+	    l'une des trois options qu'Obsidian propose lui-même — sans dépendance
+	    neuve, et portable telle quelle sur Android au chantier 3, où aucune
+	    corbeille système n'est atteignable. */
+	trash(path: string): Promise<void>;
 	exists(path: string): Promise<boolean>;
 	/** Crée le dossier ET ses parents. Ne rejette pas s'il existe déjà. */
 	mkdirs(path: string): Promise<void>;
@@ -213,6 +251,21 @@ export interface HostPaths {
 	 * « .obsidian/quiz-blocks-results », qui NE CHANGE PAS.
 	 */
 	resultsDirFor(sourcePath: string): string;
+	/**
+	 * Chemin LIBRE où ranger une pièce jointe de la note `sourcePath`.
+	 *
+	 * L'hôte décide du DOSSIER, jamais l'appelant : sous Obsidian c'est un
+	 * réglage de l'utilisateur (« dossier des pièces jointes »), qui a des
+	 * modes relatifs à la note — et le calculer nous-mêmes rangerait l'image
+	 * ailleurs que là où l'utilisateur l'a demandé.
+	 *
+	 * « LIBRE » veut dire : la cible n'existe pas au moment où elle est rendue.
+	 * L'appelant reste tenu de RÉSERVER le nom (`src/unique-path.ts`) s'il en
+	 * demande deux coup sur coup : mesuré sous Obsidian, deux appels
+	 * rapprochés rendent le MÊME chemin tant que le fichier n'existe pas, et la
+	 * seconde image écrasait la première.
+	 */
+	attachmentPathFor(name: string, sourcePath?: string): Promise<string>;
 	/** Les racines ouvertes, dans l'ordre d'affichage. */
 	roots(): HostRoot[];
 	/** La racine dont relève un chemin du contrat, ou `null`. */

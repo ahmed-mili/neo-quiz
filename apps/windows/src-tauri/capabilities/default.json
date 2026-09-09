@@ -10,6 +10,7 @@
         "fs:allow-stat",
         "fs:allow-watch",
         "fs:allow-write-text-file",
+        "fs:allow-write-file",
         "fs:allow-remove",
         "fs:allow-rename",
         "dialog:allow-open",

@@ -233,6 +233,78 @@ export function createObsidianHost(
 			}
 			await app.vault.create(path, data);
 		},
+		/* Même PARTAGE que `write`, mais SANS son test `estCache`, et c'est
+		   voulu : `vault.process` exige un `TFile`, qu'un chemin caché n'a
+		   jamais (« `getAbstractFileByPath` n'y trouvera jamais rien », plus
+		   haut) — le test serait donc une branche que rien ne peut atteindre,
+		   ni en fonctionnement ni dans un jeu de cas honnête. `write` en a
+		   besoin, lui, parce que son dernier recours est `vault.create` ; ici
+		   le dernier recours est déjà l'adaptateur.
+
+		   La branche adaptateur DÉGRADE en lecture-écriture — c'est ce que la
+		   fenêtre fait de toute façon, et aucun appelant de cette branche ne
+		   partage sa note avec un autre écrivain (résultats exportés, journal).
+		   `adapter().process` existerait (obsidian.d.ts) mais seulement depuis
+		   1.7.2, au-dessus du `minAppVersion` déclaré du greffon (1.5.0) : s'en
+		   servir casserait un utilisateur que le manifeste dit soutenir. */
+		async process(path, mutate) {
+			const f = tfile(path);
+			if (f) {
+				await app.vault.process(f, mutate);
+				return;
+			}
+			await adapter().write(path, mutate(await adapter().read(path)));
+		},
+		/* `vault.createBinary` quand la cible est neuve et indexable, exactement
+		   comme `write` passe par `vault.create` : une image écrite par le seul
+		   adaptateur EXISTE sur le disque sans entrer à l'index, et
+		   `getFirstLinkpathDest` ne la retrouve pas — l'aperçu de la question
+		   afficherait alors une image cassée juste après le collage. C'est le
+		   défaut que la tranche 2.6 a corrigé pour les notes ; il vaut à
+		   l'identique pour les pièces jointes. */
+		async writeBinary(path, data) {
+			/* La vue, pas le tampon : `data.buffer` d'une vue partielle porte
+			   plus d'octets que la vue elle-même, et l'image sortirait avec une
+			   queue parasite. `share.ts` emploie encore la forme non bornée ;
+			   ne pas la recopier. */
+			const octets = data.buffer.slice(
+				data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+			if (estCache(path)) {
+				await adapter().writeBinary(path, octets);
+				return;
+			}
+			const f = tfile(path);
+			if (f) {
+				await app.vault.modifyBinary(f, octets);
+				return;
+			}
+			if (await adapter().exists(path)) {
+				await adapter().writeBinary(path, octets);
+				return;
+			}
+			await app.vault.createBinary(path, octets);
+		},
+		/* `fileManager.trashFile` et NON `vault.delete` : lui seul respecte le
+		   réglage « Fichiers supprimés » de l'utilisateur (corbeille système,
+		   `.trash` du vault, ou définitif). Choisir à sa place serait décider
+		   qu'un quiz supprimé est irrécupérable chez quelqu'un qui a demandé
+		   l'inverse.
+
+		   PAS de branche adaptateur, contrairement à `write` et `process` : un
+		   chemin caché n'a jamais de `TFile`, et la seule suppression
+		   RÉCUPÉRABLE de l'adaptateur (`trashLocal`) date de 1.7.2, au-dessus du
+		   `minAppVersion` du greffon. Aucun appelant ne jette un chemin caché —
+		   le journal s'ajoute, les résultats ne se suppriment pas — et rendre la
+		   main vaut mieux que détruire définitivement ce qu'on a promis de
+		   rendre récupérable. */
+		async trash(path) {
+			const f = tfile(path);
+			// Déjà absent (ou hors index) : le contrat ne promet que l'ABSENCE au
+			// chemin donné, et rejeter ferait échouer une suppression que
+			// l'utilisateur voit comme réussie (même raison que `remove`).
+			if (!f) return;
+			await app.fileManager.trashFile(f);
+		},
 		async exists(path) {
 			return await adapter().exists(path);
 		},
@@ -562,6 +634,12 @@ export function createObsidianHost(
 		resultsDirFor() {
 			return ".obsidian/quiz-blocks-results";
 		},
+		/* Obsidian décide, et il déduplique déjà contre ce qui existe. On ne
+		   recalcule rien : le réglage a des modes RELATIFS à la note (« ./ »,
+		   « ./images ») que reproduire ici ferait diverger au premier
+		   changement d'Obsidian. */
+		attachmentPathFor: (name, sourcePath) =>
+			app.fileManager.getAvailablePathForAttachment(name, sourcePath),
 		roots() {
 			return [racine];
 		},

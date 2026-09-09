@@ -44,17 +44,35 @@
 	--color-orange: rgb(250, 179, 135);
 	--color-red: rgb(243, 139, 168);
 	--color-yellow: rgb(249, 226, 175);
-	/* NEO SANS STD en tête : c'est la police de la marque « Neo », et l'app
-	   l'EMBARQUE (fonts.css) pour l'avoir ailleurs que sur la machine de son
-	   auteur. La pile d'Obsidian reste derrière — un repli n'est pas une
-	   décoration ici : si un fichier de police manquait au bundle, l'interface
-	   resterait lisible au lieu de tomber sur la police par défaut du système.
-	   Le relevé d'Obsidian, lui, ne se recopie toujours pas : il commence par
-	   « Droid Arabic Naskh », qui est le réglage PERSONNEL d'Ahmed
-	   (appearance.json) et non une valeur du thème. */
-	--font-interface: "Neo Sans Std", ui-sans-serif, -apple-system,
-		BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Inter",
-		"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+	/* LA PILE D'OBSIDIAN, RECOPIÉE À L'IDENTIQUE de son `--font-default`
+	   (relevé le 2026-09-09 dans `obsidian-1.13.7.asar`, qui est la seule
+	   source : la valeur ne se devine pas).
+
+	   Elle REMPLACE « Neo Sans Std », que l'application embarquait depuis le
+	   2026-09-05. Demande d'Ahmed du 2026-09-09, après avoir vu la fenêtre à
+	   côté d'Obsidian : « c'est mieux que ce soit les mêmes que dans obsidian ».
+	   Deux mesures ont décidé de la VALEUR, parce que « la même qu'Obsidian »
+	   n'en désigne pas une seule :
+	   - le réglage `interfaceFontFamily` de son vault Efrei vaut « Droid Arabic
+	     Naskh », qui n'est installée NI dans `C:WindowsFonts` (543 polices
+	     balayées) ni dans les polices de l'utilisateur. Le réglage est donc
+	     INERTE, et ce qu'Ahmed voit dans Obsidian n'est pas ce que son
+	     appearance.json annonce ;
+	   - le thème AnuPpuccin ne pose aucun `--font-interface-theme`. La chaîne
+	     `var(--font-interface-override), var(--font-interface-theme),
+	     var(--default-font), var(--font-default)` retombe donc sur la pile
+	     ci-dessous, dont `ui-sans-serif` résout à Segoe UI sous Windows.
+
+	   Conséquence heureuse et non recherchée : plus aucune police n'est
+	   embarquée, donc plus de redistribution d'une police COMMERCIALE
+	   (Monotype/Adobe) dans un binaire destiné à la promo d'Ahmed — la
+	   question de licence que la décision du 2026-09-05 assumait disparaît
+	   d'elle-même. `assets/fonts.css` et ses quatre `.woff2` sont supprimés
+	   par le même geste ; l'historique git les garde si le choix se rejoue. */
+	--font-interface: ui-sans-serif, -apple-system, BlinkMacSystemFont,
+		system-ui, "Segoe UI", "Google Sans Flex", Roboto, "Inter Variable",
+		"Inter", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+		sans-serif;
 	--font-monospace: ui-monospace, SFMono-Regular, "Cascadia Mono", "Roboto Mono",
 		"DejaVu Sans Mono", Menlo, Monaco, "Consolas",
 		"Source Code Pro", monospace;

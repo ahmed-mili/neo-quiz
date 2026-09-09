@@ -1,4 +1,3 @@
-import "./assets/fonts.css";
 import "../../../src/assets/css/index.css";
 import "./theme/host-vars.css";
 import "./assets/toast.css";

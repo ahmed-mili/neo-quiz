@@ -66,6 +66,28 @@ réponse étant toujours non.
   objet imbriqué écrit `[object Object]` (bloc illisible, sauvegarde refusée sans un
   mot). **Pas de framework de test au-delà** ; ne pas en ajouter pour du code qu'une
   lecture suffit à juger.
+- `npm run check:quiz-io` — le CÂBLAGE de l'écriture d'un bloc
+  (`src/dashboard/detail-io.ts`), qui n'avait rien entre les deux contrôles
+  ci-dessus : `check:export` juge la FORME du bloc produit, `audit-vaults.mjs`
+  l'aller-retour sur de vrais vaults, et personne ne regardait le geste qui
+  pose ce bloc DANS la note. Les quatre défauts qu'il empêche sont tous
+  arrivés, tous silencieux, et deux d'entre eux ont régressé la nuit même de
+  leur correction (revue codex 2026-07-31) : un bloc écrit en LF dans une note
+  CRLF, dont chaque frappe apparaît ensuite comme une réécriture entière dans
+  un diff ou une synchro ; un témoin de compare-and-swap mémorisé sous une
+  autre forme que ce qui a été écrit, qui fait passer la PREMIÈRE frappe et
+  perd la SECONDE sans un mot ; une clôture réécrite en forme canonique, qui
+  efface un ` ```quiz-blocks data-owner=alice ` ou l'indentation d'un bloc en
+  liste, là où le compare-and-swap ne peut pas s'en apercevoir puisqu'il ne
+  compare que le JSON5 ; et le pire, qui ne lève rien et n'affiche rien : un
+  remplacement par CHAÎNE au lieu de par FONCTION, où `$1`, `$&` et
+  l'apostrophe inversée sont des motifs SPÉCIAUX — un quiz de maths plein de
+  `$…$` réinjecte alors la source du bloc à l'intérieur de lui-même. Il éprouve
+  aussi le REJEU du rappel de `fs.process`, que le contrat autorise et dont
+  dépend le drapeau `ecrit` remis à faux en tête : sans lui, la page annonce un
+  succès sur une note qu'elle n'a pas écrite. Le compare-and-swap sur le BLOC
+  est la seule garantie à la bonne granularité — le `mtime` parle de toute la
+  NOTE, et deux pages ouvertes pouvaient le franchir toutes les deux.
 - `npm run check:scheduler` — le noyau de l'ORDONNANCEUR (`src/scheduler/`) : horizon
   de rétention, journal, état dérivé, plan du jour. Sa première section vérifie
   MÉCANIQUEMENT la pureté du noyau (aucun `from "obsidian"`, `document`, `window`,

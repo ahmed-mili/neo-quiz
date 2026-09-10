@@ -27,6 +27,18 @@ import { pathToFileURL } from "node:url";
 const OBSIDIAN_STUB = [
 	"const nope = (nom) => { throw new Error('obsidian.' + nom + \" n'existe pas hors d'Obsidian\"); };",
 	"export const TFile = class {};",
+	/* La classe est AUSSI posée sur `globalThis`, et c'est la seule façon de
+	   l'atteindre : esbuild INLINE ce bouchon dans le bundle, rien ne le
+	   réexporte. Sans elle, tout module partagé qui discrimine encore par
+	   `file instanceof TFile` (detail-io.ts, quiz-menu.ts, share.ts) est
+	   INTESTABLE sur sa branche heureuse — aucun objet qu'un script fabrique ne
+	   peut satisfaire ce test, et la fonction répond « fichier introuvable »
+	   quoi qu'on lui donne. C'est exactement pour éviter ça qu'`apps/obsidian/
+	   host.ts` avait, lui, remplacé son `instanceof` par un test de canard
+	   (voir son commentaire d'`asTFile`) ; les modules qui ne l'ont pas encore
+	   fait ont besoin de cette poignée. Un script qui l'ignore ne voit rien
+	   changer. */
+	"globalThis.__stubTFile = TFile;",
 	"export const Notice = class { constructor() { nope('Notice'); } };",
 	/* `Modal` n'est plus une coquille vide : `HostModals` (apps/obsidian/host.ts)
 	   passe par lui, et l'ORDRE de ses deux moments — attacher PUIS `onOpen`,

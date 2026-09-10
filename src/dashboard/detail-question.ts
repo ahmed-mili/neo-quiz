@@ -236,7 +236,15 @@ function renderResourceSection(parent: HTMLElement, q: DraftQuestion, cb: EditCa
 		? t("editor.form.resourceSectionWithFile", { file: fileName })
 		: t("editor.form.resourceSection");
 	const box = section(parent, "paperclip", label, has);
-	const head = box.previousElementSibling as HTMLElement | null;
+	/* `box.parentElement`, et non `box` : `section()` rend l'INNER, dont le
+	   parent est le corps — et c'est le CORPS qui est le frère de l'en-tête
+	   (`wrap > head, body`, puis `body > inner`). Écrit sur `box`, ce calcul
+	   rendait TOUJOURS `null` : `if (head)` ne s'est jamais exécuté et
+	   l'interrupteur « activer la ressource » n'a pas été construit une seule
+	   fois depuis le 2026-07-31 (67d3a88), alors que son CSS (30 lignes) et ses
+	   clés i18n existaient. Un bloc mort ne rougit nulle part : c'est la
+	   conversion de la tranche 3 qui l'a réveillé, en cherchant à l'éprouver. */
+	const head = box.parentElement?.previousElementSibling as HTMLElement | null;
 
 	if (head) {
 		const toggle = ajouter(head, "button", "qbd-qz-section-toggle" + (has ? " is-on" : ""));
@@ -266,9 +274,12 @@ function renderResourceSection(parent: HTMLElement, q: DraftQuestion, cb: EditCa
 	ajouter(box, "div", "qbd-qz-section-help", t("editor.form.resourceHelp"));
 }
 
-/** Section repliable : en-tête cliquable + corps. Renvoie le CORPS (l'appelant
-    y écrit ses champs) ; l'en-tête se retrouve par `previousElementSibling`
-    quand il faut y greffer un interrupteur. */
+/** Section repliable : en-tête cliquable + corps. Renvoie l'INNER (l'appelant
+    y écrit ses champs) ; l'en-tête se retrouve par
+    `parentElement.previousElementSibling` quand il faut y greffer un
+    interrupteur — l'inner est fils UNIQUE du corps, c'est donc le CORPS qui est
+    le frère de l'en-tête. Ce cran oublié a coûté six semaines d'interrupteur
+    mort. */
 function section(parent: HTMLElement, icon: string, label: string, open: boolean): HTMLElement {
 	const wrap = ajouter(parent, "div", "qbd-qz-section" + (open ? "" : " is-collapsed"));
 	const head = ajouter(wrap, "button", "qbd-qz-section-head");

@@ -2101,7 +2101,9 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		closeAllSelects();
 		if (composerResizeObserver) { composerResizeObserver.disconnect(); composerResizeObserver = null; }
 		if (__focusRecheck) { window.removeEventListener("focus", __focusRecheck); __focusRecheck = null; }
-		resultPage?.dispose();
+		// `void` : le quiz généré vit en mémoire (`save` absent de sa spec), il
+		// n'y a rien à attendre — la promesse rendue est déjà résolue.
+		void resultPage?.dispose();
 		resultPage = null;
 		generatedDraft = null;
 		dropSentMessage();

@@ -18,22 +18,40 @@ import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 // Installer un hôte minimal avant d'appeler le moteur (tâche 4).
 await withSrcModule("src/host/current.ts", ({ installHost }) => {
 	const fakeHost = {
-		/* `process`, `writeBinary` et `trash` (tranche 3) ne sont exercés par
-		   aucun cas d'ici : comme `resultsDirFor` plus bas, seule leur FORME
-		   compte. Un faux hôte PARTIEL ne se plaint pas quand le contrat
+		/* Le contrat COMPLET de `src/host/types.ts` (`Host`), membre par membre,
+		   même pour ce qu'aucun cas d'ici n'exerce — `process`, `writeBinary`,
+		   `trash`, `append`, `list`, `remove`, `rename`, `onRenameDir`,
+		   `iconNames`, `modals` : comme `resultsDirFor` plus bas, seule leur
+		   FORME compte. Un faux hôte PARTIEL ne se plaint pas quand le contrat
 		   grandit, il MEURT sur un TypeError le jour où un appelant y touche —
-		   et une mort en route masque en silence tous les groupes suivants. */
-		fs: { read: async () => "", readCached: async () => "", write: async () => {}, process: async () => {}, writeBinary: async () => {}, trash: async () => {}, exists: async () => false, mkdirs: async () => {}, listMarkdown: () => [], findByName: () => [], getFile: () => null },
+		   et une mort en route masque en silence tous les groupes suivants
+		   (onze cachés, une fois). Complété à la tranche 3 (tâche 10) : quatre
+		   méthodes de `HostFs`, `onRenameDir`, `iconNames` et `modals`
+		   manquaient. */
+		fs: { read: async () => "", readCached: async () => "", write: async () => {}, process: async () => {}, writeBinary: async () => {}, trash: async () => {}, exists: async () => false, mkdirs: async () => {}, append: async () => {}, list: async () => [], remove: async () => {}, rename: async () => {}, listMarkdown: () => [], findByName: () => [], getFile: () => null },
 		links: { resolve: () => null, resourceUrl: () => null },
-		watcher: { onChange: () => () => {} },
-		ui: { notice: () => {}, setIcon: () => {} },
+		watcher: { onChange: () => () => {}, onRenameDir: () => () => {} },
+		ui: { notice: () => {}, setIcon: () => {}, iconNames: () => [] },
 		math: { ready: async () => {}, render: () => document.createElement("div"), flush: () => {} },
 		shell: { openExternal: async () => false, revealInHost: async () => false },
 		platform: { isMobile: false, isMacOS: false, uiLanguage: "en" },
 		// `resultsDirFor` (tâche 2) remplace la constante `resultsDir` : ce
 		// script n'exerce pas les résultats via `currentHost()`, seule la forme
 		// compte pour ne pas casser un appelant qui y toucherait un jour.
-		paths: { resultsDirFor: () => ".results", attachmentPathFor: async (n) => n, roots: () => [], rootOf: () => null, localPath: (p) => p, contractPath: (_r, p) => p }
+		paths: { resultsDirFor: () => ".results", attachmentPathFor: async (n) => n, roots: () => [], rootOf: () => null, localPath: (p) => p, contractPath: (_r, p) => p },
+		/* Une modale qui s'ouvre sur un corps détaché : aucun cas n'en ouvre,
+		   mais un appelant qui le ferait doit recevoir la forme du contrat
+		   (`panelEl`, `contentEl`, `close`), pas un TypeError. */
+		modals: {
+			open(spec) {
+				const panelEl = document.createElement("div");
+				const contentEl = document.createElement("div");
+				panelEl.appendChild(contentEl);
+				const handle = { panelEl, contentEl, close: () => { contentEl.replaceChildren(); spec.onClose?.(); } };
+				spec.onOpen(handle);
+				return handle;
+			},
+		},
 	};
 	installHost(fakeHost);
 });

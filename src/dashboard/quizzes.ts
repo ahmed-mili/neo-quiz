@@ -96,6 +96,15 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 	   vue puis re-rend. */
 	let moduleMap: ModuleMap | null = null;
 	let moduleMapLoaded = false;
+	/* Quiz dont le dossier doit s'ouvrir dès que la table sera lue. Un
+	   `openFolderOfQuiz` reçu AVANT `moduleMap` (la fenêtre Windows recrée
+	   ces handlers à chaque remontage de sa coquille, et le retour d'un quiz
+	   arrive alors avant la première lecture) résolvait le dossier sur la
+	   table VIDE : le parent immédiat, là où la note de correspondance
+	   pouvait désigner un ancêtre — un dossier fantôme, vide, dans le fil
+	   d'Ariane. Différer la résolution à la lecture est ce qui rend la
+	   promesse « revenir dans SON module » vraie sous les deux hôtes. */
+	let dossierAttenduPour: string | null = null;
 	/* Module ouvert (drill-down) : null = grille ; sinon on affiche les quiz de
 	   ce module + un fil d'Ariane. État d'interface, non persisté. */
 	let openModuleFolder: string | null = null;
@@ -132,6 +141,14 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 		// exactement l'ancien fallback (bug du plan, corrigé — même correctif
 		// que home.ts).
 		moduleMap = await lireModuleMap(ctx.settings.quizzesModuleMapNote || "Dashboard");
+		// Un retour de quiz reçu pendant la lecture : résolu MAINTENANT, sur la
+		// vraie table, et peint par le rendu ci-dessous (pas `openModule` : ce
+		// serait un second rendu, et un `recordNav` pour une restauration).
+		if (dossierAttenduPour !== null) {
+			const folder = moduleForQuiz(dossierAttenduPour, effectiveMap()).folder;
+			dossierAttenduPour = null;
+			if (folder) openModuleFolder = folder;
+		}
 		// Le premier rendu (map absente) est repeint ici quelques ms plus
 		// tard : sans ré-armement, ce second rendu couperait net la transition
 		// d'entrée à peine commencée (cartes soudain opaques).
@@ -351,10 +368,16 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 
 	return {
 		render,
-		resetDrilldown() { openModuleFolder = null; lastPaintedView = null; },
+		// `dossierAttenduPour` aussi : une refermeture demandée pendant la
+		// lecture de la table ne doit pas être annulée par un retour différé.
+		resetDrilldown() { openModuleFolder = null; dossierAttenduPour = null; lastPaintedView = null; },
 		getOpenFolder() { return openModuleFolder; },
 		openFolder(folder: string) { openModule(folder); },
 		openFolderOfQuiz(quizPath: string) {
+			// Table pas encore lue (`lireModuleMap` rend toujours un objet, même
+			// vide : `null` veut dire « en cours ») : c'est `loadModuleMap` qui
+			// ouvrira, sur la vraie table. Voir `dossierAttenduPour`.
+			if (moduleMap === null) { dossierAttenduPour = quizPath; return; }
 			// Dossier inconnu (quiz à la racine du vault) → on reste sur la
 			// grille plutôt que d'ouvrir un dossier fantôme.
 			const folder = moduleForQuiz(quizPath, effectiveMap()).folder;

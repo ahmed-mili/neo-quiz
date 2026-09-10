@@ -55,14 +55,18 @@ export class QuizBuilderView extends ItemView {
 
 	async onClose(): Promise<void> {
 		// Écriture en attente ET écoute clavier du document : l'onglet se
-		// ferme, plus personne ne les videra.
-		this.page?.dispose();
+		// ferme, plus personne ne les videra. Le DOM est nettoyé tout de suite
+		// (le démontage est synchrone), l'écriture est attendue EN DERNIER :
+		// Obsidian attend `onClose`, la note est donc écrite avant que l'onglet
+		// ne disparaisse (tranche 3, tâche 10).
+		const ecrit = this.page?.dispose();
 		this.page = null;
 		// Obsidian réutilise le contentEl entre deux vues : les classes posées
 		// à l'ouverture se retirent ici, pas dans onunload.
 		this.contentEl.removeClass("qbd-root");
 		this.contentEl.removeClass("qb-tab-page");
 		this.contentEl.empty();
+		await ecrit;
 	}
 
 	/** Ouvre le quiz d'une note dans cet onglet. Le second paramètre (la

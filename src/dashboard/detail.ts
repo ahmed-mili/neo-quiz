@@ -87,13 +87,21 @@ export interface QuizPageDeps {
 
 export interface QuizPageHandlers {
 	render(container: HTMLElement, spec: QuizPageSpec): void;
-	/** Écrit sur-le-champ ce qui est en attente (sortie de vue, fermeture). */
-	flush(): void;
+	/** Écrit sur-le-champ ce qui est en attente (sortie de vue, fermeture).
+	    La promesse se résout quand l'écriture est TERMINÉE — pas quand elle est
+	    lancée. Un hôte qui ferme sa fenêtre doit pouvoir l'attendre : la
+	    fenêtre Windows n'a pas de vault qui survit au processus, et fermer
+	    juste après une frappe perdait la frappe sans un mot tant que ce
+	    retour était `void`. Ne rejette jamais (l'échec est déjà signalé par
+	    une Notice dans `runSave`). */
+	flush(): Promise<void>;
 	/** Écrit, puis rend TOUT ce que la page tient au système : écoute clavier
 	    posée sur le document, glissement en vol, brouillon. Sans cet appel à
 	    la fermeture de la vue, le listener ne se détachait qu'au prochain
-	    appui de touche — et retenait d'ici là le DOM et le brouillon. */
-	dispose(): void;
+	    appui de touche — et retenait d'ici là le DOM et le brouillon.
+	    Le démontage du DOM et des écoutes est SYNCHRONE (fait avant le premier
+	    `await`) ; la promesse ne porte que l'écriture, comme `flush`. */
+	dispose(): Promise<void>;
 }
 
 /** La part de la spec que seul l'HÔTE du tableau de bord peut écrire pour un
@@ -111,8 +119,9 @@ export type DetailHostSpec = Pick<QuizPageSpec, "onBack" | "isStale" | "startEdi
 
 export interface DetailHandlers {
 	render(container: HTMLElement, quiz: QuizIndexEntry, host: DetailHostSpec): void;
-	/** Relayé à la page : appelé à la fermeture de la vue dashboard. */
-	dispose(): void;
+	/** Relayé à la page : appelé à la fermeture de la vue dashboard. Se résout
+	    quand l'écriture en attente est terminée (voir `QuizPageHandlers`). */
+	dispose(): Promise<void>;
 }
 
 /* ── La page « quiz » du dashboard : UNE instance, sur un quiz du vault. La
@@ -235,8 +244,9 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		currentSpec = spec;
 		if (spec.key !== currentPath) {
 			// Le quiz précédent part MAINTENANT : sans ça, ouvrir un autre quiz
-			// dans les 600 ms du débounce perdait la dernière frappe.
-			flushSave();
+			// dans les 600 ms du débounce perdait la dernière frappe. `void` :
+			// le rendu n'attend pas l'écriture, la chaîne la sérialise déjà.
+			void flushSave();
 			currentPath = spec.key;
 			draft = null;
 			activeIdx = 0;
@@ -247,7 +257,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			   réécrirait par-dessus. La modification externe gagne — mais on le
 			   DIT, sinon des retouches en attente disparaîtraient sans un mot. */
 			if (saveTimer) currentHost().ui.notice(t("dashboard.quiz.externalChange"));
-			flushSave();
+			void flushSave();
 			draft = null;
 		}
 
@@ -317,7 +327,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		const backIcon = ajouter(back, "span", "qbd-quizzes-crumb-icon");
 		currentHost().ui.setIcon(backIcon, "arrow-left");
 		back.addEventListener("click", () => {
-			flushSave();
+			void flushSave();
 			spec.onBack();
 		});
 
@@ -344,7 +354,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			currentHost().ui.setIcon(ajouter(btn, "span", "qbd-btn-icon"), action.icon);
 			ajouter(btn, "span", undefined, action.label);
 			btn.addEventListener("click", () => {
-				flushSave();
+				void flushSave();
 				action.onClick(btn);
 			});
 		}
@@ -358,7 +368,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			currentHost().ui.setIcon(ajouter(start, "span", "qbd-btn-icon"), startSpec.icon);
 			ajouter(start, "span", undefined, startSpec.label);
 			start.addEventListener("click", () => {
-				flushSave();
+				void flushSave();
 				startSpec.onClick(start);
 			});
 		}
@@ -370,7 +380,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	    lequel on revient le plus souvent. */
 	function toggleEditing(page: HTMLElement): void {
 		editing = !editing;
-		if (!editing) flushSave();
+		if (!editing) void flushSave();
 
 		const body = page.querySelector(".qbd-qz-body");
 		if (!body || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
@@ -766,16 +776,23 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 
 	/** Écrit MAINTENANT ce qui est en attente (sortie de page, lancement,
 	    ouverture d'un autre quiz). Vise le brouillon FIGÉ au moment de la
-	    frappe, jamais celui affiché à cet instant. */
-	function flushSave(): void {
-		if (!saveTimer || !pendingSave) return;
-		window.clearTimeout(saveTimer);
-		saveTimer = null;
-		const { draft: pending, save } = pendingSave;
-		pendingSave = null;
-		// Même alerte que le chemin débouncé : une écriture ratée au moment où
-		// l'on QUITTE la page est précisément celle qu'il faut signaler.
-		runSave(pending, save);
+	    frappe, jamais celui affiché à cet instant.
+
+	    Rend LA CHAÎNE, pas seulement l'écriture qu'on vient de lancer : une
+	    écriture partie par la minuterie un instant plus tôt est encore en vol,
+	    et une fenêtre qui se ferme sur « rien en attente » l'aurait coupée en
+	    plein milieu. La chaîne ne rejette jamais (`runSave`). */
+	function flushSave(): Promise<void> {
+		if (saveTimer && pendingSave) {
+			window.clearTimeout(saveTimer);
+			saveTimer = null;
+			const { draft: pending, save } = pendingSave;
+			pendingSave = null;
+			// Même alerte que le chemin débouncé : une écriture ratée au moment où
+			// l'on QUITTE la page est précisément celle qu'il faut signaler.
+			runSave(pending, save);
+		}
+		return saveChain;
 	}
 
 	/** Les titres AUTOMATIQUES suivent l'ordre de la liste ; ceux que l'auteur
@@ -814,8 +831,10 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		return svg;
 	}
 
-	function dispose(): void {
-		flushSave();
+	function dispose(): Promise<void> {
+		// L'écriture est CAPTURÉE avant que l'état ne soit remis à zéro : le
+		// brouillon en attente est figé dans `pendingSave`, pas relu ici.
+		const ecrit = flushSave();
 		// Un menu portalé au <body> n'est pas dans le conteneur de la page : sans
 		// ça il resterait affiché par-dessus Obsidian, écoutes comprises.
 		closeAllSelects();
@@ -826,6 +845,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		currentContainer = null;
 		currentPath = null;
 		countEl = null;
+		return ecrit;
 	}
 
 	return { render, flush: flushSave, dispose };

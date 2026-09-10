@@ -374,8 +374,11 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 		if (this._unregisterScanner) this._unregisterScanner();
 		// La page d'un quiz tient une écoute clavier posée sur le DOCUMENT et,
 		// peut-être, une écriture en attente : sans cet appel elles survivaient
-		// à la fermeture de la vue.
-		this.detail?.dispose();
+		// à la fermeture de la vue. ATTENDUE (tranche 3, tâche 10) : Obsidian
+		// attend `onClose`, donc l'onglet ne disparaît qu'une fois la note
+		// réellement écrite — c'est le même contrat que la fenêtre Windows
+		// exige pour sa fermeture, et le greffon y gagne au passage.
+		await this.detail?.dispose();
 		this.ai?.dispose();
 	}
 

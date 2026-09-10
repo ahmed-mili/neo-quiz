@@ -50,7 +50,7 @@ interface ConfirmSpec {
 	title: string;
 	body: string;
 	cta: string;
-	/** true = bouton rouge (mod-warning) : Delete uniquement. */
+	/** true = bouton rouge (`qb-btn-danger`) : Delete uniquement. */
 	warning?: boolean;
 }
 
@@ -61,21 +61,25 @@ interface ConfirmSpec {
  * pas ici : ce que `onConfirm` lance est une écriture ASYNCHRONE, et le
  * repeint n'arrive qu'à son terme, bien après les 240 ms de l'animation.
  *
- * `modal-button-container`, `mod-cta` et `mod-warning` sont des classes
- * NATIVES d'Obsidian, gardées telles quelles : le greffon y trouve ses
- * boutons habituels. La fenêtre n'a pas de CSS pour elles (voir le rapport
- * de la tâche 9) — ses boutons sont nus, mais fonctionnels.
+ * Les classes sont celles d'`openConfirmModal` (`qb-confirm-buttons`,
+ * `qb-btn`, `qb-btn-danger`), qui vivent dans le CSS PARTAGÉ
+ * (`src/assets/css/editor/`) chargé par les deux hôtes — et non les classes
+ * natives d'Obsidian (`modal-button-container`, `mod-cta`, `mod-warning`) que
+ * la tâche 9 avait gardées : la fenêtre n'a aucun CSS pour celles-ci, et
+ * « Supprimer » et « Annuler » y étaient deux `<button>` bruts
+ * INDISCERNABLES. Deux surfaces qui confirment une suppression ne peuvent
+ * pas avoir chacune leur habillage.
  */
 function openConfirm(spec: ConfirmSpec, onConfirm: () => void): void {
 	currentHost().modals.open({
 		title: spec.title,
 		onOpen: (m) => {
 			const c = m.contentEl;
-			ajouter(c, "p", undefined, spec.body);
-			const row = ajouter(c, "div", "modal-button-container");
-			const cancel = ajouter(row, "button", undefined, t("editor.action.cancel"));
+			ajouter(c, "p", "qb-confirm-message", spec.body);
+			const row = ajouter(c, "div", "qb-confirm-buttons");
+			const cancel = ajouter(row, "button", "qb-btn", t("editor.action.cancel"));
 			cancel.addEventListener("click", () => m.close());
-			const ok = ajouter(row, "button", spec.warning ? "mod-warning" : "mod-cta", spec.cta);
+			const ok = ajouter(row, "button", spec.warning ? "qb-btn qb-btn-danger" : "qb-btn", spec.cta);
 			ok.addEventListener("click", () => { m.close(); onConfirm(); });
 		},
 		/* Pas de `contentEl.empty()` : l'hôte vide le corps lui-même après la

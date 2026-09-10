@@ -22,6 +22,7 @@ import { createRenameDetector } from "../../../src/review/rename-match";
 import { chargerReglagesPages, monterDashboard } from "./ui/dashboard-shell";
 import { openQuizPage } from "./ui/quiz-page";
 import { renderSettings } from "./ui/settings";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /*
  * Démarrage de l'application.
@@ -42,14 +43,29 @@ import { renderSettings } from "./ui/settings";
  * abonnement au scanner de plus, et une modification de note redessinerait la
  * liste autant de fois qu'elle a été ouverte. C'est le pendant du
  * `destroyQuiz()` du greffon.
+ *
+ * Il peut rendre une PROMESSE (la coquille du tableau de bord, dont la page
+ * d'un quiz tient peut-être une écriture en attente) : le démontage lui-même
+ * est synchrone, seule l'écriture est à attendre. Un changement d'écran ne
+ * l'attend pas (`demonter()`, `void`) ; la fermeture de la fenêtre, si
+ * (`onCloseRequested`, plus bas).
  */
-let demonterCourant: (() => void) | null = null;
+let demonterCourant: (() => void | Promise<void>) | null = null;
+
+/** Démonte l'écran courant et rend ce qu'il reste à attendre (l'écriture en
+    attente de la page d'un quiz), ou rien. `demonterCourant` est remis à
+    `null` AVANT de rendre : un second appel pendant l'attente ne démonte pas
+    deux fois. */
+function demonter(): Promise<void> | void {
+	const d = demonterCourant;
+	demonterCourant = null;
+	return d?.();
+}
 
 /* `document.createElement`, jamais les extensions DOM d'Obsidian (`createEl`,
    `createDiv`, `empty`) : elles n'existent pas dans la fenêtre de l'app. */
 export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore, stats: StatsStore): void {
-	demonterCourant?.();
-	demonterCourant = null;
+	void demonter();
 	root.textContent = "";
 	demonterCourant = monterDashboard(root, {
 		scanner,
@@ -66,8 +82,7 @@ export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore, s
  * désormais tout entière — la liste n'a plus qu'un bouton pour y aller.
  */
 function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore, stats: StatsStore): void {
-	demonterCourant?.();
-	demonterCourant = null;
+	void demonter();
 	root.textContent = "";
 	demonterCourant = renderSettings(root, {
 		scanner,
@@ -88,9 +103,12 @@ function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore,
 }
 
 /**
- * La page d'un quiz : démonter la liste, monter la page ; au retour, démonter
- * la page et remonter la liste. TOUJOURS par `demonterCourant`, appelé AVANT
- * chaque changement d'écran.
+ * JOUER un quiz (le moteur) : démonter la coquille, monter la page du moteur ;
+ * au retour, démonter le moteur et remonter la coquille — qui revient sur la
+ * vue d'où l'on est parti, la page du quiz comprise (`dashboard-shell.ts`,
+ * `vueCourante`/`quizSelectionne`). TOUJOURS par `demonterCourant`, appelé
+ * AVANT chaque changement d'écran. La page d'un quiz (consultation, édition),
+ * elle, n'est PAS un écran de `main.ts` : c'est une vue de la coquille.
  *
  * L'affectation de `demonterCourant` se fait APRÈS l'`await` — `openQuizPage`
  * lit le fichier avant de rendre — mais le démontage de la liste, lui, a lieu
@@ -99,8 +117,7 @@ function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore,
  * `root.replaceChildren()` en entrée.
  */
 async function ouvrirQuiz(root: HTMLElement, scanner: Scanner, store: ReviewStore, stats: StatsStore, entry: QuizIndexEntry): Promise<void> {
-	demonterCourant?.();
-	demonterCourant = null;
+	void demonter();
 	root.textContent = "";
 	/* Le démontage rendu par `openQuizPage` appelle `__quizDestroy` : sans lui,
 	   chaque aller-retour laisserait vivre une instance de moteur complète
@@ -149,8 +166,7 @@ async function choisirDossier(chemin: string): Promise<void> {
  * par `changerDossier`, comme celui de la liste — un seul enchaînement.
  */
 function mountSansDossier(root: HTMLElement): void {
-	demonterCourant?.();
-	demonterCourant = null;
+	void demonter();
 	root.textContent = "";
 
 	const ecran = ajouter(root, "div", "nq-accueil");
@@ -284,25 +300,55 @@ async function demarrer(): Promise<void> {
 		   n'ont rien en commun, mélanger leur construction les lierait pour
 		   rien. */
 		const stats = await creerStatsApp();
-		/* VIDER LE TAMPON D'ÉCRITURE AVANT DE PARTIR. `store` écrit en différé
-		   (500 ms, voir `log-file.ts`) ; sans ce vidage, fermer la fenêtre ou
-		   déclencher un `location.reload()` (changement de dossier, dans
-		   `choisirDossier` / `onFoldersChanged`) dans les 500 ms qui suivent une
-		   réponse perdrait cette réponse — le pendant exact du
-		   `this._reviewStore?.destroy()` de l'`onunload` du greffon
-		   (`apps/obsidian/plugin.ts`). `beforeunload` couvre LES DEUX sorties à
-		   la fois (fermeture ET rechargement) sans dépendance Tauri neuve ;
-		   `getCurrentWindow().onCloseRequested` ne couvrirait que la première.
-		   LIMITE HONNÊTE, à ne pas dépasser : `destroy()` déclenche un `flush()`
-		   asynchrone qu'un gestionnaire `beforeunload` ne peut pas attendre — on
-		   ne fait que LANCER l'écriture au plus tôt, jamais garantir qu'elle se
-		   termine avant que la page parte réellement. Écrire une version
-		   synchrone serait pire : elle bloquerait l'interface pour une garantie
-		   que le navigateur ne peut de toute façon pas tenir.
-		   `stats` porte le MÊME débounce de 500 ms que `store` (voir
-		   `dashboard/stats-store.ts`) : le même risque de perdre la dernière
-		   écriture s'il n'était pas vidé ici aussi. */
+		/* VIDER LES TAMPONS D'ÉCRITURE AVANT DE PARTIR. Trois écrivains différés
+		   vivent ici : `store` (journal de révision, 500 ms, `log-file.ts`),
+		   `stats` (même débounce, `dashboard/stats-store.ts`) et la page d'un
+		   quiz (600 ms, `dashboard/detail.ts`), tenue par l'écran courant.
+		   Deux sorties, deux mécanismes, parce qu'aucun ne couvre les deux :
+
+		   1. FERMETURE DE LA FENÊTRE (croix, Alt+F4, barre des tâches) :
+		      `onCloseRequested`. Vérifié dans `@tauri-apps/api@2.11.1`
+		      (`window.js`, `onCloseRequested`) : le gestionnaire est AWAITÉ, puis
+		      `destroy()` n'est appelé que s'il n'a pas fait `preventDefault()` —
+		      la fenêtre ne meurt donc qu'après notre `await`. CE `destroy()` EST
+		      UNE COMMANDE SOUMISE AUX PERMISSIONS (`plugin:window|destroy`), et
+		      `core:default` ne l'accorde PAS (relevé dans
+		      `src-tauri/gen/schemas/acl-manifests.json`, `core:window`
+		      `default_permission`) : d'où `core:window:allow-destroy` dans
+		      `src-tauri/capabilities/default.json`. Sans elle, Tauri intercepte
+		      la fermeture dès qu'un écouteur existe, `destroy()` est refusé, et
+		      la fenêtre ne se ferme PLUS JAMAIS — l'inverse du but. C'est le seul
+		      chemin qui sache ATTENDRE une écriture : la page d'un quiz rend une
+		      promesse résolue quand la note est écrite, et sans cette attente
+		      fermer juste après une frappe perdait la frappe, sans message.
+		      Ce qu'il NE couvre PAS : un `location.reload()`, la fin du
+		      processus par le système, et les deux stores, dont `destroy()`
+		      LANCE l'écriture sans rendre de promesse (limite antérieure à cette
+		      tranche, notée au rapport de la tâche 10).
+		   2. RECHARGEMENT (`location.reload()` dans `choisirDossier` /
+		      `onFoldersChanged`, depuis la page Réglages) : `beforeunload`, qui
+		      ne peut rien attendre — on ne fait que LANCER les écritures au plus
+		      tôt. Tolérable ici : ces deux chemins partent de la page Réglages,
+		      où la page d'un quiz n'est plus montée (son démontage a déjà lancé
+		      son écriture, bien avant que l'utilisateur ait choisi un dossier).
+		      Une version synchrone serait pire : elle bloquerait l'interface
+		      pour une garantie que le navigateur ne peut pas tenir.
+
+		   Les deux `destroy()` sont idempotents (`detruit`, minuterie annulée) :
+		   les appeler des deux côtés ne double aucune écriture. C'est le pendant
+		   du `this._reviewStore?.destroy()` de l'`onunload` du greffon. */
 		window.addEventListener("beforeunload", () => { store.destroy(); stats.destroy(); });
+		await getCurrentWindow().onCloseRequested(async () => {
+			try {
+				await demonter();
+			} catch (e) {
+				// Un démontage qui échoue ne doit pas retenir la fenêtre ouverte :
+				// on le dit, puis on laisse `destroy()` suivre.
+				console.warn(LOG_PREFIX, "démontage incomplet à la fermeture:", e);
+			}
+			store.destroy();
+			stats.destroy();
+		});
 		/* L'appariement des renommages que le surveillant n'a pas su nommer.
 		   BRANCHÉ CÔTÉ APPLICATION SEULEMENT : Obsidian émet un vrai `rename`, que
 		   le contrat transmet tel quel — le greffon n'a rien à deviner. */

@@ -8,8 +8,18 @@
    qui comptent : monter le rail, router entre les pages, assembler le `ctx`.
 
    Les PAGES, elles, sont les mêmes qu'Obsidian : `src/dashboard/nav.ts`,
-   `home.ts`, `quizzes.ts`. Une copie divergerait, et les deux tableaux de
-   bord finiraient par compter différemment.
+   `home.ts`, `quizzes.ts`, et depuis la tranche 3 la page d'un quiz,
+   `detail.ts` (questions à gauche, question courante à droite, bouton
+   « Editor »). Une copie divergerait, et les deux tableaux de bord
+   finiraient par compter différemment.
+
+   La page d'un quiz est une VUE de la coquille (`vueCourante === "detail"`),
+   exactement comme sous Obsidian (`dashboard.ts`, `case "detail"`), et non
+   un écran que `main.ts` monterait à la place de la coquille : le retour
+   doit rouvrir le DOSSIER du quiz (`quizzes.openFolderOfQuiz`), et c'est
+   l'instance de `createQuizzesHandlers` restée vivante qui sait le faire.
+   Seul le MOTEUR (jouer) remplace la coquille — c'est `main.ts` qui le
+   monte, par `deps.onOpenQuiz`.
 
    Ce module n'importe AUCUN CSS — même contrainte que les modules d'hôte :
    un import de CSS y tire les fontes MathLive, pour lesquelles le harnais
@@ -19,12 +29,16 @@
 ══════════════════════════════════════════════════════════ */
 
 import { ajouter } from "../../../../src/dom";
+import { t } from "../../../../src/i18n";
+import { currentHost } from "../../../../src/host/current";
 import { createNavHandlers } from "../../../../src/dashboard/nav";
 import { createHomeHandlers } from "../../../../src/dashboard/home";
 import { createQuizzesHandlers } from "../../../../src/dashboard/quizzes";
+import { createDetailHandlers } from "../../../../src/dashboard/detail";
 import { openIconPicker } from "../../../../src/dashboard/icon-picker";
-import { openCreateFolderModal } from "../../../../src/dashboard/folder-create";
-import { createSelect } from "../../../../src/dashboard/ui-select";
+import { openCreateFolderModal, openCreateQuizModal } from "../../../../src/dashboard/folder-create";
+import { buildModuleCardMenu, buildQuizCardMenu } from "../../../../src/dashboard/quiz-menu";
+import { createSelect, openActionMenu } from "../../../../src/dashboard/ui-select";
 import type { DashboardPageSettings, DashboardShellCtx, DashboardViewName } from "../../../../src/types/dashboard-ctx";
 import type { QuizIndexEntry, Scanner } from "../../../../src/dashboard/scanner";
 import type { StatsStore } from "../../../../src/dashboard/stats-store";
@@ -99,6 +113,20 @@ async function enregistrerReglagesPages(): Promise<void> {
  */
 let vueCourante: DashboardViewName = "home";
 
+/**
+ * Le quiz de la page « detail », et la vue d'où l'on y est entré — au niveau
+ * du MODULE pour la même raison que `vueCourante` : jouer un quiz depuis sa
+ * page remplace la coquille par le moteur, et le retour doit ramener SUR
+ * CETTE PAGE (comme sous Obsidian, où le tableau de bord reste sur le détail
+ * pendant que la note s'ouvre à côté), puis sa flèche retour au bon endroit.
+ * C'est le `selectedQuiz`/`previousView` de `QuizDashboardView`.
+ * `vuePrecedente` ne vaut jamais "detail" : elle n'est prise qu'en QUITTANT
+ * une autre vue (le greffon, lui, la recopie sans garde et peut ainsi
+ * renvoyer un détail vers lui-même).
+ */
+let quizSelectionne: QuizIndexEntry | null = null;
+let vuePrecedente: DashboardViewName = "home";
+
 export interface MonterDashboardDeps {
 	scanner: Scanner;
 	statsStore: StatsStore;
@@ -117,8 +145,14 @@ export interface MonterDashboardDeps {
  * `root` DOIT être vide à l'appel (comme pour `renderSettings`/`openQuizPage`) :
  * c'est `main.ts` qui vide le conteneur avant chaque changement d'écran, au
  * même titre que le `demonterCourant` qu'il appelle avant tout remontage.
+ *
+ * Le démontage rend une PROMESSE : il démonte tout de suite (abonnement au
+ * scanner, écoute clavier de la page d'un quiz), et se résout quand
+ * l'écriture que cette page tenait en attente est TERMINÉE. Un changement
+ * d'écran n'a pas à l'attendre ; la fermeture de la fenêtre, si — c'est
+ * `main.ts` qui décide lequel des deux il est.
  */
-export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): () => void {
+export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): () => Promise<void> {
 	const layout = ajouter(root, "div", "qbd-layout");
 	// `qbd-sidebar` et non `qbd-nav` : c'est la classe que `src/assets/css/
 	// dashboard/dashboard-base.css` habille (largeur, fond transparent) — le
@@ -156,22 +190,67 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 		},
 		createFolder: (map, quizzes, done) => openCreateFolderModal(ctx, map, quizzes, done),
 		renderGroupingSelect: (container, opts) => createSelect(container, opts),
-		/* openCardMenu, openModuleMenu, createQuiz, openQuizPath : ABSENTS À
-		   DESSEIN (tranche 3). Les trois premiers membres ci-dessus sont
-		   maintenant honorables : `icon-picker.ts` et `folder-create.ts` (tâches
-		   1-5) ne tirent plus Obsidian, et `createSelect` (ui-select.ts) non
-		   plus. Il ne reste d'absent que ce qui écrit sur le disque via l'éditeur
-		   ou ouvre une note — `openCardMenu`/`openModuleMenu` (trois de leurs
-		   quatre entrées), `createQuiz` (un quiz vierge sans éditeur pour
-		   l'éditer aussitôt n'est pas une fonctionnalité) et `openQuizPath`
-		   (aucun éditeur avant la tranche 3). Chaque membre reste optionnel côté
-		   `DashboardShellCtx` précisément pour que cette absence soit un état
-		   PRÉVU plutôt qu'une erreur de compilation. */
+		/* Les MÊMES bâtisseurs que le greffon (`src/dashboard.ts`), sur le
+		   même `ctx` : le menu « ⋯ » ne demande que `DashboardShellCtx` depuis
+		   la tranche 3 (tâche 9), et c'est l'hôte qui l'OUVRE (`openActionMenu`,
+		   portalé au `<body>`) avec le `rerender` de la page qui l'affiche. */
+		openCardMenu: (quiz, anchor, rerender) => {
+			openActionMenu(anchor, buildQuizCardMenu(ctx, rerender)(quiz));
+		},
+		openModuleMenu: (group, anchor, rerender, map) => {
+			openActionMenu(anchor, buildModuleCardMenu(ctx, rerender, map)(group));
+		},
+		// « Nouveau quiz » : une note vierge, puis sa page en ÉDITION par
+		// `openQuizPath` ci-dessous — l'éditeur existe désormais dans la fenêtre.
+		createQuiz: (folder, done) => openCreateQuizModal(ctx, folder, done),
+		/* La page d'un quiz PAR CHEMIN, pour une note que le catalogue n'a pas
+		   forcément encore. Son seul appelant (`createQuizInFolder`,
+		   folder-create.ts) l'appelle juste après `fs.write`, AVANT que le
+		   surveillant (débouncé de 300 ms, `host/fs.ts`) n'ait fait indexer la
+		   note par le scanner : passer par `scanner.getQuiz(path)` ici rendait
+		   `null` une fois sur une. La page, elle, pourrait s'ouvrir aussitôt
+		   (`loadQuizDraft` lit l'hôte, dont l'index est recalé à l'écriture —
+		   « LA FRAÎCHEUR APRÈS UNE ÉCRITURE », `src/host/types.ts`) ; mais son
+		   bouton « Start » et sa rangée de stats exigent une `QuizIndexEntry`.
+		   Plutôt que de l'attendre du surveillant ou de la FABRIQUER depuis le
+		   brouillon (une seconde façon de calculer `questions`/`quizType`/`items`,
+		   qui divergerait du scanner), on demande au scanner d'indexer CE
+		   fichier maintenant : `scanFile` est son chemin incrémental normal,
+		   celui que le surveillant emprunte, et le `HostFile` frais vient de
+		   `getFile`. L'évènement `create` qui arrivera ensuite retrouvera une
+		   entrée identique et ne notifiera rien (comparaison hors `mtime`).
+		   Mêmes Notices que le greffon (`openQuizPathInEditor`). */
+		openQuizPath: async (path, opts) => {
+			const file = currentHost().fs.getFile(path);
+			if (!file) { currentHost().ui.notice(t("dashboard.detail.fileNotFound")); return; }
+			await deps.scanner.scanFile(file);
+			const entry = deps.scanner.getQuiz(path);
+			if (!entry) { currentHost().ui.notice(t("dashboard.detail.noBlockInNote")); return; }
+			naviguer("detail", { quiz: entry, edit: opts?.edit });
+		},
+		/* shareQuiz, renameQuiz : ABSENTS À DESSEIN, et le menu « ⋯ » de la
+		   fenêtre a donc DEUX entrées (Éditer, Supprimer) là où le greffon en
+		   a quatre. `share.ts` livre par `child_process`/`electron.shell`, hors
+		   du contrat (spec §7 : hors chantier). `renameQuiz` exige de réécrire
+		   les wikilinks ENTRANTS ([[ancien nom]]), ce que seul l'index de liens
+		   d'Obsidian sait faire (`fileManager.renameFile`) ; le poser sur
+		   `HostFs.rename` déplacerait la note et casserait ces liens EN
+		   SILENCE — une entrée absente vaut mieux qu'une entrée qui ment
+		   (`types/dashboard-ctx.ts`). Les deux restent optionnels côté
+		   `DashboardShellCtx` pour que cette absence soit un état PRÉVU, pas
+		   une erreur de compilation. */
 	};
 
 	const nav = createNavHandlers(ctx);
 	const home = createHomeHandlers(ctx);
 	const quizzes = createQuizzesHandlers(ctx);
+	const detail = createDetailHandlers(ctx);
+
+	/** Demande « ouvrir en édition » posée par `naviguer("detail", { edit })`
+	    et consommée par le prochain `peindre()` — une seule fois, le mode
+	    appartient ensuite à l'utilisateur (`pendingEdit` du greffon). Locale
+	    au montage : elle est toujours consommée dans le même tour. */
+	let editionEnAttente = false;
 
 	/** Redessine la page COURANTE. Appelée à la navigation (entrée réelle) et
 	    par le scanner (simple rafraîchissement) — dans les deux cas le calcul
@@ -188,13 +267,42 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 				// (voir `createQuizzesHandlers`), pas sur celui de la coquille.
 				quizzes.render(contentEl);
 				break;
+			case "detail": {
+				const quiz = quizSelectionne;
+				if (!quiz) {
+					// Vue persistée sans quiz (ne devrait pas arriver : `naviguer`
+					// les pose ensemble) : l'accueil plutôt qu'un contenu vide.
+					vueCourante = "home";
+					nav.setActive("home");
+					home.render(contentEl, entering);
+					break;
+				}
+				const edit = editionEnAttente;
+				editionEnAttente = false;
+				/* La cible du retour est FIXÉE à l'arrivée sur la page, comme
+				   sous Obsidian (`dashboard.ts`, `case "detail"`) : lue au clic,
+				   elle aurait pu être écrasée entre-temps. */
+				const cible = vuePrecedente;
+				detail.render(contentEl, quiz, {
+					startEditing: edit,
+					onBack: () => {
+						naviguer(cible);
+						// Retour vers « Mes quiz » : le DOSSIER du quiz, pas la
+						// grille racine — `naviguer` vient de refermer le drill
+						// (`resetDrilldown`), d'où la réouverture, sur l'instance
+						// de `quizzes` restée vivante (même geste que le greffon).
+						if (cible === "quizzes") quizzes.openFolderOfQuiz(quiz.path);
+					},
+					isStale: () => vueCourante !== "detail",
+				});
+				break;
+			}
 			case "home":
 			default:
 				// Repli défensif : `naviguer` n'assigne jamais `vueCourante` à
-				// "detail" ou "ai" (voir plus bas) — ce `default` ne devrait
-				// donc jamais s'exécuter, mais un rendu de secours vaut mieux
-				// qu'un contenu vide si un futur appelant l'atteignait quand
-				// même.
+				// "ai" (voir plus bas) — ce `default` ne devrait donc jamais
+				// s'exécuter, mais un rendu de secours vaut mieux qu'un contenu
+				// vide si un futur appelant l'atteignait quand même.
 				home.render(contentEl, entering);
 				break;
 		}
@@ -203,16 +311,15 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	/**
 	 * Route un changement de vue demandé par une page (rail, carte, bouton).
 	 *
-	 * Deux cas que le brief d'origine ne couvrait pas, et qui casseraient
-	 * silencieusement sans ce garde-fou (erreur de plan, corrigée ici) :
-	 *
-	 * - `"detail"` : `home.ts` (carte de quiz, héros « Reprendre ») appelle
-	 *   `ctx.navigate("detail", { quiz })` au clic sur une carte — l'ancienne
-	 *   page « détail » du greffon (questions à gauche, édition à droite)
-	 *   dépend du `DashboardCtx` complet (app, plugin, menus…) et n'a pas
-	 *   d'équivalent ici. Le plus proche que l'application sache faire est
-	 *   JOUER ce quiz, exactement ce que fait déjà son bouton lecture — sans
-	 *   ce cas, le clic sur une carte serait silencieusement mort.
+	 * - `"detail"` : la page d'un quiz (`detail.ts`, la même que sous Obsidian),
+	 *   demandée par une carte (`home.ts`, `quizzes-render.ts`), l'entrée
+	 *   « Éditer » du menu « ⋯ » (`edit: true`) ou `openQuizPath` après
+	 *   « Nouveau quiz ». Avant la tranche 3 ce cas court-circuitait vers
+	 *   `deps.onOpenQuiz` (jouer), faute d'éditeur portable ; JOUER est
+	 *   désormais le bouton « Start » de cette page, par `ctx.openQuiz`.
+	 *   Sans quiz dans `data`, rien ne se passe — il n'y a pas de page à
+	 *   montrer, et le greffon garde alors son `selectedQuiz` précédent, ce qui
+	 *   afficherait ICI un quiz que l'utilisateur n'a pas demandé.
 	 * - `"ai"` : le bouton « Générer » de l'accueil (CTA d'en-tête ET
 	 *   onboarding) appelle `ctx.navigate("ai")` SANS jamais consulter
 	 *   `ctx.canOpen` — `canOpen` ne gouverne que l'état du rail (grisé,
@@ -225,7 +332,15 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	 */
 	function naviguer(vue: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void {
 		if (vue === "detail") {
-			if (data?.quiz) deps.onOpenQuiz(data.quiz);
+			if (!data?.quiz) return;
+			quizSelectionne = data.quiz;
+			editionEnAttente = !!data.edit;
+			if (vueCourante !== "detail") vuePrecedente = vueCourante;
+			vueCourante = "detail";
+			// Aucun bouton du rail ne porte "detail" : `setActive` éteint donc
+			// la carte active, comme sous Obsidian.
+			nav.setActive("detail");
+			peindre();
 			return;
 		}
 		if (!ctx.canOpen(vue)) return;
@@ -249,17 +364,26 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	// false` via `peindre()` (dernierePeinte déjà à jour) : un re-render du
 	// scanner ne doit pas rejouer la transition d'entrée, sinon la page
 	// clignote à chaque sauvegarde de note.
-	const desabonner = deps.scanner.onChange(() => peindre());
+	// SAUF la page d'un quiz (même exclusion que le greffon) : elle ÉCRIT dans
+	// la note, donc réveille le scanner, et se ferait repeindre sous les
+	// doigts à chaque frappe — brouillon et mode d'édition perdus.
+	const desabonner = deps.scanner.onChange(() => { if (vueCourante !== "detail") peindre(); });
 
 	/* Le retour DÉSABONNE, et l'appelant DOIT l'invoquer avant tout
 	   remontage — même contrat que `renderSettings`/`openQuizPage` : sans lui,
 	   chaque aller-retour empilerait un abonnement de plus, et une
 	   modification de note redessinerait la page courante autant de fois
-	   qu'elle a été montée. */
-	let demonte = false;
+	   qu'elle a été montée.
+	   Il DÉMONTE aussi la page d'un quiz (`detail.dispose()`) : elle tient une
+	   écoute clavier sur le `document` et, peut-être, une écriture en attente
+	   — l'oublier fuyait une instance par ouverture. Le démontage est fait
+	   avant le premier `await` ; seule l'écriture est attendue. Idempotent :
+	   un second appel rend une promesse déjà résolue. */
+	let demonte: Promise<void> | null = null;
 	return () => {
-		if (demonte) return;
-		demonte = true;
+		if (demonte) return demonte;
 		desabonner();
+		demonte = detail.dispose();
+		return demonte;
 	};
 }

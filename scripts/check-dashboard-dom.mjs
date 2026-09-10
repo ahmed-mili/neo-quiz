@@ -13,8 +13,10 @@
  * repliables, magasin de stats), les trois modules purs qu'ils ont fait
  * naître en cours de route (`module-map-note.ts`, tâche 2 ; `folder-archive.ts`
  * et `module-icons.ts`, tâche 6, extraits pour que l'app puisse importer ces
- * pages sans tirer `ui-select.ts`/`icon-picker.ts`), et les cinq fichiers
- * libérés en tranche 2.6. Contrairement à `RESTANTS`, cette liste ne peut que
+ * pages sans tirer `ui-select.ts`/`icon-picker.ts`), les cinq fichiers
+ * libérés en tranche 2.6, et ceux de la tranche 3 (l'entrée/sortie du bloc,
+ * puis les trois satellites de la page « quiz »). Contrairement à `RESTANTS`,
+ * cette liste ne peut que
  * GRANDIR : un fichier qui y figure sans plus être libre (import d'Obsidian
  * retrouvé, extension DOM réintroduite) fait échouer le contrôle au lieu d'en
  * sortir en silence.
@@ -55,6 +57,9 @@ const LIBERES = [
 	"src/dashboard/folder-create.ts",
 	"src/dashboard/module-edit.ts",
 	"src/dashboard/detail-io.ts",
+	"src/dashboard/detail-exam.ts",
+	"src/dashboard/detail-form-bridge.ts",
+	"src/dashboard/detail-question.ts",
 	"src/editor/utils.ts",
 ];
 

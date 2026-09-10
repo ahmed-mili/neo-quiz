@@ -617,8 +617,6 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		const content = slide.createDiv({ cls: "qbd-qz-panel-body" });
 		if (editing) {
 			renderQuestionEdit(content, q, {
-				app: ctx.app,
-				plugin: ctx.plugin,
 				onChange: () => {
 					scheduleSave();
 					// Rafraîchir les LIBELLÉS, pas reconstruire la liste : à chaque

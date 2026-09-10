@@ -1,4 +1,5 @@
-import { setIcon } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
 import { createSelect } from "./ui-select";
 import type { EditorExamOptions } from "../types/editor-ctx";
@@ -47,10 +48,10 @@ export function renderExamPanel(parent: HTMLElement, opts: ExamPanelOptions): vo
 	const current = opts.get();
 	const mode: QuizMode = current?.mode || (current?.enabled ? "exam" : "quiz");
 
-	const box = parent.createDiv({ cls: "qbd-qz-exam" });
-	const head = box.createDiv({ cls: "qbd-qz-exam-head" });
-	setIcon(head.createSpan({ cls: "qbd-qz-exam-icon" }), "graduation-cap");
-	head.createSpan({ cls: "qbd-qz-exam-title", text: t("dashboard.quiz.modeTitle") });
+	const box = ajouter(parent, "div", "qbd-qz-exam");
+	const head = ajouter(box, "div", "qbd-qz-exam-head");
+	currentHost().ui.setIcon(ajouter(head, "span", "qbd-qz-exam-icon"), "graduation-cap");
+	ajouter(head, "span", "qbd-qz-exam-title", t("dashboard.quiz.modeTitle"));
 
 	createSelect(box, {
 		value: mode,
@@ -85,12 +86,10 @@ export function renderExamPanel(parent: HTMLElement, opts: ExamPanelOptions): vo
 		},
 	});
 
-	box.createDiv({
-		cls: "qbd-qz-exam-help",
-		text: t(mode === "lesson" ? "dashboard.quiz.modeLessonHelp"
+	ajouter(box, "div", "qbd-qz-exam-help",
+		t(mode === "lesson" ? "dashboard.quiz.modeLessonHelp"
 			: mode === "exam" ? "dashboard.quiz.modeExamHelp"
-			: "dashboard.quiz.modeQuizHelp"),
-	});
+			: "dashboard.quiz.modeQuizHelp"));
 
 	// Le chrono : toujours pour l'examen, en option pour la leçon
 	// (bouton « Passer l'examen »). Rien à régler en mode quiz.
@@ -107,9 +106,10 @@ export function renderExamPanel(parent: HTMLElement, opts: ExamPanelOptions): vo
 		if (!cfg.enabled) return;
 	}
 
-	const durWrap = box.createDiv({ cls: "qbd-qz-exam-field" });
-	durWrap.createDiv({ cls: "qbd-qz-field-label", text: t("dashboard.quiz.duration") });
-	const dur = durWrap.createEl("input", { cls: "qbd-qz-field-input qbd-qz-field-input--single", type: "number" });
+	const durWrap = ajouter(box, "div", "qbd-qz-exam-field");
+	ajouter(durWrap, "div", "qbd-qz-field-label", t("dashboard.quiz.duration"));
+	const dur = ajouter(durWrap, "input", "qbd-qz-field-input qbd-qz-field-input--single");
+	dur.type = "number";
 	dur.value = String(cfg.durationMinutes);
 	dur.min = "1";
 	dur.max = "180";
@@ -132,9 +132,10 @@ export function renderExamPanel(parent: HTMLElement, opts: ExamPanelOptions): vo
 }
 
 function checkbox(parent: HTMLElement, label: string, checked: boolean, onToggle: (on: boolean) => void): void {
-	const row = parent.createEl("label", { cls: "qbd-qz-exam-check" });
-	const input = row.createEl("input", { type: "checkbox" });
+	const row = ajouter(parent, "label", "qbd-qz-exam-check");
+	const input = ajouter(row, "input");
+	input.type = "checkbox";
 	input.checked = checked;
-	row.createSpan({ text: label });
+	ajouter(row, "span", undefined, label);
 	input.addEventListener("change", () => onToggle(input.checked));
 }

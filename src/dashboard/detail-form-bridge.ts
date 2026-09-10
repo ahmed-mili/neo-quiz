@@ -1,4 +1,3 @@
-import type { App, Plugin } from "obsidian";
 import { Q_TYPES, _setIcon, _iconSpan, md2html } from "../editor/utils";
 import type { DraftQuestion } from "../editor/utils";
 import { createEditorFormHandlers } from "../editor/editor-form";
@@ -22,8 +21,6 @@ import type { EditorCtx } from "../types/editor-ctx";
 ══════════════════════════════════════════════════════════ */
 
 export interface FormBridgeOptions {
-	app: App;
-	plugin: Plugin;
 	/** Une donnée a changé : persister (débounce côté appelant). */
 	onChange(): void;
 	/** L'ajout/retrait d'un champ a changé la structure : repeindre le panneau. */
@@ -65,8 +62,6 @@ export function createFormBridge(opts: FormBridgeOptions): FormBridge {
 	   quand même pointé sur un nœud détaché plutôt que laissé indéfini, pour
 	   qu'un futur appel échoue visiblement au lieu d'écrire dans le vide. */
 	const view = {
-		app: opts.app,
-		plugin: opts.plugin,
 		editorInnerEl: document.createElement("div"),
 		sourcePath: opts.sourcePath,
 		/* Les quatre crochets mènent tous à la persistance, sauf `renderCode`
@@ -81,21 +76,20 @@ export function createFormBridge(opts: FormBridgeOptions): FormBridge {
 		render: () => opts.onStructureChange(),
 	};
 
-	// Cast unique et documenté : `EditorCtx` décrit le god-object COMPLET de
-	// l'éditeur (17 slots), dont editor-form n'utilise que les sept champs
-	// ci-dessous — vérifiable d'un `grep "ctx\."` sur editor-form.ts. Fournir
-	// les autres à vide serait plus trompeur que ce cast.
-	const ctx = {
+	/* Contexte COMPLET, et non plus un cast : `EditorCtx` ne décrit plus le
+	   god-object de l'éditeur mais les sept champs que `editor-form.ts` lit
+	   vraiment, et le pont les fournit tous. C'est l'ancien
+	   `as unknown as EditorCtx` qui avait laissé `app` et `plugin` survivre ici
+	   après que le contrat les eut perdus : une annotation les fait rougir. */
+	const ctx: EditorCtx = {
 		view,
-		app: opts.app,
-		plugin: opts.plugin,
-		questions: [] as DraftQuestion[],
+		questions: [],
 		activeIdx: 0,
 		Q_TYPES,
 		_setIcon,
 		_iconSpan,
 		md2html,
-	} as unknown as EditorCtx;
+	};
 
 	const handlers = createEditorFormHandlers(ctx);
 

@@ -1,5 +1,5 @@
-import { setIcon } from "obsidian";
-import type { App, Plugin } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { DraftQuestion } from "../editor/utils";
 import { renderQuizPreviewCard } from "../editor/question-preview";
@@ -44,8 +44,6 @@ export function renderQuestionView(parent: HTMLElement, q: DraftQuestion, index:
 /* ── Édition ──────────────────────────────────────────────── */
 
 export interface EditCallbacks {
-	app: App;
-	plugin: Plugin;
 	/** Une donnée a changé : persister (débounce côté appelant) + rafraîchir la liste. */
 	onChange(): void;
 	/** Un ajout/retrait a changé la STRUCTURE : re-render du panneau. */
@@ -54,8 +52,6 @@ export interface EditCallbacks {
 
 export function renderQuestionEdit(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, sourcePath?: string): void {
 	const bridge = createFormBridge({
-		app: cb.app,
-		plugin: cb.plugin,
 		onChange: cb.onChange,
 		onStructureChange: cb.onStructureChange,
 		sourcePath,
@@ -68,7 +64,7 @@ export function renderQuestionEdit(parent: HTMLElement, q: DraftQuestion, cb: Ed
 	// Rendus par le formulaire de l'éditeur : mêmes classes, mêmes règles
 	// (jamais moins de deux réponses, au moins une bonne, réindexation à la
 	// suppression) que ce que produisait l'éditeur en onglet.
-	const typeBox = parent.createDiv({ cls: "qbd-qz-type-box" });
+	const typeBox = ajouter(parent, "div", "qbd-qz-type-box");
 	bridge.renderTypeFields(typeBox, q);
 
 	renderExtras(parent, q, cb, bridge);
@@ -77,9 +73,10 @@ export function renderQuestionEdit(parent: HTMLElement, q: DraftQuestion, cb: Ed
 /* ── Titre et énoncé ──────────────────────────────────────── */
 
 function renderTitleField(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks): void {
-	const field = parent.createDiv({ cls: "qbd-qz-field" });
-	field.createDiv({ cls: "qbd-qz-field-label", text: t("dashboard.quiz.editTitle") });
-	const input = field.createEl("input", { cls: "qbd-qz-field-input qbd-qz-field-input--single", type: "text" });
+	const field = ajouter(parent, "div", "qbd-qz-field");
+	ajouter(field, "div", "qbd-qz-field-label", t("dashboard.quiz.editTitle"));
+	const input = ajouter(field, "input", "qbd-qz-field-input qbd-qz-field-input--single");
+	input.type = "text";
 	input.value = q.title || "";
 	input.placeholder = t("dashboard.quiz.editTitlePlaceholder");
 	input.addEventListener("input", () => {
@@ -99,11 +96,9 @@ function renderPromptField(parent: HTMLElement, q: DraftQuestion, cb: EditCallba
 	// raccourci ``` + Entrée et le collage d'image vers le vault — trois
 	// capacités que la version maison n'avait pas.
 	const rich = isRichHtml(q._promptHtml);
-	const field = parent.createDiv({ cls: "qbd-qz-field qbd-qz-field--rich" });
-	field.createDiv({
-		cls: "qbd-qz-field-label",
-		text: t(rich ? "dashboard.quiz.editPromptHtml" : "dashboard.quiz.editPrompt"),
-	});
+	const field = ajouter(parent, "div", "qbd-qz-field qbd-qz-field--rich");
+	ajouter(field, "div", "qbd-qz-field-label",
+		t(rich ? "dashboard.quiz.editPromptHtml" : "dashboard.quiz.editPrompt"));
 
 	const value = rich
 		? (q._promptHtml || "").replace(/<br\s*\/?>/gi, "\n")
@@ -130,7 +125,7 @@ function renderPromptField(parent: HTMLElement, q: DraftQuestion, cb: EditCallba
 		cb.onChange();
 	});
 
-	if (rich) field.createDiv({ cls: "qbd-qz-section-help", text: t("dashboard.quiz.editPromptHtmlHint") });
+	if (rich) ajouter(field, "div", "qbd-qz-section-help", t("dashboard.quiz.editPromptHtmlHint"));
 }
 
 /* ── Sections optionnelles ────────────────────────────────── */
@@ -154,7 +149,7 @@ function renderExtras(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, 
 	// ── Document (support de compréhension) ──
 	const hasDoc = !!(readExtra("passage") || readExtra("passageId"));
 	const doc = section(parent, "book-open-text", t("editor.passage.section"), hasDoc);
-	doc.createDiv({ cls: "qbd-qz-section-help", text: t("editor.passage.help") });
+	ajouter(doc, "div", "qbd-qz-section-help", t("editor.passage.help"));
 	bridge.field(doc, t("editor.passage.textLabel"), readExtra("passage"), t("editor.passage.textPlaceholder"), true,
 		v => writeExtra("passage", v));
 	bridge.field(doc, t("editor.passage.titleLabel"), readExtra("passageTitle"), t("editor.passage.titlePlaceholder"), false,
@@ -179,7 +174,7 @@ function renderExtras(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, 
 	   vide et l'export continue de n'écrire que `lessonHtml`, inchangé. */
 	const richLesson = isRichHtml(q._lessonHtml);
 	const lesson = section(parent, "graduation-cap", t("editor.lesson.section"), !!(q.lesson || q._lessonHtml));
-	lesson.createDiv({ cls: "qbd-qz-section-help", text: t("editor.lesson.help") });
+	ajouter(lesson, "div", "qbd-qz-section-help", t("editor.lesson.help"));
 	const lessonAffichage = richLesson ? (q._lessonHtml || "")
 		: (q.lesson || (q._lessonHtml ? _htmlToText(q._lessonHtml) : ""));
 	const lessonValeur = lessonAffichage.replace(/<br\s*\/?>/gi, "\n");
@@ -195,7 +190,7 @@ function renderExtras(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, 
 			}
 			cb.onChange();
 		});
-	if (richLesson) lesson.createDiv({ cls: "qbd-qz-section-help", text: t("dashboard.quiz.editPromptHtmlHint") });
+	if (richLesson) ajouter(lesson, "div", "qbd-qz-section-help", t("dashboard.quiz.editPromptHtmlHint"));
 
 	// ── Bouton ressource ──
 	renderResourceSection(parent, q, cb, bridge);
@@ -229,7 +224,7 @@ function renderExtras(parent: HTMLElement, q: DraftQuestion, cb: EditCallbacks, 
 		}
 		cb.onChange();
 	});
-	if (richExplain) explain.createDiv({ cls: "qbd-qz-section-help", text: t("dashboard.quiz.editPromptHtmlHint") });
+	if (richExplain) ajouter(explain, "div", "qbd-qz-section-help", t("dashboard.quiz.editPromptHtmlHint"));
 }
 
 /** Le bouton « ressource » n'existe que s'il est activé : son interrupteur
@@ -244,11 +239,11 @@ function renderResourceSection(parent: HTMLElement, q: DraftQuestion, cb: EditCa
 	const head = box.previousElementSibling as HTMLElement | null;
 
 	if (head) {
-		const toggle = head.createEl("button", {
-			cls: "qbd-qz-section-toggle" + (has ? " is-on" : ""),
-			attr: { type: "button", "aria-pressed": String(has), title: t(has ? "editor.toggle.disable" : "editor.toggle.enable") },
-		});
-		toggle.createSpan({ cls: "qbd-qz-section-toggle-dot" });
+		const toggle = ajouter(head, "button", "qbd-qz-section-toggle" + (has ? " is-on" : ""));
+		toggle.type = "button";
+		toggle.setAttribute("aria-pressed", String(has));
+		toggle.title = t(has ? "editor.toggle.disable" : "editor.toggle.enable");
+		ajouter(toggle, "span", "qbd-qz-section-toggle-dot");
 		toggle.addEventListener("click", (e) => {
 			// L'en-tête ouvre/ferme la section : l'interrupteur, lui, active la
 			// ressource — sans stopPropagation le clic ferait les deux.
@@ -268,25 +263,28 @@ function renderResourceSection(parent: HTMLElement, q: DraftQuestion, cb: EditCa
 		v => { rb.label = v; cb.onChange(); });
 	bridge.field(box, t("editor.form.resourceFileName"), rb.fileName, t("editor.form.resourceFilePlaceholder"), false,
 		v => { rb.fileName = v; cb.onChange(); });
-	box.createDiv({ cls: "qbd-qz-section-help", text: t("editor.form.resourceHelp") });
+	ajouter(box, "div", "qbd-qz-section-help", t("editor.form.resourceHelp"));
 }
 
 /** Section repliable : en-tête cliquable + corps. Renvoie le CORPS (l'appelant
     y écrit ses champs) ; l'en-tête se retrouve par `previousElementSibling`
     quand il faut y greffer un interrupteur. */
 function section(parent: HTMLElement, icon: string, label: string, open: boolean): HTMLElement {
-	const wrap = parent.createDiv({ cls: "qbd-qz-section" + (open ? "" : " is-collapsed") });
-	const head = wrap.createEl("button", { cls: "qbd-qz-section-head", attr: { type: "button", "aria-expanded": String(open) } });
+	const wrap = ajouter(parent, "div", "qbd-qz-section" + (open ? "" : " is-collapsed"));
+	const head = ajouter(wrap, "button", "qbd-qz-section-head");
+	head.type = "button";
+	head.setAttribute("aria-expanded", String(open));
 	// UN seul glyphe, tourné par CSS : deux icônes échangées par setIcon() ne
 	// peuvent pas transitionner (cf. obsidian:plugin-dev §6 ter).
-	setIcon(head.createSpan({ cls: "qbd-qz-section-chevron" }), "chevron-right");
-	setIcon(head.createSpan({ cls: "qbd-qz-section-icon" }), icon);
-	head.createSpan({ cls: "qbd-qz-section-label", text: label });
+	const ui = currentHost().ui;
+	ui.setIcon(ajouter(head, "span", "qbd-qz-section-chevron"), "chevron-right");
+	ui.setIcon(ajouter(head, "span", "qbd-qz-section-icon"), icon);
+	ajouter(head, "span", "qbd-qz-section-label", label);
 
 	// Corps TOUJOURS monté, réduit à 0 par la classe : sans lui il n'y aurait
 	// rien à révéler à l'ouverture.
-	const body = wrap.createDiv({ cls: "qbd-qz-section-body" });
-	const inner = body.createDiv({ cls: "qbd-qz-section-inner" });
+	const body = ajouter(wrap, "div", "qbd-qz-section-body");
+	const inner = ajouter(body, "div", "qbd-qz-section-inner");
 
 	head.addEventListener("click", () => {
 		const collapsed = wrap.classList.contains("is-collapsed");

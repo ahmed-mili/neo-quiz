@@ -21,6 +21,15 @@
  * désormais (`HostPaths.attachmentPathFor`, `HostFs.writeBinary`). Les garder
  * aurait obligé la fenêtre à fabriquer une fausse `App` d'Obsidian pour
  * satisfaire un type dont plus personne ne lisait le contenu.
+ *
+ * Conséquence pour QUI LIRA CE FICHIER ENSUITE : le pont satisfait désormais
+ * ce contrat SANS cast. Il portait un `as unknown as EditorCtx`, justifié à
+ * l'époque où `EditorCtx` décrivait dix-sept slots dont le formulaire n'en
+ * lisait que sept ; ce cast est précisément ce qui avait laissé `app` et
+ * `plugin` survivre dans le pont après que ces deux interfaces les eurent
+ * perdus. Le contrat et l'objet fourni coïncidant enfin, l'annotation
+ * remplace le cast — et tout champ ajouté ici fera désormais rougir
+ * `npm run check` chez l'appelant au lieu d'être silencieusement absent.
  */
 
 import type { ExamOptions } from "./quiz";

@@ -95,44 +95,51 @@ function premierEcart(obtenu, attendu) {
 		+ ", obtenu " + JSON.stringify(obtenu.slice(i, i + 60));
 }
 
-await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], async (io, exp) => {
+/* TROIS entrées, et `splitting` fait de `src/host/current.ts` un chunk PARTAGÉ
+   (cf. scripts/lib/load-src.mjs) : l'hôte installé par ce script est donc bien
+   celui que `detail-io.ts` voit. Un build par entrée donnerait à chacune sa
+   copie du singleton, et `currentHost()` jetterait côté module vérifié. */
+await withSrcModule(
+	["src/dashboard/detail-io.ts", "src/host/current.ts", "src/editor/export.ts"],
+	async (io, hote, exp) => {
 	const r = makeReporter("Écriture d'un bloc");
 
-	/* `loadQuizDraft` discrimine encore par `file instanceof TFile`. Le bouchon
-	   `obsidian` inline sa classe dans le bundle : `globalThis.__stubTFile` est
-	   la seule poignée qui permette d'en fabriquer une instance, et sans elle
-	   la branche heureuse répondrait « fichier introuvable » quoi qu'on donne
-	   (cf. scripts/lib/load-src.mjs). */
-	const ClasseTFile = globalThis.__stubTFile;
-	if (typeof ClasseTFile !== "function") {
-		r.check("le bouchon obsidian expose sa classe TFile", typeof ClasseTFile, "function");
-		r.done();
-		return;
-	}
-
-	/** Un vault en mémoire : un chemin, un contenu, un `TFile` que le code
-	    partagé reconnaît. */
+	/** Un faux HÔTE sur une carte en mémoire : un chemin, un contenu, une date.
+	    Seuls `getFile`, `read` et `process` sont fournis — tout autre membre
+	    atteint jetterait bruyamment, ce qui vaut mieux qu'un double muet. */
 	function vault(contenu, { chemin = "Cours/ch1.md", mtime = 1000, process } = {}) {
 		const nom = chemin.split("/").pop();
-		const file = Object.assign(Object.create(ClasseTFile.prototype), {
+		const etat = { contenu, chemin, mtime };
+		etat.file = {
 			path: chemin,
 			name: nom,
 			basename: nom.replace(/\.[^.]+$/, ""),
 			extension: "md",
-			stat: { mtime },
-		});
-		const etat = { contenu, file, chemin };
-		etat.app = {
-			vault: {
-				getAbstractFileByPath: (p) => (p === chemin ? file : null),
-				read: async () => etat.contenu,
-				/* `process` par défaut : une seule invocation du rappel. Les cas
-				   qui éprouvent le REJEU passent le leur. */
-				process: process
-					? (f, mutate) => process(etat, mutate)
-					: async (f, mutate) => { etat.contenu = mutate(etat.contenu); },
-			},
+			get mtime() { return etat.mtime; },
 		};
+		hote.installHost({
+			fs: {
+				/* Un instantané FIGÉ à chaque appel, comme les vrais hôtes : le
+				   `HostFile` rendu porte la date du moment, et `detail-io.ts` ne
+				   doit jamais s'attendre à ce que celui qu'il tient se mette à
+				   jour tout seul. */
+				getFile: (p) => (p === chemin ? { ...etat.file, mtime: etat.mtime } : null),
+				read: async (p) => {
+					if (p !== chemin) throw new Error("ENOENT: " + p);
+					return etat.contenu;
+				},
+				/* `process` par défaut : une seule invocation du rappel. Les cas
+				   qui éprouvent le REJEU passent le leur. Toute écriture fait
+				   AVANCER la date, et `getFile` la rend aussitôt — c'est « LA
+				   FRAÎCHEUR APRÈS UNE ÉCRITURE » du contrat, sans laquelle
+				   `saveQuizDraft` mémoriserait une date périmée. */
+				process: async (p, mutate) => {
+					if (process) await process(etat, mutate);
+					else etat.contenu = mutate(etat.contenu);
+					etat.mtime += 5000;
+				},
+			},
+		});
 		return etat;
 	}
 
@@ -140,15 +147,15 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 
 	{
 		const v = vault(note());
-		const lu = await io.loadQuizDraft(v.app, v.chemin);
+		const lu = await io.loadQuizDraft(v.chemin);
 		r.check("1. lecture d'un bloc réel", typeof lu, "object");
-		const ecrit = await io.saveQuizDraft(v.app, lu);
+		const ecrit = await io.saveQuizDraft(lu);
 		r.check("1. la sauvegarde annonce un succès", ecrit, true);
 		/* La RELECTURE, et c'est tout l'objet du cas : un bloc que `exportAll`
 		   produirait mal ne se relit plus, la sauvegarde est refusée EN SILENCE
 		   (garde `parseQuizSource(source)` de saveQuizDraft) et le travail de
 		   l'utilisateur reste en mémoire jusqu'à la fermeture d'Obsidian. */
-		const relu = await io.loadQuizDraft(v.app, v.chemin);
+		const relu = await io.loadQuizDraft(v.chemin);
 		r.check("1. le bloc réécrit se relit", typeof relu, "object");
 		r.check("1. la question survit à l'aller-retour",
 			typeof relu === "object" ? relu.questions.length : relu, 1);
@@ -160,9 +167,9 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 
 	{
 		const v = vault(note({ eol: CRLF }));
-		const lu = await io.loadQuizDraft(v.app, v.chemin);
+		const lu = await io.loadQuizDraft(v.chemin);
 		lu.questions[0].prompt = "Enonce modifie";
-		r.check("2. la sauvegarde d'une note CRLF réussit", await io.saveQuizDraft(v.app, lu), true);
+		r.check("2. la sauvegarde d'une note CRLF réussit", await io.saveQuizDraft(lu), true);
 		/* Une note Windows (ou importée, ou synchronisée) est en CRLF ; y écrire
 		   un bloc en LF la rend MIXTE, et le moindre changement d'une question
 		   apparaît comme une réécriture du bloc entier dans un diff ou une
@@ -176,16 +183,16 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 
 	{
 		const v = vault(note({ eol: CRLF }));
-		const lu = await io.loadQuizDraft(v.app, v.chemin);
+		const lu = await io.loadQuizDraft(v.chemin);
 		lu.questions[0].prompt = "Premiere frappe";
-		r.check("3. la première sauvegarde passe", await io.saveQuizDraft(v.app, lu), true);
+		r.check("3. la première sauvegarde passe", await io.saveQuizDraft(lu), true);
 		lu.questions[0].prompt = "Seconde frappe";
 		/* LE cas : mémoriser la version LF de l'export comme témoin du prochain
 		   compare-and-swap fait échouer la sauvegarde SUIVANTE dans une note
 		   CRLF — la première frappe passe, la seconde est perdue EN SILENCE
 		   (revue codex 2026-07-31, régression du correctif CRLF de la même
 		   nuit). */
-		r.check("3. la seconde sauvegarde passe aussi", await io.saveQuizDraft(v.app, lu), true);
+		r.check("3. la seconde sauvegarde passe aussi", await io.saveQuizDraft(lu), true);
 		r.check("3. la note porte bien la seconde frappe",
 			v.contenu.includes("Seconde frappe"), true);
 	}
@@ -195,8 +202,8 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 	{
 		const ouverture = OUVERTURE + " data-owner=alice";
 		const v = vault(note({ ouverture }));
-		const lu = await io.loadQuizDraft(v.app, v.chemin);
-		r.check("4. la sauvegarde passe", await io.saveQuizDraft(v.app, lu), true);
+		const lu = await io.loadQuizDraft(v.chemin);
+		r.check("4. la sauvegarde passe", await io.saveQuizDraft(lu), true);
 		/* Réécrire une clôture CANONIQUE effaçait un ` ```quiz-blocks
 		   data-owner=alice ` sans que personne ne l'ait demandé, et le
 		   compare-and-swap ne pouvait pas s'en apercevoir : il ne compare que
@@ -209,8 +216,8 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 	{
 		const fermeture = "  " + FENCE;
 		const v = vault(note({ fermeture }));
-		const lu = await io.loadQuizDraft(v.app, v.chemin);
-		r.check("5. la sauvegarde passe", await io.saveQuizDraft(v.app, lu), true);
+		const lu = await io.loadQuizDraft(v.chemin);
+		r.check("5. la sauvegarde passe", await io.saveQuizDraft(lu), true);
 		// Même défaut que le cas 4, dans un bloc imbriqué dans une liste.
 		r.check("5. la fermante garde son indentation",
 			v.contenu.includes(LF + fermeture), true);
@@ -220,7 +227,7 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 
 	{
 		const v = vault(note());
-		const lu = await io.loadQuizDraft(v.app, v.chemin);
+		const lu = await io.loadQuizDraft(v.chemin);
 		lu.questions[0].prompt = "Ma frappe";
 		/* QUELQU'UN D'AUTRE passe par là entre la lecture et l'écriture : une
 		   seconde page ouverte sur la même note, l'éditeur markdown, une
@@ -230,7 +237,7 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 		const dehors = note({ source: SOURCE.replace("Unite", "Titre change dehors") });
 		v.contenu = dehors;
 		r.check("6. la sauvegarde repart bredouille, et le DIT",
-			await io.saveQuizDraft(v.app, lu), false);
+			await io.saveQuizDraft(lu), false);
 		r.check("6. la note garde la version de l'autre écrivain", v.contenu, dehors);
 	}
 
@@ -247,10 +254,10 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 				etat.contenu = m(etat.contenu);  // celui qui fait foi
 			},
 		});
-		const lu = await io.loadQuizDraft(v.app, v.chemin);
+		const lu = await io.loadQuizDraft(v.chemin);
 		lu.questions[0].prompt = "Frappe apres rejeu";
 		r.check("6bis. un rejeu neutre laisse la sauvegarde réussir",
-			await io.saveQuizDraft(v.app, lu), true);
+			await io.saveQuizDraft(lu), true);
 		r.check("6bis. le rappel a bien été invoqué DEUX fois", rappels, 2);
 		r.check("6bis. la note porte la frappe", v.contenu.includes("Frappe apres rejeu"), true);
 	}
@@ -267,10 +274,10 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 				etat.contenu = mutate(dehors); // second : quelqu'un est passé
 			},
 		});
-		const lu = await io.loadQuizDraft(v.app, v.chemin);
+		const lu = await io.loadQuizDraft(v.chemin);
 		lu.questions[0].prompt = "Ma frappe";
 		r.check("6ter. un essai abandonné ne survit pas au rejeu",
-			await io.saveQuizDraft(v.app, lu), false);
+			await io.saveQuizDraft(lu), false);
 		r.check("6ter. la note garde la version de l'autre écrivain", v.contenu, dehors);
 	}
 
@@ -284,9 +291,9 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 		   « $1$ » aurait réinjecté la source entière du bloc à sa place. */
 		const v = vault(note());
 		const avant = v.contenu;
-		const lu = await io.loadQuizDraft(v.app, v.chemin);
+		const lu = await io.loadQuizDraft(v.chemin);
 		r.check("7. l'énoncé piégé est bien lu tel quel", lu.questions[0].prompt, ENONCE_PIEGE);
-		r.check("7. la sauvegarde passe", await io.saveQuizDraft(v.app, lu), true);
+		r.check("7. la sauvegarde passe", await io.saveQuizDraft(lu), true);
 
 		/* Le bloc ATTENDU, composé par DÉCOUPE de chaînes, jamais par
 		   `String.replace` — l'outil en cause ne peut pas servir de témoin. */
@@ -320,10 +327,50 @@ await withSrcModule(["src/dashboard/detail-io.ts", "src/editor/export.ts"], asyn
 		// croit son quiz perdu. Chaque cause a son mot.
 		const sansBloc = vault("# Une note ordinaire" + LF + LF + "Pas de quiz ici.");
 		r.check("8. une note sans bloc rend « noBlock »",
-			await io.loadQuizDraft(sansBloc.app, sansBloc.chemin), "noBlock");
+			await io.loadQuizDraft(sansBloc.chemin), "noBlock");
 		r.check("8. un chemin absent rend « fileNotFound »",
-			await io.loadQuizDraft(sansBloc.app, "Cours/inexistant.md"), "fileNotFound");
+			await io.loadQuizDraft("Cours/inexistant.md"), "fileNotFound");
+	}
+
+	/* ─────────── 9. le brouillon et la modification EXTERNE ─────────── */
+
+	{
+		/* Ajouté APRÈS la conversion, et pour une raison nommée : `draftIsStale`
+		   comparait `draft.file.stat.mtime` — un `TFile` VIVANT qu'Obsidian
+		   mettait à jour en place. Traduit à la lettre en `draft.file.mtime`, il
+		   compare un instantané FIGÉ à la valeur qui en est issue : la fonction
+		   devient constante-FAUSSE, et une correction faite dans l'éditeur
+		   markdown est écrasée par la frappe suivante SANS UN MOT. Ni
+		   `check:export` ni les deux contrôles d'hôte ne regardent ça : la règle
+		   est dans le code PARTAGÉ. */
+		const v = vault(note());
+		const lu = await io.loadQuizDraft(v.chemin);
+		r.check("9. un brouillon frais n'est pas périmé", io.draftIsStale(lu), false);
+		/* SANS aucune sauvegarde de notre part : c'est le seul montage où
+		   `draft.mtime` et l'instantané `draft.file` sont encore ÉGAUX, donc le
+		   seul qui rougisse si la fonction relit l'instantané au lieu de
+		   redemander à l'hôte. */
+		v.mtime += 9000;
+		r.check("9. une modification faite DEHORS rend le brouillon périmé",
+			io.draftIsStale(lu), true);
+	}
+
+	{
+		const v = vault(note());
+		const lu = await io.loadQuizDraft(v.chemin);
+		lu.questions[0].prompt = "Ma frappe";
+		r.check("9. la sauvegarde passe", await io.saveQuizDraft(lu), true);
+		/* NOTRE PROPRE écriture ne doit pas passer pour une modification externe :
+		   c'est ce que la dernière ligne de `saveQuizDraft` achète, et elle n'y
+		   arrive que si l'hôte rend un `mtime` FRAIS. Sinon : une Notice
+		   « modifié dehors » après chaque sauvegarde. */
+		r.check("9. notre propre écriture ne rend pas le brouillon périmé",
+			io.draftIsStale(lu), false);
+		v.mtime += 9000;
+		r.check("9. … et une modification externe APRÈS la sauvegarde se voit encore",
+			io.draftIsStale(lu), true);
 	}
 
 	r.done();
+	hote.uninstallHost();
 });

@@ -106,8 +106,8 @@ export class QuizBuilderView extends ItemView {
 			subtitle: file.path,
 			// Compte réel connu seulement après lecture ; la page l'actualise.
 			questionCount: 0,
-			load: () => loadQuizDraft(this.app, file.path),
-			save: (draft) => saveQuizDraft(this.app, draft),
+			load: () => loadQuizDraft(file.path),
+			save: (draft) => saveQuizDraft(draft),
 			startEditing,
 			// Retour = refermer l'onglet : il n'a pas d'écran parent.
 			onBack: () => this.leaf.detach(),

@@ -37,7 +37,6 @@ const RESTANTS = [
 	"src/dashboard/ai.ts",
 	"src/dashboard/detail-exam.ts",
 	"src/dashboard/detail-form-bridge.ts",
-	"src/dashboard/detail-io.ts",
 	"src/dashboard/detail-question.ts",
 	"src/dashboard/detail.ts",
 	"src/dashboard/file-sources.ts",

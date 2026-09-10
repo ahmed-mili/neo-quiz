@@ -1,5 +1,5 @@
-import { TFile } from "obsidian";
-import type { App } from "obsidian";
+import { currentHost } from "../host/current";
+import type { HostFile } from "../host/types";
 import { parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-utils";
 import { convertParsedToInternal, readModeConfig } from "../editor/convert";
 import { findQuizModeConfigIndex } from "../quiz-utils";
@@ -26,7 +26,7 @@ export interface QuizDraft {
 	/** `null` pour un quiz qui n'a pas (encore) de note — le résultat d'une
 	    génération vit en mémoire jusqu'à son insertion. `saveQuizDraft` le
 	    refuse alors, plutôt que d'inventer un fichier. */
-	file: TFile | null;
+	file: HostFile | null;
 	questions: DraftQuestion[];
 	examOptions: EditorExamOptions | null;
 	/** `mtime` de la note au moment de la LECTURE, remis à jour à chaque
@@ -45,18 +45,27 @@ export interface QuizDraft {
 /** La note a-t-elle changé hors de ce brouillon depuis sa lecture ? */
 export function draftIsStale(draft: QuizDraft): boolean {
 	if (!draft.file || draft.mtime == null) return false;
-	return (draft.file.stat?.mtime ?? 0) !== draft.mtime;
+	/* On REDEMANDE le fichier à l'hôte, on ne relit pas `draft.file`. Le
+	   `TFile` d'Obsidian était un objet VIVANT que le vault mettait à jour en
+	   place ; un `HostFile` est un instantané FIGÉ (`src/host/types.ts`,
+	   « volontairement plat »), et `draft.file` n'est jamais réaffecté. Le
+	   relire comparerait donc une valeur à elle-même : cette fonction
+	   deviendrait constante-fausse, et une modification faite dans l'éditeur
+	   markdown serait écrasée par la frappe suivante SANS UN MOT.
+	   Ce que l'hôte rend est frais : c'est la promesse « LA FRAÎCHEUR APRÈS
+	   UNE ÉCRITURE » du contrat, éprouvée des deux côtés. */
+	return (currentHost().fs.getFile(draft.file.path)?.mtime ?? 0) !== draft.mtime;
 }
 
 /** Erreur de chargement, portée à l'UI sous forme de clé de traduction. */
 export type QuizLoadError = "fileNotFound" | "noBlock" | "loadError";
 
-export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft | QuizLoadError> {
-	const file = app.vault.getAbstractFileByPath(path);
-	if (!file || !(file instanceof TFile)) return "fileNotFound";
+export async function loadQuizDraft(path: string): Promise<QuizDraft | QuizLoadError> {
+	const file = currentHost().fs.getFile(path);
+	if (!file) return "fileNotFound";
 	let content: string;
 	try {
-		content = await app.vault.read(file);
+		content = await currentHost().fs.read(path);
 	} catch {
 		return "loadError";
 	}
@@ -81,14 +90,14 @@ export async function loadQuizDraft(app: App, path: string): Promise<QuizDraft |
 			}
 			questions.push(convertParsedToInternal(item));
 		});
-		return { file, questions, examOptions, mtime: file.stat?.mtime ?? 0, blockSource: match[1] };
+		return { file, questions, examOptions, mtime: file.mtime, blockSource: match[1] };
 	} catch {
 		return "loadError";
 	}
 }
 
 /** Réécrit le bloc de la note. Renvoie false si rien n'a pu être écrit. */
-export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean> {
+export async function saveQuizDraft(draft: QuizDraft): Promise<boolean> {
 	if (!draft.file) return false;
 	const file = draft.file;
 	/* PAS de garde `draftIsStale` ici. Le `mtime` parle de toute la NOTE ;
@@ -109,13 +118,14 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 		/* Ce qui a réellement été écrit entre les clôtures — pas `source`,
 		   qui n'en est que la forme LF (cf. `eol` plus bas). */
 		let temoin = source;
-		/* `vault.process` et non `read` + `modify` : Obsidian garantit qu'aucune
-		   modification ne s'intercale entre la lecture et l'écriture.
+		/* `fs.process` et non `read` + `write` : le contrat promet une
+		   lecture-modification-écriture INDIVISIBLE, ce qu'Obsidian tient par
+		   `vault.process`.
 
 		   Le rappel repart de ZÉRO à chaque invocation (`ecrit` remis à faux) :
 		   il peut être rejoué, et le résultat d'un essai abandonné ne doit pas
 		   survivre au suivant. C'est la DERNIÈRE invocation qui fait foi. */
-		await app.vault.process(file, (content) => {
+		await currentHost().fs.process(file.path, (content) => {
 			ecrit = false;
 			const actuel = content.match(QUIZ_BLOCK_RE);
 			if (!actuel) return content;
@@ -157,9 +167,15 @@ export async function saveQuizDraft(app: App, draft: QuizDraft): Promise<boolean
 		if (!ecrit) return false;
 		// Le bloc qu'on vient d'écrire devient le témoin du prochain échange.
 		draft.blockSource = temoin;
-		// Notre propre écriture ne doit pas passer pour une modification
-		// EXTERNE au prochain rendu (cf. draftIsStale).
-		draft.mtime = file.stat?.mtime ?? draft.mtime;
+		/* Notre propre écriture ne doit pas passer pour une modification EXTERNE
+		   au prochain rendu (cf. `draftIsStale`). On redemande le fichier à
+		   l'hôte plutôt que de relire `file` : ce dernier est un instantané
+		   FIGÉ, là où le `TFile` d'Obsidian se mettait à jour tout seul. Ce que
+		   l'hôte rend ici est la date que l'écriture vient de produire — c'est
+		   la promesse « LA FRAÎCHEUR APRÈS UNE ÉCRITURE » du contrat, et sans
+		   elle la fenêtre rendrait la date d'AVANT (surveillant débouncé de
+		   300 ms), donc une Notice « modifié dehors » à chaque sauvegarde. */
+		draft.mtime = currentHost().fs.getFile(file.path)?.mtime ?? draft.mtime;
 		return true;
 	} catch {
 		return false;

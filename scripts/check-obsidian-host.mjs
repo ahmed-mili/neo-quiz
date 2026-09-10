@@ -711,3 +711,136 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 
 	r.done();
 });
+
+/**
+ * LA FRAÎCHEUR APRÈS UNE ÉCRITURE, moitié GREFFON.
+ *
+ * Le contrat (`src/host/types.ts`) promet que `getFile(path)` rend le `mtime`
+ * NEUF dès que `write`, `process`, `writeBinary` ou `append` ont rendu la main.
+ * Cette moitié-ci tenait la promesse SANS LE SAVOIR pour trois des quatre
+ * voies : `getFile` refabrique son `HostFile` à chaque appel depuis un `TFile`
+ * VIVANT qu'Obsidian met à jour en place. Deux choses en découlent, et ce sont
+ * les deux que ce groupe garde :
+ *
+ * 1. la fraîcheur repose sur le fait que `getFile` ne MÉMORISE rien. Le jour où
+ *    quelqu'un l'« optimiserait » par un cache, elle disparaîtrait sans qu'une
+ *    seule ligne de type ne bronche ;
+ * 2. `append` ne la tenait PAS. Il passait par le seul ADAPTATEUR, qui écrit
+ *    sur le disque sans que le vault en sache rien — le `TFile` gardait son
+ *    ancien `mtime`. Une promesse qui saute une des quatre écritures est un
+ *    piège pire que pas de promesse, d'où `vault.append` pour les chemins
+ *    indexés (@since 0.13.0, très en dessous du minAppVersion déclaré).
+ *
+ * Le double reproduit la mise à jour EN PLACE du `TFile` — c'est le
+ * comportement réel d'Obsidian, celui dont l'ancien `detail-io.ts` dépendait
+ * déjà (`file.stat.mtime` relu après `vault.process`). Un double qui ne
+ * bougerait pas rendrait tout ce groupe vert par construction.
+ */
+await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
+	const r = makeReporter("Hôte Obsidian — la fraîcheur après une écriture");
+
+	const index = new Map();
+	const disque = new Map();
+	const journal = [];
+	let horloge = 1000;
+	/** Ce que le vault fait d'une écriture : le contenu, ET la date du `TFile`,
+	    mise à jour EN PLACE sur l'objet que l'index rend déjà. */
+	const toucher = (f, contenu) => {
+		horloge += 5000;
+		f.stat.mtime = horloge;
+		disque.set(f.path, contenu);
+	};
+	const inscrire = (p) => {
+		const nom = p.split("/").pop();
+		const f = {
+			path: p, name: nom,
+			basename: nom.replace(/\.[^.]+$/, ""),
+			extension: nom.includes(".") ? nom.split(".").pop() : "",
+			stat: { mtime: 1000 },
+		};
+		index.set(p, f);
+		disque.set(p, "avant");
+		return f;
+	};
+	const note = inscrire("Cours/ch1.md");
+	// Le journal de révision : sur le disque, JAMAIS à l'index (dossier caché).
+	disque.set(".neo-quiz/review-log.jsonl", "{}\n");
+
+	const app = fausseApp([], {
+		adapter: {
+			read: async (p) => disque.get(p) ?? "",
+			write: async (p, d) => { journal.push(["adapter.write", p]); disque.set(p, d); },
+			append: async (p, d) => { journal.push(["adapter.append", p]); disque.set(p, (disque.get(p) ?? "") + d); },
+			exists: async (p) => disque.has(p),
+		},
+		vault: {
+			getAbstractFileByPath: (p) => index.get(p) ?? null,
+			read: async (f) => disque.get(f.path) ?? "",
+			modify: async (f, d) => { journal.push(["vault.modify", f.path]); toucher(f, d); },
+			process: async (f, mutate) => {
+				journal.push(["vault.process", f.path]);
+				toucher(f, mutate(disque.get(f.path) ?? ""));
+			},
+			modifyBinary: async (f) => { journal.push(["vault.modifyBinary", f.path]); toucher(f, "octets"); },
+			append: async (f, d) => {
+				journal.push(["vault.append", f.path]);
+				toucher(f, (disque.get(f.path) ?? "") + d);
+			},
+			create: async (p, d) => { journal.push(["vault.create", p]); const f = inscrire(p); toucher(f, d); return f; },
+			createBinary: async (p) => { journal.push(["vault.createBinary", p]); const f = inscrire(p); toucher(f, "octets"); return f; },
+		},
+	});
+	const host = createObsidianHost(app, { manifest: {} });
+	const mtime = (p) => host.fs.getFile(p)?.mtime ?? null;
+
+	r.check("avant toute écriture, getFile rend la date du TFile", mtime("Cours/ch1.md"), 1000);
+
+	/* `process` — celui dont dépend `detail-io.ts`, qui relit ce `mtime` juste
+	   après pour que sa propre écriture ne passe pas pour une modification
+	   EXTERNE au rendu suivant. */
+	await host.fs.process("Cours/ch1.md", (c) => c + " + ajout");
+	r.check("après process, getFile rend le mtime NEUF", mtime("Cours/ch1.md"), note.stat.mtime);
+	r.check("… et ce n'est plus celui d'avant", mtime("Cours/ch1.md") === 1000, false);
+
+	const avantWrite = mtime("Cours/ch1.md");
+	await host.fs.write("Cours/ch1.md", "remplacé");
+	r.check("après write, le mtime a avancé", mtime("Cours/ch1.md") > avantWrite, true);
+
+	await host.fs.writeBinary("Cours/img.png", new Uint8Array([1, 2, 3]));
+	r.check("après writeBinary d'un fichier neuf, il est au catalogue avec sa date",
+		mtime("Cours/img.png"), index.get("Cours/img.png").stat.mtime);
+
+	/* `append`, LA voie qui trahissait. Elle passe désormais par le vault quand
+	   le chemin est indexé — sinon le `TFile` gardait son ancienne date. */
+	const avantAppend = mtime("Cours/ch1.md");
+	await host.fs.append("Cours/ch1.md", " et encore");
+	r.check("append d'un chemin INDEXÉ passe par le vault",
+		journal.at(-1), ["vault.append", "Cours/ch1.md"]);
+	r.check("après append, le mtime a avancé", mtime("Cours/ch1.md") > avantAppend, true);
+	r.check("… et l'ajout n'a pas remplacé le contenu",
+		disque.get("Cours/ch1.md"), "remplacé et encore");
+
+	/* Le SEUL appelant d'aujourd'hui écrit sous `.neo-quiz/`, que le vault
+	   n'indexe pas : il doit rester sur l'adaptateur, dont l'ajout ATOMIQUE est
+	   la propriété pour laquelle cette méthode existe. Sa conduite ne change
+	   pas d'un octet. */
+	await host.fs.append(".neo-quiz/review-log.jsonl", "{}\n");
+	r.check("append d'un chemin CACHÉ reste sur l'adaptateur",
+		journal.at(-1), ["adapter.append", ".neo-quiz/review-log.jsonl"]);
+	r.check("… et il a bien AJOUTÉ, pas remplacé",
+		disque.get(".neo-quiz/review-log.jsonl"), "{}\n{}\n");
+	r.check("… et il n'est pas entré au catalogue",
+		host.fs.getFile(".neo-quiz/review-log.jsonl"), null);
+
+	/* La fraîcheur tient parce que `getFile` NE MÉMORISE RIEN : il relit le
+	   `TFile` à chaque appel. Deux lectures encadrant une écriture faite hors
+	   du contrat (comme le fait Obsidian lui-même quand l'utilisateur tape dans
+	   l'éditeur markdown) doivent donc différer — c'est aussi ce qui permet à
+	   `draftIsStale` de voir une modification EXTERNE. */
+	const avantDehors = mtime("Cours/ch1.md");
+	note.stat.mtime = 99999;
+	r.check("getFile ne mémorise pas : une modification externe se voit",
+		[mtime("Cours/ch1.md"), mtime("Cours/ch1.md") === avantDehors], [99999, false]);
+
+	r.done();
+});

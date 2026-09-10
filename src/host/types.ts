@@ -41,6 +41,45 @@ export type HostFileEvent =
 	| { kind: "delete"; path: string }
 	| { kind: "rename"; file: HostFile; oldPath: string };
 
+/**
+ * LA FRAÎCHEUR APRÈS UNE ÉCRITURE — une promesse de TOUT `HostFs`, pas d'une
+ * seule de ses méthodes.
+ *
+ * Quand `write`, `process`, `writeBinary` ou `append` rendent la main sans
+ * rejeter, `getFile(path)` rend un `HostFile` dont le `mtime` est celui que
+ * l'écriture vient de produire — jamais celui d'avant. Un chemin que l'hôte ne
+ * met pas au catalogue (dossier caché : `.obsidian/…`, `.neo-quiz/…`) rend
+ * `null` avant comme après : ce n'est pas une violation, il n'a jamais été
+ * indexé.
+ *
+ * POURQUOI CETTE PROMESSE EXISTE, et ce qu'elle a coûté d'apprendre. Les deux
+ * hôtes n'indexent pas de la même façon : le greffon refabrique son `HostFile`
+ * à partir d'un `TFile` VIVANT à chaque appel, donc il était frais sans le
+ * savoir ; l'application lit une `Map` que seul son surveillant met à jour, et
+ * ce surveillant est DÉBOUNCÉ de 300 ms. Un appelant qui relit le `mtime` de
+ * ce qu'il vient d'écrire obtenait donc la vérité sous Obsidian et une valeur
+ * PÉRIMÉE dans la fenêtre — mesuré le 2026-09-10, la même écriture rendant
+ * 6000 d'un côté et 1000 de l'autre.
+ *
+ * Ce que ça produisait : `src/dashboard/detail-io.ts` mémorise le `mtime` de sa
+ * propre écriture pour que `draftIsStale` ne la prenne pas ensuite pour une
+ * modification EXTERNE. Avec un `mtime` périmé, chaque sauvegarde faisait jeter
+ * le brouillon et affichait une Notice « modifié dehors » — MENSONGÈRE, à
+ * chaque frappe. La divergence ne se voyait dans aucun type, dans aucun
+ * contrôle, et dans aucun des deux hôtes pris isolément.
+ *
+ * D'où le texte ici plutôt qu'un correctif dans la fenêtre seule : une promesse
+ * TACITE n'est pas une promesse. L'hôte Android tiendrait la fraîcheur par
+ * accident ou pas du tout, et `draftIsStale` s'y casserait sans un mot. Elle
+ * est éprouvée des DEUX côtés (`check:obsidian-host`, `check:windows-host`).
+ *
+ * Ce qu'elle NE couvre PAS, et c'est nommé exprès : `trash`, `remove` et
+ * `rename` ne sont pas des écritures — le catalogue les apprend du surveillant,
+ * qui SEUL sait traduire un déplacement vers un dossier ignoré en disparition
+ * (`evenementDeRenommage`, `apps/windows/src/host/fs.ts`). Recopier cette règle
+ * dans les méthodes d'écriture donnerait deux copies d'un même prédicat, et
+ * elles ont déjà divergé une fois ici.
+ */
 export interface HostFs {
 	/** Lit un fichier texte. Rejette si absent ou illisible. */
 	read(path: string): Promise<string>;
@@ -53,15 +92,16 @@ export interface HostFs {
 	    création refuse une cible présente (`vault.create` sous Obsidian) doit
 	    lui-même retomber sur un remplacement.
 
-	    Ce qu'elle NE PROMET PAS : que la cible soit AUSSITÔT visible de
-	    `getFile`. Les deux hôtes indexent différemment — le greffon inscrit
-	    la note dans l'appel (`vault.create`), l'application ne l'apprend que
-	    par un surveillant DÉBOUNCÉ de 300 ms (`apps/windows/src/host/fs.ts`).
-	    Un appelant qui vérifie ce qu'il vient d'écrire interroge donc le
-	    DISQUE (`exists`) et non l'index : c'est ce que fait `freeNotePath`
-	    (`src/dashboard/folder-create.ts`), dont les boucles d'import
-	    rendraient sinon deux fois le même nom libre et écraseraient la
-	    première note en silence. */
+	    Voir « LA FRAÎCHEUR APRÈS UNE ÉCRITURE » ci-dessous : au retour,
+	    `getFile(path)` rend le `mtime` NEUF.
+
+	    Ce que la fraîcheur ne rend PAS inutile : un appelant qui cherche un nom
+	    LIBRE interroge le DISQUE (`exists`), jamais l'index. L'index ne
+	    connaît que le CATALOGUE — pas les dossiers ignorés, pas ce qu'un autre
+	    programme vient de poser là. C'est ce que fait `freeNotePath`
+	    (`src/dashboard/folder-create.ts`), dont les boucles d'import rendraient
+	    sinon deux fois le même nom libre et écraseraient la première note en
+	    silence. */
 	write(path: string, data: string): Promise<void>;
 	/** Lecture-modification-écriture INDIVISIBLE : le rappel reçoit le contenu
 	    actuel et rend le contenu à écrire.
@@ -81,13 +121,22 @@ export interface HostFs {
 	    unique sans autre écrivain qu'elle-même, et son implémentation lit puis
 	    écrit. Aucun des deux ne protège d'un éditeur de texte EXTÉRIEUR — c'est
 	    pourquoi l'appelant porte son propre compare-and-swap sur le CONTENU
-	    (`detail-io.ts`), qui est la seule garantie à la bonne granularité. */
+	    (`detail-io.ts`), qui est la seule garantie à la bonne granularité.
+
+	    Voir « LA FRAÎCHEUR APRÈS UNE ÉCRITURE » ci-dessus : au retour,
+	    `getFile(path)` rend le `mtime` neuf. C'est `detail-io.ts` qui en dépend
+	    le plus directement — il relit ce `mtime` juste après avoir écrit, pour
+	    que sa propre écriture ne passe pas pour une modification EXTERNE au
+	    rendu suivant. */
 	process(path: string, mutate: (content: string) => string): Promise<void>;
 	/** Écrit des OCTETS, en créant ou en remplaçant, comme `write`.
 	    Existe pour UNE raison : coller une image dans une question
 	    (`editor/editor-form.ts`). Le texte a `write` ; un `Uint8Array` passé
 	    par `write` serait converti en chaîne et l'image serait corrompue sans
-	    qu'aucune erreur ne le dise. */
+	    qu'aucune erreur ne le dise.
+
+	    Fraîcheur : voir « LA FRAÎCHEUR APRÈS UNE ÉCRITURE ». Elle compte ici
+	    aussi — l'aperçu d'une question relit l'image qu'on vient d'y coller. */
 	writeBinary(path: string, data: Uint8Array): Promise<void>;
 	/** Retire un fichier en le rendant RÉCUPÉRABLE. Ce n'est pas `remove` :
 	    supprimer le quiz d'un semestre par mégarde ne doit pas être définitif.
@@ -108,7 +157,18 @@ export interface HostFs {
 	    L'ajout seul est ce qui rend le journal de révision sûr : une coupure
 	    ne peut tronquer que le dernier petit lot, jamais réécrire tout
 	    l'historique. Un hôte qui l'émulerait par lecture + réécriture
-	    perdrait exactement la propriété pour laquelle il existe. */
+	    perdrait exactement la propriété pour laquelle il existe.
+
+	    Fraîcheur : couvert comme les trois autres écritures, et il a fallu s'en
+	    donner les moyens plutôt que de l'excepter. Sous Obsidian, `append`
+	    passait par le seul ADAPTATEUR, qui écrit sur le disque sans que le
+	    vault en sache rien : le `mtime` du `TFile` restait celui d'avant. Une
+	    promesse qui saute une des quatre voies d'écriture est un piège pire que
+	    pas de promesse — un appelant ne peut pas se souvenir de l'exception.
+	    L'hôte greffon emploie donc `vault.append` quand le chemin EST indexé
+	    (même partage que `write`), et l'adaptateur pour le reste. Le seul
+	    appelant d'aujourd'hui, le journal de révision, écrit sous `.neo-quiz/`
+	    et prend la seconde branche : sa conduite est inchangée. */
 	append(path: string, data: string): Promise<void>;
 	/** Les FICHIERS d'un dossier (chemins du contrat), sans descendre dans
 	    les sous-dossiers. Un dossier absent rend `[]` — ce n'est pas une

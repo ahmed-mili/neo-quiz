@@ -309,7 +309,25 @@ export function createObsidianHost(
 			return await adapter().exists(path);
 		},
 		mkdirs,
+		/* MÊME PARTAGE que `write`, et il est venu pour la FRAÎCHEUR
+		   (`src/host/types.ts`, « LA FRAÎCHEUR APRÈS UNE ÉCRITURE »).
+		   `adapter().append` seul écrit sur le disque sans que le vault en
+		   sache rien : le `TFile` gardait son ancien `mtime`, et `getFile`
+		   rendait donc une date PÉRIMÉE après un ajout — la seule des quatre
+		   voies d'écriture à trahir la promesse. `vault.append` existe depuis
+		   0.13.0, très en dessous du `minAppVersion` déclaré (1.5.0).
+
+		   L'ajout reste ATOMIQUE des deux côtés : c'est la propriété pour
+		   laquelle cette méthode existe, et le journal de révision en dépend.
+		   Le journal, justement, écrit sous `.neo-quiz/` — jamais indexé, donc
+		   toujours la branche adaptateur : sa conduite ne change pas d'un
+		   octet. */
 		async append(path, data) {
+			const f = tfile(path);
+			if (f) {
+				await app.vault.append(f, data);
+				return;
+			}
 			await adapter().append(path, data);
 		},
 		/* Les FICHIERS seulement : `ListedFiles` sépare déjà `files` et

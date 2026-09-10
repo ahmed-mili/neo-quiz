@@ -111,8 +111,8 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 				subtitle: quiz.path,
 				questionCount: quiz.questions,
 				stats: quiz,
-				load: () => loadQuizDraft(ctx.app, quiz.path),
-				save: (draft) => saveQuizDraft(ctx.app, draft),
+				load: () => loadQuizDraft(quiz.path),
+				save: (draft) => saveQuizDraft(draft),
 				onBack: () => {
 					ctx.navigate(target);
 					// Retour vers « Mes quiz » : on rouvre le DOSSIER du quiz, pas

@@ -283,6 +283,44 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 		return await exists(abs(path));
 	}
 
+	/**
+	 * RECALE L'INDEX sur ce que le disque dit MAINTENANT.
+	 *
+	 * Appelée après chaque écriture réussie, et c'est la promesse du contrat
+	 * (`src/host/types.ts`, « LA FRAÎCHEUR APRÈS UNE ÉCRITURE ») : au retour
+	 * de `write`, `process`, `writeBinary` ou `append`, `getFile` doit rendre
+	 * le `mtime` NEUF. Sans elle, l'index n'apprenait le changement que du
+	 * surveillant, DÉBOUNCÉ de 300 ms — et un appelant qui relit le `mtime` de
+	 * sa propre écriture obtenait celui d'AVANT. Mesuré : la même écriture
+	 * rendait 6000 sous Obsidian (dont le `HostFile` est refabriqué à chaque
+	 * appel depuis un `TFile` vivant) et 1000 ici. `detail-io.ts` en tirait une
+	 * Notice « modifié dehors » mensongère après chaque sauvegarde.
+	 *
+	 * Le MÊME prédicat de catalogue que le surveillant (`horsCatalogue`) : le
+	 * journal de révision (`<racine>/.neo-quiz/…`) et les résultats exportés
+	 * n'ont rien à faire à l'index, et les y faire entrer par cette porte
+	 * rouvrirait exactement la divergence que `horsCatalogue` a été extraite
+	 * pour fermer. Un chemin ignoré coûte donc ZÉRO aller-retour natif.
+	 *
+	 * Un `stat` qui échoue ne fait PAS échouer l'écriture — elle a réussi, et
+	 * la refuser après coup serait mentir dans l'autre sens. On le SIGNALE, et
+	 * le surveillant recalera. C'est la seule fenêtre où la promesse peut ne
+	 * pas être tenue, et elle est bruyante.
+	 */
+	async function recaler(path: string): Promise<void> {
+		if (horsCatalogue(path)) return;
+		try {
+			const info = await stat(abs(path));
+			if (info.isDirectory) return;
+			const file = toHostFile(path, info.mtime ? info.mtime.getTime() : 0);
+			// `create` ou `modify` : `buildIndex.apply` les traite pareil, mais
+			// le nom doit rester juste — le surveillant émettra le même plus tard.
+			index.apply(index.get(path) ? { kind: "modify", file } : { kind: "create", file });
+		} catch (e) {
+			console.warn(LOG_PREFIX, "index non recalé après écriture:", path, e);
+		}
+	}
+
 	/* `recursive: true` crée le dossier ET ses parents. Le contrat exige de
 	   ne pas rejeter quand il existe déjà : on ne re-jette que si le dossier
 	   n'est toujours pas là après l'échec — sinon une course entre deux
@@ -308,6 +346,7 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 		},
 		async write(path, data) {
 			await writeTextFile(abs(path), data);
+			await recaler(path);
 		},
 		/* Lecture puis écriture, et le contrat le dit : un processus unique
 		   sans autre écrivain que lui-même. Ce n'est PAS équivalent au
@@ -316,6 +355,7 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 		async process(path, mutate) {
 			const p = abs(path);
 			await writeTextFile(p, mutate(await readTextFile(p)));
+			await recaler(path);
 		},
 		/* `writeFile` et non `writeTextFile` : ce dernier encode la chaîne qu'on
 		   lui donne, et une image passée par là sortirait corrompue sans qu'aucune
@@ -330,6 +370,7 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 		   `postMessage`, `Array.from(val)` itère la vue, pas son tampon. */
 		async writeBinary(path, data) {
 			await writeFile(abs(path), data);
+			await recaler(path);
 		},
 		/* `<racine>/.trash/<chemin local>` : le point de tête suffit à
 		   l'exclure du parcours du catalogue (`dossierIgnore`) comme du côté
@@ -365,6 +406,7 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 		   d'une fermeture au mauvais moment. */
 		async append(path, data) {
 			await writeTextFile(abs(path), data, { append: true });
+			await recaler(path);
 		},
 		async list(dir) {
 			try {

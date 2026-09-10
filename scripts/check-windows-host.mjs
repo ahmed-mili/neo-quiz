@@ -485,6 +485,12 @@ function installerTauri(fichiers = {}) {
 	const disque = new Map(Object.entries(fichiers).map(([p, t]) => [p, new TextEncoder().encode(t)]));
 	const dossiers = new Set();
 	const journal = [];
+	/* Les DATES du faux disque. Elles AVANCENT à chaque écriture, comme un vrai
+	   disque : c'est la seule façon de séparer un `mtime` frais d'un `mtime`
+	   périmé. Une date figée rendrait le groupe « index recalé » vert quoi
+	   qu'on casse. */
+	const dates = new Map([...disque.keys()].map(p => [p, 1000]));
+	const toucher = (p) => dates.set(p, (dates.get(p) ?? 1000) + 5000);
 	/* `writeTextFile` et `writeFile` passent le chemin en EN-TÊTE (le corps est
 	   la donnée), et l'encodent ; les autres commandes le passent en argument. */
 	const cheminEnTete = (options) => decodeURIComponent(options.headers.path);
@@ -502,8 +508,23 @@ function installerTauri(fichiers = {}) {
 					}
 					case "plugin:fs|write_text_file": {
 						const p = cheminEnTete(options);
-						journal.push(["write_text_file", p, new TextDecoder().decode(args)]);
-						disque.set(p, args);
+						/* `append: true` AJOUTE, il ne remplace pas — c'est la propriete
+						   pour laquelle `HostFs.append` existe, et un double qui
+						   ecraserait la ferait passer pour tenue sans l'etre. */
+						/* `options` est passe en en-tete par `JSON.stringify`, SANS
+						   encodage d'URI (releve dans plugin-fs, pas suppose) — et
+						   il vaut la chaine `undefined` quand l'appelant n'en donne
+						   pas. */
+						const brut = options.headers && options.headers.options;
+						const ajout = !!(brut && brut !== "undefined" && JSON.parse(brut).append);
+						const precedent = ajout ? (disque.get(p) ?? new Uint8Array()) : new Uint8Array();
+						const total = new Uint8Array(precedent.length + args.length);
+						total.set(precedent);
+						total.set(args, precedent.length);
+						journal.push([ajout ? "append_text_file" : "write_text_file", p,
+							new TextDecoder().decode(args)]);
+						disque.set(p, total);
+						toucher(p);
 						return;
 					}
 					case "plugin:fs|write_file": {
@@ -514,10 +535,31 @@ function installerTauri(fichiers = {}) {
 						   `data.buffer` nu se verrait ici, et nulle part ailleurs. */
 						journal.push(["write_file", p, args.byteLength]);
 						disque.set(p, args.slice());
+						toucher(p);
 						return;
 					}
 					case "plugin:fs|exists":
 						return disque.has(args.path) || dossiers.has(args.path);
+					/* `stat` : ce que `recaler` interroge apres chaque ecriture. Le
+					   vrai plugin jette sur un chemin absent ; sans ce jet, un
+					   `recaler` qui inventerait une date passerait inapercu. */
+					case "plugin:fs|stat": {
+						if (!disque.has(args.path) && !dossiers.has(args.path)) {
+							throw new Error("ENOENT: " + args.path);
+						}
+						/* La FORME que `parseFileInfo` de plugin-fs attend : `mtime`
+						   en millisecondes, et `null` explicite pour les dates qu'on
+						   ne sert pas (`new Date(undefined)` donnerait une date
+						   invalide, donc un `getTime()` a NaN). */
+						return {
+							isDirectory: dossiers.has(args.path),
+							isFile: disque.has(args.path),
+							isSymlink: false,
+							mtime: dates.get(args.path) ?? 1000,
+							atime: null,
+							birthtime: null,
+						};
+					}
 					case "plugin:fs|mkdir":
 						journal.push(["mkdir", args.path]);
 						dossiers.add(args.path);
@@ -527,6 +569,8 @@ function installerTauri(fichiers = {}) {
 						if (!octets) throw new Error("ENOENT: " + args.oldPath);
 						journal.push(["rename", args.oldPath, args.newPath]);
 						disque.delete(args.oldPath);
+						dates.delete(args.oldPath);
+						toucher(args.newPath);
 						/* ÉCRASE la destination, comme `rename` de plugin-fs sous
 						   Windows : sans ça, le cas de l'homonyme déjà en corbeille
 						   resterait vert même si le nom libre disparaissait. */
@@ -542,6 +586,7 @@ function installerTauri(fichiers = {}) {
 
 	return {
 		journal,
+		date: (p) => dates.get(p) ?? null,
 		texte: (p) => (disque.has(p) ? new TextDecoder().decode(disque.get(p)) : null),
 		octets: (p) => (disque.has(p) ? [...disque.get(p)] : null),
 		ecrire: (p, t) => disque.set(p, new TextEncoder().encode(t)),
@@ -655,6 +700,97 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs }) =
 		/* `try/finally` comme les groupes des modales : un groupe qui MEURT sur
 		   une exception laisserait `globalThis.window` remplacé pour tous ceux
 		   qui suivent. */
+		tauri.retirer();
+	}
+
+	r.done();
+});
+
+/**
+ * LA FRAÎCHEUR APRÈS UNE ÉCRITURE, moitié FENÊTRE.
+ *
+ * Le contrat (`src/host/types.ts`) promet que `getFile(path)` rend le `mtime`
+ * NEUF dès que `write`, `process`, `writeBinary` ou `append` ont rendu la main.
+ * C'est la moitié la plus fragile des deux : le greffon refabrique son
+ * `HostFile` depuis un `TFile` VIVANT à chaque appel, donc il était frais sans
+ * le savoir ; ici, `getFile` lit une `Map` que seul le surveillant met à jour,
+ * et ce surveillant est DÉBOUNCÉ de 300 ms. Sans le recalage, un appelant qui
+ * relit le `mtime` de sa propre écriture obtenait celui d'AVANT — et
+ * `detail-io.ts` en tirait une Notice « modifié dehors » MENSONGÈRE après
+ * chaque sauvegarde.
+ *
+ * Un vrai `buildIndex` ici, et non le bouchon inerte du groupe précédent : ce
+ * qu'on éprouve est justement ce que l'index retient.
+ */
+await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, buildIndex, toHostFile }) => {
+	const r = makeReporter("Hôte Windows — l'index recalé après écriture");
+	const tauri = installerTauri({
+		"D:/Quiz/Cours/ch1.md": "avant",
+		"D:/Quiz/.neo-quiz/review-log.jsonl": "{}",
+	});
+
+	try {
+		const carte = creerCarteRacines([{ id: "Quiz", name: "Quiz", path: "D:/Quiz", vault: false }]);
+		const index = buildIndex([toHostFile("Quiz/Cours/ch1.md", 1000)]);
+		const fs = createWindowsFs(carte, index);
+		const mtime = (p) => fs.getFile(p)?.mtime ?? null;
+
+		r.check("avant toute écriture, getFile rend la date de l'index",
+			mtime("Quiz/Cours/ch1.md"), 1000);
+
+		/* `process` — celui dont dépend `detail-io.ts`. */
+		await fs.process("Quiz/Cours/ch1.md", (c) => c + " + ajout");
+		r.check("après process, getFile rend le mtime du DISQUE",
+			mtime("Quiz/Cours/ch1.md"), tauri.date("D:/Quiz/Cours/ch1.md"));
+		r.check("… et ce n'est plus celui d'avant",
+			mtime("Quiz/Cours/ch1.md") === 1000, false);
+
+		/* `write` sur un fichier DÉJÀ au catalogue. */
+		const avantWrite = mtime("Quiz/Cours/ch1.md");
+		await fs.write("Quiz/Cours/ch1.md", "remplacé");
+		r.check("après write, getFile rend le mtime du DISQUE",
+			mtime("Quiz/Cours/ch1.md"), tauri.date("D:/Quiz/Cours/ch1.md"));
+		r.check("… et il a avancé", mtime("Quiz/Cours/ch1.md") > avantWrite, true);
+
+		/* `write` sur un fichier NEUF : il doit ENTRER au catalogue. Sans ça,
+		   `getFile` d'une note qu'on vient de créer rendrait `null` pendant
+		   300 ms — c'est le défaut que la tranche 2.6 avait corrigé côté
+		   greffon en passant par `vault.create`. */
+		r.check("un fichier neuf est inconnu avant son écriture",
+			fs.getFile("Quiz/Cours/neuf.md"), null);
+		await fs.write("Quiz/Cours/neuf.md", "contenu");
+		r.check("après write, un fichier neuf est AU catalogue",
+			fs.getFile("Quiz/Cours/neuf.md")?.basename, "neuf");
+		r.check("… avec le mtime du disque",
+			mtime("Quiz/Cours/neuf.md"), tauri.date("D:/Quiz/Cours/neuf.md"));
+
+		/* `writeBinary` — l'aperçu d'une question relit l'image collée. */
+		await fs.writeBinary("Quiz/Cours/img.png", new Uint8Array([1, 2, 3]));
+		r.check("après writeBinary, l'image est au catalogue avec sa date",
+			mtime("Quiz/Cours/img.png"), tauri.date("D:/Quiz/Cours/img.png"));
+
+		/* `append` — la quatrième voie. Une promesse qui saute une des quatre
+		   écritures est un piège pire que pas de promesse : un appelant ne peut
+		   pas se souvenir de l'exception. */
+		const avantAppend = mtime("Quiz/Cours/ch1.md");
+		await fs.append("Quiz/Cours/ch1.md", " et encore");
+		r.check("après append, getFile rend le mtime du DISQUE",
+			mtime("Quiz/Cours/ch1.md"), tauri.date("D:/Quiz/Cours/ch1.md"));
+		r.check("… et il a avancé", mtime("Quiz/Cours/ch1.md") > avantAppend, true);
+		r.check("… l'ajout n'a pas remplacé le contenu",
+			tauri.texte("D:/Quiz/Cours/ch1.md"), "remplacé et encore");
+
+		/* CE QUE LE RECALAGE NE DOIT PAS FAIRE : faire entrer au catalogue un
+		   chemin que le surveillant en écarte. Le journal de révision s'écrit à
+		   chaque réponse ; l'inscrire au catalogue par cette porte rouvrirait
+		   exactement la divergence que `horsCatalogue` a été extraite pour
+		   fermer — deux copies d'un même prédicat avaient déjà divergé ici. */
+		await fs.append("Quiz/.neo-quiz/review-log.jsonl", "{}\n");
+		r.check("le journal de révision reste HORS du catalogue",
+			fs.getFile("Quiz/.neo-quiz/review-log.jsonl"), null);
+		r.check("… et le journal n'a pas fait le voyage jusqu'au catalogue",
+			index.all().some(x => x.path.includes(".neo-quiz")), false);
+	} finally {
 		tauri.retirer();
 	}
 

@@ -54,6 +54,7 @@ const LIBERES = [
 	"src/dashboard/icon-picker.ts",
 	"src/dashboard/folder-create.ts",
 	"src/dashboard/module-edit.ts",
+	"src/dashboard/detail-io.ts",
 	"src/editor/utils.ts",
 ];
 

@@ -199,8 +199,9 @@ export interface DashboardShellCtx {
 	saveSettings(): Promise<void>;
 	/* Le plan (D3) déclarait `navigate(view: DashboardViewName): void`, sans
 	   second paramètre — mais `home.ts` (typé, lui, en `DashboardShellCtx`)
-	   et quiz-menu.ts, ai.ts (toujours typés en `DashboardCtx`, ils importent
-	   encore Obsidian) appellent TOUS `ctx.navigate("detail", { quiz, edit? })`.
+	   et quiz-menu.ts (passé à `DashboardShellCtx` en tranche 3, tâche 9),
+	   ai.ts (toujours typé en `DashboardCtx`, il importe encore Obsidian)
+	   appellent TOUS `ctx.navigate("detail", { quiz, edit? })`.
 	   `detail.ts` est passé à `DashboardShellCtx` en tranche 3 (tâche 8) : ses
 	   trois lectures de `ctx.view` sont remontées chez l'appelant, dans la
 	   `DetailHostSpec` que `src/dashboard.ts` construit.
@@ -294,6 +295,43 @@ export interface DashboardShellCtx {
 	    L'appelant garde donc son appel optionnel (`?.`) plutôt que de tester
 	    l'hôte. */
 	openQuizPath?: (path: string, opts?: { edit?: boolean }) => Promise<void>;
+	/** Ouvre le partage d'un quiz ou d'un module (zip, Discord, enregistrer).
+	    Optionnel et ABSENT côté application : `dashboard/share.ts` livre par
+	    `child_process` et `electron.shell`, c'est-à-dire par le sous-contrat de
+	    lancement de processus de la tranche 4 — et la spec §7 range de toute
+	    façon « la distribution aux camarades » hors de ce chantier. L'entrée
+	    « Partager » du menu « ⋯ » n'est simplement pas rendue dans la fenêtre
+	    (quiz-menu.ts). Union et non deux champs optionnels : une cible sans
+	    quiz ni module ne se construit pas. */
+	shareQuiz?: (cible: { quiz: QuizIndexEntry } | { group: ModuleGroup }) => void;
+	/** Renomme la note d'un quiz EN METTANT LES LIENS À JOUR. Optionnel et
+	    absent côté application : seul Obsidian tient l'index des liens
+	    ENTRANTS que cette opération exige (`fileManager.renameFile`).
+	    `HostFs.rename` ne convient pas — il déplace des octets sans rien
+	    réécrire ailleurs, et la migration du journal dépend de sa sémantique
+	    actuelle. Sans ce membre, l'entrée « Renommer » n'est pas rendue.
+
+	    `nom` est le futur basename, déjà ASSAINI par la modale (sans
+	    extension ni dossier) ; l'hôte compose la cible dans le dossier de la
+	    note, avec son extension.
+
+	    RÉSULTAT : `true` si la note est renommée, `false` sinon — et jamais un
+	    rejet. Un `Promise<void>` ne suffisait pas : la modale partagée reste
+	    OUVERTE sur un échec, pour que l'utilisateur corrige le nom au lieu de
+	    le retaper, et se ferme seulement sur succès ; il lui faut distinguer
+	    les deux. C'est l'HÔTE qui affiche la cause (Notice « existe déjà »,
+	    « impossible », « introuvable ») : lui seul la connaît.
+
+	    LA GARDE DE COLLISION est donc à l'hôte, et sa force dépend de son index.
+	    Le greffon regarde `vault.getAbstractFileByPath(cible)`, qui voit un
+	    DOSSIER au chemin cible comme une collision. Un hôte qui n'aurait que
+	    `HostFs.getFile` (l'application, le jour où elle tiendra un index des
+	    liens entrants) ne verrait que les FICHIERS catalogués : un dossier au
+	    nom cible ne déclencherait pas « existe déjà », et l'opération irait
+	    jusqu'au renommage pour échouer autrement (« impossible »). Aucun
+	    écrasement possible, un message moins précis — limite connue, laissée
+	    telle quelle : la corriger serait un membre de contrat de plus. */
+	renameQuiz?: (quiz: QuizIndexEntry, nom: string) => Promise<boolean>;
 }
 
 /* ════════════════════════════════════════════════════════

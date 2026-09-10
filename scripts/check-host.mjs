@@ -38,7 +38,6 @@ const RESTANTS = [
 	"src/dashboard/file-sources.ts",
 	"src/dashboard/mention-picker.ts",
 	"src/dashboard/prompt-paths.ts",
-	"src/dashboard/quiz-menu.ts",
 	"src/dashboard/share.ts",
 	"src/dashboard/usage-modal.ts",
 	"src/dashboard/voice-input.ts",

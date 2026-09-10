@@ -1,8 +1,10 @@
 import { PRODUCT_NAME } from "./branding";
-import { ItemView, Scope } from "obsidian";
+import { ItemView, Notice, Scope, TFile } from "obsidian";
 import type { App, WorkspaceLeaf, KeymapEventHandler } from "obsidian";
 import { openQuizForPlay, openQuizPathInEditor } from "../apps/obsidian/quiz-open";
 import { buildQuizCardMenu, buildModuleCardMenu } from "./dashboard/quiz-menu";
+import { ShareModal, moduleShareSource, quizShareSource } from "./dashboard/share";
+import { t } from "./i18n";
 import { openIconPicker } from "./dashboard/icon-picker";
 import { openCreateQuizModal, openCreateFolderModal } from "./dashboard/folder-create";
 import { createSelect, openActionMenu } from "./dashboard/ui-select";
@@ -215,23 +217,56 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 			// entrée « Générer » désactivée tant que la tranche 4 n'existe pas.
 			canOpen: () => true,
 			reviewStore: this.plugin._reviewStore,
-			/* Closure sur `this.ctx`, lue AU MOMENT DE L'APPEL et non à la
-			   construction du littéral : `this.ctx` n'est assigné qu'après. Le
-			   menu ⋯ a besoin du ctx COMPLET (il ouvre des modals) — c'est
-			   précisément ce que l'application ne peut pas fournir, et
-			   pourquoi ce membre est optionnel. Tour de correction 1 (tâche 6) :
-			   c'est désormais LE GREFFON qui ouvre le menu (openActionMenu),
-			   plutôt que la carte elle-même — les cartes (quiz-card.ts,
-			   module-card.ts) n'importent donc plus `ui-select.ts` du tout. */
+			/* Tour de correction 1 (tâche 6) : c'est LE GREFFON qui ouvre le
+			   menu (openActionMenu), plutôt que la carte elle-même — les cartes
+			   (quiz-card.ts, module-card.ts) n'importent donc plus
+			   `ui-select.ts` du tout. Tranche 3 (tâche 9) : le menu ne demande
+			   plus que `DashboardShellCtx` — plus de closure sur `this.ctx` ni
+			   de cast, le `ctx` local est le même objet. Ce qui reste propre au
+			   greffon (partager, renommer) lui arrive par `shareQuiz` et
+			   `renameQuiz` ci-dessous ; le membre reste optionnel : l'application
+			   ne le remplit qu'à la tâche 10, avec ces deux mêmes bâtisseurs. */
 			openCardMenu: (quiz, anchor, rerender) => {
-				openActionMenu(anchor, buildQuizCardMenu(this.ctx as DashboardCtx, rerender)(quiz));
+				openActionMenu(anchor, buildQuizCardMenu(ctx, rerender)(quiz));
 			},
-			/* Même closure sur `this.ctx` que `openCardMenu` ci-dessus, et même
-			   raison : ces cinq membres ouvrent des modals/dropdowns qui exigent
-			   le ctx complet ou `ui-select.ts` (Obsidian) — l'application ne les
-			   fournit pas (tâche 6, « Mes quiz »). */
 			openModuleMenu: (group, anchor, rerender, map) => {
-				openActionMenu(anchor, buildModuleCardMenu(this.ctx as DashboardCtx, rerender, map)(group));
+				openActionMenu(anchor, buildModuleCardMenu(ctx, rerender, map)(group));
+			},
+			/* Le partage reste au greffon : `share.ts` livre par `child_process`
+			   et `electron.shell` (voir le contrat). Même modal pour un quiz
+			   seul et pour un module, avec la source qui convient. */
+			shareQuiz: (cible) => {
+				const source = "quiz" in cible ? quizShareSource(ctx, cible.quiz) : moduleShareSource(ctx, cible.group);
+				new ShareModal(ctx, source).open();
+			},
+			/* Le renommage reste au greffon, et c'est le corps EXACT qu'avait
+			   `RenameQuizModal` avant la tâche 9 — gardes et Notice comprises :
+			   `fileManager.renameFile`, jamais `vault.rename`, pour qu'Obsidian
+			   réécrive les liens entrants ([[ancien nom]]) tout seul.
+			   La garde de collision est ICI, avec `getAbstractFileByPath`, qui
+			   voit un dossier au chemin cible comme une collision : la conduite
+			   du greffon ne change pas (le contrat dit ce qu'un hôte réduit à
+			   `HostFs.getFile` verrait de moins). `false` = l'utilisateur a été
+			   prévenu, la modale partagée reste ouverte sur le nom saisi. */
+			renameQuiz: async (quiz, nom) => {
+				const file = this.app.vault.getAbstractFileByPath(quiz.path);
+				if (!(file instanceof TFile)) {
+					new Notice(t("dashboard.detail.fileNotFound"));
+					return false;
+				}
+				const folder = file.parent && file.parent.path !== "/" ? `${file.parent.path}/` : "";
+				const target = `${folder}${nom}.${file.extension}`;
+				if (this.app.vault.getAbstractFileByPath(target)) {
+					new Notice(t("dashboard.quizzes.renameExists", { name: nom }));
+					return false;
+				}
+				try {
+					await this.app.fileManager.renameFile(file, target);
+				} catch {
+					new Notice(t("dashboard.quizzes.renameError"));
+					return false;
+				}
+				return true;
 			},
 			pickIcon: (anchor, courante, onPick, suggestions) => {
 				openIconPicker(anchor, courante, onPick, document.body, suggestions ?? []);

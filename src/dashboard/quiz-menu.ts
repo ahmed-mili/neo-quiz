@@ -1,9 +1,7 @@
-import { Notice, TFile } from "obsidian";
-import { QbdModal } from "../modal-base";
-import type { App } from "obsidian";
-import { ShareModal, moduleShareSource, quizShareSource } from "./share";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
-import type { DashboardCtx } from "../types/dashboard-ctx";
+import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { ModuleGroup, ModuleMap } from "./quiz-modules";
 import { openModuleEditModal } from "./module-edit";
@@ -25,6 +23,16 @@ import { isFolderArchived, setFolderArchived } from "./folder-archive";
    (« Pause study reminders » retiré le 2026-07-21 à la demande d'Ahmed —
    avec sa mécanique : sans entrée de menu, un quiz déjà suspendu serait
    resté hors du « À faire » sans aucun moyen de le reprendre.)
+
+   Tranche 3 (tâche 9) : ce module ne connaît plus Obsidian. La suppression
+   passe par `HostFs` (`process`, `trash`), les deux modales par
+   `HostModals`. Partager et Renommer, eux, ne sont PAS des opérations du
+   contrat : elles restent des membres OPTIONNELS du ctx (`shareQuiz?`,
+   `renameQuiz?`), remplis par le greffon et absents de l'application — voir
+   leur justification dans `types/dashboard-ctx.ts`. Le menu de la fenêtre
+   a donc DEUX entrées sur quatre (Éditer, Supprimer), et pas une ligne
+   grise de plus : une entrée absente se lit comme un hôte qui fait autre
+   chose, une entrée désactivée comme une panne.
 ══════════════════════════════════════════════════════════ */
 
 /* `isFolderArchived`/`setFolderArchived` ont déménagé dans `folder-archive.ts`
@@ -46,115 +54,131 @@ interface ConfirmSpec {
 	warning?: boolean;
 }
 
-class ConfirmModal extends QbdModal {
-	constructor(app: App, private spec: ConfirmSpec, private onConfirm: () => void) {
-		super(app);
-	}
-
-	onOpen(): void {
-		this.titleEl.setText(this.spec.title);
-		this.contentEl.createEl("p", { text: this.spec.body });
-		const row = this.contentEl.createDiv({ cls: "modal-button-container" });
-		const cancel = row.createEl("button", { text: t("editor.action.cancel") });
-		cancel.addEventListener("click", () => this.close());
-		const ok = row.createEl("button", { cls: this.spec.warning ? "mod-warning" : "mod-cta", text: this.spec.cta });
-		ok.addEventListener("click", () => { this.close(); this.onConfirm(); });
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
+/**
+ * `onConfirm` est appelé AU CLIC, juste après avoir demandé la fermeture —
+ * comme le faisait la classe d'avant, et à la différence d'`openConfirmModal`
+ * (`editor/modals.ts`, qui attend la disparition). La différence ne se voit
+ * pas ici : ce que `onConfirm` lance est une écriture ASYNCHRONE, et le
+ * repeint n'arrive qu'à son terme, bien après les 240 ms de l'animation.
+ *
+ * `modal-button-container`, `mod-cta` et `mod-warning` sont des classes
+ * NATIVES d'Obsidian, gardées telles quelles : le greffon y trouve ses
+ * boutons habituels. La fenêtre n'a pas de CSS pour elles (voir le rapport
+ * de la tâche 9) — ses boutons sont nus, mais fonctionnels.
+ */
+function openConfirm(spec: ConfirmSpec, onConfirm: () => void): void {
+	currentHost().modals.open({
+		title: spec.title,
+		onOpen: (m) => {
+			const c = m.contentEl;
+			ajouter(c, "p", undefined, spec.body);
+			const row = ajouter(c, "div", "modal-button-container");
+			const cancel = ajouter(row, "button", undefined, t("editor.action.cancel"));
+			cancel.addEventListener("click", () => m.close());
+			const ok = ajouter(row, "button", spec.warning ? "mod-warning" : "mod-cta", spec.cta);
+			ok.addEventListener("click", () => { m.close(); onConfirm(); });
+		},
+		/* Pas de `contentEl.empty()` : l'hôte vide le corps lui-même après la
+		   disparition (contrat de `HostModalHandle`). */
+	});
 }
 
 /* ── Renommage d'un quiz ──
    Le titre d'un quiz EST le basename de sa note (scanner.ts) : renommer =
-   renommer le fichier, via fileManager.renameFile — jamais vault.rename —
-   pour qu'Obsidian réécrive les liens entrants ([[ancien nom]]) tout seul.
-   Les stats suivent : stats-store écoute l'event vault "rename" (il couvre
-   donc AUSSI un renommage fait à la main dans l'explorateur). */
-class RenameQuizModal extends QbdModal {
-	private name: string;
+   renommer le fichier, via `ctx.renameQuiz` — que le greffon remplit avec
+   `fileManager.renameFile`, jamais `vault.rename`, pour qu'Obsidian réécrive
+   les liens entrants ([[ancien nom]]) tout seul. `HostFs.rename` ne convient
+   pas (il déplace des octets sans rien réécrire), d'où le membre optionnel du
+   ctx plutôt qu'un appel au contrat : voir `types/dashboard-ctx.ts`.
+   Les stats suivent : stats-store écoute l'évènement de renommage du
+   surveillant (il couvre donc AUSSI un renommage fait à la main dans
+   l'explorateur).
 
-	constructor(private ctx: DashboardCtx, private quiz: QuizIndexEntry, private onDone: () => void) {
-		super(ctx.app);
-		this.name = quiz.basename;
-	}
+   RÉPARTITION DES GARDES. La modale ne fait que ce que les deux hôtes savent
+   faire pareil : assainir le nom, ignorer un nom vide ou inchangé, vérifier
+   que la note existe encore (`fs.getFile`). La collision avec un fichier
+   déjà présent, le renommage lui-même et l'AFFICHAGE de la cause d'un échec
+   (Notice « existe déjà », « impossible ») appartiennent à l'hôte, dans
+   `renameQuiz` : lui seul sait comment son index voit la cible. Le rappel
+   rend `true` si renommé, `false` sinon — la modale se ferme sur `true`,
+   RESTE OUVERTE sur `false` pour que l'utilisateur corrige le nom au lieu
+   de le retaper. */
+function openRenameQuizModal(
+	quiz: QuizIndexEntry,
+	renameQuiz: (quiz: QuizIndexEntry, nom: string) => Promise<boolean>,
+	onDone: () => void,
+): void {
+	let name = quiz.basename;
+	currentHost().modals.open({
+		className: "qbd-medit-modal",
+		// t() AU RENDU (à l'ouverture), jamais dans une constante de haut niveau.
+		title: t("dashboard.quizzes.renameTitle"),
+		onOpen: (m) => {
+			const c = m.contentEl;
+			ajouter(c, "p", "qbd-medit-label", t("dashboard.quizzes.renameLabel"));
+			const input = ajouter(c, "input", "qbd-medit-input");
+			input.type = "text";
+			input.value = name;
+			input.addEventListener("input", () => { name = input.value; });
+			// Sélection du nom entier : le cas courant est de tout retaper.
+			window.setTimeout(() => { input.focus(); input.select(); }, 0);
 
-	onOpen(): void {
-		this.modalEl.addClass("qbd-medit-modal");
-		this.titleEl.setText(t("dashboard.quizzes.renameTitle"));
-		const c = this.contentEl;
-		c.createEl("p", { cls: "qbd-medit-label", text: t("dashboard.quizzes.renameLabel") });
-		const input = c.createEl("input", { type: "text", cls: "qbd-medit-input", value: this.name });
-		input.addEventListener("input", () => { this.name = input.value; });
-		// Sélection du nom entier : le cas courant est de tout retaper.
-		window.setTimeout(() => { input.focus(); input.select(); }, 0);
-
-		const save = c.createEl("button", { cls: "qbd-medit-save", text: t("dashboard.quizzes.renameCta") });
-		save.addEventListener("click", () => { void this.apply(); });
-		input.addEventListener("keydown", (e) => { if (e.key === "Enter") void this.apply(); });
-	}
-
-	private async apply(): Promise<void> {
-		// Mêmes caractères interdits que freeNotePath (folder-create.ts).
-		const name = this.name.trim().replace(/[\\/:*?"<>|]/g, "-");
-		if (!name || name === this.quiz.basename) { this.close(); return; }
-		const file = this.ctx.app.vault.getAbstractFileByPath(this.quiz.path);
-		if (!(file instanceof TFile)) {
-			new Notice(t("dashboard.detail.fileNotFound"));
-			this.close();
-			return;
-		}
-		const folder = file.parent && file.parent.path !== "/" ? `${file.parent.path}/` : "";
-		const target = `${folder}${name}.${file.extension}`;
-		if (this.ctx.app.vault.getAbstractFileByPath(target)) {
-			new Notice(t("dashboard.quizzes.renameExists", { name }));
-			return; // modal laissé ouvert : l'utilisateur corrige le nom
-		}
-		try {
-			await this.ctx.app.fileManager.renameFile(file, target);
-		} catch {
-			new Notice(t("dashboard.quizzes.renameError"));
-			return;
-		}
-		this.close();
-		this.onDone();
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
+			const apply = async (): Promise<void> => {
+				// Mêmes caractères interdits que freeNotePath (folder-create.ts).
+				const nom = name.trim().replace(/[\\/:*?"<>|]/g, "-");
+				if (!nom || nom === quiz.basename) { m.close(); return; }
+				// La note a disparu entre l'ouverture du menu et le clic : rien à
+				// corriger dans le nom, la modale se ferme (conduite d'avant).
+				if (!currentHost().fs.getFile(quiz.path)) {
+					currentHost().ui.notice(t("dashboard.detail.fileNotFound"));
+					m.close();
+					return;
+				}
+				// `false` : l'hôte a déjà dit pourquoi ; le nom saisi reste à
+				// l'écran pour être corrigé.
+				if (!await renameQuiz(quiz, nom)) return;
+				m.close();
+				onDone();
+			};
+			const save = ajouter(c, "button", "qbd-medit-save", t("dashboard.quizzes.renameCta"));
+			save.addEventListener("click", () => { void apply(); });
+			input.addEventListener("keydown", (e) => { if (e.key === "Enter") void apply(); });
+		},
+	});
 }
 
-async function deleteQuiz(ctx: DashboardCtx, quiz: QuizIndexEntry): Promise<void> {
-	const file = ctx.app.vault.getAbstractFileByPath(quiz.path);
-	if (!file || !(file instanceof TFile)) {
-		new Notice(t("dashboard.detail.fileNotFound"));
+async function deleteQuiz(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Promise<void> {
+	// `getFile` rend null pour un dossier comme pour un absent : la garde
+	// reste nécessaire, seule sa forme a changé (`instanceof TFile` avant).
+	if (!currentHost().fs.getFile(quiz.path)) {
+		currentHost().ui.notice(t("dashboard.detail.fileNotFound"));
 		return;
 	}
 	// La note peut ne plus contenir de bloc (supprimé ailleurs entre-temps) :
 	// annoncer « Quiz supprimé » serait alors faux.
-	if (await deleteQuizCore(ctx, quiz, file)) new Notice(t("dashboard.quizzes.deleted"));
-	else new Notice(t("dashboard.detail.noBlockInNote"));
+	if (await deleteQuizCore(ctx, quiz)) currentHost().ui.notice(t("dashboard.quizzes.deleted"));
+	else currentHost().ui.notice(t("dashboard.detail.noBlockInNote"));
 }
 
 /**
- * Cœur du delete, sans Notice (partagé quiz seul / module entier).
+ * Cœur du delete, sans Notice (partagé quiz seul / module entier). L'appelant
+ * a déjà vérifié que la note est au catalogue (`fs.getFile`).
  *
- * `vault.process` et non `read` + `modify` : entre les deux, ce que
+ * `fs.process` et non `read` + `write` : entre les deux, ce que
  * l'utilisateur venait d'écrire ailleurs dans la note était écrasé — et si ce
  * qu'il avait écrit était la seule chose qui restait, la note partait À LA
  * CORBEILLE sur la foi d'une lecture périmée (revue codex 2026-07-31). La
  * décision « il ne reste rien » se prend donc sur le contenu RÉEL au moment de
  * l'écriture, et la mise à la corbeille n'a lieu qu'après.
  */
-async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFile): Promise<boolean> {
+async function deleteQuizCore(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Promise<boolean> {
+	const fs = currentHost().fs;
 	let videApresRetrait = false;
 	let avaitUnBloc = false;
 	/** Le contenu vu par le dernier passage du rappel — le témoin d'un
-	    éventuel `trashFile`. */
+	    éventuel `trash`. */
 	let vu = "";
-	await ctx.app.vault.process(file, (content) => {
+	await fs.process(quiz.path, (content) => {
 		// Le rappel peut être rejoué : repartir de zéro à chaque essai.
 		vu = content;
 		avaitUnBloc = QUIZ_BLOCK_RE.test(content);
@@ -177,7 +201,7 @@ async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFi
 		   retrait du seul bloc — la note reste, avec ce qui vient d'y être
 		   écrit. */
 		let jetee = false;
-		await ctx.app.vault.process(file, (content) => {
+		await fs.process(quiz.path, (content) => {
 			if (content !== vu) {
 				jetee = false;
 				return content.replace(QUIZ_BLOCK_RE, "");
@@ -186,42 +210,43 @@ async function deleteQuizCore(ctx: DashboardCtx, quiz: QuizIndexEntry, file: TFi
 			return content;
 		});
 		/* La note ne contenait que le quiz : corbeille (RÉCUPÉRABLE), jamais de
-		   suppression définitive.
+		   suppression définitive — c'est ce que `fs.trash` promet, chaque hôte
+		   avec sa propre convention.
 		   Fenêtre résiduelle assumée : une écriture arrivée entre ce
-		   compare-and-swap et `trashFile` partira quand même à la corbeille.
-		   Obsidian n'expose aucun « jeter si inchangé », et c'est précisément
+		   compare-and-swap et `trash` partira quand même à la corbeille.
+		   Aucun hôte n'expose de « jeter si inchangé », et c'est précisément
 		   parce qu'on ne peut pas la fermer que la corbeille est le seul geste
 		   admis ici — l'utilisateur récupère sa note en un clic. */
-		if (jetee) await ctx.app.fileManager.trashFile(file);
+		if (jetee) await fs.trash(quiz.path);
 	}
 	ctx.statsStore?.deleteRecord(quiz.path);
 	return true;
 }
 
 /** Delete d'un MODULE entier : chaque quiz passe par le même cœur. */
-async function deleteModuleQuizzes(ctx: DashboardCtx, group: ModuleGroup): Promise<void> {
+async function deleteModuleQuizzes(ctx: DashboardShellCtx, group: ModuleGroup): Promise<void> {
 	/* Une note qui résiste n'arrête pas les autres, et ne fait pas passer la
 	   suppression pour un échec total : chaque quiz est indépendant, et laisser
 	   une exception remonter d'ici laissait le module A MOITIÉ supprimé avec
 	   une interface qui ne se redessinait même pas (revue codex 2026-07-31). */
 	let echecs = 0;
 	for (const q of group.quizzes) {
-		const file = ctx.app.vault.getAbstractFileByPath(q.path);
-		// Fichier introuvable : c'est un échec comme un autre, pas un silence.
+		// Fichier introuvable (ou dossier à ce chemin — `getFile` rend null
+		// dans les deux cas) : c'est un échec comme un autre, pas un silence.
 		// Le compter est la seule façon pour l'utilisateur de savoir que le
 		// module n'a pas été entièrement supprimé.
-		if (!(file instanceof TFile)) { echecs++; continue; }
+		if (!currentHost().fs.getFile(q.path)) { echecs++; continue; }
 		try {
 			// Un `false` — aucun bloc trouvé — est un échec comme un autre :
 			// l'annoncer comme un succès faisait croire le module entièrement
 			// supprimé (revue codex 2026-07-31).
-			if (!await deleteQuizCore(ctx, q, file)) echecs++;
+			if (!await deleteQuizCore(ctx, q)) echecs++;
 		} catch (e) {
 			echecs++;
 			console.error("[quiz-blocks] suppression impossible :", q.path, e);
 		}
 	}
-	new Notice(echecs
+	currentHost().ui.notice(echecs
 		? t("dashboard.quizzes.deletedPartial", { count: echecs })
 		: t("dashboard.quizzes.deleted"));
 }
@@ -232,46 +257,55 @@ async function deleteModuleQuizzes(ctx: DashboardCtx, group: ModuleGroup): Promi
     référence StudySmarter. Bâti AU CLIC (le nom du quiz peut avoir changé).
     AUCUNE entrée d'archivage : l'archivage n'existe qu'au niveau dossier
     (Ahmed 2026-07-19). */
-export function buildQuizCardMenu(ctx: DashboardCtx, rerender: () => void): (quiz: QuizIndexEntry) => ActionMenuItem[] {
+export function buildQuizCardMenu(ctx: DashboardShellCtx, rerender: () => void): (quiz: QuizIndexEntry) => ActionMenuItem[] {
 	return (quiz) => {
-		return [
-			{
-				icon: "share-2",
-				label: t("dashboard.quizzes.menuShare"),
-				// Même modal de partage que les dossiers (Discord / enregistrer),
-				// avec le .md du quiz seul — remplace l'ancienne copie de bloc
-				// texte, jugée insuffisante (demande Ahmed 2026-07-19).
-				onClick: () => { new ShareModal(ctx, quizShareSource(ctx, quiz)).open(); },
+		/* Capturés dans des constantes : le rétrécissement de type d'un `if`
+		   sur `ctx.shareQuiz` ne survivrait pas jusqu'au `onClick`. */
+		const { shareQuiz, renameQuiz } = ctx;
+		const items: ActionMenuItem[] = [];
+		// Poussée seulement si l'hôte sait partager : une entrée grise se lit
+		// comme une panne, une entrée absente comme un hôte qui fait autre
+		// chose (même geste que `onMenu?` sur les cartes, tranche 2.5).
+		if (shareQuiz) items.push({
+			icon: "share-2",
+			label: t("dashboard.quizzes.menuShare"),
+			// Même modal de partage que les dossiers (Discord / enregistrer),
+			// avec le .md du quiz seul — remplace l'ancienne copie de bloc
+			// texte, jugée insuffisante (demande Ahmed 2026-07-19).
+			onClick: () => { shareQuiz({ quiz }); },
+		});
+		items.push({
+			icon: "pencil",
+			label: t("dashboard.detail.edit"),
+			// La page du quiz, en ÉDITION, DANS le dashboard : ouvrir un
+			// onglet à côté ferait deux surfaces pour le même quiz, alors
+			// qu'un clic sur la carte mène déjà à cette page.
+			onClick: () => { ctx.navigate("detail", { quiz, edit: true }); },
+		});
+		// Même règle que Partager : sans `renameQuiz`, pas d'entrée. Rendre
+		// « Renommer » sur `HostFs.rename` casserait les liens entrants en
+		// silence — une entrée qui n'existe pas vaut mieux qu'une qui ment.
+		if (renameQuiz) items.push({
+			// « text-cursor-input » et non un crayon : « Edit » (pencil) ouvre
+			// déjà l'éditeur de questions — deux crayons se confondraient.
+			icon: "text-cursor-input",
+			label: t("dashboard.quizzes.menuRename"),
+			onClick: () => { openRenameQuizModal(quiz, renameQuiz, rerender); },
+		});
+		items.push({
+			icon: "trash-2",
+			label: t("dashboard.quizzes.menuDelete"),
+			danger: true,
+			onClick: () => {
+				openConfirm({
+					title: t("dashboard.quizzes.deleteConfirmTitle"),
+					body: t("dashboard.quizzes.deleteConfirmBody", { title: quiz.title }),
+					cta: t("dashboard.quizzes.deleteConfirmCta"),
+					warning: true,
+				}, () => { void deleteQuiz(ctx, quiz).then(rerender); });
 			},
-			{
-				icon: "pencil",
-				label: t("dashboard.detail.edit"),
-				// La page du quiz, en ÉDITION, DANS le dashboard : ouvrir un
-				// onglet à côté ferait deux surfaces pour le même quiz, alors
-				// qu'un clic sur la carte mène déjà à cette page.
-				onClick: () => { ctx.navigate("detail", { quiz, edit: true }); },
-			},
-			{
-				// « text-cursor-input » et non un crayon : « Edit » (pencil) ouvre
-				// déjà l'éditeur de questions — deux crayons se confondraient.
-				icon: "text-cursor-input",
-				label: t("dashboard.quizzes.menuRename"),
-				onClick: () => { new RenameQuizModal(ctx, quiz, rerender).open(); },
-			},
-			{
-				icon: "trash-2",
-				label: t("dashboard.quizzes.menuDelete"),
-				danger: true,
-				onClick: () => {
-					new ConfirmModal(ctx.app, {
-						title: t("dashboard.quizzes.deleteConfirmTitle"),
-						body: t("dashboard.quizzes.deleteConfirmBody", { title: quiz.title }),
-						cta: t("dashboard.quizzes.deleteConfirmCta"),
-						warning: true,
-					}, () => { void deleteQuiz(ctx, quiz).then(rerender); }).open();
-				},
-			},
-		];
+		});
+		return items;
 	};
 }
 
@@ -282,47 +316,49 @@ export function buildQuizCardMenu(ctx: DashboardCtx, rerender: () => void): (qui
     d'entrée « Rename » ici), Archive = LE DOSSIER (flag unique
     quizzesArchivedFolders — jamais par quiz), Delete = tous les quiz du
     module (confirmation avec le compte). */
-export function buildModuleCardMenu(ctx: DashboardCtx, rerender: () => void, map: ModuleMap): (g: ModuleGroup) => ActionMenuItem[] {
+export function buildModuleCardMenu(ctx: DashboardShellCtx, rerender: () => void, map: ModuleMap): (g: ModuleGroup) => ActionMenuItem[] {
 	return (g) => {
 		const archived = isFolderArchived(ctx, g.folder);
-		return [
-			{
-				icon: "share-2",
-				label: t("dashboard.quizzes.menuShare"),
-				onClick: () => { new ShareModal(ctx, moduleShareSource(ctx, g)).open(); },
+		const { shareQuiz } = ctx;
+		const items: ActionMenuItem[] = [];
+		// Absente, jamais grise : voir `buildQuizCardMenu`.
+		if (shareQuiz) items.push({
+			icon: "share-2",
+			label: t("dashboard.quizzes.menuShare"),
+			onClick: () => { shareQuiz({ group: g }); },
+		});
+		items.push({
+			icon: "pencil",
+			label: t("dashboard.detail.edit"),
+			// Modal « Modifier dossier » calqué sur StudySmarter (nom / UE /
+			// couleur, sans le toggle public) — remplace l'ancienne ouverture
+			// de la note de correspondance, jugée non fonctionnelle.
+			onClick: () => { openModuleEditModal(ctx, g, map, rerender); },
+		});
+		items.push({
+			icon: "archive",
+			label: t(archived ? "dashboard.quizzes.menuUnarchive" : "dashboard.quizzes.menuArchive"),
+			// Direct dans les deux sens (demande Ahmed 2026-07-19 : plus
+			// aucune confirmation d'archivage). Un seul flag par DOSSIER :
+			// opérationnel même quand la grille ne montre aucun quiz du
+			// module (l'ancien modèle par-quiz rendait « Unarchive »
+			// inopérant sur un module entièrement archivé, g.quizzes filtré
+			// étant vide).
+			onClick: () => { setFolderArchived(ctx, g.folder, !archived); rerender(); },
+		});
+		items.push({
+			icon: "trash-2",
+			label: t("dashboard.quizzes.menuDeleteModule"),
+			danger: true,
+			onClick: () => {
+				openConfirm({
+					title: t("dashboard.quizzes.deleteConfirmTitle"),
+					body: t("dashboard.quizzes.deleteModuleConfirmBody", { count: g.quizzes.length, name: g.name }),
+					cta: t("dashboard.quizzes.deleteConfirmCta"),
+					warning: true,
+				}, () => { void deleteModuleQuizzes(ctx, g).then(rerender); });
 			},
-			{
-				icon: "pencil",
-				label: t("dashboard.detail.edit"),
-				// Modal « Modifier dossier » calqué sur StudySmarter (nom / UE /
-				// couleur, sans le toggle public) — remplace l'ancienne ouverture
-				// de la note de correspondance, jugée non fonctionnelle.
-				onClick: () => { openModuleEditModal(ctx, g, map, rerender); },
-			},
-			{
-				icon: "archive",
-				label: t(archived ? "dashboard.quizzes.menuUnarchive" : "dashboard.quizzes.menuArchive"),
-				// Direct dans les deux sens (demande Ahmed 2026-07-19 : plus
-				// aucune confirmation d'archivage). Un seul flag par DOSSIER :
-				// opérationnel même quand la grille ne montre aucun quiz du
-				// module (l'ancien modèle par-quiz rendait « Unarchive »
-				// inopérant sur un module entièrement archivé, g.quizzes filtré
-				// étant vide).
-				onClick: () => { setFolderArchived(ctx, g.folder, !archived); rerender(); },
-			},
-			{
-				icon: "trash-2",
-				label: t("dashboard.quizzes.menuDeleteModule"),
-				danger: true,
-				onClick: () => {
-					new ConfirmModal(ctx.app, {
-						title: t("dashboard.quizzes.deleteConfirmTitle"),
-						body: t("dashboard.quizzes.deleteModuleConfirmBody", { count: g.quizzes.length, name: g.name }),
-						cta: t("dashboard.quizzes.deleteConfirmCta"),
-						warning: true,
-					}, () => { void deleteModuleQuizzes(ctx, g).then(rerender); }).open();
-				},
-			},
-		];
+		});
+		return items;
 	};
 }

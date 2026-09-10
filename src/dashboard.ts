@@ -418,7 +418,27 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 				if (this.selectedQuiz) {
 					const edit = this.pendingEdit;
 					this.pendingEdit = false;
-					this.detail.render(contentEl, this.selectedQuiz, edit);
+					const quiz = this.selectedQuiz;
+					// La cible du retour est fixée à l'ARRIVÉE sur la page : lue au
+					// clic, elle aurait déjà été écrasée par une navigation
+					// intermédiaire. Ces deux clôtures vivaient dans `detail.ts`,
+					// qui les lisait sur `ctx.view` ; elles sont ici parce que la
+					// vue précédente et la vue courante sont l'état de CETTE vue,
+					// que le code partagé ne porte plus (tranche 3, tâche 8).
+					const target = this.previousView || "home";
+					this.detail.render(contentEl, quiz, {
+						startEditing: edit,
+						onBack: () => {
+							this.navigate(target);
+							// Retour vers « Mes quiz » : on rouvre le DOSSIER du quiz,
+							// pas la grille racine — sortir d'un quiz doit rendre à
+							// son contexte (demande Ahmed 2026-07-21). navigate()
+							// vient de refermer le drill (resetDrilldown), d'où la
+							// réouverture.
+							if (target === "quizzes") this.quizzes.openFolderOfQuiz(quiz.path);
+						},
+						isStale: () => this.currentView !== "detail",
+					});
 				} else {
 					this.currentView = "home";
 					this.home.render(contentEl, entering);

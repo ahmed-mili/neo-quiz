@@ -199,9 +199,11 @@ export interface DashboardShellCtx {
 	saveSettings(): Promise<void>;
 	/* Le plan (D3) déclarait `navigate(view: DashboardViewName): void`, sans
 	   second paramètre — mais `home.ts` (typé, lui, en `DashboardShellCtx`)
-	   et quiz-menu.ts, ai.ts, detail.ts (toujours typés en `DashboardCtx`,
-	   ils importent encore Obsidian) appellent TOUS
-	   `ctx.navigate("detail", { quiz, edit? })`.
+	   et quiz-menu.ts, ai.ts (toujours typés en `DashboardCtx`, ils importent
+	   encore Obsidian) appellent TOUS `ctx.navigate("detail", { quiz, edit? })`.
+	   `detail.ts` est passé à `DashboardShellCtx` en tranche 3 (tâche 8) : ses
+	   trois lectures de `ctx.view` sont remontées chez l'appelant, dans la
+	   `DetailHostSpec` que `src/dashboard.ts` construit.
 	   Perdre ce paramètre ici cassait leur compilation : signature restaurée
 	   à l'identique de l'ancienne `DashboardCtx.navigate` (bug du plan,
 	   corrigé — cf. rapport de tâche).

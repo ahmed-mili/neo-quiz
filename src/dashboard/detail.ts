@@ -1,9 +1,9 @@
-import { setIcon, Notice } from "obsidian";
-import type { App, Plugin } from "obsidian";
+import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
 import { t } from "../i18n";
-import type { DashboardCtx } from "../types/dashboard-ctx";
+import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
-import type { QuizStatRecord } from "./stats-store";
+import type { QuizStatRecord, StatsStore } from "./stats-store";
 import { quizTypeLabel } from "./quiz-card";
 import { openTypePickerModal, openConfirmModal } from "../editor/modals";
 import { closeAllSelects } from "./ui-select";
@@ -54,7 +54,10 @@ export interface QuizPageSpec {
 	/** Entrée du scanner, pour la rangée de stats. Absente : pas de rangée —
 	    un quiz qui n'existe pas encore n'a ni score ni tentative. */
 	stats?: QuizIndexEntry;
-	/** Flèche retour : le SEUL chemin de sortie de la page. */
+	/** Flèche retour : le SEUL chemin de sortie de la page. C'est la part de
+	    l'HÔTE, comme `isStale` : la page ne sait pas d'où l'on vient (vue
+	    précédente du tableau de bord, onglet à refermer, scène de génération
+	    à relancer) — celui qui la monte le sait, et le dit ici. */
 	onBack(): void;
 	/** Bouton principal à droite. Absent → masqué. Reçoit son propre élément :
 	    un menu flottant doit s'ancrer au bouton cliqué, pas à la page. */
@@ -62,7 +65,9 @@ export interface QuizPageSpec {
 	/** Actions supplémentaires, posées avant le bouton principal. */
 	actions?: Array<{ label: string; icon: string; onClick(el: HTMLElement): void }>;
 	/** Vrai quand la page n'est plus celle qu'on regarde (vue changée) : les
-	    flèches ← → cessent alors de lui répondre. */
+	    flèches ← → cessent alors de lui répondre. Part de l'HÔTE, lue à
+	    chaque touche : seul lui connaît sa vue courante — la page, elle, ne
+	    porte aucun état de navigation. */
 	isStale?(): boolean;
 	/** Ouvrir d'emblée en ÉDITION. Pour un quiz qu'on vient de créer : sa
 	    question est vierge, la relire n'apprendrait rien. Ne vaut qu'à la
@@ -70,11 +75,14 @@ export interface QuizPageSpec {
 	startEditing?: boolean;
 }
 
-/** Dépendances d'une page « quiz », indépendantes du dashboard. */
+/** Dépendances d'une page « quiz », indépendantes du dashboard — et de
+    l'hôte. `app` et `plugin` d'Obsidian y figuraient : la page ne les
+    lisait pas elle-même, elle les relayait à ses satellites (lecture et
+    écriture du bloc, image collée), qui passent tous par le contrat d'hôte
+    depuis la tranche 3. Il ne reste que le magasin de stats, et seulement
+    pour la rangée d'un quiz du catalogue. */
 export interface QuizPageDeps {
-	app: App;
-	plugin: Plugin;
-	statsStore?: DashboardCtx["statsStore"];
+	statsStore?: StatsStore;
 }
 
 export interface QuizPageHandlers {
@@ -88,8 +96,21 @@ export interface QuizPageHandlers {
 	dispose(): void;
 }
 
+/** La part de la spec que seul l'HÔTE du tableau de bord peut écrire pour un
+    quiz du catalogue : où revenir, et si sa page est encore celle qu'on
+    regarde. Le wrapper ci-dessous compose tout le reste depuis l'entrée du
+    scanner ; ces deux clôtures, lui, il ne peut pas les deviner. Elles
+    lisaient `ctx.view.previousView`, `ctx.view.quizzes` et
+    `ctx.view.currentView` — la vue Obsidian, que `DashboardShellCtx` ne porte
+    pas et que la fenêtre n'a pas. Les remonter chez l'appelant plutôt
+    qu'élargir le ctx : la page sert déjà trois hôtes PAR UNE SPEC, et un
+    membre de plus sur le ctx aurait forcé la fenêtre à fabriquer une fausse
+    vue. C'est le même découpage que `QuizPageSpec.onBack`/`isStale`, dont
+    ces champs sont la projection exacte. */
+export type DetailHostSpec = Pick<QuizPageSpec, "onBack" | "isStale" | "startEditing">;
+
 export interface DetailHandlers {
-	render(container: HTMLElement, quiz: QuizIndexEntry, startEditing?: boolean): void;
+	render(container: HTMLElement, quiz: QuizIndexEntry, host: DetailHostSpec): void;
 	/** Relayé à la page : appelé à la fermeture de la vue dashboard. */
 	dispose(): void;
 }
@@ -97,14 +118,11 @@ export interface DetailHandlers {
 /* ── La page « quiz » du dashboard : UNE instance, sur un quiz du vault. La
    page « Générer » en crée une autre, sur son quiz en mémoire — d'où la
    séparation entre createQuizPage (le composant) et ce wrapper (la vue). ── */
-export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
-	const page = createQuizPage({ app: ctx.app, plugin: ctx.plugin, statsStore: ctx.statsStore });
+export function createDetailHandlers(ctx: DashboardShellCtx): DetailHandlers {
+	const page = createQuizPage({ statsStore: ctx.statsStore });
 
 	return {
-		render(container: HTMLElement, quiz: QuizIndexEntry, startEditing?: boolean): void {
-			// La cible du retour est fixée à l'ARRIVÉE sur la page : lue au clic,
-			// elle aurait déjà été écrasée par une navigation intermédiaire.
-			const target = ctx.view.previousView || "home";
+		render(container: HTMLElement, quiz: QuizIndexEntry, host: DetailHostSpec): void {
 			page.render(container, {
 				key: quiz.path,
 				title: quiz.title,
@@ -113,14 +131,7 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 				stats: quiz,
 				load: () => loadQuizDraft(quiz.path),
 				save: (draft) => saveQuizDraft(draft),
-				onBack: () => {
-					ctx.navigate(target);
-					// Retour vers « Mes quiz » : on rouvre le DOSSIER du quiz, pas
-					// la grille racine — sortir d'un quiz doit rendre à son
-					// contexte (demande Ahmed 2026-07-21). navigate() vient de
-					// refermer le drill (resetDrilldown), d'où la réouverture.
-					if (target === "quizzes") ctx.view.quizzes?.openFolderOfQuiz(quiz.path);
-				},
+				onBack: host.onBack,
 				start: {
 					label: t("dashboard.detail.play"),
 					icon: "play",
@@ -132,8 +143,8 @@ export function createDetailHandlers(ctx: DashboardCtx): DetailHandlers {
 					// parlait que d'onglets.
 					onClick: () => ctx.openQuiz(quiz),
 				},
-				isStale: () => ctx.view.currentView !== "detail",
-				startEditing,
+				isStale: host.isStale,
+				startEditing: host.startEditing,
 			});
 		},
 		dispose: () => page.dispose(),
@@ -172,8 +183,8 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		// TENABLE après un échec, sinon toutes les écritures suivantes de la
 		// session seraient court-circuitées par un rejet définitif.
 		saveChain = saveChain.then(() => save(pending)).then(
-			(ok) => { if (!ok) new Notice(t("dashboard.quiz.saveError")); },
-			() => { new Notice(t("dashboard.quiz.saveError")); },
+			(ok) => { if (!ok) currentHost().ui.notice(t("dashboard.quiz.saveError")); },
+			() => { currentHost().ui.notice(t("dashboard.quiz.saveError")); },
 		);
 	}
 	/** Piste du carrousel du panneau — recréée à chaque paintPanel. */
@@ -212,14 +223,14 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	}
 
 	function render(container: HTMLElement, spec: QuizPageSpec): void {
-		// Un glissement encore en vol vise des nœuds que container.empty() va
+		// Un glissement encore en vol vise des nœuds que container.replaceChildren() va
 		// détruire : le terminer d'abord évite un timer orphelin qui écrirait
 		// dans un DOM mort.
 		if (slideHost) { finishSlide(slideHost); slideHost = null; }
 		// Un menu portalé au <body> survivrait à la destruction de son ancre :
 		// il resterait ouvert au-dessus d'une page qui n'existe plus.
 		closeAllSelects();
-		container.empty();
+		container.replaceChildren();
 		currentContainer = container;
 		currentSpec = spec;
 		if (spec.key !== currentPath) {
@@ -235,7 +246,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			   page gardait son brouillon : on la relit, sinon la frappe suivante
 			   réécrirait par-dessus. La modification externe gagne — mais on le
 			   DIT, sinon des retouches en attente disparaîtraient sans un mot. */
-			if (saveTimer) new Notice(t("dashboard.quiz.externalChange"));
+			if (saveTimer) currentHost().ui.notice(t("dashboard.quiz.externalChange"));
 			flushSave();
 			draft = null;
 		}
@@ -250,18 +261,18 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			editing = true;
 		}
 
-		const page = container.createDiv({ cls: "qbd-qz" });
+		const page = ajouter(container, "div", "qbd-qz");
 		renderHeader(page, spec);
 		renderStats(page, spec);
 
-		const body = page.createDiv({ cls: "qbd-qz-body" });
-		const listCol = body.createDiv({ cls: "qbd-qz-list" });
+		const body = ajouter(page, "div", "qbd-qz-body");
+		const listCol = ajouter(body, "div", "qbd-qz-list");
 		// La navigation ‹ › vit SOUS le panneau, pas dedans (référence) : la
 		// carte de question garde ainsi une surface pleine, sans réserver un
 		// couloir en bas.
-		const main = body.createDiv({ cls: "qbd-qz-main" });
-		const panel = main.createDiv({ cls: "qbd-qz-panel" });
-		const nav = main.createDiv({ cls: "qbd-qz-nav" });
+		const main = ajouter(body, "div", "qbd-qz-main");
+		const panel = ajouter(main, "div", "qbd-qz-panel");
+		const nav = ajouter(main, "div", "qbd-qz-nav");
 
 		bindArrowKeys(page, listCol, panel, nav, spec);
 
@@ -270,12 +281,12 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			return;
 		}
 
-		panel.createDiv({ cls: "qbd-qz-loading", text: t("dashboard.quiz.loading") });
+		ajouter(panel, "div", "qbd-qz-loading", t("dashboard.quiz.loading"));
 		void spec.load().then(result => {
 			// La page a pu être quittée (ou un autre quiz ouvert) pendant la
 			// lecture du fichier : ne peindre que si le DOM est encore vivant.
 			if (!panel.isConnected || spec.key !== currentPath) return;
-			panel.empty();
+			panel.replaceChildren();
 			if (typeof result === "string") {
 				// Clés énumérées, pas concaténées : t() est typé sur l'union des
 				// clés du dictionnaire (une clé calculée ne compilerait pas, et
@@ -283,7 +294,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 				const msg = result === "fileNotFound" ? t("dashboard.detail.fileNotFound")
 					: result === "noBlock" ? t("dashboard.detail.noBlock")
 					: t("dashboard.detail.loadError");
-				panel.createDiv({ cls: "qbd-qz-error", text: msg });
+				ajouter(panel, "div", "qbd-qz-error", msg);
 				return;
 			}
 			draft = result;
@@ -295,44 +306,43 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 
 	/* ── Header : fil d'Ariane, nom + chemin, Editor / Start ── */
 	function renderHeader(page: HTMLElement, spec: QuizPageSpec): void {
-		const header = page.createDiv({ cls: "qbd-qz-header" });
+		const header = ajouter(page, "div", "qbd-qz-header");
 
 		// Flèche SUR LA LIGNE du titre, à sa gauche (capture StudySmarter
 		// 2026-07-21) — pas au-dessus. Mêmes classes que le retour du
 		// drill-down : un seul bouton retour dans tout le dashboard.
-		const back = header.createEl("button", {
-			cls: "qbd-quizzes-crumb-back qbd-qz-back",
-			attr: { type: "button", "aria-label": t("dashboard.quiz.back") },
-		});
-		const backIcon = back.createSpan({ cls: "qbd-quizzes-crumb-icon" });
-		setIcon(backIcon, "arrow-left");
+		const back = ajouter(header, "button", "qbd-quizzes-crumb-back qbd-qz-back");
+		back.type = "button";
+		back.setAttribute("aria-label", t("dashboard.quiz.back"));
+		const backIcon = ajouter(back, "span", "qbd-quizzes-crumb-icon");
+		currentHost().ui.setIcon(backIcon, "arrow-left");
 		back.addEventListener("click", () => {
 			flushSave();
 			spec.onBack();
 		});
 
-		const info = header.createDiv({ cls: "qbd-qz-headline" });
-		const titleRow = info.createDiv({ cls: "qbd-qz-title-row" });
-		titleRow.createEl("h2", { cls: "qbd-qz-title", text: spec.title });
+		const info = ajouter(header, "div", "qbd-qz-headline");
+		const titleRow = ajouter(info, "div", "qbd-qz-title-row");
+		ajouter(titleRow, "h2", "qbd-qz-title", spec.title);
 		const count = draft ? draft.questions.length : spec.questionCount;
-		countEl = titleRow.createSpan({ cls: "qbd-qz-count", text: String(count) });
-		if (spec.subtitle) info.createEl("p", { cls: "qbd-qz-path", text: spec.subtitle });
+		countEl = ajouter(titleRow, "span", "qbd-qz-count", String(count));
+		if (spec.subtitle) ajouter(info, "p", "qbd-qz-path", spec.subtitle);
 
-		const actions = header.createDiv({ cls: "qbd-qz-actions" });
+		const actions = ajouter(header, "div", "qbd-qz-actions");
 
 		// Modifier ↔ Terminé : la MÊME page bascule (référence : « Éditeur »
 		// n'ouvre pas un autre écran, il change le contenu de la carte).
-		const edit = actions.createEl("button", { cls: "qbd-btn qbd-btn--ghost qbd-qz-edit-btn" + (editing ? " is-on" : "") });
-		setIcon(edit.createSpan({ cls: "qbd-btn-icon" }), editing ? "check" : "square-pen");
+		const edit = ajouter(actions, "button", "qbd-btn qbd-btn--ghost qbd-qz-edit-btn" + (editing ? " is-on" : ""));
+		currentHost().ui.setIcon(ajouter(edit, "span", "qbd-btn-icon"), editing ? "check" : "square-pen");
 		// « Editor » (et non « Edit ») : le bouton ouvre un MODE, il ne
 		// déclenche pas une action — demande d'Ahmed 2026-07-21.
-		edit.createSpan({ text: t(editing ? "dashboard.quiz.editDone" : "dashboard.quiz.editor") });
+		ajouter(edit, "span", undefined, t(editing ? "dashboard.quiz.editDone" : "dashboard.quiz.editor"));
 		edit.addEventListener("click", () => toggleEditing(page));
 
 		for (const action of spec.actions || []) {
-			const btn = actions.createEl("button", { cls: "qbd-btn qbd-btn--ghost" });
-			setIcon(btn.createSpan({ cls: "qbd-btn-icon" }), action.icon);
-			btn.createSpan({ text: action.label });
+			const btn = ajouter(actions, "button", "qbd-btn qbd-btn--ghost");
+			currentHost().ui.setIcon(ajouter(btn, "span", "qbd-btn-icon"), action.icon);
+			ajouter(btn, "span", undefined, action.label);
 			btn.addEventListener("click", () => {
 				flushSave();
 				action.onClick(btn);
@@ -344,9 +354,9 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		// nos autres boutons ». Jamais l'accent bleu.
 		const startSpec = spec.start;
 		if (startSpec) {
-			const start = actions.createEl("button", { cls: "qbd-btn--create qbd-qz-start" });
-			setIcon(start.createSpan({ cls: "qbd-btn-icon" }), startSpec.icon);
-			start.createSpan({ text: startSpec.label });
+			const start = ajouter(actions, "button", "qbd-btn--create qbd-qz-start");
+			currentHost().ui.setIcon(ajouter(start, "span", "qbd-btn-icon"), startSpec.icon);
+			ajouter(start, "span", undefined, startSpec.label);
 			start.addEventListener("click", () => {
 				flushSave();
 				startSpec.onClick(start);
@@ -414,16 +424,16 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		const total = stat.totalQuestions || quiz.questions;
 		const pct = total > 0 ? Math.round(stat.questionsDone / total * 100) : 0;
 
-		const row = page.createDiv({ cls: "qbd-qz-stats" });
+		const row = ajouter(page, "div", "qbd-qz-stats");
 
-		const prog = row.createDiv({ cls: "qbd-qz-stat qbd-qz-stat--progress" });
+		const prog = ajouter(row, "div", "qbd-qz-stat qbd-qz-stat--progress");
 		prog.appendChild(createRingSVG(pct, "var(--interactive-accent)", 40, 4));
-		const progText = prog.createDiv({ cls: "qbd-qz-stat-body" });
-		progText.createSpan({ cls: "qbd-qz-stat-value qbd-qz-stat-pct", text: `${pct}%` });
-		progText.createSpan({
-			cls: "qbd-qz-stat-label",
-			text: t(total === 1 ? "dashboard.common.questionsOfOne" : "dashboard.common.questionsOfOther", { done: stat.questionsDone, total }),
-		});
+		const progText = ajouter(prog, "div", "qbd-qz-stat-body");
+		ajouter(progText, "span", "qbd-qz-stat-value qbd-qz-stat-pct", `${pct}%`);
+		ajouter(
+			progText, "span", "qbd-qz-stat-label",
+			t(total === 1 ? "dashboard.common.questionsOfOne" : "dashboard.common.questionsOfOther", { done: stat.questionsDone, total }),
+		);
 
 		// Jamais joué : « Best score » et « Last played » n'auraient qu'un tiret
 		// à montrer — deux cases vides qui n'apprennent rien (demande d'Ahmed
@@ -445,11 +455,11 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			);
 		}
 		for (const c of cells) {
-			const cell = row.createDiv({ cls: "qbd-qz-stat" });
-			const body = cell.createDiv({ cls: "qbd-qz-stat-body" });
-			const v = body.createSpan({ cls: "qbd-qz-stat-value", text: c.value });
+			const cell = ajouter(row, "div", "qbd-qz-stat");
+			const body = ajouter(cell, "div", "qbd-qz-stat-body");
+			const v = ajouter(body, "span", "qbd-qz-stat-value", c.value);
 			if (c.accent) v.style.color = c.accent;
-			body.createSpan({ cls: "qbd-qz-stat-label", text: c.label });
+			ajouter(body, "span", "qbd-qz-stat-label", c.label);
 		}
 	}
 
@@ -478,13 +488,15 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 
 	function paintList(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		if (!draft) return;
-		listCol.empty();
+		listCol.replaceChildren();
 
-		const head = listCol.createDiv({ cls: "qbd-qz-list-head" });
-		head.createSpan({ cls: "qbd-qz-list-title", text: t("dashboard.quiz.questionsTitle", { n: draft.questions.length }) });
+		const head = ajouter(listCol, "div", "qbd-qz-list-head");
+		ajouter(head, "span", "qbd-qz-list-title", t("dashboard.quiz.questionsTitle", { n: draft.questions.length }));
 		if (editing) {
-			const add = head.createEl("button", { cls: "qbd-qz-list-add", attr: { type: "button", "aria-label": t("dashboard.quiz.addQuestion") } });
-			setIcon(add, "plus");
+			const add = ajouter(head, "button", "qbd-qz-list-add");
+			add.type = "button";
+			add.setAttribute("aria-label", t("dashboard.quiz.addQuestion"));
+			currentHost().ui.setIcon(add, "plus");
 			// Le TYPE se choisit à la création, comme dans l'éditeur : une
 			// question ajoutée d'office en « choix unique » puis reconvertie
 			// perdrait ses réponses au passage.
@@ -506,13 +518,13 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			});
 		}
 
-		const items = listCol.createDiv({ cls: "qbd-qz-list-items" });
+		const items = ajouter(listCol, "div", "qbd-qz-list-items");
 		draft.questions.forEach((q, i) => {
-			const card = items.createDiv({ cls: "qbd-qz-card" + (i === activeIdx ? " is-active" : "") });
-			const num = card.createSpan({ cls: "qbd-qz-card-num", text: String(i + 1) });
+			const card = ajouter(items, "div", "qbd-qz-card" + (i === activeIdx ? " is-active" : ""));
+			const num = ajouter(card, "span", "qbd-qz-card-num", String(i + 1));
 			num.setAttribute("aria-hidden", "true");
 			const text = questionText(q);
-			const label = card.createSpan({ cls: "qbd-qz-card-text" + (text ? "" : " is-empty"), text: text || t("dashboard.quiz.promptEmpty") });
+			const label = ajouter(card, "span", "qbd-qz-card-text" + (text ? "" : " is-empty"), text || t("dashboard.quiz.promptEmpty"));
 			// LaTeX $…$ de la vignette : rendu comme dans la liste de l'éditeur
 			// (qui le faisait déjà). Sans ça, une question de maths s'y lisait
 			// avec ses dollars bruts.
@@ -521,15 +533,17 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 
 			if (!editing || !draft) return;
 
-			const acts = card.createDiv({ cls: "qbd-qz-card-acts" });
+			const acts = ajouter(card, "div", "qbd-qz-card-acts");
 
 			// Réordonnancement : l'ordre des questions EST le déroulé du quiz.
 			// Les flèches restent visibles (grisées) aux extrémités plutôt que
 			// de disparaître — une rangée d'actions qui change de largeur d'une
 			// carte à l'autre fait sautiller la liste.
 			const move = (dir: -1 | 1, icon: string, aria: string): void => {
-				const btn = acts.createEl("button", { cls: "qbd-qz-card-act", attr: { type: "button", "aria-label": aria } });
-				setIcon(btn, icon);
+				const btn = ajouter(acts, "button", "qbd-qz-card-act");
+				btn.type = "button";
+				btn.setAttribute("aria-label", aria);
+				currentHost().ui.setIcon(btn, icon);
 				const target = i + dir;
 				btn.disabled = target < 0 || target >= draft!.questions.length;
 				btn.addEventListener("click", (e) => {
@@ -550,8 +564,10 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			// Suppression : jamais la dernière (un bloc quiz-blocks vide ne se
 			// relit pas).
 			if (draft.questions.length > 1) {
-				const del = acts.createEl("button", { cls: "qbd-qz-card-act qbd-qz-card-del", attr: { type: "button", "aria-label": t("dashboard.quiz.deleteQuestion") } });
-				setIcon(del, "trash-2");
+				const del = ajouter(acts, "button", "qbd-qz-card-act qbd-qz-card-del");
+				del.type = "button";
+				del.setAttribute("aria-label", t("dashboard.quiz.deleteQuestion"));
+				currentHost().ui.setIcon(del, "trash-2");
 				del.addEventListener("click", (e) => {
 					e.stopPropagation();
 					if (!draft) return;
@@ -614,7 +630,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	function fillSlide(slide: HTMLElement, q: DraftQuestion, index: number, listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		// Pas de bandeau « Question i / n » : le rendu réel affiche déjà le
 		// TITRE de la question (h2 du moteur) — deux titres l'un sur l'autre.
-		const content = slide.createDiv({ cls: "qbd-qz-panel-body" });
+		const content = ajouter(slide, "div", "qbd-qz-panel-body");
 		if (editing) {
 			renderQuestionEdit(content, q, {
 				onChange: () => {
@@ -692,14 +708,14 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	function paintPanel(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
 		if (!draft) return;
 		// Un glissement en vol tient un timer et un listener `transitionend` sur
-		// une piste que `panel.empty()` va détacher : le conclure d'abord, sinon
+		// une piste que `panel.replaceChildren()` va détacher : le conclure d'abord, sinon
 		// ils survivent jusqu'à leur échéance en visant un DOM mort.
 		if (slideHost) finishSlide(slideHost);
-		panel.empty();
+		panel.replaceChildren();
 		slideHost = null;
 		const q = draft.questions[activeIdx];
 		if (!q) {
-			panel.createDiv({ cls: "qbd-qz-error", text: t("dashboard.detail.noBlock") });
+			ajouter(panel, "div", "qbd-qz-error", t("dashboard.detail.noBlock"));
 			return;
 		}
 
@@ -730,16 +746,20 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 	    à chaque glissement, pour que l'état désactivé suive sans reconstruire
 	    la question. */
 	function paintNav(listCol: HTMLElement, panel: HTMLElement, nav: HTMLElement, spec: QuizPageSpec): void {
-		nav.empty();
+		nav.replaceChildren();
 		if (!draft || draft.questions.length <= 1) return;
 
-		const prev = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.prev") } });
-		setIcon(prev, "chevron-left");
+		const prev = ajouter(nav, "button", "qbd-qz-nav-btn");
+		prev.type = "button";
+		prev.setAttribute("aria-label", t("dashboard.quiz.prev"));
+		currentHost().ui.setIcon(prev, "chevron-left");
 		prev.disabled = activeIdx === 0;
 		prev.addEventListener("click", () => goToQuestion(activeIdx - 1, listCol, panel, nav, spec));
 
-		const next = nav.createEl("button", { cls: "qbd-qz-nav-btn", attr: { type: "button", "aria-label": t("dashboard.quiz.next") } });
-		setIcon(next, "chevron-right");
+		const next = ajouter(nav, "button", "qbd-qz-nav-btn");
+		next.type = "button";
+		next.setAttribute("aria-label", t("dashboard.quiz.next"));
+		currentHost().ui.setIcon(next, "chevron-right");
 		next.disabled = activeIdx >= draft.questions.length - 1;
 		next.addEventListener("click", () => goToQuestion(activeIdx + 1, listCol, panel, nav, spec));
 	}

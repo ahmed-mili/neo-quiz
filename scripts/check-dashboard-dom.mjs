@@ -15,7 +15,8 @@
  * et `module-icons.ts`, tâche 6, extraits pour que l'app puisse importer ces
  * pages sans tirer `ui-select.ts`/`icon-picker.ts`), les cinq fichiers
  * libérés en tranche 2.6, et ceux de la tranche 3 (l'entrée/sortie du bloc,
- * puis les trois satellites de la page « quiz »). Contrairement à `RESTANTS`,
+ * les trois satellites de la page « quiz », puis la page elle-même —
+ * `detail.ts`, celle qui sert trois hôtes). Contrairement à `RESTANTS`,
  * cette liste ne peut que
  * GRANDIR : un fichier qui y figure sans plus être libre (import d'Obsidian
  * retrouvé, extension DOM réintroduite) fait échouer le contrôle au lieu d'en
@@ -60,6 +61,7 @@ const LIBERES = [
 	"src/dashboard/detail-exam.ts",
 	"src/dashboard/detail-form-bridge.ts",
 	"src/dashboard/detail-question.ts",
+	"src/dashboard/detail.ts",
 	"src/editor/utils.ts",
 ];
 

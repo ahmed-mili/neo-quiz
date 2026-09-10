@@ -23,16 +23,17 @@ export const VIEW_TYPE = "quiz-blocks-builder";
    quiz-blocks-builder » dans les onglets déjà ouverts.
    ════════════════════════════════════════════════════════ */
 export class QuizBuilderView extends ItemView {
-	private plugin: Plugin;
 	private page: QuizPageHandlers | null = null;
 	/** Note dont le bloc quiz-blocks est ouvert ici (null : rien encore). */
 	sourceFile: TFile | null = null;
 	/** Ouvrir en édition (quiz qu'on vient de créer). */
 	private startEditing = false;
 
-	constructor(leaf: WorkspaceLeaf, plugin: Plugin) {
+	/* Plus de `plugin` : la page ne le relayait qu'à ses satellites, qui
+	   passent par le contrat d'hôte depuis la tranche 3. Un champ que rien ne
+	   lit aurait compilé sans un mot (pas de `noUnusedLocals`). */
+	constructor(leaf: WorkspaceLeaf) {
 		super(leaf);
-		this.plugin = plugin;
 	}
 
 	getViewType(): string { return VIEW_TYPE; }
@@ -94,7 +95,7 @@ export class QuizBuilderView extends ItemView {
 		}
 
 		if (!this.page) {
-			this.page = createQuizPage({ app: this.app, plugin: this.plugin });
+			this.page = createQuizPage({});
 		}
 		// Consommé : le drapeau ne vaut que pour CETTE ouverture. Le laisser
 		// posé ferait rouvrir en édition à chaque repeint de l'onglet.

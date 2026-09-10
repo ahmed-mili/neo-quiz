@@ -35,7 +35,6 @@ const RESTANTS = [
 	"src/dashboard/ai-providers.ts",
 	"src/dashboard/ai-usage.ts",
 	"src/dashboard/ai.ts",
-	"src/dashboard/detail.ts",
 	"src/dashboard/file-sources.ts",
 	"src/dashboard/mention-picker.ts",
 	"src/dashboard/prompt-paths.ts",

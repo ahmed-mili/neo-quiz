@@ -1666,7 +1666,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// n'était pas assez simple (retour Ahmed 2026-07-31) — et il n'avait
 		// aucune raison d'être un écran différent de celui d'un quiz existant.
 		const host = container.createDiv({ cls: "qbd-ai-quiz-page" });
-		if (!resultPage) resultPage = createQuizPage({ app: ctx.app, plugin: ctx.plugin, statsStore: ctx.statsStore });
+		if (!resultPage) resultPage = createQuizPage({ statsStore: ctx.statsStore });
 
 		resultPage.render(host, {
 			// La clé change à chaque génération : la page repart alors de la

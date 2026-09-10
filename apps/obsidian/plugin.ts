@@ -1151,7 +1151,7 @@ export default class InteractiveQuizPlugin extends Plugin {
 		}
 
 		/* ─── Quiz Builder View ─── */
-		this.registerView(VIEW_TYPE, (leaf) => new QuizBuilderView(leaf, this));
+		this.registerView(VIEW_TYPE, (leaf) => new QuizBuilderView(leaf));
 
 		this.registerCommands();
 

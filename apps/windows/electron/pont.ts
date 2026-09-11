@@ -36,8 +36,10 @@
    ET TOUT CHEMIN EST BORNÉ. Un chemin absolu n'est pas un droit : chaque canal
    `fichiers.*` (et `systeme.ouvrir`) REJETTE tout chemin qui ne tombe pas sous
    un dossier du PÉRIMÈTRE (`./perimetre.ts`) — les dossiers retenus dans les
-   réglages, ceux que le sélecteur natif a désignés, les vaults qu'Obsidian
-   déclare, et le dossier de données de l'application. C'est ce que Tauri
+   réglages, ceux que le sélecteur natif a désignés, et les vaults qu'Obsidian
+   déclare. JAMAIS le dossier de données de l'application : il porte
+   `settings.json`, dont la clé `folders` nourrit ce périmètre au prochain
+   démarrage — l'y admettre permettrait de l'écrire en brut. C'est ce que Tauri
    faisait avec `allow_folder` et la portée vide de `plugin-fs` ; sans lui, une
    porte oubliée du sanitizer deviendrait `write("…/Startup/x.bat")`. Le rendu
    ne peut PAS élargir ce périmètre : `demarrer` filtre ses racines contre lui,

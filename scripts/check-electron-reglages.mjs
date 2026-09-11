@@ -169,10 +169,32 @@ await withSrcModule("apps/windows/electron/vaults.ts", async ({ vaultsObsidian }
 
 /* ─────────── le périmètre ─────────── */
 
-await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetre }) => {
+await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetre, perimetreInitial }) => {
 	const r = makeReporter("Électron — périmètre");
 	const dir = await mkdtemp(join(tmpdir(), "electron-perimetre-"));
 	try {
+		await cas(r, "le dossier de réglages (userData) est HORS périmètre au démarrage, les dossiers qu'il liste y sont", async () => {
+			/* Ruling 12. `settings.json` nourrit le périmètre (clé `folders`) au
+			   démarrage suivant : si son propre dossier y entrait, `fichiers.write`
+			   pourrait le réécrire en brut et y glisser `C:/`, hors de la garde de
+			   `reglages.ecrire`. Le module de réglages est chargé À PART, sans
+			   double : c'est lui qui écrit le fichier que `perimetreInitial` lit. */
+			const donnees = join(dir, "userData");
+			const vault = join(dir, "vault-demarrage");
+			await mkdir(join(vault, ".obsidian"), { recursive: true });
+			await mkdir(donnees, { recursive: true });
+			await writeFile(join(donnees, "settings.json"), JSON.stringify({ folders: [{ id: "v", path: vault, name: "v" }] }), "utf-8");
+			await withSrcModule("apps/windows/electron/reglages.ts", async ({ creerReglages }) => {
+				const p = await perimetreInitial({ dossierDonnees: donnees, reglages: creerReglages(join(donnees, "settings.json")) });
+				r.check("le dossier de réglages (userData) est HORS périmètre au démarrage, les dossiers qu'il liste y sont",
+					{
+						settings: await aRejete(() => p.borner(join(donnees, "settings.json"))),
+						vault: await aRejete(() => p.borner(join(vault, "note.md"))),
+					},
+					{ settings: true, vault: false });
+			});
+		});
+
 		const racine = join(dir, "vault");
 		const ailleurs = join(dir, "ailleurs");
 		await mkdir(join(racine, "Cours"), { recursive: true });

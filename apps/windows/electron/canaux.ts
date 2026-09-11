@@ -28,6 +28,7 @@ import { creerFichiers, stat } from "./fichiers";
 import { absoluDepuisContrat, contratDepuisAbsolu, creerIndex } from "./index-fichiers";
 import type { Index } from "./index-fichiers";
 import { listerRacine, normaliser } from "./parcours";
+import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { CANAUX } from "./pont";
 import type { EvenementDisque } from "./pont";
@@ -53,12 +54,6 @@ interface EtatDisque {
 	index: Index | null;
 	arreterSurveillance: (() => void) | null;
 }
-
-/** La clé des réglages où le rendu persiste ses dossiers (`host/folder.ts`),
-    et l'ancienne au singulier. Nommées ici parce que le principal les LIT au
-    démarrage pour nourrir le périmètre, et GARDE les deux à l'écriture. */
-const CLE_DOSSIERS = "folders";
-const CLE_DOSSIER_LEGACY = "folder";
 
 const fichiers = creerFichiers();
 
@@ -119,43 +114,12 @@ async function ecrireTexte(etat: EtatDisque, abs: string, contenu: string): Prom
 
 /* ─────────── les canaux ─────────── */
 
-/** Les chemins que porte une valeur de la clé `folders` (tableau d'objets
-    `{ path }`) ou de l'ancienne clé `folder` (une chaîne). Tolérant sur la
-    forme — c'est `host/folder.ts` qui la valide — strict sur le contenu. */
-function cheminsDeDossiers(valeur: unknown): string[] {
-	if (typeof valeur === "string") return [valeur];
-	if (!Array.isArray(valeur)) return [];
-	return valeur
-		.map(e => (e && typeof e === "object" ? (e as { path?: unknown }).path : undefined))
-		.filter((p): p is string => typeof p === "string" && p.trim() !== "");
-}
-
 /** REJETTE si un des dossiers de la valeur n'est pas déjà dans le périmètre. */
 async function verifierDossiers(perimetre: Perimetre, valeur: unknown): Promise<void> {
 	for (const chemin of cheminsDeDossiers(valeur)) {
 		if (!(await perimetre.contient(chemin))) {
 			throw new Error("dossier hors périmètre, refusé dans les réglages : " + chemin);
 		}
-	}
-}
-
-/** Au démarrage : les dossiers retenus à la session précédente entrent au
-    périmètre. C'est le pendant de ce que faisait `allowFolder` à chaque
-    lancement côté Tauri — sauf que c'est le PRINCIPAL qui lit les réglages,
-    pas le rendu qui les lui dicte. Un dossier disparu est simplement absent
-    (`autoriser` l'ignore), sans empêcher les autres. */
-export async function chargerPerimetre(perimetre: Perimetre, r: Reglages): Promise<void> {
-	for (const cle of [CLE_DOSSIERS, CLE_DOSSIER_LEGACY]) {
-		let valeur: unknown;
-		try {
-			valeur = await r.lire(cle);
-		} catch (e) {
-			// Réglages illisibles : le rendu le verra à son tour et l'affichera ;
-			// ici, on démarre simplement sans dossier.
-			console.warn(LOG_PREFIX, "réglages illisibles au démarrage:", e);
-			return;
-		}
-		for (const chemin of cheminsDeDossiers(valeur)) await perimetre.autoriser(chemin);
 	}
 }
 

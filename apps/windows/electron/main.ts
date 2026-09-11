@@ -25,12 +25,11 @@
 ══════════════════════════════════════════════════════════ */
 
 import { BrowserWindow, app, shell } from "electron";
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
-import { chargerPerimetre, enregistrerCanaux } from "./canaux";
+import { enregistrerCanaux } from "./canaux";
 import { normaliser } from "./parcours";
-import { creerPerimetre } from "./perimetre";
+import { perimetreInitial } from "./perimetre";
 import { CANAUX } from "./pont";
 import { creerReglages } from "./reglages";
 import type { Reglages } from "./reglages";
@@ -57,10 +56,6 @@ const DELAI_GARDE_FERMETURE_MS = 3000;
 
 /* ─────────── état du processus ─────────── */
 
-/** La liste blanche des dossiers que le pont a le droit de toucher — voir
-    `perimetre.ts`. Alimentée par les réglages, le sélecteur, les vaults
-    d'Obsidian et le dossier de données ; JAMAIS par l'argument de `demarrer`. */
-const perimetre = creerPerimetre();
 let fenetre: BrowserWindow | null = null;
 let reglages: Reglages | null = null;
 let fermetureArmee = false;
@@ -165,12 +160,25 @@ function creerFenetre(): void {
 	   `location.reload()` dont `choisirDossier` dépend, puisqu'un rechargement
 	   vise l'URL de l'application ; toute autre origine est REFUSÉE ici et
 	   remise au NAVIGATEUR de l'utilisateur, où un lien légitime a sa place. */
-	fenetre.webContents.on("will-navigate", (e, url) => {
+	const refuserHorsOrigine = (e: Electron.Event, url: string): void => {
 		if (memeOrigine(url)) return;
 		e.preventDefault();
-		if (/^https?:$/.test(new URL(url).protocol)) void shell.openExternal(url);
+		/* Sous `try` : `memeOrigine` rend `false` sur une URL non analysable, et
+		   un `throw` ici, APRÈS le `preventDefault`, ferait sortir l'écouteur en
+		   erreur pour une navigation déjà refusée. */
+		let protocole = "";
+		try {
+			protocole = new URL(url).protocol;
+		} catch {
+			// URL illisible : refusée, et rien à remettre au navigateur.
+		}
+		if (/^https?:$/.test(protocole)) void shell.openExternal(url);
 		else console.warn(LOG_PREFIX, "navigation refusée:", url);
-	});
+	};
+	fenetre.webContents.on("will-navigate", refuserHorsOrigine);
+	// Une redirection ne peut suivre qu'une navigation admise ; la même règle
+	// sur `will-redirect` est la ceinture, pour une ligne.
+	fenetre.webContents.on("will-redirect", refuserHorsOrigine);
 
 	/* Par défaut, Electron ACCORDE les permissions (micro, caméra,
 	   notifications…) à toute page. Aucune fonction de l'application n'en
@@ -227,14 +235,11 @@ if (!app.requestSingleInstanceLock()) {
 	void app.whenReady().then(async () => {
 		const donnees = app.getPath("userData");
 		reglages = creerReglages(path.join(donnees, "settings.json"));
-		/* Le dossier de données entre au périmètre AVANT les dossiers retenus :
-		   c'est là que vivront les fichiers propres à l'application. CRÉÉ d'abord :
-		   `autoriser` ignore un dossier absent, et au tout premier lancement
-		   Electron ne l'a pas forcément encore posé. Puis les réglages, lus par le
-		   principal lui-même. */
-		await fs.mkdir(donnees, { recursive: true });
-		await perimetre.autoriser(donnees);
-		await chargerPerimetre(perimetre, reglagesOuErreur());
+		/* La liste blanche des dossiers que le pont a le droit de toucher — voir
+		   `perimetre.ts` : les réglages, puis le sélecteur et les vaults d'Obsidian
+		   (`canaux.ts`). Le dossier de données est CRÉÉ là-dedans mais JAMAIS
+		   autorisé (Ruling 12) : la raison est écrite sur `perimetreInitial`. */
+		const perimetre = await perimetreInitial({ dossierDonnees: donnees, reglages: reglagesOuErreur() });
 		enregistrerCanaux({
 			perimetre,
 			reglagesOuErreur,

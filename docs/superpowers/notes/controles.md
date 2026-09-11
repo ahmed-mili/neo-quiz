@@ -147,6 +147,10 @@ réponse étant toujours non.
   rend du HTML qui n'est pas toujours celui de l'utilisateur. Le cas du `..` est
   CONCATÉNÉ, jamais composé par `path.join` : `join` replie déjà les `..` et le cas
   était vert quoi qu'on casse.
+  Et le dossier de RÉGLAGES (`userData`) reste HORS périmètre au démarrage : il
+  porte `settings.json`, dont la clé `folders` nourrit le périmètre à la session
+  suivante — l'y admettre laisserait le pont réécrire ce fichier en brut et
+  obtenir tout le disque de façon persistante (Ruling 12).
 - `npm --prefix apps/windows run typecheck:electron` — le typecheck du PROCESSUS
   PRINCIPAL Electron (`apps/windows/tsconfig.electron.json`), lancé par
   `npm run build` de ce dossier, donc par `npm run check:app`. Il referme un trou

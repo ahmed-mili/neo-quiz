@@ -9,7 +9,7 @@
  *
  *     npm run check:obsidian-host
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { parseHTML } from "linkedom";
@@ -1040,6 +1040,57 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 				{ stderr: res.stderr, code: res.code }, { stderr: "ERR:diagnostic", code: 7 });
 		},
 	);
+
+	/* ── LES ARGUMENTS N'ATTEIGNENT PAS UN INTERPRÉTEUR ──
+
+	   Sous Windows, un CLI installé par npm est un `claude.cmd` que `spawn` ne
+	   sait pas lancer : l'hôte retombe alors sur `cmd.exe`, et c'est le chemin
+	   PAR DÉFAUT pour ces installations. Les arguments traversent donc un
+	   INTERPRÉTEUR, ce que le chemin direct ne fait jamais — et `cmd.exe`
+	   n'échappe RIEN par backslash : il bascule un état « cité / pas cité » à
+	   chaque `"`. La première version citait `\"`, qui FERME le guillemet : avec
+	   `a" & echo … & "b`, cmd sortait de l'état cité, voyait un `&` nu et
+	   exécutait la commande glissée dedans.
+	   Le cas le prouve par ses DEUX moitiés : l'argument arrive INTACT dans
+	   l'`argv` de l'enfant (chaîne vide comprise, qui disparaîtrait si elle
+	   n'était pas citée `""`), et le fichier témoin n'existe PAS — c'est lui qui
+	   distingue « bien cité » de « cmd a exécuté la charge ».
+	   Hors Windows, `run` lance l'exécutable directement : l'`argv` attendu est
+	   le même, et rien ne peut interpréter quoi que ce soit. */
+	const temoinDir = mkdtempSync(join(tmpdir(), "quiz-pwn-"));
+	const temoin = join(temoinDir, "pwn.txt");
+	const charge = 'a" & echo PWN > ' + temoin.split("\\").join("/") + ' & "b';
+	const argsCites = ["--model", charge, "", "espace et suite"];
+	await avecFauxCli(
+		"process.stdout.write(JSON.stringify(process.argv.slice(2)));",
+		async () => {
+			let recus = "(pas de sortie)";
+			try {
+				recus = (await host.process.run({ tool: "codex", args: argsCites, stdin: "" })).stdout;
+			} catch (e) {
+				recus = "EXCEPTION: " + (e && e.message ? e.message : String(e));
+			}
+			r.check("un argument à guillemets et métacaractères arrive intact, sans rien exécuter",
+				{ argv: recus, temoin: existsSync(temoin) },
+				{ argv: JSON.stringify(argsCites), temoin: false });
+		},
+	);
+	rmSync(temoinDir, { recursive: true, force: true });
+
+	/* Un saut de ligne ne se cite pas : sur le chemin `cmd.exe`, c'est un
+	   séparateur de commandes qu'aucun guillemet ne neutralise. REFUSÉ avec son
+	   nom, jamais rogné en silence — un argument amputé produirait un appel faux
+	   et muet. Refusé sur TOUS les systèmes, et pas seulement là où il est
+	   dangereux : sinon le sort d'un argument dépendrait du système et de la
+	   façon dont le CLI a été installé. Rien n'est lancé, donc pas besoin d'un
+	   faux CLI. */
+	let nomSaut = "(aucun rejet)";
+	try {
+		await host.process.run({ tool: "codex", args: ["--model", "a" + String.fromCharCode(10) + "b"], stdin: "" });
+	} catch (e) {
+		nomSaut = e.name;
+	}
+	r.check("un argument porteur d'un saut de ligne est refusé, avec son nom", nomSaut, "refuse");
 
 	/* Un exécutable ABSENT : c'est le rejet que `checkClaudeCode` traduit en
 	   « non installé », et un rejet ANONYME ferait chercher une panne. Le PATH

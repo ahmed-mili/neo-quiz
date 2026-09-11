@@ -163,24 +163,41 @@ function erreurCli(nom: string, message: string): Error {
 
    EXPORTÉE, et c'est TEMPORAIRE : `src/dashboard/ai-client.ts` la consomme
    encore pour ses propres `cp.exec`. La tâche 4 bascule `ai-client.ts` sur
-   `host.process.run` et cet export redevient interne. */
-export function buildChildEnv(): NodeJS.ProcessEnv {
-	const os = require("os") as typeof import("os");
+   `host.process.run` et cet export redevient interne.
+
+   L'ENVIRONNEMENT EST UN PARAMÈTRE, même patron que `dossierPersonnel` dans
+   `apps/windows/electron/process.ts` et pour la même raison : ce qu'un
+   contrôle ne peut pas atteindre n'est pas contrôlé. Le cas « un exécutable
+   absent rejette introuvable » vide le PATH et les variables d'installation ;
+   sans cette entrée, `~/.local/bin` restait celui de la VRAIE machine (un
+   `claude.exe` y vit sur celle d'Ahmed) et le cas rougissait pour une raison
+   étrangère à ce qu'il éprouve. */
+export function buildChildEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
 	const path = require("path") as typeof import("path");
 	const extra: string[] = [
-		path.join(os.homedir(), ".local", "bin"),
+		path.join(dossierPersonnel(env), ".local", "bin"),
 		"/opt/homebrew/bin",
 		"/usr/local/bin",
-		process.env.APPDATA ? path.join(process.env.APPDATA, "npm") : null,
-		process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin") : null,
-		process.env.CODEX_INSTALL_DIR || null,
+		env.APPDATA ? path.join(env.APPDATA, "npm") : null,
+		env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin") : null,
+		env.CODEX_INSTALL_DIR || null,
 		// Installateur Windows d'Ollama (CLI ollama.exe au même endroit).
-		process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "Ollama") : null
+		env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, "Programs", "Ollama") : null
 	].filter((p): p is string => Boolean(p));
 	const sep = path.delimiter;
-	const current = process.env.PATH || "";
+	const current = env.PATH || "";
 	const merged = current + sep + extra.filter(p => !current.includes(p)).join(sep);
-	return Object.assign({}, process.env, { PATH: merged, Path: merged });
+	return Object.assign({}, env, { PATH: merged, Path: merged });
+}
+
+/** Le dossier personnel, de l'environnement DONNÉ sinon du système.
+    `os.homedir()` ne suit PAS `HOME`/`USERPROFILE` sous Windows (il lit le
+    profil du système) : c'est la seule façon pour un contrôle de fabriquer un
+    faux dossier personnel. Jumeau de la fonction du même nom dans
+    `apps/windows/electron/process.ts`. */
+function dossierPersonnel(env: NodeJS.ProcessEnv = process.env): string {
+	const os = require("os") as typeof import("os");
+	return env.USERPROFILE || env.HOME || os.homedir();
 }
 
 /** L'ARBRE de process, pas seulement le premier : `claude` et `codex` en
@@ -224,12 +241,41 @@ function trouverExecutable(nom: string, env: NodeJS.ProcessEnv): string | null {
 	return null;
 }
 
-/** Un argument, cité pour la ligne de commande de `cmd.exe`. Ne sert QUE au
-    repli Windows ci-dessous. `%VAR%` reste développé par `cmd` même entre
-    guillemets (verrue connue de `cmd.exe`, sans échappement fiable) : c'est le
-    seul résiduel de ce repli, et l'ancien `cp.exec` l'avait déjà. */
+/**
+ * Un argument, cité pour la ligne de commande de `cmd.exe`. Ne sert QU'au repli
+ * Windows ci-dessous — le chemin direct (`spawn`) ne traverse aucun shell et
+ * n'a rien à citer.
+ *
+ * LA RÈGLE DE `cmd.exe`, et elle n'a rien de celle d'un shell POSIX : le
+ * BACKSLASH N'ÉCHAPPE RIEN. `cmd` ne fait que basculer un état « dans des
+ * guillemets / dehors » à chaque `"` qu'il rencontre, et ne traite `&`, `|`,
+ * `>`, `(` comme des opérateurs que HORS de cet état. Écrire `\"` — ce que
+ * faisait la première version — FERME donc le guillemet : avec l'argument
+ * `a" & notepad & "b`, la ligne devenait `codex "a\" & notepad & \"b"`, cmd
+ * sortait de l'état cité après `a\`, voyait un `&` nu et lançait `notepad`.
+ * Le NOM de l'outil restait borné par `CLI_AUTORISES`, mais ses ARGUMENTS
+ * atteignaient un interpréteur — ce que le chemin direct ne fait jamais.
+ *
+ * La forme correcte est le guillemet DOUBLÉ (`"` → `""`) : ferme et rouvre
+ * aussitôt, donc l'état « cité » n'est jamais quitté et aucun métacaractère
+ * n'est vu comme un opérateur.
+ *
+ * TROIS CAS QUI NE SE CITENT PAS :
+ * — la chaîne VIDE doit s'écrire `""`, sinon elle n'apparaît pas du tout dans
+ *   la ligne et l'enfant reçoit un argument de MOINS (les positions décalent) ;
+ * — un retour à la ligne (CR ou LF) est un SÉPARATEUR DE COMMANDES pour `cmd`
+ *   qu'aucune citation ne neutralise : il est REFUSÉ, avec un nom, jamais
+ *   retiré en silence — un argument amputé produirait un appel faux et muet ;
+ * — `%VAR%` reste développé par `cmd` même entre guillemets (verrue connue,
+ *   sans échappement fiable). C'est le seul résiduel de ce repli, et l'ancien
+ *   `cp.exec` l'avait déjà.
+ */
 function citerPourCmd(arg: string): string {
-	return /[\s"&|<>^()%!]/.test(arg) ? '"' + arg.replace(/"/g, '\\"') + '"' : arg;
+	if (/[\r\n]/.test(arg)) {
+		throw erreurCli("refuse", "argument refusé : un retour à la ligne est un séparateur de commandes pour cmd.exe");
+	}
+	if (arg === "") return '""';
+	return /[\s"&|<>^()%!,;=]/.test(arg) ? '"' + arg.replace(/"/g, '""') + '"' : arg;
 }
 
 /**
@@ -252,14 +298,20 @@ function lancerCli(spec: {
 }, parCmd = false): Promise<{ stdout: string; stderr: string; code: number | null }> {
 	return new Promise((resolve, reject) => {
 		const cp = require("child_process") as typeof import("child_process");
-		const os = require("os") as typeof import("os");
-		const options = { env: buildChildEnv(), cwd: os.homedir(), windowsHide: true };
+		const env = buildChildEnv();
+		const options = { env, cwd: dossierPersonnel(env), windowsHide: true };
+		/* La ligne de `cmd.exe` est composée AVANT le `try` : `citerPourCmd`
+		   REJETTE un argument qui porte un retour à la ligne (`name` valant
+		   `refuse`), et le faire dans le `try` transformerait ce refus nommé en
+		   « introuvable » — le contraire de ce qu'il dit. Un jet ici rejette la
+		   promesse avec son propre nom, ce qui est exactement le contrat. */
+		const ligneCmd = parCmd ? '"' + [spec.tool, ...spec.args].map(citerPourCmd).join(" ") + '"' : "";
 		let child: import("child_process").ChildProcess;
 		try {
 			child = parCmd
 				? cp.spawn(
 					process.env.ComSpec || "cmd.exe",
-					["/d", "/s", "/c", '"' + [spec.tool, ...spec.args].map(citerPourCmd).join(" ") + '"'],
+					["/d", "/s", "/c", ligneCmd],
 					Object.assign({ windowsVerbatimArguments: true }, options),
 				)
 				: cp.spawn(spec.tool, spec.args, options);
@@ -936,6 +988,18 @@ export function createObsidianHost(
 			if (!CLI_AUTORISES.includes(spec.tool)) {
 				throw erreurCli("refuse", "CLI hors liste : " + String(spec.tool));
 			}
+			/* ET AUCUN ARGUMENT NE PORTE DE SAUT DE LIGNE, sur TOUS les systèmes.
+			   Il n'est dangereux que sur le chemin `cmd.exe` (un séparateur de
+			   commandes qu'aucun guillemet ne neutralise — `citerPourCmd` le
+			   refuse aussi, à son niveau), mais le laisser passer ailleurs ferait
+			   dépendre le sort d'un argument du SYSTÈME et de la façon dont le CLI
+			   a été installé : la même génération marcherait sous Linux et
+			   échouerait sous un Windows à shim npm. Un refus net, partout, se
+			   diagnostique ; une différence silencieuse, non. */
+			const fautif = spec.args.find(a => /[\r\n]/.test(a));
+			if (fautif !== undefined) {
+				throw erreurCli("refuse", "argument refusé : un saut de ligne ne peut pas être cité");
+			}
 			/* Mobile : pas de `require`, donc pas de CLI. NOMMÉ (`indisponible`)
 			   plutôt que rendu comme un échec de lancement — ce n'est pas une
 			   panne, c'est une plateforme sans processus enfants. */
@@ -954,11 +1018,15 @@ export function createObsidianHost(
 			if (!Platform.isDesktopApp) return null;
 			try {
 				const fs = require("fs") as typeof import("fs");
-				const os = require("os") as typeof import("os");
 				const path = require("path") as typeof import("path");
+				/* `dossierPersonnel` et non `os.homedir()` : même raison que pour
+				   `buildChildEnv` — c'est ce qui rend ces deux chemins atteignables
+				   par un contrôle. Les deux valent la même chose en production
+				   (`os.homedir()` lit `USERPROFILE` sous Windows, `HOME` ailleurs). */
+				const maison = dossierPersonnel();
 				const file = tool === "codex"
-					? path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "models_cache.json")
-					: path.join(os.homedir(), ".claude.json");
+					? path.join(process.env.CODEX_HOME || path.join(maison, ".codex"), "models_cache.json")
+					: path.join(maison, ".claude.json");
 				const mtimeMs = fs.statSync(file).mtimeMs;
 				return { mtimeMs, json: JSON.parse(fs.readFileSync(file, "utf8")) as unknown };
 			} catch (e) {

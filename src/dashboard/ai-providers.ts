@@ -925,6 +925,15 @@ async function checkOllamaLive(base: string): Promise<OllamaStatus> {
 	const resp = await host.net.fetchJson({ url: base + "/api/tags", method: "GET" });
 	if (!resp || resp.status < 200 || resp.status >= 300) return { ok: false, reason: "offline" };
 	const data = corpsJson(resp.body) as { models?: Array<{ name: string; size?: number; capabilities?: string[] }> } | null;
+	/* UN 200 QUI N'EST PAS DU JSON N'EST PAS UN SERVEUR OLLAMA : un portail
+	   captif, un proxy d'entreprise ou n'importe quel service qui occupe le
+	   port répond 200 avec du HTML. L'ancien `await resp.json()` levait et
+	   tombait dans le `catch` — donc « hors ligne ». Sans cette ligne, le
+	   diagnostic devient « Ollama joignable, 0 modèle », et l'utilisateur
+	   cherche pourquoi ses modèles ont disparu au lieu de voir qu'il parle à
+	   autre chose. `/api/version` reste best-effort : son échec ne coûte qu'un
+	   numéro de version. */
+	if (data === null) return { ok: false, reason: "offline" };
 	// capabilities (dont « thinking ») exposées par /api/tags depuis Ollama
 	// 0.31 → sert à savoir si un modèle local montre la ligne Effort.
 	const models: OllamaDetectedModel[] = (data?.models || []).map(m => ({

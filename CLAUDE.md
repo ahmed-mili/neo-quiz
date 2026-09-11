@@ -46,8 +46,11 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   n'emploie les **extensions DOM** d'Obsidian (`createEl`, `empty`, `setText`…),
   qu'aucun `import` ne trahit — passer par `ajouter` de `src/dom.ts` ; **aucun
   fichier de `src/` n'importe depuis `apps/`** (le code partagé ne connaît pas ses
-  hôtes), la seule exception étant `src/dashboard.ts`, nommée dans
-  `EXCEPTIONS_APPS` ; et **le rendu de l'app (`apps/windows/src/`) n'importe
+  hôtes), sauf les fichiers nommés dans `EXCEPTIONS_APPS` — `src/dashboard.ts`, et
+  `src/dashboard/ai-client.ts` jusqu'à ce que la tâche 4 de la tranche 5 lui
+  retire son import de `buildChildEnv` ; la liste est un CLIQUET comme
+  `RESTANTS` : une entrée qui n'importe plus rien d'`apps/` fait échouer le
+  contrôle au lieu de couvrir la violation suivante ; et **le rendu de l'app (`apps/windows/src/`) n'importe
   jamais un module qui tire Node** — `node:*`, `chokidar`, `electron`, ni un
   module de `apps/windows/electron/` hors de `SANS_NODE` (`catalogue`,
   `ressources`, `pont`, eux-mêmes vérifiés purs). Vite EXTERNALISE `node:fs` avec un
@@ -55,7 +58,7 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   `import { readFile } from "node:fs"` dans le rendu ne rougissait nulle part, et
   `perimetre.ts` importé du rendu recréait côté Chromium l'accès disque total que
   le pont existe pour retirer. Il annonce le nombre de fichiers encore liés
-  (**15**). Dans la CI : lancé à la main, ce serait la discipline et non le
+  (**12**). Dans la CI : lancé à la main, ce serait la discipline et non le
   contrôle qui tiendrait la frontière.
 - `npm run check:dashboard-dom` — **le cliquet ne suffit pas seul** : `check:host`
   ne protège un fichier de ses extensions DOM que TANT QU'il reste hors de

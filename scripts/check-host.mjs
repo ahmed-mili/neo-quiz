@@ -145,6 +145,18 @@ for (const f of fichiersTs("src")) {
 		rate(`${f} importe depuis apps/ : le code partagé ne connaît pas ses hôtes.`);
 	}
 }
+/* ET LE CLIQUET DANS L'AUTRE SENS, comme l'assertion 2 le fait pour RESTANTS.
+   Sans lui, une exception SURVIT à ce qui la justifiait : le jour où la tâche 4
+   retire de `ai-client.ts` son import de `buildChildEnv` sans retirer la ligne
+   d'ici, l'entrée reste — et couvre en silence la PROCHAINE violation dans ce
+   fichier. Une liste d'exceptions qui ne peut que rétrécir n'est pas un tapis
+   sous lequel on balaie. */
+for (const f of EXCEPTIONS_APPS) {
+	if (!existsSync(f)) rate(`EXCEPTIONS_APPS contient ${f}, qui n'existe pas : retirez l'entrée.`);
+	else if (!IMPORTE_APPS.test(codeNu(readFileSync(f, "utf8")))) {
+		rate(`${f} n'importe plus depuis apps/ : retirez-le d'EXCEPTIONS_APPS.`);
+	}
+}
 
 /* 6. LE RENDU DE L'APPLICATION N'IMPORTE JAMAIS UN MODULE QUI TIRE NODE.
 

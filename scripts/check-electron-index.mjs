@@ -213,9 +213,21 @@ await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerInd
 				{ fromAbs: "/vault/quiz/Cours", toAbs: "/vault/quiz/Cours B2" });
 		});
 
-		await cas(r, "renameDirVersAbsolu rend null si un des deux chemins ne désigne aucune racine", () => {
-			r.check("renameDirVersAbsolu rend null si un des deux chemins ne désigne aucune racine",
+		await cas(r, "renameDirVersAbsolu rend null si TO ne désigne aucune racine (FROM valide)", () => {
+			// `from` seul valide : un défaut qui casserait la garde côté `to`
+			// UNIQUEMENT doit rougir ici — voir son symétrique ci-dessous, qui
+			// éprouve l'autre moitié séparément.
+			r.check("renameDirVersAbsolu rend null si TO ne désigne aucune racine (FROM valide)",
 				renameDirVersAbsolu(["/vault/quiz"], { kind: "renameDir", from: "0/Cours", to: "9/Cours B2" }),
+				null);
+		});
+
+		await cas(r, "renameDirVersAbsolu rend null si FROM ne désigne aucune racine (TO valide)", () => {
+			// Le symétrique : `to` seul valide. Sans ce cas, un défaut qui
+			// casserait la garde côté `from` UNIQUEMENT passerait inaperçu — le
+			// cas précédent ne l'aurait pas fait rougir.
+			r.check("renameDirVersAbsolu rend null si FROM ne désigne aucune racine (TO valide)",
+				renameDirVersAbsolu(["/vault/quiz"], { kind: "renameDir", from: "9/Cours", to: "0/Cours B2" }),
 				null);
 		});
 

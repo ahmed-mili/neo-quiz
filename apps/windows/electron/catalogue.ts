@@ -14,7 +14,7 @@
    `index-fichiers.ts` (processus principal) et `src/host/fs.ts` (rendu, via
    réexportation le temps de la tâche 4) peuvent tous les deux importer.
 
-   Reprises TELLES QUELLES depuis l'hôte Tauri actuel
+   Reprises TELLES QUELLES depuis l'hôte du rendu
    (`apps/windows/src/host/fs.ts`) : elles portent un défaut réel déjà corrigé
    — un quiz mis à la corbeille rentrait au catalogue sous son chemin de
    corbeille et y restait jusqu'au redémarrage, parce que `reconcilier`

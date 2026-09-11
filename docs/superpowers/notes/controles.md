@@ -71,9 +71,17 @@ réponse étant toujours non.
   puisque c'est lui qui décide ce qui EST une formule. Il tourne sur un faux `HostMath`,
   ce qui prouve du même coup que plus rien n'appelle Obsidian — le bouchon de
   `load-src.mjs` jetterait bruyamment.
-- `npm run check:app` — build Vite + typecheck de l'application Windows, sans compiler
-  le Rust. C'est le contrôle qui attrape une rupture du code PARTAGÉ vue depuis l'autre
-  hôte, là où `npm run check` ne voit que le greffon.
+- `npm run check:app` — build Vite (rendu) + typecheck du processus principal Electron
+  (`tsconfig.electron.json`) de l'application Windows. C'est le contrôle qui attrape
+  une rupture du code PARTAGÉ vue depuis l'autre hôte, là où `npm run check` ne voit
+  que le greffon.
+- `npm run check:electron-index` — le surveillant chokidar débouncé et l'index du
+  processus principal Electron (`apps/windows/electron/index-fichiers.ts`), sur un
+  vrai dossier temporaire (`fs.mkdtemp`), chaque cas avec sa propre sous-racine vide —
+  sinon le parcours initial de chokidar (`ignoreInitial: false`) ressurgit les
+  fichiers d'un cas précédent comme autant de faux événements. Il empêche, entre
+  autres, qu'un renommage rapide (rename hors chokidar, ou deux événements bruts que
+  rien ne recolle) fasse perdre l'historique d'une note au surveillant.
 - `npm run check:md` et `npm run check:export` — deux jeux de cas ciblés,
   sur les deux logiques qu'une relecture n'arrive pas à juger : le rendu markdown des
   champs texte (`renderInlineText`, `stripInlineMarkdown`) et l'écriture d'un bloc

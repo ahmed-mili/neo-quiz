@@ -71,6 +71,18 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   le SEUL contrôle qui type `apps/windows/electron/` (`tsconfig.electron.json`).
   Aucun fichier qu'il atteint ne doit tirer `obsidian.d.ts` : un `import type`
   suffisait à neutraliser ce filet.
+- `npm run check:electron-fs` — les primitives de fichiers du processus principal
+  Electron (`apps/windows/electron/fichiers.ts`), sur un vrai dossier temporaire.
+  Empêche entre autres qu'un `append` non atomique perde un ajout concurrent au
+  journal de révision, ou qu'un `trash` supprime au lieu de déplacer.
+- `npm run check:electron-index` — le surveillant chokidar débouncé et l'index du
+  processus principal (`apps/windows/electron/index-fichiers.ts`). Empêche qu'un
+  renommage rapide, hors des événements que chokidar sait nommer lui-même, fasse
+  perdre l'historique d'une note.
+- `npm run check:electron-reglages` — les réglages, les vaults Obsidian déclarés et
+  le PÉRIMÈTRE de sécurité du pont Electron (`reglages.ts`, `vaults.ts`,
+  `perimetre.ts`). Le périmètre est la règle la plus importante du pont : sans lui,
+  chaque canal `fichiers.*` est un accès disque total depuis la fenêtre.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` avant `$…$`).
 - `npm run check:md`, `check:export` — rendu markdown des champs texte, écriture
   d'un bloc. Ils chargent le CODE RÉEL, jamais une réplique. **Pas de framework de
@@ -171,7 +183,17 @@ Vérification d'un changement = `npm run check`, plus `check:md` / `check:export
   `HostFile`** (une conversion recopiée à la main diverge en silence).
 - `apps/windows/` — l'application Windows (Electron + Vite). Elle consomme `src/` **par
   chemin relatif**, sans jamais copier un fichier : une copie divergerait sans un mot.
-  Son hôte est `apps/windows/src/host/*.ts`, son thème `src/theme/host-vars.css`.
+  Son thème est `src/theme/host-vars.css`. **L'hôte est SCINDÉ en deux, depuis la
+  tâche 4 de la migration Tauri → Electron** : `apps/windows/src/host/*.ts` implémente
+  le contrat côté RENDU (Chromium, sans Node) ; `apps/windows/electron/*.ts`
+  (`main.ts`, `pont.ts`, `fichiers.ts`, `perimetre.ts`, `reglages.ts`, `vaults.ts`,
+  `index-fichiers.ts`, `catalogue.ts`) est le processus PRINCIPAL, seul endroit du
+  dépôt qui touche le disque directement et qui tient le PÉRIMÈTRE de sécurité (un
+  chemin hors des dossiers ouverts, un `..`, une jonction qui pointe dehors). Le
+  rendu ne parle au principal que par `window.neo`, le pont IPC typé posé par
+  `preload.ts` — **le rendu ne doit JAMAIS importer un module qui tire Node**
+  (`node:fs`, `chokidar`…) : ce serait recréer, côté Chromium, l'accès disque total
+  que le périmètre existe pour retirer côté principal.
 - Une troisième application Android viendra ; elle n'aura à écrire qu'un hôte.
 
 ## Architecture (le point important)

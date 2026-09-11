@@ -90,15 +90,15 @@ export interface Index {
 }
 
 /** Sépare avec des `/` et retire le séparateur final — même règle que l'hôte
-    Tauri (`apps/windows/src/host/fs.ts`, `normaliser`) : Windows accepte les
-    deux séparateurs en lecture, le contrat n'en accepte qu'un. */
+    du rendu (`apps/windows/src/host/fs.ts`, `normaliser`) : Windows accepte
+    les deux séparateurs en lecture, le contrat n'en accepte qu'un. */
 function normaliser(chemin: string): string {
 	return String(chemin ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
 /** Le `HostFile` d'un chemin déjà au format contrat (indice de racine en
-    tête). Même découpe que `toHostFile` de l'hôte Tauri : un point de TÊTE de
-    nom n'est pas une extension (« .gitignore »). */
+    tête). Même découpe que `toHostFile` de l'hôte du rendu : un point de TÊTE
+    de nom n'est pas une extension (« .gitignore »). */
 function toHostFile(cheminContrat: string, mtime: number): HostFile {
 	const p = normaliser(cheminContrat);
 	const name = p.split("/").pop() || p;

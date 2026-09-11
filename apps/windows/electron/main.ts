@@ -41,8 +41,9 @@ import { SCHEMA_RESSOURCES, resoudreRessource } from "./ressources";
     (`strictPort: true`) : s'il change là-bas, il change ici. */
 const URL_DEV = process.env.NEO_DEV_SERVER ?? "http://localhost:1421";
 
-/** Les mêmes dimensions que la fenêtre Tauri (`src-tauri/tauri.conf.json`) :
-    ce n'est pas une application neuve, c'est la même qui change de coquille. */
+/** Les mêmes dimensions que l'ancienne fenêtre Tauri (`tauri.conf.json`,
+    retiré tâche 7) : ce n'est pas une application neuve, c'est la même qui
+    change de coquille. */
 const FENETRE = { width: 1280, height: 840, minWidth: 900, minHeight: 600 };
 
 /**

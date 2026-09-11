@@ -56,8 +56,26 @@ jobs:
   # ce que la machine de développement (Windows) ne peut pas fournir. Job
   # séparé du greffon ci-dessus : une casse ici ne doit pas bloquer la
   # publication du greffon Obsidian, qui n'a aucun rapport avec la coquille.
+  #
+  # DEUX `npm ci`, DANS CET ORDRE (Ruling 22, ronde de correction 1). Le code
+  # partagé qu'`apps/windows` compile importe des paquets déclarés
+  # uniquement dans le `package.json` de la RACINE (`mathlive` par
+  # `apps/windows/src/host/math.ts` et `src/engine/math-input.ts`, `json5`
+  # par `src/quiz-utils.ts`) : un `npm ci` limité à `apps/windows` laisse ces
+  # imports introuvables. En local ça passait par accident, parce que
+  # `node_modules` de la racine existait déjà sur le poste ; un runner CI
+  # neuf n'a rien de tel — vérifié en simulant l'un et l'autre dans un
+  # worktree sans `node_modules` racine (`tsc --noEmit` : 125 erreurs sans
+  # le premier `npm ci`, 0 avec).
+  #
+  # `continue-on-error: true` TANT QUE CE JOB N'A JAMAIS ÉTÉ VU VERT SUR
+  # GITHUB : un rouge permanent sur une branche `push: '**'` finit ignoré
+  # par réflexe, et masquerait alors un vrai rouge du job `build` (le
+  # cliquet `check:host`, entre autres) — pire que l'absence d'AppImage.
+  # À retirer une fois ce job observé vert au moins une fois sur GitHub.
   app-linux-package:
     runs-on: ubuntu-latest
+    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -68,9 +86,11 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: apps/windows/package-lock.json
 
-      - name: Install dependencies
+      - name: Install dependencies (racine)
+        run: npm ci
+
+      - name: Install dependencies (apps/windows)
         run: npm ci
         working-directory: apps/windows
 
@@ -79,6 +99,12 @@ jobs:
         working-directory: apps/windows
 
       - name: Check package artifact
-        run: |
-          ls -lh dist-installer/*.AppImage
+        run: ls -lh dist-installer/*.AppImage
         working-directory: apps/windows
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: neo-quiz-linux-appimage
+          path: apps/windows/dist-installer/*.AppImage
+          if-no-files-found: error

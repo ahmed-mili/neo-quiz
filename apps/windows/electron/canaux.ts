@@ -24,7 +24,7 @@ import { dialog, ipcMain, shell } from "electron";
 import * as path from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
 import { creerFichiers, stat } from "./fichiers";
-import { absoluDepuisContrat, contratDepuisAbsolu, creerIndex } from "./index-fichiers";
+import { absoluDepuisContrat, contratDepuisAbsolu, creerIndex, renameDirVersAbsolu } from "./index-fichiers";
 import type { EvenementSurveillant, Index } from "./index-fichiers";
 import { listerRacine, normaliser } from "./parcours";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
@@ -74,16 +74,18 @@ const fichiers = creerFichiers();
  *
  * `renameDir` (tâche 5), lui, ARRIVE bel et bien — l'index l'émet une fois la
  * paire `unlinkDir`/`addDir` appariée (voir `EvenementRenommageDossier`,
- * `index-fichiers.ts`) — et il porte DEUX chemins du contrat à retraduire,
- * chacun par la même `absoluDepuisContrat` que le reste de ce module.
+ * `index-fichiers.ts`) — et il porte DEUX chemins du contrat à retraduire.
+ * La traduction elle-même (`renameDirVersAbsolu`) est PURE et vit dans
+ * `index-fichiers.ts`, pas ici : ce fichier importe `electron`, et aucun
+ * harnais de contrôle ne peut le charger (`check-electron-index.mjs` charge
+ * `index-fichiers.ts` directement) — une fonction pure prisonnière d'ici
+ * resterait éprouvée seulement à la main.
  */
 function versDisque(racinesAbs: string[], ev: EvenementSurveillant): EvenementDisque | null {
 	if (ev.kind === "rename") return null;
 	if (ev.kind === "renameDir") {
-		const fromAbs = absoluDepuisContrat(racinesAbs, ev.from);
-		const toAbs = absoluDepuisContrat(racinesAbs, ev.to);
-		if (!fromAbs || !toAbs) return null;
-		return { kind: "renameDir", fromAbs: normaliser(fromAbs), toAbs: normaliser(toAbs) };
+		const paire = renameDirVersAbsolu(racinesAbs, ev);
+		return paire ? { kind: "renameDir", fromAbs: paire.fromAbs, toAbs: paire.toAbs } : null;
 	}
 	const contrat = ev.kind === "delete" ? ev.path : ev.file.path;
 	const absolu = absoluDepuisContrat(racinesAbs, contrat);

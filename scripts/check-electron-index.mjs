@@ -46,7 +46,7 @@ async function cas(r, nom, fn) {
 	}
 }
 
-await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerIndex, contratDepuisAbsolu }) => {
+await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerIndex, contratDepuisAbsolu, renameDirVersAbsolu }) => {
 	const r = makeReporter("Électron — index et surveillant");
 	const base = await mkdtemp(join(tmpdir(), "electron-index-check-"));
 	let n = 0;
@@ -201,6 +201,22 @@ await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerInd
 			// correspondance positive était cassée.
 			r.check("contratDepuisAbsolu rend un chemin du contrat sous la racine",
 				contratDepuisAbsolu(["/vault/quiz"], "/vault/quiz/Cours/ch1.md"), "0/Cours/ch1.md");
+		});
+
+		/* PURE, sans watcher ni délai : c'est ce qui la rend éprouvable par
+		   discriminance ICI plutôt que dans `canaux.ts` (qui importe `electron`
+		   et qu'aucun harnais ne peut charger) — voir la ronde de correction 1
+		   du rapport de tâche 5. */
+		await cas(r, "renameDirVersAbsolu traduit les deux chemins d'un renommage apparié en absolu", () => {
+			r.check("renameDirVersAbsolu traduit les deux chemins d'un renommage apparié en absolu",
+				renameDirVersAbsolu(["/vault/quiz"], { kind: "renameDir", from: "0/Cours", to: "0/Cours B2" }),
+				{ fromAbs: "/vault/quiz/Cours", toAbs: "/vault/quiz/Cours B2" });
+		});
+
+		await cas(r, "renameDirVersAbsolu rend null si un des deux chemins ne désigne aucune racine", () => {
+			r.check("renameDirVersAbsolu rend null si un des deux chemins ne désigne aucune racine",
+				renameDirVersAbsolu(["/vault/quiz"], { kind: "renameDir", from: "0/Cours", to: "9/Cours B2" }),
+				null);
 		});
 
 		await cas(r, "après une écriture par index.write, get() rend le mtime NEUF sans attendre le surveillant", async () => {

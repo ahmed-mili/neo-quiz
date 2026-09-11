@@ -103,13 +103,13 @@ export function evenementDeRenommage(
         concurrents ferait échouer l'appariement d'un renommage pourtant
         univoque). Il doit rester EXACTEMENT un candidat de chaque bord ; deux
         renommages simultanés (deux racines de chaque côté) n'apparient rien.
-     2. MÊME PARENT : un dossier qui change de PARENT n'est pas qu'un
-        renommage, c'est un déplacement — plus incertain, on ne le devine pas
-        non plus ici.
-     3. HORS CATALOGUE : un dossier ignoré (`.trash`, `node_modules`), à
+     2. HORS CATALOGUE : un dossier ignoré (`.trash`, `node_modules`), à
         l'arrivée ou au départ, est traité comme les FICHIERS le sont déjà par
         `evenementDeRenommage` ci-dessus — entrer dans un dossier ignoré ou en
         sortir n'est jamais un renommage pour le catalogue.
+     3. MÊME PARENT : un dossier qui change de PARENT n'est pas qu'un
+        renommage, c'est un déplacement — plus incertain, on ne le devine pas
+        non plus ici.
 ══════════════════════════════════════════════════════════ */
 
 /** Le chemin du contrat sans son dernier segment — le PARENT d'un dossier. */

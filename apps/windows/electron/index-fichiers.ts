@@ -161,6 +161,30 @@ export function absoluDepuisContrat(racinesAbs: string[], cheminContrat: string)
 	return relatif ? path.join(racinesAbs[i], relatif) : racinesAbs[i];
 }
 
+/**
+ * Traduit un renommage de DOSSIER apparié (chemins du CONTRAT, l'indice de
+ * racine en tête) en ses deux chemins ABSOLUS — ce que `canaux.ts` pousse
+ * ensuite vers le pont. `null` si l'un des deux ne désigne aucune racine
+ * connue (ne devrait pas arriver : `evenementDeRenommageDossier` n'a reçu que
+ * des chemins déjà produits par `contratDepuisAbsolu`, mais un défaut
+ * silencieux d'un côté ne doit pas fabriquer un chemin absolu inventé de
+ * l'autre).
+ *
+ * PURE : `absoluDepuisContrat` et `normaliser`, toutes deux déjà de ce
+ * module — c'est ce qui la rend éprouvable par discriminance, ICI, plutôt
+ * que dans `canaux.ts`, qui importe `electron` et qu'aucun harnais ne peut
+ * charger (voir `check-electron-index.mjs`, qui charge CE module).
+ */
+export function renameDirVersAbsolu(
+	racinesAbs: string[],
+	ev: EvenementRenommageDossier,
+): { fromAbs: string; toAbs: string } | null {
+	const fromAbs = absoluDepuisContrat(racinesAbs, ev.from);
+	const toAbs = absoluDepuisContrat(racinesAbs, ev.to);
+	if (!fromAbs || !toAbs) return null;
+	return { fromAbs: normaliser(fromAbs), toAbs: normaliser(toAbs) };
+}
+
 /** Construit l'index en mémoire pour ces racines (chemins ABSOLUS du disque).
     Démarre VIDE : c'est `surveiller()` (via le parcours initial de chokidar,
     `ignoreInitial: false`) qui le peuple — voir l'en-tête pour pourquoi ce

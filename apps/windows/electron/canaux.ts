@@ -312,10 +312,16 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	   Un `AbortController` par requête EN VOL, sous l'identifiant que le rendu a
 	   choisi : le `signal` ne traverse pas l'IPC (voir `Pont.reseau`). L'entrée
 	   est retirée dans un `finally`, quelle que soit l'issue — sans quoi la
-	   table grandirait d'une entrée par requête pour la vie du processus, et
-	   un identifiant réutilisé par un rendu rechargé annulerait la requête
-	   morte d'un autre. Annuler un identifiant inconnu ne fait rien : la
-	   requête est déjà finie, c'est la réponse « trop tard », pas une erreur. */
+	   table grandirait d'une entrée par requête pour la vie du processus.
+	   Et retirée SEULEMENT si c'est encore la sienne : le compteur du rendu
+	   repart à 1 après un `location.reload()` (`choisirDossier`) alors qu'une
+	   requête de l'ancienne page peut être encore en vol. Le `set` de la
+	   nouvelle requête ÉCRASE alors l'entrée de l'ancienne — c'est admis, on ne
+	   peut plus annuler une requête dont la page est morte — mais le `finally`
+	   de l'ancienne ne doit pas emporter l'entrée de la NOUVELLE, qui
+	   deviendrait inannulable. Annuler un identifiant inconnu ne fait rien :
+	   la requête est déjà finie, c'est la réponse « trop tard », pas une
+	   erreur. (Revue de la tâche 2, correction 1.) */
 	const enVol = new Map<number, AbortController>();
 
 	ipcMain.handle(CANAUX.reseauFetch, async (_e, req: unknown, requeteId: unknown) => {
@@ -327,7 +333,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 		const url = typeof r.url === "string" ? r.url : "";
 		const method = r.method === "POST" ? "POST" : "GET";
 		const headers: Record<string, string> = {};
-		if (r.headers && typeof r.headers === "object") {
+		/* `!Array.isArray` : `typeof [] === "object"`, et `Object.entries` d'un
+		   tableau donnerait des en-têtes nommés « 0 », « 1 ». */
+		if (r.headers && typeof r.headers === "object" && !Array.isArray(r.headers)) {
 			for (const [k, v] of Object.entries(r.headers)) if (typeof v === "string") headers[k] = v;
 		}
 		const body = typeof r.body === "string" ? r.body : undefined;
@@ -343,7 +351,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 				(u, init) => net.fetch(u, init),
 			);
 		} finally {
-			if (!Number.isNaN(id)) enVol.delete(id);
+			if (enVol.get(id) === controleur) enVol.delete(id);
 		}
 	});
 	ipcMain.handle(CANAUX.reseauAnnuler, (_e, requeteId: unknown) => {

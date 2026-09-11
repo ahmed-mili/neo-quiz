@@ -337,12 +337,15 @@ function creerFenetre(): void {
 
 /**
  * L'hôte d'`aiOllamaUrl` entre dans la liste du réseau (`./reseau.ts`), lu des
- * RÉGLAGES par le principal — jamais depuis le rendu, exactement comme les
- * dossiers de `folders` entrent au périmètre. Un Ollama sur un NAS est un
- * usage légitime que l'utilisateur déclare dans ses réglages ; sans cette
- * ligne, il serait refusé « hôte hors liste » sans autre recours.
+ * RÉGLAGES par le principal, comme les dossiers de `folders` entrent au
+ * périmètre. Un Ollama sur un NAS est un usage légitime que l'utilisateur
+ * déclare dans ses réglages ; sans cette ligne, il serait refusé « hôte hors
+ * liste » sans autre recours.
  * Une URL absente ou illisible n'ajoute rien, en silence : le défaut
  * (`localhost`) est déjà dans la liste.
+ * À LA DIFFÉRENCE de `folders`, la clé `ai` n'est pas encore gardée à
+ * l'écriture : le résiduel (un rendu compromis obtient un hôte au prochain
+ * lancement) est écrit sur `autoriserHote`, et la garde vient à la tâche 6.
  */
 async function admettreHoteOllama(reg: Reglages): Promise<void> {
 	let ia: unknown;

@@ -213,8 +213,20 @@ réponse étant toujours non.
   verrait rien. C'est la même règle que `perimetre.borner`, appliquée aux URL :
   la liste (`localhost`, `127.0.0.1`, `ollama.com`, `api.anthropic.com`) vit
   dans le principal, et le seul ajout possible est l'hôte d'`aiOllamaUrl`, lu
-  des RÉGLAGES par `main.ts` au démarrage (`autoriserHote`) — jamais depuis le
-  rendu, comme `folders` nourrit le périmètre. Le PROTOCOLE est vérifié aussi,
+  des RÉGLAGES par `main.ts` au démarrage (`autoriserHote`), comme `folders`
+  nourrit le périmètre. **Le résiduel, dit tel quel** : la liste est PILOTÉE
+  PAR LES RÉGLAGES, et la clé `ai` n'est pas encore GARDÉE à l'écriture comme
+  `folders` l'est (`reglagesEcrire`) — un rendu compromis peut donc y écrire
+  `{ aiOllamaUrl: "https://attaquant.example" }` et obtenir cet hôte AU
+  PROCHAIN LANCEMENT ; la garde se construit à la tâche 6, la première qui
+  écrit cette clé (http(s) obligatoire, confirmation native pour un hôte hors
+  liste et hors réseau local, hôte accepté admis aussitôt). Deux autres
+  résiduels sont admis et nommés dans `reseau.ts` : `net.fetch` SUIT les
+  redirections d'un hôte de la liste vers n'importe où (un 307/308 renvoie le
+  corps du POST ; qui contrôle la réponse d'un hôte listé tient déjà ce corps,
+  et `redirect: "manual"` casserait le catalogue d'`ollama.com`), et
+  `localhost` est admis sur tous les ports (le plan l'exige : Ollama en change
+  d'une installation à l'autre). Le PROTOCOLE est vérifié aussi,
   pas seulement l'hôte : `net.fetch` d'Electron sert `file:` (c'est ce que
   `main.ts` en fait pour les images), et `new URL("file://127.0.0.1/C:/x")`
   garde l'hôte « 127.0.0.1 », qui est DANS la liste — sans cette moitié, la

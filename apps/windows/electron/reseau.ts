@@ -17,8 +17,18 @@
       « fais cette requête » sans liste d'hôtes ferait de l'application un
       RELAIS vers n'importe où : exfiltrer une note vers un serveur tiers
       tiendrait en un `reseau.fetch({ url: "https://…", body })`. La liste
-      ci-dessous est la règle, et elle n'est modifiable QUE d'ici — jamais
-      depuis le rendu (voir `autoriserHote`).
+      ci-dessous est la règle ; aucun canal du pont ne l'étend DIRECTEMENT
+      (voir `autoriserHote`, et le résiduel qu'il nomme).
+
+   CE QUE LA LISTE NE GARANTIT PAS, écrit pour qu'on ne le découvre pas :
+   - `net.fetch` SUIT les redirections. Un hôte de la liste peut répondre 3xx
+     vers n'importe quel hôte, et un 307/308 renvoie le corps du POST là-bas.
+     Admis : qui contrôle la réponse d'un hôte de la liste tient déjà ce
+     corps, et `redirect: "manual"` casserait le catalogue d'`ollama.com`,
+     qui redirige ;
+   - `localhost` est admis sur TOUS les ports (le plan l'exige : Ollama en
+     change d'une installation à l'autre), donc tout service local en HTTP
+     est joignable depuis le rendu.
 
    POURQUOI CE MODULE N'IMPORTE PAS `electron`. Le vrai transport est
    `net.fetch` d'Electron (la pile réseau de Chromium : proxy du système,
@@ -52,11 +62,21 @@ export type Transport = (url: string, init: {
  */
 export const HOTES_AUTORISES = new Set(["localhost", "127.0.0.1", "ollama.com", "api.anthropic.com"]);
 
-/** L'hôte d'`aiOllamaUrl`, lu des réglages par le principal, s'ajoute ici au
-    démarrage — jamais depuis le rendu. Un Ollama sur un NAS (« mon-nas:11434 »)
-    est un usage légitime, et il est déclaré par l'utilisateur dans ses
-    réglages ; c'est `main.ts` qui le lit et l'admet, comme il admet les
-    dossiers de `folders` au périmètre. Aucun canal du pont n'y mène. */
+/** L'hôte d'`aiOllamaUrl`, lu des RÉGLAGES par le principal, s'ajoute ici au
+    démarrage. Un Ollama sur un NAS (« mon-nas:11434 ») est un usage légitime,
+    déclaré par l'utilisateur dans ses réglages ; c'est `main.ts` qui le lit
+    et l'admet (`admettreHoteOllama`), comme il admet les dossiers de
+    `folders` au périmètre. Aucun canal du pont n'appelle cette fonction.
+
+    LE RÉSIDUEL, dit honnêtement : la liste est PILOTÉE PAR LES RÉGLAGES, et
+    la clé `ai` n'est pas encore GARDÉE à l'écriture comme `folders` l'est
+    (`canaux.ts`, `reglagesEcrire`). Un rendu compromis peut donc écrire
+    `{ aiOllamaUrl: "https://attaquant.example" }` et obtenir cet hôte ici AU
+    PROCHAIN LANCEMENT — pas dans la session, mais après un redémarrage.
+    La garde se construit à la tâche 6 (la première qui écrit cette clé) :
+    URL en http(s) obligatoire, un hôte hors liste et hors réseau local
+    demande une confirmation native, et l'hôte accepté entre ici aussitôt.
+    D'ici là, ce commentaire est le seul endroit qui le dit. */
 export function autoriserHote(hote: string): void {
 	const h = hote.trim().toLowerCase();
 	if (h) HOTES_AUTORISES.add(h);

@@ -50,12 +50,35 @@ const FENETRE = { width: 1280, height: 840, minWidth: 900, minHeight: 600 };
  *
  * Sans lui, un rendu figé (ou déjà mort) rendrait la fenêtre INFERMABLE —
  * exactement le piège documenté côté Tauri, où un `destroy()` refusé par les
- * permissions empêchait toute fermeture après l'ajout d'un écouteur. C'est la
- * tâche 5 (« la fermeture qui attend l'écriture ») qui fixera sa valeur
- * définitive au regard des trois écrivains différés ; ici il n'est qu'un
- * garde-fou.
+ * permissions empêchait toute fermeture après l'ajout d'un écouteur.
+ *
+ * VALEUR FIXÉE PAR MESURE (tâche 6), pas choisie à vue comme les 3000 ms de
+ * la tâche 3. Les trois écrivains différés de l'application ont des débounces
+ * de 500 ms (`src/review/log-file.ts`), 500 ms (`src/dashboard/stats-store.ts`)
+ * et 600 ms (`src/dashboard/detail.ts`) — mais AUCUN des trois ne gate cette
+ * attente : `flushSave()`/`dispose()` de la page d'un quiz ANNULENT leur
+ * minuterie et lancent l'écriture SUR-LE-CHAMP (voir leur commentaire dans
+ * `detail.ts`). Le débounce n'est donc jamais ce qu'on attend ici ; ce qu'on
+ * attend, c'est l'IPC (un aller-retour `invoke`) plus l'écriture disque
+ * elle-même. Mesuré de bout en bout, sur un WM_CLOSE réel (`PostMessage`
+ * WM_CLOSE, pas `window.close()` — voir plus bas pourquoi), frappe tapée puis
+ * fenêtre fermée AUSSITÔT (moins de 40 ms après la frappe) : la fenêtre a fini
+ * de se fermer 72 à 116 ms après le WM_CLOSE, note relue avec la frappe dedans
+ * — et l'écart interne entre l'appel de fermeture et la réponse du rendu
+ * n'était que de 4 ms. Rien en attente : 70 ms, un temps équivalent — la
+ * croix ne paie donc jamais ce délai dans le cas courant.
+ *
+ * Le garde-fou n'a donc PAS à couvrir un débounce ni même une écriture lente
+ * ordinaire (déjà sous 120 ms mesurés) : il protège contre le cas
+ * PATHOLOGIQUE — un rendu figé, un disque réseau ou synchronisé
+ * (OneDrive, antivirus) qui traîne, un vault distant. 1500 ms donne plus de
+ * DIX FOIS la marge du cas mesuré (120 ms) tout en restant sous la seconde et
+ * demie où l'utilisateur perçoit un blocage — ni les 2000 ms du brief ni les
+ * 3000 ms de la tâche 3, choisis sans mesure l'un et l'autre. Le principe qui
+ * tranche si ce délai se révèle encore trop court sur un vault lent : mieux
+ * vaut perdre la dernière frappe que refuser de fermer.
  */
-const DELAI_GARDE_FERMETURE_MS = 3000;
+const DELAI_GARDE_FERMETURE_MS = 1500;
 
 /* ─────────── état du processus ─────────── */
 
@@ -101,6 +124,18 @@ function memeOrigine(url: string): boolean {
 	}
 }
 
+/** Le nombre de tentatives de connexion au serveur de développement, et
+    l'intervalle entre deux : Tâche 6, nommés à la revue de la tâche 3 (deux
+    littéraux nus, « dix secondes d'attente silencieuse avant le repli »). Le
+    produit des deux (10 s) est le temps qu'Electron laisse à Vite pour
+    démarrer avant de retomber sur `dist/index.html` — en pratique celui-ci
+    n'existe pas encore en développement (`npm run dev` ne le construit pas),
+    et la fenêtre s'ouvre alors sur une page blanche : un mode DÉGRADÉ,
+    propre au développement, jamais rencontré depuis un paquet installé
+    (`app.isPackaged` court-circuite cette boucle plus haut). */
+const TENTATIVES_SERVEUR_DEV = 40;
+const INTERVALLE_TENTATIVE_MS = 250;
+
 /** Charge le rendu, en réessayant tant que le serveur de développement n'écoute
     pas encore : `npm run dev` lance Vite et Electron EN PARALLÈLE, et Electron
     est souvent prêt le premier. Sans réessai, la fenêtre s'ouvrirait une fois
@@ -114,12 +149,12 @@ async function charger(cible: BrowserWindow): Promise<void> {
 		return;
 	}
 	origineApp = new URL(URL_DEV).origin;
-	for (let essai = 0; essai < 40; essai++) {
+	for (let essai = 0; essai < TENTATIVES_SERVEUR_DEV; essai++) {
 		try {
 			await cible.loadURL(URL_DEV);
 			return;
 		} catch {
-			await new Promise(r => setTimeout(r, 250));
+			await new Promise(r => setTimeout(r, INTERVALLE_TENTATIVE_MS));
 		}
 	}
 	/* Pas de serveur de développement : on retombe sur le rendu construit,
@@ -183,6 +218,23 @@ function creerFenetre(): void {
 	// sur `will-redirect` est la ceinture, pour une ligne.
 	fenetre.webContents.on("will-redirect", refuserHorsOrigine);
 
+	/* REMISE À ZÉRO DE L'ARMEMENT — défaut laissé par la tâche 3, relevé à sa
+	   revue. `choisirDossier` recharge par `location.reload()` (une navigation
+	   de premier niveau ADMISE par `refuserHorsOrigine`, donc jamais annulée) :
+	   le nouveau contexte de préchargement reçu par le rendu a `neo.fenetre
+	   .surFermeture` non réarmé (`ecouteurFermeturePose` à faux côté rendu,
+	   `src/main.ts`), mais SANS ce reset, `fermetureArmee` restait VRAI côté
+	   principal — hérité de l'ancien contexte, détruit avec la page qui l'avait
+	   posé. Fermer la fenêtre pendant cette fenêtre de course (entre le
+	   rechargement et le prochain `armer()`) attendrait alors le délai de garde
+	   ENTIER pour un rappel qui n'existe plus. `isMainFrame && !isInPlace` :
+	   seule une VRAIE navigation de haut niveau compte, pas un changement de
+	   hash ni une frame secondaire (il n'y en a pas ici, mais la garde coûte
+	   une comparaison). */
+	fenetre.webContents.on("did-start-navigation", (_e, _url, isInPlace, isMainFrame) => {
+		if (isMainFrame && !isInPlace) fermetureArmee = false;
+	});
+
 	/* Par défaut, Electron ACCORDE les permissions (micro, caméra,
 	   notifications…) à toute page. Aucune fonction de l'application n'en
 	   demande : refus systématique, et une origine hostile n'obtient rien. */
@@ -194,13 +246,29 @@ function creerFenetre(): void {
 	   détruit la fenêtre sans passer par ici. Ce n'est pas gênant — l'application
 	   n'appelle jamais `window.close()`, elle recharge (`location.reload()`) —
 	   mais un rappel de fermeture éprouvé avec `window.close()` passerait pour
-	   cassé alors qu'il ne l'est pas. Vérifié deux fois : un rappel qui ne
-	   résout jamais fait fermer au délai de garde (3,1 s), un rappel de 600 ms
-	   fait fermer à 0,7 s. */
+	   cassé alors qu'il ne l'est pas. Vérifié par la tâche 3 (délai de garde
+	   alors à 3000 ms) : un rappel qui ne résout jamais fait fermer au délai de
+	   garde (3,1 s), un rappel de 600 ms fait fermer à 0,7 s. Rejoué par la
+	   tâche 6 sur une écriture RÉELLE (voir `DELAI_GARDE_FERMETURE_MS`) : 72 à
+	   116 ms du WM_CLOSE à la fenêtre détruite, frappe relue dans la note. */
 	fenetre.on("close", e => {
 		/* Tant que le rendu n'a armé aucun rappel, la fermeture est immédiate :
 		   intercepter sans personne pour répondre donnerait une fenêtre qui ne
-		   se ferme plus — le piège exact rencontré côté Tauri. */
+		   se ferme plus — le piège exact rencontré côté Tauri.
+
+		   DÉCISION (défaut laissé par la tâche 3, relevé à sa revue) : un SECOND
+		   clic sur la croix pendant que `fermetureEnCours` est vrai n'est PAS
+		   intercepté ici — `preventDefault` n'est pas rappelé, et Electron
+		   détruit la fenêtre par son comportement natif, abandonnant l'écriture
+		   déjà lancée par le premier clic. C'est VOULU, pas oublié : le premier
+		   clic a déjà déclenché le vidage des tampons ET posé un délai de garde
+		   borné (`DELAI_GARDE_FERMETURE_MS`) — la seule chose qu'un second clic
+		   change, c'est de raccourcir une attente déjà plafonnée. Refuser ce
+		   second clic ferait de la fenêtre une chose qui ignore l'utilisateur
+		   qui insiste, pour ne protéger qu'une fenêtre de quelques centaines de
+		   millisecondes au plus — le même arbitrage que le délai de garde
+		   lui-même (« mieux vaut perdre la dernière frappe que refuser de
+		   fermer »), appliqué à l'impatience plutôt qu'à un rendu figé. */
 		if (!fermetureArmee || fermetureEnCours) return;
 		fermetureEnCours = true;
 		e.preventDefault();

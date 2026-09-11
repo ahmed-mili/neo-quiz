@@ -332,6 +332,19 @@ class QuizBlocksSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		/* L'INSTANTANÉ des fichiers de CLI (tranche 5, tâche 3) : la liste de
+		   modèles Codex plus bas est lue SYNCHRONEMENT dans un instantané de
+		   module, que seul `refreshCliCaches` remplit — la lecture elle-même
+		   est asynchrone depuis qu'elle passe par l'hôte (dans l'application,
+		   elle traverse l'IPC). On redessine UNE fois, et seulement si
+		   l'instantané a changé : se redessiner inconditionnellement
+		   rappellerait `display()`, donc `refreshCliCaches`, sans fin. */
+		void aiProviders.refreshCliCaches().then(change => {
+			// `isConnected` : l'onglet refermé entre-temps n'a plus rien à
+			// redessiner, et son conteneur sera vidé à la prochaine ouverture.
+			if (change && containerEl.isConnected) this.display();
+		});
+
 		containerEl.createEl("h2", { text: PLUGIN_NAME });
 
 		containerEl.createEl("p", {

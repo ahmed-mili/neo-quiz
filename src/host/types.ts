@@ -325,6 +325,55 @@ export interface HostNet {
 }
 
 /**
+ * Un CLI que la génération IA a le droit de lancer. `tool` est un NOM, jamais
+ * un chemin : c'est l'hôte qui résout l'exécutable (réglage « chemin » s'il
+ * est rempli, sinon le PATH du processus) et refuse tout autre nom. C'est la
+ * liste blanche qui rend impossible la séquence que le périmètre des chemins
+ * ne voit pas : `fs.write("x.bat")` puis `process.run("x.bat")`. Voir la spec
+ * docs/superpowers/specs/2026-09-11-generation-ia-app-design.md, §2.
+ */
+export type CliTool = "claude" | "codex" | "ollama";
+
+/**
+ * LES PROCESSUS ET LES FICHIERS DES CLI, vus du code partagé.
+ *
+ * POURQUOI UNE PORTE : `src/dashboard/ai-providers.ts` faisait dix
+ * `require("fs"|"os"|"path"|"child_process")` — lire le cache de modèles de
+ * Codex, `~/.claude.json`, lancer `claude --version`, chercher Ollama à ses
+ * emplacements d'installation. Dans le rendu de l'application, `require`
+ * n'existe pas : chaque sonde aurait dit « non installé » en silence, sans
+ * qu'aucune erreur ne le nomme. Tout ce qui touche Node passe donc par l'hôte,
+ * et le rendu de l'application n'a jamais que le pont.
+ */
+export interface HostProcess {
+	/** Un CLI lancé SANS RIEN D'INTERACTIF : le prompt complet sur `stdin`,
+	    `stdin` fermé, `stdout` et `stderr` rendus SÉPARÉS et À LA FIN, avec le
+	    code de sortie. Rejette avec une erreur dont `name` est nommé :
+	    `introuvable` (l'exécutable manque), `timeout` (`timeoutMs` dépassé,
+	    process tué), `annule` (`signal` abandonné, l'ARBRE de process est tué
+	    — `claude` et `codex` spawnent des enfants), `indisponible` (l'hôte ne
+	    sait pas encore lancer de CLI : l'application jusqu'à la tâche 7). */
+	run(spec: { tool: CliTool; args: string[]; stdin: string; signal?: AbortSignal; timeoutMs?: number })
+		: Promise<{ stdout: string; stderr: string; code: number | null }>;
+	/** Le fichier de cache/config du CLI, à un chemin FIXE tenu par l'hôte
+	    (Codex : `$CODEX_HOME` ou `~/.codex/models_cache.json` ; Claude :
+	    `~/.claude.json`), HORS de toute racine — c'est pourquoi `HostFs` ne
+	    l'atteint pas. `mtimeMs` sert à l'appelant pour ne pas re-parser ; le
+	    PARSING (quels modèles, quels efforts) reste dans le code partagé, l'hôte
+	    ne fait que lire et décoder le JSON. `null` = absent ou illisible. */
+	lireCache(tool: "claude" | "codex"): Promise<{ mtimeMs: number; json: unknown } | null>;
+	/** Ollama est-il INSTALLÉ, même serveur arrêté ? `ollama --version`
+	    répond, ou l'exécutable est à un emplacement d'installation officiel.
+	    Le greffon diagnostique lui-même : jamais un « si Ollama n'est pas
+	    installé » laissé à l'utilisateur. */
+	ollamaInstalle(): Promise<boolean>;
+	/** Démarre l'application Ollama (le serveur démarre avec elle), détachée,
+	    best-effort : `false` quand rien n'a pu être lancé. L'appelant constate
+	    le résultat en interrogeant le serveur, pas ici. */
+	demarrerOllama(): Promise<boolean>;
+}
+
+/**
  * Une RACINE : un dossier de quiz ouvert.
  *
  * Le greffon n'en a qu'une (le vault) ; l'application peut en ouvrir
@@ -449,4 +498,5 @@ export interface Host {
 	paths: HostPaths;
 	modals: HostModals;
 	net: HostNet;
+	process: HostProcess;
 }

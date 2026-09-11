@@ -1,4 +1,4 @@
-import { Platform, requestUrl } from "obsidian";
+import { currentHost } from "../host/current";
 import { t, currentLang } from "../i18n";
 import type { Lang } from "../i18n";
 // Le forfait Claude est lu par ai-usage (trousseau du CLI) : une seule source
@@ -215,7 +215,56 @@ interface CodexCacheFile {
 	models?: CodexCacheModel[];
 }
 
-/* Modèles Codex réels : ~/.codex/models_cache.json (ou $CODEX_HOME), relu
+/* ── Les fichiers des CLI : un INSTANTANÉ, rempli par `refreshCliCaches` ──
+   `getCodexModels` et `readClaudeCliInfo` sont SYNCHRONES et appelés en plein
+   rendu (menu de modèles, onglet de réglages, juste avant un appel du CLI).
+   Or la lecture d'un fichier hors de toute racine (`~/.codex/models_cache.json`,
+   `~/.claude.json`) passe désormais par `host.process.lireCache`, qui est
+   ASYNCHRONE — dans l'application, elle traverse l'IPC jusqu'au processus
+   principal, seul à toucher le disque. Les deux lecteurs lisent donc un
+   instantané de module, et c'est `refreshCliCaches()` qui le remplit : à
+   attendre à chaque ENTRÉE d'affichage ou d'appel (l'onglet de réglages, le
+   rendu du composer, la génération), pas partout. Avant le premier
+   rafraîchissement, ou sans fichier, ils rendent le repli embarqué — exactement
+   ce que l'ancien `try/catch` rendait sur un `fs` absent. */
+let codexCacheSnapshot: { mtimeMs: number; json: unknown } | null = null;
+let claudeCacheSnapshot: { mtimeMs: number; json: unknown } | null = null;
+/* Un rafraîchissement EN VOL est partagé : le composer et le menu fournisseur
+   se rendent souvent dans le même tick, et deux lectures de `~/.claude.json`
+   (plusieurs centaines de Ko) pour un même instantané seraient du gaspillage. */
+let refreshEnCours: Promise<boolean> | null = null;
+
+/** Relit les deux fichiers de CLI par l'hôte. Ne rejette jamais : un cache
+    illisible vaut « pas de cache », et les lecteurs synchrones retombent sur
+    le repli embarqué.
+
+    REND `true` QUAND L'INSTANTANÉ A CHANGÉ, et ce booléen n'est pas une
+    commodité : un appelant qui a DÉJÀ dessiné sa liste (l'onglet de réglages,
+    l'étiquette du bouton modèle) doit se redessiner une fois le premier
+    instantané arrivé, et il ne peut le faire qu'à cette condition — se
+    redessiner inconditionnellement rappellerait `refreshCliCaches`, qui
+    rappellerait le rendu, sans fin. */
+export function refreshCliCaches(): Promise<boolean> {
+	if (refreshEnCours) return refreshEnCours;
+	refreshEnCours = (async () => {
+		const host = currentHost();
+		const [codex, claude] = await Promise.all([
+			host.process.lireCache("codex").catch(() => null),
+			host.process.lireCache("claude").catch(() => null),
+		]);
+		/* Le `mtime` SUFFIT à dire le changement : c'est déjà la clé sur
+		   laquelle `getCodexModels` et `readClaudeCliInfo` décident de
+		   re-parser. `null` (pas de fichier) est comparé comme tel. */
+		const cle = (s: { mtimeMs: number } | null): number => (s ? s.mtimeMs : -1);
+		const change = cle(codex) !== cle(codexCacheSnapshot) || cle(claude) !== cle(claudeCacheSnapshot);
+		codexCacheSnapshot = codex;
+		claudeCacheSnapshot = claude;
+		return change;
+	})().finally(() => { refreshEnCours = null; });
+	return refreshEnCours;
+}
+
+/* Modèles Codex réels : ~/.codex/models_cache.json (ou $CODEX_HOME), reparsé
    uniquement quand le fichier change (mtime) — donc toujours à jour après un
    « codex update » ou l'arrivée d'un nouveau modèle, sans re-parse inutile.
    Les slugs connus gardent leur entrée FR curée ; les inconnus reçoivent un
@@ -229,16 +278,16 @@ let codexModelsCache: { mtimeMs: number; lang: Lang; models: ModelDef[] } | null
 
 export function getCodexModels(): ModelDef[] {
 	const lang = currentLang();
+	const snapshot = codexCacheSnapshot;
+	if (!snapshot) return CODEX_FALLBACK_MODELS;
 	try {
-		const fs = require("fs") as typeof import("fs");
-		const os = require("os") as typeof import("os");
-		const path = require("path") as typeof import("path");
-		const file = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "models_cache.json");
-		const mtimeMs = fs.statSync(file).mtimeMs;
+		const { mtimeMs } = snapshot;
 		if (codexModelsCache && codexModelsCache.mtimeMs === mtimeMs && codexModelsCache.lang === lang) {
 			return codexModelsCache.models;
 		}
-		const data = JSON.parse(fs.readFileSync(file, "utf8")) as CodexCacheFile;
+		// Un JSON qui n'est pas un objet (`null`, un tableau) n'a pas de
+		// `models` : même issue qu'un fichier illisible, le repli.
+		const data = (snapshot.json && typeof snapshot.json === "object" ? snapshot.json : {}) as CodexCacheFile;
 		const models: ModelDef[] = (data.models || [])
 			.filter(m => m && m.slug && m.visibility === "list")
 			.sort((a, b) => (a.priority || 0) - (b.priority || 0))
@@ -268,7 +317,7 @@ export function getCodexModels(): ModelDef[] {
 		codexModelsCache = { mtimeMs, lang, models };
 		return models;
 	} catch (e) {
-		// mobile (pas de fs), cache absent ou JSON invalide → repli embarqué
+		// forme inattendue du cache → repli embarqué
 		return CODEX_FALLBACK_MODELS;
 	}
 }
@@ -385,9 +434,10 @@ export function getEffortLabel(value: string | undefined, providerId: string): s
    limites hebdomadaires, et sont affichées TELLES QUELLES sur la jauge qu'elles
    désignent (cf. usage-modal) — datées par leur émetteur, jamais par nous.
 
-   Lecture desktop-only (fs), cache TTL pour ne pas relire ~/.claude.json à
-   chaque ouverture de menu. Fallback prudent si illisible/absent : Fable masqué,
-   aucune note promo. */
+   Lecture par l'HÔTE (`host.process.lireCache`, le seul à toucher le disque),
+   puis un instantané de module que `refreshCliCaches` remplit — le parse n'est
+   refait que quand le `mtime` change. Fallback prudent si illisible, absent ou
+   pas encore lu : Fable masqué, aucune note promo. */
 
 /** Note promo publiée par le CLI Claude Code, rattachée à UNE jauge d'usage.
     `bar` est la clé d'API de la fenêtre (« five_hour », « seven_day »…), pas
@@ -397,17 +447,20 @@ export interface ClaudePromoNotice { bar: string; text: string }
 
 /** Ce que ~/.claude.json apprend en UNE lecture : Fable proposé ?, le nom des
     modèles réellement servis, et les notes promo en cours. Même fichier, même
-    TTL — une seule lecture pour les trois usages. */
+    instantané — une seule lecture pour les trois usages. */
 type ClaudeCliInfo = {
 	fableOffered: boolean;
 	labels: Record<string, string>;
 	promos: ClaudePromoNotice[];
 };
-let claudeCliCache: { at: number; info: ClaudeCliInfo } | null = null;
-const CLAUDE_CLI_CACHE_TTL = 60000;
+/* Clé = le `mtime` de l'instantané, et PLUS DE TTL : l'ancien TTL de 60 s
+   protégeait de RELIRE le fichier à chaque rendu ; la lecture vit désormais
+   dans `refreshCliCaches`, et seul le PARSE reste ici — à ne refaire que quand
+   le fichier a changé, ce que le `mtime` dit exactement. */
+let claudeCliCache: { mtimeMs: number; info: ClaudeCliInfo } | null = null;
 
-/* Repli neuf à chaque appel : l'objet est stocké dans le cache TTL et rendu
-   aux appelants, une constante partagée serait modifiable de l'extérieur. */
+/* Repli neuf à chaque appel : l'objet est stocké dans le cache et rendu aux
+   appelants, une constante partagée serait modifiable de l'extérieur. */
 function emptyCliInfo(): ClaudeCliInfo {
 	return { fableOffered: false, labels: {}, promos: [] };
 }
@@ -510,19 +563,22 @@ function labelsFromModelUsage(projects: unknown): Record<string, string> {
 	return labels;
 }
 
-/* Lit ~/.claude.json (cache TTL, desktop) : Fable proposé ? + libellés de
-   modèles appris + notes promo en cours. UNE lecture pour les trois usages. */
+/* Lit l'instantané de ~/.claude.json : Fable proposé ? + libellés de modèles
+   appris + notes promo en cours. UNE lecture pour les trois usages.
+   Pas de garde `isDesktopApp` ici : c'est l'HÔTE qui sait s'il a un CLI
+   (`lireCache` rend `null` sous Obsidian mobile), et la redemander ici
+   ferait deux endroits pour une seule question. */
 function readClaudeCliInfo(): ClaudeCliInfo {
-	if (!Platform.isDesktopApp) return emptyCliInfo();
-	if (claudeCliCache && Date.now() - claudeCliCache.at < CLAUDE_CLI_CACHE_TTL) {
+	const snapshot = claudeCacheSnapshot;
+	if (!snapshot) return emptyCliInfo();
+	if (claudeCliCache && claudeCliCache.mtimeMs === snapshot.mtimeMs) {
 		return claudeCliCache.info;
 	}
 	let info = emptyCliInfo();
 	try {
-		const fs = require("fs") as typeof import("fs");
-		const os = require("os") as typeof import("os");
-		const path = require("path") as typeof import("path");
-		const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude.json"), "utf8")) as {
+		// Un JSON qui n'est pas un objet (`null`, un tableau) n'a aucune de ces
+		// clés : même issue qu'un fichier illisible, le repli.
+		const cfg = (snapshot.json && typeof snapshot.json === "object" ? snapshot.json : {}) as {
 			additionalModelOptionsCache?: unknown;
 			cachedGrowthBookFeatures?: { tengu_rate_limit_promo_notices?: unknown };
 			projects?: unknown;
@@ -534,9 +590,9 @@ function readClaudeCliInfo(): ClaudeCliInfo {
 			promos: promoNoticesFrom(cfg.cachedGrowthBookFeatures?.tengu_rate_limit_promo_notices)
 		};
 	} catch {
-		info = emptyCliInfo(); // absent/illisible → repli
+		info = emptyCliInfo(); // forme inattendue → repli
 	}
-	claudeCliCache = { at: Date.now(), info };
+	claudeCliCache = { mtimeMs: snapshot.mtimeMs, info };
 	return info;
 }
 
@@ -727,15 +783,19 @@ export function dedupeOllamaLatest<T extends { value: string }>(list: T[]): T[] 
 	return out;
 }
 
-/* Récupère les modèles cloud récents depuis ollama.com (best-effort, via
-   requestUrl → pas de CORS). Repli embarqué (tags exacts, dont les tailles
-   gpt-oss) + familles découvertes STRICTEMENT plus récentes (tag deviné
-   « <famille>:cloud »), dernière version par famille. Le prix n'est PAS
+/* Récupère les modèles cloud récents depuis ollama.com (best-effort, par
+   `host.net.fetchJson` → pas de CORS sous Obsidian, et la requête part du
+   processus principal dans l'application). Repli embarqué (tags exacts, dont
+   les tailles gpt-oss) + familles découvertes STRICTEMENT plus récentes (tag
+   deviné « <famille>:cloud »), dernière version par famille. Le prix n'est PAS
    récupéré (détecté au 403). Lève en cas d'échec réseau. Renvoie [{value,label}]. */
 export async function fetchOllamaCloudCatalog(): Promise<OllamaCatalogEntry[]> {
-	const resp = await requestUrl({ url: "https://ollama.com/search?c=cloud", throw: false });
-	if (!resp || resp.status !== 200 || !resp.text) throw new Error("catalog fetch " + (resp && resp.status));
-	const families = [...new Set([...resp.text.matchAll(/x-test-search-response-title>([a-z0-9.\-]+)/gi)].map(m => m[1]))];
+	/* Le nom `fetchJson` dit l'usage courant, pas une contrainte : le contrat
+	   rend le corps BRUT (`body`), et c'est du HTML ici — la page de recherche
+	   d'ollama.com, dont on extrait les noms de familles. */
+	const resp = await currentHost().net.fetchJson({ url: "https://ollama.com/search?c=cloud" });
+	if (!resp || resp.status !== 200 || !resp.body) throw new Error("catalog fetch " + (resp && resp.status));
+	const families = [...new Set([...resp.body.matchAll(/x-test-search-response-title>([a-z0-9.\-]+)/gi)].map(m => m[1]))];
 	// Version max du repli par modèle → les familles déjà couvertes gardent leur
 	// TAG EXACT embarqué (dont les tailles gpt-oss 120b/20b, non devinables) ; on
 	// n'ajoute une famille découverte que si elle est STRICTEMENT plus récente
@@ -764,38 +824,13 @@ export function getDefaultModels(providerId: string): ModelDef[] {
 	return dedupeOllamaLatest(OLLAMA_FALLBACK_CATALOG);
 }
 
-/* ── PATH étendu pour child_process ──
-   Obsidian lancé depuis l'UI n'hérite pas toujours du PATH
-   complet du shell (npm global, ~/.local/bin, homebrew) — et un
-   installateur qui modifie le PATH du REGISTRE (Codex CLI officiel)
-   n'atteint jamais un process déjà lancé : sans ces chemins en dur,
-   « installé mais pas détecté » tant qu'Obsidian n'est pas redémarré
-   (vécu Ahmed 2026-07-12, install.ps1 officiel sur desktop). Chemins
-   vérifiés DANS les scripts d'installation d'OpenAI :
-   - install.ps1 → %LOCALAPPDATA%\Programs\OpenAI\Codex\bin
-   - install.sh  → ~/.local/bin (déjà couvert)
-   - npm         → %APPDATA%\npm (déjà couvert)
-   - CODEX_INSTALL_DIR : override honoré par les deux scripts. */
-export function buildChildEnv(): NodeJS.ProcessEnv {
-	const os = require("os") as typeof import("os");
-	const path = require("path") as typeof import("path");
-	const extra: string[] = [
-		path.join(os.homedir(), ".local", "bin"),
-		"/opt/homebrew/bin",
-		"/usr/local/bin",
-		process.env.APPDATA ? path.join(process.env.APPDATA, "npm") : null,
-		process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin") : null,
-		process.env.CODEX_INSTALL_DIR || null,
-		// Installateur Windows d'Ollama (CLI ollama.exe au même endroit).
-		process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "Ollama") : null
-	].filter((p): p is string => Boolean(p));
-	const sep = path.delimiter;
-	const current = process.env.PATH || "";
-	const merged = current + sep + extra.filter(p => !current.includes(p)).join(sep);
-	return Object.assign({}, process.env, { PATH: merged, Path: merged });
-}
-
-/* ── Détections de statut ── */
+/* ── Détections de statut ──
+   Elles ne lancent plus rien elles-mêmes : `host.process` (`src/host/types.ts`)
+   est la seule porte vers un CLI. Le PATH étendu, les emplacements
+   d'installation d'Ollama et le démarrage détaché vivent maintenant dans les
+   hôtes (`apps/obsidian/host.ts`, `apps/windows/electron/process.ts`), parce
+   que `require` n'existe pas dans le rendu de l'application : chaque sonde y
+   aurait répondu « non installé » en silence. */
 
 let claudeCodeCache: { at: number; result: ClaudeCodeStatus } | null = null;
 const CLAUDE_CODE_TTL = 60000;
@@ -804,31 +839,23 @@ const CLAUDE_CODE_TTL = 60000;
    `force` ignore le TTL (relance le CLI) — sert à re-vérifier la version
    à l'ouverture du menu fournisseur, après un éventuel update. */
 export async function checkClaudeCode(force?: boolean): Promise<ClaudeCodeStatus> {
-	if (!Platform.isDesktopApp) {
+	if (!currentHost().platform.isDesktopApp) {
 		return { ok: false, reason: "mobile" };
 	}
 	if (!force && claudeCodeCache && Date.now() - claudeCodeCache.at < CLAUDE_CODE_TTL) {
 		return claudeCodeCache.result;
 	}
-	const result = await new Promise<ClaudeCodeStatus>((resolve) => {
-		try {
-			const cp = require("child_process") as typeof import("child_process");
-			cp.exec("claude --version", {
-				env: buildChildEnv(),
-				timeout: 10000,
-				windowsHide: true
-			}, (err, stdout) => {
-				if (err) {
-					resolve({ ok: false, reason: "not-installed" });
-				} else {
-					const version = (stdout || "").trim().split(/\s+/)[0] || "";
-					resolve({ ok: true, version });
-				}
-			});
-		} catch (e) {
-			resolve({ ok: false, reason: "not-installed" });
-		}
-	});
+	/* TOUT rejet vaut « pas installé », exactement comme l'ancien `err` de
+	   `cp.exec` : l'exécutable manque (`introuvable`), le CLI n'a pas répondu
+	   en 10 s (`timeout`), ou l'hôte ne sait pas encore lancer de CLI
+	   (`indisponible`, l'application jusqu'à la tâche 7). Un code de sortie
+	   non nul aussi — l'ancien `exec` le rendait dans `err`. */
+	const result = await currentHost().process
+		.run({ tool: "claude", args: ["--version"], stdin: "", timeoutMs: 10000 })
+		.then((res): ClaudeCodeStatus => res.code === 0
+			? { ok: true, version: (res.stdout || "").trim().split(/\s+/)[0] || "" }
+			: { ok: false, reason: "not-installed" })
+		.catch((): ClaudeCodeStatus => ({ ok: false, reason: "not-installed" }));
 	claudeCodeCache = { at: Date.now(), result };
 	return result;
 }
@@ -839,32 +866,21 @@ let codexCache: { at: number; result: CodexStatus } | null = null;
    `codex --version` sort « codex-cli 0.139.0 » → on garde le dernier token.
    `force` ignore le TTL (même logique que checkClaudeCode). */
 export async function checkCodex(force?: boolean): Promise<CodexStatus> {
-	if (!Platform.isDesktopApp) {
+	if (!currentHost().platform.isDesktopApp) {
 		return { ok: false, reason: "mobile" };
 	}
 	if (!force && codexCache && Date.now() - codexCache.at < CLAUDE_CODE_TTL) {
 		return codexCache.result;
 	}
-	const result = await new Promise<CodexStatus>((resolve) => {
-		try {
-			const cp = require("child_process") as typeof import("child_process");
-			cp.exec("codex --version", {
-				env: buildChildEnv(),
-				timeout: 10000,
-				windowsHide: true
-			}, (err, stdout) => {
-				if (err) {
-					resolve({ ok: false, reason: "not-installed" });
-				} else {
-					const parts = (stdout || "").trim().split(/\s+/);
-					const version = parts[parts.length - 1] || "";
-					resolve({ ok: true, version });
-				}
-			});
-		} catch (e) {
-			resolve({ ok: false, reason: "not-installed" });
-		}
-	});
+	// Même règle que `checkClaudeCode` : tout rejet vaut « pas installé ».
+	const result = await currentHost().process
+		.run({ tool: "codex", args: ["--version"], stdin: "", timeoutMs: 10000 })
+		.then((res): CodexStatus => {
+			if (res.code !== 0) return { ok: false, reason: "not-installed" };
+			const parts = (res.stdout || "").trim().split(/\s+/);
+			return { ok: true, version: parts[parts.length - 1] || "" };
+		})
+		.catch((): CodexStatus => ({ ok: false, reason: "not-installed" }));
 	codexCache = { at: Date.now(), result };
 	return result;
 }
@@ -887,27 +903,40 @@ export async function checkOllama(url?: string, force?: boolean): Promise<Ollama
 	return result;
 }
 
-async function checkOllamaLive(base: string): Promise<OllamaStatus> {
+/** Le corps d'une réponse, décodé SANS jamais lever : un serveur qui répond
+    200 avec autre chose que du JSON (un portail captif, un proxy) ne doit pas
+    faire remonter une exception là où le contrat attend « injoignable ». */
+function corpsJson(body: string): unknown {
 	try {
-		const resp = await fetch(base + "/api/tags", { method: "GET" });
-		if (!resp.ok) return { ok: false, reason: "offline" };
-		const data = await resp.json() as { models?: Array<{ name: string; size?: number; capabilities?: string[] }> };
-		// capabilities (dont « thinking ») exposées par /api/tags depuis Ollama
-		// 0.31 → sert à savoir si un modèle local montre la ligne Effort.
-		const models: OllamaDetectedModel[] = (data?.models || []).map(m => ({
-			name: m.name, size: m.size, capabilities: m.capabilities || []
-		}));
-		// Version du serveur = version d'Ollama installée (GET /api/version →
-		// { "version": "0.31.2" }). Best-effort : undefined si l'endpoint échoue.
-		let version: string | undefined;
-		try {
-			const vr = await fetch(base + "/api/version", { method: "GET" });
-			if (vr.ok) version = (await vr.json() as { version?: string })?.version;
-		} catch (e) { /* version optionnelle */ }
-		return { ok: true, models, version };
+		return JSON.parse(body);
 	} catch (e) {
-		return { ok: false, reason: "offline" };
+		return null;
 	}
+}
+
+async function checkOllamaLive(base: string): Promise<OllamaStatus> {
+	/* `host.net.fetchJson` et non `fetch` : dans le rendu de l'application, un
+	   `fetch` vers `http://localhost:11434` est refusé par la politique
+	   d'origine de Chromium — la requête part du processus principal, derrière
+	   la liste d'hôtes (`apps/windows/electron/reseau.ts`). `null` (échec
+	   réseau) et un statut non-2xx valent tous deux « hors ligne », comme
+	   l'ancien `catch` et l'ancien `!resp.ok`. */
+	const host = currentHost();
+	const resp = await host.net.fetchJson({ url: base + "/api/tags", method: "GET" });
+	if (!resp || resp.status < 200 || resp.status >= 300) return { ok: false, reason: "offline" };
+	const data = corpsJson(resp.body) as { models?: Array<{ name: string; size?: number; capabilities?: string[] }> } | null;
+	// capabilities (dont « thinking ») exposées par /api/tags depuis Ollama
+	// 0.31 → sert à savoir si un modèle local montre la ligne Effort.
+	const models: OllamaDetectedModel[] = (data?.models || []).map(m => ({
+		name: m.name, size: m.size, capabilities: m.capabilities || []
+	}));
+	// Version du serveur = version d'Ollama installée (GET /api/version →
+	// { "version": "0.31.2" }). Best-effort : undefined si l'endpoint échoue.
+	const vr = await host.net.fetchJson({ url: base + "/api/version", method: "GET" });
+	const version = vr && vr.status >= 200 && vr.status < 300
+		? (corpsJson(vr.body) as { version?: string } | null)?.version
+		: undefined;
+	return { ok: true, models, version };
 }
 
 let ollamaInstalledCache: { at: number; result: OllamaInstalledStatus } | null = null;
@@ -919,67 +948,27 @@ let ollamaInstalledCache: { at: number; result: OllamaInstalledStatus } | null =
    d'installation officiels. Caché (même TTL) : un `ollama --version` qui
    échoue coûte un spawn de shell, à ne pas repayer à chaque re-render. */
 export async function checkOllamaInstalled(force?: boolean): Promise<OllamaInstalledStatus> {
-	if (!Platform.isDesktopApp) return { installed: false };
+	if (!currentHost().platform.isDesktopApp) return { installed: false };
 	if (!force && ollamaInstalledCache && Date.now() - ollamaInstalledCache.at < CLAUDE_CODE_TTL) {
 		return ollamaInstalledCache.result;
 	}
-	const result = await checkOllamaInstalledLive();
+	/* La SONDE elle-même vit dans l'hôte (`ollama --version`, puis les
+	   emplacements d'installation officiels) : elle demande le système de
+	   fichiers et le nom de l'OS, que le code partagé n'a pas. Un rejet vaut
+	   « pas installé » — jamais une exception remontée dans la page. */
+	const installed = await currentHost().process.ollamaInstalle().catch(() => false);
+	const result: OllamaInstalledStatus = { installed };
 	ollamaInstalledCache = { at: Date.now(), result };
 	return result;
 }
 
-async function checkOllamaInstalledLive(): Promise<OllamaInstalledStatus> {
-	const execOk = await new Promise<boolean>((resolve) => {
-		try {
-			const cp = require("child_process") as typeof import("child_process");
-			cp.exec("ollama --version", {
-				env: buildChildEnv(),
-				timeout: 4000,
-				windowsHide: true
-			}, (err) => resolve(!err));
-		} catch (e) {
-			resolve(false);
-		}
-	});
-	if (execOk) return { installed: true };
-	try {
-		const fs = require("fs") as typeof import("fs");
-		const path = require("path") as typeof import("path");
-		const candidates = Platform.isWin
-			? [path.join(process.env.LOCALAPPDATA || "", "Programs", "Ollama", "ollama app.exe")]
-			: Platform.isMacOS
-				? ["/Applications/Ollama.app", "/opt/homebrew/bin/ollama", "/usr/local/bin/ollama"]
-				: ["/usr/local/bin/ollama", "/usr/bin/ollama"];
-		return { installed: candidates.some(p => fs.existsSync(p)) };
-	} catch (e) {
-		return { installed: false };
-	}
-}
-
 /* Démarre Ollama (le serveur démarre avec l'application) — détaché,
-   best effort : l'app de bureau sur Windows/macOS, « ollama serve »
-   sur Linux (pas d'app). Les erreurs asynchrones (exe absent) sont
-   avalées : le poll de l'appelant constatera simplement l'échec. */
-export function startOllamaApp(): boolean {
-	const cp = require("child_process") as typeof import("child_process");
-	const path = require("path") as typeof import("path");
-	try {
-		let child;
-		if (Platform.isWin) {
-			const fs = require("fs") as typeof import("fs");
-			const exe = path.join(process.env.LOCALAPPDATA || "", "Programs", "Ollama", "ollama app.exe");
-			child = fs.existsSync(exe)
-				? cp.spawn(exe, [], { detached: true, stdio: "ignore" })
-				: cp.spawn("ollama", ["serve"], { detached: true, stdio: "ignore", env: buildChildEnv() });
-		} else if (Platform.isMacOS) {
-			child = cp.spawn("open", ["-a", "Ollama"], { detached: true, stdio: "ignore" });
-		} else {
-			child = cp.spawn("ollama", ["serve"], { detached: true, stdio: "ignore", env: buildChildEnv() });
-		}
-		child.on("error", () => { /* constaté par le poll de l'appelant */ });
-		child.unref();
-		return true;
-	} catch (e) {
-		return false;
-	}
+   best effort, dans l'hôte : l'app de bureau sur Windows/macOS, « ollama
+   serve » sur Linux (pas d'app). Les erreurs asynchrones (exe absent) sont
+   avalées : le poll de l'appelant constatera simplement l'échec.
+   ASYNCHRONE depuis la tranche 5 (dans l'application, le démarrage traverse
+   l'IPC) : le booléen dit seulement que quelque chose a été lancé, pas que le
+   serveur répond — c'est le poll de l'appelant qui le constate. */
+export async function startOllamaApp(): Promise<boolean> {
+	return currentHost().process.demarrerOllama().catch(() => false);
 }

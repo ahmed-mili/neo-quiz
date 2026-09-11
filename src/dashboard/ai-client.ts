@@ -8,9 +8,17 @@ import {
 	resolveEffort,
 	getCodexModels,
 	getProvider,
-	buildChildEnv,
 	isOllamaCloudModel,
+	refreshCliCaches,
 } from "./ai-providers";
+/* TEMPORAIRE, et la tâche 4 le supprime : `buildChildEnv` a suivi le reste du
+   code Node vers l'hôte Obsidian (tâche 3), parce que `require` n'existe pas
+   dans le rendu de l'application. Ce module, lui, lance encore ses CLI
+   lui-même — il est le DERNIER, et il figure toujours dans `RESTANTS`
+   (`scripts/check-host.mjs`) comme dans `EXCEPTIONS_APPS`. La tâche 4 le fait
+   passer par `host.process.run` : cet import disparaît alors, et l'exception
+   avec lui. */
+import { buildChildEnv } from "../../apps/obsidian/host";
 import type { AiUsage } from "./ai-usage";
 import { t } from "../i18n";
 
@@ -123,6 +131,13 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		aborted = false;
 		pendingUsage = null;
 		lastUsage = null;
+		/* L'INSTANTANÉ des fichiers de CLI, relu AVANT l'appel : `resolveCodexModel`
+		   et `getCodexModels` (plus bas) sont synchrones et lisent un instantané de
+		   module que seul `refreshCliCaches` remplit. Sans cette ligne, une
+		   génération lancée avant tout affichage de liste choisirait son modèle
+		   dans le repli embarqué — et un modèle du repli retiré du compte donne un
+		   404 au CLI. Ne rejette jamais. */
+		await refreshCliCaches();
 		const startedAt = Date.now();
 		try {
 			const questions = await generateInner(prompt, options);

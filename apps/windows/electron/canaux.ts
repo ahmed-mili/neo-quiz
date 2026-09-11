@@ -36,6 +36,7 @@ import type { EvenementSurveillant, Index } from "./index-fichiers";
 import { listerRacine, normaliser } from "./parcours";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
+import { demarrerOllama, erreurCli, lireCache, ollamaInstalle } from "./process";
 import { CANAUX } from "./pont";
 import type { EvenementDisque, RequeteReseau } from "./pont";
 import type { Reglages } from "./reglages";
@@ -357,6 +358,27 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	ipcMain.handle(CANAUX.reseauAnnuler, (_e, requeteId: unknown) => {
 		if (typeof requeteId === "number") enVol.get(requeteId)?.abort();
 	});
+
+	/* ─── les CLI et leurs fichiers ───
+
+	   MÊME RÈGLE QUE LES CHEMINS ET LES URL, appliquée aux NOMS D'OUTILS : le
+	   rendu n'envoie qu'un nom, et ce nom est jugé ici. Les chemins, eux, sont
+	   FIXES et connus du seul principal (`./process.ts`) — c'est ce qui fait
+	   que ce canal n'a pas besoin de `perimetre.borner` : il n'y a aucun
+	   chemin venu du rendu à borner. Un `tool` hors liste serait précisément
+	   la faille inverse : « lis-moi ce fichier-là » déguisé en nom d'outil.
+	   Le refus est NOMMÉ dans la console ET rejeté (`name === "refuse"`) : un
+	   `null` muet passerait pour « pas de cache », et on chercherait le défaut
+	   du côté du CLI. */
+	ipcMain.handle(CANAUX.processusLireCache, async (_e, tool: unknown) => {
+		if (tool !== "claude" && tool !== "codex") {
+			console.warn(LOG_PREFIX, "cache refusé, outil hors liste:", tool);
+			throw erreurCli("refuse", "outil hors liste : " + String(tool));
+		}
+		return lireCache(tool);
+	});
+	ipcMain.handle(CANAUX.processusOllamaInstalle, () => ollamaInstalle());
+	ipcMain.handle(CANAUX.processusDemarrerOllama, () => demarrerOllama());
 
 	ipcMain.handle(CANAUX.armerFermeture, () => deps.fermeture.armer());
 	ipcMain.handle(CANAUX.fermetureTerminee, () => deps.fermeture.terminee());

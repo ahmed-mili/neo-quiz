@@ -675,6 +675,19 @@ function installerPont(fichiers = {}) {
 			},
 			async annuler(requeteId) { journal.push(["reseau.annuler", requeteId]); },
 		},
+		/* Les CLI du pont, journalisés : ce que le rendu a décidé d'envoyer. Le
+		   NOM de l'outil, et rien d'autre — un chemin passé ici serait une
+		   lecture disque hors périmètre, et c'est exactement ce que le cas doit
+		   pouvoir surprendre. Les réponses sont celles du principal ; le rendu
+		   n'a rien à en traduire. */
+		processus: {
+			async lireCache(tool) {
+				journal.push(["processus.lireCache", tool]);
+				return { mtimeMs: 1234, json: { models: [] } };
+			},
+			async ollamaInstalle() { journal.push(["processus.ollamaInstalle"]); return true; },
+			async demarrerOllama() { journal.push(["processus.demarrerOllama"]); return true; },
+		},
 		fenetre: { async surFermeture() {} },
 	};
 	const reponseReseau = { valeur: { status: 200, body: "ok" }, attente: null };
@@ -1496,6 +1509,61 @@ await withSrcModule("apps/windows/src/host/net.ts", async ({ createWindowsNet })
 		await Promise.resolve();
 		r.check("abandonner le signal d'une requête finie n'annule rien",
 			pont.journal.filter(e => e[0] === "reseau.annuler").length - avantAbandon, 0);
+	} finally {
+		pont.retirer();
+	}
+	r.done();
+});
+
+/**
+ * LES CLI du rendu : un passe-plat vers les canaux `process.*` du pont, et un
+ * `run` qui REJETTE.
+ *
+ * Deux règles, et elles ne se confondent pas :
+ * — ce qui traverse le pont est un NOM D'OUTIL, jamais un chemin. Les chemins
+ *   des fichiers de CLI (`$CODEX_HOME/models_cache.json`, `~/.claude.json`)
+ *   sont fixes et connus du seul principal ; un chemin composé ici ferait de
+ *   ce canal une lecture disque hors périmètre, et `canaux.ts` refuserait de
+ *   toute façon tout nom hors de sa liste ;
+ * — `run` rejette SUR PLACE, sans traverser : il n'a pas encore de canal
+ *   (tâche 7). Le nom du rejet (`indisponible`) est ce que le code partagé
+ *   sait traduire — un `invoke` vers un canal inexistant donnerait « No
+ *   handler registered », une phrase qui ne désigne rien.
+ */
+await withSrcModule("apps/windows/src/host/process.ts", async ({ createWindowsProcess }) => {
+	const r = makeReporter("Hôte Windows — les CLI");
+	const pont = installerPont();
+	try {
+		const processus = createWindowsProcess();
+
+		const cache = await processus.lireCache("codex");
+		r.check("lireCache traverse le pont avec le NOM de l'outil, jamais un chemin",
+			pont.journal.filter(e => e[0] === "processus.lireCache"), [["processus.lireCache", "codex"]]);
+		r.check("la réponse du principal est rendue telle quelle", cache, { mtimeMs: 1234, json: { models: [] } });
+
+		r.check("ollamaInstalle et demarrerOllama traversent sans argument",
+			{
+				installe: await processus.ollamaInstalle(),
+				demarre: await processus.demarrerOllama(),
+				appels: pont.journal.filter(e => e[0].startsWith("processus.")).map(e => e.join(":")),
+			},
+			{
+				installe: true,
+				demarre: true,
+				appels: ["processus.lireCache:codex", "processus.ollamaInstalle", "processus.demarrerOllama"],
+			});
+
+		/* Le rejet est NOMMÉ, et RIEN ne traverse : un canal `process.run`
+		   n'existe pas encore côté principal. */
+		const avant = pont.journal.length;
+		let nom = "(aucun rejet)";
+		try {
+			await processus.run({ tool: "claude", args: ["--version"], stdin: "" });
+		} catch (e) {
+			nom = e.name;
+		}
+		r.check("run rejette « indisponible » sans traverser le pont",
+			{ nom, traverse: pont.journal.length - avant }, { nom: "indisponible", traverse: 0 });
 	} finally {
 		pont.retirer();
 	}

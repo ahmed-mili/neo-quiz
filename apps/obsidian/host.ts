@@ -26,7 +26,7 @@
 
 import { Notice, Platform, requestUrl, setIcon, getIconIds, loadMathJax, renderMath, finishRenderMath } from "obsidian";
 import type { App, DataAdapter, EventRef, TAbstractFile, TFile, View, WorkspaceLeaf } from "obsidian";
-import type { Host, HostFile, HostFileEvent, HostModalHandle, HostModalSpec, HostRoot } from "../../src/host/types";
+import type { CliTool, Host, HostFile, HostFileEvent, HostModalHandle, HostModalSpec, HostRoot } from "../../src/host/types";
 import { QbdModal } from "../../src/modal-base";
 import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../src/review/paths";
 
@@ -118,6 +118,213 @@ class HoteModal extends QbdModal {
 		this.spec.onClose?.();
 		this.contentEl.empty();
 	}
+}
+
+/* ══════════════════════════════════════════════════════════
+   LES CLI ET LEURS FICHIERS — `HostProcess` sous Obsidian
+
+   Tranche 5, tâche 3. Tout ce bloc vient de `src/dashboard/ai-providers.ts`,
+   DÉPLACÉ et non réécrit : il y faisait dix `require("fs"|"os"|"path"|
+   "child_process")`. Dans le rendu de l'application, `require` n'existe pas —
+   chaque sonde y aurait répondu « non installé » en silence, sans qu'aucune
+   erreur ne le nomme. Le code partagé ne demande donc plus que le CONTRAT, et
+   c'est ici (et dans `apps/windows/electron/process.ts`) que Node est touché.
+══════════════════════════════════════════════════════════ */
+
+/** Les CLI que cet hôte accepte de lancer, et rien d'autre. La liste est la
+    moitié « nom, jamais un chemin » du contrat (`CliTool`) : elle rend
+    impossible la séquence que le périmètre des chemins ne voit pas —
+    `fs.write("x.bat")` puis `process.run("x.bat")`. `CliTool` la tient déjà à
+    la compilation ; ceci la tient à L'EXÉCUTION, où arrive un jour une valeur
+    venue d'un réglage ou d'un quiz partagé. */
+const CLI_AUTORISES: readonly CliTool[] = ["claude", "codex", "ollama"];
+
+/** Une erreur dont le `name` est celui que le contrat nomme (`introuvable`,
+    `timeout`, `annule`, `refuse`, `indisponible`) : l'appelant décide sur ce
+    nom, jamais sur le texte du message, qui n'est pas traduit. */
+function erreurCli(nom: string, message: string): Error {
+	const e = new Error(message);
+	e.name = nom;
+	return e;
+}
+
+/* ── PATH étendu pour child_process ──
+   Obsidian lancé depuis l'UI n'hérite pas toujours du PATH
+   complet du shell (npm global, ~/.local/bin, homebrew) — et un
+   installateur qui modifie le PATH du REGISTRE (Codex CLI officiel)
+   n'atteint jamais un process déjà lancé : sans ces chemins en dur,
+   « installé mais pas détecté » tant qu'Obsidian n'est pas redémarré
+   (vécu Ahmed 2026-07-12, install.ps1 officiel sur desktop). Chemins
+   vérifiés DANS les scripts d'installation d'OpenAI :
+   - install.ps1 → %LOCALAPPDATA%\Programs\OpenAI\Codex\bin
+   - install.sh  → ~/.local/bin (déjà couvert)
+   - npm         → %APPDATA%\npm (déjà couvert)
+   - CODEX_INSTALL_DIR : override honoré par les deux scripts.
+
+   EXPORTÉE, et c'est TEMPORAIRE : `src/dashboard/ai-client.ts` la consomme
+   encore pour ses propres `cp.exec`. La tâche 4 bascule `ai-client.ts` sur
+   `host.process.run` et cet export redevient interne. */
+export function buildChildEnv(): NodeJS.ProcessEnv {
+	const os = require("os") as typeof import("os");
+	const path = require("path") as typeof import("path");
+	const extra: string[] = [
+		path.join(os.homedir(), ".local", "bin"),
+		"/opt/homebrew/bin",
+		"/usr/local/bin",
+		process.env.APPDATA ? path.join(process.env.APPDATA, "npm") : null,
+		process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin") : null,
+		process.env.CODEX_INSTALL_DIR || null,
+		// Installateur Windows d'Ollama (CLI ollama.exe au même endroit).
+		process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "Ollama") : null
+	].filter((p): p is string => Boolean(p));
+	const sep = path.delimiter;
+	const current = process.env.PATH || "";
+	const merged = current + sep + extra.filter(p => !current.includes(p)).join(sep);
+	return Object.assign({}, process.env, { PATH: merged, Path: merged });
+}
+
+/** L'ARBRE de process, pas seulement le premier : `claude` et `codex` en
+    spawnent des enfants, et un `kill` sur le seul parent laisse la génération
+    tourner (et le fichier de sortie s'écrire) après un clic sur Stop.
+    Recopié de `killTree` d'`ai-client.ts`, que la tâche 4 supprimera. */
+function tuerArbre(child: import("child_process").ChildProcess): void {
+	try {
+		if (process.platform === "win32") {
+			(require("child_process") as typeof import("child_process"))
+				.exec("taskkill /pid " + child.pid + " /T /F", { windowsHide: true });
+		} else {
+			child.kill("SIGTERM");
+		}
+	} catch (e) { /* best effort : le poll de l'appelant constatera */ }
+}
+
+/**
+ * Le premier fichier du PATH qui porte ce nom, `PATHEXT` compris sous Windows.
+ * `null` = aucun, donc « vraiment introuvable ».
+ *
+ * Ne sert QU'à trancher, après un ENOENT de `spawn` sous Windows, entre « shim
+ * `.cmd`, à relancer par `cmd.exe` » et « CLI absent ». La résolution complète
+ * (le réglage « chemin » de l'utilisateur d'abord) est celle de la tâche 7,
+ * côté application.
+ */
+function trouverExecutable(nom: string, env: NodeJS.ProcessEnv): string | null {
+	const fs = require("fs") as typeof import("fs");
+	const path = require("path") as typeof import("path");
+	const extensions = process.platform === "win32"
+		? (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)
+		: [""];
+	for (const dossier of (env.PATH || "").split(path.delimiter).filter(Boolean)) {
+		for (const ext of extensions) {
+			try {
+				const candidat = path.join(dossier, nom + ext);
+				if (fs.statSync(candidat).isFile()) return candidat;
+			} catch (e) { /* dossier inexistant ou illisible : au suivant */ }
+		}
+	}
+	return null;
+}
+
+/** Un argument, cité pour la ligne de commande de `cmd.exe`. Ne sert QUE au
+    repli Windows ci-dessous. `%VAR%` reste développé par `cmd` même entre
+    guillemets (verrue connue de `cmd.exe`, sans échappement fiable) : c'est le
+    seul résiduel de ce repli, et l'ancien `cp.exec` l'avait déjà. */
+function citerPourCmd(arg: string): string {
+	return /[\s"&|<>^()%!]/.test(arg) ? '"' + arg.replace(/"/g, '\\"') + '"' : arg;
+}
+
+/**
+ * Lance un CLI, `stdin` écrit EN ENTIER puis fermé, `stdout` et `stderr`
+ * accumulés SÉPARÉMENT et rendus à la fin avec le code de sortie.
+ *
+ * POURQUOI UN REPLI PAR `cmd.exe` SOUS WINDOWS. `spawn("claude")` passe par
+ * `CreateProcess`, qui ne sait lancer qu'un `.exe` : une installation npm
+ * (`claude.cmd`, `codex.cmd`) donne un ENOENT, donc « non installé » — alors
+ * que l'ancien `cp.exec` passait TOUJOURS par `cmd.exe` et la trouvait. Le
+ * chemin direct reste le premier (aucun interpréteur entre nous et le CLI) ;
+ * le repli n'est tenté qu'après un ENOENT, et seulement sous Windows.
+ */
+function lancerCli(spec: {
+	tool: CliTool;
+	args: string[];
+	stdin: string;
+	signal?: AbortSignal;
+	timeoutMs?: number;
+}, parCmd = false): Promise<{ stdout: string; stderr: string; code: number | null }> {
+	return new Promise((resolve, reject) => {
+		const cp = require("child_process") as typeof import("child_process");
+		const os = require("os") as typeof import("os");
+		const options = { env: buildChildEnv(), cwd: os.homedir(), windowsHide: true };
+		let child: import("child_process").ChildProcess;
+		try {
+			child = parCmd
+				? cp.spawn(
+					process.env.ComSpec || "cmd.exe",
+					["/d", "/s", "/c", '"' + [spec.tool, ...spec.args].map(citerPourCmd).join(" ") + '"'],
+					Object.assign({ windowsVerbatimArguments: true }, options),
+				)
+				: cp.spawn(spec.tool, spec.args, options);
+		} catch (e) {
+			reject(erreurCli("introuvable", "CLI introuvable : " + spec.tool));
+			return;
+		}
+		let fini = false;
+		let minuteur: ReturnType<typeof setTimeout> | null = null;
+		const sortir = (fn: () => void): void => {
+			if (fini) return;
+			fini = true;
+			if (minuteur) clearTimeout(minuteur);
+			spec.signal?.removeEventListener("abort", surAbandon);
+			fn();
+		};
+		function surAbandon(): void {
+			tuerArbre(child);
+			sortir(() => reject(erreurCli("annule", "CLI annulé : " + spec.tool)));
+		}
+		/* SÉPARÉS, et c'est le contrat : `stderr` porte le diagnostic (« not
+		   logged in »), `stdout` la réponse. Les concaténer rendrait la sortie
+		   JSON d'un CLI illisible dès qu'il écrit un avertissement. */
+		let stdout = "";
+		let stderr = "";
+		child.stdout?.on("data", (d: unknown) => { stdout += String(d); });
+		child.stderr?.on("data", (d: unknown) => { stderr += String(d); });
+		child.on("error", (e: NodeJS.ErrnoException) => {
+			/* ENOENT sous Windows : `CreateProcess` ne lance qu'un `.exe`. Si un
+			   fichier du PATH porte ce nom avec une extension de `PATHEXT`
+			   (`claude.cmd` d'une installation npm), on retente UNE fois par
+			   `cmd.exe` ; si RIEN ne porte ce nom, l'exécutable est vraiment
+			   absent et le rejet est `introuvable`. Sans cette résolution, le
+			   repli lancerait `cmd.exe` pour rien et rendrait son code de sortie
+			   (1 ici, 9009 ailleurs, un message localisé dans les deux cas) au
+			   lieu du rejet que `checkClaudeCode` attend. */
+			if (!parCmd && process.platform === "win32" && e.code === "ENOENT"
+				&& trouverExecutable(spec.tool, options.env)) {
+				sortir(() => { resolve(lancerCli(spec, true)); });
+				return;
+			}
+			sortir(() => reject(erreurCli(
+				e.code === "ENOENT" ? "introuvable" : e.name || "erreur",
+				"CLI " + spec.tool + " : " + e.message,
+			)));
+		});
+		child.on("close", (code: number | null) => sortir(() => resolve({ stdout, stderr, code })));
+		if (spec.timeoutMs) {
+			minuteur = setTimeout(() => {
+				tuerArbre(child);
+				sortir(() => reject(erreurCli("timeout", "CLI expiré : " + spec.tool)));
+			}, spec.timeoutMs);
+		}
+		if (spec.signal) {
+			if (spec.signal.aborted) { surAbandon(); return; }
+			spec.signal.addEventListener("abort", surAbandon, { once: true });
+		}
+		/* Le prompt COMPLET sur `stdin`, puis fermé : aucun argument à
+		   échapper, et le CLI sait que l'entrée est finie. Un `stdin` resté
+		   ouvert ferait attendre `claude -p` indéfiniment. */
+		try {
+			child.stdin?.write(spec.stdin);
+			child.stdin?.end();
+		} catch (e) { /* le process est déjà mort : `close` ou `error` tranche */ }
+	});
 }
 
 /** Le second paramètre est réduit à ce dont l'hôte a besoin — le manifeste,
@@ -719,5 +926,100 @@ export function createObsidianHost(
 		},
 	};
 
-	return { fs, links, watcher, ui, math, shell, platform, paths, modals, net };
+	/* ─── process ─── */
+
+	const processus: Host["process"] = {
+		async run(spec) {
+			/* Le NOM est jugé avant tout : la liste blanche est la seule chose
+			   qui sépare « lancer le CLI de l'utilisateur » de « lancer ce
+			   qu'on lui a écrit sur le disque ». */
+			if (!CLI_AUTORISES.includes(spec.tool)) {
+				throw erreurCli("refuse", "CLI hors liste : " + String(spec.tool));
+			}
+			/* Mobile : pas de `require`, donc pas de CLI. NOMMÉ (`indisponible`)
+			   plutôt que rendu comme un échec de lancement — ce n'est pas une
+			   panne, c'est une plateforme sans processus enfants. */
+			if (!Platform.isDesktopApp) {
+				throw erreurCli("indisponible", "aucun CLI sur mobile");
+			}
+			return lancerCli(spec);
+		},
+
+		/* Le fichier de cache du CLI, à son chemin FIXE — hors de toute racine,
+		   c'est pourquoi `HostFs` ne l'atteint pas. L'hôte LIT et DÉCODE ; le
+		   parsing (quels modèles, quels efforts) reste dans le code partagé.
+		   Le `mtime` est rendu pour que l'appelant ne re-parse que ce qui a
+		   changé. `null` = absent, illisible, ou mobile (pas de `require`). */
+		async lireCache(tool) {
+			if (!Platform.isDesktopApp) return null;
+			try {
+				const fs = require("fs") as typeof import("fs");
+				const os = require("os") as typeof import("os");
+				const path = require("path") as typeof import("path");
+				const file = tool === "codex"
+					? path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "models_cache.json")
+					: path.join(os.homedir(), ".claude.json");
+				const mtimeMs = fs.statSync(file).mtimeMs;
+				return { mtimeMs, json: JSON.parse(fs.readFileSync(file, "utf8")) as unknown };
+			} catch (e) {
+				return null; // absent, illisible ou JSON invalide → « pas de cache »
+			}
+		},
+
+		/* Ollama INSTALLÉ, même serveur arrêté : le binaire répond à `--version`
+		   (PATH étendu, couvre npm/brew/PATH custom), sinon les emplacements
+		   d'installation officiels. Le plugin diagnostique lui-même (demande
+		   Ahmed : jamais un « si Ollama n'est pas installé » laissé à
+		   l'utilisateur). */
+		async ollamaInstalle() {
+			if (!Platform.isDesktopApp) return false;
+			const repond = await lancerCli({ tool: "ollama", args: ["--version"], stdin: "", timeoutMs: 4000 })
+				.then(res => res.code === 0)
+				.catch(() => false);
+			if (repond) return true;
+			try {
+				const fs = require("fs") as typeof import("fs");
+				const path = require("path") as typeof import("path");
+				const candidates = Platform.isWin
+					? [path.join(process.env.LOCALAPPDATA || "", "Programs", "Ollama", "ollama app.exe")]
+					: Platform.isMacOS
+						? ["/Applications/Ollama.app", "/opt/homebrew/bin/ollama", "/usr/local/bin/ollama"]
+						: ["/usr/local/bin/ollama", "/usr/bin/ollama"];
+				return candidates.some(p => fs.existsSync(p));
+			} catch (e) {
+				return false;
+			}
+		},
+
+		/* Démarre Ollama (le serveur démarre avec l'application) — détaché,
+		   best effort : l'app de bureau sur Windows/macOS, « ollama serve » sur
+		   Linux (pas d'app). Les erreurs asynchrones (exe absent) sont avalées :
+		   le poll de l'appelant constatera simplement l'échec. */
+		async demarrerOllama() {
+			if (!Platform.isDesktopApp) return false;
+			try {
+				const cp = require("child_process") as typeof import("child_process");
+				const path = require("path") as typeof import("path");
+				let child;
+				if (Platform.isWin) {
+					const fs = require("fs") as typeof import("fs");
+					const exe = path.join(process.env.LOCALAPPDATA || "", "Programs", "Ollama", "ollama app.exe");
+					child = fs.existsSync(exe)
+						? cp.spawn(exe, [], { detached: true, stdio: "ignore" })
+						: cp.spawn("ollama", ["serve"], { detached: true, stdio: "ignore", env: buildChildEnv() });
+				} else if (Platform.isMacOS) {
+					child = cp.spawn("open", ["-a", "Ollama"], { detached: true, stdio: "ignore" });
+				} else {
+					child = cp.spawn("ollama", ["serve"], { detached: true, stdio: "ignore", env: buildChildEnv() });
+				}
+				child.on("error", () => { /* constaté par le poll de l'appelant */ });
+				child.unref();
+				return true;
+			} catch (e) {
+				return false;
+			}
+		},
+	};
+
+	return { fs, links, watcher, ui, math, shell, platform, paths, modals, net, process: processus };
 }

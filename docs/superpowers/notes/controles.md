@@ -247,6 +247,36 @@ réponse étant toujours non.
   la requête traverse SANS `signal` (un `AbortSignal` ne se clone pas, `invoke`
   rejetterait), un identifiant distinct par requête, l'abandon relayé par
   `reseau.annuler` sous ce même identifiant et pendant la requête seulement.
+- `npm run check:electron-process` — les FICHIERS DES CLI dans le processus
+  principal (`apps/windows/electron/process.ts`, tâche 3 de la génération IA
+  dans l'application). Le défaut qu'il empêche : **la page « Générer » propose
+  une liste de modèles PLAUSIBLE mais périmée, sans un seul message.** Tout ce
+  que l'application sait des modèles de Codex et du CLI Claude vient de deux
+  fichiers à des chemins que seul le principal connaît
+  (`$CODEX_HOME/models_cache.json` ou `~/.codex/models_cache.json`,
+  `~/.claude.json`). Une clé décalée, un `$CODEX_HOME` ignoré — c'est
+  l'override que le CLI Codex honore lui-même, donc lire ailleurs, c'est lire
+  le cache d'une AUTRE installation que celle qui répond — ou un fichier absent
+  qui LÈVE au lieu de rendre `null` : dans les trois cas, le code partagé
+  retombe sur son repli embarqué, qui ressemble à une vraie liste. Un modèle du
+  repli retiré du compte donne ensuite un 404 au CLI, et on cherche le défaut du
+  côté du CLI. Le contrôle éprouve le module RÉEL sur un FAUX dossier personnel
+  (`USERPROFILE`/`HOME` sont des paramètres de `lireCache` et `cheminCache`
+  exprès : `os.homedir()` ne suit pas `HOME` sous Windows, et un contrôle qui
+  lirait les vrais fichiers de la machine dépendrait de ce qu'ils contiennent),
+  avec un `$CODEX_HOME` séparé dont le contenu DIFFÈRE de celui du dossier
+  personnel — sans quoi « honore CODEX_HOME » passerait par hasard. Il couvre
+  aussi les deux façons de n'avoir pas de cache (absent, JSON invalide), les
+  emplacements d'installation d'Ollama système par système — la SECONDE sonde,
+  celle qui distingue « serveur arrêté » de « non installé » quand le binaire
+  n'est pas sur le PATH d'une application de bureau — et le rejet NOMMÉ de
+  `run` (`indisponible`) tant que la tâche 7 ne l'a pas implémenté : un
+  `stdout` vide passerait pour une génération qui a tourné pour rien. La
+  tâche 7 étend ce script avec les cas à vrais process (stdin écrit puis fermé,
+  flux séparés, arbre tué à l'annulation). Côté greffon, les mêmes règles sont
+  gardées par `check:obsidian-host` (groupe « les CLI ») sur le code qui a
+  quitté `src/dashboard/ai-providers.ts` ; côté rendu, `check:windows-host`
+  garde le passe-plat : le NOM de l'outil traverse le pont, jamais un chemin.
 - `npm --prefix apps/windows run typecheck:electron` — le typecheck du PROCESSUS
   PRINCIPAL Electron (`apps/windows/tsconfig.electron.json`), lancé par
   `npm run build` de ce dossier, donc par `npm run check:app`. Il referme un trou

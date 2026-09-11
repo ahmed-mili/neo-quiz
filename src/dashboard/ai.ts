@@ -477,8 +477,24 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 					effortBtn.classList.toggle("is-ultra", !!(ef && ef.accent));
 				};
 				refreshTriggers();
+				/* L'INSTANTANÉ des fichiers de CLI (tranche 5, tâche 3) :
+				   `getModels()` est synchrone et lit un instantané de module que
+				   seul `refreshCliCaches` remplit. L'étiquette vient d'être
+				   dessinée avec ce qu'on avait ; on la redessine UNE fois si
+				   l'instantané a changé — `refreshTriggers` et non un re-rendu du
+				   composer, qui effacerait le message en cours de frappe. */
+				void aiProviders.refreshCliCaches().then(change => {
+					if (change && trigger.isConnected) refreshTriggers();
+				});
 
-				trigger.addEventListener("click", () => {
+				/* RELU À L'OUVERTURE, comme avant : la liste suivait
+				   `~/.codex/models_cache.json` à chaque clic (un modèle neuf du
+				   compte y apparaissait sans mise à jour du plugin). La lecture
+				   est devenue asynchrone, l'attente aussi — quelques
+				   millisecondes avant que le menu ne s'ouvre. */
+				trigger.addEventListener("click", async () => {
+					await aiProviders.refreshCliCaches();
+					if (!trigger.isConnected) return;
 					openModelMenu(trigger, {
 						models: getModels(),
 						currentModel: currentMv(),
@@ -866,7 +882,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 					});
 				}
 			});
-			usageBtn.addEventListener("click", () => openUsage());
+			usageBtn.addEventListener("click", () => void openUsage());
 		}
 
 		// Groupe droite : logo fournisseur, sélecteur modèle + effort, puis
@@ -1238,7 +1254,10 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 						action: {
 							label: t("ai.hint.startOllama"), icon: "circle-play",
 							onClick: () => {
-								aiProviders.startOllamaApp();
+								// ASYNCHRONE depuis la tranche 5 (dans l'application,
+								// le démarrage traverse l'IPC) : rien à attendre ici,
+								// c'est le poll ci-dessous qui constate le résultat.
+								void aiProviders.startOllamaApp();
 								// Poll : vert automatique dès que le
 								// serveur répond (10 s max).
 								let tries = 0;
@@ -1612,8 +1631,13 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	/** Ouvre l'écran d'usage en lui passant la dernière lecture connue (il ne
 	    rappellera l'endpoint que si elle a vieilli) et retient ce qu'il lit,
 	    pour que le survol du bouton puisse le résumer sans relire. */
-	function openUsage(): void {
+	async function openUsage(): Promise<void> {
 		const plugin = ctx.plugin as unknown as UsagePlugin;
+		/* L'écran d'usage lit lui aussi l'instantané de `~/.claude.json` (Fable
+		   proposé ?, notes promo en cours) par `ai-providers`. Une entrée
+		   d'affichage de plus, donc un `await` de plus — le seul du fichier avec
+		   le menu de modèles. */
+		await aiProviders.refreshCliCaches();
 		openUsageModal(ctx.app, {
 			plugin,
 			provider: ctx.plugin.settings.aiProvider || "",
@@ -1648,7 +1672,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		const dur = formatDuration(usage.durationMs);
 		if (dur) badge.createSpan({ cls: "qbd-ai-usage-sep", text: dur });
 
-		badge.addEventListener("click", () => openUsage());
+		badge.addEventListener("click", () => void openUsage());
 	}
 
 	/* Zone résultat (pleine page, composer en bas) : barre compacte +

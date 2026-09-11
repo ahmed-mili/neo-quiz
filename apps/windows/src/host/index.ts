@@ -30,6 +30,7 @@ import { createWindowsMath } from "./math";
 import { createWindowsModals } from "./modal";
 import { createWindowsNet } from "./net";
 import { createWindowsPlatform } from "./platform";
+import { createWindowsProcess } from "./process";
 import { createWindowsUi } from "./ui";
 
 export { createWindowsIndex } from "./fs";
@@ -121,6 +122,9 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		math: createWindowsMath(),
 		modals: createWindowsModals(),
 		net: createWindowsNet(),
+		/* Extrait dans `./process.ts`, comme `net.ts` : un passe-plat vers le
+		   pont, dont `run` rejette `indisponible` jusqu'à la tâche 7. */
+		process: createWindowsProcess(),
 		/* Extraite dans `./platform.ts` (PURE, donc éprouvable), comme `roots.ts`
 		   et pour la même raison : ce fichier-ci importe MathLive. */
 		platform: createWindowsPlatform(),

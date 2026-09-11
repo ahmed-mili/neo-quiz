@@ -107,6 +107,12 @@ const pont: Pont = {
 		annuler: requeteId => ipcRenderer.invoke(CANAUX.reseauAnnuler, requeteId),
 	},
 
+	processus: {
+		lireCache: tool => ipcRenderer.invoke(CANAUX.processusLireCache, tool),
+		ollamaInstalle: () => ipcRenderer.invoke(CANAUX.processusOllamaInstalle),
+		demarrerOllama: () => ipcRenderer.invoke(CANAUX.processusDemarrerOllama),
+	},
+
 	fenetre: {
 		async surFermeture(rappel) {
 			rappelsFermeture.push(rappel);

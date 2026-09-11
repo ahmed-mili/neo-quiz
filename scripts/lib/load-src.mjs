@@ -18,6 +18,17 @@
  *   ceux-là, c'est d'abord lire le double ci-dessous et vérifier qu'il dit
  *   encore la vérité sur Obsidian — un double approximatif rend vert sans
  *   rien garder.
+ *
+ * ET UN `require` QUI MARCHE. Le greffon tourne dans l'Electron d'Obsidian,
+ * où `require("child_process")` existe : `apps/obsidian/host.ts` s'en sert
+ * pour lancer les CLI et lire leurs fichiers de cache. La sortie de ce
+ * harnais est de l'ESM, et esbuild y remplace chaque `require` par un
+ * `__require` qui JETTE — « Dynamic require of "child_process" is not
+ * supported ». Un `try/catch` autour (c'est le cas de `lireCache`) avalait
+ * alors ce jet et rendait « pas de cache » : un cas VERT sur un code qui
+ * n'avait rien lu. Le `BANNER` ci-dessous pose un vrai `require` de Node ;
+ * le `__require` d'esbuild le détecte (`typeof require !== "undefined"`) et
+ * lui délègue, comme dans Obsidian.
  */
 import { build } from "esbuild";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -83,6 +94,12 @@ const OBSIDIAN_STUB = [
 	"export const finishRenderMath = () => nope('finishRenderMath');",
 ].join("\n");
 
+/** Posé en tête de chaque sortie : voir « ET UN `require` QUI MARCHE ». */
+const BANNER = [
+	"import { createRequire as __creerRequire } from 'node:module';",
+	"var require = __creerRequire(import.meta.url);",
+].join("\n");
+
 /**
  * @param {string | string[]} entry un module source ("src/editor/export.ts"),
  *   ou plusieurs — le rappel reçoit alors un module par entrée, dans l'ordre.
@@ -122,6 +139,7 @@ export async function withSrcModule(entry, run) {
 				// recalculé ci-dessous ne correspondrait plus au fichier réel.
 				outbase: "src",
 				logLevel: "warning",
+				banner: { js: BANNER },
 				plugins: [stubPlugin],
 			});
 			// `outbase: "src"` fixe la racine : "src/host/current.ts" devient
@@ -138,6 +156,7 @@ export async function withSrcModule(entry, run) {
 				platform: "node",
 				outfile,
 				logLevel: "warning",
+				banner: { js: BANNER },
 				plugins: [stubPlugin],
 			});
 			sorties = [outfile];

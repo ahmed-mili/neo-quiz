@@ -56,6 +56,18 @@ await withSrcModule("src/host/current.ts", ({ installHost }) => {
 		/* Aucun cas ne fait de requête : `null` est la réponse « échec réseau »
 		   du contrat, la seule qu'un hôte sans réseau puisse rendre honnêtement. */
 		net: { fetchJson: async () => null },
+		/* `process` (tranche 5, tâche 3) : aucun cas ne lance de CLI, mais un
+		   faux hôte PARTIEL meurt sur un TypeError le jour où un appelant y
+		   touche — et une mort en route masque en silence tous les groupes
+		   suivants. Les réponses sont celles d'une machine sans CLI : pas de
+		   cache, rien d'installé, rien à démarrer, et un `run` qui rejette
+		   avec le nom que le contrat prévoit. */
+		process: {
+			run: async () => { const e = new Error("pas de CLI ici"); e.name = "indisponible"; throw e; },
+			lireCache: async () => null,
+			ollamaInstalle: async () => false,
+			demarrerOllama: async () => false,
+		},
 	};
 	installHost(fakeHost);
 });

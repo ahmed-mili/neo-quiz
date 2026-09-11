@@ -9,7 +9,9 @@
  *
  *     npm run check:obsidian-host
  */
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
 import { parseHTML } from "linkedom";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
@@ -914,5 +916,175 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	} finally {
 		delete globalThis.__obsidianRequestUrl;
 	}
+	r.done();
+});
+
+/**
+ * LES CLI sous Obsidian : `HostProcess`, où vit désormais tout ce que
+ * `src/dashboard/ai-providers.ts` faisait en `require("fs"|"os"|"path"|
+ * "child_process")`. Deux choses sont éprouvées, et elles ont chacune coûté
+ * un défaut ailleurs :
+ *
+ * — `lireCache("codex")` honore `$CODEX_HOME`. C'est l'override que le CLI
+ *   Codex honore lui-même : l'ignorer ferait lire le cache d'une AUTRE
+ *   installation que celle qui répond, et la liste de modèles mentirait sans
+ *   qu'aucune erreur ne le dise ;
+ * — `run` écrit le stdin COMPLET puis le FERME (un CLI dont l'entrée reste
+ *   ouverte attend indéfiniment), rend `stdout` et `stderr` SÉPARÉS (les
+ *   concaténer rendrait illisible la sortie JSON d'un CLI qui avertit), et
+ *   rejette `introuvable` sur un exécutable absent — ce que
+ *   `checkClaudeCode` traduit en « non installé ».
+ *
+ * Le CLI éprouvé est `process.execPath` (Node lui-même) : le seul exécutable
+ * dont on soit sûr qu'il existe sur la machine qui lance ce contrôle. Comme
+ * `run` n'accepte qu'un NOM de sa liste blanche, le test passe par un
+ * `PATH` bricolé — voir `avecFauxCli`.
+ */
+await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
+	const r = makeReporter("Hôte Obsidian — les CLI");
+	const host = createObsidianHost(fausseApp([]), { manifest: {} });
+
+	/* Un dossier temporaire qui contient un faux `codex` : un script Node,
+	   plus un lanceur du nom que la liste blanche autorise. `buildChildEnv`
+	   AJOUTE au PATH du processus sans le remplacer, donc poser le dossier en
+	   tête de `process.env.PATH` suffit à ce que le lancement tombe sur le
+	   nôtre.
+
+	   POURQUOI `codex` ET PAS `claude` : sur la machine qui écrit ce contrôle,
+	   `claude.exe` existe pour de bon dans `~/.local/bin`, que `buildChildEnv`
+	   ajoute au PATH — le premier jet de ce cas a donc lancé le VRAI Claude
+	   Code, et attendu sa réponse. Le nom éprouvé doit être celui que RIEN
+	   d'autre que nous ne résout. */
+	function avecFauxCli(corps, executer) {
+		const dossier = mkdtempSync(join(tmpdir(), "quiz-cli-"));
+		const script = join(dossier, "faux.js");
+		writeFileSync(script, corps);
+		/* Sous Windows, `spawn` ne lance qu'un `.exe` : un `.cmd` est le seul
+		   lanceur qu'on puisse poser à la main — et c'est EXACTEMENT le cas
+		   que le repli par `cmd.exe` de l'hôte existe pour servir (une
+		   installation npm de `codex` est un `codex.cmd`). Ailleurs, un script
+		   shell exécutable, lancé par le chemin DIRECT : les deux chemins de
+		   `lancerCli` sont donc éprouvés, un par système. */
+		if (process.platform === "win32") {
+			writeFileSync(join(dossier, "codex.cmd"),
+				'@echo off\r\n"' + process.execPath + '" "' + script + '" %*\r\n');
+		} else {
+			writeFileSync(join(dossier, "codex"),
+				'#!/bin/sh\nexec "' + process.execPath + '" "' + script + '" "$@"\n', { mode: 0o755 });
+		}
+		const avant = process.env.PATH;
+		process.env.PATH = dossier + delimiter + avant;
+		return (async () => {
+			try {
+				return await executer();
+			} finally {
+				process.env.PATH = avant;
+				rmSync(dossier, { recursive: true, force: true });
+			}
+		})();
+	}
+
+	/* ── lireCache ── */
+	const maison = mkdtempSync(join(tmpdir(), "quiz-codex-"));
+	mkdirSync(join(maison, "cache"), { recursive: true });
+	writeFileSync(join(maison, "cache", "models_cache.json"), '{"models":[{"slug":"gpt-test"}]}');
+	const codexHomeAvant = process.env.CODEX_HOME;
+	process.env.CODEX_HOME = join(maison, "cache");
+	try {
+		/* `lire` ATTRAPE : sans ça, un `lireCache` qui laisserait remonter son
+		   exception (la rupture « pas de catch ») tuerait le script au lieu de
+		   rougir sous son nom — et une mort en route masque tous les cas
+		   suivants, ce que ce dépôt a déjà payé une fois. */
+		const lire = async (outil) => {
+			try {
+				return await host.process.lireCache(outil);
+			} catch (e) {
+				return "EXCEPTION: " + (e && e.message ? e.message : String(e));
+			}
+		};
+		const cache = await lire("codex");
+		r.check("lireCache(\"codex\") lit $CODEX_HOME/models_cache.json",
+			{ json: cache && cache.json, date: !!(cache && typeof cache.mtimeMs === "number") },
+			{ json: { models: [{ slug: "gpt-test" }] }, date: true });
+		/* Un fichier absent n'est PAS une erreur : une machine sans Codex est
+		   un état normal, et le code partagé retombe sur son repli embarqué. */
+		process.env.CODEX_HOME = join(maison, "vide");
+		r.check("un cache absent rend null, sans lever", await lire("codex"), null);
+	} finally {
+		if (codexHomeAvant === undefined) delete process.env.CODEX_HOME;
+		else process.env.CODEX_HOME = codexHomeAvant;
+		rmSync(maison, { recursive: true, force: true });
+	}
+
+	/* ── run ── */
+	await avecFauxCli(
+		[
+			"let entree = '';",
+			"process.stdin.on('data', d => { entree += d; });",
+			"process.stdin.on('end', () => {",
+			"  process.stdout.write('OUT:' + entree.length + ':' + process.argv.slice(2).join(','));",
+			"  process.stderr.write('ERR:diagnostic');",
+			"  process.exit(7);",
+			"});",
+		].join("\n"),
+		async () => {
+			const prompt = "x".repeat(5000);
+			const res = await host.process.run({ tool: "codex", args: ["-p", "--model", "opus"], stdin: prompt });
+			/* Le stdin COMPLET, puis FERMÉ : sans le `end()`, le faux CLI
+			   n'atteindrait jamais son `'end'` et `run` n'aboutirait pas —
+			   le cas expirerait au lieu de rougir, mais il rougirait aussi
+			   sur la longueur si une partie du prompt était perdue. */
+			r.check("run écrit le stdin complet puis le ferme, et passe les arguments",
+				res.stdout, "OUT:5000:-p,--model,opus");
+			r.check("stdout et stderr sont rendus séparés, avec le code de sortie",
+				{ stderr: res.stderr, code: res.code }, { stderr: "ERR:diagnostic", code: 7 });
+		},
+	);
+
+	/* Un exécutable ABSENT : c'est le rejet que `checkClaudeCode` traduit en
+	   « non installé », et un rejet ANONYME ferait chercher une panne. Le PATH
+	   est vidé le temps du cas, et les variables dont `buildChildEnv` compose
+	   ses chemins en dur pointent vers un dossier vide.
+	   RÉSIDUEL, écrit plutôt que découvert : `buildChildEnv` ajoute AUSSI
+	   `~/.local/bin`, `/opt/homebrew/bin` et `/usr/local/bin`, que rien ici ne
+	   peut détourner (`os.homedir()` ignore `HOME` sous Windows). Une machine
+	   qui aurait `codex` dans l'un de ces trois-là verrait ce cas rouge — un
+	   faux rouge, bruyant et expliqué ici, jamais un faux vert. */
+	const vide = mkdtempSync(join(tmpdir(), "quiz-vide-"));
+	const envAvant = {
+		PATH: process.env.PATH,
+		APPDATA: process.env.APPDATA,
+		LOCALAPPDATA: process.env.LOCALAPPDATA,
+		CODEX_INSTALL_DIR: process.env.CODEX_INSTALL_DIR,
+	};
+	let nom = "(aucun rejet)";
+	try {
+		process.env.PATH = vide;
+		process.env.APPDATA = vide;
+		process.env.LOCALAPPDATA = vide;
+		process.env.CODEX_INSTALL_DIR = vide;
+		await host.process.run({ tool: "codex", args: ["--version"], stdin: "" });
+	} catch (e) {
+		nom = e.name;
+	} finally {
+		for (const [cle, valeur] of Object.entries(envAvant)) {
+			if (valeur === undefined) delete process.env[cle];
+			else process.env[cle] = valeur;
+		}
+		rmSync(vide, { recursive: true, force: true });
+	}
+	r.check("un exécutable absent rejette « introuvable »", nom, "introuvable");
+
+	/* La liste blanche est jugée AVANT tout lancement : c'est elle, et non le
+	   périmètre des chemins, qui sépare « lancer le CLI de l'utilisateur » de
+	   « lancer ce qu'on vient d'écrire sur son disque ». */
+	let hors = "(aucun rejet)";
+	try {
+		await host.process.run({ tool: "notepad", args: [], stdin: "" });
+	} catch (e) {
+		hors = e.name;
+	}
+	r.check("un outil hors liste blanche est refusé, sans rien lancer", hors, "refuse");
+
 	r.done();
 });

@@ -314,6 +314,29 @@ export interface Pont {
 		annuler(requeteId: number): Promise<void>;
 	};
 
+	/**
+	 * LES CLI ET LEURS FICHIERS : `HostProcess` (`src/host/types.ts`) vu du
+	 * rendu, moins `run` — qui n'a pas encore de canal (tâche 7) et que l'hôte
+	 * du rendu rejette sur place, `name === "indisponible"`.
+	 *
+	 * `lireCache` prend un NOM D'OUTIL, jamais un chemin, et c'est toute la
+	 * sûreté de ce canal : les chemins (`$CODEX_HOME/models_cache.json`,
+	 * `~/.claude.json`) sont FIXES et connus du seul principal
+	 * (`./process.ts`). Un chemin venu du rendu ferait de ce canal une lecture
+	 * disque hors périmètre — le canal REFUSE donc tout nom hors de
+	 * « claude » / « codex » (`canaux.ts`), et le refus est journalisé.
+	 *
+	 * `ollamaInstalle` et `demarrerOllama` ne prennent RIEN : il n'y a qu'un
+	 * Ollama, à ses emplacements d'installation officiels. `demarrerOllama`
+	 * rend `false` quand rien n'a pu être lancé ; c'est le poll de l'appelant
+	 * qui constate si le serveur répond, jamais ce booléen.
+	 */
+	processus: {
+		lireCache(tool: "claude" | "codex"): Promise<{ mtimeMs: number; json: unknown } | null>;
+		ollamaInstalle(): Promise<boolean>;
+		demarrerOllama(): Promise<boolean>;
+	};
+
 	fenetre: {
 		/**
 		 * Le rappel à exécuter AVANT que la fenêtre ne se ferme, et que la
@@ -374,6 +397,9 @@ export const CANAUX = {
 	vaultsObsidian: "neo:systeme/vaults-obsidian",
 	reseauFetch: "neo:reseau/fetch",
 	reseauAnnuler: "neo:reseau/annuler",
+	processusLireCache: "neo:process/lire-cache",
+	processusOllamaInstalle: "neo:process/ollama-installe",
+	processusDemarrerOllama: "neo:process/demarrer-ollama",
 } as const;
 
 /** La clé des RÉGLAGES IA de l'application (`neo.reglages`) : les MÊMES

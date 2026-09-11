@@ -40,13 +40,16 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
 `docs/superpowers/notes/controles.md`. Le lire avant d'en contourner un.
 
 - `npm run check` — typecheck. Toujours après une modif TS.
-- `npm run check:host` — **le cliquet de la frontière d'hôte**, quatre assertions :
+- `npm run check:host` — **le cliquet de la frontière d'hôte**, CINQ assertions :
   aucun fichier de `src/` n'importe Obsidian hors de la liste `RESTANTS`, laquelle
-  ne peut que RÉTRÉCIR ; rien sous `apps/windows/` ; et aucun fichier déjà libéré
+  ne peut que RÉTRÉCIR ; rien sous `apps/windows/` ; aucun fichier déjà libéré
   n'emploie les **extensions DOM** d'Obsidian (`createEl`, `empty`, `setText`…),
-  qu'aucun `import` ne trahit — passer par `ajouter` de `src/dom.ts`. Il annonce le
-  nombre de fichiers encore liés (**33**). Dans la CI : lancé à la main, ce serait
-  la discipline et non le contrôle qui tiendrait la frontière.
+  qu'aucun `import` ne trahit — passer par `ajouter` de `src/dom.ts` ; et **aucun
+  fichier de `src/` n'importe depuis `apps/`** (le code partagé ne connaît pas ses
+  hôtes), la seule exception étant `src/dashboard.ts`, nommée dans
+  `EXCEPTIONS_APPS`. Il annonce le nombre de fichiers encore liés (**15**). Dans
+  la CI : lancé à la main, ce serait la discipline et non le contrôle qui
+  tiendrait la frontière.
 - `npm run check:dashboard-dom` — **le cliquet ne suffit pas seul** : `check:host`
   ne protège un fichier de ses extensions DOM que TANT QU'il reste hors de
   `RESTANTS`. Rien n'empêche qu'une tranche future y remette
@@ -74,6 +77,13 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   réécrira pas.
 - `npm run check:review-store`, `check:engine-review`, `check:module-edit` — les
   trois câblages de l'ordonnanceur.
+- `npm run check:quiz-io` — **le CÂBLAGE de l'écriture d'un bloc**, le seul
+  chemin par lequel la page réécrit une note. Entre `check:export` (la FORME du
+  bloc produit) et `audit-vaults.mjs` (l'aller-retour sur de vrais vaults), il n'y
+  avait RIEN : ni le compare-and-swap sur le bloc, ni la préservation des fins de
+  ligne, ni celle des clôtures, ni le remplacement par FONCTION qui protège un
+  quiz contenant `$1$`. Les quatre sont des correctifs de bugs réels, et deux
+  avaient régressé la nuit même où ils furent écrits.
 - `npm run check:review-log` — l'emplacement et la migration du journal de révision.
 - `npm run check:folders` — la conversion `folder` → `folders`, et l'unicité des
   identifiants de dossier.
@@ -103,8 +113,9 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   `release.yml` publie. (Pas `npm run release` : il pointe vers un fichier absent.)
 
 Vérification d'un changement = `npm run check`, plus `check:md` / `check:export` /
-`check:markers` si le rendu ou l'écriture sont touchés, `check:app` si le code
-partagé bouge, **puis** test manuel dans Obsidian.
+`check:markers` si le rendu ou l'écriture sont touchés, **`check:quiz-io` dès que
+`dashboard/detail-io.ts` bouge** (c'est le seul chemin qui réécrit une note),
+`check:app` si le code partagé bouge, **puis** test manuel dans Obsidian.
 
 ## Build & déploiement (`esbuild.config.mjs`)
 

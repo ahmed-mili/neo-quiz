@@ -50,3 +50,35 @@ jobs:
           test -f dist/main.js
           test -f dist/styles.css
           ls -lh dist/
+
+  # Le paquet Linux de l'application Windows (tâche 7 de la migration
+  # Tauri → Electron) : AppImage exige un runner Linux pour se construire,
+  # ce que la machine de développement (Windows) ne peut pas fournir. Job
+  # séparé du greffon ci-dessus : une casse ici ne doit pas bloquer la
+  # publication du greffon Obsidian, qui n'a aucun rapport avec la coquille.
+  app-linux-package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/windows/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: apps/windows
+
+      - name: Build and package (AppImage)
+        run: npm run pack:linux
+        working-directory: apps/windows
+
+      - name: Check package artifact
+        run: |
+          ls -lh dist-installer/*.AppImage
+        working-directory: apps/windows

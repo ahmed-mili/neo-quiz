@@ -11,21 +11,17 @@
     "typecheck:electron": "tsc --noEmit -p tsconfig.electron.json",
     "build:electron": "node electron/construire.mjs",
     "build": "npm run typecheck && npm run typecheck:electron && npm run build:electron && vite build",
-    "tauri": "tauri"
+    "pack:win": "npm run build && electron-builder --win nsis",
+    "pack:linux": "npm run build && electron-builder --linux AppImage"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-dialog": "^2.7.3",
-    "@tauri-apps/plugin-fs": "^2.5.2",
-    "@tauri-apps/plugin-opener": "^2.5.5",
-    "@tauri-apps/plugin-store": "^2.4.4",
     "chokidar": "^5.0.0",
     "lucide": "^1.41.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.4",
     "concurrently": "^10.0.5",
     "electron": "^44.3.0",
+    "electron-builder": "^26.0.19",
     "esbuild": "0.28.2",
     "typescript": "^7.0.2",
     "vite": "^8.2.0"

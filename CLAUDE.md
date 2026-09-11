@@ -169,7 +169,7 @@ Vérification d'un changement = `npm run check`, plus `check:md` / `check:export
   extends Plugin`) et `host.ts`, la seule implémentation du contrat qui a le droit
   d'importer Obsidian, et **le seul endroit du dépôt où un `TFile` devient un
   `HostFile`** (une conversion recopiée à la main diverge en silence).
-- `apps/windows/` — l'application Windows (Tauri 2 + Vite). Elle consomme `src/` **par
+- `apps/windows/` — l'application Windows (Electron + Vite). Elle consomme `src/` **par
   chemin relatif**, sans jamais copier un fichier : une copie divergerait sans un mot.
   Son hôte est `apps/windows/src/host/*.ts`, son thème `src/theme/host-vars.css`.
 - Une troisième application Android viendra ; elle n'aura à écrire qu'un hôte.

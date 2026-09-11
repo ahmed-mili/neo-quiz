@@ -6,9 +6,17 @@ dist/
 build/
 release/
 apps/windows/dist/
+apps/windows/dist-electron/
+apps/windows/dist-installer/
 apps/windows/node_modules/
-apps/windows/src-tauri/target/
-apps/windows/src-tauri/gen/
+
+# Le code Tauri est retiré du dépôt (tâche 7, migration Electron), mais son
+# cache de compilation Rust (`target/`, ~6,4 Go) reste sur le disque jusqu'à
+# un effacement à la main : il n'a jamais été suivi par git, et cette ligne
+# empêche qu'un futur `git add -A` l'indexe entre-temps (c'est arrivé une
+# fois pendant cette tâche : 4033 fichiers indexés par erreur, défaits avant
+# commit).
+apps/windows/src-tauri/
 
 # Environment & secrets
 .env

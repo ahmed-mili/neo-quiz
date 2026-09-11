@@ -34,9 +34,9 @@ export default defineConfig({
 		/* `dist-electron/` est la sortie du PROCESSUS PRINCIPAL, reconstruite à
 		   chaque `npm run dev` : la surveiller ferait recharger la page du rendu
 		   pour un fichier qu'elle ne charge pas. */
-		watch: { ignored: ["**/src-tauri/**", "**/dist-electron/**"] },
+		watch: { ignored: ["**/dist-electron/**"] },
 	},
-	envPrefix: ["VITE_", "TAURI_"],
+	envPrefix: ["VITE_"],
 	build: {
 		target: "es2021",
 		outDir: "dist",

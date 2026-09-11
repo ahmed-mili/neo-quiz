@@ -19,8 +19,9 @@
  * `apps/windows/electron/catalogue.ts`, où ils ont été relogés (voir l'en-tête
  * de `catalogue.ts` : le brief de la tâche voulait les déplacer dans
  * `index-fichiers.ts`, ce qui aurait fait tirer Node au futur import côté
- * rendu de la tâche 4). Ce contrôle-ci éprouve les HUIT cas neufs, sur le
- * surveillant chokidar.
+ * rendu de la tâche 4). Ce contrôle-ci éprouve les cas neufs du surveillant
+ * chokidar et de `contratDepuisAbsolu` — dix, depuis la ronde de correction 1
+ * qui a scindé le cas « hors racine » en deux (voir sa note ci-dessous).
  *
  * Chaque cas est isolé dans son propre `try/catch` (`cas()`, même patron que
  * `check-electron-fs.mjs`) : une exception non prévue devient un échec NOMMÉ
@@ -45,7 +46,7 @@ async function cas(r, nom, fn) {
 	}
 }
 
-await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerIndex }) => {
+await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerIndex, contratDepuisAbsolu }) => {
 	const r = makeReporter("Électron — index et surveillant");
 	const base = await mkdtemp(join(tmpdir(), "electron-index-check-"));
 	let n = 0;
@@ -152,7 +153,19 @@ await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerInd
 			}
 		});
 
-		await cas(r, "un .md hors racine n'émet rien", async () => {
+		/*
+		 * DEUX cas distincts pour « hors racine », depuis la ronde de correction
+		 * 1 (commit 6581ec5) : le premier, initialement seul, ne discriminait
+		 * PAS — `watch(racinesAbs, …)` ne reçoit que les racines exactes, donc
+		 * chokidar ne soumet JAMAIS un chemin hors racine à `contratDepuisAbsolu`
+		 * dans ce scénario ; casser SEULEMENT le garde-fou (`contratDepuisAbsolu`)
+		 * laissait le cas vert, parce que la promesse de chokidar de ne
+		 * surveiller que ce qu'on lui donne suffisait déjà à le faire réussir.
+		 * Il fallait casser LES DEUX à la fois (le périmètre physique du watcher
+		 * ET le garde-fou) pour le voir rougir — la preuve que ce cas n'éprouve,
+		 * isolément, QUE la promesse de chokidar, jamais le garde-fou lui-même.
+		 */
+		await cas(r, "le surveillant n'est monté que sur les racines qu'on lui donne (chokidar, pas le garde-fou)", async () => {
 			const parent = await racineNeuve();
 			const racine = join(parent, "surveillee");
 			const dehors = join(parent, "pas-surveillee");
@@ -165,10 +178,29 @@ await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerInd
 				await attendre(200);
 				await writeFile(join(dehors, "f.md"), "hors racine");
 				await attendre(500);
-				r.check("un .md hors racine n'émet rien", evs.length, 0);
+				r.check("le surveillant n'est monté que sur les racines qu'on lui donne (chokidar, pas le garde-fou)",
+					evs.length, 0);
 			} finally {
 				arreter();
 			}
+		});
+
+		await cas(r, "contratDepuisAbsolu rend null hors de toute racine", () => {
+			// DÉTERMINISTE, sans surveillant, sans délai : éprouve directement le
+			// garde-fou que le cas ci-dessus ne pouvait pas atteindre — voir sa
+			// note. Un chemin qui n'est ni une racine donnée ni sous l'une
+			// d'elles doit rendre `null`, quel que soit ce que chokidar aurait
+			// ou non transmis.
+			r.check("contratDepuisAbsolu rend null hors de toute racine",
+				contratDepuisAbsolu(["/vault/quiz"], "/ailleurs/note.md"), null);
+		});
+
+		await cas(r, "contratDepuisAbsolu rend un chemin du contrat sous la racine", () => {
+			// Non-régression du même garde-fou, côté chemin VALIDE : un cas qui
+			// n'éprouverait que le rejet pourrait rester vert même si la
+			// correspondance positive était cassée.
+			r.check("contratDepuisAbsolu rend un chemin du contrat sous la racine",
+				contratDepuisAbsolu(["/vault/quiz"], "/vault/quiz/Cours/ch1.md"), "0/Cours/ch1.md");
 		});
 
 		await cas(r, "après une écriture par index.write, get() rend le mtime NEUF sans attendre le surveillant", async () => {

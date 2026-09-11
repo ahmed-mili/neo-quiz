@@ -1000,6 +1000,28 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsIndex }
 		r.check("les abonnés reçoivent les trois genres, traduits en chemins du contrat",
 			vus, ["modify Quiz/Cours/ch1.md", "create Quiz/Cours/neuf.md", "delete Quiz/Cours/neuf.md"]);
 
+		/* LE PARCOURS INITIAL DE CHOKIDAR, REJOUÉ SUR LE MIROIR (revue finale,
+		   I3). Le principal pousse un `create` par fichier du vault au démarrage
+		   (1676 sur `Personal`). Mesuré, cette rafale précède la fin de
+		   l'hydratation et frappe un miroir vide — mais dans l'ordre INVERSE
+		   (parcours rendu avant la rafale), chaque `create` trouverait le
+		   miroir déjà garni du MÊME `mtime`, deviendrait un `modify` du
+		   contrat, et le scanner relirait la note (un `readCached` par IPC +
+		   parse) pour rien. C'est cet ordre-là que `versContrat` garde : voir
+		   son commentaire dans `fs.ts`. Le `mtime` courant du miroir est 7777
+		   (posé par le `modify` ci-dessus) : le rejouer ne doit RIEN émettre —
+		   ni aux abonnés, ni au miroir. Puis un `mtime` DIFFÉRENT doit passer,
+		   sinon la déduplication avalerait aussi les vrais changements survenus
+		   pendant le parcours, et « on s'abonne AVANT d'hydrater » ne
+		   protégerait plus rien. */
+		pont.emettre({ kind: "create", abs: "D:/Quiz/Cours/ch1.md", mtime: 7777 });
+		pont.emettre({ kind: "modify", abs: "D:/Quiz/Cours/ch1.md", mtime: 7777 });
+		r.check("un événement dont le mtime est déjà celui du miroir n'émet rien",
+			vus.length, 3);
+		pont.emettre({ kind: "modify", abs: "D:/Quiz/Cours/ch1.md", mtime: 7778 });
+		r.check("un événement dont le mtime diffère de celui du miroir passe, lui",
+			[vus.length, miroir.get("Quiz/Cours/ch1.md")?.mtime], [4, 7778]);
+
 		/* TÂCHE 5 : un `renameDir` poussé par le principal (paire déjà
 		   appariée, chemins ABSOLUS) doit atteindre les abonnés `onRenameDir`,
 		   traduit en chemins du CONTRAT — et EUX SEULS : les abonnés `onChange`
@@ -1010,7 +1032,7 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsIndex }
 		r.check("un renameDir poussé atteint les abonnés, en chemins du CONTRAT",
 			renommages, [{ from: "Quiz/Cours", to: "Quiz/Cours B2" }]);
 		r.check("un renameDir ne fait rien au miroir de fichiers ni aux abonnés onChange",
-			vus.length, 3);
+			vus.length, 4);
 
 		/* LE DÉSABONNEMENT REND ARRÊTE VRAIMENT L'ÉCOUTE. */
 		desabonnerRenameDir();
@@ -1028,7 +1050,7 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsIndex }
 		pont.emettre({ kind: "create", abs: "D:/Quiz/.neo-quiz/results/x.md", mtime: 1 });
 		pont.emettre({ kind: "delete", abs: "D:/Quiz/Cours/jamais-vu.tmp" });
 		r.check("un chemin hors racine, un chemin hors catalogue et la suppression d'un inconnu ne changent rien",
-			[miroir.all().length, vus.length], [avant, 3]);
+			[miroir.all().length, vus.length], [avant, 4]);
 	} finally {
 		pont.retirer();
 	}

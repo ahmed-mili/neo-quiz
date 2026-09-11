@@ -106,3 +106,48 @@ export async function resoudreRessource(perimetre: Perimetre, url: string): Prom
 		return null;
 	}
 }
+
+/* ─────────── ce que `systeme.ouvrir` refuse d'ouvrir ─────────── */
+
+/**
+ * Les extensions que `systeme.ouvrir` (`canaux.ts`) REFUSE, quel que soit le
+ * périmètre — revue finale de la migration, I1.
+ *
+ * LE PÉRIMÈTRE BORNE L'ÉCRITURE ET LA LECTURE, PAS L'EXÉCUTION. `ouvrir` passe
+ * par `shell.openPath`, qui lance l'application par défaut du système — et pour
+ * un `.bat`, un `.exe` ou un `.ps1`, « l'application par défaut » EST le
+ * fichier. Deux appels bornés, chacun dans les règles, composent alors une
+ * exécution : `fichiers.write("<vault>/x.bat", …)` puis
+ * `systeme.ouvrir("<vault>/x.bat")`. Le périmètre, pris comme barrière, est
+ * contourné. Et il n'y a même pas besoin d'un XSS : `src/engine/resources.ts`
+ * ouvre par NOM un fichier livré avec le dossier du quiz — un quiz PARTAGÉ
+ * dont le dossier contient `fiche.bat` et un bouton « ressource » suffit.
+ * Même forme sous Tauri, donc pas une régression ; mais c'est exactement la
+ * porte que le périmètre prétend fermer.
+ *
+ * Une liste NOIRE, pas blanche : ce que l'utilisateur ouvre depuis un quiz
+ * (PDF, image, `.docx`, `.xlsx`, `.pptx`, `.ipynb`…) est trop varié pour être
+ * énuméré, et un type refusé à tort serait une ressource morte sans message —
+ * alors que ce qui S'EXÉCUTE en double-clic sous Windows est une liste courte
+ * et connue. Elle vit ici, dans un module sans Node ni Electron, pour être
+ * ÉPROUVÉE (`scripts/check-electron-reglages.mjs`) : `canaux.ts` importe
+ * `electron`, aucun contrôle ne peut le charger.
+ */
+export const EXTENSIONS_EXECUTABLES: ReadonlySet<string> = new Set([
+	"exe", "bat", "cmd", "com", "scr", "pif", "lnk",
+	"js", "jse", "vbs", "vbe", "wsf", "wsh", "hta",
+	"msi", "ps1", "reg", "url",
+]);
+
+/**
+ * Vrai si `ouvrir` doit REFUSER ce chemin. Sur l'extension seule, casse
+ * ignorée (`X.BAT` s'exécute autant que `x.bat`), et sur le DERNIER point du
+ * nom : `notes.pdf.exe` est un `.exe`. Un chemin sans extension n'est pas
+ * refusé — Windows ne l'exécute pas en double-clic.
+ */
+export function extensionRefusee(chemin: string): boolean {
+	const nom = String(chemin ?? "").replace(/\\/g, "/").split("/").pop() ?? "";
+	const point = nom.lastIndexOf(".");
+	if (point <= 0) return false;
+	return EXTENSIONS_EXECUTABLES.has(nom.slice(point + 1).toLowerCase());
+}

@@ -324,8 +324,12 @@ async function demarrer(): Promise<void> {
 		      Ce qu'il NE couvre PAS : un `location.reload()`, la fin du
 		      processus par le système, et les deux stores, dont `destroy()`
 		      LANCE l'écriture sans rendre de promesse (limite antérieure à cette
-		      tranche, notée au rapport de la tâche 10). La valeur définitive du
-		      délai de garde est l'affaire de la tâche 5.
+		      tranche, notée au rapport de la tâche 10 de la TRANCHE 3, celle
+		      qui a écrit ce chemin sous Tauri). La valeur définitive du délai de
+		      garde a été fixée sur mesure par la tâche 6 de la migration
+		      Electron (`DELAI_GARDE_FERMETURE_MS`, `electron/main.ts` — elle
+		      était la 5 avant que le renommage d'un dossier ne devienne la
+		      tâche 5, Ruling 16).
 		   2. RECHARGEMENT (`location.reload()` dans `choisirDossier` /
 		      `onFoldersChanged`, depuis la page Réglages) : `beforeunload`, qui
 		      ne peut rien attendre — on ne fait que LANCER les écritures au plus

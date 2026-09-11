@@ -24,6 +24,21 @@ réponse étant toujours non.
   `npx tsc --noEmit -p apps/windows/tsconfig.json`, d'où la règle qu'aucun fichier
   atteint par ce typecheck ne doit tirer `obsidian.d.ts` — un simple `import type`
   suffisait à le neutraliser.
+  Sa SIXIÈME assertion (revue finale de la migration Electron, I2) garde l'autre
+  frontière du même dépôt : **le rendu de l'application (`apps/windows/src/`)
+  n'importe jamais un module qui tire Node** — `node:*`, `chokidar`, `electron`,
+  ni un module de `apps/windows/electron/` hors de la liste `SANS_NODE`
+  (`catalogue`, `ressources`, `pont`), dont chaque entrée est elle-même vérifiée
+  sans import Node. Le défaut qu'elle empêche ne rougissait NULLE PART : Vite
+  EXTERNALISE `node:fs` avec un avertissement et `check:app` reste vert, donc un
+  `import { readFile } from "node:fs"` dans `host/fs.ts` ne se découvrait qu'à
+  l'exécution (`readFile` indéfini) ; et `perimetre.ts` ou `fichiers.ts`
+  importés du rendu recréaient, côté Chromium, l'accès disque total que le pont
+  existe pour retirer — `sandbox: true` ne protège que de ce qui est réellement
+  chargé. `import type` reste admis (effacé à la compilation) ; `import { type X,
+  Y }` compte comme un vrai import. Éprouvée par quatre cassures (`node:fs`
+  statique, `perimetre` réel, `import("chokidar")` dynamique, `node:fs` ajouté à
+  `ressources.ts`), chacune rouge sous son libellé propre.
 - `npm run check:dashboard-dom` — le trou que `check:host` ne peut pas fermer seul :
   il ne regarde les extensions DOM d'un fichier QUE tant que ce fichier reste hors
   de `RESTANTS`. Rien n'empêche qu'une tranche future remette
@@ -176,6 +191,17 @@ réponse étant toujours non.
   porte `settings.json`, dont la clé `folders` nourrit le périmètre à la session
   suivante — l'y admettre laisserait le pont réécrire ce fichier en brut et
   obtenir tout le disque de façon persistante (Ruling 12).
+  Deux cas de la revue finale de la migration : **le périmètre borne l'écriture
+  et la lecture, pas l'EXÉCUTION** (I1) — `systeme.ouvrir` passe par
+  `shell.openPath`, et pour un `.bat` « l'application par défaut » est le fichier,
+  donc `write` puis `ouvrir`, deux appels bornés, composaient une exécution (et
+  sans XSS : `engine/resources.ts` ouvre par NOM un fichier livré avec le dossier
+  d'un quiz partagé). Le prédicat `extensionRefusee` vit dans `ressources.ts`,
+  sans Node ni Electron, pour être éprouvé ici (liste noire, casse ignorée,
+  dernier point du nom) ; `canaux.ts` l'applique et LOGGE le refus. Et **une clé
+  de réglage `__proto__`** (M6) n'écrivait aucune propriété propre mais
+  remplaçait le prototype de la table : refusée avec sa cause, et la table
+  reste intacte après le refus.
 - `npm --prefix apps/windows run typecheck:electron` — le typecheck du PROCESSUS
   PRINCIPAL Electron (`apps/windows/tsconfig.electron.json`), lancé par
   `npm run build` de ce dossier, donc par `npm run check:app`. Il referme un trou

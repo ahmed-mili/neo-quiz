@@ -88,13 +88,17 @@ export interface MiroirDisque extends WindowsIndex {
  * Sépare avec des `/` et retire le séparateur final. Windows accepte les deux
  * séparateurs en lecture ; le contrat, lui, n'en accepte qu'un.
  *
- * EXPORTÉE, et c'est la SEULE copie du rendu : `host/folder.ts` l'importe pour
- * normaliser les chemins qui entrent (sélecteur natif, `obsidian.json`,
- * réglages écrits par la version Tauri). Deux copies octet pour octet de cette
- * règle dans le même paquet finiraient par diverger, et la divergence ne se
- * verrait qu'à l'usage : deux `path` pour un seul disque, donc des événements
- * du surveillant qui tombent dans le vide. `electron/parcours.ts` en garde une
- * troisième, elle assumée — ce module-ci tire le pont, celui-là tire `node:fs`,
+ * EXPORTÉE : `host/folder.ts` l'importe pour normaliser les chemins qui
+ * entrent (sélecteur natif, `obsidian.json`, réglages écrits par la version
+ * Tauri). Ce n'est PAS la seule copie du rendu, et un commentaire le disait à
+ * tort (revue finale, M3) : `roots.ts` porte `nettoyer`, la même règle octet
+ * pour octet, PRÉEXISTANTE et privée — `CarteRacines` s'en sert pour les deux
+ * conversions du contrat, et ce fichier-ci n'importe `roots.ts` qu'en type.
+ * Deux copies d'une règle dans le même paquet finiront par diverger, et la
+ * divergence ne se verrait qu'à l'usage : deux `path` pour un seul disque,
+ * donc des événements du surveillant qui tombent dans le vide. Dette notée
+ * dans la passation, pas réparée ici. `electron/parcours.ts` en garde une
+ * autre, elle assumée — ce module-ci tire le pont, celui-là tire `node:fs`,
  * et la frontière entre les deux mondes ne se franchit pas pour trois lignes.
  */
 export function normaliser(chemin: string): string {
@@ -185,6 +189,31 @@ export { horsCatalogue };
  * de corbeille), et une garde qui coûte une ligne vaut mieux qu'une confiance.
  * La garde sur `delete` évite d'annoncer la disparition d'un fichier que le
  * catalogue n'a jamais connu (un `.tmp` d'éditeur).
+ *
+ * LA DÉDUPLICATION SUR LE `mtime` (revue finale de la migration, I3). Le
+ * surveillant du principal part avec `ignoreInitial: false`
+ * (`index-fichiers.ts`, c'est ce qui peuple SON index), donc son parcours
+ * initial est POUSSÉ ici comme autant de `create` — un par fichier du vault.
+ * La revue y voyait chaque `.md` relu deux fois au démarrage (le `create`
+ * devenu `modify`, donc un `scanFile` du scanner, donc un `readCached` par
+ * IPC + parse). MESURÉ sur `Personal` (1676 fichiers, 531 `.md`) AVANT de
+ * toucher au code, et ce n'est PAS ce qui se passe : la rafale de chokidar
+ * arrive de 66 à 532 ms après le montage, `liste` (le parcours) rend à 542 ms
+ * — la rafale entière frappe un miroir encore VIDE, sans aucun abonné (le
+ * scanner ne s'abonne qu'après), puis l'hydratation saute les 1676 entrées
+ * qu'elle trouve déjà posées. `readCached` au démarrage : 531 + 1 (la note du
+ * plan des modules), pas 1062. Le coût réel de `ignoreInitial: false` est
+ * 1676 messages IPC et autant de `stat` côté principal, en parallèle du
+ * parcours : invisible.
+ * La comparaison ci-dessous n'attrape donc RIEN aujourd'hui (0 sur 1676,
+ * mesuré aussi), et elle reste parce qu'elle protège l'ORDRE INVERSE — un
+ * parcours qui rendrait avant la fin de la rafale (disque plus rapide que
+ * chokidar, `awaitWriteFinish` qui retarde les `add`) ferait de chaque
+ * `create` un `modify` vers un scanner déjà abonné — sans rien coûter à
+ * « on s'abonne AVANT d'hydrater » : un vrai changement survenu pendant le
+ * parcours porte un `mtime` DIFFÉRENT, il passe. Les fichiers qui ne sont pas
+ * des `.md` passent quoi qu'il arrive (le parcours ne les date pas, `mtime` 0,
+ * chokidar si) : le scanner les ignore par extension, ce n'est que du fan-out.
  */
 function versContrat(
 	carte: CarteRacines,
@@ -194,8 +223,10 @@ function versContrat(
 	const rel = carte.depuisAbsolu(ev.abs);
 	if (rel === null || horsCatalogue(rel)) return null;
 	if (ev.kind === "delete") return index.get(rel) ? { kind: "delete", path: rel } : null;
+	const connu = index.get(rel);
+	if (connu && connu.mtime === ev.mtime) return null;
 	const file = toHostFile(rel, ev.mtime);
-	return index.get(rel) ? { kind: "modify", file } : { kind: "create", file };
+	return connu ? { kind: "modify", file } : { kind: "create", file };
 }
 
 /**

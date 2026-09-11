@@ -125,10 +125,31 @@ export function creerReglages(fichier: string): Reglages {
 			return (await charger())[cle];
 		},
 		ecrire(cle, valeur) {
+			refuserClePrototype(cle);
 			return enfiler(t => { t[cle] = valeur; });
 		},
 		supprimer(cle) {
+			refuserClePrototype(cle);
 			return enfiler(t => { delete t[cle]; });
 		},
 	};
+}
+
+/**
+ * REFUSE les trois clés qui n'écriraient pas dans la table mais dans sa
+ * CHAÎNE DE PROTOTYPES (revue finale, M6). La clé vient du rendu, par l'IPC :
+ * `ecrire("__proto__", { folders: … })` ne posait aucune propriété propre, il
+ * remplaçait le prototype de `table` — et chaque `lire` d'une clé absente
+ * remontait ensuite jusqu'à cette valeur. `JSON.parse` ne crée jamais ce cas
+ * à la lecture (une clé « __proto__ » y devient une propriété PROPRE), c'est
+ * bien l'affectation `t[cle] = valeur` qui l'ouvrait. Refuser plutôt
+ * qu'`Object.create(null)` : une clé qui n'a aucun sens comme réglage mérite
+ * une erreur NOMMÉE, pas une écriture silencieusement inerte. `lire` n'est
+ * pas gardée : lire `__proto__` rend le prototype d'un objet ordinaire, pas
+ * un secret, et l'appelant y voit une valeur absurde plutôt qu'une erreur.
+ */
+function refuserClePrototype(cle: string): void {
+	if (cle === "__proto__" || cle === "constructor" || cle === "prototype") {
+		throw new Error("clé de réglage refusée : " + cle);
+	}
 }

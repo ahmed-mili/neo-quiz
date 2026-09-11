@@ -40,16 +40,23 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
 `docs/superpowers/notes/controles.md`. Le lire avant d'en contourner un.
 
 - `npm run check` — typecheck. Toujours après une modif TS.
-- `npm run check:host` — **le cliquet de la frontière d'hôte**, CINQ assertions :
+- `npm run check:host` — **le cliquet de la frontière d'hôte**, SIX assertions :
   aucun fichier de `src/` n'importe Obsidian hors de la liste `RESTANTS`, laquelle
   ne peut que RÉTRÉCIR ; rien sous `apps/windows/` ; aucun fichier déjà libéré
   n'emploie les **extensions DOM** d'Obsidian (`createEl`, `empty`, `setText`…),
-  qu'aucun `import` ne trahit — passer par `ajouter` de `src/dom.ts` ; et **aucun
+  qu'aucun `import` ne trahit — passer par `ajouter` de `src/dom.ts` ; **aucun
   fichier de `src/` n'importe depuis `apps/`** (le code partagé ne connaît pas ses
   hôtes), la seule exception étant `src/dashboard.ts`, nommée dans
-  `EXCEPTIONS_APPS`. Il annonce le nombre de fichiers encore liés (**15**). Dans
-  la CI : lancé à la main, ce serait la discipline et non le contrôle qui
-  tiendrait la frontière.
+  `EXCEPTIONS_APPS` ; et **le rendu de l'app (`apps/windows/src/`) n'importe
+  jamais un module qui tire Node** — `node:*`, `chokidar`, `electron`, ni un
+  module de `apps/windows/electron/` hors de `SANS_NODE` (`catalogue`,
+  `ressources`, `pont`, eux-mêmes vérifiés purs). Vite EXTERNALISE `node:fs` avec un
+  simple avertissement et `check:app` reste vert : sans cette assertion, un
+  `import { readFile } from "node:fs"` dans le rendu ne rougissait nulle part, et
+  `perimetre.ts` importé du rendu recréait côté Chromium l'accès disque total que
+  le pont existe pour retirer. Il annonce le nombre de fichiers encore liés
+  (**15**). Dans la CI : lancé à la main, ce serait la discipline et non le
+  contrôle qui tiendrait la frontière.
 - `npm run check:dashboard-dom` — **le cliquet ne suffit pas seul** : `check:host`
   ne protège un fichier de ses extensions DOM que TANT QU'il reste hors de
   `RESTANTS`. Rien n'empêche qu'une tranche future y remette
@@ -81,8 +88,12 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   perdre l'historique d'une note.
 - `npm run check:electron-reglages` — les réglages, les vaults Obsidian déclarés et
   le PÉRIMÈTRE de sécurité du pont Electron (`reglages.ts`, `vaults.ts`,
-  `perimetre.ts`). Le périmètre est la règle la plus importante du pont : sans lui,
-  chaque canal `fichiers.*` est un accès disque total depuis la fenêtre.
+  `perimetre.ts`, plus les prédicats purs de `ressources.ts`). Le périmètre est la
+  règle la plus importante du pont : sans lui, chaque canal `fichiers.*` est un
+  accès disque total depuis la fenêtre. Et il ne borne que l'écriture et la
+  lecture, pas l'EXÉCUTION : `systeme.ouvrir` refuse en plus les extensions
+  exécutables (`EXTENSIONS_EXECUTABLES`), sans quoi `write` puis `ouvrir` d'un
+  `.bat` — deux appels bornés — le contournaient.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` avant `$…$`).
 - `npm run check:md`, `check:export` — rendu markdown des champs texte, écriture
   d'un bloc. Ils chargent le CODE RÉEL, jamais une réplique. **Pas de framework de
@@ -186,14 +197,18 @@ Vérification d'un changement = `npm run check`, plus `check:md` / `check:export
   Son thème est `src/theme/host-vars.css`. **L'hôte est SCINDÉ en deux, depuis la
   tâche 4 de la migration Tauri → Electron** : `apps/windows/src/host/*.ts` implémente
   le contrat côté RENDU (Chromium, sans Node) ; `apps/windows/electron/*.ts`
-  (`main.ts`, `pont.ts`, `fichiers.ts`, `perimetre.ts`, `reglages.ts`, `vaults.ts`,
-  `index-fichiers.ts`, `catalogue.ts`) est le processus PRINCIPAL, seul endroit du
+  (`main.ts` la fenêtre, `canaux.ts` les gestionnaires IPC — là où `borner`
+  s'applique —, `pont.ts`, `preload.ts`, `fichiers.ts`, `perimetre.ts`,
+  `reglages.ts`, `vaults.ts`, `index-fichiers.ts`, `parcours.ts`, `catalogue.ts`,
+  `ressources.ts`) est le processus PRINCIPAL, seul endroit du
   dépôt qui touche le disque directement et qui tient le PÉRIMÈTRE de sécurité (un
   chemin hors des dossiers ouverts, un `..`, une jonction qui pointe dehors). Le
   rendu ne parle au principal que par `window.neo`, le pont IPC typé posé par
   `preload.ts` — **le rendu ne doit JAMAIS importer un module qui tire Node**
   (`node:fs`, `chokidar`…) : ce serait recréer, côté Chromium, l'accès disque total
-  que le périmètre existe pour retirer côté principal.
+  que le périmètre existe pour retirer côté principal. Seuls `catalogue.ts`,
+  `ressources.ts` et `pont.ts` (sans Node) sont importables du rendu ; `npm run
+  check:host` le tient mécaniquement (assertion 6, liste `SANS_NODE`).
 - Une troisième application Android viendra ; elle n'aura à écrire qu'un hôte.
 
 ## Architecture (le point important)

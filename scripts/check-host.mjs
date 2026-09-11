@@ -1,5 +1,6 @@
 /**
- * FRONTIÈRE D'HÔTE — aucun fichier de `src/` n'importe Obsidian.
+ * FRONTIÈRE D'HÔTE — aucun fichier de `src/` n'importe Obsidian, et le rendu
+ * de l'application n'importe jamais un module qui tire Node (assertion 6).
  *
  * Même rôle que la section pureté de check-scheduler.mjs, avec une propriété
  * de plus : le noyau de l'ordonnanceur est DÉJÀ pur, alors que `src/` ne le
@@ -138,6 +139,73 @@ for (const f of fichiersTs("src")) {
 	if (EXCEPTIONS_APPS.has(f)) continue;
 	if (IMPORTE_APPS.test(codeNu(readFileSync(f, "utf8")))) {
 		rate(`${f} importe depuis apps/ : le code partagé ne connaît pas ses hôtes.`);
+	}
+}
+
+/* 6. LE RENDU DE L'APPLICATION N'IMPORTE JAMAIS UN MODULE QUI TIRE NODE.
+
+      La règle est née à la tâche 2 de la migration Tauri → Electron
+      (`CLAUDE.md`, « Structure du dépôt ») et AUCUN contrôle ne la tenait
+      (revue finale, I2). Le rendu tourne dans Chromium avec `contextIsolation`
+      et sans `nodeIntegration` : un `import { readFile } from "node:fs"` dans
+      `apps/windows/src/host/fs.ts` ne rougit NULLE PART — Vite EXTERNALISE
+      `node:fs` avec un simple avertissement, `check:app` passe, et c'est à
+      l'exécution que `readFile` est `undefined`. Pire : `perimetre.ts`,
+      `fichiers.ts` ou `canaux.ts` importés du rendu recréeraient, côté
+      Chromium, l'accès disque total que le pont existe pour retirer — et
+      `sandbox: true` ne protège que de ce qui est réellement chargé.
+
+      Ce qui est interdit dans `apps/windows/src/` hors `import type` : tout
+      spécificateur `node:*`, `chokidar`, `electron`, et tout module de
+      `apps/windows/electron/` sauf ceux SANS import Node — `SANS_NODE`, dont
+      chaque entrée est VÉRIFIÉE ici même (un `node:fs` ajouté à
+      `ressources.ts` « pour aller vite » ferait rougir la liste, pas passer
+      le rendu). `import type` reste admis : effacé à la compilation, il ne
+      charge rien — c'est ainsi que `fs.ts` lit le type `EvenementDisque`. */
+const SANS_NODE = new Set(["catalogue", "ressources", "pont"]);
+const SPECIFICATEUR_NODE = /^(node:|chokidar$|electron$)/;
+const MODULE_ELECTRON = /(?:^|\/)electron\/([^/"']+?)(?:\.[cm]?ts)?$/;
+
+/** Les spécificateurs importés POUR DE VRAI (pas `import type`), sous leurs
+    trois formes plus la réexportation `export … from`. `import { type X }`
+    compte comme un vrai import : TypeScript ne l'efface que si TOUS les
+    membres sont `type`, et en douter coûte un faux rouge, pas un trou. */
+function specificateursCharges(src) {
+	const nu = codeNu(src);
+	const trouves = [];
+	const statique = /(?:^|[^\w$.])(import|export)\s+(type\s+)?[^;'"]*?from\s*["']([^"']+)["']/g;
+	let m;
+	while ((m = statique.exec(nu))) if (!m[2]) trouves.push(m[3]);
+	const nuImport = /(?:^|[^\w$.])import\s*["']([^"']+)["']/g;
+	while ((m = nuImport.exec(nu))) trouves.push(m[1]);
+	const dynamique = /(?:require\s*\(\s*|(?<![.\w$])import\s*\(\s*)["']([^"']+)["']/g;
+	while ((m = dynamique.exec(nu))) trouves.push(m[1]);
+	return trouves;
+}
+
+for (const f of fichiersTs("apps/windows/src")) {
+	for (const spec of specificateursCharges(readFileSync(f, "utf8"))) {
+		if (SPECIFICATEUR_NODE.test(spec)) {
+			rate(`${f} importe « ${spec} » : le rendu tourne dans Chromium, sans Node — passez par le pont (window.neo).`);
+			continue;
+		}
+		const em = spec.match(MODULE_ELECTRON);
+		if (em && !SANS_NODE.has(em[1])) {
+			rate(`${f} importe « ${spec} » : ce module du processus principal tire Node ; seuls ${[...SANS_NODE].join(", ")} sont importables du rendu.`);
+		}
+	}
+}
+for (const nom of SANS_NODE) {
+	const f = `apps/windows/electron/${nom}.ts`;
+	if (!existsSync(f)) {
+		rate(`SANS_NODE contient ${nom}, mais ${f} n'existe pas : retirez l'entrée.`);
+		continue;
+	}
+	for (const spec of specificateursCharges(readFileSync(f, "utf8"))) {
+		const em = spec.match(MODULE_ELECTRON);
+		if (SPECIFICATEUR_NODE.test(spec) || (em && !SANS_NODE.has(em[1]))) {
+			rate(`${f} importe « ${spec} » alors qu'il est déclaré SANS Node (SANS_NODE) : le rendu l'importe, il vient de tirer Node avec lui.`);
+		}
 	}
 }
 

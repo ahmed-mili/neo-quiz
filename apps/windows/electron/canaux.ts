@@ -13,7 +13,10 @@
    canaux `fichiers.*`, plus `systeme.ouvrir`, y passent ; `demarrer` FILTRE
    ses racines contre le périmètre au lieu de le définir ; et la clé `folders`
    des réglages est GARDÉE à l'écriture, parce qu'elle nourrit le périmètre au
-   prochain démarrage.
+   prochain démarrage. `ouvrir` refuse EN PLUS les extensions exécutables
+   (`EXTENSIONS_EXECUTABLES`, `ressources.ts`) : le périmètre borne l'écriture
+   et la lecture, pas l'exécution, et `write` puis `ouvrir` d'un `.bat` les
+   composerait.
 
    AUCUN `ipcMain.on` : tout est `ipcMain.handle`. Un canal sans réponse ne
    peut pas être attendu, et l'appelant ne saurait jamais si son écriture a
@@ -32,6 +35,7 @@ import type { Perimetre } from "./perimetre";
 import { CANAUX } from "./pont";
 import type { EvenementDisque } from "./pont";
 import type { Reglages } from "./reglages";
+import { extensionRefusee } from "./ressources";
 import { vaultsObsidian } from "./vaults";
 
 /** Ce que les canaux demandent à `main.ts`. */
@@ -272,6 +276,17 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 		   système sinon. `HostShell.openExternal` attend un booléen dont
 		   `engine/resources.ts` se sert pour prévenir l'utilisateur. */
 		const a = await perimetre.borner(abs);
+		/* ET REFUSÉ SUR L'EXTENSION, même dans le périmètre : pour un `.bat`
+		   ou un `.exe`, « l'application par défaut » est le fichier lui-même,
+		   et `write` puis `ouvrir` — deux appels bornés — composeraient une
+		   exécution (revue finale, I1 ; la liste et son POURQUOI sont sur
+		   `EXTENSIONS_EXECUTABLES`, `ressources.ts`). Le refus est NOMMÉ dans
+		   la console et rendu `false` : l'utilisateur voit la Notice « ouverture
+		   impossible » de `engine/resources.ts`, jamais un bouton mort. */
+		if (extensionRefusee(a)) {
+			console.warn(LOG_PREFIX, "ouverture refusée, extension exécutable:", a);
+			return false;
+		}
 		const erreur = await shell.openPath(path.normalize(a));
 		if (erreur) console.warn(LOG_PREFIX, "ouverture impossible:", a, erreur);
 		return !erreur;

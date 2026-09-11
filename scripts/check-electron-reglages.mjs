@@ -123,6 +123,33 @@ await withSrcModule("apps/windows/electron/reglages.ts", async ({ creerReglages 
 				{ valeur: await reg.lire("folders"), fichiers: await readdir(d) },
 				{ valeur: undefined, fichiers: [] });
 		});
+
+		/* LA CLÉ VIENT DU RENDU (revue finale, M6) : `ecrire("__proto__", …)`
+		   n'écrivait aucune propriété propre, il remplaçait le PROTOTYPE de la
+		   table, et toute clé absente lue ensuite remontait jusqu'à sa valeur.
+		   Les DEUX moitiés : le refus est une erreur NOMMÉE, et une clé
+		   ordinaire lue après reste intacte — un `folders` qui remonterait au
+		   prototype empoisonné passerait sinon pour un réglage. */
+		await cas(r, "une clé de prototype (__proto__, constructor, prototype) est refusée et n'empoisonne pas la table", async () => {
+			const d = join(dir, "sept");
+			await mkdir(d);
+			const reg = creerReglages(join(d, "settings.json"));
+			await reg.ecrire("folders", []);
+			const cause = async (fn) => { try { await fn(); return "accepté"; } catch (e) { return String(e.message).split(" : ")[0]; } };
+			r.check("une clé de prototype (__proto__, constructor, prototype) est refusée et n'empoisonne pas la table",
+				{
+					proto: await cause(() => reg.ecrire("__proto__", { folders: [{ path: "C:/" }] })),
+					constructor: await cause(() => reg.ecrire("constructor", 1)),
+					prototype: await cause(() => reg.supprimer("prototype")),
+					folders: await reg.lire("folders"),
+					absente: await reg.lire("jamais-ecrite"),
+					disque: JSON.parse(await readFile(join(d, "settings.json"), "utf-8")),
+				},
+				{
+					proto: "clé de réglage refusée", constructor: "clé de réglage refusée", prototype: "clé de réglage refusée",
+					folders: [], absente: undefined, disque: { folders: [] },
+				});
+		});
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
@@ -277,6 +304,41 @@ await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetr
 						etrangere: await resoudreRessource(p, "https://exemple.test/x.png"),
 					},
 					{ dedans, dehors: null, remontee: null, etrangere: null });
+			});
+		});
+
+		/* LA PORTE D'EXÉCUTION SOUS LE PÉRIMÈTRE (revue finale, I1). Le périmètre
+		   borne l'écriture et la lecture ; `systeme.ouvrir` (`shell.openPath`)
+		   EXÉCUTE un `.bat` ou un `.exe` — et `write` puis `ouvrir` sont deux
+		   appels bornés, chacun dans les règles. Le prédicat vit dans
+		   `ressources.ts` (sans Node ni Electron) pour être éprouvé ici ;
+		   `canaux.ts`, qui l'applique, importe `electron`. Les DEUX moitiés :
+		   une liste vide accepterait tout et un prédicat constant refuserait
+		   tout — chacune serait verte seule. La casse (`X.BAT`), le double
+		   suffixe (`notes.pdf.exe`) et le chemin sans extension sont les trois
+		   façons de se tromper sur « l'extension ». */
+		await cas(r, "ouvrir refuse les extensions exécutables, quelle que soit la casse, et laisse passer les documents", async () => {
+			await withSrcModule("apps/windows/electron/ressources.ts", async ({ extensionRefusee, EXTENSIONS_EXECUTABLES }) => {
+				r.check("ouvrir refuse les extensions exécutables, quelle que soit la casse, et laisse passer les documents",
+					{
+						bat: extensionRefusee(join(racine, "Cours", "x.bat")),
+						casse: extensionRefusee(join(racine, "Cours", "X.BAT")),
+						doubleSuffixe: extensionRefusee(join(racine, "Cours", "notes.pdf.exe")),
+						ps1: extensionRefusee(join(racine, "Cours", "script.ps1")),
+						lnk: extensionRefusee(join(racine, "Cours", "raccourci.lnk")),
+						pdf: extensionRefusee(join(racine, "Cours", "fiche.pdf")),
+						md: extensionRefusee(join(racine, "Cours", "ch1.md")),
+						sansExtension: extensionRefusee(join(racine, "Cours", "Makefile")),
+						pointDeTete: extensionRefusee(join(racine, "Cours", ".bat")),
+						/* La liste de la revue, entière : une extension retirée « par
+						   simplification » rougirait ici, nommée. */
+						liste: [...EXTENSIONS_EXECUTABLES].sort(),
+					},
+					{
+						bat: true, casse: true, doubleSuffixe: true, ps1: true, lnk: true,
+						pdf: false, md: false, sansExtension: false, pointDeTete: false,
+						liste: ["bat", "cmd", "com", "exe", "hta", "js", "jse", "lnk", "msi", "pif", "ps1", "reg", "scr", "url", "vbe", "vbs", "wsf", "wsh"],
+					});
 			});
 		});
 	} finally {

@@ -29,7 +29,6 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
 import { enregistrerCanaux } from "./canaux";
-import { normaliser } from "./parcours";
 import { perimetreInitial } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { CANAUX } from "./pont";
@@ -143,7 +142,13 @@ const INTERVALLE_TENTATIVE_MS = 250;
     sur deux sur une page d'erreur, selon la machine. */
 async function charger(cible: BrowserWindow): Promise<void> {
 	const fichierRendu = path.join(__dirname, "..", "dist", "index.html");
-	const origineFichier = "file://" + normaliser(fichierRendu).replace(/^([A-Za-z]:)/, "/$1");
+	/* `pathToFileURL`, jamais une concaténation : `memeOrigine` compare le
+	   `pathname` de l'URL que Chromium rapporte, donc PERCENT-ENCODÉ. Un `#`
+	   ou un `?` dans le dossier d'installation (« C:/Apps/Neo Quiz #2 ») aurait
+	   fait de la concaténation une URL au fragment tronqué, la comparaison
+	   échouait, et `location.reload()` — la navigation dont `choisirDossier`
+	   dépend — était REFUSÉE comme une origine étrangère (revue finale, M1). */
+	const origineFichier = pathToFileURL(fichierRendu).href;
 	if (app.isPackaged) {
 		origineApp = origineFichier;
 		await cible.loadFile(fichierRendu);
@@ -172,7 +177,12 @@ function creerFenetre(): void {
 		   rectangle blanc, puis le thème sombre — un clignotement à chaque
 		   lancement. */
 		show: false,
-		backgroundColor: "#1e1e1e",
+		/* La couleur du THÈME (`--background-primary`, `src/theme/host-vars.css`
+		   : rgb(30, 30, 46)), pas une valeur recopiée : c'est ce que la fenêtre
+		   montre AVANT que la page ait peint, et un ton différent ferait un
+		   clignotement à chaque lancement — exactement ce que `show: false`
+		   ci-dessus existe pour empêcher (différé depuis la tâche 3, M2). */
+		backgroundColor: "#1e1e2e",
 		webPreferences: {
 			preload: path.join(__dirname, "preload.cjs"),
 			// LES TROIS DRAPEAUX — voir l'en-tête de ce fichier.
@@ -186,8 +196,16 @@ function creerFenetre(): void {
 
 	/* Un quiz PARTAGÉ peut contenir un lien : qu'il ouvre une seconde fenêtre
 	   Electron n'a aucun sens ici, et une fenêtre ouverte par la page hériterait
-	   de préférences que nous n'aurions pas choisies. Refus systématique. */
-	fenetre.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+	   de préférences que nous n'aurions pas choisies. Refus systématique — mais
+	   REMIS AU NAVIGATEUR quand c'est du `https?:`, comme `will-navigate`
+	   ci-dessous : le sanitizer admet `<a target="_blank">`, et un refus sec
+	   faisait de ce lien légitime un lien MORT, là où le même lien sans
+	   `target` s'ouvrait dans le navigateur (revue finale, M7). Même filtre,
+	   même geste : deux règles pour un seul lien auraient divergé. */
+	fenetre.webContents.setWindowOpenHandler(({ url }) => {
+		remettreAuNavigateur(url);
+		return { action: "deny" };
+	});
 
 	/* UNE NAVIGATION DE PREMIER NIVEAU DONNERAIT `window.neo` À UNE ORIGINE
 	   ÉTRANGÈRE. Le sanitizer laisse passer `<a href="https://…">`
@@ -199,9 +217,10 @@ function creerFenetre(): void {
 	   `location.reload()` dont `choisirDossier` dépend, puisqu'un rechargement
 	   vise l'URL de l'application ; toute autre origine est REFUSÉE ici et
 	   remise au NAVIGATEUR de l'utilisateur, où un lien légitime a sa place. */
-	const refuserHorsOrigine = (e: Electron.Event, url: string): void => {
-		if (memeOrigine(url)) return;
-		e.preventDefault();
+	/** Ouvre `url` dans le navigateur de l'utilisateur si c'est du `https?:`,
+	    sinon le refus est NOMMÉ dans la console. Partagée entre la navigation
+	    de premier niveau et `setWindowOpenHandler` : un seul filtre. */
+	const remettreAuNavigateur = (url: string): void => {
 		/* Sous `try` : `memeOrigine` rend `false` sur une URL non analysable, et
 		   un `throw` ici, APRÈS le `preventDefault`, ferait sortir l'écouteur en
 		   erreur pour une navigation déjà refusée. */
@@ -213,6 +232,11 @@ function creerFenetre(): void {
 		}
 		if (/^https?:$/.test(protocole)) void shell.openExternal(url);
 		else console.warn(LOG_PREFIX, "navigation refusée:", url);
+	};
+	const refuserHorsOrigine = (e: Electron.Event, url: string): void => {
+		if (memeOrigine(url)) return;
+		e.preventDefault();
+		remettreAuNavigateur(url);
 	};
 	fenetre.webContents.on("will-navigate", refuserHorsOrigine);
 	// Une redirection ne peut suivre qu'une navigation admise ; la même règle

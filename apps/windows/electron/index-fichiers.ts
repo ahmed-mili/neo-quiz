@@ -27,6 +27,12 @@ import * as path from "node:path";
 import type { HostFile, HostFileEvent } from "../../../src/host/types";
 import { dossierHorsCatalogue, evenementDeRenommageDossier, horsCatalogue } from "./catalogue";
 import { creerFichiers, stat } from "./fichiers";
+/* `normaliser` vient de `./parcours`, la copie du PRINCIPAL : ce module en
+   gardait une deuxième, octet pour octet, sans qu'aucune frontière ne le
+   justifie (les deux tirent `node:fs` ; revue finale, M3). Deux copies d'une
+   même règle dans un même processus finissent par diverger, et la divergence
+   ferait tomber les événements du surveillant dans le vide. */
+import { normaliser } from "./parcours";
 
 /**
  * Ce qu'un renommage de DOSSIER, apparié, doit pousser vers le rendu — tâche
@@ -87,13 +93,6 @@ export interface Index {
 	 * `evenementDeRenommageDossier`).
 	 */
 	surveiller(onEvenement: (ev: EvenementSurveillant) => void, delayMs?: number): () => void;
-}
-
-/** Sépare avec des `/` et retire le séparateur final — même règle que l'hôte
-    du rendu (`apps/windows/src/host/fs.ts`, `normaliser`) : Windows accepte
-    les deux séparateurs en lecture, le contrat n'en accepte qu'un. */
-function normaliser(chemin: string): string {
-	return String(chemin ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
 /** Le `HostFile` d'un chemin déjà au format contrat (indice de racine en

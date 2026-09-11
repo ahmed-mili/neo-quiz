@@ -346,7 +346,63 @@ git commit -m "refactor(host): l'hote de la fenetre passe de Tauri au pont Elect
 
 ---
 
-## Task 5 : La fermeture qui attend l'écriture
+## Task 5 : Le renommage d'un dossier, que l'app ne voit plus
+
+**Files:**
+- Modify: `apps/windows/electron/index-fichiers.ts`
+- Modify: `apps/windows/electron/pont.ts`, `preload.ts`, `main.ts` (l'événement traverse)
+- Modify: `apps/windows/src/host/fs.ts` (`onRenameDir` cesse d'être inerte)
+- Modify: `scripts/check-electron-index.mjs`
+
+**Pourquoi cette tâche existe :** ajoutée le 2026-09-11, après la revue de la
+tâche 4, qui a CONFIRMÉ une régression que le plan initial ne voyait pas.
+
+L'hôte Tauri APPELAIT `onRenameDir` : `git show b2e7632:apps/windows/src/host/fs.ts`,
+lignes 500-530, sur `type.modify.kind === "rename" && mode === "both"`, suivi d'un
+`stat` qui distingue le dossier. Le débouncer de notify appariait réellement
+`From`/`To` en `Both` dans sa fenêtre de 300 ms — ce chemin n'était pas théorique.
+Côté Electron, `index-fichiers.ts` n'abonne que `add`, `change`, `unlink` : ni
+`addDir` ni `unlinkDir`, donc rien à apparier même en le voulant.
+
+**Ce que la régression coûte :** renommer un dossier ORPHELINE l'historique de
+révision de toutes ses notes, en silence. Les clés du journal portent le chemin ;
+sans l'événement, `review-store` ne les rebaptise pas, et chaque question
+redevient éternellement neuve.
+
+Ce n'est pas une violation du contrat — `src/host/types.ts` dit qu'« un hôte qui
+ne sait pas distinguer un dossier renommé n'appelle jamais le rappel ; il ne
+DEVINE pas » — c'est pourquoi la tâche 4 a pu être close. Mais la migration ne
+peut pas être déclarée finie sur une capacité perdue sans un mot.
+
+- [ ] **Étape 1 : l'appariement, une fonction PURE**
+
+Chokidar émet `unlinkDir` puis `addDir` sans les lier. La règle d'appariement
+(même parent, fenêtre de temps, aucun autre candidat) est du code pur : elle va
+dans `catalogue.ts`, à côté d'`evenementDeRenommage`, et s'éprouve sans disque.
+**Ne pas DEVINER** : deux dossiers supprimés puis deux créés dans la même fenêtre
+ne s'apparient pas — mieux vaut ne rien émettre qu'apparier à tort.
+
+- [ ] **Étape 2 : le contrôle, avant le code**
+
+Cas neufs, chacun avec sa rupture : un renommage simple émet UN événement de
+dossier ; une suppression seule n'émet rien ; deux renommages simultanés
+n'apparient rien ; un renommage vers un dossier ignoré est une suppression.
+
+- [ ] **Étape 3 : l'événement traverse le pont**, et `onRenameDir` cesse d'être
+inerte côté rendu.
+
+- [ ] **Étape 4 : à l'écran** — renommer un dossier de quiz, vérifier que
+l'historique de révision SUIT (une question déjà vue ne redevient pas neuve).
+
+- [ ] **Étape 5 : commit**
+
+```bash
+git commit -m "feat(electron): le renommage d'un dossier suit l'historique de revision"
+```
+
+---
+
+## Task 6 : La fermeture qui attend l'écriture
 
 **Files:**
 - Modify: `apps/windows/electron/main.ts`
@@ -383,7 +439,7 @@ git commit -m "feat(electron): la fermeture attend l'ecriture en cours"
 
 ---
 
-## Task 6 : L'empaquetage, et le retrait de Tauri
+## Task 7 : L'empaquetage, et le retrait de Tauri
 
 **Files:**
 - Create: `apps/windows/electron-builder.yml`

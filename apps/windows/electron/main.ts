@@ -3,8 +3,8 @@
 
    Tâche 3 de la migration Tauri → Electron
    (docs/superpowers/plans/2026-09-11-migration-electron.md). Ce fichier ouvre
-   la fenêtre, branche les primitives des tâches 1 et 2, et enregistre un
-   gestionnaire par méthode du pont (`./pont.ts`).
+   la fenêtre, alimente le périmètre et branche les canaux du pont
+   (`./pont.ts`, `./canaux.ts`).
 
    LES TROIS DRAPEAUX DE LA FENÊTRE NE SE NÉGOCIENT PAS —
    `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. Neo Quiz
@@ -17,26 +17,23 @@
    un défaut peut changer d'une version majeure à l'autre sans rien casser de
    visible, et personne ne relit une ligne absente.
 
-   AUCUN `ipcMain.on` : tout est `ipcMain.handle`. Un canal sans réponse ne
-   peut pas être attendu, et l'appelant ne saurait jamais si son écriture a
-   réussi. Le seul sens principal → rendu est `webContents.send` du surveillant
-   (`CANAUX.evenement`) et l'appel de fermeture, auquel le rendu RÉPOND par un
-   `invoke`.
+   Les gestionnaires des canaux vivent dans `./canaux.ts` (aucun `ipcMain.on`,
+   tout est `ipcMain.handle`) ; le périmètre qui borne chaque chemin dans
+   `./perimetre.ts`. Le seul sens principal → rendu est `webContents.send` du
+   surveillant (`CANAUX.evenement`) et l'appel de fermeture, auquel le rendu
+   RÉPOND par un `invoke`.
 ══════════════════════════════════════════════════════════ */
 
-import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
+import { BrowserWindow, app, shell } from "electron";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
-import type { HostFileEvent } from "../../../src/host/types";
-import { creerFichiers, stat } from "./fichiers";
-import { absoluDepuisContrat, contratDepuisAbsolu, creerIndex } from "./index-fichiers";
-import type { Index } from "./index-fichiers";
-import { listerRacine, normaliser } from "./parcours";
+import { chargerPerimetre, enregistrerCanaux } from "./canaux";
+import { normaliser } from "./parcours";
+import { creerPerimetre } from "./perimetre";
 import { CANAUX } from "./pont";
-import type { EvenementDisque } from "./pont";
 import { creerReglages } from "./reglages";
 import type { Reglages } from "./reglages";
-import { vaultsObsidian } from "./vaults";
 
 /** Le serveur de développement de Vite. Le port vient de `vite.config.ts`
     (`strictPort: true`) : s'il change là-bas, il change ici. */
@@ -60,183 +57,20 @@ const DELAI_GARDE_FERMETURE_MS = 3000;
 
 /* ─────────── état du processus ─────────── */
 
-const fichiers = creerFichiers();
+/** La liste blanche des dossiers que le pont a le droit de toucher — voir
+    `perimetre.ts`. Alimentée par les réglages, le sélecteur, les vaults
+    d'Obsidian et le dossier de données ; JAMAIS par l'argument de `demarrer`. */
+const perimetre = creerPerimetre();
 let fenetre: BrowserWindow | null = null;
 let reglages: Reglages | null = null;
-/** Les racines déclarées par `demarrer`, normalisées. */
-let racinesAbs: string[] = [];
-let index: Index | null = null;
-let arreterSurveillance: (() => void) | null = null;
 let fermetureArmee = false;
 let fermetureEnCours = false;
 let gardeFermeture: NodeJS.Timeout | null = null;
 
-/* ─────────── ce qui franchit le pont ─────────── */
-
-/**
- * L'événement du surveillant, retraduit en chemin ABSOLU.
- *
- * L'index porte une convention INTERNE (« 0/Cours/ch1.md », l'indice de la
- * racine en tête) qui ne franchit JAMAIS le pont : les chemins du CONTRAT sont
- * les clés du journal de révision, et `src/host/types.ts` avertit qu'un second
- * endroit qui les recomposerait ferait diverger deux historiques sans que
- * personne ne le voie. Le rendu, qui tient `CarteRacines`, est ce seul endroit.
- *
- * `rename` ne peut pas arriver (l'index n'émet que `create`/`modify`/`delete`
- * depuis chokidar) — le `null` est là pour que le jour où il en émettrait un,
- * ce soit un silence visible à la lecture plutôt qu'un `abs` indéfini poussé
- * dans la fenêtre.
- */
-function versDisque(ev: HostFileEvent): EvenementDisque | null {
-	if (ev.kind === "rename") return null;
-	const contrat = ev.kind === "delete" ? ev.path : ev.file.path;
-	const absolu = absoluDepuisContrat(racinesAbs, contrat);
-	if (!absolu) return null;
-	const abs = normaliser(absolu);
-	return ev.kind === "delete" ? { kind: "delete", abs } : { kind: ev.kind, abs, mtime: ev.file.mtime };
-}
-
-/** Le `mtime` que l'écriture vient de produire — voir « LES QUATRE ÉCRITURES
-    RENDENT LE `mtime` NEUF » dans `pont.ts`. Un `stat` qui échoue rend 0 plutôt
-    que de faire échouer une écriture qui, elle, a réussi : la refuser après
-    coup serait mentir dans l'autre sens. */
-async function fraicheur(abs: string): Promise<{ mtime: number }> {
-	const info = await stat(abs);
-	return { mtime: info ? info.mtime : 0 };
-}
-
-/**
- * Écrit un fichier TEXTE, par l'index quand le chemin tombe sous une racine.
- *
- * POURQUOI PASSER PAR L'INDEX, alors que le `mtime` rendu à la fenêtre vient
- * d'un `stat` et pas de lui : l'index du principal sert de garde au
- * surveillant (`surSuppression` n'annonce la disparition que d'un fichier
- * qu'il connaît). Une note créée puis mise à la corbeille dans la même fenêtre
- * de débounce n'y serait jamais entrée, sa suppression serait donc AVALÉE, et
- * le miroir du rendu — qui, lui, l'a apprise par le `mtime` rendu ici —
- * garderait un quiz fantôme que plus rien ne peut retirer.
- *
- * `writeBinary` et `append` ne passent pas par là : l'index n'a pas de variante
- * binaire, et le seul appelant d'`append` (le journal de révision) écrit sous
- * `.neo-quiz/`, hors catalogue par construction.
- */
-async function ecrireTexte(abs: string, contenu: string): Promise<void> {
-	const contrat = index ? contratDepuisAbsolu(racinesAbs, normaliser(abs)) : null;
-	if (index && contrat) await index.write(contrat, contenu);
-	else await fichiers.write(abs, contenu);
-}
-
-/* ─────────── les canaux ─────────── */
-
-/** Les réglages, ou une erreur NOMMÉE : un `null` silencieux ferait repartir
-    l'utilisateur de l'écran de choix sans que rien ne dise pourquoi. */
+/** Les réglages, ou une erreur NOMMÉE — voir `DependancesCanaux`. */
 function reglagesOuErreur(): Reglages {
 	if (!reglages) throw new Error("réglages non initialisés : l'application n'est pas prête");
 	return reglages;
-}
-
-function enregistrerCanaux(): void {
-	ipcMain.handle(CANAUX.demarrer, async (_e, racines: string[]) => {
-		/* Un second appel REMPLACE : le rendu recharge la page quand les racines
-		   changent, et laisser vivre l'ancien surveillant ferait pousser dans la
-		   fenêtre des événements portant les indices de l'ancienne liste. */
-		arreterSurveillance?.();
-		arreterSurveillance = null;
-		racinesAbs = (Array.isArray(racines) ? racines : []).map(normaliser);
-		index = creerIndex(racinesAbs);
-	});
-
-	ipcMain.handle(CANAUX.read, (_e, abs: string) => fichiers.read(abs));
-	ipcMain.handle(CANAUX.readCached, (_e, abs: string) => fichiers.readCached(abs));
-
-	ipcMain.handle(CANAUX.write, async (_e, abs: string, contenu: string) => {
-		await ecrireTexte(abs, contenu);
-		return await fraicheur(abs);
-	});
-
-	ipcMain.handle(CANAUX.lirePourEcriture, async (_e, abs: string) => {
-		// `read` et non `readCached` : c'est la moitié LECTURE d'un
-		// lire-modifier-écrire, elle doit voir le disque tel qu'il est.
-		const contenu = await fichiers.read(abs);
-		const { mtime } = await fraicheur(abs);
-		return { contenu, mtime };
-	});
-
-	/* La seconde moitié de `process` — voir « `process`, EN DEUX TEMPS » dans
-	   `pont.ts`. La comparaison porte sur le CONTENU : un `mtime` dont la
-	   granularité vaut plusieurs millisecondes ne distinguerait pas deux
-	   écritures rapprochées. `null` n'est pas une erreur, c'est la réponse
-	   « le fichier a changé, rejoue ton rappel ». */
-	ipcMain.handle(CANAUX.ecrireSiInchange, async (_e, abs: string, lu: string, contenu: string) => {
-		const actuel = await fichiers.read(abs);
-		if (actuel !== lu) return null;
-		await ecrireTexte(abs, contenu);
-		return await fraicheur(abs);
-	});
-
-	ipcMain.handle(CANAUX.writeBinary, async (_e, abs: string, data: Uint8Array) => {
-		await fichiers.writeBinary(abs, data);
-		return await fraicheur(abs);
-	});
-
-	ipcMain.handle(CANAUX.append, async (_e, abs: string, contenu: string) => {
-		await fichiers.append(abs, contenu);
-		return await fraicheur(abs);
-	});
-
-	ipcMain.handle(CANAUX.exists, (_e, abs: string) => fichiers.exists(abs));
-	ipcMain.handle(CANAUX.mkdirs, (_e, abs: string) => fichiers.mkdirs(abs));
-	ipcMain.handle(CANAUX.trash, (_e, abs: string, racine: string) => fichiers.trash(abs, racine));
-	/* NORMALISÉE : `fichiers.list` compose ses chemins avec `path.join`, donc
-	   avec des `\` sous Windows. Tout ce qui franchit le pont doit avoir la même
-	   forme, sinon le miroir du rendu tiendrait deux clés pour un seul fichier. */
-	ipcMain.handle(CANAUX.list, async (_e, dossier: string) =>
-		(await fichiers.list(dossier)).map(normaliser));
-	ipcMain.handle(CANAUX.remove, (_e, abs: string) => fichiers.remove(abs));
-	ipcMain.handle(CANAUX.rename, (_e, de: string, vers: string) => fichiers.rename(de, vers));
-	ipcMain.handle(CANAUX.stat, (_e, abs: string) => stat(abs));
-	ipcMain.handle(CANAUX.liste, (_e, racine: string) => listerRacine(racine));
-
-	ipcMain.handle(CANAUX.surveiller, () => {
-		/* La cause est NOMMÉE : un surveillant qui ne démarre pas en silence
-		   donnerait une fenêtre où rien ne se met plus à jour, sans erreur. */
-		if (!index) throw new Error("surveiller() avant demarrer() : aucune racine déclarée");
-		if (arreterSurveillance) return; // déjà monté : un second watcher serait redondant.
-		arreterSurveillance = index.surveiller(ev => {
-			const disque = versDisque(ev);
-			if (!disque || !fenetre || fenetre.isDestroyed()) return;
-			fenetre.webContents.send(CANAUX.evenement, disque);
-		});
-	});
-
-	ipcMain.handle(CANAUX.choisirDossier, async () => {
-		const choix = await dialog.showOpenDialog({ properties: ["openDirectory"] });
-		// Annulation : la réponse « non », pas une erreur.
-		if (choix.canceled || choix.filePaths.length === 0) return null;
-		return normaliser(choix.filePaths[0]);
-	});
-
-	ipcMain.handle(CANAUX.reglagesLire, (_e, cle: string) => reglagesOuErreur().lire(cle));
-	ipcMain.handle(CANAUX.reglagesEcrire, (_e, cle: string, valeur: unknown) => reglagesOuErreur().ecrire(cle, valeur));
-	ipcMain.handle(CANAUX.reglagesSupprimer, (_e, cle: string) => reglagesOuErreur().supprimer(cle));
-
-	ipcMain.handle(CANAUX.ouvrir, async (_e, abs: string) => {
-		/* `shell.openPath` rend une CHAÎNE : vide en cas de succès, le message
-		   du système sinon. `HostShell.openExternal` attend un booléen dont
-		   `engine/resources.ts` se sert pour prévenir l'utilisateur. */
-		const erreur = await shell.openPath(path.normalize(abs));
-		if (erreur) console.warn(LOG_PREFIX, "ouverture impossible:", abs, erreur);
-		return !erreur;
-	});
-
-	ipcMain.handle(CANAUX.vaultsObsidian, () => vaultsObsidian());
-
-	ipcMain.handle(CANAUX.armerFermeture, () => {
-		fermetureArmee = true;
-	});
-	ipcMain.handle(CANAUX.fermetureTerminee, () => {
-		terminerFermeture();
-	});
 }
 
 /* ─────────── la fermeture ─────────── */
@@ -253,16 +87,35 @@ function terminerFermeture(): void {
 
 /* ─────────── la fenêtre ─────────── */
 
+/** L'origine de la page de l'application (« http://localhost:1421 » en
+    développement, « file://…/dist/index.html » sinon). `file://` a une origine
+    OPAQUE (« null ») : on compare alors sur le chemin du fichier chargé. */
+let origineApp: string | null = null;
+
+function memeOrigine(url: string): boolean {
+	if (!origineApp) return false;
+	try {
+		const u = new URL(url);
+		if (u.protocol === "file:") return origineApp.startsWith("file:") && u.pathname === new URL(origineApp).pathname;
+		return u.origin === origineApp;
+	} catch {
+		return false;
+	}
+}
+
 /** Charge le rendu, en réessayant tant que le serveur de développement n'écoute
     pas encore : `npm run dev` lance Vite et Electron EN PARALLÈLE, et Electron
     est souvent prêt le premier. Sans réessai, la fenêtre s'ouvrirait une fois
     sur deux sur une page d'erreur, selon la machine. */
 async function charger(cible: BrowserWindow): Promise<void> {
 	const fichierRendu = path.join(__dirname, "..", "dist", "index.html");
+	const origineFichier = "file://" + normaliser(fichierRendu).replace(/^([A-Za-z]:)/, "/$1");
 	if (app.isPackaged) {
+		origineApp = origineFichier;
 		await cible.loadFile(fichierRendu);
 		return;
 	}
+	origineApp = new URL(URL_DEV).origin;
 	for (let essai = 0; essai < 40; essai++) {
 		try {
 			await cible.loadURL(URL_DEV);
@@ -273,6 +126,7 @@ async function charger(cible: BrowserWindow): Promise<void> {
 	}
 	/* Pas de serveur de développement : on retombe sur le rendu construit,
 	   s'il existe. Un `npm run build` suivi d'`electron .` passe par là. */
+	origineApp = origineFichier;
 	await cible.loadFile(fichierRendu);
 }
 
@@ -300,6 +154,28 @@ function creerFenetre(): void {
 	   Electron n'a aucun sens ici, et une fenêtre ouverte par la page hériterait
 	   de préférences que nous n'aurions pas choisies. Refus systématique. */
 	fenetre.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+
+	/* UNE NAVIGATION DE PREMIER NIVEAU DONNERAIT `window.neo` À UNE ORIGINE
+	   ÉTRANGÈRE. Le sanitizer laisse passer `<a href="https://…">`
+	   (`src/engine/sanitizer.ts`), un quiz partagé peut donc porter un lien ;
+	   un clic ferait naviguer la fenêtre, et le préchargement est attaché au
+	   `webContents`, pas à l'origine — la page de l'attaquant recevrait le
+	   pont entier. Règle par ORIGINE : la nôtre (le serveur de développement
+	   ou `file://`) navigue librement — c'est ce qui laisse passer le
+	   `location.reload()` dont `choisirDossier` dépend, puisqu'un rechargement
+	   vise l'URL de l'application ; toute autre origine est REFUSÉE ici et
+	   remise au NAVIGATEUR de l'utilisateur, où un lien légitime a sa place. */
+	fenetre.webContents.on("will-navigate", (e, url) => {
+		if (memeOrigine(url)) return;
+		e.preventDefault();
+		if (/^https?:$/.test(new URL(url).protocol)) void shell.openExternal(url);
+		else console.warn(LOG_PREFIX, "navigation refusée:", url);
+	});
+
+	/* Par défaut, Electron ACCORDE les permissions (micro, caméra,
+	   notifications…) à toute page. Aucune fonction de l'application n'en
+	   demande : refus systématique, et une origine hostile n'obtient rien. */
+	fenetre.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 
 	/* MESURÉ SUR ELECTRON 44, et la tâche 5 doit le savoir : cet événement est
 	   émis par le chemin UTILISATEUR (la croix, Alt+F4, la barre des tâches —
@@ -335,11 +211,44 @@ function creerFenetre(): void {
    la barre oblique ferait du dossier de données un sous-dossier fantôme. */
 app.setName(PRODUCT_NAME);
 
-void app.whenReady().then(() => {
-	reglages = creerReglages(path.join(app.getPath("userData"), "settings.json"));
-	enregistrerCanaux();
-	creerFenetre();
-});
+/* UNE SEULE INSTANCE. `reglages.ts` tient sa table en mémoire et réécrit le
+   fichier entier à chaque changement : deux instances écraseraient chacune
+   les réglages de l'autre à tour de rôle, sans un mot. La seconde instance
+   s'arrête et la première reprend le premier plan. */
+if (!app.requestSingleInstanceLock()) {
+	app.quit();
+} else {
+	app.on("second-instance", () => {
+		if (!fenetre || fenetre.isDestroyed()) return;
+		if (fenetre.isMinimized()) fenetre.restore();
+		fenetre.focus();
+	});
+
+	void app.whenReady().then(async () => {
+		const donnees = app.getPath("userData");
+		reglages = creerReglages(path.join(donnees, "settings.json"));
+		/* Le dossier de données entre au périmètre AVANT les dossiers retenus :
+		   c'est là que vivront les fichiers propres à l'application. CRÉÉ d'abord :
+		   `autoriser` ignore un dossier absent, et au tout premier lancement
+		   Electron ne l'a pas forcément encore posé. Puis les réglages, lus par le
+		   principal lui-même. */
+		await fs.mkdir(donnees, { recursive: true });
+		await perimetre.autoriser(donnees);
+		await chargerPerimetre(perimetre, reglagesOuErreur());
+		enregistrerCanaux({
+			perimetre,
+			reglagesOuErreur,
+			envoyer(canal, charge) {
+				if (fenetre && !fenetre.isDestroyed()) fenetre.webContents.send(canal, charge);
+			},
+			fermeture: {
+				armer() { fermetureArmee = true; },
+				terminee: terminerFermeture,
+			},
+		});
+		creerFenetre();
+	});
+}
 
 /* Une seule fenêtre, et Windows pour seule plateforme à cette tranche : sa
    fermeture est la fin de l'application. */

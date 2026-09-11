@@ -56,7 +56,12 @@ const pont: Pont = {
 		lirePourEcriture: abs => ipcRenderer.invoke(CANAUX.lirePourEcriture, abs),
 		ecrireSiInchange: (abs, lu, contenu) =>
 			ipcRenderer.invoke(CANAUX.ecrireSiInchange, abs, lu, contenu),
-		writeBinary: (abs, data) => ipcRenderer.invoke(CANAUX.writeBinary, abs, data),
+		/* RECOPIÉE (`new Uint8Array(data)`) avant l'envoi : la conservation
+		   d'une VUE PARTIELLE au passage du `contextBridge` n'est pas
+		   documentée, et une vue qui redeviendrait tout son tampon écrirait
+		   l'image collée avec tout ce qui l'entoure en mémoire. La copie coûte
+		   la taille de l'image, une fois ; elle rend la question sans objet. */
+		writeBinary: (abs, data) => ipcRenderer.invoke(CANAUX.writeBinary, abs, new Uint8Array(data)),
 		append: (abs, contenu) => ipcRenderer.invoke(CANAUX.append, abs, contenu),
 		exists: abs => ipcRenderer.invoke(CANAUX.exists, abs),
 		mkdirs: abs => ipcRenderer.invoke(CANAUX.mkdirs, abs),

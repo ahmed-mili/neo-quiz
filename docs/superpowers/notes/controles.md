@@ -132,6 +132,21 @@ réponse étant toujours non.
   qu'un `trash` supprime au lieu de déplacer, et qu'un homonyme déjà dans la
   corbeille soit écrasé plutôt que numéroté. Tourne sur un vrai dossier temporaire
   (`fs.mkdtemp`), retiré dans un `finally`.
+- `npm run check:electron-reglages` — les trois modules du processus principal que
+  la fenêtre ne peut pas éprouver à sa place : `reglages.ts`, `vaults.ts`,
+  `perimetre.ts` (tâche 3, ronde de correction 1). Il empêche des défauts qui
+  échouent EN SILENCE : un fichier de réglages réécrit à partir d'une table VIDE
+  parce qu'une lecture a transitoirement échoué (un `EBUSY` d'antivirus, puis le
+  premier `ecrire`, et TOUS les dossiers de l'utilisateur perdus sans message —
+  c'était le code de la première version) ; un JSON corrompu ÉCRASÉ au lieu d'être
+  mis de côté ; deux écritures concurrentes qui se renomment l'une l'autre ; un
+  `.tmp` laissé comme résultat final. Et le PÉRIMÈTRE, la règle la plus importante
+  du pont Electron : un chemin hors des dossiers ouverts, un `..` qui en sort, une
+  jonction posée dedans et pointant dehors, une racine de corbeille inconnue — sans
+  lui, chaque canal `fichiers.*` est un accès disque total depuis la fenêtre, qui
+  rend du HTML qui n'est pas toujours celui de l'utilisateur. Le cas du `..` est
+  CONCATÉNÉ, jamais composé par `path.join` : `join` replie déjà les `..` et le cas
+  était vert quoi qu'on casse.
 - `npm --prefix apps/windows run typecheck:electron` — le typecheck du PROCESSUS
   PRINCIPAL Electron (`apps/windows/tsconfig.electron.json`), lancé par
   `npm run build` de ce dossier, donc par `npm run check:app`. Il referme un trou

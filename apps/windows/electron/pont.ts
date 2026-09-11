@@ -32,6 +32,16 @@
    TOUT EST ASYNCHRONE, sans exception : chaque appel traverse l'IPC. C'est la
    contrainte qui a décidé la forme de `liste()` et de `surveiller()` — voir
    plus bas.
+
+   ET TOUT CHEMIN EST BORNÉ. Un chemin absolu n'est pas un droit : chaque canal
+   `fichiers.*` (et `systeme.ouvrir`) REJETTE tout chemin qui ne tombe pas sous
+   un dossier du PÉRIMÈTRE (`./perimetre.ts`) — les dossiers retenus dans les
+   réglages, ceux que le sélecteur natif a désignés, les vaults qu'Obsidian
+   déclare, et le dossier de données de l'application. C'est ce que Tauri
+   faisait avec `allow_folder` et la portée vide de `plugin-fs` ; sans lui, une
+   porte oubliée du sanitizer deviendrait `write("…/Startup/x.bat")`. Le rendu
+   ne peut PAS élargir ce périmètre : `demarrer` filtre ses racines contre lui,
+   et la clé `folders` des réglages est gardée à l'écriture.
 ══════════════════════════════════════════════════════════ */
 
 /** Un vault Obsidian connu de la machine (remplace la commande Rust
@@ -85,6 +95,10 @@ export interface Pont {
 	 * second appel remplace les racines : le rendu recharge la fenêtre quand
 	 * elles changent (`main.ts`, `choisirDossier`), il n'appelle donc jamais
 	 * ceci deux fois dans la même vie de page.
+	 *
+	 * FILTRÉE, pas crue : une racine hors périmètre est IGNORÉE (et nommée dans
+	 * la console du principal). Le rendu ne définit jamais ce qu'il a le droit
+	 * de lire — voir l'en-tête.
 	 */
 	demarrer(racines: string[]): Promise<void>;
 
@@ -156,7 +170,10 @@ export interface Pont {
 		mkdirs(abs: string): Promise<void>;
 		/** Déplace vers `<racine>/.trash/…`. `racine` est explicite : le
 		    principal ne connaît pas la notion de racines multiples, elle vit
-		    dans `CarteRacines` côté rendu. */
+		    dans `CarteRacines` côté rendu. Elle doit ÊTRE une racine du
+		    périmètre (pas seulement y tomber), et `abs` doit être sous elle :
+		    sinon `path.relative` fabriquerait un `../../…` et le déplacement
+		    irait n'importe où. */
 		trash(abs: string, racine: string): Promise<void>;
 		/** Les FICHIERS d'un dossier, sans descendre. Un dossier absent rend
 		    `[]`. */

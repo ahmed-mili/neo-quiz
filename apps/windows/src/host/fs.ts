@@ -27,6 +27,16 @@ import { LOG_PREFIX } from "../../../../src/branding";
 import type { HostFile, HostFileEvent, HostFs, HostWatcher } from "../../../../src/host/types";
 import { cheminLibre, couperExtension } from "./roots";
 import type { CarteRacines } from "./roots";
+/* `horsCatalogue` et `evenementDeRenommage` vivent désormais dans
+   `apps/windows/electron/catalogue.ts` : un module SANS AUCUNE dépendance
+   Node, que le processus principal Electron (tâche 2) et ce fichier de rendu
+   partagent tous les deux — voir l'en-tête de `catalogue.ts` pour le POURQUOI
+   (la tâche 4 fera importer ces deux fonctions par le rendu lui-même, qui ne
+   doit jamais tirer `node:fs/promises` à travers elles). Réexportées plus bas
+   pour que les dix-sept cas de `check-windows-host.mjs` (groupe « index »),
+   qui les importent depuis CE fichier, continuent de passer sans qu'une seule
+   de leurs assertions ne change. */
+import { dossierIgnore, evenementDeRenommage, horsCatalogue } from "../../electron/catalogue";
 
 /** L'index en mémoire du dossier. Volontairement minuscule : c'est ce qui le
     rend éprouvable hors de la fenêtre (`npm run check:windows-host`). */
@@ -121,67 +131,12 @@ export function buildIndex(fichiers: HostFile[]): WindowsIndex {
 
 /* ─────────── le parcours du dossier ─────────── */
 
-/**
- * Dossiers jamais indexés.
- *
- * Tout dossier CACHÉ (nom commençant par un point) est écarté, plus
- * `node_modules`. Ce n'est pas de la coquetterie : indexer `.git` fait grimper
- * un dossier de cours de quelques centaines d'entrées à des dizaines de
- * milliers, dont pas une seule n'est un quiz — le démarrage s'allonge, la
- * mémoire monte, et `findByName` doit balayer tout ça à chaque image.
- * `.obsidian` et `.neo-quiz` (les résultats, cf. `paths.resultsDirFor`) tombent
- * sous la même règle ; ils restent LISIBLES par chemin, ils ne sont
- * simplement pas au catalogue.
- */
-function dossierIgnore(nom: string): boolean {
-	return nom.startsWith(".") || nom === "node_modules";
-}
-
-/**
- * Un chemin du CONTRAT que le catalogue ne doit pas connaître : il traverse un
- * dossier ignoré, ou il se réduit à la racine elle-même.
- *
- * Nommée et exportée pour être ÉPROUVABLE, et pour que le parcours du démarrage
- * et le surveillant ne puissent pas diverger : c'est exactement ce qui venait
- * d'arriver. `reconcilier` filtrait, la branche des renommages `both` non — un
- * fichier mis à la corbeille par `HostFs.trash` (un `rename` vers
- * `<racine>/.trash/…`) rentrait donc au catalogue sous son chemin de corbeille,
- * et le quiz restait dans « Mes quiz » jusqu'au redémarrage. Le premier segment
- * est l'identifiant de la racine et le dernier le NOM du fichier : ni l'un ni
- * l'autre n'est un dossier traversé.
- */
-export function horsCatalogue(cheminContrat: string): boolean {
-	const segments = cheminContrat.split("/");
-	if (segments.length < 2) return true;
-	return segments.slice(1, -1).some(dossierIgnore);
-}
-
-/**
- * Ce que le CATALOGUE doit retenir d'un renommage de fichier, une fois ses deux
- * chemins résolus dans l'espace du contrat. `null` quand il n'a rien à en
- * faire.
- *
- * Un renommage qui ENTRE dans un dossier ignoré n'est pas un renommage pour le
- * catalogue, c'est une DISPARITION ; qui en SORT, une APPARITION. Diffuser un
- * `rename` dans le premier cas insérerait le chemin de corbeille à l'index
- * (`buildIndex`, `apply` ne filtre rien) ; se contenter de ne rien diffuser y
- * laisserait l'ANCIEN chemin, donc un quiz que plus aucun fichier ne peut
- * mettre à jour — les deux moitiés sont nécessaires.
- *
- * PURE : c'est ce qui la rend éprouvable, le surveillant ne l'étant pas.
- */
-export function evenementDeRenommage(
-	avant: string,
-	apres: string,
-	file: HostFile,
-): HostFileEvent | null {
-	const avantAuCatalogue = !horsCatalogue(avant);
-	const apresAuCatalogue = !horsCatalogue(apres);
-	if (!apresAuCatalogue) return avantAuCatalogue ? { kind: "delete", path: avant } : null;
-	return avantAuCatalogue
-		? { kind: "rename", file, oldPath: avant }
-		: { kind: "create", file };
-}
+/* `horsCatalogue` et `evenementDeRenommage` : voir l'import en tête de
+   fichier. Réexportées ici pour que les dix-sept cas existants de
+   `check-windows-host.mjs` (groupe « index »), qui les importent depuis CE
+   fichier, continuent de passer sans qu'une seule de leurs assertions ne
+   change — le vrai portage de ce fichier reste la tâche 4. */
+export { evenementDeRenommage, horsCatalogue };
 
 /** Concurrence des `stat` du démarrage : un aller-retour IPC par fichier, donc
     on en tient plusieurs en vol sans pour autant en lancer mille d'un coup. */

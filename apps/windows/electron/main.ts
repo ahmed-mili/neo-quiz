@@ -268,7 +268,31 @@ function creerFenetre(): void {
 		   qui insiste, pour ne protéger qu'une fenêtre de quelques centaines de
 		   millisecondes au plus — le même arbitrage que le délai de garde
 		   lui-même (« mieux vaut perdre la dernière frappe que refuser de
-		   fermer »), appliqué à l'impatience plutôt qu'à un rendu figé. */
+		   fermer »), appliqué à l'impatience plutôt qu'à un rendu figé.
+
+		   LA TENSION AVEC `DELAI_GARDE_FERMETURE_MS`, ET POURQUOI ELLE N'EN EST
+		   PAS UNE : ce délai est la PATIENCE de l'application — combien de temps
+		   ELLE attend une écriture avant de conclure que le rendu est figé ; le
+		   second clic est le MOT DE LA FIN de l'utilisateur — et quand les deux
+		   s'opposent (l'utilisateur clique une seconde fois AVANT l'expiration
+		   du délai de garde, précisément le moment où ce second clic est le plus
+		   tentant), c'est l'utilisateur qui gagne, jamais l'application. Même
+		   principe que celui qui fixe `DELAI_GARDE_FERMETURE_MS` : mieux vaut
+		   perdre la dernière frappe que refuser de fermer — ici appliqué à
+		   l'impatience de l'utilisateur plutôt qu'à un rendu figé, mais c'est le
+		   MÊME arbitrage, pas un second.
+
+		   CE QUE ÇA COÛTE VRAIMENT (doute n°1 du rapport de tâche 6) : les
+		   1500 ms de `DELAI_GARDE_FERMETURE_MS` sont mesurés sur un disque LOCAL
+		   rapide (72 à 116 ms bout en bout pour une écriture réelle). Sur un
+		   vault RÉSEAU ou SYNCHRONISÉ (OneDrive, antivirus qui intercepte
+		   l'écriture), cette garde peut se révéler trop courte : l'écriture est
+		   alors coupée en plein vol par `terminerFermeture()`, et la dernière
+		   frappe est perdue — le second clic ne fait qu'avancer ce moment.
+		   Ce n'est PAS un défaut caché : c'est l'arbitrage assumé par le plan de
+		   migration (mieux perdre la frappe que rendre la fenêtre infermable),
+		   écrit ici pour que le prochain lecteur le trouve à l'endroit où il se
+		   pose, sans avoir à recouper deux commentaires séparés. */
 		if (!fermetureArmee || fermetureEnCours) return;
 		fermetureEnCours = true;
 		e.preventDefault();

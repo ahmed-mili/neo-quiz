@@ -147,7 +147,35 @@ await withSrcModule("apps/windows/electron/fichiers.ts", async ({ creerFichiers 
 				["premier", "second"]);
 		});
 
-		/* VENU DE `check:windows-host` À LA TÂCHE 4 : la numérotation d'un
+		/* VENU DE `check:windows-host` À LA TÂCHE 4, ronde 1, et il lui manquait
+		   un NOM. La création du dossier de corbeille était éprouvée là-bas par
+		   « le dossier de la corbeille est créé avant le déplacement » ; ici,
+		   elle n'était garantie qu'EN SUBSTANCE (sans elle, les deux cas
+		   ci-dessus rougissent, puisqu'ils tournent dans un dossier temporaire
+		   neuf où `.trash/` n'existe pas). Une assertion retirée d'un groupe sans
+		   nom d'accueil ailleurs, c'est exactement la façon dont une migration
+		   triche sans le dire — elle en a un désormais.
+		   Le cas vise un SOUS-DOSSIER : `<racine>/.trash/` seul serait créé par
+		   le premier `trash` de n'importe quel fichier, alors que
+		   `<racine>/.trash/Cours/Reseau/` exige que `trash` crée toute la
+		   branche du chemin relatif, et non le seul dossier de tête. */
+		await cas(r, "le dossier de la corbeille est créé avant le déplacement, sous-dossiers compris", async () => {
+			const sous = join(dir, "Cours", "Reseau");
+			await fichiers.mkdirs(sous);
+			const p = join(sous, "ch1.md");
+			await fichiers.write(p, "profond");
+			r.check("le dossier de la corbeille n'existe pas encore pour ce chemin",
+				await fichiers.exists(join(dir, ".trash", "Cours", "Reseau")), false);
+			await fichiers.trash(p, dir);
+			r.check("le dossier de la corbeille est créé avant le déplacement, sous-dossiers compris",
+				[
+					await fichiers.exists(join(dir, ".trash", "Cours", "Reseau")),
+					await fichiers.read(join(dir, ".trash", "Cours", "Reseau", "ch1.md")),
+				],
+				[true, "profond"]);
+		});
+
+		/* La numérotation d'un
 		   homonyme vivait côté rendu sous Tauri, elle vit ici depuis que le pont
 		   la porte. Un fichier SANS extension mis deux fois à la corbeille :
 		   `.trash` porte un point, et couper au dernier point du chemin ENTIER

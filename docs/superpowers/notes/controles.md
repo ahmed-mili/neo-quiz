@@ -49,6 +49,23 @@ réponse étant toujours non.
   identité (aller-retour sans perte), et une résolution de lien par nom ne doit jamais
   franchir la racine de la note qui cite — sans cette borne, une image du dossier A
   se servirait, en silence, à une note du dossier B.
+- **LE TROU DU HARNAIS : `sanitizeQuizHtml` n'est éprouvable par AUCUN contrôle
+  du dépôt.** `linkedom` (le DOM des scripts) ne tient pas la sémantique d'un
+  `<template>` : son `.content` est une fragment SÉPARÉE du `innerHTML` qu'il
+  resérialise, donc toutes les retouches du sanitizer s'y perdent et il rend son
+  entrée TELLE QUELLE. Mesuré deux fois, indépendamment : `<script>`,
+  `onerror=` et `javascript:` y survivent tous les trois. **Un cas écrit sur
+  `sanitizeQuizHtml` avec ce DOM est VERT quoi qu'on casse** — le piège que
+  `CLAUDE.md` nomme (« un cas vert quoi qu'on fasse ne prouve rien »), ici posé
+  par l'outillage et non par l'auteur. La fenêtre et Obsidian, eux, ont de vrais
+  `<template>` : le sanitizer y fonctionne, et c'est le relevé À L'ÉCRAN qui en
+  répond. Ce qui garde les quatre portes reste donc la LECTURE du code.
+  Corollaire, pour que personne ne s'y trompe : les deux cas « le schéma des
+  ressources » de `check:windows-host` prouvent exactement que la chaîne `app:`
+  FIGURE sur la ligne d'`isSafeQuizUrl` (`src/engine/sanitizer.ts`) et sur celle
+  des préfixes déjà résolus (`src/engine/cards.ts`) — rien de plus. Ils
+  resteraient verts si `cards.ts` cessait d'appeler le sanitizer, ou si la liste
+  blanche cessait d'être consultée.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` testé avant
   `$…$`, l'heuristique qui épargne « 5$ et 3$ ») : le code qu'aucun hôte ne réécrira,
   puisque c'est lui qui décide ce qui EST une formule. Il tourne sur un faux `HostMath`,

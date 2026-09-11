@@ -30,6 +30,7 @@ import { LOG_PREFIX } from "../../../../src/branding";
    fonctions PURES qu'il éprouve (`lireDossiers`, `idUnique`,
    `appliquerExamDate`…) ne l'appellent jamais. */
 import { pont } from "./pont";
+import { normaliser } from "./fs";
 
 /** Un dossier de quiz retenu par l'application. */
 export interface DossierQuiz {
@@ -61,8 +62,6 @@ const CLE_DOSSIERS = "folders";
 const CLE_DOSSIER_LEGACY = "folder";
 
 /**
- * Sépare avec des `/` et retire le séparateur final.
- *
  * LA CONVERSION DES VALEURS DÉJÀ PERSISTÉES (Ruling 14). Un `folders` écrit
  * par la version Tauri porte les `\` que le sélecteur natif rendait
  * (« C:\obsidian-vaults\Efrei ») ; le pont, lui, pose partout l'invariant des
@@ -73,10 +72,12 @@ const CLE_DOSSIER_LEGACY = "folder";
  * préfixes, donc les événements du surveillant tomberaient dans le vide pour
  * l'une des deux formes. Appliquée à la LECTURE (`lireDossiers`), donc une
  * fois pour toutes : la première écriture qui suit réécrit la forme normalisée.
+ *
+ * IMPORTÉE de `./fs.ts` et non réécrite : c'était la TROISIÈME copie octet pour
+ * octet de la même règle dans le dépôt, et deux d'entre elles vivaient dans le
+ * même paquet.
  */
-export function normaliserChemin(chemin: string): string {
-	return String(chemin ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
-}
+const normaliserChemin = normaliser;
 
 /** Ouvre le sélecteur natif. `null` si l'utilisateur annule — ce n'est pas une
     erreur, c'est la réponse « non ». Le dossier choisi entre au périmètre du
@@ -199,23 +200,35 @@ export async function savedFolders(): Promise<DossierQuiz[]> {
  * n'est jamais entré au périmètre — `autoriser` ignore ce qui n'existe pas —
  * et sa seule présence dans la liste ferait REJETER l'écriture entière : un
  * utilisateur ne pourrait plus retirer un autre dossier tant que la clé n'est
- * pas rebranchée. On écarte donc les dossiers disparus AVANT d'écrire ; ils
+ * pas rebranchée. On écarte donc les dossiers DISPARUS avant d'écrire ; ils
  * sont perdus du réglage, ce qui est déjà ce que l'écran montre (le démarrage
- * les ignore aussi, `main.ts`). Le refus qui reste possible — un chemin
- * PRÉSENT mais hors périmètre — est celui qu'on veut : il ne peut venir que
- * d'une valeur fabriquée, jamais du sélecteur ni des vaults.
+ * les ignore aussi, `main.ts`).
+ *
+ * DEUX RÉPONSES QUI NE SE CONFONDENT PAS, et c'est le correctif de la ronde 1 :
+ * `exists` rend `false` (« le disque a répondu : il n'y a rien là ») ou REJETTE
+ * (« la question n'a pas pu être posée » — chemin hors périmètre, partage
+ * réseau qui ne répond pas, droits). Seul le `false` fait retirer l'entrée.
+ * Un rejet la GARDE : le Ruling 15 ne visait que « disparu du disque », et une
+ * défaillance transitoire du canal ferait sinon disparaître un dossier des
+ * réglages en silence — un dossier parfaitement vivant, que l'utilisateur
+ * retrouverait oublié au prochain lancement. Garder l'entrée laisse le
+ * PRINCIPAL trancher : s'il s'agit vraiment d'un chemin hors périmètre, sa
+ * garde refuse l'écriture entière et le refus atteint l'utilisateur, ce qui est
+ * exactement ce qu'on veut d'une valeur fabriquée.
  */
 export async function saveFolders(liste: DossierQuiz[]): Promise<void> {
 	const gardes: DossierQuiz[] = [];
 	for (const d of liste) {
+		let present = true;
 		try {
-			if (await pont().fichiers.exists(d.path)) gardes.push(d);
-			else console.warn(LOG_PREFIX, "dossier disparu du disque, retiré des réglages:", d.path);
+			present = await pont().fichiers.exists(d.path);
 		} catch (e) {
-			/* `exists` rejette quand le chemin est hors périmètre : le garder
-			   ferait rejeter l'écriture entière (voir ci-dessus). On le nomme. */
-			console.warn(LOG_PREFIX, "dossier inaccessible, retiré des réglages:", d.path, e);
+			/* La question n'a pas pu être posée : on ne conclut RIEN. L'entrée
+			   reste, et le principal tranchera à l'écriture. */
+			console.warn(LOG_PREFIX, "dossier inaccessible, gardé dans les réglages:", d.path, e);
 		}
+		if (present) gardes.push(d);
+		else console.warn(LOG_PREFIX, "dossier disparu du disque, retiré des réglages:", d.path);
 	}
 	await pont().reglages.ecrire(CLE_DOSSIERS, gardes);
 }

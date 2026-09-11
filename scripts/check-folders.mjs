@@ -1,17 +1,18 @@
 /**
  * LES DOSSIERS DE QUIZ — conversion du réglage et unicité des identifiants.
  *
- * Deux défauts que ce script empêche, et qu'une relecture ne voit pas :
+ * Trois défauts que ce script empêche, et qu'une relecture ne voit pas :
  * un utilisateur qui met à jour l'application et retombe sur l'écran
  * « Choisissez un dossier » alors que son dossier est toujours là ; et deux
  * dossiers homonymes dont les chemins du contrat se confondent, ce qui
- * ferait compter l'historique de l'un pour l'autre.
+ * ferait compter l'historique de l'un pour l'autre ; et un dossier RETIRÉ des
+ * réglages parce qu'une question posée au disque n'a pas pu aboutir.
  *
  *     npm run check:folders
  */
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
-await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, idUnique, segmentValide, MAX_DOSSIERS, appliquerExamDate }) => {
+await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, idUnique, segmentValide, MAX_DOSSIERS, appliquerExamDate, saveFolders }) => {
 	const r = makeReporter("Dossiers — réglage et identifiants");
 
 	r.check("aucun réglage : aucune racine", lireDossiers({}), []);
@@ -90,6 +91,60 @@ await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, id
 			{ "Efrei/Reseaux": "2027-06-01", "Efrei/BDD": "2027-05-01" },
 			"Efrei/Reseaux", ""),
 		{ "Efrei/BDD": "2027-05-01" });
+
+	/* ── `saveFolders` : DISPARU n'est pas INACCESSIBLE (tâche 4, ronde 1) ──
+
+	   `saveFolders` écarte les dossiers disparus du disque avant d'écrire, et
+	   il le faut : la garde du canal `reglages.ecrire` exige que chaque chemin
+	   de la clé `folders` soit déjà au périmètre, or un dossier absent n'y est
+	   jamais entré — sa seule présence ferait rejeter l'écriture ENTIÈRE, et
+	   l'utilisateur ne pourrait plus retirer un AUTRE dossier tant que sa clé
+	   USB n'est pas rebranchée (Ruling 15).
+
+	   Mais `exists` a DEUX façons de ne pas dire oui, et les confondre coûte
+	   cher : `false` est une réponse du disque (« il n'y a rien là »), un REJET
+	   n'en est pas une (partage réseau muet, droits, chemin hors périmètre).
+	   Retirer l'entrée sur un rejet ferait disparaître en silence un dossier
+	   parfaitement vivant — et priverait au passage l'utilisateur du refus que
+	   la garde du principal devait lui montrer sur un chemin fabriqué.
+
+	   Le pont est DOUBLÉ ici, au plus juste : trois dossiers, un présent, un
+	   absent, un dont la question rejette. Les trois moitiés comptent — un
+	   double qui rendrait `true` partout ferait passer un code qui n'écarte
+	   rien. */
+	const precedent = globalThis.window;
+	const ecrits = [];
+	globalThis.window = {
+		neo: {
+			fichiers: {
+				async exists(chemin) {
+					if (chemin === "C:/injoignable") throw new Error("EBUSY: le partage ne répond pas");
+					return chemin !== "C:/disparu";
+				},
+			},
+			reglages: {
+				async ecrire(cle, valeur) { ecrits.push([cle, valeur.map(d => d.path)]); },
+			},
+		},
+	};
+	/* `saveFolders` NOMME en console chaque dossier écarté ou gardé de force —
+	   c'est voulu dans l'application, mais ici la pile d'appels du faux rejet
+	   noierait le rapport. */
+	const avertir = console.warn;
+	console.warn = () => {};
+	try {
+		await saveFolders([
+			{ id: "Present", path: "C:/present", name: "Present" },
+			{ id: "Disparu", path: "C:/disparu", name: "Disparu" },
+			{ id: "Injoignable", path: "C:/injoignable", name: "Injoignable" },
+		]);
+		r.check("saveFolders retire le dossier DISPARU et garde celui qu'on n'a pas pu joindre",
+			ecrits, [["folders", ["C:/present", "C:/injoignable"]]]);
+	} finally {
+		console.warn = avertir;
+		if (precedent === undefined) delete globalThis.window;
+		else globalThis.window = precedent;
+	}
 
 	r.done();
 });

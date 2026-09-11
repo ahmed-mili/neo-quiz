@@ -45,7 +45,18 @@ const f = (path, extension, mtime = 1) => ({
 	mtime,
 });
 
-await withSrcModule("apps/windows/src/host/fs.ts", async ({ buildIndex, horsCatalogue, evenementDeRenommage }) => {
+/* `evenementDeRenommage` est prise DANS LE MODULE OÙ ELLE VIT
+   (`apps/windows/electron/catalogue.ts`) et non plus réexportée par l'hôte :
+   depuis la tâche 4, plus aucun code du rendu ne l'appelle — le pont n'émet pas
+   de renommage. La faire transiter par `fs.ts` laisserait croire qu'un câblage
+   existe là-bas. Elle reste une règle du CATALOGUE, partagée par les deux
+   processus, et ces quatre cas la gardent. */
+let evenementDeRenommage;
+await withSrcModule("apps/windows/electron/catalogue.ts", async (mod) => {
+	evenementDeRenommage = mod.evenementDeRenommage;
+});
+
+await withSrcModule("apps/windows/src/host/fs.ts", async ({ buildIndex, horsCatalogue }) => {
 	const r = makeReporter("Hôte Windows — index");
 	const idx = buildIndex([
 		f("Cours/reseau.md", "md"),

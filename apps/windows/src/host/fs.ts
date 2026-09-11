@@ -58,7 +58,7 @@ import type { EvenementDisque } from "../../electron/pont";
    — voir l'en-tête de `catalogue.ts` pour le POURQUOI. Réexportées plus bas
    pour les dix-sept cas de `check-windows-host.mjs` (groupe « index »), qui
    les importent depuis CE fichier. */
-import { evenementDeRenommage, horsCatalogue } from "../../electron/catalogue";
+import { horsCatalogue } from "../../electron/catalogue";
 
 /** L'index en mémoire du dossier. Volontairement minuscule : c'est ce qui le
     rend éprouvable hors de la fenêtre (`npm run check:windows-host`). */
@@ -84,9 +84,20 @@ export interface MiroirDisque extends WindowsIndex {
 
 /* ─────────── chemins ─────────── */
 
-/** Sépare avec des `/` et retire le séparateur final. Windows accepte les deux
-    séparateurs en lecture ; le contrat, lui, n'en accepte qu'un. */
-function normaliser(chemin: string): string {
+/**
+ * Sépare avec des `/` et retire le séparateur final. Windows accepte les deux
+ * séparateurs en lecture ; le contrat, lui, n'en accepte qu'un.
+ *
+ * EXPORTÉE, et c'est la SEULE copie du rendu : `host/folder.ts` l'importe pour
+ * normaliser les chemins qui entrent (sélecteur natif, `obsidian.json`,
+ * réglages écrits par la version Tauri). Deux copies octet pour octet de cette
+ * règle dans le même paquet finiraient par diverger, et la divergence ne se
+ * verrait qu'à l'usage : deux `path` pour un seul disque, donc des événements
+ * du surveillant qui tombent dans le vide. `electron/parcours.ts` en garde une
+ * troisième, elle assumée — ce module-ci tire le pont, celui-là tire `node:fs`,
+ * et la frontière entre les deux mondes ne se franchit pas pour trois lignes.
+ */
+export function normaliser(chemin: string): string {
 	return String(chemin ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
@@ -154,13 +165,14 @@ export function buildIndex(fichiers: HostFile[]): WindowsIndex {
 
 /* ─────────── le miroir : abonnement, puis hydratation ─────────── */
 
-/* `horsCatalogue` et `evenementDeRenommage` : voir l'import en tête de
-   fichier. Réexportées pour les dix-sept cas de `check-windows-host.mjs`
-   (groupe « index »). `evenementDeRenommage` n'a plus d'appelant ICI depuis
-   que le pont n'émet pas de `rename` (chokidar remonte `unlink` puis `add`) :
-   elle reste la règle du catalogue, éprouvée, et l'appariement d'un
-   renommage vit côté application dans `createRenameDetector`. */
-export { evenementDeRenommage, horsCatalogue };
+/* `horsCatalogue` est RÉEXPORTÉE parce que ce fichier l'emploie et que les cas
+   du groupe « index » de `check-windows-host.mjs` l'atteignent par là.
+   `evenementDeRenommage` NE L'EST PLUS : le pont n'émet pas de `rename`
+   (chokidar remonte `unlink` puis `add`), donc plus rien ici ne l'appelle, et
+   une réexportation sans appelant laisse croire qu'un câblage existe. Elle
+   reste la règle du catalogue, et le contrôle l'importe désormais de là où
+   elle vit, `electron/catalogue.ts`. */
+export { horsCatalogue };
 
 /**
  * Traduit un événement du DISQUE (chemin absolu, poussé par le principal) en
@@ -191,12 +203,19 @@ function versContrat(carte: CarteRacines, index: WindowsIndex, ev: EvenementDisq
  *
  * L'hydratation n'ÉCRASE PAS une entrée que l'abonné a déjà posée : un
  * événement reçu pendant le parcours porte le `mtime` d'un changement survenu
- * APRÈS l'abonnement, et le parcours a pu dater ce fichier avant. Un fichier
- * supprimé PENDANT le parcours, lui, peut rester listé (le `readdir` l'a vu,
- * le `unlink` a suivi, et sa suppression n'a rien à retirer d'un miroir
- * encore vide) : c'est une fenêtre de quelques centaines de millisecondes au
- * démarrage, la même que l'hôte Tauri avait, et le prochain événement sur ce
- * chemin la referme.
+ * APRÈS l'abonnement, et le parcours a pu dater ce fichier avant.
+ *
+ * UNE COURSE CONNUE, ET ELLE NE SE REFERME PAS TOUTE SEULE. Un fichier
+ * supprimé PENDANT le parcours peut rester listé : le `readdir` l'a vu, le
+ * `unlink` a suivi, et la suppression n'a rien à retirer d'un miroir encore
+ * vide. Elle ne repassera pas : le principal ne pousse la disparition que d'un
+ * fichier que SON index connaît (`index-fichiers.ts`, `surSuppression`), et il
+ * ne l'a jamais indexé non plus. Le fantôme tient donc toute la SESSION — un
+ * quiz au catalogue dont la note n'existe plus, jusqu'au prochain
+ * rechargement. Même classe de course que sous Tauri (le parcours et le
+ * surveillant y étaient déjà deux lectures distinctes du disque) : ce n'est pas
+ * une régression, c'est une limite, et elle est écrite ici plutôt que promise
+ * refermée.
  *
  * `mtime` n'est relevé par le principal que sur les `.md` (`parcours.ts`) :
  * seul le catalogue de quiz s'en sert (tri « récents »). Les autres fichiers
@@ -212,7 +231,6 @@ export async function createWindowsIndex(carte: CarteRacines): Promise<MiroirDis
 	const neo = pont();
 	const index = buildIndex([]);
 	const abonnes = new Set<(ev: HostFileEvent) => void>();
-	const abonnesDossier = new Set<(ev: { from: string; to: string }) => void>();
 
 	/* L'INDEX D'ABORD, les abonnés ensuite. L'ordre compte : un abonné qui
 	   interroge l'index pendant sa notification doit y voir le changement,
@@ -264,16 +282,32 @@ export async function createWindowsIndex(carte: CarteRacines): Promise<MiroirDis
 				abonnes.delete(cb);
 			};
 		},
-		/* JAMAIS appelé à cette tranche, et ce n'est pas un oubli : le pont
-		   n'émet pas de renommage (chokidar remonte `unlink` puis `add`, sans
-		   les apparier), et le contrat dit ce qu'un hôte fait alors — « il ne
-		   DEVINE pas ». L'appariement d'un renommage de FICHIER vit côté
-		   application (`createRenameDetector`) ; celui d'un DOSSIER n'a pas de
-		   voie ici, ce que l'hôte Tauri ne tenait déjà que quand le système
-		   envoyait la paire (`mode: "both"`). */
-		onRenameDir(cb) {
-			abonnesDossier.add(cb);
-			return () => { abonnesDossier.delete(cb); };
+		/**
+		 * NE RETIENT RIEN, ET C'EST DÉLIBÉRÉ : l'application ne sait pas encore
+		 * détecter un renommage de DOSSIER.
+		 *
+		 * Le pont n'émet pas de renommage — chokidar remonte `unlink` puis
+		 * `add`, sans les apparier — et le contrat tranche ce cas : « un hôte
+		 * qui ne sait pas distinguer un dossier renommé n'appelle jamais le
+		 * rappel ; il ne DEVINE pas » (`src/host/types.ts`, `HostWatcher`).
+		 * L'hôte Tauri, lui, l'appelait quand le système envoyait la paire
+		 * (`modify: { kind: "rename", mode: "both" }`) : c'est donc une
+		 * capacité PERDUE, pas un trou de naissance, et elle fait l'objet d'une
+		 * tâche à part du plan de migration.
+		 *
+		 * Mémoriser le rappel dans un ensemble que rien ne parcourt donnerait
+		 * l'impression qu'un câblage existe, et la prochaine lecture de ce
+		 * fichier chercherait pourquoi il ne se déclenche pas. Le
+		 * désabonnement rendu est donc inerte, comme le rappel.
+		 *
+		 * CE QUE ÇA COÛTE, en clair : renommer un dossier orpheline d'un coup
+		 * l'historique de révision de toutes ses notes (le journal déplace ses
+		 * clés par PRÉFIXE, d'où ce canal). L'appariement d'un renommage de
+		 * FICHIER, lui, tient toujours : il vit côté application, dans
+		 * `createRenameDetector` (`src/review/rename-match.ts`).
+		 */
+		onRenameDir() {
+			return () => {};
 		},
 	};
 }

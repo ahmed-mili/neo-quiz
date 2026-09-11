@@ -27,6 +27,12 @@
 import { Notice, Platform, requestUrl, setIcon, getIconIds, loadMathJax, renderMath, finishRenderMath } from "obsidian";
 import type { App, DataAdapter, EventRef, TAbstractFile, TFile, View, WorkspaceLeaf } from "obsidian";
 import type { CliTool, Host, HostFile, HostFileEvent, HostModalHandle, HostModalSpec, HostRoot } from "../../src/host/types";
+/* La moitié PURE des jetons de pièces jointes, partagée avec le processus
+   principal de l'application : aucun `fs`, donc rien qui interdise au rendu de
+   l'importer, et surtout UNE seule définition du format des jetons. Deux
+   copies avaient divergé en une tranche. */
+import { nomDeFichierSur, substituerJetons } from "../../src/host/jetons";
+import type { FichierJoint } from "../../src/host/jetons";
 import { QbdModal } from "../../src/modal-base";
 import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../src/review/paths";
 
@@ -386,60 +392,39 @@ function lancerCli(spec: {
    charge — le code partagé dit « la première pièce jointe », l'hôte dit où
    elle est.
 
+   LA MOITIÉ PURE (composer un jeton, le substituer, réduire un nom de fichier)
+   vit dans `src/host/jetons.ts`, partagée avec le processus principal de
+   l'application : elle ne touche ni `fs`, ni `os`, ni `path`, et la dupliquer
+   n'avait rien de forcé — les deux copies du premier jet de la tâche 4 avaient
+   déjà divergé en une tranche. Ne reste ici que ce qui touche le disque.
+
    LE DOSSIER EST EFFACÉ EN `finally`, TOUJOURS : un CLI qui échoue, expire ou
    est annulé laissait sinon les images de l'utilisateur dans `%TEMP%`. C'est
    la propriété que le `try/finally` d'`ai-client.ts` tenait, et elle déménage
-   ici entière — pas la moitié.
-
-   LES JETONS SONT REMPLACÉS PAR UNE FONCTION, jamais par une chaîne de
-   remplacement : un chemin qui contiendrait `$1` ou `$&` serait réécrit par
-   `String.replace`. Le dépôt a déjà payé ce défaut ailleurs (cf. CLAUDE.md,
-   `check:quiz-io`). */
-const JETONS_FICHIERS = /\{\{fichier:(\d+)\}\}|\{\{dossier\}\}|\{\{sortie\}\}|\{\{home\}\}/g;
-
-/** Le nom d'une pièce jointe, RÉDUIT à un nom de fichier. Le code partagé ne
-    choisit pas où l'hôte écrit : un `..` ou un séparateur sortirait du dossier
-    temporaire, qui est la seule chose que ce dossier promette. */
-function nomDeFichierSur(nom: string, defaut: string): string {
-	const base = String(nom || "").split(/[/\\]/).pop() || "";
-	return base && base !== "." && base !== ".." ? base : defaut;
-}
-
-function substituerJetons(
-	texte: string,
-	chemins: string[],
-	dossier: string,
-	sortie: string,
-	maison: string,
-): string {
-	return texte.replace(JETONS_FICHIERS, (jeton: string, index: string | undefined) => {
-		if (index === undefined) {
-			return jeton === "{{dossier}}" ? dossier : jeton === "{{sortie}}" ? sortie : maison;
-		}
-		const i = Number(index) - 1;
-		if (i < 0 || i >= chemins.length) {
-			/* NOMMÉ plutôt que laissé passer : un `{{fichier:3}}` littéral sur la
-			   ligne de commande donnerait au CLI un chemin qui n'existe pas, et un
-			   diagnostic qui ne désigne rien. */
-			throw erreurCli("refuse", "jeton " + jeton + " : aucune pièce jointe à cet index");
-		}
-		return chemins[i];
-	});
-}
+   ici entière — pas la moitié. */
 
 /**
  * Écrit les pièces jointes, substitue les jetons, exécute, relit `sortieFichier`,
  * efface le dossier. Le dossier n'existe que s'il sert : sans pièce jointe ni
- * fichier de sortie, seul `{{home}}` a un sens et rien n'est créé.
+ * fichier de sortie, seul `{{…:home}}` a un sens et rien n'est créé. Sans
+ * marqueur, RIEN n'est substitué — c'est le défaut sûr.
+ *
+ * L'ENVIRONNEMENT EST UN PARAMÈTRE, comme pour `buildChildEnv` et
+ * `dossierPersonnel` : le cas qui éprouve `{{…:home}}` doit pouvoir injecter un
+ * FAUX dossier personnel, sinon il lit le vrai profil de la machine et le
+ * compare à une formule recopiée du code — un contrôle qui n'atteint pas sa
+ * propre entrée ne contrôle rien.
  */
 async function avecFichiers<T>(
 	spec: {
 		args: string[];
 		stdin: string;
-		fichiers?: Array<{ nom: string; base64: string }>;
+		marqueur?: string;
+		fichiers?: FichierJoint[];
 		sortieFichier?: string;
 	},
 	executer: (resolu: { args: string[]; stdin: string }) => Promise<T>,
+	env: NodeJS.ProcessEnv = process.env,
 ): Promise<{ resultat: T; sortie?: string }> {
 	const fs = require("fs") as typeof import("fs");
 	const os = require("os") as typeof import("os");
@@ -457,8 +442,10 @@ async function avecFichiers<T>(
 		const cheminSortie = spec.sortieFichier
 			? path.join(dossier, nomDeFichierSur(spec.sortieFichier, "sortie.txt"))
 			: "";
-		const maison = dossierPersonnel();
-		const remplacer = (s: string): string => substituerJetons(s, chemins, dossier, cheminSortie, maison);
+		const marqueur = spec.marqueur;
+		const remplacer = (s: string): string => marqueur === undefined
+			? s
+			: substituerJetons(s, { marqueur, chemins, sortie: cheminSortie, maison: dossierPersonnel(env) });
 		const resultat = await executer({ args: spec.args.map(remplacer), stdin: remplacer(spec.stdin) });
 		let sortie: string | undefined;
 		if (cheminSortie) {
@@ -469,9 +456,36 @@ async function avecFichiers<T>(
 		return { resultat, sortie };
 	} finally {
 		if (dossier) {
-			try { fs.rmSync(dossier, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+			/* `maxRetries` N'EST PAS DU CONFORT : ce `finally` s'exécute juste
+			   après un `taskkill /T /F`, et Windows garde un handle ouvert
+			   quelques dizaines de millisecondes après la mort d'un process —
+			   `rmSync` rend alors EBUSY/EPERM. Et l'échec est DIT : avalé en
+			   silence, le dossier d'images survivait dans `%TEMP%` à chaque
+			   annulation, ce que ce `finally` existe précisément pour empêcher. */
+			try {
+				fs.rmSync(dossier, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+			} catch (e) {
+				console.warn("[Quiz] dossier temporaire de CLI non effacé :", dossier, e);
+			}
 		}
 	}
+}
+
+/**
+ * L'URL désigne-t-elle CETTE machine ? PURE, et jugée sur le NOM D'HÔTE analysé
+ * par `URL`, jamais sur une sous-chaîne : `https://localhost.evil.com/` contient
+ * « localhost » et n'est pas la boucle locale. Une URL illisible n'est pas
+ * locale — le doute va vers `requestUrl`, la voie qui ne suppose rien.
+ */
+function estBoucleLocale(url: string): boolean {
+	let hote: string;
+	try {
+		hote = new URL(url).hostname.toLowerCase();
+	} catch (e) {
+		return false;
+	}
+	// `URL` rend « [::1] » sans crochets sur certains moteurs : les deux formes.
+	return hote === "localhost" || hote === "127.0.0.1" || hote === "::1" || hote === "[::1]";
 }
 
 /** Le second paramètre est réduit à ce dont l'hôte a besoin — le manifeste,
@@ -1044,20 +1058,40 @@ export function createObsidianHost(
 	/* ─── net ─── */
 
 	const net: Host["net"] = {
-		/* `requestUrl`, comme le greffon l'a toujours fait : c'est la voie
-		   d'Obsidian qui contourne CORS, et `fetch` depuis le greffon ne
-		   l'atteindrait pas pour `localhost:11434`.
-		   `throw: false` est ce qui rend le contrat tenable : par défaut,
-		   `requestUrl` JETTE sur un statut d'erreur et le corps est perdu — or
-		   Ollama y met son diagnostic (« model not found »), et c'est ce que
-		   l'utilisateur doit lire. Un statut non-2xx est donc RENDU avec son
-		   corps ; seul un rejet (hôte injoignable, DNS, coupure) vaut `null`.
-		   `signal` est IGNORÉ, et c'est écrit ici plutôt que passé sous
-		   silence : `requestUrl` n'accepte aucun signal, et le greffon
-		   n'annulait pas ses appels non plus — la conduite ne change pas, elle
-		   est nommée. */
+		/**
+		 * DEUX VOIES, ET C'EST L'HÔTE DE L'URL QUI TRANCHE — jamais l'appelant.
+		 *
+		 * — BOUCLE LOCALE (`localhost`, `127.0.0.1`, `[::1]`) : `fetch`. C'est
+		 *   exactement ce que `ai-client.ts` faisait avant cette tranche, et pour
+		 *   deux raisons qui tiennent toujours. La politique d'origine n'a jamais
+		 *   gêné ici (Ollama répond avec les en-têtes qu'il faut), et surtout
+		 *   `fetch` accepte un `signal` : un clic sur Stop FERME la connexion, et
+		 *   Ollama arrête d'inférer. `requestUrl` n'accepte aucun signal — passer
+		 *   par lui laissait le modèle tourner après l'annulation, jusqu'à faire
+		 *   tourner DEUX inférences concurrentes sur le même modèle local si
+		 *   l'utilisateur relançait aussitôt.
+		 * — TOUT LE RESTE : `requestUrl`, la voie d'Obsidian qui contourne CORS.
+		 *   Un `fetch` vers `api.anthropic.com` depuis le rendu échoue en
+		 *   « Failed to fetch » (vérifié, cf. `ai-usage.ts`), et `ollama.com` —
+		 *   le catalogue cloud — est dans le même cas. Le `signal` y est IGNORÉ,
+		 *   et c'est écrit plutôt que passé sous silence.
+		 *
+		 * LES DEUX VOIES TIENNENT LE MÊME CONTRAT, au caractère près : `{status,
+		 * body}` avec le CORPS d'un statut d'erreur (c'est là qu'Ollama met son
+		 * diagnostic — d'où `throw: false`, sans lequel `requestUrl` jette et le
+		 * perd), et `null` pour le SEUL échec réseau, abandon compris.
+		 */
 		async fetchJson(req) {
 			try {
+				if (estBoucleLocale(req.url)) {
+					const resp = await fetch(req.url, {
+						method: req.method ?? "GET",
+						headers: req.headers,
+						body: req.body,
+						signal: req.signal,
+					});
+					return { status: resp.status, body: await resp.text() };
+				}
 				const resp = await requestUrl({
 					url: req.url,
 					method: req.method ?? "GET",
@@ -1112,7 +1146,7 @@ export function createObsidianHost(
 					signal: spec.signal,
 					timeoutMs: spec.timeoutMs,
 				});
-			});
+			}, process.env);
 			return Object.assign({}, resultat, { sortie });
 		},
 

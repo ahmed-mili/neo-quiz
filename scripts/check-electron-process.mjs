@@ -29,7 +29,7 @@
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 async function cas(r, nom, fn) {
@@ -41,8 +41,7 @@ async function cas(r, nom, fn) {
 }
 
 await withSrcModule("apps/windows/electron/process.ts", async ({
-	avecFichiers, cheminCache, dossierPersonnel, emplacementsOllama, lireCache,
-	nomDeFichierSur, run,
+	avecFichiers, cheminCache, dossierPersonnel, emplacementsOllama, lireCache, run,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -158,17 +157,25 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		   L'EXÉCUTANT EST UN FAUX : `avecFichiers` ne lance rien lui-même, il
 		   enveloppe. Le faux tient donc exactement le rôle du `spawn` de la
 		   tâche 7 — il reçoit les arguments et le `stdin` SUBSTITUÉS, et peut
-		   écrire le fichier de sortie comme le ferait un CLI. */
+		   écrire le fichier de sortie comme le ferait un CLI.
+
+		   LE FORMAT DES JETONS EST ÉCRIT ICI À LA MAIN, comme dans
+		   `check-obsidian-host.mjs` : c'est une promesse du contrat, et un
+		   contrôle qui le lirait de `src/host/jetons.ts` resterait vert si le
+		   format changeait des deux côtés à la fois. */
+		const jeton = (m, quoi) => "{{nq-" + m + ":" + quoi + "}}";
+		const MARQ = "0123456789abcdef0123456789abcdef";
 		const piece = { nom: "image-1.png", base64: Buffer.from("OCTETS-IMAGE").toString("base64") };
 		const specImage = {
-			args: ["-i", "{{fichier:1}}", "--dossier", "{{dossier}}", "-o", "{{sortie}}", "-C", "{{home}}"],
-			stdin: "PROMPT\n- {{fichier:1}}\n",
+			marqueur: MARQ,
+			args: ["-i", jeton(MARQ, "fichier:1"), "-o", jeton(MARQ, "sortie"), "-C", jeton(MARQ, "home")],
+			stdin: "PROMPT\n- " + jeton(MARQ, "fichier:1") + "\n",
 			fichiers: [piece],
 			sortieFichier: "last-message.txt",
 		};
 		const envMaisonSeule = { USERPROFILE: maison, HOME: maison };
 
-		await cas(r, "{{fichier:1}} est remplacé dans les args ET dans stdin par un chemin qui existe", async () => {
+		await cas(r, "le jeton de pièce jointe est remplacé dans les args ET dans stdin par un chemin qui existe", async () => {
 			/* Le contenu est lu DEPUIS l'exécutant : c'est le seul moment où le
 			   fichier existe encore, le dossier étant effacé au retour. Un test
 			   fait après coup ne pourrait plus rien en dire. */
@@ -177,30 +184,73 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				vu = {
 					nom: resolu.args[1].split(/[/\\]/).pop(),
 					contenu: readFileSync(resolu.args[1], "utf8"),
-					stdin: resolu.stdin.includes(resolu.args[1]) && !resolu.stdin.includes("{{fichier:1}}"),
+					stdin: resolu.stdin.includes(resolu.args[1]) && !resolu.stdin.includes("{{nq-"),
 				};
 				return null;
 			}, envMaisonSeule);
-			r.check("{{fichier:1}} est remplacé dans les args ET dans stdin par un chemin qui existe",
+			r.check("le jeton de pièce jointe est remplacé dans les args ET dans stdin par un chemin qui existe",
 				vu, { nom: "image-1.png", contenu: "OCTETS-IMAGE", stdin: true });
 		});
 
-		await cas(r, "{{dossier}} et {{home}} sont remplacés par le dossier temporaire et le dossier personnel", async () => {
+		await cas(r, "le jeton du dossier personnel rend le dossier personnel DONNÉ, pas celui de la machine", async () => {
+			/* `USERPROFILE`/`HOME` sont des paramètres exprès : `homedir()` ne
+			   suit pas `HOME` sous Windows, et un cas qui ne peut pas fabriquer
+			   son entrée ne compare qu'à une formule recopiée du code. */
 			let vu = null;
 			await avecFichiers(specImage, async resolu => {
-				vu = {
-					imageDansLeDossier: resolu.args[1].startsWith(resolu.args[3]),
-					home: resolu.args[7],
-				};
+				vu = { home: resolu.args[5], imageDansUnDossierAPart: !resolu.args[1].startsWith(maison) };
 				return null;
 			}, envMaisonSeule);
-			r.check("{{dossier}} et {{home}} sont remplacés par le dossier temporaire et le dossier personnel",
-				vu, { imageDansLeDossier: true, home: maison });
+			r.check("le jeton du dossier personnel rend le dossier personnel DONNÉ, pas celui de la machine",
+				vu, { home: maison, imageDansUnDossierAPart: true });
+		});
+
+		await cas(r, "un prompt qui cite {{home}} ou {{fichier:1}} ressort INTACT", async () => {
+			/* `stdin` porte la demande de l'utilisateur ET le contenu des notes
+			   qu'il a jointes. La première forme des jetons était FIXE
+			   (`{{home}}`) — une note sur Handlebars, Jinja ou Mustache faisait
+			   donc partir le chemin ABSOLU de la machine au modèle, libre de le
+			   recopier dans le quiz ; et un `{{fichier:1}}` cité sans image
+			   jointe faisait REFUSER l'appel, tuant la génération sur un
+			   diagnostic interne, en français, dans une interface anglaise. Le
+			   marqueur est tiré au sort par appel — pas même la FORME complète
+			   avec un autre marqueur ne collisionne, ce que la 3e phrase
+			   ci-dessous éprouve. */
+			const citations = "Un gabarit Handlebars s'écrit {{home}}, et {{fichier:1}} aussi. "
+				+ "Même avec un autre marqueur : " + jeton("ffffffffffffffffffffffffffffffff", "home") + ".";
+			let vu = null;
+			await avecFichiers({ ...specImage, stdin: citations }, async resolu => {
+				vu = resolu.stdin;
+				return null;
+			}, envMaisonSeule);
+			r.check("un prompt qui cite {{home}} ou {{fichier:1}} ressort INTACT", vu, citations);
+		});
+
+		await cas(r, "sans marqueur, aucun jeton n'est substitué", async () => {
+			/* Le défaut SÛR : un appelant qui ne fournit pas de marqueur ne veut
+			   pas de substitution, et son texte traverse tel quel. */
+			let vu = null;
+			await avecFichiers({ ...specImage, marqueur: undefined }, async resolu => {
+				vu = { args: resolu.args[1], stdin: resolu.stdin };
+				return null;
+			}, envMaisonSeule);
+			r.check("sans marqueur, aucun jeton n'est substitué",
+				vu, { args: jeton(MARQ, "fichier:1"), stdin: specImage.stdin });
 		});
 
 		await cas(r, "sortieFichier rend le contenu écrit par l'enfant", async () => {
 			const { sortie } = await avecFichiers(specImage, async resolu => {
-				writeFileSync(resolu.args[5], "REPONSE FINALE");
+				/* LE CHEMIN DOIT ÊTRE ABSOLU avant qu'on écrive quoi que ce soit.
+				   Sous une rupture de la substitution, `args[3]` vaut le jeton
+				   LITTÉRAL : un chemin RELATIF, donc un fichier écrit dans le
+				   dossier courant — le dépôt. C'est arrivé une fois, en salissant
+				   l'arbre de travail. Un contrôle ne doit jamais écrire hors de
+				   son dossier temporaire, même quand la règle qu'il éprouve est
+				   cassée : la garde fait rougir le cas, ce qui est le but. */
+				if (!isAbsolute(resolu.args[3])) {
+					throw new Error("chemin de sortie non absolu (jeton non substitué ?) : " + resolu.args[3]);
+				}
+				writeFileSync(resolu.args[3], "REPONSE FINALE");
 				return null;
 			}, envMaisonSeule);
 			r.check("sortieFichier rend le contenu écrit par l'enfant", sortie, "REPONSE FINALE");
@@ -219,13 +269,12 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		await cas(r, "le dossier temporaire est effacé même quand le CLI échoue", async () => {
 			/* Un dossier qui SURVIT laisse les images de l'utilisateur dans
 			   %TEMP% à chaque génération — un défaut qu'aucun écran ne montre.
-			   Les deux issues qui ne sont pas un succès : un exécutant qui JETTE
-			   (l'exécutable manque, l'appel est annulé) et un qui rend un échec. */
+			   L'exécutant JETTE, comme le fera un `spawn` annulé ou introuvable. */
 			let dossierVu = "";
 			let leve = "(aucun rejet)";
 			try {
 				await avecFichiers(specImage, async resolu => {
-					dossierVu = resolu.args[3];
+					dossierVu = resolu.args[1].slice(0, resolu.args[1].lastIndexOf(resolu.args[1].includes("/") ? "/" : "\\"));
 					throw new Error("le CLI a échoué");
 				}, envMaisonSeule);
 			} catch (e) {
@@ -236,37 +285,127 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				{ existeEncore: false, dossierConnu: true, leve: "le CLI a échoué" });
 		});
 
-		await cas(r, "un jeton {{fichier:N}} sans pièce jointe est refusé, avec son nom", async () => {
+		await cas(r, "un jeton qui ne désigne rien est refusé, avec son nom", async () => {
 			/* Laissé passer, le jeton LITTÉRAL partirait sur la ligne de commande
-			   et le CLI se plaindrait d'un chemin « {{fichier:3}} » qui ne
-			   désigne rien. Refusé, le défaut se lit d'un coup d'œil. */
-			let nom = "(aucun rejet)";
-			try {
-				await avecFichiers({ args: ["-i", "{{fichier:3}}"], stdin: "", fichiers: [piece] },
-					async () => null, envMaisonSeule);
-			} catch (e) {
-				nom = e.name;
-			}
-			r.check("un jeton {{fichier:N}} sans pièce jointe est refusé, avec son nom", nom, "refuse");
+			   et le CLI se plaindrait d'un chemin qui ne désigne rien ; rendu
+			   VIDE, il donnerait `-o ""`, un argument vide au lieu d'un chemin.
+			   Les deux produisent un appel faux et muet. */
+			const nomDuRejet = async (spec) => {
+				try {
+					await avecFichiers(spec, async () => null, envMaisonSeule);
+					return "(aucun rejet)";
+				} catch (e) {
+					return e.name;
+				}
+			};
+			r.check("un jeton qui ne désigne rien est refusé, avec son nom",
+				{
+					indexHorsBornes: await nomDuRejet({
+						marqueur: MARQ, args: ["-i", jeton(MARQ, "fichier:3")], stdin: "", fichiers: [piece],
+					}),
+					sortieSansFichier: await nomDuRejet({
+						marqueur: MARQ, args: ["-o", jeton(MARQ, "sortie")], stdin: "",
+					}),
+					marqueurInvalide: await nomDuRejet({
+						marqueur: "pas-hexa!", args: ["-i", "x"], stdin: "", fichiers: [piece],
+					}),
+				},
+				{ indexHorsBornes: "refuse", sortieSansFichier: "refuse", marqueurInvalide: "refuse" });
 		});
 
-		await cas(r, "le nom d'une pièce jointe ne sort pas du dossier temporaire", async () => {
-			/* Le rendu ne choisit pas OÙ le principal écrit : c'est la même règle
-			   que `perimetre.borner` pour les chemins du pont. Un `..` ou un
-			   séparateur dans le nom écrirait hors du dossier — la seule chose
-			   que ce dossier promette. PURE, donc éprouvée seule. */
-			r.check("le nom d'une pièce jointe ne sort pas du dossier temporaire",
-				[
-					nomDeFichierSur("../../evasion.bat", "defaut"),
-					nomDeFichierSur("C:/Windows/System32/mal.exe", "defaut"),
-					nomDeFichierSur("..", "defaut"),
-					nomDeFichierSur("", "defaut"),
-					nomDeFichierSur("image-1.png", "defaut"),
-				],
-				["evasion.bat", "mal.exe", "defaut", "defaut", "image-1.png"]);
-		});
 	} finally {
 		rmSync(racine, { recursive: true, force: true });
 	}
+	r.done();
+});
+
+/**
+ * LA MOITIÉ PURE DES JETONS (`src/host/jetons.ts`), éprouvée SEULE.
+ *
+ * Elle est partagée par les deux hôtes depuis la ronde 1 de la revue : composer
+ * un jeton, le substituer, réduire un nom de fichier ne touche ni `fs`, ni
+ * `os`, ni `path`. Dupliquée, elle avait DIVERGÉ en une tranche — l'une des
+ * deux copies prenait son environnement en paramètre, l'autre lisait celui du
+ * système. Ce groupe la tient à sa source ; les deux groupes d'hôte, eux,
+ * tiennent la moitié DISQUE.
+ *
+ * Il vit dans ce script plutôt que dans un script neuf parce que c'est ici que
+ * la moitié disque correspondante est déjà éprouvée : deux commandes pour un
+ * même sujet se lancent moins souvent qu'une.
+ */
+await withSrcModule("src/host/jetons.ts", async ({
+	jetonFichier, jetonHome, jetonSortie, nomDeFichierSur, nouveauMarqueur, substituerJetons,
+}) => {
+	const r = makeReporter("Jetons de pièces jointes (code partagé)");
+	const MARQ = "0123456789abcdef0123456789abcdef";
+	const valeurs = { marqueur: MARQ, chemins: ["/tmp/x/image-1.png"], sortie: "/tmp/x/out.txt", maison: "/home/a" };
+
+	/* LA FORME DES JETONS est une promesse du contrat : `HostProcess.run` la
+	   documente, et `check-obsidian-host.mjs` comme le groupe ci-dessus
+	   l'écrivent à la main. Ce cas est le seul endroit où la SOURCE est
+	   comparée à la forme écrite : s'ils divergent, c'est ici qu'on le voit. */
+	r.check("les trois jetons portent le marqueur de l'appel",
+		[jetonFichier(MARQ, 1), jetonFichier(MARQ, 12), jetonSortie(MARQ), jetonHome(MARQ)],
+		["{{nq-" + MARQ + ":fichier:1}}", "{{nq-" + MARQ + ":fichier:12}}",
+			"{{nq-" + MARQ + ":sortie}}", "{{nq-" + MARQ + ":home}}"]);
+
+	/* Le marqueur est HEXADÉCIMAL et de longueur fixe : c'est ce qui en fait un
+	   littéral sûr dans l'expression régulière composée ensuite, sans
+	   échappement. Deux appels ne partagent pas le même — sinon le texte d'une
+	   génération pourrait citer le jeton de la suivante. */
+	const m1 = nouveauMarqueur();
+	const m2 = nouveauMarqueur();
+	r.check("un marqueur neuf est hexadécimal, long, et différent à chaque appel",
+		{ forme: /^[0-9a-f]{32}$/.test(m1), distincts: m1 !== m2 }, { forme: true, distincts: true });
+
+	r.check("les jetons du marqueur sont remplacés par leurs valeurs",
+		substituerJetons(
+			"lis " + jetonFichier(MARQ, 1) + " puis écris " + jetonSortie(MARQ) + " depuis " + jetonHome(MARQ),
+			valeurs),
+		"lis /tmp/x/image-1.png puis écris /tmp/x/out.txt depuis /home/a");
+
+	/* LE TEXTE DE L'UTILISATEUR N'EST PAS UN JETON. `stdin` porte sa demande et
+	   le contenu de ses notes ; la forme FIXE du premier jet (`{{home}}`)
+	   collisionnait avec tout gabarit Handlebars, Jinja ou Mustache — et faisait
+	   partir un chemin absolu de la machine au modèle. */
+	const citations = "Handlebars écrit {{home}}, {{fichier:1}}, {{sortie}} ; "
+		+ "et avec un AUTRE marqueur : " + jetonHome("ffffffffffffffffffffffffffffffff") + ".";
+	r.check("un texte qui cite {{home}}, {{fichier:1}} ou le jeton d'un autre marqueur ressort INTACT",
+		substituerJetons(citations, valeurs), citations);
+
+	/* UN JETON QUI NE DÉSIGNE RIEN REFUSE — il ne s'efface pas. Rendu vide, il
+	   donnerait `-o ""` au CLI : un argument vide au lieu d'un chemin, donc un
+	   appel faux et MUET. */
+	const nomDuJet = (fn) => { try { fn(); return "(aucun jet)"; } catch (e) { return e.name; } };
+	r.check("un jeton qui ne désigne rien est refusé, avec son nom",
+		{
+			indexHorsBornes: nomDuJet(() => substituerJetons(jetonFichier(MARQ, 3), valeurs)),
+			sortieAbsente: nomDuJet(() => substituerJetons(jetonSortie(MARQ), { ...valeurs, sortie: "" })),
+			maisonAbsente: nomDuJet(() => substituerJetons(jetonHome(MARQ), { ...valeurs, maison: "" })),
+			marqueurInvalide: nomDuJet(() => substituerJetons("x", { ...valeurs, marqueur: "PAS.HEXA*" })),
+		},
+		{ indexHorsBornes: "refuse", sortieAbsente: "refuse", maisonAbsente: "refuse", marqueurInvalide: "refuse" });
+
+	/* REMPLACEMENT PAR FONCTION, jamais par chaîne : un chemin qui contient
+	   `$&` ou `$1` serait réécrit par `String.replace`. Le dépôt a déjà payé ce
+	   défaut ailleurs (cf. CLAUDE.md, `check:quiz-io`) — et un dossier
+	   temporaire peut très bien contenir un `$`. */
+	r.check("un chemin qui contient $& ou $1 est posé tel quel",
+		substituerJetons(jetonFichier(MARQ, 1), { ...valeurs, chemins: ["C:/tmp/$&-$1-$$/image.png"] }),
+		"C:/tmp/$&-$1-$$/image.png");
+
+	/* Le rendu ne choisit pas OÙ l'hôte écrit : c'est la même règle que
+	   `perimetre.borner` pour les chemins du pont. Un `..` ou un séparateur
+	   sortirait du dossier temporaire, la seule chose que ce dossier promette. */
+	r.check("le nom d'une pièce jointe ne sort pas du dossier temporaire",
+		[
+			nomDeFichierSur("../../evasion.bat", "defaut"),
+			nomDeFichierSur("C:/Windows/System32/mal.exe", "defaut"),
+			nomDeFichierSur("..", "defaut"),
+			nomDeFichierSur("", "defaut"),
+			nomDeFichierSur("image-1.png", "defaut"),
+		],
+		["evasion.bat", "mal.exe", "defaut", "defaut", "image-1.png"]);
+
 	r.done();
 });

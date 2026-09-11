@@ -64,6 +64,17 @@ réponse étant toujours non.
   identité (aller-retour sans perte), et une résolution de lien par nom ne doit jamais
   franchir la racine de la note qui cite — sans cette borne, une image du dossier A
   se servirait, en silence, à une note du dossier B.
+  **Le groupe « réseau » de `check:obsidian-host` tient les DEUX VOIES de
+  `net.fetchJson`**, et c'est l'HÔTE de l'URL qui tranche, jamais l'appelant :
+  `fetch` pour la boucle locale, `requestUrl` partout ailleurs. Le défaut qu'il
+  empêche est invisible à l'écran : `requestUrl` n'accepte AUCUN `signal`, donc
+  faire passer Ollama par lui — ce qu'a fait le premier jet de la tranche 5,
+  tâche 4 — retire l'annulation. Un clic sur Stop rendait la main à l'écran
+  mais laissait le modèle inférer ; relancer aussitôt faisait tourner DEUX
+  inférences concurrentes sur le même modèle local. Le cas branche un faux
+  `fetch` qui ne répond QUE sur son `signal` : un `requestUrl`, qui l'ignore, ne
+  pourrait pas finir. Et le nom d'hôte est ANALYSÉ par `URL`, jamais cherché en
+  sous-chaîne — `https://localhost.evil.com/` contient « localhost ».
 - **LE TROU DU HARNAIS : `sanitizeQuizHtml` n'est éprouvable par AUCUN contrôle
   du dépôt.** `linkedom` (le DOM des scripts) ne tient pas la sémantique d'un
   `<template>` : son `.content` est une fragment SÉPARÉE du `innerHTML` qu'il
@@ -278,21 +289,40 @@ réponse étant toujours non.
   quitté `src/dashboard/ai-providers.ts` ; côté rendu, `check:windows-host`
   garde le passe-plat : le NOM de l'outil traverse le pont, jamais un chemin.
   **Depuis la tâche 4, il garde aussi les PIÈCES JOINTES** (`avecFichiers`), et
-  `check:obsidian-host` les mêmes cinq cas sur l'hôte Obsidian. Le défaut
-  qu'ils empêchent est double. D'abord : `callClaude` glissait les CHEMINS
-  ABSOLUS des images dans le prompt (« First read these images… ») et
-  `callCodex` dans ses arguments (`-i`, `-o`) ; le rendu n'a ni disque ni
-  chemins, donc le code partagé n'envoie plus que des jetons
-  (`{{fichier:N}}`, `{{dossier}}`, `{{sortie}}`, `{{home}}`). Une substitution
-  faite dans les arguments mais PAS dans le `stdin` ne rougit à aucun
-  typecheck : Claude recevrait « lis - {{fichier:1}} », répondrait de la prose,
-  et l'écran dirait « le modèle a répondu du texte au lieu d'un quiz ». Ensuite :
-  le dossier temporaire doit être effacé en `finally`, sur les DEUX issues qui
-  ne sont pas un succès (un CLI qui sort en erreur, un appel rejeté avant tout
-  lancement) — un dossier qui survit laisse les images de l'utilisateur dans
-  `%TEMP%` à chaque génération, et aucun écran ne le montre jamais. Le contenu
-  du fichier est lu DEPUIS l'enfant (ou depuis l'exécutant, côté Électron) :
-  c'est le seul moment où il existe encore.
+  `check:obsidian-host` les mêmes cas sur l'hôte Obsidian. Le défaut qu'ils
+  empêchent est triple. D'abord : `callClaude` glissait les CHEMINS ABSOLUS des
+  images dans le prompt (« First read these images… ») et `callCodex` dans ses
+  arguments (`-i`, `-o`) ; le rendu n'a ni disque ni chemins, donc le code
+  partagé n'envoie plus que des JETONS. Une substitution faite dans les
+  arguments mais PAS dans le `stdin` ne rougit à aucun typecheck : Claude
+  recevrait « lis - <jeton> », répondrait de la prose, et l'écran dirait « le
+  modèle a répondu du texte au lieu d'un quiz ». Ensuite : le dossier
+  temporaire doit être effacé en `finally`, sur les DEUX issues qui ne sont pas
+  un succès (un CLI qui sort en erreur, un appel rejeté avant tout lancement) —
+  un dossier qui survit laisse les images de l'utilisateur dans `%TEMP%` à
+  chaque génération, et aucun écran ne le montre jamais. Le contenu du fichier
+  est lu DEPUIS l'enfant (ou depuis l'exécutant, côté Électron) : c'est le seul
+  moment où il existe encore. Enfin — et c'est la ronde 1 de la revue — **les
+  jetons portent un MARQUEUR tiré au sort par appel**
+  (`{{nq-<marqueur>:fichier:1}}`) : `stdin` est un texte ENTIÈREMENT écrit par
+  l'utilisateur (sa demande, le contenu de ses notes), et une forme fixe
+  (`{{home}}`) collisionnait avec toute note citant Handlebars, Jinja ou
+  Mustache — le chemin absolu de la machine partait au modèle, libre de le
+  recopier dans le quiz réécrit dans une note ; et un `{{fichier:1}}` cité sans
+  image jointe faisait REFUSER l'appel, tuant la génération sur un diagnostic
+  interne en français dans une interface anglaise. Le cas « un prompt qui cite
+  `{{home}}` ou `{{fichier:1}}` ressort INTACT » est le seul filet contre le
+  retour à une forme fixe. Un jeton qui ne désigne rien REFUSE au lieu de
+  s'effacer, des deux côtés : rendu vide, il donnerait `-o ""` au CLI, un appel
+  faux et MUET.
+  Le script porte enfin un second groupe, **« Jetons de pièces jointes (code
+  partagé) »**, sur `src/host/jetons.ts` : la moitié PURE (composer un jeton,
+  le substituer, réduire un nom de fichier) est partagée par les deux hôtes
+  depuis la ronde 1 — dupliquée, elle avait divergé en une tranche. Il y tient
+  la FORME des jetons, l'unicité du marqueur, le refus d'un marqueur non
+  hexadécimal (qui composerait une expression régulière depuis une chaîne
+  étrangère) et le fait qu'un chemin contenant `$&` ou `$1` est posé tel quel —
+  la réécriture « naturelle » en remplacements par CHAÎNE le corromprait.
 - `npm --prefix apps/windows run typecheck:electron` — le typecheck du PROCESSUS
   PRINCIPAL Electron (`apps/windows/tsconfig.electron.json`), lancé par
   `npm run build` de ce dossier, donc par `npm run check:app`. Il referme un trou

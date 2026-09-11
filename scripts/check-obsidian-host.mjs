@@ -853,13 +853,27 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 });
 
 /**
- * LE RÉSEAU sous Obsidian : `HostNet.fetchJson` passe par `requestUrl`, et le
- * bouchon de load-src.mjs délègue à `globalThis.__obsidianRequestUrl` le temps
- * du groupe. Ce qui est éprouvé, c'est la TRADUCTION — l'URL, la méthode, les
- * en-têtes et le corps arrivent intacts, `throw: false` est posé — et la
- * promesse du contrat que `requestUrl` ne tient pas par défaut : un statut
- * d'erreur est RENDU avec son corps (Ollama y met son diagnostic), et seul un
- * rejet vaut `null`.
+ * LE RÉSEAU sous Obsidian : `HostNet.fetchJson` a DEUX VOIES, et c'est l'HÔTE
+ * de l'URL qui tranche — jamais l'appelant.
+ *
+ * — hors boucle locale : `requestUrl`, la voie d'Obsidian qui contourne CORS
+ *   (un `fetch` vers `api.anthropic.com` ou `ollama.com` depuis le rendu échoue
+ *   en « Failed to fetch », vérifié). Le bouchon de load-src.mjs délègue à
+ *   `globalThis.__obsidianRequestUrl` le temps du groupe. Ce qui est éprouvé,
+ *   c'est la TRADUCTION — URL, méthode, en-têtes et corps intacts, `throw:
+ *   false` posé — et la promesse que `requestUrl` ne tient pas par défaut : un
+ *   statut d'erreur est RENDU avec son corps (Ollama y met son diagnostic), et
+ *   seul un rejet vaut `null` ;
+ * — boucle locale (`localhost`, `127.0.0.1`, `[::1]`) : `fetch`, parce qu'il
+ *   accepte un `signal`. C'EST LE DÉFAUT QUE CE GROUPE EMPÊCHE : passer Ollama
+ *   par `requestUrl` — ce qu'a fait le premier jet de la tâche 4 — retire
+ *   l'annulation. Un clic sur Stop rendait la main à l'écran mais laissait le
+ *   modèle inférer ; relancer aussitôt faisait tourner DEUX inférences
+ *   concurrentes sur le même modèle local. Rien ne le montre à l'écran, et le
+ *   contrat ne l'interdit pas : seul ce cas le tient.
+ *
+ * Le double de `fetch` est posé sur `globalThis` et RETIRÉ ensuite : les cas des
+ * autres groupes n'en veulent pas.
  */
 await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	const r = makeReporter("Hôte Obsidian — réseau");
@@ -871,9 +885,12 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		if (params.url.endsWith("/panne")) throw new Error("net::ERR_CONNECTION_REFUSED");
 		return { status: 200, text: "ok" };
 	};
+	/* Une URL DISTANTE : c'est celle du catalogue cloud d'Ollama et de l'usage
+	   Anthropic, donc exactement le trafic qui doit rester sur `requestUrl`. */
+	const LOIN = "https://ollama.com";
 	try {
 		const reponse = await host.net.fetchJson({
-			url: "http://localhost:11434/api/generate",
+			url: LOIN + "/api/generate",
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: '{"model":"llama3"}',
@@ -882,10 +899,10 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		   sur un 4xx/5xx et le corps — le diagnostic — est perdu. Le double ne
 		   jette pas lui-même sur un statut d'erreur, donc c'est le PARAMÈTRE
 		   qu'on lit, pas la conduite. */
-		r.check("fetchJson traverse requestUrl avec l'URL, la méthode, les en-têtes et le corps intacts, et throw:false",
+		r.check("une requête non-loopback traverse requestUrl avec l'URL, la méthode, les en-têtes et le corps intacts, et throw:false",
 			recus[0],
 			{
-				url: "http://localhost:11434/api/generate",
+				url: LOIN + "/api/generate",
 				method: "POST",
 				headers: { "content-type": "application/json" },
 				body: '{"model":"llama3"}',
@@ -893,7 +910,7 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 			});
 		r.check("la réponse est rendue { status, body } à partir de resp.text", reponse, { status: 200, body: "ok" });
 		r.check("un statut 500 est RENDU avec son corps, jamais null",
-			await host.net.fetchJson({ url: "http://localhost:11434/erreur" }),
+			await host.net.fetchJson({ url: LOIN + "/erreur" }),
 			{ status: 500, body: '{"error":"model not found"}' });
 		/* Un rejet de `requestUrl` (hôte injoignable) vaut `null`, jamais une
 		   exception qui remonterait dans la page « Générer ». Le `warn` est
@@ -902,7 +919,7 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		console.warn = () => {};
 		let panne;
 		try {
-			panne = await host.net.fetchJson({ url: "http://localhost:11434/panne" });
+			panne = await host.net.fetchJson({ url: LOIN + "/panne" });
 		} catch (e) {
 			panne = "EXCEPTION: " + e.message;
 		} finally {
@@ -911,8 +928,79 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		r.check("un rejet de requestUrl rend null sans lever", panne, null);
 		/* La méthode par défaut est GET, écrite en toutes lettres : `requestUrl`
 		   la déduit sinon, et le contrat ne veut rien devoir à une déduction. */
-		await host.net.fetchJson({ url: "http://localhost:11434/api/tags" });
+		await host.net.fetchJson({ url: LOIN + "/api/tags" });
 		r.check("sans méthode, GET est posé explicitement", recus[recus.length - 1].method, "GET");
+
+		/* ── LA BOUCLE LOCALE PASSE PAR `fetch`, ET S'ANNULE ── */
+		const vraiFetch = globalThis.fetch;
+		const vus = [];
+		/* Un `fetch` qui ne répond JAMAIS de lui-même : seul le `signal` le
+		   termine. C'est ce qui rend le cas discriminant — un `requestUrl`, qui
+		   ignore le signal, ne pourrait pas finir, et le cas rougirait sur son
+		   délai plutôt que de passer par hasard. */
+		globalThis.fetch = (url, init) => {
+			vus.push({ url: String(url), method: init && init.method, body: init && init.body, signal: !!(init && init.signal) });
+			if (String(url).endsWith("/lent")) {
+				return new Promise((_, rejeter) => {
+					init.signal.addEventListener("abort", () => {
+						const e = new Error("The operation was aborted.");
+						e.name = "AbortError";
+						rejeter(e);
+					}, { once: true });
+				});
+			}
+			if (String(url).endsWith("/erreur")) {
+				return Promise.resolve({ status: 404, text: async () => '{"error":"model not found"}' });
+			}
+			return Promise.resolve({ status: 200, text: async () => "local" });
+		};
+		const avantLoopback = recus.length;
+		try {
+			const locale = await host.net.fetchJson({
+				url: "http://localhost:11434/api/tags", method: "GET", headers: { a: "b" },
+			});
+			r.check("une requête loopback passe par fetch, pas par requestUrl",
+				{ reponse: locale, url: vus[0] && vus[0].url, requestUrlAppele: recus.length - avantLoopback },
+				{ reponse: { status: 200, body: "local" }, url: "http://localhost:11434/api/tags", requestUrlAppele: 0 });
+
+			/* Le contrat est le MÊME sur les deux voies : un statut d'erreur est
+			   rendu AVEC son corps. C'est là qu'Ollama met « model not found ». */
+			r.check("sur la voie loopback aussi, un statut d'erreur est rendu avec son corps",
+				await host.net.fetchJson({ url: "http://127.0.0.1:11434/erreur" }),
+				{ status: 404, body: '{"error":"model not found"}' });
+
+			/* L'ANNULATION, le point de tout ceci : le `signal` atteint `fetch`,
+			   la requête est COUPÉE, et l'abandon vaut `null` — un échec réseau au
+			   sens du contrat, jamais une exception dans la page « Générer ». */
+			const avertir2 = console.warn;
+			console.warn = () => {};
+			const ac = new AbortController();
+			let annulee;
+			try {
+				const p = host.net.fetchJson({ url: "http://localhost:11434/lent", signal: ac.signal });
+				ac.abort();
+				annulee = await p;
+			} catch (e) {
+				annulee = "EXCEPTION: " + e.message;
+			} finally {
+				console.warn = avertir2;
+			}
+			r.check("une requête loopback est annulable : le signal atteint fetch et l'abandon rend null",
+				{ resultat: annulee, signalTransmis: vus[vus.length - 1].signal }, { resultat: null, signalTransmis: true });
+
+			/* Le NOM D'HÔTE est analysé, jamais cherché en sous-chaîne :
+			   `https://localhost.evil.com/` contient « localhost » et n'est pas la
+			   boucle locale. Sans `URL`, un `includes("localhost")` enverrait ce
+			   trafic sur `fetch`, où la politique d'origine le bloquerait. */
+			const avantPiege = vus.length;
+			await host.net.fetchJson({ url: "https://localhost.example.com/api/tags" });
+			r.check("un hôte qui CONTIENT « localhost » n'est pas la boucle locale",
+				{ fetchAppele: vus.length - avantPiege, dernierRequestUrl: recus[recus.length - 1].url },
+				{ fetchAppele: 0, dernierRequestUrl: "https://localhost.example.com/api/tags" });
+		} finally {
+			if (vraiFetch === undefined) delete globalThis.fetch;
+			else globalThis.fetch = vraiFetch;
+		}
 	} finally {
 		delete globalThis.__obsidianRequestUrl;
 	}
@@ -1141,16 +1229,22 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 
 	   CE QUE CES CAS EMPÊCHENT. `callClaude` et `callCodex` écrivaient
 	   eux-mêmes les images dans un `mkdtempSync` et glissaient les chemins
-	   ABSOLUS obtenus dans le prompt (« First read these images… - C:\…\ ») ou
-	   dans les arguments (`-i`, `-o`), puis effaçaient le dossier. Le rendu de
+	   ABSOLUS obtenus dans le prompt (« First read these images… ») ou dans les
+	   arguments (`-i`, `-o`), puis effaçaient le dossier. Le rendu de
 	   l'application n'a ni disque ni chemins : la tâche 4 a renversé la charge
-	   en jetons (`{{fichier:N}}`, `{{dossier}}`, `{{sortie}}`, `{{home}}`) que
-	   l'hôte remplace. Une substitution qui ne se ferait PAS dans le `stdin`
-	   passerait inaperçue au typecheck et donnerait à Claude une consigne
-	   « lis - {{fichier:1}} » : le modèle répondrait de la prose, et l'erreur
+	   en JETONS que l'hôte remplace. Une substitution qui ne se ferait PAS dans
+	   le `stdin` passerait inaperçue au typecheck et donnerait à Claude une
+	   consigne « lis - <jeton> » : le modèle répondrait de la prose, et l'erreur
 	   affichée serait « le modèle a répondu du texte au lieu d'un quiz ».
 	   Et un dossier qui SURVIT laisse les images de l'utilisateur dans %TEMP%
-	   à chaque génération — un défaut qu'aucun écran ne montre jamais. */
+	   à chaque génération — un défaut qu'aucun écran ne montre jamais.
+
+	   LE FORMAT DES JETONS EST ÉCRIT ICI À LA MAIN, et c'est voulu : c'est une
+	   promesse du contrat, et un contrôle qui le lirait de `src/host/jetons.ts`
+	   resterait vert si le format changeait des deux côtés à la fois. Ces deux
+	   lignes en sont la SECONDE énonciation. */
+	const jeton = (m, quoi) => "{{nq-" + m + ":" + quoi + "}}";
+	const MARQ = "0123456789abcdef0123456789abcdef";
 	const nbDossiersTemp = () => readdirSync(tmpdir()).filter(n => n.startsWith("quiz-blocks-")).length;
 
 	/* Le faux CLI RAPPORTE ce qu'il a reçu, et surtout ce qu'il a pu LIRE : le
@@ -1159,19 +1253,21 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	   pourrait plus dire, le dossier étant alors déjà effacé. */
 	const rapporteur = [
 		"const fs = require('fs');",
+		"const path = require('path');",
 		"let entree = '';",
 		"process.stdin.on('data', d => { entree += d; });",
 		"process.stdin.on('end', () => {",
 		"  const a = process.argv.slice(2);",
 		"  let contenu = '(illisible)';",
 		"  try { contenu = fs.readFileSync(a[1], 'utf8'); } catch (e) { contenu = 'ERREUR:' + e.code; }",
-		"  if (a[7] === 'ecris') fs.writeFileSync(a[5], 'REPONSE FINALE');",
+		// ABSOLU seulement : sous une rupture de la substitution, `a[3]` vaut le
+		// jeton littéral, donc un chemin RELATIF au dossier courant de l'enfant.
+		// Le cas rougit alors sur `sortie`, au lieu de salir un dossier au hasard.
+		"  if (a[5] === 'ecris' && path.isAbsolute(a[3])) fs.writeFileSync(a[3], 'REPONSE FINALE');",
 		"  process.stdout.write(JSON.stringify({",
-		"    cheminImage: a[1], dossier: a[3], home: a[9],",
-		"    stdinSubstitue: entree.indexOf(a[1]) >= 0 && entree.indexOf('{{fichier:1}}') < 0,",
-		"    contenu,",
+		"    cheminImage: a[1], dossier: path.dirname(a[1]), home: a[7], entree, contenu,",
 		"  }));",
-		"  process.exit(Number(a[11]));",
+		"  process.exit(Number(a[9]));",
 		"});",
 	].join("\n");
 
@@ -1179,38 +1275,88 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	// existe » ne se confonde pas avec « un fichier vide a été créé ».
 	const piece = { nom: "image-1.png", base64: Buffer.from("OCTETS-IMAGE").toString("base64") };
 	const argsRapport = (quoi, code) => [
-		"--image", "{{fichier:1}}", "--dossier", "{{dossier}}", "--out", "{{sortie}}",
-		"--ecrire", quoi, "--home", "{{home}}", "--code", String(code),
+		"--image", jeton(MARQ, "fichier:1"),
+		"--out", jeton(MARQ, "sortie"),
+		"--ecrire", quoi,
+		"--home", jeton(MARQ, "home"),
+		"--code", String(code),
 	];
+
+	/* UN FAUX DOSSIER PERSONNEL, injecté par l'environnement — la même porte que
+	   `buildChildEnv` et `lireCache` (`dossierPersonnel` lit `USERPROFILE`/`HOME`
+	   de l'environnement DONNÉ). Sans elle, le cas du jeton `home` ne pourrait
+	   comparer qu'à une formule recopiée du code, et resterait vert quoi qu'on
+	   change : un contrôle qui n'atteint pas sa propre entrée ne contrôle rien. */
+	const fausseMaison = mkdtempSync(join(tmpdir(), "quiz-maison-"));
+	const maisonAvant = { USERPROFILE: process.env.USERPROFILE, HOME: process.env.HOME };
+	const avecFausseMaison = async (executer) => {
+		process.env.USERPROFILE = fausseMaison;
+		process.env.HOME = fausseMaison;
+		try {
+			return await executer();
+		} finally {
+			for (const [cle, valeur] of Object.entries(maisonAvant)) {
+				if (valeur === undefined) delete process.env[cle];
+				else process.env[cle] = valeur;
+			}
+		}
+	};
 
 	let rapport = null;
 	let resOk = null;
-	await avecFauxCli(rapporteur, async () => {
+	await avecFausseMaison(() => avecFauxCli(rapporteur, async () => {
 		resOk = await host.process.run({
 			tool: "codex",
+			marqueur: MARQ,
 			args: argsRapport("ecris", 0),
-			stdin: "PROMPT\n- {{fichier:1}}\n",
+			stdin: "PROMPT\n- " + jeton(MARQ, "fichier:1") + "\n",
 			fichiers: [piece],
 			sortieFichier: "last-message.txt",
 		});
 		rapport = JSON.parse(resOk.stdout);
-	});
+	}));
 
-	r.check("{{fichier:1}} est remplacé dans les args ET dans stdin par un chemin qui existe",
+	r.check("le jeton de pièce jointe est remplacé dans les args ET dans stdin par un chemin qui existe",
 		rapport && {
 			nom: rapport.cheminImage.split(/[/\\]/).pop(),
-			absolu: rapport.cheminImage.length > 12 && rapport.cheminImage !== "{{fichier:1}}",
-			stdin: rapport.stdinSubstitue,
+			absolu: rapport.cheminImage.length > 12 && rapport.cheminImage.indexOf("{{") < 0,
+			stdin: rapport.entree.indexOf(rapport.cheminImage) >= 0
+				&& rapport.entree.indexOf(jeton(MARQ, "fichier:1")) < 0,
 			contenu: rapport.contenu,
 		},
 		{ nom: "image-1.png", absolu: true, stdin: true, contenu: "OCTETS-IMAGE" });
 
-	r.check("{{dossier}} et {{home}} sont remplacés par le dossier temporaire et le dossier personnel",
-		rapport && {
-			imageDansLeDossier: rapport.cheminImage.startsWith(rapport.dossier),
-			home: rapport.home === (process.env.USERPROFILE || process.env.HOME || homedir()),
-		},
-		{ imageDansLeDossier: true, home: true });
+	r.check("le jeton du dossier personnel rend le dossier personnel DONNÉ, pas celui de la machine",
+		rapport && { home: rapport.home, imageDansUnDossierAPart: rapport.dossier !== rapport.home },
+		{ home: fausseMaison, imageDansUnDossierAPart: true });
+
+	/* LE TEXTE DE L'UTILISATEUR NE PEUT PAS ÊTRE UN JETON.
+
+	   `stdin` porte sa demande ET le contenu des notes qu'il a jointes. La
+	   première forme des jetons était FIXE (`{{home}}`, `{{fichier:1}}`) — donc
+	   une note sur Handlebars, Jinja ou Mustache, qui écrivent tous `{{…}}`,
+	   faisait partir le chemin ABSOLU de la machine au modèle, libre de le
+	   recopier dans le quiz réécrit dans une note. Et un `{{fichier:1}}` cité
+	   sans image jointe faisait REFUSER l'appel : génération tuée, sur un
+	   diagnostic interne en français, dans une interface anglaise. Le marqueur
+	   est tiré au sort par appel : le texte ne peut pas le deviner — pas même en
+	   citant la FORME complète avec un autre marqueur, ce que la 3e phrase
+	   ci-dessous éprouve. */
+	const citations = "Un gabarit Handlebars s'écrit {{home}}, et {{fichier:1}} aussi. "
+		+ "Même avec un autre marqueur : " + jeton("ffffffffffffffffffffffffffffffff", "home") + ".";
+	let intact = "(pas de rapport)";
+	await avecFausseMaison(() => avecFauxCli(rapporteur, async () => {
+		const res = await host.process.run({
+			tool: "codex",
+			marqueur: MARQ,
+			args: argsRapport("rien", 0),
+			stdin: citations,
+			fichiers: [piece],
+			sortieFichier: "last-message.txt",
+		});
+		intact = JSON.parse(res.stdout).entree;
+	}));
+	r.check("un prompt qui cite {{home}} ou {{fichier:1}} ressort INTACT", intact, citations);
 
 	/* Le fichier `-o` de Codex : l'hôte le relit et le rend dans `sortie`. Sans
 	   lui, `callCodex` retombe sur la reconstitution depuis les events JSONL —
@@ -1218,15 +1364,16 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	r.check("sortieFichier rend le contenu écrit par l'enfant", resOk && resOk.sortie, "REPONSE FINALE");
 
 	let resSans = null;
-	await avecFauxCli(rapporteur, async () => {
+	await avecFausseMaison(() => avecFauxCli(rapporteur, async () => {
 		resSans = await host.process.run({
 			tool: "codex",
+			marqueur: MARQ,
 			args: argsRapport("rien", 0),
 			stdin: "",
 			fichiers: [piece],
 			sortieFichier: "last-message.txt",
 		});
-	});
+	}));
 	/* `undefined` et non `""` : `callCodex` distingue « le CLI n'a rien écrit »
 	   (il reconstitue depuis les events) de « il a écrit une réponse vide »
 	   (« ChatGPT n'a rien répondu »). Une chaîne vide confondrait les deux. */
@@ -1234,23 +1381,49 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		resSans && { sortie: resSans.sortie, code: resSans.code },
 		{ sortie: undefined, code: 0 });
 
+	/* UN JETON QUI NE DÉSIGNE RIEN REFUSE — il ne s'efface pas. Un jeton
+	   « sortie » rendu vide donnerait `-o ""` au CLI : un argument vide au lieu
+	   d'un chemin, donc un appel faux et MUET. Même règle que l'index hors
+	   bornes, et c'est la symétrie qui manquait au premier jet. */
+	let nomSortieSeule = "(aucun rejet)";
+	try {
+		await host.process.run({
+			tool: "codex", marqueur: MARQ, args: ["-o", jeton(MARQ, "sortie")], stdin: "",
+		});
+	} catch (e) {
+		nomSortieSeule = e.name;
+	}
+	let nomIndex = "(aucun rejet)";
+	try {
+		await host.process.run({
+			tool: "codex", marqueur: MARQ, args: ["-i", jeton(MARQ, "fichier:3")], stdin: "",
+			fichiers: [piece],
+		});
+	} catch (e) {
+		nomIndex = e.name;
+	}
+	r.check("un jeton qui ne désigne rien est refusé, avec son nom",
+		{ sortieSansFichier: nomSortieSeule, indexHorsBornes: nomIndex },
+		{ sortieSansFichier: "refuse", indexHorsBornes: "refuse" });
+
 	/* LE DOSSIER EST EFFACÉ EN `finally`, TOUJOURS — les deux sorties de `run`
 	   qui ne sont pas un succès. Un CLI qui sort en erreur RÉSOUT (c'est
 	   l'appelant qui juge le code) ; un argument refusé REJETTE avant tout
 	   lancement, et le dossier existait déjà à ce moment-là. */
 	let dossierApresEchec = "(pas de rapport)";
-	await avecFauxCli(rapporteur, async () => {
+	await avecFausseMaison(() => avecFauxCli(rapporteur, async () => {
 		const res = await host.process.run({
-			tool: "codex", args: argsRapport("rien", 3), stdin: "",
+			tool: "codex", marqueur: MARQ, args: argsRapport("rien", 3), stdin: "",
 			fichiers: [piece], sortieFichier: "last-message.txt",
 		});
 		dossierApresEchec = existsSync(JSON.parse(res.stdout).dossier);
-	});
+	}));
 	const avantRejet = nbDossiersTemp();
 	try {
 		await host.process.run({
 			tool: "codex",
-			args: ["--image", "{{fichier:1}}", "a" + String.fromCharCode(10) + "b"],
+			marqueur: MARQ,
+			args: ["--image", jeton(MARQ, "fichier:1"), "a" + String.fromCharCode(10) + "b"],
 			stdin: "",
 			fichiers: [piece],
 		});
@@ -1258,6 +1431,7 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	r.check("le dossier temporaire est effacé même quand le CLI échoue",
 		{ apresEchec: dossierApresEchec, apresRejet: nbDossiersTemp() - avantRejet },
 		{ apresEchec: false, apresRejet: 0 });
+	rmSync(fausseMaison, { recursive: true, force: true });
 
 	r.done();
 });

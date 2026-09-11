@@ -1,5 +1,6 @@
 import JSON5 from "json5";
 import { currentHost } from "../host/current";
+import { jetonFichier, jetonHome, jetonSortie, nouveauMarqueur } from "../host/jetons";
 import {
 	resolveClaudeModel,
 	resolveCodexModel,
@@ -22,8 +23,11 @@ import { t } from "../i18n";
      `stdin` écrit puis fermé, les deux flux lus séparément, le `taskkill` de
      l'arbre à l'annulation et le dossier temporaire des images vivent dans
      l'hôte. Les pièces jointes ne sont plus des CHEMINS mais des jetons
-     (`{{fichier:1}}`, `{{sortie}}`, `{{home}}`) que l'hôte remplace : le rendu
-     de l'application n'a pas de disque, et n'apprend donc aucun chemin.
+     (`src/host/jetons.ts`) que l'hôte remplace : le rendu de l'application n'a
+     pas de disque, et n'apprend donc aucun chemin. Les jetons portent un
+     MARQUEUR tiré au sort par appel — sans lui, une note jointe qui cite un
+     moteur de gabarits (`{{home}}` chez Handlebars, Jinja, Mustache) faisait
+     partir un chemin absolu de la machine au modèle.
    — Ollama par `host.net.fetchJson`, qui rend le CORPS d'un statut d'erreur
      (c'est là qu'Ollama met son diagnostic, et c'est pourquoi ce module
      employait `fetch` plutôt que `requestUrl`).
@@ -41,7 +45,7 @@ const CLI_TIMEOUT_MIN = String(Math.round(CLI_TIMEOUT_MS / 60000));
 
 /** Le NOM du fichier que Codex écrit avec `-o`, relu par l'hôte et rendu dans
     `sortie`. Le chemin absolu, lui, ne quitte jamais l'hôte : les arguments
-    l'écrivent `{{sortie}}`. */
+    l'écrivent avec `jetonSortie(marqueur)`. */
 const CODEX_FICHIER_SORTIE = "last-message.txt";
 
 /** Image jointe à la génération (vision). */
@@ -151,11 +155,15 @@ function userError(message: string): UserFacingError {
 /**
  * Une promesse RÉSEAU, qui rend la main dès l'abandon.
  *
- * `HostNet` n'annule pas sous Obsidian, et le contrat le dit en toutes lettres :
- * `requestUrl` n'accepte pas de `signal`. Sans cette course, un clic sur Stop
- * pendant une génération Ollama laisserait la page « Générer » figée jusqu'à ce
- * que le modèle ait fini — ce que le `fetch` d'avant n'imposait pas. La requête,
- * elle, continue en arrière-plan : son résultat est simplement jeté, et
+ * LE FILET DE LA VOIE NON ANNULABLE, et rien de plus. Un hôte peut honorer le
+ * `signal` (l'application le relaie par son canal `reseau.annuler` ; le greffon
+ * emploie `fetch` pour la boucle locale, donc pour Ollama en local) — là, la
+ * requête est vraiment COUPÉE et cette course ne sert à rien. Mais un hôte peut
+ * aussi l'IGNORER, et le contrat le dit en toutes lettres : le greffon passe par
+ * `requestUrl`, qui n'accepte aucun signal, dès que l'URL n'est pas locale — un
+ * Ollama sur une autre machine, réglage que le composer expose. Sans cette
+ * course, un clic sur Stop y laisserait la page « Générer » figée jusqu'à ce que
+ * le modèle ait fini. La requête, elle, continue : son résultat est jeté, et
  * `generate()` a déjà traduit l'abandon en retour à l'état initial.
  */
 function courseAbandon<T>(promesse: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -205,6 +213,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 	 */
 	function runCli(spec: {
 		tool: "claude" | "codex";
+		marqueur: string;
 		args: string[];
 		stdin: string;
 		fichiers?: Array<{ nom: string; base64: string }>;
@@ -218,13 +227,14 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 			stdin: spec.stdin,
 			signal: ac.signal,
 			timeoutMs: CLI_TIMEOUT_MS,
+			marqueur: spec.marqueur,
 			fichiers: spec.fichiers,
 			sortieFichier: spec.sortieFichier,
 		});
 	}
 
 	/** Les images de la génération, en pièces jointes de l'appel : l'hôte les
-	    écrit et remplace `{{fichier:N}}` par leur chemin. L'extension suit le
+	    écrit et remplace le jeton de chacune par son chemin. L'extension suit le
 	    type MIME — le CLI la lit pour décider comment décoder l'image. */
 	function piecesJointes(images: ImagePayload[]): Array<{ nom: string; base64: string }> {
 		return images.map((img, i) => {
@@ -395,20 +405,24 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 		}
 
 		/* Images : l'HÔTE les écrit en fichiers temporaires (et les efface), et
-		   remplace `{{fichier:N}}` par leur chemin absolu — ici dans le PROMPT,
-		   que Claude lit ensuite avec le tool Read (multimodal, read-only).
+		   remplace le jeton de la N-ième par son chemin absolu — ici dans le
+		   PROMPT, que Claude lit ensuite avec le tool Read (multimodal,
+		   read-only). Le MARQUEUR est tiré au sort pour CET appel : le prompt
+		   contient la demande de l'utilisateur et le contenu de ses notes, et une
+		   forme fixe y aurait collisionné (voir `src/host/jetons.ts`).
 		   `--tools` reçoit la liste des outils autorisés, et une chaîne VIDE
 		   quand il n'y a pas d'image : c'est un argument réellement vide, pas
 		   les deux caractères `""` — sous `cp.exec`, le shell retirait les
 		   guillemets de `--tools ""`, et le CLI refuse la paire littérale
 		   (mesuré : « Invalid setting source: "" »). */
+		const marqueur = nouveauMarqueur();
 		const fichiers = piecesJointes(images);
 		const tools = fichiers.length > 0 ? "Read" : "";
 		// Instruction au MODÈLE (pas de l'UI) → anglais, comme le prompt
 		// système ; la langue du quiz reste celle de la demande.
 		const imageNote = fichiers.length > 0
 			? "\n\nFirst read these images with the Read tool, then base the quiz on their content:\n" +
-				fichiers.map((_, i) => "- {{fichier:" + (i + 1) + "}}").join("\n")
+				fichiers.map((_, i) => "- " + jetonFichier(marqueur, i + 1)).join("\n")
 			: "";
 
 		const fullPrompt = systemPrompt + "\n\n" + userPrompt + imageNote;
@@ -441,6 +455,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 					"-p", "--output-format", "json", "--model", model,
 					"--tools", tools, "--no-session-persistence", "--setting-sources", "",
 				],
+				marqueur,
 				stdin: fullPrompt,
 				fichiers,
 			});
@@ -530,18 +545,19 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 		}
 		const effortVal = /^[a-z]+$/.test(effort) ? effort : "medium";
 
-		// Images : l'HÔTE les écrit dans son dossier temporaire et remplace
-		// `{{fichier:N}}` par leur chemin ; elles sont attachées au prompt
-		// initial par `-i`.
+		// Images : l'HÔTE les écrit dans son dossier temporaire et remplace le
+		// jeton de chacune par son chemin ; elles sont attachées au prompt
+		// initial par `-i`. Marqueur tiré au sort pour CET appel.
+		const marqueur = nouveauMarqueur();
 		const fichiers = piecesJointes(images);
 		const fullPrompt = systemPrompt + "\n\n" + userPrompt;
 		/* `--json` : stdout devient un flux d'events JSONL, seul endroit où le CLI
 		   publie les tokens consommés (`turn.completed.usage`) et l'identifiant de
 		   thread qui mène à ses quotas. La réponse finale, elle, continue d'être
 		   lue dans le fichier `-o` — que l'hôte relit et rend dans `sortie`.
-		   `{{home}}` et `{{sortie}}` sont des jetons : le dossier personnel et le
-		   chemin du fichier de sortie sont du savoir d'HÔTE, et le rendu de
-		   l'application n'a ni l'un ni l'autre. */
+		   Le dossier personnel et le chemin du fichier de sortie sont du savoir
+		   d'HÔTE — le rendu de l'application n'a ni l'un ni l'autre : ce sont des
+		   jetons. */
 		const args = [
 			"exec", "--json", "-m", model,
 			"-c", "model_reasoning_effort=" + effortVal,
@@ -549,9 +565,9 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 			// valeur vient de models_cache.json (service_tiers[].id).
 			...(fast ? ["-c", "service_tier=priority"] : []),
 			"-s", "read-only", "--skip-git-repo-check", "--ignore-user-config",
-			"-C", "{{home}}",
-			"-o", "{{sortie}}",
-			...fichiers.flatMap((f, i) => ["-i", "{{fichier:" + (i + 1) + "}}"]),
+			"-C", jetonHome(marqueur),
+			"-o", jetonSortie(marqueur),
+			...fichiers.flatMap((_, i) => ["-i", jetonFichier(marqueur, i + 1)]),
 		];
 
 		/** La cartographie des messages, INCHANGÉE (voir `erreurClaude`). */
@@ -575,7 +591,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 
 		let res: SortieCli;
 		try {
-			res = await runCli({ tool: "codex", args, stdin: fullPrompt, fichiers, sortieFichier: CODEX_FICHIER_SORTIE });
+			res = await runCli({ tool: "codex", marqueur, args, stdin: fullPrompt, fichiers, sortieFichier: CODEX_FICHIER_SORTIE });
 		} catch (err) {
 			/* Une ANNULATION n'est pas une erreur. L'hôte tue l'arbre de process
 			   et rejette `annule` — ce que la branche « killed » prendrait pour un

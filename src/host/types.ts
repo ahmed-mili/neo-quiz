@@ -360,20 +360,32 @@ export interface HostProcess {
 		stdin: string;
 		signal?: AbortSignal;
 		timeoutMs?: number;
+		/** Le MARQUEUR de cet appel, tiré au sort par `nouveauMarqueur()`
+		    (`src/host/jetons.ts`). L'hôte ne substitue QUE les jetons qui le
+		    portent — `{{nq-<marqueur>:fichier:N}}`, `{{nq-<marqueur>:sortie}}`,
+		    `{{nq-<marqueur>:home}}`, composés par `jetonFichier`/`jetonSortie`/
+		    `jetonHome`. Sans lui, AUCUNE substitution n'a lieu.
+
+		    POURQUOI IL EXISTE : `stdin` porte un texte entièrement écrit par
+		    l'utilisateur (sa demande, le contenu des notes jointes). Une forme
+		    fixe (`{{home}}`) collisionnait avec toute note citant un moteur de
+		    gabarits — et faisait partir un chemin absolu de la machine au
+		    modèle, qui pouvait le recopier dans le quiz. */
+		marqueur?: string;
 		/** Les pièces jointes de CET appel. L'hôte crée un dossier temporaire, y
 		    écrit chaque fichier, et REMPLACE — dans `args` comme dans `stdin` — le
-		    jeton `{{fichier:N}}` par le chemin absolu du N-ième (1-based),
-		    `{{dossier}}` par le dossier lui-même, `{{sortie}}` par le chemin absolu
-		    de `sortieFichier` et `{{home}}` par le dossier personnel. Le rendu
-		    compose donc sa ligne de commande sans jamais apprendre un chemin
-		    disque. Le dossier est effacé en `finally`, toujours. */
+		    jeton `{{nq-<marqueur>:fichier:N}}` par le chemin absolu du N-ième
+		    (1-based). Le rendu compose donc sa ligne de commande sans jamais
+		    apprendre un chemin disque. Le dossier est effacé en `finally`,
+		    toujours. Un jeton qui ne désigne rien REJETTE (`refuse`) au lieu de
+		    s'effacer : un argument vide produirait un appel faux et muet. */
 		fichiers?: Array<{ nom: string; base64: string }>;
 		/** Un NOM de fichier, relatif au dossier temporaire, que le CLI écrit et que
 		    l'appelant veut relire (Codex `-o last-message.txt`). Son contenu est rendu
 		    dans `sortie` ; `undefined` si le CLI ne l'a pas écrit. Le chemin absolu à
-		    donner au CLI s'écrit `{{sortie}}` — et NON `{{dossier}}` suivi d'un
-		    séparateur : le code partagé ne sait pas si l'hôte sépare par `/` ou `\`,
-		    et le deviner est exactement ce que ces jetons existent pour éviter. */
+		    donner au CLI s'écrit `{{nq-<marqueur>:sortie}}` : le code partagé ne sait
+		    pas si l'hôte sépare par `/` ou `\`, et le deviner est exactement ce que
+		    ces jetons existent pour éviter. */
 		sortieFichier?: string;
 	}): Promise<{ stdout: string; stderr: string; code: number | null; sortie?: string }>;
 	/** Le fichier de cache/config du CLI, à un chemin FIXE tenu par l'hôte

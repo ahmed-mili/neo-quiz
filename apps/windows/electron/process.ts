@@ -39,6 +39,9 @@
    dépôt : ce qu'un contrôle ne peut pas atteindre n'est pas contrôlé.
 ══════════════════════════════════════════════════════════ */
 
+import { nomDeFichierSur, substituerJetons } from "../../../src/host/jetons";
+import type { FichierJoint } from "../../../src/host/jetons";
+
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -206,11 +209,11 @@ export async function demarrerOllama(): Promise<boolean> {
 /* ══════════════════════════════════════════════════════════
    LES PIÈCES JOINTES D'UN APPEL, ET LE DOSSIER QUI LES PORTE
 
-   Jumeau de `avecFichiers` dans `apps/obsidian/host.ts`, et pour la même
-   raison que `dossierPersonnel` l'est : les deux hôtes tiennent la MÊME
-   promesse du contrat, chacun avec ses primitives, et rien ne peut être
-   partagé entre `apps/` — le rendu n'importerait pas ce module sans tirer
-   Node avec lui (`check:host`, assertion 6).
+   Jumeau de `avecFichiers` dans `apps/obsidian/host.ts` pour sa moitié DISQUE
+   seulement, et pour la même raison que `dossierPersonnel` l'est : chaque hôte
+   tient la promesse du contrat avec ses primitives, et rien ne peut être
+   partagé entre `apps/` (le rendu n'importerait pas ce module sans tirer Node
+   avec lui, `check:host` assertion 6). Le reste ne l'est PLUS — voir plus bas.
 
    POURQUOI CE CODE EST ÉCRIT MAINTENANT, alors que `run` rejette encore.
    `callClaude` et `callCodex` écrivaient eux-mêmes les images dans un
@@ -225,60 +228,27 @@ export async function demarrerOllama(): Promise<boolean> {
    LE DOSSIER EST EFFACÉ EN `finally`, TOUJOURS : un CLI qui échoue, expire ou
    est annulé laisserait sinon les images de l'utilisateur dans `%TEMP%`.
 
-   LES JETONS SONT REMPLACÉS PAR UNE FONCTION, jamais par une chaîne de
-   remplacement : un chemin qui contiendrait `$1` ou `$&` serait réécrit par
-   `String.replace`.
+   LA MOITIÉ PURE (composer un jeton, le substituer, réduire un nom de fichier)
+   vit dans `src/host/jetons.ts`, partagée avec l'hôte Obsidian : elle ne touche
+   ni `fs`, ni `os`, ni `path`, et la dupliquer ici n'avait rien de forcé — les
+   deux copies du premier jet de la tâche 4 avaient déjà divergé en une tranche.
+   `src/` est importable depuis le processus principal, comme `canaux.ts`
+   importe déjà `LOG_PREFIX` ; et comme ce module-là ne tire aucun Node, le
+   RENDU pourrait l'importer aussi sans faire rougir `check:host`. Ne reste ici
+   que ce qui touche le disque.
 ══════════════════════════════════════════════════════════ */
-
-/** Une pièce jointe : un nom et son contenu, tels que le rendu les envoie. */
-export interface FichierJoint {
-	nom: string;
-	base64: string;
-}
-
-const JETONS_FICHIERS = /\{\{fichier:(\d+)\}\}|\{\{dossier\}\}|\{\{sortie\}\}|\{\{home\}\}/g;
-
-/** Le nom d'une pièce jointe, RÉDUIT à un nom de fichier. Le rendu ne choisit
-    pas où le principal écrit : un `..` ou un séparateur sortirait du dossier
-    temporaire, qui est la seule chose que ce dossier promette. C'est la même
-    règle que `perimetre.borner` pour les chemins du pont. PURE. */
-export function nomDeFichierSur(nom: string, defaut: string): string {
-	const base = String(nom || "").split(/[/\\]/).pop() || "";
-	return base && base !== "." && base !== ".." ? base : defaut;
-}
-
-/** Les quatre jetons du contrat, remplacés dans une chaîne. PURE. */
-export function substituerJetons(
-	texte: string,
-	chemins: string[],
-	dossier: string,
-	sortie: string,
-	maison: string,
-): string {
-	return texte.replace(JETONS_FICHIERS, (jeton: string, index: string | undefined) => {
-		if (index === undefined) {
-			return jeton === "{{dossier}}" ? dossier : jeton === "{{sortie}}" ? sortie : maison;
-		}
-		const i = Number(index) - 1;
-		if (i < 0 || i >= chemins.length) {
-			/* NOMMÉ plutôt que laissé passer : un `{{fichier:3}}` littéral sur la
-			   ligne de commande donnerait au CLI un chemin qui n'existe pas, et un
-			   diagnostic qui ne désigne rien. */
-			throw erreurCli("refuse", "jeton " + jeton + " : aucune pièce jointe à cet index");
-		}
-		return chemins[i];
-	});
-}
 
 /**
  * Écrit les pièces jointes, substitue les jetons, exécute, relit `sortieFichier`,
  * efface le dossier. Le dossier n'existe que s'il sert : sans pièce jointe ni
- * fichier de sortie, seul `{{home}}` a un sens et rien n'est créé.
+ * fichier de sortie, seul `{{…:home}}` a un sens et rien n'est créé. Sans
+ * marqueur, RIEN n'est substitué — c'est le défaut sûr.
  */
 export async function avecFichiers<T>(
 	spec: {
 		args: string[];
 		stdin: string;
+		marqueur?: string;
 		fichiers?: FichierJoint[];
 		sortieFichier?: string;
 	},
@@ -298,8 +268,10 @@ export async function avecFichiers<T>(
 		const cheminSortie = spec.sortieFichier
 			? join(dossier, nomDeFichierSur(spec.sortieFichier, "sortie.txt"))
 			: "";
-		const maison = dossierPersonnel(env);
-		const remplacer = (s: string): string => substituerJetons(s, chemins, dossier, cheminSortie, maison);
+		const marqueur = spec.marqueur;
+		const remplacer = (s: string): string => marqueur === undefined
+			? s
+			: substituerJetons(s, { marqueur, chemins, sortie: cheminSortie, maison: dossierPersonnel(env) });
 		const resultat = await executer({ args: spec.args.map(remplacer), stdin: remplacer(spec.stdin) });
 		let sortie: string | undefined;
 		if (cheminSortie) {
@@ -314,9 +286,17 @@ export async function avecFichiers<T>(
 		return { resultat, sortie };
 	} finally {
 		if (dossier) {
+			/* `maxRetries` N'EST PAS DU CONFORT : ce `finally` s'exécutera juste
+			   après un `taskkill /T /F` (tâche 7), et Windows garde un handle
+			   ouvert quelques dizaines de millisecondes après la mort d'un
+			   process — `rmSync` rend alors EBUSY/EPERM. Et l'échec est DIT :
+			   avalé en silence, le dossier d'images survivait dans `%TEMP%` à
+			   chaque annulation, ce que ce `finally` existe pour empêcher. */
 			try {
-				rmSync(dossier, { recursive: true, force: true });
-			} catch (e) { /* best effort */ }
+				rmSync(dossier, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+			} catch (e) {
+				console.warn("[neo-quiz] dossier temporaire de CLI non effacé :", dossier, e);
+			}
 		}
 	}
 }
@@ -338,6 +318,7 @@ export async function run(_spec: {
 	args: string[];
 	stdin: string;
 	timeoutMs?: number;
+	marqueur?: string;
 	fichiers?: FichierJoint[];
 	sortieFichier?: string;
 }): Promise<{ stdout: string; stderr: string; code: number | null; sortie?: string }> {

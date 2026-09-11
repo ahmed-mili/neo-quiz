@@ -123,6 +123,15 @@ réponse étant toujours non.
   autre, et ne se voit jamais. C'est ce second défaut, plus fin, qui a été trouvé ici
   a posteriori : une clé de signature non injective (`ids.join(" ")`) faisait
   collisionner `["ip","masque"]` et `["ip masque"]`.
+- `npm run check:electron-fs` — les primitives de fichiers du processus principal
+  Electron (`apps/windows/electron/fichiers.ts`, tâche 1 de la migration
+  Tauri → Electron). Onze cas, pas huit : le brief de la tâche citait `stat`, absent
+  du contrat `HostFs` (`src/host/types.ts`), et omettait `list`, `remove`, `rename`,
+  qui y sont — le contrat fait autorité sur le plan. Il empêche, entre autres,
+  qu'un `append` non atomique perde un ajout concurrent au journal de révision,
+  qu'un `trash` supprime au lieu de déplacer, et qu'un homonyme déjà dans la
+  corbeille soit écrasé plutôt que numéroté. Tourne sur un vrai dossier temporaire
+  (`fs.mkdtemp`), retiré dans un `finally`.
 - `npm run check:lesson` — la boucle d'apprentissage (rôles `pre`/`read`/`recall`/`test`,
   tranches, auto-évaluation). **Il doit aller jusqu'au bout** : ce script MEURT sur une
   exception au lieu d'échouer proprement, et une mort en cours de route masque en

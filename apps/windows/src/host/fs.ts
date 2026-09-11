@@ -186,7 +186,11 @@ export { horsCatalogue };
  * La garde sur `delete` évite d'annoncer la disparition d'un fichier que le
  * catalogue n'a jamais connu (un `.tmp` d'éditeur).
  */
-function versContrat(carte: CarteRacines, index: WindowsIndex, ev: EvenementDisque): HostFileEvent | null {
+function versContrat(
+	carte: CarteRacines,
+	index: WindowsIndex,
+	ev: Exclude<EvenementDisque, { kind: "renameDir" }>,
+): HostFileEvent | null {
 	const rel = carte.depuisAbsolu(ev.abs);
 	if (rel === null || horsCatalogue(rel)) return null;
 	if (ev.kind === "delete") return index.get(rel) ? { kind: "delete", path: rel } : null;
@@ -231,6 +235,10 @@ export async function createWindowsIndex(carte: CarteRacines): Promise<MiroirDis
 	const neo = pont();
 	const index = buildIndex([]);
 	const abonnes = new Set<(ev: HostFileEvent) => void>();
+	/* Les abonnés d'un renommage de DOSSIER — tâche 5, distincts des abonnés
+	   de fichiers : un `{ from, to }` n'est pas un `HostFileEvent`, et le
+	   MIROIR n'a rien à en faire lui-même (voir plus bas, POURQUOI). */
+	const abonnesRenameDir = new Set<(ev: { from: string; to: string }) => void>();
 
 	/* L'INDEX D'ABORD, les abonnés ensuite. L'ordre compte : un abonné qui
 	   interroge l'index pendant sa notification doit y voir le changement,
@@ -246,6 +254,33 @@ export async function createWindowsIndex(carte: CarteRacines): Promise<MiroirDis
 		}
 	};
 
+	/**
+	 * Traduit un renommage de DOSSIER (chemins ABSOLUS, appariés par le
+	 * principal — voir `pont.ts`, `EvenementDisque.renameDir`) en chemins du
+	 * CONTRAT, et prévient les abonnés `onRenameDir`. `depuisAbsolu` est la
+	 * SEULE conversion, comme partout ailleurs dans ce fichier.
+	 *
+	 * LE MIROIR (l'index de fichiers) N'EST PAS TOUCHÉ ICI, et c'est
+	 * délibéré : chaque fichier du dossier renommé reçoit de toute façon son
+	 * propre `unlink`/`add` du surveillant de fichiers (chokidar ne relie pas
+	 * plus les fichiers que les dossiers), donc l'index se recale déjà par la
+	 * voie ordinaire. Le SEUL consommateur de `onRenameDir` est le journal de
+	 * révision (`src/review/review-store.ts`), dont les clés se déplacent par
+	 * PRÉFIXE : lui seul a besoin de la paire `{ from, to }`.
+	 */
+	const diffuserRenameDir = (ev: { fromAbs: string; toAbs: string }): void => {
+		const from = carte.depuisAbsolu(ev.fromAbs);
+		const to = carte.depuisAbsolu(ev.toAbs);
+		if (from === null || to === null) return;
+		for (const cb of [...abonnesRenameDir]) {
+			try {
+				cb({ from, to });
+			} catch (e) {
+				console.warn(LOG_PREFIX, "surveillant: rappel de renommage en erreur:", e);
+			}
+		}
+	};
+
 	const racines = carte.toutes();
 	await neo.demarrer(racines.map(r => r.path));
 	/* Jamais désabonné : le miroir doit rester juste tant que la fenêtre vit,
@@ -253,6 +288,10 @@ export async function createWindowsIndex(carte: CarteRacines): Promise<MiroirDis
 	   modification afficherait un catalogue périmé. Le désabonnement rendu
 	   par `surveiller` ne servirait qu'à un rechargement, qui repart de zéro. */
 	await neo.surveiller(ev => {
+		if (ev.kind === "renameDir") {
+			diffuserRenameDir(ev);
+			return;
+		}
 		const traduit = versContrat(carte, index, ev);
 		if (traduit) diffuser(traduit);
 	});
@@ -283,31 +322,26 @@ export async function createWindowsIndex(carte: CarteRacines): Promise<MiroirDis
 			};
 		},
 		/**
-		 * NE RETIENT RIEN, ET C'EST DÉLIBÉRÉ : l'application ne sait pas encore
-		 * détecter un renommage de DOSSIER.
+		 * TÂCHE 5 : l'application sait désormais apparier un renommage de
+		 * DOSSIER — plus loin que le pont lui-même (chokidar remonte
+		 * `unlinkDir`/`addDir` séparément), mais AVANT d'atteindre ce fichier :
+		 * l'appariement (« même parent, fenêtre de temps, aucun autre
+		 * candidat », `HostWatcher.onRenameDir`, « il ne DEVINE pas ») est fait
+		 * côté PRINCIPAL, PUREMENT (`electron/catalogue.ts`,
+		 * `evenementDeRenommageDossier`), sur la fenêtre de débounce
+		 * d'`index-fichiers.ts`. Ce module ne fait plus que RELAYER une paire
+		 * déjà certaine — voir `diffuserRenameDir` ci-dessus, qui la traduit en
+		 * chemins du contrat avant de prévenir ces abonnés.
 		 *
-		 * Le pont n'émet pas de renommage — chokidar remonte `unlink` puis
-		 * `add`, sans les apparier — et le contrat tranche ce cas : « un hôte
-		 * qui ne sait pas distinguer un dossier renommé n'appelle jamais le
-		 * rappel ; il ne DEVINE pas » (`src/host/types.ts`, `HostWatcher`).
-		 * L'hôte Tauri, lui, l'appelait quand le système envoyait la paire
-		 * (`modify: { kind: "rename", mode: "both" }`) : c'est donc une
-		 * capacité PERDUE, pas un trou de naissance, et elle fait l'objet d'une
-		 * tâche à part du plan de migration.
-		 *
-		 * Mémoriser le rappel dans un ensemble que rien ne parcourt donnerait
-		 * l'impression qu'un câblage existe, et la prochaine lecture de ce
-		 * fichier chercherait pourquoi il ne se déclenche pas. Le
-		 * désabonnement rendu est donc inerte, comme le rappel.
-		 *
-		 * CE QUE ÇA COÛTE, en clair : renommer un dossier orpheline d'un coup
-		 * l'historique de révision de toutes ses notes (le journal déplace ses
-		 * clés par PRÉFIXE, d'où ce canal). L'appariement d'un renommage de
-		 * FICHIER, lui, tient toujours : il vit côté application, dans
-		 * `createRenameDetector` (`src/review/rename-match.ts`).
+		 * C'était une capacité PERDUE dans la migration Tauri → Electron
+		 * (l'hôte Tauri l'appelait sur `modify: { kind: "rename", mode: "both"
+		 * }`) : elle est refermée ici.
 		 */
-		onRenameDir() {
-			return () => {};
+		onRenameDir(cb) {
+			abonnesRenameDir.add(cb);
+			return () => {
+				abonnesRenameDir.delete(cb);
+			};
 		},
 	};
 }

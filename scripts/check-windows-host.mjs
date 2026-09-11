@@ -140,6 +140,52 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ buildIndex, horsCata
 	r.done();
 });
 
+/**
+ * L'APPARIEMENT D'UN RENOMMAGE DE DOSSIER — tâche 5. Chokidar remonte
+ * `unlinkDir`/`addDir` séparément ; `evenementDeRenommageDossier` (pure, dans
+ * `catalogue.ts`) décide si une paire est CERTAINE. Elle ne devine jamais :
+ * ces cas éprouvent chacune des trois gardes séparément, plus la réduction
+ * des sous-dossiers d'un même mouvement.
+ */
+await withSrcModule("apps/windows/electron/catalogue.ts", async ({ evenementDeRenommageDossier }) => {
+	const r = makeReporter("Hôte Windows — l'appariement d'un renommage de dossier");
+
+	r.check("un renommage simple émet une paire, dans les deux sens du contrat",
+		evenementDeRenommageDossier(["Quiz/Cours"], ["Quiz/Cours B2"]),
+		{ from: "Quiz/Cours", to: "Quiz/Cours B2" });
+
+	r.check("une suppression seule (aucun dossier créé) n'apparie rien",
+		evenementDeRenommageDossier(["Quiz/Cours"], []), null);
+
+	r.check("une création seule (aucun dossier supprimé) n'apparie rien",
+		evenementDeRenommageDossier([], ["Quiz/Cours B2"]), null);
+
+	r.check("deux renommages simultanés n'apparient rien",
+		evenementDeRenommageDossier(["Quiz/Cours", "Quiz/Autre"], ["Quiz/Cours B2", "Quiz/Autre B2"]),
+		null);
+
+	r.check("un renommage qui change de PARENT n'apparie rien (déplacement, pas renommage)",
+		evenementDeRenommageDossier(["Quiz/Cours"], ["Quiz/Ailleurs/Cours"]), null);
+
+	r.check("un renommage VERS un dossier ignoré n'apparie rien, comme pour un fichier",
+		evenementDeRenommageDossier(["Quiz/Cours"], ["Quiz/.trash"]), null);
+
+	r.check("un renommage DEPUIS un dossier ignoré n'apparie rien, comme pour un fichier",
+		evenementDeRenommageDossier(["Quiz/.trash"], ["Quiz/Cours"]), null);
+
+	/* Renommer « Cours » qui contient « Cours/TD » fait remonter, dans la même
+	   fenêtre, un `unlinkDir` pour LES DEUX chemins et un `addDir` pour leurs
+	   deux nouveaux noms : sans la réduction aux racines du mouvement, ce
+	   cas rougirait comme s'il y avait deux candidats de chaque bord. */
+	r.check("le sous-dossier d'un dossier renommé n'est pas un second candidat",
+		evenementDeRenommageDossier(
+			["Quiz/Cours", "Quiz/Cours/TD"],
+			["Quiz/Cours B2", "Quiz/Cours B2/TD"]),
+		{ from: "Quiz/Cours", to: "Quiz/Cours B2" });
+
+	r.done();
+});
+
 await withSrcModule("apps/windows/src/host/links.ts", async ({ resolveDansIndex }) => {
 	const r = makeReporter("Hôte Windows — liens");
 	/* L'ORDRE de cette liste est porteur : l'homonyme LOINTAIN est en tête.
@@ -953,6 +999,24 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsIndex }
 		   liste des quiz telle qu'elle était jusqu'au prochain montage. */
 		r.check("les abonnés reçoivent les trois genres, traduits en chemins du contrat",
 			vus, ["modify Quiz/Cours/ch1.md", "create Quiz/Cours/neuf.md", "delete Quiz/Cours/neuf.md"]);
+
+		/* TÂCHE 5 : un `renameDir` poussé par le principal (paire déjà
+		   appariée, chemins ABSOLUS) doit atteindre les abonnés `onRenameDir`,
+		   traduit en chemins du CONTRAT — et EUX SEULS : les abonnés `onChange`
+		   ne doivent rien en voir, ce n'est pas un `HostFileEvent`. */
+		const renommages = [];
+		const desabonnerRenameDir = miroir.onRenameDir(ev => renommages.push(ev));
+		pont.emettre({ kind: "renameDir", fromAbs: "D:/Quiz/Cours", toAbs: "D:/Quiz/Cours B2" });
+		r.check("un renameDir poussé atteint les abonnés, en chemins du CONTRAT",
+			renommages, [{ from: "Quiz/Cours", to: "Quiz/Cours B2" }]);
+		r.check("un renameDir ne fait rien au miroir de fichiers ni aux abonnés onChange",
+			vus.length, 3);
+
+		/* LE DÉSABONNEMENT REND ARRÊTE VRAIMENT L'ÉCOUTE. */
+		desabonnerRenameDir();
+		pont.emettre({ kind: "renameDir", fromAbs: "D:/Quiz/Autre", toAbs: "D:/Quiz/Autre B2" });
+		r.check("le désabonnement d'onRenameDir arrête vraiment l'écoute",
+			renommages.length, 1);
 
 		/* CE QUE LE MIROIR DOIT IGNORER. Un chemin hors des racines (le
 		   principal surveille ce qu'on lui donne, mais la garde est ici aussi),

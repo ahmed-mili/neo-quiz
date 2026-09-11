@@ -29,7 +29,7 @@
  *
  *     npm run check:electron-index
  */
-import { mkdir, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
@@ -224,6 +224,102 @@ await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerInd
 			await attendre(400);
 			r.check("surveiller rend une fonction qui arrête vraiment l'écoute", evs.length, 0);
 		});
+
+		/* ─── L'APPARIEMENT D'UN RENOMMAGE DE DOSSIER — tâche 5 ───
+
+		   `evenementDeRenommageDossier` (catalogue.ts) est éprouvée pure dans
+		   `check-windows-host.mjs` ; les cas ci-dessous éprouvent le CÂBLAGE
+		   réel : chokidar → `unlinkDir`/`addDir` → la fenêtre de débounce → la
+		   règle pure → `onEvenement({ kind: "renameDir", … })`. La fenêtre est
+		   fixe (voir `FENETRE_RENOMMAGE_DOSSIER_MS`, 300 ms) : chaque cas
+		   attend au moins ce délai après son dernier geste sur le disque avant
+		   de lire `evs`. */
+
+		await cas(r, "renommer un dossier émet UN renameDir avec ses deux chemins du contrat", async () => {
+			const racine = await racineNeuve();
+			await mkdir(join(racine, "Cours"), { recursive: true });
+			const index = creerIndex([racine]);
+			const evs = [];
+			const arreter = index.surveiller(ev => evs.push(ev), 50);
+			try {
+				await attendre(300); // parcours initial : "Cours" entre au catalogue
+				await rename(join(racine, "Cours"), join(racine, "Cours B2"));
+				await attendre(500);
+				const renames = evs.filter(e => e.kind === "renameDir");
+				r.check("renommer un dossier émet UN renameDir avec ses deux chemins du contrat",
+					renames, [{ kind: "renameDir", from: "0/Cours", to: "0/Cours B2" }]);
+			} finally {
+				arreter();
+			}
+		});
+
+		await cas(r, "supprimer un dossier seul (sans création) n'émet aucun renameDir", async () => {
+			const racine = await racineNeuve();
+			await mkdir(join(racine, "Vide"), { recursive: true });
+			const index = creerIndex([racine]);
+			const evs = [];
+			const arreter = index.surveiller(ev => evs.push(ev), 50);
+			try {
+				await attendre(300);
+				await rm(join(racine, "Vide"), { recursive: true });
+				await attendre(500);
+				r.check("supprimer un dossier seul (sans création) n'émet aucun renameDir",
+					evs.filter(e => e.kind === "renameDir").length, 0);
+			} finally {
+				arreter();
+			}
+		});
+
+		await cas(r, "deux renommages de dossier simultanés n'apparient rien", async () => {
+			const racine = await racineNeuve();
+			await mkdir(join(racine, "A"), { recursive: true });
+			await mkdir(join(racine, "B"), { recursive: true });
+			const index = creerIndex([racine]);
+			const evs = [];
+			const arreter = index.surveiller(ev => evs.push(ev), 50);
+			try {
+				await attendre(300);
+				await rename(join(racine, "A"), join(racine, "A2"));
+				await rename(join(racine, "B"), join(racine, "B2"));
+				await attendre(500);
+				r.check("deux renommages de dossier simultanés n'apparient rien",
+					evs.filter(e => e.kind === "renameDir").length, 0);
+			} finally {
+				arreter();
+			}
+		});
+
+		await cas(r, "un renommage vers un dossier ignoré (.trash) n'émet aucun renameDir", async () => {
+			const racine = await racineNeuve();
+			await mkdir(join(racine, "Cours"), { recursive: true });
+			const index = creerIndex([racine]);
+			const evs = [];
+			const arreter = index.surveiller(ev => evs.push(ev), 50);
+			try {
+				await attendre(300);
+				// Même PARENT des deux côtés : c'est bien la garde « dossier
+				// ignoré » qui doit refuser ce cas, pas la garde « même parent ».
+				await rename(join(racine, "Cours"), join(racine, ".trash"));
+				await attendre(500);
+				r.check("un renommage vers un dossier ignoré (.trash) n'émet aucun renameDir",
+					evs.filter(e => e.kind === "renameDir").length, 0);
+			} finally {
+				arreter();
+			}
+		});
+
+		/* PAS de cas d'intégration pour un dossier qui contient un sous-dossier :
+		   tenté, il rejette sur ce poste avec `EPERM: operation not permitted,
+		   rename` — Windows refuse de renommer un dossier PARENT tant qu'un
+		   descendant a une poignée ouverte, et chokidar en tient une sur chaque
+		   sous-dossier surveillé. Ce n'est pas un défaut de ce code : c'est une
+		   limite du disque réel que ce contrôle, qui en utilise un vrai, ne peut
+		   pas contourner. La réduction aux racines du mouvement
+		   (`racinesDuMouvement`) qui rendrait ce cas discriminant reste éprouvée
+		   PUREMENT dans `check-windows-host.mjs` (« le sous-dossier d'un dossier
+		   renommé n'est pas un second candidat »), sans jamais toucher le
+		   disque — voir le rapport de tâche pour ce doute.
+		 */
 	} finally {
 		// `finally` : le dossier temporaire doit disparaître même si un cas a
 		// jeté une erreur inattendue, pas seulement un échec d'assertion.

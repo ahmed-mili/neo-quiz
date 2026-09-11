@@ -25,8 +25,34 @@
 import { watch } from "chokidar";
 import * as path from "node:path";
 import type { HostFile, HostFileEvent } from "../../../src/host/types";
-import { horsCatalogue } from "./catalogue";
+import { dossierHorsCatalogue, evenementDeRenommageDossier, horsCatalogue } from "./catalogue";
 import { creerFichiers, stat } from "./fichiers";
+
+/**
+ * Ce qu'un renommage de DOSSIER, apparié, doit pousser vers le rendu — tâche
+ * 5. `from`/`to` sont des chemins du CONTRAT (l'indice de racine en tête,
+ * comme le reste de ce module) : c'est `canaux.ts` qui les retraduit en
+ * absolu avant de franchir le pont, exactement comme il le fait déjà pour
+ * `create`/`modify`/`delete`.
+ */
+export interface EvenementRenommageDossier {
+	kind: "renameDir";
+	from: string;
+	to: string;
+}
+
+/** Ce que `surveiller` peut pousser : un événement de FICHIER (`HostFileEvent`,
+    jamais `rename` — voir sa doc), ou un renommage de DOSSIER apparié. */
+export type EvenementSurveillant = HostFileEvent | EvenementRenommageDossier;
+
+/** La fenêtre d'appariement d'un renommage de dossier : le temps qu'on laisse
+    à un `addDir` pour rejoindre l'`unlinkDir` qui vient de le précéder (ou
+    l'inverse — l'ordre entre les deux n'est pas garanti). Fixe et distincte de
+    `delayMs` (la stabilisation des ÉCRITURES de fichier, `awaitWriteFinish`) :
+    les deux mesurent des choses différentes, et coupler la seconde à zéro
+    (comme le fait le cas « delayMs à 0 » du contrôle) ne doit pas désactiver
+    l'appariement des dossiers. */
+const FENETRE_RENOMMAGE_DOSSIER_MS = 300;
 
 /** L'index en mémoire, plus la surveillance qui le tient à jour. */
 export interface Index {
@@ -52,10 +78,15 @@ export interface Index {
 	 * `delayMs` est le délai de stabilité de chokidar (`awaitWriteFinish`) :
 	 * un éditeur écrit souvent une note en plusieurs passes rapprochées, et
 	 * sans délai chaque passe repeindrait sa propre notification. Rend une
-	 * fonction qui ARRÊTE VRAIMENT l'écoute (ferme le watcher chokidar) :
+	 * fonction qui ARRÊTE VRAIMENT l'écoute (ferme le watcher chokidar, et
+	 * annule la minuterie d'appariement des dossiers avec lui — tâche 5) :
 	 * sinon chaque remontage de fenêtre fuit un observateur.
+	 *
+	 * `onEvenement` peut aussi recevoir un renommage de DOSSIER apparié — voir
+	 * `EvenementRenommageDossier` : il est PORTÉ, jamais deviné (tâche 5,
+	 * `evenementDeRenommageDossier`).
 	 */
-	surveiller(onEvenement: (ev: HostFileEvent) => void, delayMs?: number): () => void;
+	surveiller(onEvenement: (ev: EvenementSurveillant) => void, delayMs?: number): () => void;
 }
 
 /** Sépare avec des `/` et retire le séparateur final — même règle que l'hôte
@@ -235,10 +266,58 @@ export function creerIndex(racines: string[]): Index {
 			watcher.on("change", p => surFichier("modify", p));
 			watcher.on("unlink", surSuppression);
 
+			/* ─── l'appariement d'un renommage de DOSSIER — tâche 5 ───
+
+			   Chokidar remonte `unlinkDir` et `addDir` séparément, sans jamais
+			   les lier. On les ACCUMULE dans une fenêtre fixe
+			   (`FENETRE_RENOMMAGE_DOSSIER_MS`, distincte de `delayMs` — voir sa
+			   doc), puis on demande à `evenementDeRenommageDossier` (PURE, dans
+			   `catalogue.ts`) si la paire est CERTAINE. Rien n'est deviné ici :
+			   toute la décision vit dans cette fonction, ce module ne fait que
+			   lui fournir sa fenêtre. */
+			let dossiersSupprimes: string[] = [];
+			let dossiersCrees: string[] = [];
+			let minuterieDossier: ReturnType<typeof setTimeout> | null = null;
+
+			function planifierAppariement(): void {
+				if (minuterieDossier) clearTimeout(minuterieDossier);
+				minuterieDossier = setTimeout(() => {
+					minuterieDossier = null;
+					const supprimes = dossiersSupprimes;
+					const crees = dossiersCrees;
+					dossiersSupprimes = [];
+					dossiersCrees = [];
+					const paire = evenementDeRenommageDossier(supprimes, crees);
+					if (paire) onEvenement({ kind: "renameDir", from: paire.from, to: paire.to });
+				}, FENETRE_RENOMMAGE_DOSSIER_MS);
+			}
+
+			watcher.on("unlinkDir", absolu => {
+				const chemin = contratDepuisAbsolu(racinesAbs, absolu);
+				// FILTRÉ ICI, pas seulement dans la règle pure : un vault porte des
+				// centaines de sous-dossiers `.git`/`node_modules` que le parcours
+				// initial de chokidar (`ignoreInitial: false`) traverse aussi pour
+				// les DOSSIERS (rien ne les en exclut, à la différence des fichiers
+				// qui passent par `horsCatalogue` avant d'atteindre `onEvenement`) ;
+				// les laisser entrer dans la fenêtre ajouterait des candidats
+				// fantômes qui feraient échouer l'appariement d'un renommage
+				// pourtant univoque ailleurs dans le vault.
+				if (chemin === null || dossierHorsCatalogue(chemin)) return;
+				dossiersSupprimes.push(chemin);
+				planifierAppariement();
+			});
+			watcher.on("addDir", absolu => {
+				const chemin = contratDepuisAbsolu(racinesAbs, absolu);
+				if (chemin === null || dossierHorsCatalogue(chemin)) return;
+				dossiersCrees.push(chemin);
+				planifierAppariement();
+			});
+
 			let arretee = false;
 			return () => {
 				if (arretee) return;
 				arretee = true;
+				if (minuterieDossier) clearTimeout(minuterieDossier);
 				void watcher.close();
 			};
 		},

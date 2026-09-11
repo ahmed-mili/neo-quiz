@@ -66,20 +66,30 @@ export interface EntreeDisque {
  *
  * Ce n'est PAS `HostFileEvent` (`src/host/types.ts`), et c'est volontaire :
  * `HostFile.path` est un chemin du CONTRAT, que le processus principal n'a pas
- * le droit de composer (voir l'en-tête). Le rendu traduit ces trois genres en
- * `HostFileEvent` avec `CarteRacines.depuisAbsolu`, comme il le fait déjà
- * aujourd'hui dans `reconcilier`.
+ * le droit de composer (voir l'en-tête). Le rendu traduit les trois premiers
+ * genres en `HostFileEvent` avec `CarteRacines.depuisAbsolu`, comme il le fait
+ * déjà aujourd'hui dans `reconcilier`.
  *
- * PAS de `rename` : l'index du processus principal n'en émet pas (chokidar
- * remonte `add`/`change`/`unlink`, jamais une paire appariée). L'appariement
- * d'un renommage vit côté rendu, dans `createRenameDetector`
- * (`src/review/rename-match.ts`), déjà branché côté application — l'inventer
- * ici en ferait une seconde règle d'appariement.
+ * PAS de `rename` de FICHIER : l'index du processus principal n'en émet pas
+ * (chokidar remonte `add`/`change`/`unlink`, jamais une paire appariée).
+ * L'appariement d'un renommage de FICHIER vit côté rendu, dans
+ * `createRenameDetector` (`src/review/rename-match.ts`), déjà branché côté
+ * application — l'inventer ici en ferait une seconde règle d'appariement.
+ *
+ * `renameDir` EST présent, et c'est tâche 5 : un renommage de DOSSIER,
+ * contrairement à un fichier, ne peut PAS se réconcilier après coup par un
+ * `create`+`delete` — c'est le PRÉFIXE que le journal de révision doit
+ * déplacer, et lui seul dit ce préfixe. L'appariement `unlinkDir`/`addDir` est
+ * donc fait ICI, côté principal (`electron/catalogue.ts`,
+ * `evenementDeRenommageDossier`, PURE, plus la fenêtre de débounce
+ * d'`index-fichiers.ts`) — pas une seconde règle, la SEULE : il n'y a pas
+ * d'équivalent rendu pour les dossiers, à la différence des fichiers.
  */
 export type EvenementDisque =
 	| { kind: "create"; abs: string; mtime: number }
 	| { kind: "modify"; abs: string; mtime: number }
-	| { kind: "delete"; abs: string };
+	| { kind: "delete"; abs: string }
+	| { kind: "renameDir"; fromAbs: string; toAbs: string };
 
 /**
  * Ce que la fenêtre peut demander au processus principal.

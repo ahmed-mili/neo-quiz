@@ -23,10 +23,9 @@
 import { dialog, ipcMain, shell } from "electron";
 import * as path from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
-import type { HostFileEvent } from "../../../src/host/types";
 import { creerFichiers, stat } from "./fichiers";
 import { absoluDepuisContrat, contratDepuisAbsolu, creerIndex } from "./index-fichiers";
-import type { Index } from "./index-fichiers";
+import type { EvenementSurveillant, Index } from "./index-fichiers";
 import { listerRacine, normaliser } from "./parcours";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
@@ -68,13 +67,24 @@ const fichiers = creerFichiers();
  * endroit qui les recomposerait ferait diverger deux historiques sans que
  * personne ne le voie. Le rendu, qui tient `CarteRacines`, est ce seul endroit.
  *
- * `rename` ne peut pas arriver (l'index n'émet que `create`/`modify`/`delete`
- * depuis chokidar) — le `null` est là pour que le jour où il en émettrait un,
- * ce soit un silence visible à la lecture plutôt qu'un `abs` indéfini poussé
- * dans la fenêtre.
+ * `rename` (de FICHIER) ne peut pas arriver (l'index n'émet que
+ * `create`/`modify`/`delete` depuis chokidar) — le `null` est là pour que le
+ * jour où il en émettrait un, ce soit un silence visible à la lecture plutôt
+ * qu'un `abs` indéfini poussé dans la fenêtre.
+ *
+ * `renameDir` (tâche 5), lui, ARRIVE bel et bien — l'index l'émet une fois la
+ * paire `unlinkDir`/`addDir` appariée (voir `EvenementRenommageDossier`,
+ * `index-fichiers.ts`) — et il porte DEUX chemins du contrat à retraduire,
+ * chacun par la même `absoluDepuisContrat` que le reste de ce module.
  */
-function versDisque(racinesAbs: string[], ev: HostFileEvent): EvenementDisque | null {
+function versDisque(racinesAbs: string[], ev: EvenementSurveillant): EvenementDisque | null {
 	if (ev.kind === "rename") return null;
+	if (ev.kind === "renameDir") {
+		const fromAbs = absoluDepuisContrat(racinesAbs, ev.from);
+		const toAbs = absoluDepuisContrat(racinesAbs, ev.to);
+		if (!fromAbs || !toAbs) return null;
+		return { kind: "renameDir", fromAbs: normaliser(fromAbs), toAbs: normaliser(toAbs) };
+	}
 	const contrat = ev.kind === "delete" ? ev.path : ev.file.path;
 	const absolu = absoluDepuisContrat(racinesAbs, contrat);
 	if (!absolu) return null;

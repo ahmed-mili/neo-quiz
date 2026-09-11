@@ -1,7 +1,5 @@
-import { Platform } from "obsidian";
-import type { ChildProcess } from "child_process";
-import type { Plugin } from "obsidian";
-import type { AiSettings } from "../types/dashboard-ctx";
+import JSON5 from "json5";
+import { currentHost } from "../host/current";
 import {
 	resolveClaudeModel,
 	resolveCodexModel,
@@ -11,21 +9,24 @@ import {
 	isOllamaCloudModel,
 	refreshCliCaches,
 } from "./ai-providers";
-/* TEMPORAIRE, et la tâche 4 le supprime : `buildChildEnv` a suivi le reste du
-   code Node vers l'hôte Obsidian (tâche 3), parce que `require` n'existe pas
-   dans le rendu de l'application. Ce module, lui, lance encore ses CLI
-   lui-même — il est le DERNIER, et il figure toujours dans `RESTANTS`
-   (`scripts/check-host.mjs`) comme dans `EXCEPTIONS_APPS`. La tâche 4 le fait
-   passer par `host.process.run` : cet import disparaît alors, et l'exception
-   avec lui. */
-import { buildChildEnv } from "../../apps/obsidian/host";
+import type { AiSettingsHost } from "./ai-settings-host";
 import type { AiUsage } from "./ai-usage";
 import { t } from "../i18n";
 
 /* ══════════════════════════════════════════════════════════
    AI CLIENT — Claude Code + Codex + Ollama
-   Claude/Codex: via le CLI de l'abonnement (aucune clé API), prompt par stdin.
-   Ollama: fetch() pour lire les corps d'erreur. Multimodal pour images.
+
+   TOUT passe par le contrat d'hôte depuis la tranche 5, tâche 4 :
+   — Claude et Codex par `host.process.run`. Ce module ne garde que la
+     CONSTRUCTION des arguments et le PARSING de la sortie ; le `spawn`, le
+     `stdin` écrit puis fermé, les deux flux lus séparément, le `taskkill` de
+     l'arbre à l'annulation et le dossier temporaire des images vivent dans
+     l'hôte. Les pièces jointes ne sont plus des CHEMINS mais des jetons
+     (`{{fichier:1}}`, `{{sortie}}`, `{{home}}`) que l'hôte remplace : le rendu
+     de l'application n'a pas de disque, et n'apprend donc aucun chemin.
+   — Ollama par `host.net.fetchJson`, qui rend le CORPS d'un statut d'erreur
+     (c'est là qu'Ollama met son diagnostic, et c'est pourquoi ce module
+     employait `fetch` plutôt que `requestUrl`).
 ══════════════════════════════════════════════════════════ */
 
 /* Délai avant abandon d'un CLI. 3 min ne suffisaient pas : un modèle à
@@ -38,8 +39,10 @@ import { t } from "../i18n";
 const CLI_TIMEOUT_MS = 900000;
 const CLI_TIMEOUT_MIN = String(Math.round(CLI_TIMEOUT_MS / 60000));
 
-/** Hôte plugin attendu par createAiClient (seul `settings` est lu). */
-export type AiPlugin = Plugin & { settings: AiSettings };
+/** Le NOM du fichier que Codex écrit avec `-o`, relu par l'hôte et rendu dans
+    `sortie`. Le chemin absolu, lui, ne quitte jamais l'hôte : les arguments
+    l'écrivent `{{sortie}}`. */
+const CODEX_FICHIER_SORTIE = "last-message.txt";
 
 /** Image jointe à la génération (vision). */
 export interface ImagePayload {
@@ -64,13 +67,71 @@ export interface AiClient {
 	lastUsage: AiUsage | null;
 }
 
-/** Erreur d'exécution CLI enrichie (child_process.exec). */
+/** Erreur d'exécution CLI, à la forme que `child_process.exec` produisait.
+    Elle SURVIT au passage par `host.process.run` (qui, lui, rejette avec un
+    `name` nommé ou rend un code de sortie non nul) parce que toute la
+    cartographie des messages plus bas est écrite dessus : la ramener à cette
+    forme, c'est garder cette cartographie au mot près. */
 type ExecError = Error & {
 	code?: string | number;
 	stderr?: string;
 	stdout?: string;
 	killed?: boolean;
 };
+
+/** Ce que `run` rend quand il ne rejette pas. */
+interface SortieCli {
+	stdout: string;
+	stderr: string;
+	code: number | null;
+	sortie?: string;
+}
+
+/**
+ * Un rejet NOMMÉ de `host.process.run`, ramené à l'`ExecError` d'avant.
+ *
+ * `introuvable` était un `ENOENT` de `cp.exec` ; `timeout` était un `killed`
+ * (c'est `cp.exec` qui tuait après son `timeout`). Les deux branches de test
+ * qui suivent, dans chaque `callX`, sont donc inchangées — et `refuse` ou un
+ * `name` inconnu retombent sur le message générique, comme n'importe quelle
+ * autre panne de lancement.
+ */
+function execErrorDepuisRejet(err: unknown): ExecError {
+	const source = err as Error;
+	const e = new Error(source?.message || String(err)) as ExecError;
+	e.stdout = "";
+	e.stderr = "";
+	if (source?.name === "introuvable") e.code = "ENOENT";
+	else if (source?.name === "timeout") e.killed = true;
+	return e;
+}
+
+/**
+ * Un CODE DE SORTIE NON NUL, ramené à la même forme.
+ *
+ * `cp.exec` appelait son callback avec une erreur dès que le code n'était pas
+ * 0 ; `run` RÉSOUT et rend le code. Sans cette traduction, un CLI qui échoue
+ * (non connecté, quota dépassé — il écrit son diagnostic sur `stderr` et sort
+ * en 1) passerait pour une génération réussie à la sortie vide, et
+ * l'utilisateur lirait « réponse illisible » au lieu de « compte non
+ * connecté ».
+ */
+function execErrorDepuisCode(res: SortieCli): ExecError {
+	const e = new Error("exit code " + String(res.code)) as ExecError;
+	e.code = res.code === null ? undefined : res.code;
+	e.stdout = res.stdout;
+	e.stderr = res.stderr;
+	return e;
+}
+
+/** `indisponible` = l'hôte ne sait pas lancer de CLI (l'application jusqu'à la
+    tâche 7). Ce n'est ni une panne ni une absence d'installation : le dire
+    autrement enverrait l'utilisateur réinstaller un CLI qu'il a déjà. */
+function erreurIndisponible(err: unknown): UserFacingError | null {
+	return (err as Error)?.name === "indisponible"
+		? userError(t("ai.error.providerUnavailable"))
+		: null;
+}
 
 /** Erreur DÉJÀ formulée pour l'utilisateur (message traduit, affiché tel quel
     par l'écran d'erreur de la vue « Générer »). */
@@ -87,7 +148,29 @@ function userError(message: string): UserFacingError {
 	return e;
 }
 
-export function createAiClient(plugin: AiPlugin): AiClient {
+/**
+ * Une promesse RÉSEAU, qui rend la main dès l'abandon.
+ *
+ * `HostNet` n'annule pas sous Obsidian, et le contrat le dit en toutes lettres :
+ * `requestUrl` n'accepte pas de `signal`. Sans cette course, un clic sur Stop
+ * pendant une génération Ollama laisserait la page « Générer » figée jusqu'à ce
+ * que le modèle ait fini — ce que le `fetch` d'avant n'imposait pas. La requête,
+ * elle, continue en arrière-plan : son résultat est simplement jeté, et
+ * `generate()` a déjà traduit l'abandon en retour à l'état initial.
+ */
+function courseAbandon<T>(promesse: Promise<T>, signal: AbortSignal): Promise<T> {
+	if (signal.aborted) return Promise.reject(new Error("abandon"));
+	return new Promise<T>((resolve, reject) => {
+		const surAbandon = (): void => reject(new Error("abandon"));
+		signal.addEventListener("abort", surAbandon, { once: true });
+		promesse.then(
+			v => { signal.removeEventListener("abort", surAbandon); resolve(v); },
+			e => { signal.removeEventListener("abort", surAbandon); reject(e as Error); },
+		);
+	});
+}
+
+export function createAiClient(settings: AiSettingsHost): AiClient {
 	// ── Annulation (bouton stop / Esc) ──
 	// Chaque appel CLI/HTTP enregistre sa fonction d'arrêt ici ; abort()
 	// l'invoque. L'erreur qui en résulte (process tué, fetch avorté) est
@@ -115,16 +198,39 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	   narrowerait la variable à `never` sur la foi du `= null` initial. */
 	const takePendingUsage = (): Partial<AiUsage> | null => pendingUsage;
 
-	function killTree(child: ChildProcess): void {
-		// Windows : taskkill /T /F sur le PID précis tue tout l'arbre
-		// (codex/claude spawnent des enfants) ; ailleurs SIGTERM suffit.
-		try {
-			if (process.platform === "win32") {
-				(require("child_process") as typeof import("child_process")).exec("taskkill /pid " + child.pid + " /T /F", { windowsHide: true });
-			} else {
-				child.kill("SIGTERM");
-			}
-		} catch (e) { /* best effort */ }
+	/**
+	 * Un appel de CLI, annulable. Le `signal` part à l'hôte, qui tue l'ARBRE de
+	 * process (`claude` et `codex` en spawnent) — c'est l'ancien `killTree` de ce
+	 * module, déménagé là où vit `child_process`.
+	 */
+	function runCli(spec: {
+		tool: "claude" | "codex";
+		args: string[];
+		stdin: string;
+		fichiers?: Array<{ nom: string; base64: string }>;
+		sortieFichier?: string;
+	}): Promise<SortieCli> {
+		const ac = new AbortController();
+		abortCurrent = () => { aborted = true; try { ac.abort(); } catch (e) { /* déjà avorté */ } };
+		return currentHost().process.run({
+			tool: spec.tool,
+			args: spec.args,
+			stdin: spec.stdin,
+			signal: ac.signal,
+			timeoutMs: CLI_TIMEOUT_MS,
+			fichiers: spec.fichiers,
+			sortieFichier: spec.sortieFichier,
+		});
+	}
+
+	/** Les images de la génération, en pièces jointes de l'appel : l'hôte les
+	    écrit et remplace `{{fichier:N}}` par leur chemin. L'extension suit le
+	    type MIME — le CLI la lit pour décider comment décoder l'image. */
+	function piecesJointes(images: ImagePayload[]): Array<{ nom: string; base64: string }> {
+		return images.map((img, i) => {
+			const ext = ((img.mediaType || "image/png").split("/")[1] || "png").replace("jpeg", "jpg");
+			return { nom: "image-" + (i + 1) + "." + ext, base64: img.base64 };
+		});
 	}
 
 	async function generate(prompt: string, options: GenerateOptions = {}): Promise<unknown[]> {
@@ -144,8 +250,8 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 			const u = takePendingUsage();
 			if (u) {
 				lastUsage = {
-					provider: u.provider || plugin.settings.aiProvider || "",
-					model: u.model || plugin.settings.aiModel || "",
+					provider: u.provider || settings.get().aiProvider || "",
+					model: u.model || settings.get().aiModel || "",
 					inputTokens: u.inputTokens || 0,
 					outputTokens: u.outputTokens || 0,
 					cachedInputTokens: u.cachedInputTokens || 0,
@@ -170,11 +276,11 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	async function generateInner(prompt: string, options: GenerateOptions = {}): Promise<unknown[]> {
 		const { count = 5, type = "Mixte", source = "topic", images = [] } = options;
 		lastRequestText = prompt;
-		const provider = plugin.settings.aiProvider || "claude-code";
+		const provider = settings.get().aiProvider || "claude-code";
 		// Le défaut vient du registry, JAMAIS d'une copie locale : une seconde
 		// table avait divergé (« sonnet » ici, « opus » dans PROVIDERS), donc le
 		// composer annonçait un modèle et la génération en lançait un autre.
-		let model = plugin.settings.aiModel || getProvider(provider).defaultModel;
+		let model = settings.get().aiModel || getProvider(provider).defaultModel;
 		// Fable 5 masqué si la promo n'est plus proposée → retombe sur le défaut Claude
 		if (provider === "claude-code") {
 			model = resolveClaudeModel(model);
@@ -255,21 +361,21 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 			// Un seul endpoint local : sert les modèles locaux ET cloud (:cloud).
 			// Clé optionnelle (le daemon connecté via `ollama signin` n'en a pas
 			// besoin) ; envoyée en Authorization si l'utilisateur en a défini une.
-			const ollamaUrl = (plugin.settings.aiOllamaUrl || "http://localhost:11434").replace(/\/+$/, "");
-			const key = (plugin.settings.aiOllamaCloudKey || "").trim();
+			const ollamaUrl = (settings.get().aiOllamaUrl || "http://localhost:11434").replace(/\/+$/, "");
+			const key = (settings.get().aiOllamaCloudKey || "").trim();
 			const authHeader: Record<string, string> = key ? { "Authorization": "Bearer " + key } : {};
 			// Effort réel : niveau `think` (low/medium/high/max) passé à l'API
 			// pour les modèles à raisonnement (ignoré sinon, cf. callOllama).
-			const effort = resolveEffort("ollama", plugin.settings.aiEffort);
+			const effort = resolveEffort("ollama", settings.get().aiEffort);
 			return callOllama(model, systemPrompt, userPrompt, ollamaUrl, authHeader, images, effort);
 		} else if (provider === "codex") {
 			// Effort clampé aux niveaux supportés par CE modèle (ex. ultra
 			// persisté + gpt-5.5 → xhigh), sinon le CLI rejetterait la valeur.
-			const effort = resolveEffort("codex", plugin.settings.aiEffort, model);
+			const effort = resolveEffort("codex", settings.get().aiEffort, model);
 			// Mode Fast (éclair du popover effort) : service tier « priority »,
 			// seulement si CE modèle l'expose (cf. models_cache service_tiers).
 			const m = getCodexModels().find(x => x.value === model);
-			const fast = !!plugin.settings.aiCodexFast && !!(m && m.fast);
+			const fast = !!settings.get().aiCodexFast && !!(m && m.fast);
 			return callCodex(model, systemPrompt, userPrompt, images, effort, fast);
 		} else {
 			return callClaudeCode(model, systemPrompt, userPrompt, images);
@@ -281,91 +387,74 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	   compte Pro/Max/Team/Enterprise. Prompt complet par stdin
 	   (aucun échappement d'argument), sortie --output-format json. */
 	async function callClaudeCode(model: string, systemPrompt: string, userPrompt: string, images: ImagePayload[] = []): Promise<unknown[]> {
-		if (!Platform.isDesktopApp) {
+		if (!currentHost().platform.isDesktopApp) {
 			throw new Error(t("ai.hint.claudeDesktopOnly"));
 		}
 		if (!/^[a-zA-Z0-9._:-]+$/.test(model)) {
 			throw new Error(t("ai.err.invalidModelClaude", { model }));
 		}
 
-		const cp = require("child_process") as typeof import("child_process");
-		const os = require("os") as typeof import("os");
-		const path = require("path") as typeof import("path");
-		const fs = require("fs") as typeof import("fs");
-
-		// Images : écrites en fichiers temporaires que Claude lit
-		// avec le tool Read (multimodal, read-only)
-		let tools = '""';
-		let imageNote = "";
-		let tmpDir: string | null = null;
-		if (images.length > 0) {
-			tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "quiz-blocks-"));
-			const paths = images.map((img, i) => {
-				const ext = ((img.mediaType || "image/png").split("/")[1] || "png").replace("jpeg", "jpg");
-				const p = path.join(tmpDir as string, "image-" + (i + 1) + "." + ext);
-				fs.writeFileSync(p, Buffer.from(img.base64, "base64"));
-				return p;
-			});
-			tools = '"Read"';
-			// Instruction au MODÈLE (pas de l'UI) → anglais, comme le prompt
-			// système ; la langue du quiz reste celle de la demande.
-			imageNote = "\n\nFirst read these images with the Read tool, then base the quiz on their content:\n" +
-				paths.map(p => "- " + p).join("\n");
-		}
+		/* Images : l'HÔTE les écrit en fichiers temporaires (et les efface), et
+		   remplace `{{fichier:N}}` par leur chemin absolu — ici dans le PROMPT,
+		   que Claude lit ensuite avec le tool Read (multimodal, read-only).
+		   `--tools` reçoit la liste des outils autorisés, et une chaîne VIDE
+		   quand il n'y a pas d'image : c'est un argument réellement vide, pas
+		   les deux caractères `""` — sous `cp.exec`, le shell retirait les
+		   guillemets de `--tools ""`, et le CLI refuse la paire littérale
+		   (mesuré : « Invalid setting source: "" »). */
+		const fichiers = piecesJointes(images);
+		const tools = fichiers.length > 0 ? "Read" : "";
+		// Instruction au MODÈLE (pas de l'UI) → anglais, comme le prompt
+		// système ; la langue du quiz reste celle de la demande.
+		const imageNote = fichiers.length > 0
+			? "\n\nFirst read these images with the Read tool, then base the quiz on their content:\n" +
+				fichiers.map((_, i) => "- {{fichier:" + (i + 1) + "}}").join("\n")
+			: "";
 
 		const fullPrompt = systemPrompt + "\n\n" + userPrompt + imageNote;
-		const cmd = "claude -p --output-format json --model " + model +
-			" --tools " + tools + " --no-session-persistence --setting-sources \"\"";
 
-		let stdout: string;
-		try {
-			stdout = await new Promise<string>((resolve, reject) => {
-				const child = cp.exec(cmd, {
-					cwd: os.homedir(),
-					env: buildChildEnv(),
-					timeout: CLI_TIMEOUT_MS,
-					maxBuffer: 16 * 1024 * 1024,
-					windowsHide: true
-				}, (err, out, stderr) => {
-					if (err) {
-						const e = err as ExecError;
-						e.stderr = stderr;
-						e.stdout = out;
-						reject(e);
-					} else {
-						resolve(out);
-					}
-				});
-				abortCurrent = () => { aborted = true; killTree(child); };
-				child.stdin!.write(fullPrompt);
-				child.stdin!.end();
-			});
-		} catch (err) {
-			/* Une ANNULATION n'est pas une erreur. `killTree` fait sortir le
-			   processus en echec — souvent avec `killed`, que la branche
-			   ci-dessous prendrait pour un depassement de delai — et le journal
-			   se remplissait d'erreurs a chaque clic sur Stop. `generate()`
-			   traduit ensuite ce rejet en erreur `aborted`, que l'UI traite
-			   comme un retour a l'etat initial. */
-			if (aborted) throw err;
-			const e = err as ExecError;
+		/** La cartographie des messages, INCHANGÉE — chaque clé était déjà là.
+		    Elle est sortie du `catch` parce qu'un échec arrive désormais par DEUX
+		    chemins : un rejet nommé de `run`, et un code de sortie non nul que
+		    `run` RÉSOUT au lieu de rejeter. Les deux sont ramenés à l'`ExecError`
+		    qu'elle a toujours lue. */
+		const erreurClaude = (e: ExecError): Error => {
 			console.error("[quiz-blocks] Claude Code error:", e.message, e.stderr || "");
 			const detail = ((e.stderr || "") + " " + (e.stdout || "") + " " + e.message).toLowerCase();
 			if (e.code === "ENOENT" || e.code === 127 || detail.includes("not recognized") || detail.includes("introuvable") || detail.includes("command not found")) {
-				throw new Error(t("ai.err.claudeNotInstalled"));
+				return new Error(t("ai.err.claudeNotInstalled"));
 			}
 			if (e.killed || detail.includes("etimedout")) {
-				throw new Error(t("ai.err.claudeTimeout", { minutes: CLI_TIMEOUT_MIN }));
+				return new Error(t("ai.err.claudeTimeout", { minutes: CLI_TIMEOUT_MIN }));
 			}
 			if (detail.includes("login") || detail.includes("api key") || detail.includes("authentication") || detail.includes("credential")) {
-				throw new Error(t("ai.err.claudeNotLoggedIn"));
+				return new Error(t("ai.err.claudeNotLoggedIn"));
 			}
-			throw new Error(t("ai.err.claudeCode", { detail: (e.stderr || e.message).trim().slice(0, 300) }));
-		} finally {
-			if (tmpDir) {
-				try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* best effort */ }
-			}
+			return new Error(t("ai.err.claudeCode", { detail: (e.stderr || e.message).trim().slice(0, 300) }));
+		};
+
+		let res: SortieCli;
+		try {
+			res = await runCli({
+				tool: "claude",
+				args: [
+					"-p", "--output-format", "json", "--model", model,
+					"--tools", tools, "--no-session-persistence", "--setting-sources", "",
+				],
+				stdin: fullPrompt,
+				fichiers,
+			});
+		} catch (err) {
+			/* Une ANNULATION n'est pas une erreur. L'hôte tue l'arbre de process
+			   et rejette `annule` — ce que la branche « killed » prendrait pour un
+			   depassement de delai — et le journal se remplissait d'erreurs a
+			   chaque clic sur Stop. `generate()` traduit ensuite ce rejet en
+			   erreur `aborted`, que l'UI traite comme un retour a l'etat initial. */
+			if (aborted) throw err;
+			throw erreurIndisponible(err) || erreurClaude(execErrorDepuisRejet(err));
 		}
+		if (res.code !== 0) throw erreurClaude(execErrorDepuisCode(res));
+		const stdout = res.stdout;
 
 		/* `--output-format json` publie l'usage RÉEL de l'appel : tokens (dont
 		   ceux servis par le cache) et coût en dollars — Claude Code est le seul
@@ -432,7 +521,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 	   écrite dans un fichier (-o) pour un parsing propre. Sandbox read-only et
 	   --ignore-user-config isolent la génération (pas de MCP/hooks perso). */
 	async function callCodex(model: string, systemPrompt: string, userPrompt: string, images: ImagePayload[] = [], effort = "medium", fast = false): Promise<unknown[]> {
-		if (!Platform.isDesktopApp) {
+		if (!currentHost().platform.isDesktopApp) {
 			// Même libellé que le hint du composer (« Codex CLI » explicite).
 			throw new Error(t("ai.hint.codexDesktopOnly"));
 		}
@@ -441,95 +530,68 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		}
 		const effortVal = /^[a-z]+$/.test(effort) ? effort : "medium";
 
-		const cp = require("child_process") as typeof import("child_process");
-		const os = require("os") as typeof import("os");
-		const path = require("path") as typeof import("path");
-		const fs = require("fs") as typeof import("fs");
-
-		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "quiz-blocks-codex-"));
-		const outFile = path.join(tmpDir, "last-message.txt");
-
-		// Images : fichiers temporaires attachés au prompt initial via -i
-		let imageArgs = "";
-		if (images.length > 0) {
-			const paths = images.map((img, i) => {
-				const ext = ((img.mediaType || "image/png").split("/")[1] || "png").replace("jpeg", "jpg");
-				const p = path.join(tmpDir, "image-" + (i + 1) + "." + ext);
-				fs.writeFileSync(p, Buffer.from(img.base64, "base64"));
-				return p;
-			});
-			imageArgs = paths.map(p => ' -i "' + p + '"').join("");
-		}
-
+		// Images : l'HÔTE les écrit dans son dossier temporaire et remplace
+		// `{{fichier:N}}` par leur chemin ; elles sont attachées au prompt
+		// initial par `-i`.
+		const fichiers = piecesJointes(images);
 		const fullPrompt = systemPrompt + "\n\n" + userPrompt;
-		// `--json` : stdout devient un flux d'events JSONL, seul endroit où le CLI
-		// publie les tokens consommés (`turn.completed.usage`) et l'identifiant de
-		// thread qui mène à ses quotas. La réponse finale, elle, continue d'être
-		// lue dans le fichier -o.
-		const cmd = "codex exec --json -m " + model +
-			" -c model_reasoning_effort=" + effortVal +
+		/* `--json` : stdout devient un flux d'events JSONL, seul endroit où le CLI
+		   publie les tokens consommés (`turn.completed.usage`) et l'identifiant de
+		   thread qui mène à ses quotas. La réponse finale, elle, continue d'être
+		   lue dans le fichier `-o` — que l'hôte relit et rend dans `sortie`.
+		   `{{home}}` et `{{sortie}}` sont des jetons : le dossier personnel et le
+		   chemin du fichier de sortie sont du savoir d'HÔTE, et le rendu de
+		   l'application n'a ni l'un ni l'autre. */
+		const args = [
+			"exec", "--json", "-m", model,
+			"-c", "model_reasoning_effort=" + effortVal,
 			// Fast (1.5x speed, more usage) : service tier « priority » — la
 			// valeur vient de models_cache.json (service_tiers[].id).
-			(fast ? " -c service_tier=priority" : "") +
-			" -s read-only --skip-git-repo-check --ignore-user-config" +
-			" -C \"" + os.homedir() + "\"" +
-			" -o \"" + outFile + "\"" + imageArgs;
+			...(fast ? ["-c", "service_tier=priority"] : []),
+			"-s", "read-only", "--skip-git-repo-check", "--ignore-user-config",
+			"-C", "{{home}}",
+			"-o", "{{sortie}}",
+			...fichiers.flatMap((f, i) => ["-i", "{{fichier:" + (i + 1) + "}}"]),
+		];
 
-		let raw: string;
-		try {
-			const stdout = await new Promise<string>((resolve, reject) => {
-				const child = cp.exec(cmd, {
-					cwd: os.homedir(),
-					env: buildChildEnv(),
-					timeout: CLI_TIMEOUT_MS,
-					maxBuffer: 16 * 1024 * 1024,
-					windowsHide: true
-				}, (err, out, stderr) => {
-					if (err) {
-						const e = err as ExecError;
-						e.stderr = stderr;
-						e.stdout = out;
-						reject(e);
-					} else {
-						resolve(out);
-					}
-				});
-				abortCurrent = () => { aborted = true; killTree(child); };
-				child.stdin!.write(fullPrompt);
-				child.stdin!.end();
-			});
-			readCodexEvents(stdout, model);
-			// Le fichier -o contient la réponse finale nette ; à défaut, elle se
-			// reconstitue depuis les events (stdout est du JSONL depuis --json,
-			// et le donner brut au parseur JSON5 serait illisible).
-			raw = fs.existsSync(outFile) ? fs.readFileSync(outFile, "utf8") : extractCodexText(stdout);
-		} catch (err) {
-			/* Une ANNULATION n'est pas une erreur. `killTree` fait sortir le
-			   processus en echec — souvent avec `killed`, que la branche
-			   ci-dessous prendrait pour un depassement de delai — et le journal
-			   se remplissait d'erreurs a chaque clic sur Stop. `generate()`
-			   traduit ensuite ce rejet en erreur `aborted`, que l'UI traite
-			   comme un retour a l'etat initial. */
-			if (aborted) throw err;
-			const e = err as ExecError;
+		/** La cartographie des messages, INCHANGÉE (voir `erreurClaude`). */
+		const erreurCodex = (e: ExecError): Error => {
 			console.error("[quiz-blocks] Codex error:", e.message, e.stderr || "");
 			const detail = ((e.stderr || "") + " " + (e.stdout || "") + " " + e.message).toLowerCase();
 			if (e.code === "ENOENT" || e.code === 127 || detail.includes("not recognized") || detail.includes("introuvable") || detail.includes("command not found")) {
-				throw new Error(t("ai.err.codexNotInstalled"));
+				return new Error(t("ai.err.codexNotInstalled"));
 			}
 			if (e.killed || detail.includes("etimedout")) {
-				throw new Error(t("ai.err.codexTimeout", { minutes: CLI_TIMEOUT_MIN }));
+				return new Error(t("ai.err.codexTimeout", { minutes: CLI_TIMEOUT_MIN }));
 			}
 			if (detail.includes("not logged in") || detail.includes("login") || detail.includes("unauthorized") || detail.includes("401") || detail.includes("credential") || detail.includes("authenticat")) {
-				throw new Error(t("ai.err.codexNotLoggedIn"));
+				return new Error(t("ai.err.codexNotLoggedIn"));
 			}
 			if (detail.includes("usage limit") || detail.includes("rate limit") || detail.includes("quota")) {
-				throw new Error(t("ai.err.codexRateLimit"));
+				return new Error(t("ai.err.codexRateLimit"));
 			}
-			throw new Error(t("ai.err.codex", { detail: (e.stderr || e.message).trim().slice(0, 300) }));
-		} finally {
-			try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+			return new Error(t("ai.err.codex", { detail: (e.stderr || e.message).trim().slice(0, 300) }));
+		};
+
+		let res: SortieCli;
+		try {
+			res = await runCli({ tool: "codex", args, stdin: fullPrompt, fichiers, sortieFichier: CODEX_FICHIER_SORTIE });
+		} catch (err) {
+			/* Une ANNULATION n'est pas une erreur. L'hôte tue l'arbre de process
+			   et rejette `annule` — ce que la branche « killed » prendrait pour un
+			   depassement de delai — et le journal se remplissait d'erreurs a
+			   chaque clic sur Stop. `generate()` traduit ensuite ce rejet en
+			   erreur `aborted`, que l'UI traite comme un retour a l'etat initial. */
+			if (aborted) throw err;
+			throw erreurIndisponible(err) || erreurCodex(execErrorDepuisRejet(err));
 		}
+		if (res.code !== 0) throw erreurCodex(execErrorDepuisCode(res));
+
+		readCodexEvents(res.stdout, model);
+		// Le fichier -o contient la réponse finale nette ; à défaut (l'hôte rend
+		// alors `undefined`), elle se reconstitue depuis les events (stdout est du
+		// JSONL depuis --json, et le donner brut au parseur JSON5 serait illisible).
+		const raw = res.sortie !== undefined ? res.sortie : extractCodexText(res.stdout);
 
 		if (!raw || !raw.trim()) {
 			throw new Error(t("ai.err.codexEmpty"));
@@ -594,7 +656,7 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 
 	async function callOllama(model: string, systemPrompt: string, userPrompt: string, ollamaUrl?: string, authHeaders?: Record<string, string>, images: ImagePayload[] = [], effort: string | null = null): Promise<unknown[]> {
 		if (!ollamaUrl) {
-			ollamaUrl = (plugin.settings.aiOllamaUrl || "http://localhost:11434").replace(/\/+$/, "");
+			ollamaUrl = (settings.get().aiOllamaUrl || "http://localhost:11434").replace(/\/+$/, "");
 		}
 		authHeaders = authHeaders || {};
 
@@ -609,11 +671,15 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		let installedModels: string[] = [];
 		let tagModels: Array<{ name: string; capabilities?: string[] }> = [];
 		try {
-			const tagsResp = await fetch(`${ollamaUrl}/api/tags`, { method: "GET", headers: authHeaders, signal: ac.signal });
-			if (!tagsResp.ok) {
+			const tagsResp = await courseAbandon(currentHost().net.fetchJson({
+				url: `${ollamaUrl}/api/tags`, method: "GET", headers: authHeaders, signal: ac.signal,
+			}), ac.signal);
+			// `null` = échec RÉSEAU (cf. le contrat) ; un statut d'erreur, lui,
+			// arrive avec son corps. Les deux valent ici « serveur injoignable ».
+			if (!tagsResp || tagsResp.status < 200 || tagsResp.status >= 300) {
 				throw new Error("ollama_unreachable");
 			}
-			const tagsData = await tagsResp.json() as { models?: Array<{ name: string; capabilities?: string[] }> };
+			const tagsData = JSON.parse(tagsResp.body) as { models?: Array<{ name: string; capabilities?: string[] }> };
 			tagModels = tagsData?.models || [];
 			installedModels = tagModels.map(m => m.name);
 			console.log("[quiz-blocks] Ollama installed models:", installedModels.join(", "));
@@ -678,7 +744,8 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 			eval_count?: number;
 		};
 		try {
-			const resp = await fetch(`${ollamaUrl}/api/chat`, {
+			const resp = await courseAbandon(currentHost().net.fetchJson({
+				url: `${ollamaUrl}/api/chat`,
 				method: "POST",
 				signal: ac.signal,
 				headers: { "Content-Type": "application/json", ...authHeaders },
@@ -718,11 +785,17 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 						required: ["questions"]
 					}
 				})
-			});
+			}), ac.signal);
 
-			data = await resp.json();
+			/* `null` = échec RÉSEAU, et c'est la SEULE chose que le contrat traite
+			   comme une panne : un statut d'erreur arrive avec son CORPS, là où
+			   Ollama met son diagnostic (« model not found », « more system
+			   memory »). C'est toute la raison pour laquelle ce module employait
+			   `fetch` et non `requestUrl`, et le contrat la tient désormais. */
+			if (!resp) throw new Error("ollama_unreachable");
+			data = JSON.parse(resp.body);
 
-			if (!resp.ok) {
+			if (resp.status < 200 || resp.status >= 300) {
 				const rawErr: unknown = data?.error;
 				const errMsg: unknown = typeof rawErr === "string" ? rawErr : (rawErr || t("ai.err.httpStatus", { status: resp.status }));
 				console.error("[quiz-blocks] Ollama error:", resp.status, errMsg);
@@ -827,7 +900,6 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		// Ollama with format: structured JSON wraps the array in an object
 		// e.g. { "questions": [...] }
 		try {
-			const JSON5 = require("json5") as typeof import("json5");
 			const parsed: unknown = JSON5.parse(cleaned);
 
 			// If it's an object with a "questions" key, extract the array
@@ -855,7 +927,6 @@ export function createAiClient(plugin: AiPlugin): AiClient {
 		}
 		cleaned = repairLatexBackslashes(cleaned);
 
-		const JSON5 = require("json5") as typeof import("json5");
 		let parsed: unknown;
 		try {
 			parsed = JSON5.parse(cleaned);

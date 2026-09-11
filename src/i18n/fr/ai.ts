@@ -142,6 +142,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.error.title": "Échec de la génération",
 	"ai.error.retry": "Réessayer",
 	"ai.error.checkSettings": "Vérifiez vos paramètres IA dans les paramètres du plugin.",
+	"ai.error.providerUnavailable": "Ce fournisseur n'est pas encore disponible ici. Choisissez Ollama, ou générez le quiz depuis le greffon Obsidian.",
 	"ai.result.count": "{count} questions générées",
 	"ai.result.untitled": "Quiz généré",
 	"ai.result.insert": "Insérer dans une note",

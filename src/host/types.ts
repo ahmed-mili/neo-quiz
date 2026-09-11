@@ -351,10 +351,31 @@ export interface HostProcess {
 	    code de sortie. Rejette avec une erreur dont `name` est nommé :
 	    `introuvable` (l'exécutable manque), `timeout` (`timeoutMs` dépassé,
 	    process tué), `annule` (`signal` abandonné, l'ARBRE de process est tué
-	    — `claude` et `codex` spawnent des enfants), `indisponible` (l'hôte ne
-	    sait pas encore lancer de CLI : l'application jusqu'à la tâche 7). */
-	run(spec: { tool: CliTool; args: string[]; stdin: string; signal?: AbortSignal; timeoutMs?: number })
-		: Promise<{ stdout: string; stderr: string; code: number | null }>;
+	    — `claude` et `codex` spawnent des enfants), `refuse` (outil hors liste,
+	    argument incitable), `indisponible` (l'hôte ne sait pas encore lancer de
+	    CLI : l'application jusqu'à la tâche 7). */
+	run(spec: {
+		tool: CliTool;
+		args: string[];
+		stdin: string;
+		signal?: AbortSignal;
+		timeoutMs?: number;
+		/** Les pièces jointes de CET appel. L'hôte crée un dossier temporaire, y
+		    écrit chaque fichier, et REMPLACE — dans `args` comme dans `stdin` — le
+		    jeton `{{fichier:N}}` par le chemin absolu du N-ième (1-based),
+		    `{{dossier}}` par le dossier lui-même, `{{sortie}}` par le chemin absolu
+		    de `sortieFichier` et `{{home}}` par le dossier personnel. Le rendu
+		    compose donc sa ligne de commande sans jamais apprendre un chemin
+		    disque. Le dossier est effacé en `finally`, toujours. */
+		fichiers?: Array<{ nom: string; base64: string }>;
+		/** Un NOM de fichier, relatif au dossier temporaire, que le CLI écrit et que
+		    l'appelant veut relire (Codex `-o last-message.txt`). Son contenu est rendu
+		    dans `sortie` ; `undefined` si le CLI ne l'a pas écrit. Le chemin absolu à
+		    donner au CLI s'écrit `{{sortie}}` — et NON `{{dossier}}` suivi d'un
+		    séparateur : le code partagé ne sait pas si l'hôte sépare par `/` ou `\`,
+		    et le deviner est exactement ce que ces jetons existent pour éviter. */
+		sortieFichier?: string;
+	}): Promise<{ stdout: string; stderr: string; code: number | null; sortie?: string }>;
 	/** Le fichier de cache/config du CLI, à un chemin FIXE tenu par l'hôte
 	    (Codex : `$CODEX_HOME` ou `~/.codex/models_cache.json` ; Claude :
 	    `~/.claude.json`), HORS de toute racine — c'est pourquoi `HostFs` ne

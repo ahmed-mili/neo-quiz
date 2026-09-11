@@ -177,6 +177,10 @@ export const EN_AI = {
 	"ai.error.title": "Generation failed",
 	"ai.error.retry": "Try again",
 	"ai.error.checkSettings": "Check your AI settings in the plugin settings.",
+	/* L'hôte ne sait pas lancer de CLI (rejet `indisponible` de
+	   `host.process.run`). Ce n'est ni une panne ni une absence d'installation :
+	   le dire autrement enverrait l'utilisateur réinstaller un CLI qu'il a déjà. */
+	"ai.error.providerUnavailable": "This provider is not available here yet. Pick Ollama, or generate the quiz from the Obsidian plugin.",
 	"ai.result.count": "{count} questions generated",
 	"ai.result.untitled": "Generated quiz",
 	"ai.result.insert": "Insert into a note",

@@ -32,7 +32,6 @@ const EXTENSIONS_TS = [".ts", ".tsx", ".mts", ".cts"];
 const RESTANTS = [
 	// Tableau de bord — tranches 2 et 3.
 	"src/dashboard.ts",
-	"src/dashboard/ai-client.ts",
 	"src/dashboard/ai-usage.ts",
 	"src/dashboard/ai.ts",
 	"src/dashboard/file-sources.ts",
@@ -131,14 +130,11 @@ for (const f of fichiersTs("src")) {
       façon la plus rapide de contourner tout le reste du contrôle, sans
       qu'aucune des quatre assertions précédentes ne s'en aperçoive. */
 const IMPORTE_APPS = /(?:from\s*|require\s*\(\s*|(?<![.\w$])import\s*\(\s*)["'][^"']*\bapps\//;
-/* La seconde exception est DATÉE : `ai-client.ts` est le dernier module de
-   `src/` qui lance ses CLI lui-même, et il consomme `buildChildEnv` de
-   `apps/obsidian/host.ts` depuis que le reste du code Node a quitté
-   `ai-providers.ts` (tranche 5, tâche 3) — `require` n'existe pas dans le
-   rendu de l'application. La tâche 4 le fait passer par `host.process.run` :
-   l'import disparaît, et cette entrée avec lui. Il figure aussi dans
-   RESTANTS, donc l'assertion 2 le surveille déjà. */
-const EXCEPTIONS_APPS = new Set(["src/dashboard.ts", "src/dashboard/ai-client.ts"]);
+/* La seconde exception a VÉCU ce que le cliquet ci-dessous promet :
+   `ai-client.ts` consommait `buildChildEnv` d'`apps/obsidian/host.ts` tant
+   qu'il lançait ses CLI lui-même (tranche 5, tâche 3). La tâche 4 l'a fait
+   passer par `host.process.run` — l'import a disparu, et l'entrée avec lui. */
+const EXCEPTIONS_APPS = new Set(["src/dashboard.ts"]);
 for (const f of fichiersTs("src")) {
 	if (EXCEPTIONS_APPS.has(f)) continue;
 	if (IMPORTE_APPS.test(codeNu(readFileSync(f, "utf8")))) {

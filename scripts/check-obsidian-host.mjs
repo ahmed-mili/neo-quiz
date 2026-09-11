@@ -9,8 +9,8 @@
  *
  *     npm run check:obsidian-host
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { parseHTML } from "linkedom";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
@@ -1136,6 +1136,128 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		hors = e.name;
 	}
 	r.check("un outil hors liste blanche est refusé, sans rien lancer", hors, "refuse");
+
+	/* ── LES PIÈCES JOINTES, ET LE DOSSIER QUI LES PORTE ──
+
+	   CE QUE CES CAS EMPÊCHENT. `callClaude` et `callCodex` écrivaient
+	   eux-mêmes les images dans un `mkdtempSync` et glissaient les chemins
+	   ABSOLUS obtenus dans le prompt (« First read these images… - C:\…\ ») ou
+	   dans les arguments (`-i`, `-o`), puis effaçaient le dossier. Le rendu de
+	   l'application n'a ni disque ni chemins : la tâche 4 a renversé la charge
+	   en jetons (`{{fichier:N}}`, `{{dossier}}`, `{{sortie}}`, `{{home}}`) que
+	   l'hôte remplace. Une substitution qui ne se ferait PAS dans le `stdin`
+	   passerait inaperçue au typecheck et donnerait à Claude une consigne
+	   « lis - {{fichier:1}} » : le modèle répondrait de la prose, et l'erreur
+	   affichée serait « le modèle a répondu du texte au lieu d'un quiz ».
+	   Et un dossier qui SURVIT laisse les images de l'utilisateur dans %TEMP%
+	   à chaque génération — un défaut qu'aucun écran ne montre jamais. */
+	const nbDossiersTemp = () => readdirSync(tmpdir()).filter(n => n.startsWith("quiz-blocks-")).length;
+
+	/* Le faux CLI RAPPORTE ce qu'il a reçu, et surtout ce qu'il a pu LIRE : le
+	   contenu du fichier prouve que le chemin substitué existe pour de vrai au
+	   moment où l'enfant tourne — ce qu'une vérification faite après coup ne
+	   pourrait plus dire, le dossier étant alors déjà effacé. */
+	const rapporteur = [
+		"const fs = require('fs');",
+		"let entree = '';",
+		"process.stdin.on('data', d => { entree += d; });",
+		"process.stdin.on('end', () => {",
+		"  const a = process.argv.slice(2);",
+		"  let contenu = '(illisible)';",
+		"  try { contenu = fs.readFileSync(a[1], 'utf8'); } catch (e) { contenu = 'ERREUR:' + e.code; }",
+		"  if (a[7] === 'ecris') fs.writeFileSync(a[5], 'REPONSE FINALE');",
+		"  process.stdout.write(JSON.stringify({",
+		"    cheminImage: a[1], dossier: a[3], home: a[9],",
+		"    stdinSubstitue: entree.indexOf(a[1]) >= 0 && entree.indexOf('{{fichier:1}}') < 0,",
+		"    contenu,",
+		"  }));",
+		"  process.exit(Number(a[11]));",
+		"});",
+	].join("\n");
+
+	// « image » en base64 : des octets reconnaissables, pour que « le fichier
+	// existe » ne se confonde pas avec « un fichier vide a été créé ».
+	const piece = { nom: "image-1.png", base64: Buffer.from("OCTETS-IMAGE").toString("base64") };
+	const argsRapport = (quoi, code) => [
+		"--image", "{{fichier:1}}", "--dossier", "{{dossier}}", "--out", "{{sortie}}",
+		"--ecrire", quoi, "--home", "{{home}}", "--code", String(code),
+	];
+
+	let rapport = null;
+	let resOk = null;
+	await avecFauxCli(rapporteur, async () => {
+		resOk = await host.process.run({
+			tool: "codex",
+			args: argsRapport("ecris", 0),
+			stdin: "PROMPT\n- {{fichier:1}}\n",
+			fichiers: [piece],
+			sortieFichier: "last-message.txt",
+		});
+		rapport = JSON.parse(resOk.stdout);
+	});
+
+	r.check("{{fichier:1}} est remplacé dans les args ET dans stdin par un chemin qui existe",
+		rapport && {
+			nom: rapport.cheminImage.split(/[/\\]/).pop(),
+			absolu: rapport.cheminImage.length > 12 && rapport.cheminImage !== "{{fichier:1}}",
+			stdin: rapport.stdinSubstitue,
+			contenu: rapport.contenu,
+		},
+		{ nom: "image-1.png", absolu: true, stdin: true, contenu: "OCTETS-IMAGE" });
+
+	r.check("{{dossier}} et {{home}} sont remplacés par le dossier temporaire et le dossier personnel",
+		rapport && {
+			imageDansLeDossier: rapport.cheminImage.startsWith(rapport.dossier),
+			home: rapport.home === (process.env.USERPROFILE || process.env.HOME || homedir()),
+		},
+		{ imageDansLeDossier: true, home: true });
+
+	/* Le fichier `-o` de Codex : l'hôte le relit et le rend dans `sortie`. Sans
+	   lui, `callCodex` retombe sur la reconstitution depuis les events JSONL —
+	   une sortie moins propre, et sur laquelle le parseur JSON5 bute. */
+	r.check("sortieFichier rend le contenu écrit par l'enfant", resOk && resOk.sortie, "REPONSE FINALE");
+
+	let resSans = null;
+	await avecFauxCli(rapporteur, async () => {
+		resSans = await host.process.run({
+			tool: "codex",
+			args: argsRapport("rien", 0),
+			stdin: "",
+			fichiers: [piece],
+			sortieFichier: "last-message.txt",
+		});
+	});
+	/* `undefined` et non `""` : `callCodex` distingue « le CLI n'a rien écrit »
+	   (il reconstitue depuis les events) de « il a écrit une réponse vide »
+	   (« ChatGPT n'a rien répondu »). Une chaîne vide confondrait les deux. */
+	r.check("sortieFichier absent rend undefined",
+		resSans && { sortie: resSans.sortie, code: resSans.code },
+		{ sortie: undefined, code: 0 });
+
+	/* LE DOSSIER EST EFFACÉ EN `finally`, TOUJOURS — les deux sorties de `run`
+	   qui ne sont pas un succès. Un CLI qui sort en erreur RÉSOUT (c'est
+	   l'appelant qui juge le code) ; un argument refusé REJETTE avant tout
+	   lancement, et le dossier existait déjà à ce moment-là. */
+	let dossierApresEchec = "(pas de rapport)";
+	await avecFauxCli(rapporteur, async () => {
+		const res = await host.process.run({
+			tool: "codex", args: argsRapport("rien", 3), stdin: "",
+			fichiers: [piece], sortieFichier: "last-message.txt",
+		});
+		dossierApresEchec = existsSync(JSON.parse(res.stdout).dossier);
+	});
+	const avantRejet = nbDossiersTemp();
+	try {
+		await host.process.run({
+			tool: "codex",
+			args: ["--image", "{{fichier:1}}", "a" + String.fromCharCode(10) + "b"],
+			stdin: "",
+			fichiers: [piece],
+		});
+	} catch (e) { /* `refuse` : c'est le cas plus haut qui le nomme */ }
+	r.check("le dossier temporaire est effacé même quand le CLI échoue",
+		{ apresEchec: dossierApresEchec, apresRejet: nbDossiersTemp() - avantRejet },
+		{ apresEchec: false, apresRejet: 0 });
 
 	r.done();
 });

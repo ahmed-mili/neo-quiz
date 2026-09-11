@@ -1,4 +1,5 @@
 import { setIcon, Notice, loadPdfJs, Platform, MarkdownRenderer, TFile } from "obsidian";
+import JSON5 from "json5";
 import type { App, View } from "obsidian";
 import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { EditorExamOptions } from "../types/editor-ctx";
@@ -1939,7 +1940,20 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		render(container);
 
 		const { createAiClient } = require("./ai-client") as typeof import("./ai-client");
-		const client = createAiClient(ctx.plugin);
+		/* L'ADAPTATEUR OBSIDIAN DES RÉGLAGES IA, ici et TEMPORAIREMENT.
+		   `createAiClient` ne prend plus un `obsidian.Plugin` mais un
+		   `AiSettingsHost` (`ai-settings-host.ts`) — c'est ce qui a sorti
+		   `ai-client.ts` de la liste des fichiers liés à Obsidian. `ai.ts`, lui,
+		   y figure encore : la tâche 6 de la tranche 5 (la page « Générer » de
+		   l'application) déménage cet objet hors d'ici, chez celui qui possède
+		   les réglages. */
+		const client = createAiClient({
+			get: () => ctx.plugin.settings,
+			save: async patch => {
+				Object.assign(ctx.plugin.settings, patch);
+				await ctx.plugin.saveSettings();
+			},
+		});
 		activeClient = client;
 		// Esc annule la génération (référence : tooltip « Arrêter  Esc »)
 		const onEsc = (e: KeyboardEvent) => {
@@ -2064,7 +2078,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			const { exportAll } = require("../editor/export") as typeof import("../editor/export");
 			quizJson = exportAll(draft.questions, draft.examOptions);
 		} else if (generatedQuestions.length) {
-			quizJson = (require("json5") as typeof import("json5")).stringify(generatedQuestions, null, 2);
+			quizJson = JSON5.stringify(generatedQuestions, null, 2);
 		} else {
 			return;
 		}

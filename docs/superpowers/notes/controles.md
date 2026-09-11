@@ -277,6 +277,22 @@ réponse étant toujours non.
   gardées par `check:obsidian-host` (groupe « les CLI ») sur le code qui a
   quitté `src/dashboard/ai-providers.ts` ; côté rendu, `check:windows-host`
   garde le passe-plat : le NOM de l'outil traverse le pont, jamais un chemin.
+  **Depuis la tâche 4, il garde aussi les PIÈCES JOINTES** (`avecFichiers`), et
+  `check:obsidian-host` les mêmes cinq cas sur l'hôte Obsidian. Le défaut
+  qu'ils empêchent est double. D'abord : `callClaude` glissait les CHEMINS
+  ABSOLUS des images dans le prompt (« First read these images… ») et
+  `callCodex` dans ses arguments (`-i`, `-o`) ; le rendu n'a ni disque ni
+  chemins, donc le code partagé n'envoie plus que des jetons
+  (`{{fichier:N}}`, `{{dossier}}`, `{{sortie}}`, `{{home}}`). Une substitution
+  faite dans les arguments mais PAS dans le `stdin` ne rougit à aucun
+  typecheck : Claude recevrait « lis - {{fichier:1}} », répondrait de la prose,
+  et l'écran dirait « le modèle a répondu du texte au lieu d'un quiz ». Ensuite :
+  le dossier temporaire doit être effacé en `finally`, sur les DEUX issues qui
+  ne sont pas un succès (un CLI qui sort en erreur, un appel rejeté avant tout
+  lancement) — un dossier qui survit laisse les images de l'utilisateur dans
+  `%TEMP%` à chaque génération, et aucun écran ne le montre jamais. Le contenu
+  du fichier est lu DEPUIS l'enfant (ou depuis l'exécutant, côté Électron) :
+  c'est le seul moment où il existe encore.
 - `npm --prefix apps/windows run typecheck:electron` — le typecheck du PROCESSUS
   PRINCIPAL Electron (`apps/windows/tsconfig.electron.json`), lancé par
   `npm run build` de ce dossier, donc par `npm run check:app`. Il referme un trou

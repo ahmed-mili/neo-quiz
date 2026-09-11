@@ -40,8 +40,8 @@
 ══════════════════════════════════════════════════════════ */
 
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 /** Ce que `lireCache` sait lire. `ollama` n'en a pas : son catalogue est
@@ -203,21 +203,143 @@ export async function demarrerOllama(): Promise<boolean> {
 	}
 }
 
+/* ══════════════════════════════════════════════════════════
+   LES PIÈCES JOINTES D'UN APPEL, ET LE DOSSIER QUI LES PORTE
+
+   Jumeau de `avecFichiers` dans `apps/obsidian/host.ts`, et pour la même
+   raison que `dossierPersonnel` l'est : les deux hôtes tiennent la MÊME
+   promesse du contrat, chacun avec ses primitives, et rien ne peut être
+   partagé entre `apps/` — le rendu n'importerait pas ce module sans tirer
+   Node avec lui (`check:host`, assertion 6).
+
+   POURQUOI CE CODE EST ÉCRIT MAINTENANT, alors que `run` rejette encore.
+   `callClaude` et `callCodex` écrivaient eux-mêmes les images dans un
+   `mkdtempSync`, glissaient les chemins ABSOLUS obtenus dans le prompt
+   (« First read these images… ») ou dans les arguments (`-i`, `-o`), puis
+   effaçaient le dossier. Le rendu n'a ni disque ni chemins : il ne peut NI
+   écrire ces fichiers, NI apprendre où ils sont. La tâche 7 n'a donc plus qu'à
+   poser le `spawn` au milieu — la moitié FICHIERS est déjà là, éprouvée
+   (`npm run check:electron-process`), au lieu d'être réinventée sous la
+   pression du reste.
+
+   LE DOSSIER EST EFFACÉ EN `finally`, TOUJOURS : un CLI qui échoue, expire ou
+   est annulé laisserait sinon les images de l'utilisateur dans `%TEMP%`.
+
+   LES JETONS SONT REMPLACÉS PAR UNE FONCTION, jamais par une chaîne de
+   remplacement : un chemin qui contiendrait `$1` ou `$&` serait réécrit par
+   `String.replace`.
+══════════════════════════════════════════════════════════ */
+
+/** Une pièce jointe : un nom et son contenu, tels que le rendu les envoie. */
+export interface FichierJoint {
+	nom: string;
+	base64: string;
+}
+
+const JETONS_FICHIERS = /\{\{fichier:(\d+)\}\}|\{\{dossier\}\}|\{\{sortie\}\}|\{\{home\}\}/g;
+
+/** Le nom d'une pièce jointe, RÉDUIT à un nom de fichier. Le rendu ne choisit
+    pas où le principal écrit : un `..` ou un séparateur sortirait du dossier
+    temporaire, qui est la seule chose que ce dossier promette. C'est la même
+    règle que `perimetre.borner` pour les chemins du pont. PURE. */
+export function nomDeFichierSur(nom: string, defaut: string): string {
+	const base = String(nom || "").split(/[/\\]/).pop() || "";
+	return base && base !== "." && base !== ".." ? base : defaut;
+}
+
+/** Les quatre jetons du contrat, remplacés dans une chaîne. PURE. */
+export function substituerJetons(
+	texte: string,
+	chemins: string[],
+	dossier: string,
+	sortie: string,
+	maison: string,
+): string {
+	return texte.replace(JETONS_FICHIERS, (jeton: string, index: string | undefined) => {
+		if (index === undefined) {
+			return jeton === "{{dossier}}" ? dossier : jeton === "{{sortie}}" ? sortie : maison;
+		}
+		const i = Number(index) - 1;
+		if (i < 0 || i >= chemins.length) {
+			/* NOMMÉ plutôt que laissé passer : un `{{fichier:3}}` littéral sur la
+			   ligne de commande donnerait au CLI un chemin qui n'existe pas, et un
+			   diagnostic qui ne désigne rien. */
+			throw erreurCli("refuse", "jeton " + jeton + " : aucune pièce jointe à cet index");
+		}
+		return chemins[i];
+	});
+}
+
+/**
+ * Écrit les pièces jointes, substitue les jetons, exécute, relit `sortieFichier`,
+ * efface le dossier. Le dossier n'existe que s'il sert : sans pièce jointe ni
+ * fichier de sortie, seul `{{home}}` a un sens et rien n'est créé.
+ */
+export async function avecFichiers<T>(
+	spec: {
+		args: string[];
+		stdin: string;
+		fichiers?: FichierJoint[];
+		sortieFichier?: string;
+	},
+	executer: (resolu: { args: string[]; stdin: string }) => Promise<T>,
+	env: NodeJS.ProcessEnv = process.env,
+): Promise<{ resultat: T; sortie?: string }> {
+	const fichiers = spec.fichiers || [];
+	const dossier = (fichiers.length > 0 || spec.sortieFichier)
+		? mkdtempSync(join(tmpdir(), "neo-quiz-cli-"))
+		: "";
+	try {
+		const chemins = fichiers.map((f, i) => {
+			const cible = join(dossier, nomDeFichierSur(f.nom, "piece-" + (i + 1)));
+			writeFileSync(cible, Buffer.from(f.base64, "base64"));
+			return cible;
+		});
+		const cheminSortie = spec.sortieFichier
+			? join(dossier, nomDeFichierSur(spec.sortieFichier, "sortie.txt"))
+			: "";
+		const maison = dossierPersonnel(env);
+		const remplacer = (s: string): string => substituerJetons(s, chemins, dossier, cheminSortie, maison);
+		const resultat = await executer({ args: spec.args.map(remplacer), stdin: remplacer(spec.stdin) });
+		let sortie: string | undefined;
+		if (cheminSortie) {
+			// Absent = le CLI ne l'a pas écrit : `undefined`, et l'appelant retombe
+			// sur ce qu'il sait reconstituer. Jamais une exception.
+			try {
+				sortie = readFileSync(cheminSortie, "utf8");
+			} catch (e) {
+				sortie = undefined;
+			}
+		}
+		return { resultat, sortie };
+	} finally {
+		if (dossier) {
+			try {
+				rmSync(dossier, { recursive: true, force: true });
+			} catch (e) { /* best effort */ }
+		}
+	}
+}
+
 /**
  * Lancer un CLI — PAS ENCORE, et le rejet est NOMMÉ.
  *
- * La tâche 7 remplace ce corps par la vraie exécution (résolution de
- * l'exécutable par le PATH ou le réglage « chemin », `spawn`, prompt complet
- * sur `stdin`, arbre de process tué à l'annulation). D'ici là, `indisponible`
- * est la réponse honnête : le code partagé la traduit en « fournisseur
- * indisponible », là où un `stdout` vide ferait croire à une génération qui a
- * tourné pour rien.
+ * La tâche 7 remplace ce corps par la vraie exécution : `avecFichiers` ci-dessus
+ * enveloppe la résolution de l'exécutable (PATH ou réglage « chemin »), le
+ * `spawn`, le prompt complet sur `stdin` et l'arbre de process tué à
+ * l'annulation. D'ici là, `indisponible` est la réponse honnête : le code
+ * partagé la traduit en « fournisseur indisponible », là où un `stdout` vide
+ * ferait croire à une génération qui a tourné pour rien. Rien n'est écrit sur
+ * le disque avant ce rejet — un dossier temporaire créé pour être aussitôt
+ * effacé ne prouverait rien.
  */
 export async function run(_spec: {
 	tool: string;
 	args: string[];
 	stdin: string;
 	timeoutMs?: number;
-}): Promise<{ stdout: string; stderr: string; code: number | null }> {
+	fichiers?: FichierJoint[];
+	sortieFichier?: string;
+}): Promise<{ stdout: string; stderr: string; code: number | null; sortie?: string }> {
 	throw erreurCli("indisponible", "lancer un CLI n'est pas encore implémenté dans l'application");
 }

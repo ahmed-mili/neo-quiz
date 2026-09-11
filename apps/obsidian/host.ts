@@ -161,10 +161,6 @@ function erreurCli(nom: string, message: string): Error {
    - npm         → %APPDATA%\npm (déjà couvert)
    - CODEX_INSTALL_DIR : override honoré par les deux scripts.
 
-   EXPORTÉE, et c'est TEMPORAIRE : `src/dashboard/ai-client.ts` la consomme
-   encore pour ses propres `cp.exec`. La tâche 4 bascule `ai-client.ts` sur
-   `host.process.run` et cet export redevient interne.
-
    L'ENVIRONNEMENT EST UN PARAMÈTRE, même patron que `dossierPersonnel` dans
    `apps/windows/electron/process.ts` et pour la même raison : ce qu'un
    contrôle ne peut pas atteindre n'est pas contrôlé. Le cas « un exécutable
@@ -172,7 +168,7 @@ function erreurCli(nom: string, message: string): Error {
    sans cette entrée, `~/.local/bin` restait celui de la VRAIE machine (un
    `claude.exe` y vit sur celle d'Ahmed) et le cas rougissait pour une raison
    étrangère à ce qu'il éprouve. */
-export function buildChildEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+function buildChildEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
 	const path = require("path") as typeof import("path");
 	const extra: string[] = [
 		path.join(dossierPersonnel(env), ".local", "bin"),
@@ -377,6 +373,105 @@ function lancerCli(spec: {
 			child.stdin?.end();
 		} catch (e) { /* le process est déjà mort : `close` ou `error` tranche */ }
 	});
+}
+
+/* ── LES PIÈCES JOINTES D'UN APPEL, ET LE DOSSIER QUI LES PORTE ──
+
+   POURQUOI L'HÔTE ET PAS L'APPELANT. `callClaude` et `callCodex` écrivaient
+   eux-mêmes les images dans un `mkdtempSync`, glissaient les chemins ABSOLUS
+   obtenus dans le prompt (« First read these images… - C:\…\image-1.png ») ou
+   dans les arguments (`-i "<chemin>"`, `-o "<chemin>"`), puis effaçaient le
+   dossier. Le rendu de l'application n'a ni disque ni chemins : il ne peut
+   NI écrire ces fichiers, NI apprendre où ils sont. Les jetons renversent la
+   charge — le code partagé dit « la première pièce jointe », l'hôte dit où
+   elle est.
+
+   LE DOSSIER EST EFFACÉ EN `finally`, TOUJOURS : un CLI qui échoue, expire ou
+   est annulé laissait sinon les images de l'utilisateur dans `%TEMP%`. C'est
+   la propriété que le `try/finally` d'`ai-client.ts` tenait, et elle déménage
+   ici entière — pas la moitié.
+
+   LES JETONS SONT REMPLACÉS PAR UNE FONCTION, jamais par une chaîne de
+   remplacement : un chemin qui contiendrait `$1` ou `$&` serait réécrit par
+   `String.replace`. Le dépôt a déjà payé ce défaut ailleurs (cf. CLAUDE.md,
+   `check:quiz-io`). */
+const JETONS_FICHIERS = /\{\{fichier:(\d+)\}\}|\{\{dossier\}\}|\{\{sortie\}\}|\{\{home\}\}/g;
+
+/** Le nom d'une pièce jointe, RÉDUIT à un nom de fichier. Le code partagé ne
+    choisit pas où l'hôte écrit : un `..` ou un séparateur sortirait du dossier
+    temporaire, qui est la seule chose que ce dossier promette. */
+function nomDeFichierSur(nom: string, defaut: string): string {
+	const base = String(nom || "").split(/[/\\]/).pop() || "";
+	return base && base !== "." && base !== ".." ? base : defaut;
+}
+
+function substituerJetons(
+	texte: string,
+	chemins: string[],
+	dossier: string,
+	sortie: string,
+	maison: string,
+): string {
+	return texte.replace(JETONS_FICHIERS, (jeton: string, index: string | undefined) => {
+		if (index === undefined) {
+			return jeton === "{{dossier}}" ? dossier : jeton === "{{sortie}}" ? sortie : maison;
+		}
+		const i = Number(index) - 1;
+		if (i < 0 || i >= chemins.length) {
+			/* NOMMÉ plutôt que laissé passer : un `{{fichier:3}}` littéral sur la
+			   ligne de commande donnerait au CLI un chemin qui n'existe pas, et un
+			   diagnostic qui ne désigne rien. */
+			throw erreurCli("refuse", "jeton " + jeton + " : aucune pièce jointe à cet index");
+		}
+		return chemins[i];
+	});
+}
+
+/**
+ * Écrit les pièces jointes, substitue les jetons, exécute, relit `sortieFichier`,
+ * efface le dossier. Le dossier n'existe que s'il sert : sans pièce jointe ni
+ * fichier de sortie, seul `{{home}}` a un sens et rien n'est créé.
+ */
+async function avecFichiers<T>(
+	spec: {
+		args: string[];
+		stdin: string;
+		fichiers?: Array<{ nom: string; base64: string }>;
+		sortieFichier?: string;
+	},
+	executer: (resolu: { args: string[]; stdin: string }) => Promise<T>,
+): Promise<{ resultat: T; sortie?: string }> {
+	const fs = require("fs") as typeof import("fs");
+	const os = require("os") as typeof import("os");
+	const path = require("path") as typeof import("path");
+	const fichiers = spec.fichiers || [];
+	const dossier = (fichiers.length > 0 || spec.sortieFichier)
+		? fs.mkdtempSync(path.join(os.tmpdir(), "quiz-blocks-"))
+		: "";
+	try {
+		const chemins = fichiers.map((f, i) => {
+			const cible = path.join(dossier, nomDeFichierSur(f.nom, "piece-" + (i + 1)));
+			fs.writeFileSync(cible, Buffer.from(f.base64, "base64"));
+			return cible;
+		});
+		const cheminSortie = spec.sortieFichier
+			? path.join(dossier, nomDeFichierSur(spec.sortieFichier, "sortie.txt"))
+			: "";
+		const maison = dossierPersonnel();
+		const remplacer = (s: string): string => substituerJetons(s, chemins, dossier, cheminSortie, maison);
+		const resultat = await executer({ args: spec.args.map(remplacer), stdin: remplacer(spec.stdin) });
+		let sortie: string | undefined;
+		if (cheminSortie) {
+			// Absent = le CLI ne l'a pas écrit : `undefined`, et l'appelant retombe
+			// sur ce qu'il sait reconstituer. Jamais une exception.
+			try { sortie = fs.readFileSync(cheminSortie, "utf8"); } catch (e) { sortie = undefined; }
+		}
+		return { resultat, sortie };
+	} finally {
+		if (dossier) {
+			try { fs.rmSync(dossier, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+		}
+	}
 }
 
 /** Le second paramètre est réduit à ce dont l'hôte a besoin — le manifeste,
@@ -988,25 +1083,37 @@ export function createObsidianHost(
 			if (!CLI_AUTORISES.includes(spec.tool)) {
 				throw erreurCli("refuse", "CLI hors liste : " + String(spec.tool));
 			}
-			/* ET AUCUN ARGUMENT NE PORTE DE SAUT DE LIGNE, sur TOUS les systèmes.
-			   Il n'est dangereux que sur le chemin `cmd.exe` (un séparateur de
-			   commandes qu'aucun guillemet ne neutralise — `citerPourCmd` le
-			   refuse aussi, à son niveau), mais le laisser passer ailleurs ferait
-			   dépendre le sort d'un argument du SYSTÈME et de la façon dont le CLI
-			   a été installé : la même génération marcherait sous Linux et
-			   échouerait sous un Windows à shim npm. Un refus net, partout, se
-			   diagnostique ; une différence silencieuse, non. */
-			const fautif = spec.args.find(a => /[\r\n]/.test(a));
-			if (fautif !== undefined) {
-				throw erreurCli("refuse", "argument refusé : un saut de ligne ne peut pas être cité");
-			}
 			/* Mobile : pas de `require`, donc pas de CLI. NOMMÉ (`indisponible`)
 			   plutôt que rendu comme un échec de lancement — ce n'est pas une
-			   panne, c'est une plateforme sans processus enfants. */
+			   panne, c'est une plateforme sans processus enfants. Jugé AVANT
+			   `avecFichiers`, qui écrirait sinon un dossier temporaire pour rien. */
 			if (!Platform.isDesktopApp) {
 				throw erreurCli("indisponible", "aucun CLI sur mobile");
 			}
-			return lancerCli(spec);
+			const { resultat, sortie } = await avecFichiers(spec, async resolu => {
+				/* ET AUCUN ARGUMENT NE PORTE DE SAUT DE LIGNE, sur TOUS les systèmes.
+				   Il n'est dangereux que sur le chemin `cmd.exe` (un séparateur de
+				   commandes qu'aucun guillemet ne neutralise — `citerPourCmd` le
+				   refuse aussi, à son niveau), mais le laisser passer ailleurs ferait
+				   dépendre le sort d'un argument du SYSTÈME et de la façon dont le CLI
+				   a été installé : la même génération marcherait sous Linux et
+				   échouerait sous un Windows à shim npm. Un refus net, partout, se
+				   diagnostique ; une différence silencieuse, non.
+				   Jugé APRÈS substitution : un jeton se remplace par un chemin, et
+				   c'est ce qui part sur la ligne de commande qu'il faut juger. */
+				const fautif = resolu.args.find(a => /[\r\n]/.test(a));
+				if (fautif !== undefined) {
+					throw erreurCli("refuse", "argument refusé : un saut de ligne ne peut pas être cité");
+				}
+				return lancerCli({
+					tool: spec.tool,
+					args: resolu.args,
+					stdin: resolu.stdin,
+					signal: spec.signal,
+					timeoutMs: spec.timeoutMs,
+				});
+			});
+			return Object.assign({}, resultat, { sortie });
 		},
 
 		/* Le fichier de cache du CLI, à son chemin FIXE — hors de toute racine,

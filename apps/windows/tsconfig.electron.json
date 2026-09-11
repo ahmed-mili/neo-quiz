@@ -1,0 +1,43 @@
+{
+	/*
+	 * LE PROCESSUS PRINCIPAL SE TYPE À PART DU RENDU.
+	 *
+	 * Deux cibles, deux mondes : le rendu tourne dans Chromium (DOM, pas de
+	 * Node), le principal dans Node (fichiers, Electron, pas de fenêtre). Les
+	 * mélanger dans une seule configuration laisserait le rendu appeler
+	 * `node:fs` et le principal toucher `document` sans qu'aucun des deux ne
+	 * rougisse — exactement ce que l'isolation de contexte existe pour empêcher.
+	 *
+	 * CE FICHIER REFERME UN TROU NOMMÉ. Les rapports des tâches 1 et 2 l'ont
+	 * signalé chacun leur tour : AUCUN `tsconfig.json` du dépôt ne couvrait
+	 * `apps/windows/electron/` — ni celui de la racine (`src/` et
+	 * `apps/obsidian/`), ni celui d'à côté (`src/` de l'application). Trois
+	 * fichiers déjà écrits n'étaient donc typés par aucun `npm run check*`, et
+	 * seul un `tsc` lancé à la main les avait jamais vus. Il est branché dans
+	 * `npm run build` de ce dossier, donc dans `npm run check:app`.
+	 *
+	 * `lib: DOM` dans un processus SANS DOM : `src/host/types.ts`, importé en
+	 * `import type` par `catalogue.ts` et `main.ts`, référence `HTMLElement`
+	 * (`HostUi.setIcon`, `HostMath.render`). Sans `DOM`, ces types ne résolvent
+	 * pas. C'est le prix d'un contrat unique pour les trois hôtes ; il ne donne
+	 * aucun `document` réel au principal, seulement des types.
+	 */
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"lib": ["ES2022", "DOM"],
+		"strict": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		"isolatedModules": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"types": ["node"]
+	},
+	"include": ["electron/**/*.ts"]
+}

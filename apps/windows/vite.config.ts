@@ -18,11 +18,23 @@ const racineDepot = fileURLToPath(new URL("../../", import.meta.url));
 
 export default defineConfig({
 	clearScreen: false,
+	/*
+	 * `./` et non `/` : la fenêtre Electron charge `dist/index.html` par
+	 * `loadFile`, donc en `file://`, où un chemin ABSOLU (« /assets/… ») désigne
+	 * la racine du DISQUE et non celle du paquet. Sans cette ligne, le rendu
+	 * construit s'ouvre sur une page blanche, aucune feuille et aucun script
+	 * chargés — et rien dans la console d'un navigateur ordinaire ne l'aurait
+	 * montré, puisque le serveur de développement, lui, sert bien « / ».
+	 */
+	base: "./",
 	server: {
 		port: 1421,
 		strictPort: true,
 		fs: { allow: [racineDepot] },
-		watch: { ignored: ["**/src-tauri/**"] },
+		/* `dist-electron/` est la sortie du PROCESSUS PRINCIPAL, reconstruite à
+		   chaque `npm run dev` : la surveiller ferait recharger la page du rendu
+		   pour un fichier qu'elle ne charge pas. */
+		watch: { ignored: ["**/src-tauri/**", "**/dist-electron/**"] },
 	},
 	envPrefix: ["VITE_", "TAURI_"],
 	build: {

@@ -132,6 +132,17 @@ réponse étant toujours non.
   qu'un `trash` supprime au lieu de déplacer, et qu'un homonyme déjà dans la
   corbeille soit écrasé plutôt que numéroté. Tourne sur un vrai dossier temporaire
   (`fs.mkdtemp`), retiré dans un `finally`.
+- `npm --prefix apps/windows run typecheck:electron` — le typecheck du PROCESSUS
+  PRINCIPAL Electron (`apps/windows/tsconfig.electron.json`), lancé par
+  `npm run build` de ce dossier, donc par `npm run check:app`. Il referme un trou
+  que les rapports des tâches 1 et 2 de la migration ont signalé chacun leur tour :
+  AUCUN `tsconfig` du dépôt ne couvrait `apps/windows/electron/` — ni celui de la
+  racine (`src/` + `apps/obsidian/`), ni celui de l'application (son `src/` seul).
+  Trois fichiers déjà écrits n'étaient donc typés par aucun `npm run check*`, et
+  `check:electron-fs`/`check:electron-index` les chargent par esbuild, qui ne
+  vérifie AUCUN type. Une configuration SÉPARÉE de celle du rendu, et pas une
+  entrée de plus dans la sienne : le rendu tourne dans Chromium et le principal
+  dans Node, les mélanger laisserait le rendu appeler `node:fs` sans rougir.
 - `npm run check:lesson` — la boucle d'apprentissage (rôles `pre`/`read`/`recall`/`test`,
   tranches, auto-évaluation). **Il doit aller jusqu'au bout** : ce script MEURT sur une
   exception au lieu d'échouer proprement, et une mort en cours de route masque en

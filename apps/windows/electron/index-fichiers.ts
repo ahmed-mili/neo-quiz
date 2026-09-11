@@ -107,6 +107,29 @@ export function contratDepuisAbsolu(racinesAbs: string[], absolu: string): strin
 	return null;
 }
 
+/**
+ * Le chemin ABSOLU disque d'un chemin du contrat (indice de racine en tête),
+ * ou `null` si cet indice ne désigne aucune racine connue. L'exact symétrique
+ * de `contratDepuisAbsolu` ci-dessus.
+ *
+ * EXPORTÉE, en dehors de `creerIndex`, pour la même raison que sa jumelle mais
+ * avec un appelant de plus : le pont de la tâche 3 (`main.ts`) ne fait jamais
+ * franchir l'IPC à la convention INTERNE de ce module (« 0/Cours/ch1.md ») —
+ * il retraduit en absolu chaque événement qu'il émet, parce que les chemins du
+ * CONTRAT sont les clés du journal de révision et que `src/host/types.ts`
+ * interdit qu'un second endroit les recompose. Sans cet export, cette règle
+ * serait RECOPIÉE là-bas, et deux copies d'une même règle ont déjà divergé une
+ * fois dans ce dépôt.
+ */
+export function absoluDepuisContrat(racinesAbs: string[], cheminContrat: string): string | null {
+	const barre = cheminContrat.indexOf("/");
+	const idStr = barre === -1 ? cheminContrat : cheminContrat.slice(0, barre);
+	const i = Number(idStr);
+	if (!Number.isInteger(i) || i < 0 || i >= racinesAbs.length) return null;
+	const relatif = barre === -1 ? "" : cheminContrat.slice(barre + 1);
+	return relatif ? path.join(racinesAbs[i], relatif) : racinesAbs[i];
+}
+
 /** Construit l'index en mémoire pour ces racines (chemins ABSOLUS du disque).
     Démarre VIDE : c'est `surveiller()` (via le parcours initial de chokidar,
     `ignoreInitial: false`) qui le peuple — voir l'en-tête pour pourquoi ce
@@ -117,17 +140,6 @@ export function creerIndex(racines: string[]): Index {
 	const racinesAbs = racines.map(normaliser);
 	const parChemin = new Map<string, HostFile>();
 	const fichiers = creerFichiers();
-
-	/** Le chemin ABSOLU disque d'un chemin du contrat, ou `null` si son indice
-	    de racine ne désigne aucune racine connue. */
-	function absoluDepuisContrat(cheminContrat: string): string | null {
-		const barre = cheminContrat.indexOf("/");
-		const idStr = barre === -1 ? cheminContrat : cheminContrat.slice(0, barre);
-		const i = Number(idStr);
-		if (!Number.isInteger(i) || i < 0 || i >= racinesAbs.length) return null;
-		const relatif = barre === -1 ? "" : cheminContrat.slice(barre + 1);
-		return relatif ? path.join(racinesAbs[i], relatif) : racinesAbs[i];
-	}
 
 	function apply(ev: HostFileEvent): void {
 		switch (ev.kind) {
@@ -155,7 +167,7 @@ export function creerIndex(racines: string[]): Index {
 	    c'est la seule fenêtre où la promesse peut ne pas être tenue. */
 	async function recaler(cheminContrat: string): Promise<void> {
 		if (horsCatalogue(cheminContrat)) return;
-		const absolu = absoluDepuisContrat(cheminContrat);
+		const absolu = absoluDepuisContrat(racinesAbs, cheminContrat);
 		if (!absolu) return;
 		const info = await stat(absolu);
 		if (!info) return;
@@ -172,7 +184,7 @@ export function creerIndex(racines: string[]): Index {
 		},
 		apply,
 		async write(chemin, donnees) {
-			const absolu = absoluDepuisContrat(chemin);
+			const absolu = absoluDepuisContrat(racinesAbs, chemin);
 			if (!absolu) throw new Error(`chemin hors des racines surveillées : ${chemin}`);
 			await fichiers.write(absolu, donnees);
 			await recaler(chemin);

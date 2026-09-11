@@ -64,8 +64,11 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
 - `npm run check:obsidian-host`, `check:windows-host` — les deux implémentations du
   contrat `src/host/types.ts`. Tout cas neuf s'éprouve par DISCRIMINANCE : casser
   la règle, voir rougir, restaurer. Un cas vert quoi qu'on fasse ne prouve rien.
-- `npm run check:app` — typecheck + build de l'app. Il attrape une rupture du code
-  PARTAGÉ vue depuis l'autre hôte, là où `npm run check` ne voit que le greffon.
+- `npm run check:app` — typecheck + build de l'app, RENDU ET PROCESSUS PRINCIPAL
+  Electron (deux `tsconfig` séparés, deux sorties : `dist/` et `dist-electron/`).
+  Il attrape une rupture du code PARTAGÉ vue depuis l'autre hôte, là où
+  `npm run check` ne voit que le greffon — et depuis la tranche Electron, c'est
+  le SEUL contrôle qui type `apps/windows/electron/` (`tsconfig.electron.json`).
   Aucun fichier qu'il atteint ne doit tirer `obsidian.d.ts` : un `import type`
   suffisait à neutraliser ce filet.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` avant `$…$`).

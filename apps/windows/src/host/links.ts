@@ -7,7 +7,7 @@
    éprouvable hors de la fenêtre (`npm run check:windows-host`).
 ══════════════════════════════════════════════════════════ */
 
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { urlDeRessource } from "../../electron/ressources";
 import type { WindowsIndex } from "./fs";
 import type { CarteRacines } from "./roots";
 import { LOG_PREFIX } from "../../../../src/branding";
@@ -37,7 +37,7 @@ function segmentsCommuns(a: string, b: string): number {
 }
 
 /**
- * Résout un wikilink dans une liste de fichiers. PURE : aucun appel Tauri,
+ * Résout un wikilink dans une liste de fichiers. PURE : aucun appel au pont,
  * aucun accès au disque.
  *
  * L'ORDRE est la règle, et il est repris de ce que fait Obsidian :
@@ -142,10 +142,17 @@ export function createWindowsLinks(carte: CarteRacines, index: WindowsIndex): Ho
 		/* `null` et JAMAIS la chaîne vide : un `src=""` fait recharger la page
 		   courante comme image — requête inutile et image cassée.
 
-		   `convertFileSrc` fabrique une URL du protocole `asset`, que le natif
-		   ne servira QUE si le dossier est dans la portée du protocole d'asset.
-		   C'est la seconde portée ouverte par `allow_folder` : sans elle, cette
-		   URL est parfaitement formée et ne charge rien, sans erreur. */
+		   `urlDeRessource` (`electron/ressources.ts`, partagé avec le processus
+		   principal) fabrique l'URL `app://neo-res/<chemin absolu>` que le
+		   protocole enregistré dans `electron/main.ts` sert — BORNÉ par le MÊME
+		   périmètre que les canaux `fichiers.*`, jamais par une liste à lui.
+		   L'INDEX fait déjà autorité ici (un fichier qu'il ne connaît pas rend
+		   `null`), et le principal refuse de son côté tout chemin hors des
+		   dossiers ouverts : les deux bornes sont nécessaires, la première pour
+		   ne jamais fabriquer une URL vers un fichier absent, la seconde parce
+		   que le rendu ne définit jamais ce qu'il a le droit de lire.
+		   SYNCHRONE, et c'est le contrat : aucun aller-retour IPC ici, l'URL
+		   est une pure fonction du chemin. */
 		resourceUrl(target, fromPath) {
 			try {
 				const brut = typeof target === "string" ? target : target?.path;
@@ -161,7 +168,7 @@ export function createWindowsLinks(carte: CarteRacines, index: WindowsIndex): Ho
 				const f = index.get(chemin) ?? resolveDansIndex(dansLaRacineDe(depuis), versContrat(chemin, depuis), depuis);
 				if (!f) return null;
 				const a = carte.absolu(f.path);
-				return a ? convertFileSrc(a) || null : null;
+				return a ? urlDeRessource(a) : null;
 			} catch (e) {
 				console.warn(LOG_PREFIX, "resourceUrl erreur:", e);
 				return null;

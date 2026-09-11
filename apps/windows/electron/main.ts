@@ -24,15 +24,18 @@
    RÉPOND par un `invoke`.
 ══════════════════════════════════════════════════════════ */
 
-import { BrowserWindow, app, shell } from "electron";
+import { BrowserWindow, app, net, protocol, shell } from "electron";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
 import { enregistrerCanaux } from "./canaux";
 import { normaliser } from "./parcours";
 import { perimetreInitial } from "./perimetre";
+import type { Perimetre } from "./perimetre";
 import { CANAUX } from "./pont";
 import { creerReglages } from "./reglages";
 import type { Reglages } from "./reglages";
+import { SCHEMA_RESSOURCES, resoudreRessource } from "./ressources";
 
 /** Le serveur de développement de Vite. Le port vient de `vite.config.ts`
     (`strictPort: true`) : s'il change là-bas, il change ici. */
@@ -212,6 +215,51 @@ function creerFenetre(): void {
 	void charger(fenetre).catch(e => console.error(LOG_PREFIX, "chargement du rendu impossible:", e));
 }
 
+/* ─────────── le protocole des ressources ─────────── */
+
+/**
+ * Sert les images qu'un quiz affiche (`HostLinks.resourceUrl`, côté rendu
+ * `apps/windows/src/host/links.ts`) — le remplaçant du protocole d'asset de
+ * Tauri. La forme de l'URL et sa lecture vivent dans `./ressources.ts`, partagé
+ * avec le rendu ; ici il n'y a que le branchement.
+ *
+ * BORNÉ PAR LE MÊME PÉRIMÈTRE QUE LES CANAUX `fichiers.*` (Ruling 13), et pas
+ * par une liste à lui : une seconde liste blanche finirait par diverger de la
+ * première, et c'est la porte que la tâche 3 a mis deux rondes à fermer. Une
+ * URL hors des dossiers ouverts reçoit 403, sans que le chemin demandé ne
+ * touche jamais le disque — `resoudreRessource` rend `null` avant.
+ *
+ * `net.fetch` sur une URL `file:` est le chemin que la documentation d'Electron
+ * donne pour un `protocol.handle` qui sert des fichiers : il pose le type MIME
+ * d'après l'extension et diffuse en flux (`stream: true` ci-dessous), sans
+ * charger l'image entière en mémoire. Un fichier disparu entre la résolution
+ * et la lecture rejette : 404, pas une exception qui remonterait au rendu.
+ */
+function servirRessources(perimetre: Perimetre): void {
+	protocol.handle(SCHEMA_RESSOURCES, async (requete) => {
+		const chemin = await resoudreRessource(perimetre, requete.url);
+		if (!chemin) return new Response(null, { status: 403 });
+		try {
+			return await net.fetch(pathToFileURL(chemin).href);
+		} catch (e) {
+			console.warn(LOG_PREFIX, "ressource illisible:", chemin, e);
+			return new Response(null, { status: 404 });
+		}
+	});
+}
+
+/* AVANT `app.ready`, et nulle part ailleurs : Electron refuse d'enregistrer
+   des privilèges après. `standard` donne à l'URL un hôte et un chemin
+   analysables (sans lui, `app://neo-res/D:/…` serait un chemin OPAQUE que
+   `new URL` ne découpe pas) ; `secure` évite qu'une page chargée en `https`
+   (ce n'est pas le cas aujourd'hui) traite ces images comme du contenu mixte ;
+   `stream` laisse `net.fetch` diffuser le fichier au lieu de le lire entier.
+   Ni `supportFetchAPI` ni `bypassCSP` : le rendu ne fait que des `<img src>`,
+   et une surface qu'aucun appelant ne demande est une surface de trop. */
+protocol.registerSchemesAsPrivileged([
+	{ scheme: SCHEMA_RESSOURCES, privileges: { standard: true, secure: true, stream: true } },
+]);
+
 /* ─────────── le démarrage ─────────── */
 
 /* Le nom de l'application, POSÉ AVANT `getPath("userData")` : sans lui,
@@ -240,6 +288,9 @@ if (!app.requestSingleInstanceLock()) {
 		   (`canaux.ts`). Le dossier de données est CRÉÉ là-dedans mais JAMAIS
 		   autorisé (Ruling 12) : la raison est écrite sur `perimetreInitial`. */
 		const perimetre = await perimetreInitial({ dossierDonnees: donnees, reglages: reglagesOuErreur() });
+		// Le MÊME objet que les canaux : une racine admise par `choisirDossier`
+		// ou `vaultsObsidian` devient aussitôt servable, sans second registre.
+		servirRessources(perimetre);
 		enregistrerCanaux({
 			perimetre,
 			reglagesOuErreur,

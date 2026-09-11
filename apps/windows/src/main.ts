@@ -11,9 +11,10 @@ import type { QuizIndexEntry, Scanner } from "../../../src/dashboard/scanner";
 import { currentHost, installHost } from "../../../src/host/current";
 import { createWindowsHost, createWindowsIndex, creerCarteRacines } from "./host";
 import type { RacineOuverte } from "./host";
+import { pont } from "./host/pont";
 import { poserIcone } from "./host/ui";
 import { poserLogoObsidian } from "./ui/marques";
-import { addFolder, allowFolder, chargerExamDates, estVaultObsidian, obsidianVaults, pickFolder, savedFolders } from "./host/folder";
+import { addFolder, chargerExamDates, estVaultObsidian, obsidianVaults, pickFolder, savedFolders } from "./host/folder";
 import type { ReviewStore } from "../../../src/review/review-store";
 import type { StatsStore } from "../../../src/dashboard/stats-store";
 import { creerJournalApp } from "./review/store";
@@ -22,7 +23,6 @@ import { createRenameDetector } from "../../../src/review/rename-match";
 import { chargerReglagesPages, monterDashboard } from "./ui/dashboard-shell";
 import { openQuizPage } from "./ui/quiz-page";
 import { renderSettings } from "./ui/settings";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /*
  * Démarrage de l'application.
@@ -154,10 +154,16 @@ async function changerDossier(): Promise<boolean> {
  * installé une seule fois, et repartir de zéro est la façon la plus honnête
  * d'en obtenir un neuf. Un second `installHost` laisserait le premier index et
  * son surveillant vivants, sur l'ancien dossier.
+ *
+ * PLUS D'`allowFolder` ici, et ce n'est pas un oubli : le périmètre du
+ * processus principal (`electron/perimetre.ts`) admet le dossier au moment où
+ * il le PRODUIT — `choisirDossier` (le sélecteur natif) et `vaultsObsidian`
+ * sont deux de ses trois portes, la troisième étant la clé `folders` relue au
+ * démarrage. Le rendu ne déclare plus ce qu'il a le droit de lire ; c'est tout
+ * l'objet du périmètre (voir l'en-tête de `host/folder.ts`).
  */
 async function choisirDossier(chemin: string): Promise<void> {
 	await addFolder(chemin);
-	await allowFolder(chemin);
 	location.reload();
 }
 
@@ -255,19 +261,17 @@ async function demarrer(): Promise<void> {
 	try {
 		const dossiers = await savedFolders();
 		if (!dossiers.length) return void mountSansDossier(root);
-		/* Les portées natives ne survivent pas au redémarrage : les rouvrir
-		   AVANT toute lecture, pour CHAQUE dossier. Un dossier disparu (clé USB
-		   retirée, dossier supprimé) ne doit pas empêcher les autres de
-		   s'ouvrir — d'où le `catch` par dossier plutôt qu'un `Promise.all`
-		   qui rejetterait en bloc. */
+		/* Les dossiers persistés sont DÉJÀ au périmètre du processus principal,
+		   qui a lu la clé `folders` avant d'ouvrir la fenêtre — il n'y a plus
+		   rien à « ouvrir » d'ici. Reste la détection de vault, qui décide où
+		   vont les résultats de CE dossier : dans un vault, à l'endroit où le
+		   greffon les écrit déjà, pour que les deux hôtes n'aient pas chacun
+		   leur moitié. Un dossier disparu (clé USB retirée, dossier supprimé)
+		   ne doit pas empêcher les autres de s'ouvrir — d'où le `catch` par
+		   dossier plutôt qu'un `Promise.all` qui rejetterait en bloc. */
 		const ouvertes: RacineOuverte[] = [];
 		for (const d of dossiers) {
 			try {
-				await allowFolder(d.path);
-				/* APRÈS `allowFolder` : sans la portée, la détection échoue. Elle
-				   décide où vont les résultats de CE dossier — dans un vault, à
-				   l'endroit où le greffon les écrit déjà, pour que les deux hôtes
-				   n'aient pas chacun leur moitié. */
 				ouvertes.push({ ...d, vault: await estVaultObsidian(d.path) });
 			} catch (e) {
 				console.warn(LOG_PREFIX, "dossier inaccessible, ignoré:", d.path, e);
@@ -307,24 +311,21 @@ async function demarrer(): Promise<void> {
 		   Deux sorties, deux mécanismes, parce qu'aucun ne couvre les deux :
 
 		   1. FERMETURE DE LA FENÊTRE (croix, Alt+F4, barre des tâches) :
-		      `onCloseRequested`. Vérifié dans `@tauri-apps/api@2.11.1`
-		      (`window.js`, `onCloseRequested`) : le gestionnaire est AWAITÉ, puis
-		      `destroy()` n'est appelé que s'il n'a pas fait `preventDefault()` —
-		      la fenêtre ne meurt donc qu'après notre `await`. CE `destroy()` EST
-		      UNE COMMANDE SOUMISE AUX PERMISSIONS (`plugin:window|destroy`), et
-		      `core:default` ne l'accorde PAS (relevé dans
-		      `src-tauri/gen/schemas/acl-manifests.json`, `core:window`
-		      `default_permission`) : d'où `core:window:allow-destroy` dans
-		      `src-tauri/capabilities/default.json`. Sans elle, Tauri intercepte
-		      la fermeture dès qu'un écouteur existe, `destroy()` est refusé, et
-		      la fenêtre ne se ferme PLUS JAMAIS — l'inverse du but. C'est le seul
-		      chemin qui sache ATTENDRE une écriture : la page d'un quiz rend une
-		      promesse résolue quand la note est écrite, et sans cette attente
+		      `neo.fenetre.surFermeture`. Le processus principal intercepte le
+		      `close` de la `BrowserWindow`, POUSSE l'appel vers le rendu et
+		      attend sa réponse avant de détruire la fenêtre (`electron/main.ts`),
+		      avec un délai de garde — sans lui, un rendu figé rendrait la
+		      fenêtre INFERMABLE, le piège exact rencontré côté Tauri. L'ARMEMENT
+		      lui-même est attendu (`await`) : une fermeture survenue avant que le
+		      principal ne sache qu'un rappel existe n'attendrait rien. C'est le
+		      seul chemin qui sache ATTENDRE une écriture : la page d'un quiz rend
+		      une promesse résolue quand la note est écrite, et sans cette attente
 		      fermer juste après une frappe perdait la frappe, sans message.
 		      Ce qu'il NE couvre PAS : un `location.reload()`, la fin du
 		      processus par le système, et les deux stores, dont `destroy()`
 		      LANCE l'écriture sans rendre de promesse (limite antérieure à cette
-		      tranche, notée au rapport de la tâche 10).
+		      tranche, notée au rapport de la tâche 10). La valeur définitive du
+		      délai de garde est l'affaire de la tâche 5.
 		   2. RECHARGEMENT (`location.reload()` dans `choisirDossier` /
 		      `onFoldersChanged`, depuis la page Réglages) : `beforeunload`, qui
 		      ne peut rien attendre — on ne fait que LANCER les écritures au plus
@@ -338,7 +339,7 @@ async function demarrer(): Promise<void> {
 		   les appeler des deux côtés ne double aucune écriture. C'est le pendant
 		   du `this._reviewStore?.destroy()` de l'`onunload` du greffon. */
 		window.addEventListener("beforeunload", () => { store.destroy(); stats.destroy(); });
-		await getCurrentWindow().onCloseRequested(async () => {
+		await pont().fenetre.surFermeture(async () => {
 			try {
 				await demonter();
 			} catch (e) {

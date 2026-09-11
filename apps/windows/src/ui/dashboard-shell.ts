@@ -44,7 +44,7 @@ import type { QuizIndexEntry, Scanner } from "../../../../src/dashboard/scanner"
 import type { StatsStore } from "../../../../src/dashboard/stats-store";
 import type { ReviewStore } from "../../../../src/review/review-store";
 import type { ModuleOverride } from "../../../../src/dashboard/quiz-modules";
-import { reglagesStore } from "../host/folder";
+import { ecrireReglage, lireReglage } from "../host/folder";
 
 /* ══════════════════════════════════════════════════════════
    LES RÉGLAGES DES PAGES « ACCUEIL » / « MES QUIZ »
@@ -70,13 +70,12 @@ let reglagesPagesCache: DashboardPageSettings = {};
  * (aucun dossier déplié, axe par défaut) jusqu'au premier `saveSettings()`.
  */
 export async function chargerReglagesPages(): Promise<DashboardPageSettings> {
-	const store = await reglagesStore();
 	reglagesPagesCache = {
-		quizzesExpandedFolders: (await store.get<string[]>("quizzesExpandedFolders")) ?? undefined,
-		quizzesGrouping: (await store.get<string>("quizzesGrouping")) ?? undefined,
-		quizzesModuleOverrides: (await store.get<Record<string, ModuleOverride>>("quizzesModuleOverrides")) ?? undefined,
-		quizzesModuleMapNote: (await store.get<string>("quizzesModuleMapNote")) ?? undefined,
-		quizzesArchivedFolders: (await store.get<string[]>("quizzesArchivedFolders")) ?? undefined,
+		quizzesExpandedFolders: (await lireReglage<string[]>("quizzesExpandedFolders")) ?? undefined,
+		quizzesGrouping: (await lireReglage<string>("quizzesGrouping")) ?? undefined,
+		quizzesModuleOverrides: (await lireReglage<Record<string, ModuleOverride>>("quizzesModuleOverrides")) ?? undefined,
+		quizzesModuleMapNote: (await lireReglage<string>("quizzesModuleMapNote")) ?? undefined,
+		quizzesArchivedFolders: (await lireReglage<string[]>("quizzesArchivedFolders")) ?? undefined,
 	};
 	return reglagesPagesCache;
 }
@@ -86,15 +85,13 @@ function reglagesPages(): DashboardPageSettings {
 }
 
 async function enregistrerReglagesPages(): Promise<void> {
-	const store = await reglagesStore();
 	// `?? null`/`?? []` : un réglage effacé par la page (retour à « aucun »)
 	// doit s'écrire comme tel, jamais laisser une ancienne valeur trainer.
-	await store.set("quizzesExpandedFolders", reglagesPagesCache.quizzesExpandedFolders ?? []);
-	await store.set("quizzesGrouping", reglagesPagesCache.quizzesGrouping ?? null);
-	await store.set("quizzesModuleOverrides", reglagesPagesCache.quizzesModuleOverrides ?? {});
-	await store.set("quizzesModuleMapNote", reglagesPagesCache.quizzesModuleMapNote ?? null);
-	await store.set("quizzesArchivedFolders", reglagesPagesCache.quizzesArchivedFolders ?? []);
-	await store.save();
+	await ecrireReglage("quizzesExpandedFolders", reglagesPagesCache.quizzesExpandedFolders ?? []);
+	await ecrireReglage("quizzesGrouping", reglagesPagesCache.quizzesGrouping ?? null);
+	await ecrireReglage("quizzesModuleOverrides", reglagesPagesCache.quizzesModuleOverrides ?? {});
+	await ecrireReglage("quizzesModuleMapNote", reglagesPagesCache.quizzesModuleMapNote ?? null);
+	await ecrireReglage("quizzesArchivedFolders", reglagesPagesCache.quizzesArchivedFolders ?? []);
 }
 
 /* ══════════════════════════════════════════════════════════

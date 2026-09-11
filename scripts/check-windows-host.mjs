@@ -12,16 +12,28 @@
  * de tout le reste ; les groupes « liens » qui suivent la consomment comme un
  * appelant réel le ferait.
  *
- * Le reste de l'hôte (sélecteur, protocole d'asset, toasts, MathLive) n'existe
- * que dans la fenêtre : il se vérifie à la main, et la tâche dit comment. Les
- * modules chargés ici IMPORTENT Tauri au niveau module — c'est sans danger,
- * rien ne s'exécute au chargement. Une SEULE fonction Tauri est appelée, dans
- * les groupes « resourceUrl », et derrière un double de
- * `window.__TAURI_INTERNALS__` : la fabrication d'URL de `convertFileSrc`. Ces
- * groupes éprouvent la RÉSOLUTION qui la précède, pas la conversion elle-même.
+ * Le reste de l'hôte (sélecteur, toasts, MathLive) n'existe que dans la
+ * fenêtre : il se vérifie à la main, et la tâche dit comment.
+ *
+ * DEPUIS LA TÂCHE 4 (migration Tauri → Electron), CE QUE CES GROUPES DOUBLENT
+ * A CHANGÉ DE NATURE. L'hôte ne parle plus à `@tauri-apps/plugin-fs` par
+ * `window.__TAURI_INTERNALS__.invoke` : il appelle `window.neo`, le pont typé
+ * du préchargement (`apps/windows/electron/pont.ts`). Le double n'imite donc
+ * plus une frontière IPC bavarde — c'est un `window.neo` de quinze méthodes
+ * (`installerPont` plus bas), et ce qu'il laisse sous test est exactement ce
+ * qui est à nous : la traduction chemin du contrat ↔ chemin absolu, le rejeu
+ * de `process`, le recalage du miroir sur le `mtime` RENDU par chaque
+ * écriture. Ce qui est parti de l'autre côté de la frontière (la mécanique de
+ * `.trash`, la numérotation d'un homonyme) est éprouvé là où il vit désormais,
+ * `npm run check:electron-fs` — pas doublé deux fois.
+ *
+ * `resourceUrl` n'a plus AUCUN double : l'URL du protocole des ressources est
+ * une pure fonction du chemin (`apps/windows/electron/ressources.ts`), et le
+ * groupe qui suit son SCHÉMA prouve que le sanitizer l'accepte.
  *
  *     npm run check:windows-host
  */
+import { readFileSync } from "node:fs";
 import { Event, parseHTML } from "linkedom";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
@@ -330,20 +342,14 @@ await withSrcModule("apps/windows/src/host/roots.ts", async (mod) => {
 await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLinks }) => {
 	const r = makeReporter("Hôte Windows — resourceUrl");
 
-	/* SEUL endroit du script qui touche Tauri, et par un DOUBLE : la
-	   fabrication d'URL de `convertFileSrc` lit `window.__TAURI_INTERNALS__`,
-	   absent hors de la fenêtre. Sans ce double, chaque appel jetterait et
-	   `resourceUrl` rendrait `null` partout — le cas passerait au vert quelle
-	   que soit la logique, donc ne prouverait rien. Ce qui est ÉPROUVÉ ici,
-	   c'est la RÉSOLUTION qui précède la conversion, pas la conversion. */
-	const precedent = globalThis.window;
-	globalThis.window = {
-		__TAURI_INTERNALS__: {
-			convertFileSrc: (chemin, protocole) => `${protocole}://localhost/${chemin}`,
-		},
-	};
-
-	try {
+	/* PLUS AUCUN DOUBLE ICI depuis la tâche 4. `convertFileSrc` de Tauri lisait
+	   `window.__TAURI_INTERNALS__` et il fallait le doubler, sans quoi chaque
+	   appel jetait et `resourceUrl` rendait `null` partout — un vert qui ne
+	   prouvait rien. `urlDeRessource` (`apps/windows/electron/ressources.ts`)
+	   est une pure fonction du chemin : rien à installer, et l'URL attendue est
+	   celle que le protocole de `electron/main.ts` sert pour de bon. Ce qui est
+	   ÉPROUVÉ ici reste la RÉSOLUTION qui précède la conversion. */
+	{
 		/* Une seule racine, « Quiz » : les chemins du contrat portent quand
 		   même son préfixe (l'hôte Windows préfixe TOUJOURS, même à un seul
 		   dossier — seul le greffon a un identifiant vide). L'INDEX contient
@@ -370,8 +376,8 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 		   de l'index — le `.path` d'un `HostFile` déjà résolu, JAMAIS ce qu'une
 		   note écrit elle-même — donne une URL d'asset sur son chemin ABSOLU,
 		   par le chemin RAPIDE (`index.get`), sans passer par la résolution. */
-		r.check("resourceUrl d'un HostFile (déjà un chemin du contrat) donne l'URL d'asset absolue",
-			links.resourceUrl(f("Quiz/Cours/reseau.md", "md")), "asset://localhost/D:/Quiz/Cours/reseau.md");
+		r.check("resourceUrl d'un HostFile (déjà un chemin du contrat) donne l'URL de ressource absolue",
+			links.resourceUrl(f("Quiz/Cours/reseau.md", "md")), "app://neo-res/D:/Quiz/Cours/reseau.md");
 
 		/* RÉGRESSION DU PREMIER TOUR DE REVUE, ici rétablie : le tour précédent
 		   avait remplacé ce cas par un lien DÉJÀ PRÉFIXÉ (« Quiz/Autre/
@@ -386,19 +392,19 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 		   perdant la règle n°1 : « le fichier explicitement désigné gagne
 		   toujours ». */
 		r.check("un chemin exact écrit SANS préfixe (comme dans une note) gagne sur un homonyme plus proche",
-			links.resourceUrl("Autre/schema.png", "Quiz/Cours/reseau.md"), "asset://localhost/D:/Quiz/Autre/schema.png");
+			links.resourceUrl("Autre/schema.png", "Quiz/Cours/reseau.md"), "app://neo-res/D:/Quiz/Autre/schema.png");
 		/* Même régression, à l'étape 2 (extension implicite) : sans la
 		   conversion, « Autre/ch1 » complète son extension en espace NU
 		   (« Autre/ch1.md », absent d'un index préfixé), échoue, et retombe
 		   sur l'homonyme « Cours/ch1.md », plus proche par proximité. */
 		r.check("une extension implicite se complète dans l'espace du contrat (lien sans préfixe)",
-			links.resourceUrl("Autre/ch1", "Quiz/Cours/reseau.md"), "asset://localhost/D:/Quiz/Autre/ch1.md");
+			links.resourceUrl("Autre/ch1", "Quiz/Cours/reseau.md"), "app://neo-res/D:/Quiz/Autre/ch1.md");
 
 		/* Un NOM NU passe par la résolution par nom, comme `resolve` : c'est ce
 		   qui distingue « résout puis convertit » d'un simple changement de
 		   préfixe, et c'est la moitié que l'hôte Obsidian a dû rejoindre. */
 		r.check("resourceUrl d'un nom nu passe par la résolution par nom",
-			links.resourceUrl("reseau.md"), "asset://localhost/D:/Quiz/Cours/reseau.md");
+			links.resourceUrl("reseau.md"), "app://neo-res/D:/Quiz/Cours/reseau.md");
 		/* `null`, JAMAIS la chaîne vide : un `src=""` fait recharger la page
 		   courante comme image. L'index fait AUTORITÉ — une URL vers un fichier
 		   qu'il ne connaît pas pointerait hors du dossier autorisé. */
@@ -409,10 +415,7 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 		/* `fromPath` BORNE la résolution : sans lui, un nom nu tombe sur
 		   l'homonyme le plus proche de la RACINE, pas de la note citante. */
 		r.check("resourceUrl passe la note citante à la résolution par nom",
-			links.resourceUrl("schema.png", "Quiz/Cours/reseau.md"), "asset://localhost/D:/Quiz/Cours/Images/schema.png");
-	} finally {
-		if (precedent === undefined) delete globalThis.window;
-		else globalThis.window = precedent;
+			links.resourceUrl("schema.png", "Quiz/Cours/reseau.md"), "app://neo-res/D:/Quiz/Cours/Images/schema.png");
 	}
 
 	r.done();
@@ -464,132 +467,157 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
 });
 
 /**
- * Le DOUBLE de la FRONTIÈRE IPC de Tauri, et non des fonctions de plugin-fs.
+ * LE DOUBLE DU PONT — `window.neo`, et rien d'autre.
  *
- * `@tauri-apps/plugin-fs` reste le VRAI module, bundlé et appelé : il finit par
- * `window.__TAURI_INTERNALS__.invoke`, le seul point qui manque hors de la
- * fenêtre. Doubler ce point-là laisse sous test tout ce qui est à nous — y
- * compris la façon dont `writeFile` transmet une VUE partielle, qu'un double
- * posé sur `writeFile` lui-même aurait masquée. Même patron que le double de
- * `convertFileSrc` des groupes « resourceUrl » ci-dessus.
+ * Ce que le rendu peut toucher tient désormais en un seul objet : le pont posé
+ * par le préchargement (`apps/windows/electron/pont.ts`). Doubler CE point-là,
+ * et pas les primitives qui vivent derrière, laisse sous test tout ce qui est à
+ * nous — la traduction chemin du contrat ↔ chemin absolu, le rejeu de
+ * `process`, le recalage du miroir sur le `mtime` que chaque écriture REND.
+ * C'est le même patron que le double de `window.__TAURI_INTERNALS__` qu'il
+ * remplace, en beaucoup plus simple : quinze méthodes nommées au lieu d'un
+ * `invoke` qui décodait des en-têtes.
  *
- * Les chemins vus ici sont ABSOLUS : c'est ce que plugin-fs reçoit, une fois
- * `abs()` passé. Le disque est un `Map` d'octets, parce que plugin-fs encode
- * lui-même le texte et que la seule façon honnête de vérifier ce qui est écrit
- * est de le décoder de l'autre côté.
+ * LES CHEMINS VUS ICI SONT ABSOLUS. C'est l'invariant du pont, et c'est
+ * précisément ce qu'un cas doit pouvoir surprendre : un hôte qui passerait le
+ * chemin du CONTRAT (« Quiz/Cours/ch1.md ») au lieu de l'absolu
+ * (« D:/Quiz/Cours/ch1.md ») écrirait dans un fichier qui n'existe pas, et le
+ * principal le refuserait à l'exécution seulement.
+ *
+ * Le disque est un `Map` d'octets : `writeBinary` doit pouvoir être surpris à
+ * écrire tout un tampon là où on ne lui a donné qu'une vue. Les DATES avancent
+ * à chaque écriture, comme un vrai disque — une date figée rendrait le groupe
+ * « miroir recalé » vert quoi qu'on casse.
+ *
+ * `writeBinary` RECOPIE la vue (`new Uint8Array(donnees)`), exactement comme le
+ * préchargement réel le fait avant l'IPC : c'est ce qui rend le cas « les
+ * octets de la vue, pas ceux du tampon » discriminant ici aussi.
  *
  * @param fichiers état initial du disque, `{ "<chemin absolu>": "<texte>" }`
  */
-function installerTauri(fichiers = {}) {
+function installerPont(fichiers = {}) {
 	const precedent = globalThis.window;
-	const disque = new Map(Object.entries(fichiers).map(([p, t]) => [p, new TextEncoder().encode(t)]));
+	const encodeur = new TextEncoder();
+	const decodeur = new TextDecoder();
+	const disque = new Map(Object.entries(fichiers).map(([p, t]) => [p, encodeur.encode(t)]));
 	const dossiers = new Set();
 	const journal = [];
-	/* Les DATES du faux disque. Elles AVANCENT à chaque écriture, comme un vrai
-	   disque : c'est la seule façon de séparer un `mtime` frais d'un `mtime`
-	   périmé. Une date figée rendrait le groupe « index recalé » vert quoi
-	   qu'on casse. */
 	const dates = new Map([...disque.keys()].map(p => [p, 1000]));
-	const toucher = (p) => dates.set(p, (dates.get(p) ?? 1000) + 5000);
-	/* `writeTextFile` et `writeFile` passent le chemin en EN-TÊTE (le corps est
-	   la donnée), et l'encodent ; les autres commandes le passent en argument. */
-	const cheminEnTete = (options) => decodeURIComponent(options.headers.path);
+	const toucher = (p) => {
+		dates.set(p, (dates.get(p) ?? 1000) + 5000);
+		return { mtime: dates.get(p) };
+	};
+	/* Le vrai principal REJETTE sur un chemin absent (`fichiers.read`) : sans ce
+	   jet, un `process` qui inventerait une chaîne vide passerait inaperçu. */
+	const lire = (p) => {
+		const octets = disque.get(p);
+		if (!octets) throw new Error("ENOENT: " + p);
+		return decodeur.decode(octets);
+	};
+	const ecrireTexte = (nom, p, contenu) => {
+		journal.push([nom, p, contenu]);
+		disque.set(p, encodeur.encode(contenu));
+		return toucher(p);
+	};
 
-	globalThis.window = {
-		__TAURI_INTERNALS__: {
-			invoke: async (cmd, args, options) => {
-				switch (cmd) {
-					case "plugin:fs|read_text_file": {
-						const octets = disque.get(args.path);
-						// Le vrai plugin jette sur un chemin absent : sans ce jet, un
-						// `process` qui inventerait une chaîne vide passerait inaperçu.
-						if (!octets) throw new Error("ENOENT: " + args.path);
-						return octets;
-					}
-					case "plugin:fs|write_text_file": {
-						const p = cheminEnTete(options);
-						/* `append: true` AJOUTE, il ne remplace pas — c'est la propriete
-						   pour laquelle `HostFs.append` existe, et un double qui
-						   ecraserait la ferait passer pour tenue sans l'etre. */
-						/* `options` est passe en en-tete par `JSON.stringify`, SANS
-						   encodage d'URI (releve dans plugin-fs, pas suppose) — et
-						   il vaut la chaine `undefined` quand l'appelant n'en donne
-						   pas. */
-						const brut = options.headers && options.headers.options;
-						const ajout = !!(brut && brut !== "undefined" && JSON.parse(brut).append);
-						const precedent = ajout ? (disque.get(p) ?? new Uint8Array()) : new Uint8Array();
-						const total = new Uint8Array(precedent.length + args.length);
-						total.set(precedent);
-						total.set(args, precedent.length);
-						journal.push([ajout ? "append_text_file" : "write_text_file", p,
-							new TextDecoder().decode(args)]);
-						disque.set(p, total);
-						toucher(p);
-						return;
-					}
-					case "plugin:fs|write_file": {
-						const p = cheminEnTete(options);
-						/* `byteLength` de la VUE reçue, et une COPIE bornée à elle :
-						   c'est exactement ce qu'un corps de requête fait d'un
-						   `BufferSource`. Une implémentation qui enverrait
-						   `data.buffer` nu se verrait ici, et nulle part ailleurs. */
-						journal.push(["write_file", p, args.byteLength]);
-						disque.set(p, args.slice());
-						toucher(p);
-						return;
-					}
-					case "plugin:fs|exists":
-						return disque.has(args.path) || dossiers.has(args.path);
-					/* `stat` : ce que `recaler` interroge apres chaque ecriture. Le
-					   vrai plugin jette sur un chemin absent ; sans ce jet, un
-					   `recaler` qui inventerait une date passerait inapercu. */
-					case "plugin:fs|stat": {
-						if (!disque.has(args.path) && !dossiers.has(args.path)) {
-							throw new Error("ENOENT: " + args.path);
-						}
-						/* La FORME que `parseFileInfo` de plugin-fs attend : `mtime`
-						   en millisecondes, et `null` explicite pour les dates qu'on
-						   ne sert pas (`new Date(undefined)` donnerait une date
-						   invalide, donc un `getTime()` a NaN). */
-						return {
-							isDirectory: dossiers.has(args.path),
-							isFile: disque.has(args.path),
-							isSymlink: false,
-							mtime: dates.get(args.path) ?? 1000,
-							atime: null,
-							birthtime: null,
-						};
-					}
-					case "plugin:fs|mkdir":
-						journal.push(["mkdir", args.path]);
-						dossiers.add(args.path);
-						return;
-					case "plugin:fs|rename": {
-						const octets = disque.get(args.oldPath);
-						if (!octets) throw new Error("ENOENT: " + args.oldPath);
-						journal.push(["rename", args.oldPath, args.newPath]);
-						disque.delete(args.oldPath);
-						dates.delete(args.oldPath);
-						toucher(args.newPath);
-						/* ÉCRASE la destination, comme `rename` de plugin-fs sous
-						   Windows : sans ça, le cas de l'homonyme déjà en corbeille
-						   resterait vert même si le nom libre disparaissait. */
-						disque.set(args.newPath, octets);
-						return;
-					}
-					default:
-						throw new Error("commande Tauri non doublée : " + cmd);
-				}
+	/** Les rappels que `surveiller` a posés — de quoi POUSSER un événement
+	    depuis le « principal », comme le fait `webContents.send`. */
+	const abonnes = [];
+
+	const neo = {
+		async demarrer(racines) {
+			journal.push(["demarrer", ...racines]);
+		},
+		fichiers: {
+			async read(p) { return lire(p); },
+			async readCached(p) { return lire(p); },
+			async write(p, contenu) { return ecrireTexte("write", p, String(contenu)); },
+			async lirePourEcriture(p) {
+				return { contenu: lire(p), mtime: dates.get(p) ?? 1000 };
+			},
+			/* La comparaison porte sur le CONTENU, comme le vrai gestionnaire
+			   (`canaux.ts`) : `null` n'est pas une erreur, c'est « le fichier a
+			   changé, rejoue ton rappel ». */
+			async ecrireSiInchange(p, lu, contenu) {
+				if (lire(p) !== lu) return null;
+				return ecrireTexte("write", p, String(contenu));
+			},
+			async writeBinary(p, donnees) {
+				journal.push(["writeBinary", p, donnees.byteLength]);
+				disque.set(p, new Uint8Array(donnees));
+				return toucher(p);
+			},
+			async append(p, contenu) {
+				const avant = disque.get(p) ?? new Uint8Array();
+				const ajout = encodeur.encode(String(contenu));
+				const total = new Uint8Array(avant.length + ajout.length);
+				total.set(avant);
+				total.set(ajout, avant.length);
+				journal.push(["append", p, String(contenu)]);
+				disque.set(p, total);
+				return toucher(p);
+			},
+			async exists(p) { return disque.has(p) || dossiers.has(p); },
+			async mkdirs(p) { journal.push(["mkdirs", p]); dossiers.add(p); },
+			/* Le principal compose `<racine>/.trash/…`, numérote l'homonyme et
+			   déplace : RIEN de tout cela n'est plus dans le rendu, et c'est
+			   `npm run check:electron-fs` qui l'éprouve (cas 7 et 8). Ici, on ne
+			   retient QUE ce que le rendu a décidé : le chemin absolu, et la
+			   racine dont il relève. */
+			async trash(p, racine) { journal.push(["trash", p, racine]); disque.delete(p); },
+			async list(dossier) {
+				const prefixe = dossier + "/";
+				return [...disque.keys()].filter(p => p.startsWith(prefixe) && !p.slice(prefixe.length).includes("/"));
+			},
+			async remove(p) { journal.push(["remove", p]); disque.delete(p); },
+			async rename(de, vers) { journal.push(["rename", de, vers]); },
+			async stat(p) { return disque.has(p) ? { mtime: dates.get(p) ?? 1000 } : null; },
+			async liste(racine) {
+				/* JOURNALISÉE, comme `surveiller` : c'est la COMPARAISON des deux
+				   places dans le journal qui prouve l'ordre, et rien d'autre ne
+				   peut le faire — un abonnement pris après le parcours existe
+				   tout autant quand le cas l'observe. */
+				journal.push(["liste", racine]);
+				const prefixe = racine + "/";
+				return [...disque.keys()]
+					.filter(p => p.startsWith(prefixe))
+					.map(p => ({ chemin: p, mtime: dates.get(p) ?? 1000 }));
 			},
 		},
+		async surveiller(onEvenement) {
+			/* JOURNALISÉ, et c'est le seul moyen de prouver l'ORDRE : un
+			   abonnement pris APRÈS le parcours existerait tout autant au moment
+			   où le cas l'observe. */
+			journal.push(["surveiller"]);
+			abonnes.push(onEvenement);
+			return () => {
+				const i = abonnes.indexOf(onEvenement);
+				if (i >= 0) abonnes.splice(i, 1);
+			};
+		},
+		dialogue: { async choisirDossier() { return null; } },
+		reglages: {
+			async lire() { return undefined; },
+			async ecrire() {},
+			async supprimer() {},
+		},
+		systeme: {
+			async ouvrir(p) { journal.push(["ouvrir", p]); return true; },
+			async vaultsObsidian() { return []; },
+		},
+		fenetre: { async surFermeture() {} },
 	};
+
+	globalThis.window = { neo };
 
 	return {
 		journal,
 		date: (p) => dates.get(p) ?? null,
-		texte: (p) => (disque.has(p) ? new TextDecoder().decode(disque.get(p)) : null),
+		texte: (p) => (disque.has(p) ? decodeur.decode(disque.get(p)) : null),
 		octets: (p) => (disque.has(p) ? [...disque.get(p)] : null),
-		ecrire: (p, t) => disque.set(p, new TextEncoder().encode(t)),
+		ecrire: (p, t) => { disque.set(p, encodeur.encode(t)); toucher(p); },
+		/** Pousse un événement du « principal » vers tous les abonnés. */
+		emettre: (ev) => { for (const cb of abonnes) cb(ev); },
 		retirer() {
 			if (precedent === undefined) delete globalThis.window;
 			else globalThis.window = precedent;
@@ -599,90 +627,121 @@ function installerTauri(fichiers = {}) {
 
 await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs }) => {
 	const r = makeReporter("Hôte Windows — process, octets et corbeille");
-	const tauri = installerTauri({
+	const pont = installerPont({
 		"D:/Quiz/Cours/ch1.md": "avant",
-		"D:/Quiz/Cours/README": "sans extension",
+		"D:/Quiz/Cours/notes.txt": "autre",
 	});
 
 	try {
 		const carte = creerCarteRacines([{ id: "Quiz", name: "Quiz", path: "D:/Quiz", vault: false }]);
 		/* L'index ne sert qu'à `listMarkdown`/`getFile`, qu'aucun cas de ce
-		   groupe n'exerce : les trois primitives ajoutées ici passent toutes par
-		   le disque, jamais par le catalogue. */
+		   groupe n'exerce : tout ce qui suit passe par le pont, jamais par le
+		   catalogue. */
 		const index = { all: () => [], get: () => null, apply: () => undefined };
 		const fs = createWindowsFs(carte, index);
 
-		/* ── process ── */
+		/* ── le chemin ABSOLU, et lui seul, franchit le pont ── */
 
-		/* Lecture puis écriture, et le contrat le dit : la fenêtre est un
-		   processus unique. Ce qui est éprouvé ici, c'est que le rappel voit le
-		   contenu ACTUEL et que c'est ce qu'il REND qui part sur le disque — un
-		   hôte qui ignorerait son retour réécrirait « avant ». */
+		/* L'INVARIANT du pont (`pont.ts`) : le rendu tient `CarteRacines`, le
+		   principal ne connaît que l'absolu. Un hôte qui passerait le chemin du
+		   contrat écrirait dans un fichier inexistant, et rien ici ne le dirait
+		   sans ce cas — les autres cas du groupe liraient alors ce qu'ils
+		   viennent d'écrire, sous le mauvais nom, et resteraient verts. */
+		await fs.write("Quiz/Cours/ch1.md", "par le pont");
+		r.check("une écriture passe au pont le chemin ABSOLU, jamais celui du contrat",
+			pont.journal.at(-1), ["write", "D:/Quiz/Cours/ch1.md", "par le pont"]);
+		/* La CAUSE, pas le seul rejet : `abs()` garde CHAQUE appel de ce fichier,
+		   et un cas qui accepterait n'importe quelle exception resterait vert le
+		   jour où la fonction mourrait d'une faute de frappe. */
+		let horsRacineLecture = null;
+		try {
+			await fs.read("Inconnu/x.md");
+		} catch (e) {
+			horsRacineLecture = String(e.message);
+		}
+		r.check("une lecture hors des dossiers ouverts rejette en nommant la cause, sans toucher au pont",
+			[horsRacineLecture && horsRacineLecture.includes("chemin hors des dossiers ouverts"),
+				pont.journal.at(-1)[0]],
+			[true, "write"]);
+
+		/* ── process, EN DEUX TEMPS ── */
+
+		/* Le rappel voit le contenu ACTUEL, et c'est ce qu'il REND qui part sur
+		   le disque — un hôte qui ignorerait son retour réécrirait « avant ». */
 		await fs.process("Quiz/Cours/ch1.md", (c) => c + " + ajout");
 		r.check("process écrit ce que le rappel rend, à partir de ce qui était là",
-			tauri.journal.at(-1), ["write_text_file", "D:/Quiz/Cours/ch1.md", "avant + ajout"]);
+			pont.journal.at(-1), ["write", "D:/Quiz/Cours/ch1.md", "par le pont + ajout"]);
+
+		/* LE REJEU, et c'est la moitié que l'ancien hôte ne tenait PAS : il
+		   lisait puis écrivait sans rien comparer, donc une modification arrivée
+		   entre les deux était écrasée en silence. Ici le principal REFUSE
+		   l'écriture quand le contenu a changé (`null`), et le rendu doit
+		   relire et rejouer — le contrat l'autorise en toutes lettres (« Le
+		   rappel peut être REJOUÉ… C'est la DERNIÈRE invocation qui fait foi »)
+		   et `detail-io.ts` en dépend.
+		   Le rappel écrit lui-même sous le pied du premier essai : c'est la
+		   seule façon de provoquer le refus à coup sûr, sans course. */
+		const vus = [];
+		let premier = true;
+		await fs.process("Quiz/Cours/ch1.md", (c) => {
+			vus.push(c);
+			if (premier) {
+				premier = false;
+				// Quelqu'un d'autre écrit entre la lecture et l'écriture.
+				pont.ecrire("D:/Quiz/Cours/ch1.md", "modifié dehors");
+			}
+			return c + " !";
+		});
+		r.check("process REJOUE son rappel quand le fichier a changé entre la lecture et l'écriture",
+			vus, ["par le pont + ajout", "modifié dehors"]);
+		r.check("… et c'est la DERNIÈRE invocation qui fait foi",
+			pont.texte("D:/Quiz/Cours/ch1.md"), "modifié dehors !");
+
+		/* BORNÉ. Un fichier qu'un autre programme réécrit en continu ferait
+		   boucler `process` sans fin, et la fenêtre se figerait sans un mot :
+		   l'abandon est bruyant, et il nomme le fichier. */
+		let sansFin = null;
+		try {
+			await fs.process("Quiz/Cours/notes.txt", (c) => {
+				pont.ecrire("D:/Quiz/Cours/notes.txt", c + ".");
+				return "jamais écrit";
+			});
+		} catch (e) {
+			sansFin = String(e.message);
+		}
+		r.check("process abandonne en nommant le fichier plutôt que de boucler sans fin",
+			sansFin && sansFin.includes("Quiz/Cours/notes.txt"), true);
 
 		/* ── writeBinary ── */
 
-		/* `write_file` et NON `write_text_file` : ce dernier encode la chaîne
-		   qu'on lui donne, et une image y sortirait corrompue en silence.
-		   La vue est PARTIELLE, sur un tampon plus grand qu'elle : un cas qui
+		/* La VUE est PARTIELLE, sur un tampon plus grand qu'elle : un cas qui
 		   vérifierait seulement l'appel resterait VERT avec `data.buffer` nu,
 		   puisque pour une vue construite sur un tampon exact les deux formes
 		   coïncident. C'est la LONGUEUR et le CONTENU qui les séparent. */
 		const tampon = new ArrayBuffer(12);
 		new Uint8Array(tampon).set([9, 9, 9, 9, 1, 2, 3, 4, 5, 6, 7, 8]);
 		await fs.writeBinary("Quiz/Cours/vue.png", new Uint8Array(tampon, 4, 4));
-		r.check("writeBinary passe par write_file, et n'écrit que les octets de la vue",
-			tauri.journal.at(-1), ["write_file", "D:/Quiz/Cours/vue.png", 4]);
-		r.check("… et ce sont les siens, pas ceux du tampon",
-			tauri.octets("D:/Quiz/Cours/vue.png"), [1, 2, 3, 4]);
+		r.check("writeBinary passe au pont la vue, et n'en donne que la longueur qui est la sienne",
+			pont.journal.at(-1), ["writeBinary", "D:/Quiz/Cours/vue.png", 4]);
+		r.check("… et ce sont ses octets, pas ceux du tampon",
+			pont.octets("D:/Quiz/Cours/vue.png"), [1, 2, 3, 4]);
 
 		/* ── trash ── */
 
-		/* RÉCUPÉRABLE, jamais `remove` : supprimer le quiz d'un semestre par
-		   mégarde ne doit pas être définitif. Le fichier se retrouve sous
-		   `<racine>/.trash/<chemin local>`, dont le point de tête l'exclut du
-		   parcours du catalogue (`dossierIgnore`) sans qu'aucun filtre neuf
-		   n'ait à le savoir. */
+		/* Le rendu ne compose plus `<racine>/.trash/…` : c'est le principal qui
+		   le fait (`electron/fichiers.ts`, éprouvé par `npm run
+		   check:electron-fs`). Ce qui reste à sa charge, et que ce cas garde :
+		   passer le chemin ABSOLU et LA RACINE DONT IL RELÈVE. Une autre racine
+		   ferait fabriquer au principal un `../../…` — un déplacement vers
+		   n'importe où, que sa garde refuse justement parce que le rendu peut se
+		   tromper ici. */
 		await fs.trash("Quiz/Cours/ch1.md");
-		r.check("le dossier de la corbeille est créé avant le déplacement",
-			tauri.journal.at(-2), ["mkdir", "D:/Quiz/.trash/Cours"]);
-		r.check("trash DÉPLACE vers .trash, il ne supprime pas",
-			tauri.journal.at(-1), ["rename", "D:/Quiz/Cours/ch1.md", "D:/Quiz/.trash/Cours/ch1.md"]);
-		r.check("… et le contenu est retrouvable là",
-			tauri.texte("D:/Quiz/.trash/Cours/ch1.md"), "avant + ajout");
-		r.check("… tandis que le chemin d'origine est vide",
-			tauri.texte("D:/Quiz/Cours/ch1.md"), null);
-
-		/* La corbeille est justement l'endroit où rien ne doit disparaître :
-		   supprimer deux fois une note du même nom (recréée entre les deux)
-		   écraserait la première — `rename` de plugin-fs remplace la destination
-		   en silence sous Windows, et le double le reproduit exprès. */
-		tauri.ecrire("D:/Quiz/Cours/ch1.md", "recréée");
-		await fs.trash("Quiz/Cours/ch1.md");
-		r.check("un homonyme déjà en corbeille n'est pas écrasé",
-			tauri.journal.at(-1), ["rename", "D:/Quiz/Cours/ch1.md", "D:/Quiz/.trash/Cours/ch1-2.md"]);
-		r.check("… et la première version est toujours là",
-			tauri.texte("D:/Quiz/.trash/Cours/ch1.md"), "avant + ajout");
-
-		/* Un fichier SANS extension : `.trash` porte un point, et couper au
-		   dernier point du chemin ENTIER numéroterait le DOSSIER
-		   (« D:/Quiz/-2.trash/Cours/README ») au lieu du fichier. */
-		await fs.trash("Quiz/Cours/README");
-		tauri.ecrire("D:/Quiz/Cours/README", "recréé");
-		await fs.trash("Quiz/Cours/README");
-		r.check("un fichier sans extension est numéroté sur son NOM, pas sur .trash",
-			tauri.journal.at(-1), ["rename", "D:/Quiz/Cours/README", "D:/Quiz/.trash/Cours/README-2"]);
+		r.check("trash passe au principal le chemin absolu ET la racine dont il relève",
+			pont.journal.at(-1), ["trash", "D:/Quiz/Cours/ch1.md", "D:/Quiz"]);
 
 		/* Hors des dossiers ouverts : nommer la cause plutôt que de fabriquer un
 		   chemin absolu plausible, qui échouerait plus loin avec un message
-		   incompréhensible. */
-		/* La CAUSE, pas le seul fait de lever : `trash` traverse `carte`,
-		   `couperExtension`, `cheminLibre`, `creerDossiers` et `rename`, dont
-		   chacun peut lever pour une autre raison. Un cas qui se contente d'un
-		   `catch` vide resterait vert le jour où la fonction mourrait d'une
-		   faute de frappe AVANT d'avoir seulement regardé la racine. */
+		   incompréhensible. La CAUSE, pas le seul fait de lever. */
 		let horsRacine = null;
 		try {
 			await fs.trash("Inconnu/x.md");
@@ -691,16 +750,25 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs }) =
 		}
 		r.check("trash d'un chemin hors des dossiers ouverts rejette en nommant la cause",
 			horsRacine && horsRacine.includes("chemin hors des dossiers ouverts"), true);
-		/* PAS de cas « et rien n'a été tenté sur le disque » : il serait vert quoi
-		   qu'on fasse. `abs()` garde CHAQUE appel natif de ce fichier et rejette
-		   sur la même cause, donc aucun réordonnancement de `trash` ne peut
-		   atteindre le disque avec un chemin hors racines. Le cas ci-dessus, lui,
-		   rougit bien — vérifié en remplaçant le message par un autre. */
+
+		/* ── list : le pont rend de l'ABSOLU, le contrat veut du CONTRAT ── */
+
+		/* Le contrat promet des chemins du CONTRAT (`HostFs.list`), et le pont
+		   ne rend que de l'absolu : sans la traduction, l'appelant (le journal,
+		   qui cherche ses fichiers de conflit) recevrait des chemins qu'aucune
+		   de ses lectures ne saurait rouvrir. */
+		pont.ecrire("D:/Quiz/Cours/a.md", "a");
+		pont.ecrire("D:/Quiz/Cours/b.md", "b");
+		const liste = await fs.list("Quiz/Cours");
+		r.check("list rend des chemins du CONTRAT, pas l'absolu que le pont a donné",
+			liste.includes("Quiz/Cours/a.md") && liste.includes("Quiz/Cours/b.md"), true);
+		r.check("… et aucun chemin absolu ne fuit dans le résultat",
+			liste.filter(p => /^[A-Za-z]:/.test(p)), []);
 	} finally {
 		/* `try/finally` comme les groupes des modales : un groupe qui MEURT sur
 		   une exception laisserait `globalThis.window` remplacé pour tous ceux
 		   qui suivent. */
-		tauri.retirer();
+		pont.retirer();
 	}
 
 	r.done();
@@ -713,18 +781,24 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs }) =
  * NEUF dès que `write`, `process`, `writeBinary` ou `append` ont rendu la main.
  * C'est la moitié la plus fragile des deux : le greffon refabrique son
  * `HostFile` depuis un `TFile` VIVANT à chaque appel, donc il était frais sans
- * le savoir ; ici, `getFile` lit une `Map` que seul le surveillant met à jour,
- * et ce surveillant est DÉBOUNCÉ de 300 ms. Sans le recalage, un appelant qui
- * relit le `mtime` de sa propre écriture obtenait celui d'AVANT — et
- * `detail-io.ts` en tirait une Notice « modifié dehors » MENSONGÈRE après
- * chaque sauvegarde.
+ * le savoir ; ici, `getFile` lit le MIROIR, une `Map` que seuls le surveillant
+ * — DÉBOUNCÉ de 300 ms côté principal — et le recalage mettent à jour. Sans le
+ * recalage, un appelant qui relit le `mtime` de sa propre écriture obtenait
+ * celui d'AVANT, et `detail-io.ts` en tirait une Notice « modifié dehors »
+ * MENSONGÈRE après chaque sauvegarde.
+ *
+ * CE QUI A CHANGÉ À LA TÂCHE 4 : le `mtime` ne vient plus d'un `stat` que
+ * l'hôte ferait lui-même, mais de la valeur que CHAQUE ÉCRITURE DU PONT REND
+ * (`Promise<{ mtime }>`, voir `pont.ts`). C'est la même promesse, tenue par un
+ * aller-retour de moins — et le double le vérifie de la même façon, en
+ * comparant au `mtime` que son disque porte.
  *
  * Un vrai `buildIndex` ici, et non le bouchon inerte du groupe précédent : ce
- * qu'on éprouve est justement ce que l'index retient.
+ * qu'on éprouve est justement ce que le miroir retient.
  */
 await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, buildIndex, toHostFile }) => {
 	const r = makeReporter("Hôte Windows — l'index recalé après écriture");
-	const tauri = installerTauri({
+	const pont = installerPont({
 		"D:/Quiz/Cours/ch1.md": "avant",
 		"D:/Quiz/.neo-quiz/review-log.jsonl": "{}",
 	});
@@ -741,7 +815,7 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, bui
 		/* `process` — celui dont dépend `detail-io.ts`. */
 		await fs.process("Quiz/Cours/ch1.md", (c) => c + " + ajout");
 		r.check("après process, getFile rend le mtime du DISQUE",
-			mtime("Quiz/Cours/ch1.md"), tauri.date("D:/Quiz/Cours/ch1.md"));
+			mtime("Quiz/Cours/ch1.md"), pont.date("D:/Quiz/Cours/ch1.md"));
 		r.check("… et ce n'est plus celui d'avant",
 			mtime("Quiz/Cours/ch1.md") === 1000, false);
 
@@ -749,7 +823,7 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, bui
 		const avantWrite = mtime("Quiz/Cours/ch1.md");
 		await fs.write("Quiz/Cours/ch1.md", "remplacé");
 		r.check("après write, getFile rend le mtime du DISQUE",
-			mtime("Quiz/Cours/ch1.md"), tauri.date("D:/Quiz/Cours/ch1.md"));
+			mtime("Quiz/Cours/ch1.md"), pont.date("D:/Quiz/Cours/ch1.md"));
 		r.check("… et il a avancé", mtime("Quiz/Cours/ch1.md") > avantWrite, true);
 
 		/* `write` sur un fichier NEUF : il doit ENTRER au catalogue. Sans ça,
@@ -762,12 +836,12 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, bui
 		r.check("après write, un fichier neuf est AU catalogue",
 			fs.getFile("Quiz/Cours/neuf.md")?.basename, "neuf");
 		r.check("… avec le mtime du disque",
-			mtime("Quiz/Cours/neuf.md"), tauri.date("D:/Quiz/Cours/neuf.md"));
+			mtime("Quiz/Cours/neuf.md"), pont.date("D:/Quiz/Cours/neuf.md"));
 
 		/* `writeBinary` — l'aperçu d'une question relit l'image collée. */
 		await fs.writeBinary("Quiz/Cours/img.png", new Uint8Array([1, 2, 3]));
 		r.check("après writeBinary, l'image est au catalogue avec sa date",
-			mtime("Quiz/Cours/img.png"), tauri.date("D:/Quiz/Cours/img.png"));
+			mtime("Quiz/Cours/img.png"), pont.date("D:/Quiz/Cours/img.png"));
 
 		/* `append` — la quatrième voie. Une promesse qui saute une des quatre
 		   écritures est un piège pire que pas de promesse : un appelant ne peut
@@ -775,10 +849,10 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, bui
 		const avantAppend = mtime("Quiz/Cours/ch1.md");
 		await fs.append("Quiz/Cours/ch1.md", " et encore");
 		r.check("après append, getFile rend le mtime du DISQUE",
-			mtime("Quiz/Cours/ch1.md"), tauri.date("D:/Quiz/Cours/ch1.md"));
+			mtime("Quiz/Cours/ch1.md"), pont.date("D:/Quiz/Cours/ch1.md"));
 		r.check("… et il a avancé", mtime("Quiz/Cours/ch1.md") > avantAppend, true);
 		r.check("… l'ajout n'a pas remplacé le contenu",
-			tauri.texte("D:/Quiz/Cours/ch1.md"), "remplacé et encore");
+			pont.texte("D:/Quiz/Cours/ch1.md"), "remplacé et encore");
 
 		/* CE QUE LE RECALAGE NE DOIT PAS FAIRE : faire entrer au catalogue un
 		   chemin que le surveillant en écarte. Le journal de révision s'écrit à
@@ -791,8 +865,176 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, bui
 		r.check("… et le journal n'a pas fait le voyage jusqu'au catalogue",
 			index.all().some(x => x.path.includes(".neo-quiz")), false);
 	} finally {
-		tauri.retirer();
+		pont.retirer();
 	}
+
+	r.done();
+});
+
+/**
+ * LE MIROIR — l'abonnement AVANT l'hydratation, et la traduction des
+ * événements que le principal POUSSE.
+ *
+ * Groupe NEUF de la tâche 4, et il n'a pas d'équivalent sous Tauri : là-bas
+ * l'index se construisait par un parcours que l'hôte faisait LUI-MÊME, et le
+ * surveillant lui parlait directement. Ici les deux passent par l'IPC, et deux
+ * règles que rien d'autre ne garde en dépendent :
+ *
+ * — l'ORDRE. `pont.ts` l'écrit : on s'abonne AVANT d'hydrater. Un changement
+ *   survenu entre les deux est alors soit déjà dans le parcours, soit reçu par
+ *   l'abonné. Dans l'ordre inverse il serait PERDU jusqu'au suivant, et la
+ *   fenêtre montrerait un quiz qui n'existe plus — pendant toute la session.
+ * — la TRADUCTION. Le pont ne parle que d'absolu ; le catalogue ne connaît que
+ *   les chemins du contrat, et il n'admet pas les dossiers cachés.
+ */
+await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsIndex }) => {
+	const r = makeReporter("Hôte Windows — le miroir de l'index");
+	const pont = installerPont({
+		"D:/Quiz/Cours/ch1.md": "un",
+		"D:/Quiz/Cours/schema.png": "image",
+		"D:/Quiz/.neo-quiz/review-log.jsonl": "{}",
+	});
+
+	try {
+		const carte = creerCarteRacines([{ id: "Quiz", name: "Quiz", path: "D:/Quiz", vault: false }]);
+		const miroir = await createWindowsIndex(carte);
+
+		/* Les racines sont DÉCLARÉES au principal, en absolu, avant tout le
+		   reste : sans `demarrer`, `surveiller` et `liste` rejettent tous les
+		   deux (« aucune racine déclarée ») et la fenêtre s'ouvrirait sur un
+		   catalogue vide sans que rien ne l'explique. */
+		r.check("les racines sont déclarées au principal, en chemins absolus",
+			pont.journal[0], ["demarrer", "D:/Quiz"]);
+
+		/* L'HYDRATATION : le parcours du principal peuple le miroir, traduit en
+		   chemins du contrat. */
+		r.check("le parcours hydrate le miroir en chemins du CONTRAT",
+			miroir.all().map(x => x.path).sort(), ["Quiz/Cours/ch1.md", "Quiz/Cours/schema.png"]);
+		/* Le journal de révision vit sous un dossier caché : il ne doit pas
+		   entrer au catalogue, même si le principal le listait — la garde est
+		   des DEUX côtés, et deux copies de cette règle avaient déjà divergé. */
+		r.check("un chemin hors catalogue n'entre pas au miroir, même listé par le principal",
+			miroir.get("Quiz/.neo-quiz/review-log.jsonl"), null);
+		r.check("le mtime du parcours est repris tel quel",
+			miroir.get("Quiz/Cours/ch1.md")?.mtime, pont.date("D:/Quiz/Cours/ch1.md"));
+
+		/* L'ABONNEMENT EST PRIS — et ce cas est la seule preuve qu'il l'a été
+		   AVANT le parcours : si `createWindowsIndex` s'abonnait après avoir
+		   hydraté, l'abonné existerait quand même ici et le cas suivant
+		   passerait. C'est pourquoi il porte sur le JOURNAL du principal, où
+		   l'ordre des appels est visible. */
+		r.check("on s'abonne AVANT d'hydrater, jamais l'inverse",
+			pont.journal.map(l => l[0]), ["demarrer", "surveiller", "liste"]);
+
+		/* UN ÉVÉNEMENT POUSSÉ met le miroir à jour, et les abonnés avec. */
+		const vus = [];
+		miroir.onChange(ev => vus.push(ev.kind + " " + (ev.kind === "delete" ? ev.path : ev.file.path)));
+		pont.emettre({ kind: "modify", abs: "D:/Quiz/Cours/ch1.md", mtime: 7777 });
+		r.check("un modify poussé met le mtime du miroir à jour",
+			miroir.get("Quiz/Cours/ch1.md")?.mtime, 7777);
+		pont.emettre({ kind: "create", abs: "D:/Quiz/Cours/neuf.md", mtime: 42 });
+		r.check("un create poussé fait entrer le fichier au miroir",
+			miroir.get("Quiz/Cours/neuf.md")?.basename, "neuf");
+		pont.emettre({ kind: "delete", abs: "D:/Quiz/Cours/neuf.md" });
+		r.check("un delete poussé le retire", miroir.get("Quiz/Cours/neuf.md"), null);
+		/* L'INDEX D'ABORD, les abonnés ensuite — mais surtout : les abonnés sont
+		   prévenus. Un miroir qui se mettrait à jour sans le dire laisserait la
+		   liste des quiz telle qu'elle était jusqu'au prochain montage. */
+		r.check("les abonnés reçoivent les trois genres, traduits en chemins du contrat",
+			vus, ["modify Quiz/Cours/ch1.md", "create Quiz/Cours/neuf.md", "delete Quiz/Cours/neuf.md"]);
+
+		/* CE QUE LE MIROIR DOIT IGNORER. Un chemin hors des racines (le
+		   principal surveille ce qu'on lui donne, mais la garde est ici aussi),
+		   un chemin hors catalogue, et la suppression d'un fichier que le
+		   catalogue n'a JAMAIS connu — un `.tmp` d'éditeur, dont l'annonce
+		   ferait redessiner la liste pour rien. */
+		const avant = miroir.all().length;
+		pont.emettre({ kind: "create", abs: "E:/Ailleurs/x.md", mtime: 1 });
+		pont.emettre({ kind: "create", abs: "D:/Quiz/.neo-quiz/results/x.md", mtime: 1 });
+		pont.emettre({ kind: "delete", abs: "D:/Quiz/Cours/jamais-vu.tmp" });
+		r.check("un chemin hors racine, un chemin hors catalogue et la suppression d'un inconnu ne changent rien",
+			[miroir.all().length, vus.length], [avant, 3]);
+	} finally {
+		pont.retirer();
+	}
+
+	r.done();
+});
+
+/**
+ * LE SCHÉMA DU PROTOCOLE DES RESSOURCES — et pourquoi il n'est pas libre.
+ *
+ * Groupe NEUF de la tâche 4. `resourceUrl` fabrique l'URL d'une image, et cette
+ * URL traverse ensuite le SANITIZER : `src/engine/cards.ts` résout les images
+ * d'options PUIS assainit (`sanitizeQuizHtml`), et la liste blanche
+ * d'`isSafeQuizUrl` (`src/engine/sanitizer.ts`) n'admet pour un `src` que
+ * `https?:`, `app:`, `file:`, `blob:` et `data:image/`.
+ *
+ * UN SCHÉMA INVENTÉ (« neo-res: ») AURAIT DONC FAIT RETIRER CHAQUE IMAGE
+ * D'OPTION, sans la moindre erreur : des quiz qui s'affichent, sans images, et
+ * rien dans la console. C'est le genre de défaut qu'une relecture ne voit pas,
+ * et `src/` ne bouge pas à cette tranche — c'est donc au protocole de rentrer
+ * dans la liste, pas l'inverse. Ce groupe est ce qui l'empêche de ressortir :
+ * renommer le schéma dans `electron/ressources.ts` fait rougir le cas du
+ * sanitizer.
+ */
+await withSrcModule("apps/windows/electron/ressources.ts", async ({ urlDeRessource, cheminDeRessource }) => {
+	const r = makeReporter("Hôte Windows — le schéma des ressources");
+
+	r.check("l'URL porte le chemin absolu, lisible",
+		urlDeRessource("D:/Quiz/Cours/schema.png"), "app://neo-res/D:/Quiz/Cours/schema.png");
+	/* Un espace ou un `#` dans un nom de fichier casserait l'URL : `#` couperait
+	   le chemin à cet endroit, et le protocole servirait un autre fichier. Le
+	   `:` du lecteur, lui, reste lisible — c'est une URL qu'on relit dans
+	   l'inspecteur quand une image ne s'affiche pas. */
+	r.check("un nom qui porte un espace ou un dièse est encodé, le lecteur reste lisible",
+		urlDeRessource("D:/Quiz/Cours/mon schéma #1.png"),
+		"app://neo-res/D:/Quiz/Cours/mon%20sch%C3%A9ma%20%231.png");
+	/* L'aller-retour, sans quoi le protocole servirait un chemin qui n'est pas
+	   celui que le rendu a demandé. */
+	r.check("le chemin se relit tel quel",
+		cheminDeRessource(urlDeRessource("D:/Quiz/Cours/mon schéma #1.png")),
+		"D:/Quiz/Cours/mon schéma #1.png");
+	/* Une URL d'un AUTRE protocole n'est pas à nous : le gestionnaire répond
+	   404 plutôt que de servir un fichier sur la foi d'un chemin qui traîne. */
+	r.check("une URL étrangère au protocole n'est pas un chemin",
+		[cheminDeRessource("https://exemple.test/x.png"), cheminDeRessource("app://autre/D:/x.png"),
+			cheminDeRessource("pas une url")],
+		[null, null, null]);
+
+	/* LA CONTRAINTE, ÉPROUVÉE SUR LES DEUX LISTES QUI LA PORTENT — et par le
+	   TEXTE de leur source, comme le fait déjà `check:obsidian-host` pour la
+	   liste des préfixes de `cards.ts`. Ce n'est pas un raccourci : passer par
+	   le VRAI `sanitizeQuizHtml` ne prouverait RIEN ici, parce que linkedom ne
+	   tient pas la sémantique d'un `<template>` — son `.content` est une
+	   fragment SÉPARÉE du `innerHTML` qu'il resérialise, donc toutes les
+	   retouches du sanitizer s'y perdent et il rend son entrée TELLE QUELLE
+	   (mesuré : `<script>`, `onerror=` et `javascript:` y survivent tous les
+	   trois). Un cas écrit là-dessus serait vert quel que soit le schéma — le
+	   défaut exact qu'il est censé attraper.
+	   Ce que ces deux cas gardent : le schéma que `urlDeRessource` produit doit
+	   être NOMMÉ dans les deux listes de `src/`, qui ne bougent pas à cette
+	   tranche. Le renommer dans `electron/ressources.ts` les fait rougir. */
+	const schema = new URL(urlDeRessource("D:/Quiz/Cours/schema.png")).protocol;
+
+	/* `isSafeQuizUrl` (`src/engine/sanitizer.ts`) : la liste blanche des URL
+	   qu'un `src` d'image a le droit de porter. Un schéma absent d'ici est
+	   RETIRÉ de l'attribut, sans la moindre erreur : le quiz s'affiche, sans
+	   ses images, et rien dans la console ne le dit. */
+	const listeSanitizer = readFileSync("src/engine/sanitizer.ts", "utf8")
+		.split("\n").find(ligne => ligne.includes("mailto:") && ligne.includes("blob:"));
+	r.check("le schéma des ressources est dans la liste blanche du sanitizer",
+		!!listeSanitizer && listeSanitizer.includes(schema), true);
+
+	/* `cards.ts` : les préfixes DÉJÀ résolus, qu'une seconde passe ne doit pas
+	   réécrire. Un schéma absent d'ici ferait repasser l'URL par `resourceUrl`,
+	   qui ne sait pas la relire et rendrait `null` — le `src` d'origine
+	   survivrait, puis le sanitizer le retirerait. Même résultat, autre cause :
+	   la règle est gardée des deux côtés. */
+	const listeCards = readFileSync("src/engine/cards.ts", "utf8")
+		.split("\n").find(ligne => ligne.includes("data:") && ligne.includes("asset:"));
+	r.check("… et dans les préfixes que cards.ts tient pour déjà résolus",
+		!!listeCards && listeCards.includes(schema), true);
 
 	r.done();
 });
@@ -856,6 +1098,7 @@ await withSrcModule("apps/windows/src/review/catalogue.ts", async ({ construireC
  * pas encore été appelé. `matchMedia` rend `matches: false` pour éprouver le
  * chemin ANIMÉ ; le chemin `prefers-reduced-motion` détache immédiatement et
  * ne dirait rien de cet ordre-là.
+
  */
 function installerDom() {
 	const precedentDocument = globalThis.document;

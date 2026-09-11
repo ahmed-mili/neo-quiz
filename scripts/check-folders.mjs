@@ -21,6 +21,23 @@ await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, id
 	r.check("la clé au singulier devient une liste d'un dossier",
 		lireDossiers({ folder: "C:/obsidian-vaults/Efrei" }),
 		[{ id: "Efrei", path: "C:/obsidian-vaults/Efrei", name: "Efrei" }]);
+	/* LA CONVERSION DES SÉPARATEURS (tâche 4 de la migration Electron, Ruling
+	   14). Un réglage écrit par la version Tauri porte les `\` que le sélecteur
+	   natif rendait ; le pont, lui, pose partout l'invariant des `/`, et
+	   `obsidian.json` donne lui aussi des `\`. Sans cette conversion à la
+	   LECTURE, le même dossier ouvert depuis la liste Obsidian et par le
+	   sélecteur aurait DEUX `path` pour un seul disque : `depuisAbsolu`
+	   (`roots.ts`) compare des préfixes, donc les événements du surveillant
+	   tomberaient dans le vide pour l'une des deux formes — un catalogue qui ne
+	   se met plus à jour, sans message. Le `\` FINAL part aussi : un préfixe qui
+	   se termine par un séparateur ne correspond à rien. */
+	r.check("un chemin persisté avec des antislashs est converti",
+		lireDossiers({ folders: [{ path: "C:\\obsidian-vaults\\Efrei\\" }] })[0].path,
+		"C:/obsidian-vaults/Efrei");
+	r.check("… y compris sous l'ancienne clé au singulier",
+		lireDossiers({ folder: "C:\\obsidian-vaults\\Efrei" })[0].path,
+		"C:/obsidian-vaults/Efrei");
+
 	/* `folders` GAGNE sur `folder` : une fois converti, l'ancien réglage ne
 	   doit plus jamais reprendre la main. */
 	r.check("folders l'emporte sur folder",

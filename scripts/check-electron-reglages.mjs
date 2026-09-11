@@ -248,6 +248,37 @@ await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetr
 				{ objet: await cause({ toString: () => racine }), vide: await cause("") },
 				{ objet: "chemin invalide", vide: "chemin invalide" });
 		});
+
+		/* LE PROTOCOLE DES RESSOURCES, BORNÉ PAR CE MÊME PÉRIMÈTRE (Ruling 13).
+		   `protocol.handle` (`electron/main.ts`) sert les images d'un quiz, et
+		   c'est la SEULE autre porte du principal vers le disque avec les canaux
+		   `fichiers.*`. Lui donner sa propre liste blanche, c'est la faire
+		   diverger de l'autre — la porte que la tâche 3 a mis deux rondes à
+		   fermer. `resoudreRessource` vit dans `electron/ressources.ts` et non
+		   dans `main.ts` pour être éprouvable ici : `main.ts` importe Electron,
+		   aucun contrôle ne peut le charger.
+		   Les DEUX moitiés, sinon un périmètre vide ferait passer le cas : une
+		   image DANS la racine est servie, la même URL hors racine est
+		   REFUSÉE (`null`, que le gestionnaire traduit en 403). */
+		await cas(r, "le protocole des ressources est borné par le MÊME périmètre", async () => {
+			await withSrcModule("apps/windows/electron/ressources.ts", async ({ urlDeRessource, resoudreRessource }) => {
+				const dedans = join(racine, "Cours", "schema.png").replace(/\\/g, "/");
+				const dehors = join(ailleurs, "secret.md").replace(/\\/g, "/");
+				r.check("le protocole des ressources est borné par le MÊME périmètre",
+					{
+						dedans: await resoudreRessource(p, urlDeRessource(dedans)),
+						dehors: await resoudreRessource(p, urlDeRessource(dehors)),
+						/* Un `..` ENCODÉ dans l'URL arrive ici décodé : c'est
+						   `borner` qui le replie, jamais une comparaison de
+						   chaîne. Concaténé et non `path.join`, qui replierait
+						   déjà (le cas d'à côté a été vert pour cette raison). */
+						remontee: await resoudreRessource(p, urlDeRessource(racine + "/Cours/../../ailleurs/secret.md")),
+						/* Une URL d'un autre protocole n'est pas à nous. */
+						etrangere: await resoudreRessource(p, "https://exemple.test/x.png"),
+					},
+					{ dedans, dehors: null, remontee: null, etrangere: null });
+			});
+		});
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

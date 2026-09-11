@@ -1,9 +1,11 @@
 /* ══════════════════════════════════════════════════════════
    L'HÔTE WINDOWS
 
-   L'implémentation Tauri du contrat `src/host/types.ts`. C'est ici, et NULLE
-   PART AILLEURS sous `src/`, que le code partagé touche le disque, le
-   sélecteur natif ou le protocole d'asset.
+   L'implémentation ELECTRON du contrat `src/host/types.ts`. C'est ici, et
+   NULLE PART AILLEURS sous `src/`, que le code partagé touche le disque, le
+   sélecteur natif ou le protocole des ressources — et « toucher » veut dire
+   « demander au processus principal par le pont » (`window.neo`) : la fenêtre
+   n'a aucun accès direct, `contextIsolation` et `sandbox` le lui interdisent.
 
    Ce fichier vit sous `apps/windows/` par construction, comme
    `apps/obsidian/host.ts` : il est l'un des deux seuls endroits du dépôt où
@@ -16,11 +18,11 @@
    il ne connaît lui-même aucun chemin absolu ni aucune conversion de préfixe.
 ══════════════════════════════════════════════════════════ */
 
-import { openPath } from "@tauri-apps/plugin-opener";
 import { LOG_PREFIX } from "../../../../src/branding";
 import type { Host } from "../../../../src/host/types";
+import { pont } from "./pont";
 import { createWindowsFs, createWindowsWatcher } from "./fs";
-import type { WindowsIndex } from "./fs";
+import type { MiroirDisque } from "./fs";
 import { attachmentPathFor as attachmentPathForRacine, resultsDirFor as resultsDirForRacine } from "./roots";
 import type { CarteRacines } from "./roots";
 import { createWindowsLinks } from "./links";
@@ -29,11 +31,15 @@ import { createWindowsModals } from "./modal";
 import { createWindowsUi } from "./ui";
 
 export { createWindowsIndex } from "./fs";
-export type { WindowsIndex } from "./fs";
+export type { MiroirDisque, WindowsIndex } from "./fs";
 export { creerCarteRacines } from "./roots";
 export type { CarteRacines, RacineOuverte } from "./roots";
 
-export function createWindowsHost(carte: CarteRacines, index: WindowsIndex): Host {
+/** L'hôte, à partir de la carte des racines et du MIROIR de l'index que
+    `createWindowsIndex` a construit (abonné au surveillant du principal PUIS
+    hydraté — voir `./fs.ts`). Le miroir sert deux fois : comme index pour les
+    trois lectures synchrones du contrat, et comme source du `HostWatcher`. */
+export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Host {
 	/* NOMMÉ ici, et non construit dans le littéral rendu en fin de fonction :
 	   `paths.attachmentPathFor` a besoin d'interroger le disque, et le seul
 	   endroit du dépôt qui sait convertir un chemin du contrat en chemin absolu
@@ -43,27 +49,34 @@ export function createWindowsHost(carte: CarteRacines, index: WindowsIndex): Hos
 	const fs = createWindowsFs(carte, index);
 
 	const shell: Host["shell"] = {
-		/* `openPath` de plugin-opener : l'application par défaut du système,
-		   exactement comme `app.openWithDefaultApp` sous Obsidian. Le contrat
-		   rend un booléen ; l'appelant (`engine/resources.ts`) s'en sert pour
-		   décider s'il doit prévenir l'utilisateur. */
+		/* `systeme.ouvrir` du pont (`shell.openPath` côté principal, BORNÉ au
+		   périmètre) : l'application par défaut du système, exactement comme
+		   `app.openWithDefaultApp` sous Obsidian. Le principal rend un booléen —
+		   `shell.openPath` rend une chaîne vide en cas de succès, et l'appelant
+		   (`engine/resources.ts`) a besoin d'un booléen pour décider s'il doit
+		   prévenir l'utilisateur. */
 		async openExternal(file) {
 			if (!file || !index.get(file.path)) return false;
 			const a = carte.absolu(file.path);
 			if (!a) return false;
 			try {
-				await openPath(a);
-				return true;
+				return await pont().systeme.ouvrir(a);
 			} catch (e) {
-				console.warn(LOG_PREFIX, "openPath a échoué:", e);
+				/* La cause est LOGGÉE, jamais affichée : ce rejet peut porter un
+				   message du processus principal (« chemin hors des dossiers
+				   ouverts »), qui n'est pas traduit par `t()` — le montrer dans
+				   une Notice ferait fuiter une phrase française dans une interface
+				   anglaise. L'appelant sait quoi dire d'un `false`. */
+				console.warn(LOG_PREFIX, "ouverture externe refusée:", e);
 				return false;
 			}
 		},
 		/* `revealInHost` rend TOUJOURS false : l'app n'a pas d'explorateur de
 		   fichiers interne à faire défiler. Ce n'est PAS une erreur — le contrat
 		   le dit, et `engine/resources.ts` enchaîne sur l'ouverture externe.
-		   (plugin-opener sait révéler un fichier dans l'explorateur de WINDOWS,
-		   mais ce n'est pas ce que le contrat demande : il parle de l'explorateur
+		   (`shell.showItemInFolder` d'Electron sait révéler un fichier dans
+		   l'explorateur de WINDOWS, mais ce n'est pas ce que le contrat
+		   demande : il parle de l'explorateur
 		   de l'HÔTE, celui qu'on garde sous les yeux. Ouvrir une fenêtre du
 		   système par-dessus l'application serait une autre action, décidée par
 		   l'appelant, pas glissée ici sous le même nom.) */
@@ -77,7 +90,7 @@ export function createWindowsHost(carte: CarteRacines, index: WindowsIndex): Hos
 		isMacOS: false,
 		/* La langue de l'INTERFACE DE L'HÔTE. Ici l'hôte est la fenêtre
 		   elle-même : `navigator.language` rend la langue du système, que
-		   WebView2 reprend de Windows. Accesseur et non valeur figée, par
+		   Chromium reprend de Windows. Accesseur et non valeur figée, par
 		   symétrie avec l'hôte Obsidian ; c'est `src/i18n.ts` qui décide ce
 		   qu'il en fait, pas l'hôte. */
 		get uiLanguage(): string {
@@ -92,8 +105,8 @@ export function createWindowsHost(carte: CarteRacines, index: WindowsIndex): Hos
 		   hors d'un vault, il n'y a pas de `.obsidian/` et en créer un serait
 		   poser un dossier de configuration Obsidian fantôme.
 		   Logique extraite dans `roots.ts` (PURE, donc éprouvable) : ce
-		   fichier-ci importe MathLive et Tauri, qu'esbuild ne charge pas hors
-		   de la fenêtre. */
+		   fichier-ci importe MathLive, qu'esbuild ne charge pas hors de la
+		   fenêtre. */
 		resultsDirFor(sourcePath) { return resultsDirForRacine(carte, sourcePath); },
 		/* Même extraction, et pour la même raison : la logique vit dans
 		   `roots.ts` (PURE, donc éprouvable par `npm run check:windows-host`) et
@@ -114,7 +127,7 @@ export function createWindowsHost(carte: CarteRacines, index: WindowsIndex): Hos
 	return {
 		fs,
 		links: createWindowsLinks(carte, index),
-		watcher: createWindowsWatcher(carte, index),
+		watcher: createWindowsWatcher(index),
 		ui: createWindowsUi(),
 		math: createWindowsMath(),
 		modals: createWindowsModals(),

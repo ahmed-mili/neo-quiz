@@ -1,6 +1,6 @@
 import { LOG_PREFIX } from "../../../../src/branding";
 import { createStatsStore, type StatsStore, type QuizStatRecord } from "../../../../src/dashboard/stats-store";
-import { reglagesStore } from "../host/folder";
+import { ecrireReglage, lireReglage } from "../host/folder";
 
 /* ══════════════════════════════════════════════════════════
    LES STATISTIQUES PAR QUIZ, CÔTÉ APPLICATION
@@ -20,10 +20,9 @@ import { reglagesStore } from "../host/folder";
 const CLE_STATS = "quizStats";
 
 export async function creerStatsApp(): Promise<StatsStore> {
-	const store = await reglagesStore();
 	let cache: Record<string, QuizStatRecord> = {};
 	try {
-		const brut = await store.get<Record<string, QuizStatRecord>>(CLE_STATS);
+		const brut = await lireReglage<Record<string, QuizStatRecord>>(CLE_STATS);
 		if (brut && typeof brut === "object") cache = brut;
 	} catch (e) {
 		// Réglages illisibles : on repart de stats vides plutôt que d'empêcher
@@ -35,8 +34,7 @@ export async function creerStatsApp(): Promise<StatsStore> {
 		getStats: () => cache,
 		saveStats: async (data) => {
 			cache = data;
-			await store.set(CLE_STATS, data);
-			await store.save();
+			await ecrireReglage(CLE_STATS, data);
 		},
 	});
 	stats.load();

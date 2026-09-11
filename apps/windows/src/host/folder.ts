@@ -1,20 +1,35 @@
 /* ══════════════════════════════════════════════════════════
    L'HÔTE WINDOWS — LE DOSSIER DE QUIZ
 
-   Choisir un dossier, s'en souvenir d'une session à l'autre, et rouvrir les
-   portées natives qui le rendent lisible. C'est la seule partie de l'hôte qui
-   parle au natif autrement que par un greffon.
+   Choisir un dossier, s'en souvenir d'une session à l'autre. Tout passe par le
+   pont (`window.neo`, `apps/windows/electron/pont.ts`) : le sélecteur natif,
+   les réglages, la liste des vaults d'Obsidian.
+
+   `allowFolder` A DISPARU, et ce n'est pas une simplification. Sous Tauri, la
+   commande Rust `allow_folder` ÉTENDAIT une barrière (la portée vide de
+   `plugin-fs`) à chaque lancement : le rendu déclarait ce qu'il avait le droit
+   de lire. Le périmètre Electron (`electron/perimetre.ts`) tient la même
+   barrière, mais côté PRINCIPAL et alimenté par lui seul — la clé `folders`
+   des réglages, lue au démarrage ; le dossier que le sélecteur natif a
+   désigné ; les vaults qu'Obsidian déclare. Il n'y a donc plus rien à
+   « ouvrir » depuis ici : un dossier persisté est déjà au périmètre quand le
+   rendu démarre, et un dossier neuf y entre par la porte qui l'a produit.
+
+   LES CHEMINS SONT NORMALISÉS À L'ENTRÉE (Ruling 14). `obsidian.json` écrit
+   des `\` (« C:\\obsidian-vaults\\Personal ») et le sélecteur natif aussi,
+   alors que tout ce qui franchit le pont porte des `/`. Un même dossier
+   ouvert d'un côté puis de l'autre donnerait sinon deux clés pour un seul
+   fichier dans le miroir du rendu — et deux historiques de révision. La
+   normalisation se fait ici, au point d'entrée, et les valeurs DÉJÀ
+   PERSISTÉES par la version Tauri sont CONVERTIES à la lecture.
 ══════════════════════════════════════════════════════════ */
 
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import { exists } from "@tauri-apps/plugin-fs";
-import { load } from "@tauri-apps/plugin-store";
-import type { Store } from "@tauri-apps/plugin-store";
 import { LOG_PREFIX } from "../../../../src/branding";
-
-/** Fichier des réglages de l'application, dans son dossier de données. */
-const FICHIER_REGLAGES = "settings.json";
+/* `pont()` lit `window.neo` À L'APPEL — voir `./pont.ts` pour le pourquoi.
+   `npm run check:folders` charge ce module hors de toute fenêtre : les
+   fonctions PURES qu'il éprouve (`lireDossiers`, `idUnique`,
+   `appliquerExamDate`…) ne l'appellent jamais. */
+import { pont } from "./pont";
 
 /** Un dossier de quiz retenu par l'application. */
 export interface DossierQuiz {
@@ -30,8 +45,8 @@ export interface DossierQuiz {
 	 * second endroit où le préfixe serait connu.
 	 */
 	id: string;
-	/** Chemin ABSOLU sur le disque. La seule valeur qui ne soit pas du
-	    contrat : elle ne sort jamais de l'hôte. */
+	/** Chemin ABSOLU sur le disque, séparateurs `/`. La seule valeur qui ne
+	    soit pas du contrat : elle ne sort de l'hôte que vers le pont. */
 	path: string;
 	/** Nom affiché. Modifiable un jour sans conséquence — l'identité, c'est
 	    `id`. */
@@ -45,26 +60,30 @@ const CLE_DOSSIERS = "folders";
 /** L'ancienne clé, au SINGULIER (tranche 1). Lue une fois, puis retirée. */
 const CLE_DOSSIER_LEGACY = "folder";
 
-let magasin: Store | null = null;
-
 /**
- * Le magasin Tauri des réglages de l'application, partagé par tout ce
- * fichier (dossiers, dates d'examen) ET par `review/stats.ts` (tâche
- * « statistiques par quiz »). EXPORTÉE : ouvrir un second magasin sur le
- * même fichier `settings.json` ferait écrire deux instances sans savoir
- * l'une de l'autre, chacune écrasant les changements de l'autre à sa
- * prochaine sauvegarde.
+ * Sépare avec des `/` et retire le séparateur final.
+ *
+ * LA CONVERSION DES VALEURS DÉJÀ PERSISTÉES (Ruling 14). Un `folders` écrit
+ * par la version Tauri porte les `\` que le sélecteur natif rendait
+ * (« C:\obsidian-vaults\Efrei ») ; le pont, lui, pose partout l'invariant des
+ * `/` — c'est `parcours.ts` qui le dit et le principal l'applique à tout ce
+ * qu'il émet. Sans cette conversion, un dossier ouvert depuis la liste
+ * Obsidian et le MÊME ouvert par le sélecteur donneraient deux `path`
+ * différents pour un seul disque : `depuisAbsolu` (`roots.ts`) compare des
+ * préfixes, donc les événements du surveillant tomberaient dans le vide pour
+ * l'une des deux formes. Appliquée à la LECTURE (`lireDossiers`), donc une
+ * fois pour toutes : la première écriture qui suit réécrit la forme normalisée.
  */
-export async function reglagesStore(): Promise<Store> {
-	if (!magasin) magasin = await load(FICHIER_REGLAGES);
-	return magasin;
+export function normaliserChemin(chemin: string): string {
+	return String(chemin ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
 /** Ouvre le sélecteur natif. `null` si l'utilisateur annule — ce n'est pas une
-    erreur, c'est la réponse « non ». */
+    erreur, c'est la réponse « non ». Le dossier choisi entre au périmètre du
+    principal par ce seul appel (`canaux.ts`). */
 export async function pickFolder(): Promise<string | null> {
-	const choix = await open({ directory: true, multiple: false });
-	return typeof choix === "string" && choix.trim() ? choix : null;
+	const choix = await pont().dialogue.choisirDossier();
+	return typeof choix === "string" && choix.trim() ? normaliserChemin(choix) : null;
 }
 
 /** Le dernier segment d'un chemin, quel que soit le séparateur. */
@@ -97,8 +116,9 @@ export function idUnique(nom: string, pris: ReadonlySet<string>): string {
 }
 
 /**
- * Les dossiers retenus, à partir de ce que le magasin contient — y compris
- * l'ANCIENNE clé au singulier.
+ * Les dossiers retenus, à partir de ce que les réglages contiennent — y
+ * compris l'ANCIENNE clé au singulier, et y compris les chemins écrits avec
+ * des `\` par la version Tauri (voir `normaliserChemin`).
  *
  * PURE, et c'est délibéré : la conversion d'un réglage est exactement le
  * genre de code qu'on n'ose plus toucher parce qu'on ne peut pas l'exécuter.
@@ -111,7 +131,7 @@ export function lireDossiers(brut: { folders?: unknown; folder?: unknown }): Dos
 	if (Array.isArray(brut.folders)) {
 		for (const e of brut.folders) {
 			const o = e as Partial<DossierQuiz> | null;
-			const path = typeof o?.path === "string" ? o.path.trim() : "";
+			const path = typeof o?.path === "string" ? normaliserChemin(o.path.trim()) : "";
 			if (!path) continue;
 			const name = typeof o?.name === "string" && o.name.trim() ? o.name.trim() : nomDeDossier(path);
 			/* L'identifiant persisté est reconduit tel quel — sauf collision,
@@ -133,7 +153,7 @@ export function lireDossiers(brut: { folders?: unknown; folder?: unknown }): Dos
 	   l'utilisateur sur l'écran « Choisissez un dossier », son dossier
 	   toujours là mais oublié. */
 	if (typeof brut.folder === "string" && brut.folder.trim()) {
-		const path = brut.folder.trim();
+		const path = normaliserChemin(brut.folder.trim());
 		const name = nomDeDossier(path);
 		return [{ id: segmentValide(name), path, name }];
 	}
@@ -146,18 +166,18 @@ export function lireDossiers(brut: { folders?: unknown; folder?: unknown }): Dos
  */
 export async function savedFolders(): Promise<DossierQuiz[]> {
 	try {
-		const store = await reglagesStore();
+		const reglages = pont().reglages;
+		const legacy = await reglages.lire(CLE_DOSSIER_LEGACY);
 		const liste = lireDossiers({
-			folders: await store.get(CLE_DOSSIERS),
-			folder: await store.get(CLE_DOSSIER_LEGACY),
+			folders: await reglages.lire(CLE_DOSSIERS),
+			folder: legacy,
 		});
 		/* La conversion se paie UNE fois : dès qu'on a lu l'ancienne clé, on
 		   écrit la nouvelle et on retire l'ancienne. Laisser les deux en place
 		   ferait diverger le jour où l'une des deux serait modifiée. */
-		if ((await store.get(CLE_DOSSIER_LEGACY)) !== undefined) {
-			await store.set(CLE_DOSSIERS, liste);
-			await store.delete(CLE_DOSSIER_LEGACY);
-			await store.save();
+		if (legacy !== undefined) {
+			await reglages.ecrire(CLE_DOSSIERS, liste);
+			await reglages.supprimer(CLE_DOSSIER_LEGACY);
 		}
 		return liste;
 	} catch (e) {
@@ -168,12 +188,36 @@ export async function savedFolders(): Promise<DossierQuiz[]> {
 	}
 }
 
+/**
+ * Écrit la liste des dossiers.
+ *
+ * LA GARDE DU PRINCIPAL PEUT REFUSER (Ruling 15). Le canal `reglages.ecrire`
+ * vérifie que CHAQUE chemin de cette clé est déjà au périmètre, parce que
+ * c'est elle qui le nourrit au démarrage suivant : sans cette garde, le rendu
+ * pourrait s'écrire `{ path: "C:/" }` et obtenir tout le disque à la session
+ * d'après. Or un dossier ABSENT du disque (clé USB retirée, dossier supprimé)
+ * n'est jamais entré au périmètre — `autoriser` ignore ce qui n'existe pas —
+ * et sa seule présence dans la liste ferait REJETER l'écriture entière : un
+ * utilisateur ne pourrait plus retirer un autre dossier tant que la clé n'est
+ * pas rebranchée. On écarte donc les dossiers disparus AVANT d'écrire ; ils
+ * sont perdus du réglage, ce qui est déjà ce que l'écran montre (le démarrage
+ * les ignore aussi, `main.ts`). Le refus qui reste possible — un chemin
+ * PRÉSENT mais hors périmètre — est celui qu'on veut : il ne peut venir que
+ * d'une valeur fabriquée, jamais du sélecteur ni des vaults.
+ */
 export async function saveFolders(liste: DossierQuiz[]): Promise<void> {
-	const store = await reglagesStore();
-	await store.set(CLE_DOSSIERS, liste);
-	// `save()` explicite : l'enregistrement automatique est débouncé, et
-	// l'application recharge la fenêtre juste après ce choix.
-	await store.save();
+	const gardes: DossierQuiz[] = [];
+	for (const d of liste) {
+		try {
+			if (await pont().fichiers.exists(d.path)) gardes.push(d);
+			else console.warn(LOG_PREFIX, "dossier disparu du disque, retiré des réglages:", d.path);
+		} catch (e) {
+			/* `exists` rejette quand le chemin est hors périmètre : le garder
+			   ferait rejeter l'écriture entière (voir ci-dessus). On le nomme. */
+			console.warn(LOG_PREFIX, "dossier inaccessible, retiré des réglages:", d.path, e);
+		}
+	}
+	await pont().reglages.ecrire(CLE_DOSSIERS, gardes);
 }
 
 /** Ajoute un dossier et rend la liste complète. Un chemin déjà présent n'est
@@ -181,8 +225,8 @@ export async function saveFolders(liste: DossierQuiz[]): Promise<void> {
     donc deux fois chaque quiz au catalogue. */
 export async function addFolder(chemin: string): Promise<DossierQuiz[]> {
 	const liste = await savedFolders();
-	const normalise = chemin.replace(/[\\/]+$/, "");
-	if (liste.some(d => d.path.replace(/[\\/]+$/, "").toLowerCase() === normalise.toLowerCase())) return liste;
+	const normalise = normaliserChemin(chemin);
+	if (liste.some(d => d.path.toLowerCase() === normalise.toLowerCase())) return liste;
 	if (liste.length >= MAX_DOSSIERS) return liste;
 	const nom = nomDeDossier(normalise);
 	const suivante = [...liste, { id: idUnique(nom, new Set(liste.map(d => d.id))), path: normalise, name: nom }];
@@ -199,18 +243,6 @@ export async function removeFolder(id: string): Promise<DossierQuiz[]> {
 	return suivante;
 }
 
-/**
- * Ouvre les portées natives sur le dossier.
- *
- * À appeler AVANT toute lecture, y compris au redémarrage sur un dossier déjà
- * persisté : les portées vivent en mémoire et ne survivent pas à la fermeture.
- * La commande Rust en ouvre DEUX (fichiers et protocole d'asset) — la raison
- * est écrite au-dessus d'elle, dans `src-tauri/src/lib.rs`.
- */
-export async function allowFolder(chemin: string): Promise<void> {
-	await invoke("allow_folder", { chemin });
-}
-
 /** Un vault Obsidian connu de la machine. */
 export interface VaultConnu {
 	chemin: string;
@@ -221,16 +253,24 @@ export interface VaultConnu {
  * Les vaults qu'Obsidian connaît sur cette machine, pour les proposer d'un
  * clic plutôt que de faire naviguer l'utilisateur dans le sélecteur natif.
  *
- * La lecture se fait EN RUST (`obsidian_vaults`) : le fichier vit dans le
- * dossier de configuration d'Obsidian, hors de la portée du greffon `fs`, et
- * l'y étendre donnerait à la fenêtre bien plus de droits que nécessaire.
+ * La lecture se fait DANS LE PROCESSUS PRINCIPAL (`electron/vaults.ts`) : le
+ * fichier vit dans le dossier de configuration d'Obsidian, et donner au rendu
+ * l'accès à ce dossier pour lire un seul fichier lui donnerait bien plus que
+ * ce qu'il demande. C'est aussi l'une des trois portes du périmètre : les
+ * vaults rendus ici y entrent, ce qui permet à `addFolder` de les écrire
+ * ensuite sous `folders`.
+ *
+ * Les chemins sont NORMALISÉS ici (Ruling 14) : `obsidian.json` les écrit avec
+ * des `\`, et c'est ce chemin-là qui devient le `path` d'une racine quand
+ * l'utilisateur clique.
  *
  * Une liste vide est un état NORMAL — Obsidian n'est pas installé, ou aucun
  * de ses vaults n'existe plus. L'écran n'affiche alors que le sélecteur.
  */
 export async function obsidianVaults(): Promise<VaultConnu[]> {
 	try {
-		return await invoke<VaultConnu[]>("obsidian_vaults");
+		const vaults = await pont().systeme.vaultsObsidian();
+		return vaults.map(v => ({ nom: v.nom, chemin: normaliserChemin(v.chemin) }));
 	} catch (e) {
 		console.warn(LOG_PREFIX, "liste des vaults Obsidian illisible:", e);
 		return [];
@@ -245,15 +285,13 @@ export async function obsidianVaults(): Promise<VaultConnu[]> {
  * l'application doit y écrire aussi, sinon les deux hôtes tiennent chacun leur
  * moitié de l'historique sur le même corpus. Hors d'un vault, il n'y a pas de
  * `.obsidian/` et les résultats vont dans `.neo-quiz/`.
- *
- * À appeler APRÈS `allowFolder` : sans la portée, `exists` échoue.
  */
 export async function estVaultObsidian(racine: string): Promise<boolean> {
 	try {
-		return await exists(`${racine.replace(/[\/]+$/, "")}/.obsidian`);
+		return await pont().fichiers.exists(`${normaliserChemin(racine)}/.obsidian`);
 	} catch (e) {
-		// Dossier illisible : on le traite comme un dossier ordinaire plutôt
-		// que d'empêcher son ouverture.
+		// Dossier illisible ou hors périmètre : on le traite comme un dossier
+		// ordinaire plutôt que d'empêcher son ouverture.
 		console.warn(LOG_PREFIX, "détection du vault impossible:", e);
 		return false;
 	}
@@ -267,10 +305,10 @@ export async function estVaultObsidian(racine: string): Promise<boolean> {
    jamais resserrer les révisions de « Perso/Reseaux ». Valeur PERSISTÉE,
    au format AAAA-MM-JJ tel que saisi — jamais traduite, jamais reformatée.
 
-   `examDates()` lit le réglage EN MÉMOIRE plutôt que le magasin à chaque
-   appel : le plan de l'ordonnanceur est recalculé souvent (chaque réponse
-   jouée), et un aller-retour disque à chaque calcul serait payé pour rien.
-   D'où `chargerExamDates()`, appelé une fois au démarrage.
+   `examDates()` lit le réglage EN MÉMOIRE plutôt que le pont à chaque appel :
+   le plan de l'ordonnanceur est recalculé souvent (chaque réponse jouée), et
+   un aller-retour IPC à chaque calcul serait payé pour rien. D'où
+   `chargerExamDates()`, appelé une fois au démarrage.
 ══════════════════════════════════════════════════════════ */
 
 const CLE_EXAM_DATES = "examDates";
@@ -285,8 +323,8 @@ export function examDates(): Record<string, string> {
 
 export async function chargerExamDates(): Promise<Record<string, string>> {
 	try {
-		const brut = await (await reglagesStore()).get<Record<string, string>>(CLE_EXAM_DATES);
-		datesExamen = brut && typeof brut === "object" ? brut : {};
+		const brut = await pont().reglages.lire(CLE_EXAM_DATES);
+		datesExamen = brut && typeof brut === "object" ? brut as Record<string, string> : {};
 	} catch (e) {
 		console.warn(LOG_PREFIX, "dates d'examen illisibles:", e);
 		datesExamen = {};
@@ -297,11 +335,11 @@ export async function chargerExamDates(): Promise<Record<string, string>> {
 /**
  * La table des dates d'examen une fois celle d'un module réglée (ou effacée).
  *
- * PURE, et c'est délibéré : `setExamDate` est impure (elle écrit dans le
- * magasin Tauri), donc c'est cette règle-ci que `npm run check:folders`
- * exécute. Une date effacée RETIRE la clé, elle n'est pas gardée vide :
- * `horizonFor` retomberait de toute façon sur l'horizon par défaut, mais le
- * réglage accumulerait des entrées mortes qu'on n'oserait plus nettoyer.
+ * PURE, et c'est délibéré : `setExamDate` est impure (elle écrit par le pont),
+ * donc c'est cette règle-ci que `npm run check:folders` exécute. Une date
+ * effacée RETIRE la clé, elle n'est pas gardée vide : `horizonFor` retomberait
+ * de toute façon sur l'horizon par défaut, mais le réglage accumulerait des
+ * entrées mortes qu'on n'oserait plus nettoyer.
  */
 export function appliquerExamDate(
 	courant: Record<string, string>,
@@ -316,7 +354,24 @@ export function appliquerExamDate(
 export async function setExamDate(module: string, date: string): Promise<void> {
 	const suivant = appliquerExamDate(datesExamen, module, date);
 	datesExamen = suivant;
-	const store = await reglagesStore();
-	await store.set(CLE_EXAM_DATES, suivant);
-	await store.save();
+	await pont().reglages.ecrire(CLE_EXAM_DATES, suivant);
+}
+
+/* ══════════════════════════════════════════════════════════
+   LES AUTRES RÉGLAGES
+
+   `reglagesStore()` (le magasin Tauri) a disparu avec `plugin-store`. Ses deux
+   autres consommateurs — les statistiques par quiz (`review/stats.ts`) et les
+   réglages de page du tableau de bord (`ui/dashboard-shell.ts`) — passent
+   désormais par ces deux fonctions, qui sont le pont nu. Elles vivent ICI et
+   non chez eux pour la raison qui avait fait exporter `reglagesStore` : un
+   seul endroit du rendu sait où vivent les réglages.
+══════════════════════════════════════════════════════════ */
+
+export async function lireReglage<T>(cle: string): Promise<T | undefined> {
+	return await pont().reglages.lire(cle) as T | undefined;
+}
+
+export async function ecrireReglage(cle: string, valeur: unknown): Promise<void> {
+	await pont().reglages.ecrire(cle, valeur);
 }

@@ -147,6 +147,27 @@ await withSrcModule("apps/windows/electron/fichiers.ts", async ({ creerFichiers 
 				["premier", "second"]);
 		});
 
+		/* VENU DE `check:windows-host` À LA TÂCHE 4 : la numérotation d'un
+		   homonyme vivait côté rendu sous Tauri, elle vit ici depuis que le pont
+		   la porte. Un fichier SANS extension mis deux fois à la corbeille :
+		   `.trash` porte un point, et couper au dernier point du chemin ENTIER
+		   numéroterait le DOSSIER (« <racine>/-2.trash/README ») au lieu du
+		   fichier — les deux versions finiraient dans deux dossiers différents
+		   au lieu d'être côte à côte. */
+		await cas(r, "un fichier sans extension est numéroté sur son NOM, pas sur .trash", async () => {
+			const p = join(dir, "README");
+			await fichiers.write(p, "premier");
+			await fichiers.trash(p, dir);
+			await fichiers.write(p, "second");
+			await fichiers.trash(p, dir);
+			r.check("un fichier sans extension est numéroté sur son NOM, pas sur .trash",
+				[
+					await fichiers.read(join(dir, ".trash", "README")),
+					await fichiers.read(join(dir, ".trash", "README-2")),
+				],
+				["premier", "second"]);
+		});
+
 		await cas(r, "list d'un dossier absent rend []", async () => {
 			const abs = join(dir, "n-existe-pas");
 			r.check("list d'un dossier absent rend []", await fichiers.list(abs), []);

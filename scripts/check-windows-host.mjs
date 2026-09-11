@@ -662,8 +662,22 @@ function installerPont(fichiers = {}) {
 			async ouvrir(p) { journal.push(["ouvrir", p]); return true; },
 			async vaultsObsidian() { return []; },
 		},
+		/* Le RÉSEAU du pont, journalisé : ce que le rendu a décidé d'envoyer (la
+		   requête SANS `signal`, l'identifiant) et ce qu'il annule. La réponse
+		   est celle du principal : le rendu n'a rien à en traduire. `fetch`
+		   ATTEND `terminer` quand un cas le pose, pour observer l'annulation
+		   PENDANT la requête — c'est le seul moment où `annuler` a un sens. */
+		reseau: {
+			async fetch(req, requeteId) {
+				journal.push(["reseau.fetch", req, requeteId]);
+				if (reponseReseau.attente) await reponseReseau.attente;
+				return reponseReseau.valeur;
+			},
+			async annuler(requeteId) { journal.push(["reseau.annuler", requeteId]); },
+		},
 		fenetre: { async surFermeture() {} },
 	};
+	const reponseReseau = { valeur: { status: 200, body: "ok" }, attente: null };
 
 	globalThis.window = { neo };
 
@@ -675,6 +689,8 @@ function installerPont(fichiers = {}) {
 		ecrire: (p, t) => { disque.set(p, encodeur.encode(t)); toucher(p); },
 		/** Pousse un événement du « principal » vers tous les abonnés. */
 		emettre: (ev) => { for (const cb of abonnes) cb(ev); },
+		/** Ce que le prochain `reseau.fetch` rend, et ce qu'il attend avant. */
+		reseau: reponseReseau,
 		retirer() {
 			if (precedent === undefined) delete globalThis.window;
 			else globalThis.window = precedent;
@@ -1377,5 +1393,111 @@ await withSrcModule("apps/windows/src/host/ui.ts", async ({ createWindowsUi }) =
 		dom.retirer();
 	}
 
+	r.done();
+});
+
+/**
+ * LA PLATEFORME de l'application, extraite dans `platform.ts` pour être
+ * éprouvable ici — `index.ts` importe MathLive, qu'esbuild ne charge pas hors
+ * de la fenêtre. `isDesktopApp` est LA valeur que la génération IA lit pour
+ * décider si la page « Générer » a un sens : un `false` glissé là la rendrait
+ * morte dans l'app sans qu'aucun contrôle ne le dise.
+ */
+await withSrcModule("apps/windows/src/host/platform.ts", async ({ createWindowsPlatform }) => {
+	const r = makeReporter("Hôte Windows — plateforme");
+	const platform = createWindowsPlatform();
+	r.check("platform est renseigné",
+		["isMobile", "isMacOS", "isDesktopApp", "uiLanguage"].filter(k => !(k in platform)), []);
+	r.check("isDesktopApp est vrai dans l'application", platform.isDesktopApp, true);
+	r.check("isMobile est faux dans l'application", platform.isMobile, false);
+	// Hors de toute fenêtre, `navigator` n'existe pas : l'anglais, pas une mort.
+	r.check("uiLanguage rend une étiquette même sans navigator", typeof platform.uiLanguage, "string");
+	r.done();
+});
+
+/**
+ * LE RÉSEAU du rendu : un passe-plat vers `reseau.fetch` du pont, et rien
+ * d'autre — le principal juge l'hôte (`npm run check:electron-reseau`). Ce
+ * qui est à nous ici tient en trois règles : la requête traverse INTACTE et
+ * SANS `signal` (un `AbortSignal` ne se clone pas, `invoke` rejetterait) ;
+ * chaque requête porte un identifiant DISTINCT ; l'abandon du signal est
+ * relayé par `reseau.annuler` sous CE MÊME identifiant, pendant que la
+ * requête vit — après, il n'y a plus rien à annuler.
+ */
+await withSrcModule("apps/windows/src/host/net.ts", async ({ createWindowsNet }) => {
+	const r = makeReporter("Hôte Windows — réseau");
+	const pont = installerPont();
+	try {
+		const net = createWindowsNet();
+		const controleur = new AbortController();
+		const reponse = await net.fetchJson({
+			url: "http://localhost:11434/api/generate",
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: '{"model":"llama3"}',
+			signal: controleur.signal,
+		});
+		const appel = pont.journal.find(e => e[0] === "reseau.fetch");
+		r.check("un fetchJson traverse le pont avec l'URL, la méthode, les en-têtes et le corps intacts, sans signal",
+			appel ? appel[1] : null,
+			{
+				url: "http://localhost:11434/api/generate",
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: '{"model":"llama3"}',
+			});
+		r.check("la réponse du principal est rendue telle quelle", reponse, { status: 200, body: "ok" });
+		r.check("un signal non abandonné ne fait rien annuler",
+			pont.journal.filter(e => e[0] === "reseau.annuler"), []);
+
+		/* Deux requêtes, deux identifiants : un identifiant partagé ferait
+		   annuler l'AUTRE requête en vol côté principal. */
+		await net.fetchJson({ url: "http://localhost:11434/api/tags" });
+		const ids = pont.journal.filter(e => e[0] === "reseau.fetch").map(e => e[2]);
+		r.check("chaque requête porte un identifiant numérique distinct",
+			{ nombres: ids.every(i => typeof i === "number"), distincts: new Set(ids).size },
+			{ nombres: true, distincts: 2 });
+
+		/* L'annulation PENDANT la requête : le double retient `fetch` tant que
+		   `terminer` n'est pas appelé, le cas abandonne le signal entre-temps, et
+		   `annuler` doit porter l'identifiant de CETTE requête. */
+		let terminer;
+		pont.reseau.attente = new Promise(res => { terminer = res; });
+		const c2 = new AbortController();
+		const enVol = net.fetchJson({ url: "http://localhost:11434/lent", signal: c2.signal });
+		await Promise.resolve();
+		c2.abort();
+		await Promise.resolve();
+		const idLent = pont.journal.filter(e => e[0] === "reseau.fetch").pop()[2];
+		const annulations = pont.journal.filter(e => e[0] === "reseau.annuler").map(e => e[1]);
+		terminer();
+		await enVol;
+		r.check("l'abandon du signal est relayé par reseau.annuler sous le même identifiant",
+			annulations, [idLent]);
+
+		/* Déjà annulé AVANT l'envoi : `null` sans que rien ne traverse — le
+		   contrat rend `null` pour une annulation, et le principal n'a pas à voir
+		   passer une requête que personne n'attend plus. */
+		pont.reseau.attente = null;
+		const avant = pont.journal.length;
+		const c3 = new AbortController();
+		c3.abort();
+		const deja = await net.fetchJson({ url: "http://localhost:11434/api/tags", signal: c3.signal });
+		r.check("un signal déjà abandonné rend null sans traverser le pont",
+			{ deja, traverse: pont.journal.length - avant }, { deja: null, traverse: 0 });
+
+		/* Après la fin d'une requête, abandonner son signal n'annule plus rien :
+		   l'écouteur est retiré dans un `finally`, sinon chaque requête finie
+		   laisserait un écouteur sur un signal que l'appelant peut réutiliser. */
+		const c4 = new AbortController();
+		await net.fetchJson({ url: "http://localhost:11434/api/tags", signal: c4.signal });
+		const avantAbandon = pont.journal.filter(e => e[0] === "reseau.annuler").length;
+		c4.abort();
+		await Promise.resolve();
+		r.check("abandonner le signal d'une requête finie n'annule rien",
+			pont.journal.filter(e => e[0] === "reseau.annuler").length - avantAbandon, 0);
+	} finally {
+		pont.retirer();
+	}
 	r.done();
 });

@@ -272,10 +272,56 @@ export interface HostShell {
 export interface HostPlatform {
 	isMobile: boolean;
 	isMacOS: boolean;
+	/** Vrai quand un CLI local peut être lancé et qu'un réseau est atteignable
+	    depuis l'hôte : Obsidian de bureau, l'application Windows. Faux sur
+	    Obsidian mobile — et l'hôte Android le dira lui-même. C'est le SEUL
+	    test d'hôte que la génération IA a le droit de faire : elle ne demande
+	    jamais « suis-je sous Electron ? », elle demande « ai-je un bureau ? ». */
+	isDesktopApp: boolean;
 	/** Étiquette BCP-47 de la langue de l'interface de l'HÔTE (« fr »,
 	    « en-US »). C'est la source du mode « auto » de `src/i18n.ts` : sous
 	    Obsidian, la langue d'Obsidian ; dans l'app, celle du système. */
 	uiLanguage: string;
+}
+
+/**
+ * Une requête HTTP, telle que la génération IA en fait : le catalogue
+ * d'Ollama, son API locale, l'usage chez Anthropic. Plate et sérialisable —
+ * SAUF `signal`, qui ne traverse aucun IPC : l'hôte de l'application le
+ * traduit en un identifiant de requête et un canal d'annulation
+ * (`apps/windows/src/host/net.ts`), et l'hôte Obsidian l'IGNORE, parce que
+ * `requestUrl` ne l'accepte pas — le greffon n'annulait pas ses appels non
+ * plus.
+ */
+export interface HostNetRequest {
+	url: string;
+	method?: "GET" | "POST";
+	headers?: Record<string, string>;
+	body?: string;
+	signal?: AbortSignal;
+}
+
+export interface HostNetResponse {
+	status: number;
+	body: string;
+}
+
+/**
+ * TOUT le HTTP du code partagé passe ici, et l'hôte décide de ce qui part.
+ *
+ * POURQUOI UNE PORTE ET PAS `fetch` : dans l'application, la fenêtre rend du
+ * HTML qui n'est pas toujours celui de l'utilisateur, et `fetch` depuis le
+ * rendu vers `localhost:11434` est de toute façon refusé par la politique
+ * d'origine. Le processus PRINCIPAL fait donc la requête, derrière une liste
+ * d'hôtes (`apps/windows/electron/reseau.ts`) — un rendu compromis ne peut
+ * pas faire de l'application un relais vers n'importe où. Sous Obsidian,
+ * c'est `requestUrl`, qui contourne CORS comme le greffon l'a toujours fait.
+ */
+export interface HostNet {
+	/** `null` = échec RÉSEAU (hôte refusé, injoignable, annulé). Un statut
+	    HTTP d'erreur n'est PAS un échec réseau : il est rendu avec son corps —
+	    Ollama y met son diagnostic, et `requestUrl` le cachait. */
+	fetchJson(req: HostNetRequest): Promise<HostNetResponse | null>;
 }
 
 /**
@@ -402,4 +448,5 @@ export interface Host {
 	platform: HostPlatform;
 	paths: HostPaths;
 	modals: HostModals;
+	net: HostNet;
 }

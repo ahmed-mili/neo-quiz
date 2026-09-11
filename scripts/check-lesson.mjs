@@ -27,14 +27,15 @@ await withSrcModule("src/host/current.ts", ({ installHost }) => {
 		   et une mort en route masque en silence tous les groupes suivants
 		   (onze cachés, une fois). Complété à la tranche 3 (tâche 10) : quatre
 		   méthodes de `HostFs`, `onRenameDir`, `iconNames` et `modals`
-		   manquaient. */
+		   manquaient. Et à la tranche 5 (tâche 2) : `platform.isDesktopApp` et
+		   `net`. */
 		fs: { read: async () => "", readCached: async () => "", write: async () => {}, process: async () => {}, writeBinary: async () => {}, trash: async () => {}, exists: async () => false, mkdirs: async () => {}, append: async () => {}, list: async () => [], remove: async () => {}, rename: async () => {}, listMarkdown: () => [], findByName: () => [], getFile: () => null },
 		links: { resolve: () => null, resourceUrl: () => null },
 		watcher: { onChange: () => () => {}, onRenameDir: () => () => {} },
 		ui: { notice: () => {}, setIcon: () => {}, iconNames: () => [] },
 		math: { ready: async () => {}, render: () => document.createElement("div"), flush: () => {} },
 		shell: { openExternal: async () => false, revealInHost: async () => false },
-		platform: { isMobile: false, isMacOS: false, uiLanguage: "en" },
+		platform: { isMobile: false, isMacOS: false, isDesktopApp: true, uiLanguage: "en" },
 		// `resultsDirFor` (tâche 2) remplace la constante `resultsDir` : ce
 		// script n'exerce pas les résultats via `currentHost()`, seule la forme
 		// compte pour ne pas casser un appelant qui y toucherait un jour.
@@ -52,6 +53,9 @@ await withSrcModule("src/host/current.ts", ({ installHost }) => {
 				return handle;
 			},
 		},
+		/* Aucun cas ne fait de requête : `null` est la réponse « échec réseau »
+		   du contrat, la seule qu'un hôte sans réseau puisse rendre honnêtement. */
+		net: { fetchJson: async () => null },
 	};
 	installHost(fakeHost);
 });

@@ -18,12 +18,16 @@
    et la lecture, pas l'exécution, et `write` puis `ouvrir` d'un `.bat` les
    composerait.
 
+   ET LA MÊME RÈGLE POUR LES URL : les canaux `reseau.*` passent par
+   `fetchBorne` (`./reseau.ts`), qui refuse tout hôte hors de sa liste. Le
+   rendu ne définit ni les chemins qu'il lit, ni les hôtes qu'il joint.
+
    AUCUN `ipcMain.on` : tout est `ipcMain.handle`. Un canal sans réponse ne
    peut pas être attendu, et l'appelant ne saurait jamais si son écriture a
    réussi.
 ══════════════════════════════════════════════════════════ */
 
-import { dialog, ipcMain, shell } from "electron";
+import { dialog, ipcMain, net, shell } from "electron";
 import * as path from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
 import { creerFichiers, stat } from "./fichiers";
@@ -33,8 +37,9 @@ import { listerRacine, normaliser } from "./parcours";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { CANAUX } from "./pont";
-import type { EvenementDisque } from "./pont";
+import type { EvenementDisque, RequeteReseau } from "./pont";
 import type { Reglages } from "./reglages";
+import { fetchBorne } from "./reseau";
 import { extensionRefusee } from "./ressources";
 import { vaultsObsidian } from "./vaults";
 
@@ -300,6 +305,49 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 		const vaults = await vaultsObsidian();
 		for (const v of vaults) await perimetre.autoriser(v.chemin);
 		return vaults;
+	});
+
+	/* ─── le réseau ───
+
+	   Un `AbortController` par requête EN VOL, sous l'identifiant que le rendu a
+	   choisi : le `signal` ne traverse pas l'IPC (voir `Pont.reseau`). L'entrée
+	   est retirée dans un `finally`, quelle que soit l'issue — sans quoi la
+	   table grandirait d'une entrée par requête pour la vie du processus, et
+	   un identifiant réutilisé par un rendu rechargé annulerait la requête
+	   morte d'un autre. Annuler un identifiant inconnu ne fait rien : la
+	   requête est déjà finie, c'est la réponse « trop tard », pas une erreur. */
+	const enVol = new Map<number, AbortController>();
+
+	ipcMain.handle(CANAUX.reseauFetch, async (_e, req: unknown, requeteId: unknown) => {
+		/* La requête vient du RENDU : elle est RECOMPOSÉE champ par champ, jamais
+		   passée telle quelle au transport. Une propriété inattendue (`mode`,
+		   `credentials`, `redirect`…) glissée dans l'objet reçu n'atteint donc
+		   pas `net.fetch` ; et l'hôte est jugé par `fetchBorne`, pas ici. */
+		const r = (req && typeof req === "object" ? req : {}) as Partial<RequeteReseau>;
+		const url = typeof r.url === "string" ? r.url : "";
+		const method = r.method === "POST" ? "POST" : "GET";
+		const headers: Record<string, string> = {};
+		if (r.headers && typeof r.headers === "object") {
+			for (const [k, v] of Object.entries(r.headers)) if (typeof v === "string") headers[k] = v;
+		}
+		const body = typeof r.body === "string" ? r.body : undefined;
+		const id = typeof requeteId === "number" ? requeteId : NaN;
+		const controleur = new AbortController();
+		if (!Number.isNaN(id)) enVol.set(id, controleur);
+		try {
+			/* `net.fetch` d'Electron, jamais le `fetch` de Node : c'est la pile
+			   réseau de Chromium — proxy du système, magasin de certificats —
+			   celle que l'utilisateur a déjà configurée pour tout le reste. */
+			return await fetchBorne(
+				{ url, method, headers, body, signal: controleur.signal },
+				(u, init) => net.fetch(u, init),
+			);
+		} finally {
+			if (!Number.isNaN(id)) enVol.delete(id);
+		}
+	});
+	ipcMain.handle(CANAUX.reseauAnnuler, (_e, requeteId: unknown) => {
+		if (typeof requeteId === "number") enVol.get(requeteId)?.abort();
 	});
 
 	ipcMain.handle(CANAUX.armerFermeture, () => deps.fermeture.armer());

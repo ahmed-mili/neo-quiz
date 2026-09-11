@@ -10,13 +10,14 @@
  * — la plupart des symboles JETTENT (`nope`). Ils ne sont appelés par aucune
  *   des fonctions vérifiées, et si l'un l'était un jour, l'échec serait
  *   bruyant plutôt que silencieux ;
- * — `Modal` et `getIconIds` sont des DOUBLES DE COMPORTEMENT, parce que
- *   `HostModals` et `HostUi.iconNames` (apps/obsidian/host.ts) passent par
- *   eux pour de bon. Ils rendent donc une valeur au lieu de jeter, et un cas
- *   qui les traverse ne prouve QUE ce que le double reproduit fidèlement.
- *   Écrire un cas neuf sur ces deux-là, c'est d'abord lire le double
- *   ci-dessous et vérifier qu'il dit encore la vérité sur Obsidian — un
- *   double approximatif rend vert sans rien garder.
+ * — `Modal`, `getIconIds`, `Platform` et `requestUrl` sont des DOUBLES DE
+ *   COMPORTEMENT, parce que `HostModals`, `HostUi.iconNames`, `HostPlatform`
+ *   et `HostNet` (apps/obsidian/host.ts) passent par eux pour de bon. Ils
+ *   rendent donc une valeur au lieu de jeter, et un cas qui les traverse ne
+ *   prouve QUE ce que le double reproduit fidèlement. Écrire un cas neuf sur
+ *   ceux-là, c'est d'abord lire le double ci-dessous et vérifier qu'il dit
+ *   encore la vérité sur Obsidian — un double approximatif rend vert sans
+ *   rien garder.
  */
 import { build } from "esbuild";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -61,8 +62,20 @@ const OBSIDIAN_STUB = [
 	   comme ceux d'Obsidian : c'est ce préfixe que l'hôte doit retirer, et une
 	   liste déjà nue rendrait le cas qui le vérifie vert par construction. */
 	"export const getIconIds = () => ['lucide-chevron-down', 'lucide-search', 'lucide-x'];",
-	"export const Platform = {};",
-	"export const requestUrl = () => nope('requestUrl');",
+	/* Un Obsidian DE BUREAU : c'est ce que `HostPlatform.isDesktopApp` doit
+	   rendre vrai, et un `{}` laissait la lecture à `undefined` — un cas sur
+	   `isDesktopApp` serait alors rouge quoi qu'on fasse, ou vert par un `!!`
+	   qui mentirait. Les trois drapeaux disent la même machine. */
+	"export const Platform = { isDesktopApp: true, isMobile: false, isMacOS: false };",
+	/* `requestUrl` DÉLÈGUE à un double posé par le script (`globalThis
+	   .__obsidianRequestUrl`), et jette sinon : `HostNet.fetchJson` l'appelle
+	   pour de bon, et c'est la SEULE façon de voir les paramètres qu'il lui
+	   passe (`throw: false`, sans lequel un statut d'erreur jette et son corps
+	   est perdu). Un script qui ne pose pas de double garde le régime « jette ». */
+	"export const requestUrl = (params) => {",
+	"	if (typeof globalThis.__obsidianRequestUrl === 'function') return globalThis.__obsidianRequestUrl(params);",
+	"	return nope('requestUrl');",
+	"};",
 	"export const MarkdownRenderer = {};",
 	"export const loadPdfJs = () => nope('loadPdfJs');",
 	"export const loadMathJax = () => nope('loadMathJax');",

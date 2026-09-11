@@ -24,7 +24,7 @@
    diverge en silence le jour où `HostFile` gagne un champ.
 ══════════════════════════════════════════════════════════ */
 
-import { Notice, Platform, setIcon, getIconIds, loadMathJax, renderMath, finishRenderMath } from "obsidian";
+import { Notice, Platform, requestUrl, setIcon, getIconIds, loadMathJax, renderMath, finishRenderMath } from "obsidian";
 import type { App, DataAdapter, EventRef, TAbstractFile, TFile, View, WorkspaceLeaf } from "obsidian";
 import type { Host, HostFile, HostFileEvent, HostModalHandle, HostModalSpec, HostRoot } from "../../src/host/types";
 import { QbdModal } from "../../src/modal-base";
@@ -611,6 +611,11 @@ export function createObsidianHost(
 	const platform: Host["platform"] = {
 		isMobile: Platform.isMobile,
 		isMacOS: Platform.isMacOS,
+		/* La même source qu'`isMobile` : c'est Obsidian qui sait s'il tourne
+		   dans son enveloppe Electron de bureau ou dans l'application mobile,
+		   et c'est la seule question que la génération IA a le droit de poser
+		   (un CLI local, un réseau atteignable). */
+		isDesktopApp: Platform.isDesktopApp,
 		/* Accesseur et non valeur figée : la langue d'Obsidian change sans
 		   recharger le greffon, et une constante lue à l'installation resterait
 		   celle du démarrage.
@@ -682,5 +687,37 @@ export function createObsidianHost(
 		},
 	};
 
-	return { fs, links, watcher, ui, math, shell, platform, paths, modals };
+	/* ─── net ─── */
+
+	const net: Host["net"] = {
+		/* `requestUrl`, comme le greffon l'a toujours fait : c'est la voie
+		   d'Obsidian qui contourne CORS, et `fetch` depuis le greffon ne
+		   l'atteindrait pas pour `localhost:11434`.
+		   `throw: false` est ce qui rend le contrat tenable : par défaut,
+		   `requestUrl` JETTE sur un statut d'erreur et le corps est perdu — or
+		   Ollama y met son diagnostic (« model not found »), et c'est ce que
+		   l'utilisateur doit lire. Un statut non-2xx est donc RENDU avec son
+		   corps ; seul un rejet (hôte injoignable, DNS, coupure) vaut `null`.
+		   `signal` est IGNORÉ, et c'est écrit ici plutôt que passé sous
+		   silence : `requestUrl` n'accepte aucun signal, et le greffon
+		   n'annulait pas ses appels non plus — la conduite ne change pas, elle
+		   est nommée. */
+		async fetchJson(req) {
+			try {
+				const resp = await requestUrl({
+					url: req.url,
+					method: req.method ?? "GET",
+					headers: req.headers,
+					body: req.body,
+					throw: false,
+				});
+				return { status: resp.status, body: resp.text };
+			} catch (e) {
+				console.warn("[Quiz] requête réseau échouée:", req.url, e);
+				return null;
+			}
+		},
+	};
+
+	return { fs, links, watcher, ui, math, shell, platform, paths, modals, net };
 }

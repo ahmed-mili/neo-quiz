@@ -102,6 +102,11 @@ const pont: Pont = {
 		vaultsObsidian: () => ipcRenderer.invoke(CANAUX.vaultsObsidian),
 	},
 
+	reseau: {
+		fetch: (req, requeteId) => ipcRenderer.invoke(CANAUX.reseauFetch, req, requeteId),
+		annuler: requeteId => ipcRenderer.invoke(CANAUX.reseauAnnuler, requeteId),
+	},
+
 	fenetre: {
 		async surFermeture(rappel) {
 			rappelsFermeture.push(rappel);

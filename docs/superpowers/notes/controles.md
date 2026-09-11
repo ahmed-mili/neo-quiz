@@ -202,6 +202,39 @@ réponse étant toujours non.
   de réglage `__proto__`** (M6) n'écrivait aucune propriété propre mais
   remplaçait le prototype de la table : refusée avec sa cause, et la table
   reste intacte après le refus.
+- `npm run check:electron-reseau` — la PORTE RÉSEAU du processus principal
+  (`apps/windows/electron/reseau.ts`, tâche 2 de la génération IA dans
+  l'application). Le défaut qu'il empêche : **un rendu compromis fait de
+  l'application un RELAIS vers n'importe où.** La fenêtre rend du HTML qui n'est
+  pas toujours celui de l'utilisateur (un quiz PARTAGÉ porte les `explainHtml`
+  de son auteur), et le canal `reseau.fetch` du pont est, par construction,
+  « fais cette requête à ma place » — sans liste d'hôtes, exfiltrer une note
+  vers un serveur tiers tiendrait en un appel, et le périmètre des chemins n'y
+  verrait rien. C'est la même règle que `perimetre.borner`, appliquée aux URL :
+  la liste (`localhost`, `127.0.0.1`, `ollama.com`, `api.anthropic.com`) vit
+  dans le principal, et le seul ajout possible est l'hôte d'`aiOllamaUrl`, lu
+  des RÉGLAGES par `main.ts` au démarrage (`autoriserHote`) — jamais depuis le
+  rendu, comme `folders` nourrit le périmètre. Le PROTOCOLE est vérifié aussi,
+  pas seulement l'hôte : `net.fetch` d'Electron sert `file:` (c'est ce que
+  `main.ts` en fait pour les images), et `new URL("file://127.0.0.1/C:/x")`
+  garde l'hôte « 127.0.0.1 », qui est DANS la liste — sans cette moitié, la
+  porte réseau serait une porte disque hors du périmètre. Il éprouve ensuite
+  les deux promesses de `HostNet` que `requestUrl` ne tenait pas par défaut :
+  un statut d'erreur est RENDU avec son corps (Ollama y met son diagnostic,
+  « model not found », et le greffon le perdait), et une annulation rend `null`
+  sans lever ni journaliser une panne. Sur le module RÉEL contre un serveur
+  `http` local sur un port libre : `reseau.ts` reçoit son transport en
+  paramètre (`net.fetch` dans l'application, le `fetch` de Node ici) exprès
+  pour que le contrôle n'ait rien à doubler. Le serveur écoute sur l'adresse
+  non spécifiée (double pile) : Node résout « localhost » en IPv6 d'abord, et
+  un serveur lié à `127.0.0.1` seul rendrait le cas « localhost est accepté »
+  rouge pour une raison étrangère à la liste. Le refus est NOMMÉ
+  (`console.warn`, « hôte hors liste ») et le cas le lit : un `null` muet
+  ressemble à une panne réseau et fait chercher ailleurs. Côté rendu,
+  `check:windows-host` garde le passe-plat (`apps/windows/src/host/net.ts`) :
+  la requête traverse SANS `signal` (un `AbortSignal` ne se clone pas, `invoke`
+  rejetterait), un identifiant distinct par requête, l'abandon relayé par
+  `reseau.annuler` sous ce même identifiant et pendant la requête seulement.
 - `npm --prefix apps/windows run typecheck:electron` — le typecheck du PROCESSUS
   PRINCIPAL Electron (`apps/windows/tsconfig.electron.json`), lancé par
   `npm run build` de ce dossier, donc par `npm run check:app`. Il referme un trou

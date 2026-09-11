@@ -46,6 +46,14 @@
    et la clé `folders` des réglages est gardée à l'écriture.
 ══════════════════════════════════════════════════════════ */
 
+import type { HostNetRequest, HostNetResponse } from "../../../src/host/types";
+
+/** Une requête réseau telle qu'elle TRAVERSE le pont : `HostNetRequest` sans
+    son `signal`. Un `AbortSignal` ne se clone pas (l'IPC sérialise par clonage
+    structuré, et `invoke` rejetterait) ; l'annulation voyage à part, par un
+    identifiant — voir `Pont.reseau`. */
+export type RequeteReseau = Omit<HostNetRequest, "signal">;
+
 /** Un vault Obsidian connu de la machine (remplace la commande Rust
     `obsidian_vaults`). */
 export interface VaultConnu {
@@ -284,6 +292,28 @@ export interface Pont {
 		vaultsObsidian(): Promise<VaultConnu[]>;
 	};
 
+	/**
+	 * LE RÉSEAU, tout entier : `HostNet` (`src/host/types.ts`) vu du rendu.
+	 *
+	 * Une seule porte, dans le PRINCIPAL, derrière une liste d'hôtes
+	 * (`./reseau.ts`) : un rendu compromis ne peut pas faire de l'application
+	 * un relais vers n'importe où — c'est la même règle que le périmètre pour
+	 * les chemins, appliquée aux URL. Le principal ne rend `null` que sur un
+	 * échec RÉSEAU (hôte refusé, injoignable, annulé) ; un statut d'erreur
+	 * HTTP est rendu avec son corps.
+	 *
+	 * `requeteId` : le `signal` de `HostNetRequest` ne traverse pas l'IPC. Le
+	 * rendu choisit un identifiant, l'envoie avec la requête, et c'est
+	 * `annuler(requeteId)` qui relaie l'abandon — le principal tient un
+	 * `AbortController` par identifiant tant que la requête vit
+	 * (`canaux.ts`). Un identifiant inconnu (requête déjà finie) est ignoré :
+	 * annuler ce qui est terminé n'est pas une erreur.
+	 */
+	reseau: {
+		fetch(req: RequeteReseau, requeteId: number): Promise<HostNetResponse | null>;
+		annuler(requeteId: number): Promise<void>;
+	};
+
 	fenetre: {
 		/**
 		 * Le rappel à exécuter AVANT que la fenêtre ne se ferme, et que la
@@ -342,7 +372,19 @@ export const CANAUX = {
 	reglagesSupprimer: "neo:reglages/supprimer",
 	ouvrir: "neo:systeme/ouvrir",
 	vaultsObsidian: "neo:systeme/vaults-obsidian",
+	reseauFetch: "neo:reseau/fetch",
+	reseauAnnuler: "neo:reseau/annuler",
 } as const;
+
+/** La clé des RÉGLAGES IA de l'application (`neo.reglages`) : les MÊMES
+    champs que `plugin.settings` du greffon, dont `aiOllamaUrl`. Écrite ici,
+    entre les deux processus, parce que les DEUX la lisent : le principal au
+    démarrage, pour admettre l'hôte d'`aiOllamaUrl` à la liste du réseau
+    (`main.ts`, `admettreHoteOllama`) — AVANT que le rendu n'existe — et le
+    rendu pour ses réglages (`AiSettingsHost`, tâche 6 du plan). Deux
+    littéraux « ai » recopiés divergeraient sans une erreur : l'hôte du NAS
+    resterait refusé alors que le réglage est bien enregistré. */
+export const CLE_REGLAGES_IA = "ai";
 
 declare global {
 	interface Window {

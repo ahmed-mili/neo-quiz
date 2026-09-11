@@ -155,7 +155,12 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	}
 	r.check("aucune méthode du contrat ne manque", manquantes, []);
 	r.check("platform est renseigné",
-		["isMobile", "isMacOS", "uiLanguage"].filter(k => !(k in host.platform)), []);
+		["isMobile", "isMacOS", "isDesktopApp", "uiLanguage"].filter(k => !(k in host.platform)), []);
+	/* La VALEUR, pas seulement la clé : le bouchon `Platform` de load-src.mjs
+	   décrit un Obsidian de bureau, et c'est ce que la génération IA lit pour
+	   savoir si un CLI local se lance. Un `false` codé en dur, ou une lecture
+	   d'un autre drapeau, laisserait la page « Générer » morte sur le bureau. */
+	r.check("isDesktopApp est vrai sous un Obsidian de bureau", host.platform.isDesktopApp, true);
 
 	/* La regex de cards.ts décide quelles URL sont DÉJÀ résolues. Un préfixe
 	   oublié fait réécrire une URL bonne — et le défaut n'apparaîtrait que
@@ -842,5 +847,72 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	r.check("getFile ne mémorise pas : une modification externe se voit",
 		[mtime("Cours/ch1.md"), mtime("Cours/ch1.md") === avantDehors], [99999, false]);
 
+	r.done();
+});
+
+/**
+ * LE RÉSEAU sous Obsidian : `HostNet.fetchJson` passe par `requestUrl`, et le
+ * bouchon de load-src.mjs délègue à `globalThis.__obsidianRequestUrl` le temps
+ * du groupe. Ce qui est éprouvé, c'est la TRADUCTION — l'URL, la méthode, les
+ * en-têtes et le corps arrivent intacts, `throw: false` est posé — et la
+ * promesse du contrat que `requestUrl` ne tient pas par défaut : un statut
+ * d'erreur est RENDU avec son corps (Ollama y met son diagnostic), et seul un
+ * rejet vaut `null`.
+ */
+await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
+	const r = makeReporter("Hôte Obsidian — réseau");
+	const host = createObsidianHost(fausseApp([]), { manifest: {} });
+	const recus = [];
+	globalThis.__obsidianRequestUrl = async (params) => {
+		recus.push(params);
+		if (params.url.endsWith("/erreur")) return { status: 500, text: '{"error":"model not found"}' };
+		if (params.url.endsWith("/panne")) throw new Error("net::ERR_CONNECTION_REFUSED");
+		return { status: 200, text: "ok" };
+	};
+	try {
+		const reponse = await host.net.fetchJson({
+			url: "http://localhost:11434/api/generate",
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: '{"model":"llama3"}',
+		});
+		/* `throw: false` est LA ligne qui compte : sans elle, `requestUrl` jette
+		   sur un 4xx/5xx et le corps — le diagnostic — est perdu. Le double ne
+		   jette pas lui-même sur un statut d'erreur, donc c'est le PARAMÈTRE
+		   qu'on lit, pas la conduite. */
+		r.check("fetchJson traverse requestUrl avec l'URL, la méthode, les en-têtes et le corps intacts, et throw:false",
+			recus[0],
+			{
+				url: "http://localhost:11434/api/generate",
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: '{"model":"llama3"}',
+				throw: false,
+			});
+		r.check("la réponse est rendue { status, body } à partir de resp.text", reponse, { status: 200, body: "ok" });
+		r.check("un statut 500 est RENDU avec son corps, jamais null",
+			await host.net.fetchJson({ url: "http://localhost:11434/erreur" }),
+			{ status: 500, body: '{"error":"model not found"}' });
+		/* Un rejet de `requestUrl` (hôte injoignable) vaut `null`, jamais une
+		   exception qui remonterait dans la page « Générer ». Le `warn` est
+		   avalé : il fait partie de la conduite, pas du rapport. */
+		const avertir = console.warn;
+		console.warn = () => {};
+		let panne;
+		try {
+			panne = await host.net.fetchJson({ url: "http://localhost:11434/panne" });
+		} catch (e) {
+			panne = "EXCEPTION: " + e.message;
+		} finally {
+			console.warn = avertir;
+		}
+		r.check("un rejet de requestUrl rend null sans lever", panne, null);
+		/* La méthode par défaut est GET, écrite en toutes lettres : `requestUrl`
+		   la déduit sinon, et le contrat ne veut rien devoir à une déduction. */
+		await host.net.fetchJson({ url: "http://localhost:11434/api/tags" });
+		r.check("sans méthode, GET est posé explicitement", recus[recus.length - 1].method, "GET");
+	} finally {
+		delete globalThis.__obsidianRequestUrl;
+	}
 	r.done();
 });

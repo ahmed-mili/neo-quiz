@@ -28,6 +28,8 @@ import type { CarteRacines } from "./roots";
 import { createWindowsLinks } from "./links";
 import { createWindowsMath } from "./math";
 import { createWindowsModals } from "./modal";
+import { createWindowsNet } from "./net";
+import { createWindowsPlatform } from "./platform";
 import { createWindowsUi } from "./ui";
 
 export { createWindowsIndex } from "./fs";
@@ -85,19 +87,6 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		},
 	};
 
-	const platform: Host["platform"] = {
-		isMobile: false,
-		isMacOS: false,
-		/* La langue de l'INTERFACE DE L'HÔTE. Ici l'hôte est la fenêtre
-		   elle-même : `navigator.language` rend la langue du système, que
-		   Chromium reprend de Windows. Accesseur et non valeur figée, par
-		   symétrie avec l'hôte Obsidian ; c'est `src/i18n.ts` qui décide ce
-		   qu'il en fait, pas l'hôte. */
-		get uiLanguage(): string {
-			return navigator.language || "en";
-		},
-	};
-
 	const paths: Host["paths"] = {
 		/* Le dossier des résultats dépend de la RACINE de la note : une
 		   constante enverrait les résultats d'un quiz du dossier B dans le
@@ -131,8 +120,11 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		ui: createWindowsUi(),
 		math: createWindowsMath(),
 		modals: createWindowsModals(),
+		net: createWindowsNet(),
+		/* Extraite dans `./platform.ts` (PURE, donc éprouvable), comme `roots.ts`
+		   et pour la même raison : ce fichier-ci importe MathLive. */
+		platform: createWindowsPlatform(),
 		shell,
-		platform,
 		paths,
 	};
 }

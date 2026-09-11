@@ -31,9 +31,10 @@ import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
 import { enregistrerCanaux } from "./canaux";
 import { perimetreInitial } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { CANAUX } from "./pont";
+import { CANAUX, CLE_REGLAGES_IA } from "./pont";
 import { creerReglages } from "./reglages";
 import type { Reglages } from "./reglages";
+import { autoriserHote } from "./reseau";
 import { SCHEMA_RESSOURCES, resoudreRessource } from "./ressources";
 
 /** Le serveur de développement de Vite. Le port vient de `vite.config.ts`
@@ -332,6 +333,34 @@ function creerFenetre(): void {
 	void charger(fenetre).catch(e => console.error(LOG_PREFIX, "chargement du rendu impossible:", e));
 }
 
+/* ─────────── la liste d'hôtes du réseau ─────────── */
+
+/**
+ * L'hôte d'`aiOllamaUrl` entre dans la liste du réseau (`./reseau.ts`), lu des
+ * RÉGLAGES par le principal — jamais depuis le rendu, exactement comme les
+ * dossiers de `folders` entrent au périmètre. Un Ollama sur un NAS est un
+ * usage légitime que l'utilisateur déclare dans ses réglages ; sans cette
+ * ligne, il serait refusé « hôte hors liste » sans autre recours.
+ * Une URL absente ou illisible n'ajoute rien, en silence : le défaut
+ * (`localhost`) est déjà dans la liste.
+ */
+async function admettreHoteOllama(reg: Reglages): Promise<void> {
+	let ia: unknown;
+	try {
+		ia = await reg.lire(CLE_REGLAGES_IA);
+	} catch (e) {
+		console.warn(LOG_PREFIX, "réglages IA illisibles, hôte Ollama non admis:", e);
+		return;
+	}
+	const url = ia && typeof ia === "object" ? (ia as { aiOllamaUrl?: unknown }).aiOllamaUrl : undefined;
+	if (typeof url !== "string" || !url) return;
+	try {
+		autoriserHote(new URL(url).hostname);
+	} catch {
+		console.warn(LOG_PREFIX, "aiOllamaUrl illisible, hôte non admis:", url);
+	}
+}
+
 /* ─────────── le protocole des ressources ─────────── */
 
 /**
@@ -405,6 +434,8 @@ if (!app.requestSingleInstanceLock()) {
 		   (`canaux.ts`). Le dossier de données est CRÉÉ là-dedans mais JAMAIS
 		   autorisé (Ruling 12) : la raison est écrite sur `perimetreInitial`. */
 		const perimetre = await perimetreInitial({ dossierDonnees: donnees, reglages: reglagesOuErreur() });
+		// Même geste que le périmètre, pour les URL : l'hôte Ollama des réglages.
+		await admettreHoteOllama(reglagesOuErreur());
 		// Le MÊME objet que les canaux : une racine admise par `choisirDossier`
 		// ou `vaultsObsidian` devient aussitôt servable, sans second registre.
 		servirRessources(perimetre);

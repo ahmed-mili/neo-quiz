@@ -34,8 +34,6 @@ import { createReviewStore, buildReviewCatalogue, parseExamDate } from "../../sr
 import type { ReviewStore } from "../../src/review/review-store";
 import { migrateReviewLog } from "../../src/review/migration";
 import type { ModuleOverride } from "../../src/dashboard/quiz-modules";
-import * as voiceInstall from "../../src/dashboard/voice-install";
-import type { VoiceBackend, VoiceModelId, VoiceLang } from "../../src/dashboard/voice-install";
 import * as aiProviders from "../../src/dashboard/ai-providers";
 import type { OllamaCatalogEntry } from "../../src/dashboard/ai-providers";
 import type { AiUsageEntry } from "../../src/dashboard/ai-usage";
@@ -98,10 +96,6 @@ interface QuizBlocksSettings {
 	/** Overrides du modal « Modifier dossier » (nom / UE / couleur par module),
 	    appliqués PAR-DESSUS la note de correspondance. Cf. quiz-modules.ts. */
 	quizzesModuleOverrides: Record<string, ModuleOverride>;
-	voiceEnabled: boolean;
-	voiceBackend: VoiceBackend;
-	voiceModel: VoiceModelId;
-	voiceLang: VoiceLang;
 	// ── Clés héritées supprimées à la migration (loadSettings) : déclarées
 	//    optionnelles uniquement pour autoriser `in`/`delete` sur d'anciennes
 	//    données persistées. Jamais lues comme valeurs. ──
@@ -155,12 +149,11 @@ const DEFAULT_SETTINGS: QuizBlocksSettings = {
 	quizzesModuleMapNote: "Dashboard",
 	quizzesArchivedFolders: [],
 	quizzesModuleOverrides: {},
-	// ── Saisie vocale (dictée locale whisper.cpp) — opt-in complet.
-	// Spec : docs/superpowers/specs/2026-07-10-voice-input-design.md
-	voiceEnabled: false,
-	voiceBackend: "cpu",      // "cpu" | "cuda"
-	voiceModel: "small-q5_1", // cf. voice-install.js MODELS
-	voiceLang: "fr",          // "fr" | "auto" | "en"
+	// ── La dictée (whisper.cpp) a été retirée le 2026-09-11. Ses clés
+	// persistées (voiceEnabled/voiceBackend/voiceModel/voiceLang) restent
+	// SANS type ici et sans défaut : un utilisateur qui reviendrait à une
+	// version antérieure du plugin doit les retrouver intactes dans
+	// data.json — elles sont ignorées à la lecture, jamais effacées.
 };
 
 interface Logger {
@@ -930,122 +923,6 @@ class QuizBlocksSettingTab extends PluginSettingTab {
 		};
 		addHotkeySetting(t("plugin.hotkey.addFiles.name"), t("plugin.hotkey.addFiles.desc"), "hotkeyAddFiles");
 		addHotkeySetting(t("plugin.hotkey.addNotes.name"), t("plugin.hotkey.addNotes.desc"), "hotkeyAddNotes");
-
-		// ─── Saisie vocale (dictée) ───
-		containerEl.createEl("h3", { text: t("plugin.voice.heading") });
-		if (!voiceInstall.isSupported()) {
-			containerEl.createEl("p", {
-				text: t("plugin.voice.windowsOnly"),
-				cls: "setting-item-description",
-			});
-		} else {
-			new Setting(containerEl)
-				.setName(t("plugin.voice.enable.name"))
-				.setDesc(t("plugin.voice.enable.desc"))
-				.addToggle(toggle => toggle
-					.setValue(this.plugin.settings.voiceEnabled)
-					.onChange(async (v) => {
-						this.plugin.settings.voiceEnabled = v;
-						await this.plugin.saveSettings();
-						this.display();
-					}));
-
-			if (this.plugin.settings.voiceEnabled) {
-				new Setting(containerEl)
-					.setName(t("plugin.voice.backend.name"))
-					.setDesc(t("plugin.voice.backend.desc"))
-					.addDropdown(d => d
-						.addOption("cpu", t("plugin.voice.backend.cpu"))
-						.addOption("cuda", t("plugin.voice.backend.cuda"))
-						.setValue(this.plugin.settings.voiceBackend)
-						.onChange(async (v) => {
-							this.plugin.settings.voiceBackend = v as VoiceBackend;
-							await this.plugin.saveSettings();
-							this.display();
-						}));
-
-				new Setting(containerEl)
-					.setName(t("plugin.voice.model.name"))
-					.setDesc(t("plugin.voice.model.desc"))
-					.addDropdown(d => {
-						for (const [id, m] of Object.entries(voiceInstall.MODELS)) d.addOption(id, m.label);
-						d.setValue(this.plugin.settings.voiceModel)
-							.onChange(async (v) => {
-								this.plugin.settings.voiceModel = v as VoiceModelId;
-								await this.plugin.saveSettings();
-								this.display();
-							});
-					});
-
-				new Setting(containerEl)
-					.setName(t("plugin.voice.lang.name"))
-					.addDropdown(d => d
-						.addOption("fr", t("plugin.voice.lang.fr"))
-						.addOption("auto", t("plugin.voice.lang.auto"))
-						.addOption("en", t("plugin.voice.lang.en"))
-						.setValue(this.plugin.settings.voiceLang)
-						.onChange(async (v) => {
-							this.plugin.settings.voiceLang = v as VoiceLang;
-							await this.plugin.saveSettings();
-						}));
-
-				// État d'installation + téléchargements (rien sans clic explicite).
-				const st = voiceInstall.getStatus(this.plugin.settings);
-				// Paramètres nommés done/total (et non d/t) : un paramètre « t »
-				// masquerait la fonction de traduction importée.
-				const fmtPct = (done: number, total: number): string => (total
-					? Math.round((done / total) * 100) + " %"
-					: t("plugin.voice.megabytes", { n: Math.round(done / 1e6) }));
-			// onProgress arrive à CHAQUE chunk (~16 Ko) : sur le zip CUDA
-			// (~678 Mo) ça ferait des dizaines de milliers de setButtonText.
-			// Ne toucher au DOM que quand le libellé change réellement.
-			const throttledProgress = (btn: ButtonComponent) => {
-				let last = "";
-				return (done: number, total: number): void => {
-					const label = fmtPct(done, total);
-					if (label !== last) { last = label; btn.setButtonText(label); }
-				};
-			};
-
-				const binRow = new Setting(containerEl)
-					.setName(t("plugin.voice.binary.name", { backend: this.plugin.settings.voiceBackend }))
-					.setDesc(st.cliPath ? t("plugin.voice.installed", { path: st.cliPath }) : t("plugin.voice.notInstalled"));
-				if (!st.cliPath) binRow.addButton(b => b
-					.setButtonText(t("plugin.voice.download"))
-					.setCta()
-					.onClick(async () => {
-						b.setDisabled(true);
-						try {
-							await voiceInstall.installBinary(this.plugin.settings.voiceBackend,
-								throttledProgress(b));
-							new Notice(t("plugin.voice.binaryInstalled"));
-						} catch (e) {
-							console.error("[quiz-blocks] install binaire:", e);
-							new Notice(t("plugin.voice.downloadFailed", { error: e instanceof Error ? e.message : String(e) }));
-						}
-						this.display();
-					}));
-
-				const mdlRow = new Setting(containerEl)
-					.setName(t("plugin.voice.model.rowName", { label: voiceInstall.MODELS[this.plugin.settings.voiceModel]?.label || this.plugin.settings.voiceModel }))
-					.setDesc(st.modelFile ? t("plugin.voice.installed", { path: st.modelFile }) : t("plugin.voice.notInstalled"));
-				if (!st.modelFile) mdlRow.addButton(b => b
-					.setButtonText(t("plugin.voice.download"))
-					.setCta()
-					.onClick(async () => {
-						b.setDisabled(true);
-						try {
-							await voiceInstall.installModel(this.plugin.settings.voiceModel,
-								throttledProgress(b));
-							new Notice(t("plugin.voice.modelInstalled"));
-						} catch (e) {
-							console.error("[quiz-blocks] install modèle:", e);
-							new Notice(t("plugin.voice.downloadFailed", { error: e instanceof Error ? e.message : String(e) }));
-						}
-						this.display();
-					}));
-			}
-		}
 	}
 }
 

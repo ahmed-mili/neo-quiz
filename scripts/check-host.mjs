@@ -41,8 +41,6 @@ const RESTANTS = [
 	"src/dashboard/prompt-paths.ts",
 	"src/dashboard/share.ts",
 	"src/dashboard/usage-modal.ts",
-	"src/dashboard/voice-input.ts",
-	"src/dashboard/voice-install.ts",
 	"src/types/dashboard-ctx.ts",
 	// Divers du greffon — tranche 4.
 	"src/hotkey-format.ts",

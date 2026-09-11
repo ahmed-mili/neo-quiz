@@ -29,7 +29,6 @@ import type { NavHandlers } from "../dashboard/nav";
 import type { QuizzesHandlers } from "../dashboard/quizzes";
 import type { HomeHandlers } from "../dashboard/home";
 import type { DetailHandlers } from "../dashboard/detail";
-import type { VoiceSettings } from "../dashboard/voice-install";
 import type { Hotkey } from "../hotkey-format";
 import type { OllamaCatalogEntry } from "../dashboard/ai-providers";
 import type { AiClient } from "../dashboard/ai-client";
@@ -52,12 +51,14 @@ export type DashboardViewName = "home" | "quizzes" | "detail" | "ai";
  */
 
 /**
- * Réglages IA du plugin (src/plugin.js DEFAULT_SETTINGS, encore .js). Étend
- * `VoiceSettings` (dictée) avec le sous-ensemble « génération IA » réellement
- * lu par le lot IA (ai.ts / ai-client.ts) — Task 8c. Les champs non listés
- * existent au runtime, simplement pas encore déclarés ici.
+ * Réglages IA du plugin (src/plugin.js DEFAULT_SETTINGS, encore .js). Couvre
+ * le sous-ensemble « génération IA » réellement lu par le lot IA (ai.ts /
+ * ai-client.ts) — Task 8c. La dictée a été retirée le 2026-09-11 ; ses
+ * réglages persistés existent encore au runtime (ignorés, pas effacés) mais
+ * ne sont plus typés ici. Les champs non listés existent au runtime,
+ * simplement pas encore déclarés ici.
  */
-export interface AiSettings extends VoiceSettings {
+export interface AiSettings {
 	aiProvider?: string;
 	aiModel?: string;
 	aiEffort?: string;
@@ -344,9 +345,9 @@ export interface DashboardCtx extends DashboardShellCtx {
 	app: App;
 	/**
 	 * `plugin.settings` : `AiSettings` (Task 8c) couvre le sous-ensemble
-	 * « dictée » (`VoiceSettings`) + « génération IA » (aiProvider, aiModel,
-	 * aiEffort, aiOllama*, hotkey*…) réellement lu par voice-input.ts, ai.ts et
-	 * ai-client.ts. La forme COMPLÈTE (quizStats…) sera étoffée par la
+	 * « génération IA » (aiProvider, aiModel, aiEffort, aiOllama*, hotkey*…)
+	 * réellement lu par ai.ts et ai-client.ts. La forme COMPLÈTE (quizStats…)
+	 * sera étoffée par la
 	 * conversion de `plugin.js` lui-même (encore `.js`). Les champs non listés
 	 * existent bel et bien au runtime, simplement pas encore déclarés ici.
 	 */

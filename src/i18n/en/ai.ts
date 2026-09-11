@@ -231,18 +231,4 @@ export const EN_AI = {
 	"ai.err.ollama": "Ollama error: {detail}",
 	"ai.err.ollamaEmpty": "Ollama returned no response. Make sure the model is installed.",
 
-	/* ── Dictée (whisper.cpp local) ── */
-	"ai.voice.transcribing": "Transcribing…",
-	"ai.voice.recordHint": "{time} · release Space to transcribe",
-	"ai.voice.micDenied": "Dictation: microphone permission denied.",
-	"ai.voice.noMic": "Dictation: no microphone available.",
-	"ai.voice.missingInstall": "Dictation: binary or model missing, see the Neo Quiz settings.",
-	"ai.voice.wavFailed": "Dictation: could not write the audio file.",
-	"ai.voice.transcribeFailed": "Dictation: transcription failed (see console).",
-	"ai.voice.noText": "Dictation: no text recognized.",
-	"ai.voice.modelSmall": "Fast — small (190 MB)",
-	"ai.voice.modelLarge": "Max — large-v3-turbo (574 MB)",
-	"ai.voice.errUnknownBackend": "Unknown backend: {backend}",
-	"ai.voice.errUnknownModel": "Unknown model: {model}",
-	"ai.voice.errCliNotFound": "whisper-cli.exe not found after extraction",
 } as const;

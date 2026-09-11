@@ -322,8 +322,8 @@ introuvable ou ambigu est signalé par une Notice, jamais ignoré en silence.
   greffon, les données de la bibliothèque `lucide` dans l'app. Jamais d'emoji.
 - **Maths** : LaTeX `$...$` partout, rendu MathJax natif (`engine/mathjax.ts`) + éditeur
   MathLive (`engine/math-input.ts`).
-- **Dictée** : `dashboard/voice-install.ts` + `dashboard/voice-input.ts` (whisper.cpp
-  local, Windows, opt-in).
+- La dictée a été retirée le 2026-09-11 ; ses réglages persistés sont ignorés,
+  pas effacés.
 
 ## Texte et HTML d'un quiz : quatre portes, jamais une cinquième
 

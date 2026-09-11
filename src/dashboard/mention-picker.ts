@@ -242,9 +242,8 @@ export function attachMentionPicker(
 	textarea.addEventListener("click", onClick);
 	// NB : sur l'élément CIBLE, capture ne passe pas avant bubble (les deux
 	// s'exécutent à AT_TARGET dans l'ordre d'attachement). Ce qui protège
-	// réellement Entrée et la dictée, ce sont leurs gardes explicites
-	// (« mentions.isOpen() » dans ai.ts, « isBlocked » dans voice-input.ts),
-	// pas cette phase.
+	// réellement Entrée, c'est sa garde explicite (« mentions.isOpen() »
+	// dans ai.ts), pas cette phase.
 	textarea.addEventListener("keydown", onKeyDown, true);
 	textarea.addEventListener("blur", onBlur);
 

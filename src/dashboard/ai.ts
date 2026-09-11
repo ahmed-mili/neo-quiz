@@ -8,7 +8,6 @@ import { createSelect, closeAllSelects, openActionMenu, openModelMenu, openEffor
 import type { SelectHandle, SelectOption } from "./ui-select";
 import { formatHotkey } from "../hotkey-format";
 import { findQuizModeConfigIndex } from "../quiz-utils";
-import * as voiceInput from "./voice-input";
 import { attachMentionPicker } from "./mention-picker";
 import type { MentionPickerHandle } from "./mention-picker";
 import type { AiClient, ImagePayload } from "./ai-client";
@@ -657,11 +656,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		}
 
 		const composerInput = textZone.createEl("textarea", { cls: "qbd-ai-composer-input" });
-		// Picker « @ » : déclaré avant la dictée pour que celle-ci puisse
-		// interroger son état (les deux écoutent le même textarea).
 		let mentions: MentionPickerHandle | null = null;
-		// Dictée vocale push-to-talk (opt-in — réglages « Saisie vocale »).
-		voiceInput.attach(ctx, composerInput, { isBlocked: () => !!mentions && mentions.isOpen() });
 		// Au moins une pièce jointe (chip note/PDF ou vignette image) : la
 		// question d'origine n'a plus de sens (le fichier EST le sujet) — le
 		// placeholder invite alors à des instructions facultatives. Recalculé

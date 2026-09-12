@@ -62,21 +62,20 @@ export type Transport = (url: string, init: {
  */
 export const HOTES_AUTORISES = new Set(["localhost", "127.0.0.1", "ollama.com", "api.anthropic.com"]);
 
-/** L'hôte d'`aiOllamaUrl`, lu des RÉGLAGES par le principal, s'ajoute ici au
-    démarrage. Un Ollama sur un NAS (« mon-nas:11434 ») est un usage légitime,
-    déclaré par l'utilisateur dans ses réglages ; c'est `main.ts` qui le lit
-    et l'admet (`admettreHoteOllama`), comme il admet les dossiers de
-    `folders` au périmètre. Aucun canal du pont n'appelle cette fonction.
+/** L'hôte d'`aiOllamaUrl` s'ajoute ici par DEUX chemins, et aucun des deux
+    n'est un canal du pont : `main.ts` (`admettreHoteOllama`) le relit des
+    réglages au démarrage, et `canaux.ts` (`garderReglagesIa`) l'admet au
+    moment où le rendu l'ÉCRIT — après la garde, jamais avant. Un Ollama sur un
+    NAS (« mon-nas:11434 ») est un usage légitime, déclaré par l'utilisateur.
 
-    LE RÉSIDUEL, dit honnêtement : la liste est PILOTÉE PAR LES RÉGLAGES, et
-    la clé `ai` n'est pas encore GARDÉE à l'écriture comme `folders` l'est
-    (`canaux.ts`, `reglagesEcrire`). Un rendu compromis peut donc écrire
-    `{ aiOllamaUrl: "https://attaquant.example" }` et obtenir cet hôte ici AU
-    PROCHAIN LANCEMENT — pas dans la session, mais après un redémarrage.
-    La garde se construit à la tâche 6 (la première qui écrit cette clé) :
-    URL en http(s) obligatoire, un hôte hors liste et hors réseau local
-    demande une confirmation native, et l'hôte accepté entre ici aussitôt.
-    D'ici là, ce commentaire est le seul endroit qui le dit. */
+    LA GARDE (tâche 6, `garde-ia.ts`) est ce qui fait que « piloté par les
+    réglages » n'est pas une porte : l'URL doit être en http(s) ; un hôte de la
+    liste ou du réseau local (boucle locale, RFC 1918, `.local`) passe ; tout
+    autre hôte est DEMANDÉ à l'utilisateur par un dialogue natif du principal,
+    et refusé = rien d'écrit, rien d'admis. Un rendu compromis ne peut donc
+    plus écrire `{ aiOllamaUrl: "https://attaquant.example" }` et obtenir cet
+    hôte au prochain lancement : il obtient une question posée à l'utilisateur,
+    dans une boîte qu'il n'a pas rédigée. */
 export function autoriserHote(hote: string): void {
 	const h = hote.trim().toLowerCase();
 	if (h) HOTES_AUTORISES.add(h);

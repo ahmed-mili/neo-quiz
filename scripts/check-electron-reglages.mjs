@@ -397,3 +397,110 @@ await withSrcModule("apps/windows/electron/pont.ts", async ({ CANAUX }) => {
 		["read", "write", "listerDossier", "statEntree", "readBinary"].filter(n => !canauxFichiers.includes(n)), []);
 	r.done();
 });
+
+/**
+ * LA GARDE DE LA CLÉ `ai` (tranche 5, tâche 6, ruling R-B). La clé `ai` des
+ * réglages est la première que le RENDU écrit et que le PRINCIPAL relit pour
+ * élargir ce qu'il accepte : l'hôte d'`aiOllamaUrl` entre dans la liste du
+ * réseau (`reseau.ts`), `aiMentionExtraFolders` désigne des dossiers lus par
+ * les canaux `fichiers.*`. Sans garde, un rendu compromis écrivait
+ * `{ aiOllamaUrl: "https://attaquant.example" }` et obtenait cet hôte au
+ * prochain lancement — le résiduel que `reseau.ts` nommait jusqu'ici.
+ *
+ * Le verdict est PUR (`garde-ia.ts`, ni `electron` ni `node:*`) : il se
+ * charge ici tel quel, avec un périmètre doublé par une simple liste. Le
+ * dialogue natif et l'admission (`canaux.ts`) ne se chargent pas — la
+ * dernière assertion, STATIQUE comme celle des canaux `fichiers.*`, vérifie
+ * que `reglagesEcrire` appelle la garde AVANT `.ecrire(`.
+ */
+await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ hoteEstPrive, validerReglagesIa }) => {
+	const r = makeReporter("Électron — la garde de la clé ai");
+
+	/* ── hoteEstPrive : la boucle locale, la RFC 1918, `.local`, et rien d'autre ── */
+	const prives = ["localhost", "127.0.0.1", "127.9.9.9", "::1", "[::1]", "10.0.0.5", "172.16.0.1", "172.31.255.255", "192.168.1.10", "mon-nas.local"];
+	r.check("les hôtes de la boucle locale, des plages RFC 1918 et .local sont privés",
+		prives.filter(h => !hoteEstPrive(h)), []);
+	const publics = ["172.15.0.1", "172.32.0.1", "8.8.8.8", "11.0.0.1", "example.com", "ollama.com", "monnas.localhost.example", ""];
+	r.check("un hôte public, une plage voisine de 172.16/12, ou un nom Internet ne sont pas privés",
+		publics.filter(h => hoteEstPrive(h)), []);
+
+	/* ── validerReglagesIa : les trois verdicts ── */
+	const contient = async (chemin) => chemin.startsWith("D:/Quiz");
+	await cas(r, "une valeur qui n'est pas un objet est refusée", async () => {
+		const verdicts = await Promise.all([null, "x", 3, [1]].map(v => validerReglagesIa(v, contient)));
+		r.check("une valeur qui n'est pas un objet est refusée",
+			verdicts.map(v => "refus" in v), [true, true, true, true]);
+	});
+	await cas(r, "sans aiOllamaUrl, rien à admettre", async () => {
+		r.check("sans aiOllamaUrl, rien à admettre",
+			await validerReglagesIa({ aiModel: "x" }, contient), { ok: true, admettre: null });
+	});
+	await cas(r, "une URL illisible, non-chaîne ou hors http(s) est refusée, nommée", async () => {
+		const [pasChaine, illisible, fichier, ftp] = await Promise.all([
+			validerReglagesIa({ aiOllamaUrl: 42 }, contient),
+			validerReglagesIa({ aiOllamaUrl: "pas une url" }, contient),
+			validerReglagesIa({ aiOllamaUrl: "file://127.0.0.1/C:/x" }, contient),
+			validerReglagesIa({ aiOllamaUrl: "ftp://localhost/x" }, contient),
+		]);
+		r.check("une URL illisible, non-chaîne ou hors http(s) est refusée, nommée",
+			[pasChaine, illisible, fichier, ftp].map(v => "refus" in v && /aiOllamaUrl/.test(v.refus)), [true, true, true, true]);
+	});
+	await cas(r, "un hôte de la liste ou du réseau local passe, et l'hôte est à admettre", async () => {
+		r.check("un hôte de la liste ou du réseau local passe, et l'hôte est à admettre",
+			await Promise.all([
+				validerReglagesIa({ aiOllamaUrl: "http://localhost:11434" }, contient),
+				validerReglagesIa({ aiOllamaUrl: "HTTP://192.168.1.10:11434/" }, contient),
+				validerReglagesIa({ aiOllamaUrl: "https://ollama.com" }, contient),
+				validerReglagesIa({ aiOllamaUrl: "http://mon-nas.local:11434" }, contient),
+			]),
+			[
+				{ ok: true, admettre: "localhost" },
+				{ ok: true, admettre: "192.168.1.10" },
+				{ ok: true, admettre: "ollama.com" },
+				{ ok: true, admettre: "mon-nas.local" },
+			]);
+	});
+	await cas(r, "un hôte Internet hors liste demande confirmation, par son nom", async () => {
+		r.check("un hôte Internet hors liste demande confirmation, par son nom",
+			await validerReglagesIa({ aiOllamaUrl: "https://Attaquant.Example:8443/api" }, contient),
+			{ confirmer: "attaquant.example" });
+	});
+	await cas(r, "aiMentionExtraFolders : un dossier hors périmètre est refusé, nommé", async () => {
+		const v = await validerReglagesIa({ aiMentionExtraFolders: ["D:/Quiz/Cours", "E:/Ailleurs"] }, contient);
+		r.check("aiMentionExtraFolders : un dossier hors périmètre est refusé, nommé",
+			"refus" in v && v.refus.includes("E:/Ailleurs"), true);
+	});
+	await cas(r, "aiMentionExtraFolders : tous dans le périmètre passe ; une forme autre qu'un tableau de chaînes est refusée", async () => {
+		const [ok, pasTableau, pasChaines] = await Promise.all([
+			validerReglagesIa({ aiMentionExtraFolders: ["D:/Quiz/Cours"] }, contient),
+			validerReglagesIa({ aiMentionExtraFolders: "D:/Quiz" }, contient),
+			validerReglagesIa({ aiMentionExtraFolders: [1] }, contient),
+		]);
+		r.check("aiMentionExtraFolders : tous dans le périmètre passe ; une forme autre qu'un tableau de chaînes est refusée",
+			[ok, "refus" in pasTableau, "refus" in pasChaines], [{ ok: true, admettre: null }, true, true]);
+	});
+	await cas(r, "le refus d'un dossier prime sur l'URL : rien n'est admis quand une moitié est refusée", async () => {
+		const v = await validerReglagesIa({ aiOllamaUrl: "http://localhost:11434", aiMentionExtraFolders: ["E:/x"] }, contient);
+		r.check("le refus d'un dossier prime sur l'URL : rien n'est admis quand une moitié est refusée", "refus" in v, true);
+	});
+
+	/* ── STATIQUE : la garde est appelée AVANT l'écriture, dans le gestionnaire ── */
+	const source = await readFile("apps/windows/electron/canaux.ts", "utf-8");
+	const debut = source.indexOf("ipcMain.handle(CANAUX.reglagesEcrire,");
+	let corps = null;
+	if (debut >= 0) {
+		let niveau = 0;
+		for (let i = source.indexOf("(", debut); i < source.length; i++) {
+			if (source[i] === "(") niveau++;
+			else if (source[i] === ")" && --niveau === 0) { corps = source.slice(debut, i + 1); break; }
+		}
+	}
+	const garde = corps ? corps.indexOf("garderReglagesIa(") : -1;
+	const ecriture = corps ? corps.indexOf(".ecrire(") : -1;
+	r.check("reglagesEcrire garde la clé ai (garderReglagesIa) AVANT d'écrire",
+		{ gardee: garde >= 0, avantEcriture: garde >= 0 && ecriture > garde }, { gardee: true, avantEcriture: true });
+	r.check("garderReglagesIa passe par le verdict pur validerReglagesIa, et n'écrit qu'après avoir admis l'hôte",
+		{ verdict: source.includes("validerReglagesIa(valeur"), admet: source.includes("autoriserHote(verdict.") },
+		{ verdict: true, admet: true });
+	r.done();
+});

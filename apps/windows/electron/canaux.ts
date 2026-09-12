@@ -11,9 +11,12 @@
    LA RÈGLE QUI GOUVERNE CE FICHIER : aucun chemin venu du rendu n'atteint une
    primitive sans passer par `perimetre.borner` (`./perimetre.ts`). Tous les
    canaux `fichiers.*`, plus `systeme.ouvrir`, y passent ; `demarrer` FILTRE
-   ses racines contre le périmètre au lieu de le définir ; et la clé `folders`
-   des réglages est GARDÉE à l'écriture, parce qu'elle nourrit le périmètre au
-   prochain démarrage. `ouvrir` refuse EN PLUS les extensions exécutables
+   ses racines contre le périmètre au lieu de le définir ; et les deux clés des
+   réglages qui donnent un DROIT au principal sont GARDÉES à l'écriture :
+   `folders`, qui nourrit le périmètre au prochain démarrage, et `ai`
+   (`garde-ia.ts`), dont l'hôte d'`aiOllamaUrl` entre dans la liste du réseau
+   et dont `aiMentionExtraFolders` désigne des dossiers lus par les canaux.
+   `ouvrir` refuse EN PLUS les extensions exécutables
    (`EXTENSIONS_EXECUTABLES`, `ressources.ts`) : le périmètre borne l'écriture
    et la lecture, pas l'exécution, et `write` puis `ouvrir` d'un `.bat` les
    composerait.
@@ -28,19 +31,22 @@
 ══════════════════════════════════════════════════════════ */
 
 import { dialog, ipcMain, net, shell } from "electron";
+import type { BrowserWindow } from "electron";
 import * as path from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
 import { creerFichiers, stat, statEntree } from "./fichiers";
 import { absoluDepuisContrat, contratDepuisAbsolu, creerIndex, renameDirVersAbsolu } from "./index-fichiers";
 import type { EvenementSurveillant, Index } from "./index-fichiers";
 import { listerRacine, normaliser } from "./parcours";
+import { t } from "../../../src/i18n";
+import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { demarrerOllama, erreurCli, lireCache, ollamaInstalle } from "./process";
-import { CANAUX } from "./pont";
+import { CANAUX, CLE_REGLAGES_IA } from "./pont";
 import type { EvenementDisque, RequeteReseau } from "./pont";
 import type { Reglages } from "./reglages";
-import { fetchBorne } from "./reseau";
+import { autoriserHote, fetchBorne } from "./reseau";
 import { extensionRefusee } from "./ressources";
 import { vaultsObsidian } from "./vaults";
 
@@ -53,6 +59,10 @@ export interface DependancesCanaux {
 	reglagesOuErreur(): Reglages;
 	/** Pousse une charge vers la fenêtre (`webContents.send`), si elle existe. */
 	envoyer(canal: string, charge: unknown): void;
+	/** La fenêtre, pour y RATTACHER un dialogue natif (modal de la fenêtre,
+	    pas de l'application) ; `null` avant qu'elle existe ou après sa
+	    destruction — le dialogue s'ouvre alors seul. */
+	fenetreCourante(): BrowserWindow | null;
 	fermeture: { armer(): void; terminee(): void };
 }
 
@@ -282,8 +292,48 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 		   tout le disque à la session suivante. Chaque chemin doit déjà être
 		   dans le périmètre — venu du sélecteur ou des vaults d'Obsidian. */
 		if (cle === CLE_DOSSIERS || cle === CLE_DOSSIER_LEGACY) await verifierDossiers(perimetre, valeur);
+		/* La clé `ai` est GARDÉE de la même façon, AVANT l'écriture, et pour la
+		   même raison : l'hôte d'`aiOllamaUrl` entre dans la liste du réseau
+		   (`main.ts` l'y admet au démarrage) et `aiMentionExtraFolders` désigne
+		   des dossiers que les canaux `fichiers.*` liront. Le verdict est pur
+		   (`garde-ia.ts`, éprouvé par `check:electron-reglages`) ; ici ne
+		   restent que la porte NATIVE et l'admission. */
+		if (cle === CLE_REGLAGES_IA) await garderReglagesIa(valeur);
 		await reglagesOuErreur().ecrire(String(cle), valeur);
 	});
+
+	/** Refuse (rejet nommé, rien d'écrit), demande à l'utilisateur, ou admet
+	    l'hôte d'Ollama dans la liste du réseau — AUSSITÔT, pas au prochain
+	    lancement : un NAS déclaré dans les réglages doit répondre dans la
+	    session où on l'a déclaré. */
+	async function garderReglagesIa(valeur: unknown): Promise<void> {
+		const verdict = await validerReglagesIa(valeur, chemin => perimetre.contient(chemin));
+		if ("refus" in verdict) throw new Error(verdict.refus);
+		if ("confirmer" in verdict) {
+			/* Une porte NATIVE, comme `choisirDossier` : la question est rédigée
+			   et traduite ICI, sur la langue posée par `main.ts` — un rendu
+			   compromis ne peut ni la formuler ni y répondre. `cancelId` = refus :
+			   fermer la boîte, c'est dire non. */
+			const options = {
+				type: "question" as const,
+				title: t("app.aiHost.title"),
+				message: t("app.aiHost.message", { host: verdict.confirmer }),
+				detail: t("app.aiHost.detail"),
+				buttons: [t("app.aiHost.allow"), t("app.aiHost.deny")],
+				defaultId: 1,
+				cancelId: 1,
+			};
+			const parent = deps.fenetreCourante();
+			const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+			if (response !== 0) {
+				console.warn(LOG_PREFIX, "hôte Ollama refusé par l'utilisateur:", verdict.confirmer);
+				throw new Error("hôte refusé par l'utilisateur, réglages IA non écrits : " + verdict.confirmer);
+			}
+			autoriserHote(verdict.confirmer);
+			return;
+		}
+		if (verdict.admettre) autoriserHote(verdict.admettre);
+	}
 	ipcMain.handle(CANAUX.reglagesSupprimer, (_e, cle: string) => reglagesOuErreur().supprimer(String(cle)));
 
 	ipcMain.handle(CANAUX.ouvrir, async (_e, abs: unknown) => {

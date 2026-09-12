@@ -9,4 +9,10 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.error.startup": "Neo Quiz n'a pas pu démarrer : {error}",
 
 	"app.quiz.readError": "Impossible de lire {path} : {error}",
+
+	"app.aiHost.title": "Autoriser ce serveur Ollama ?",
+	"app.aiHost.message": "Neo Quiz enverra vos demandes et les notes que vous joignez à {host}.",
+	"app.aiHost.detail": "Ce serveur n'est ni un hôte connu ni sur votre réseau local. Ne l'autorisez que si vous l'avez configuré vous-même.",
+	"app.aiHost.allow": "Autoriser",
+	"app.aiHost.deny": "Annuler",
 };

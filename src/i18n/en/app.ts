@@ -22,4 +22,16 @@ export const EN_APP = {
 	   ouvert par le coffre, ici il vient du disque et la cause doit être nommée —
 	   un message qui avale la cause rend la panne indiagnosticable. */
 	"app.quiz.readError": "Could not read {path}: {error}",
+
+	/* ── La confirmation NATIVE d'un hôte Ollama hors liste ──
+	   Affichée par le PROCESSUS PRINCIPAL (`electron/canaux.ts`, garde de la
+	   clé `ai`), jamais par la fenêtre : un rendu compromis ne doit pas
+	   pouvoir rédiger la question qu'on lui pose. Le principal traduit avec
+	   ce même dictionnaire, sur la langue du système (`app.getLocale()`), la
+	   source que la fenêtre lit elle aussi par `navigator.language`. */
+	"app.aiHost.title": "Allow this Ollama server?",
+	"app.aiHost.message": "Neo Quiz will send your requests and the notes you attach to {host}.",
+	"app.aiHost.detail": "This server is neither a known host nor on your local network. Allow it only if you set it up yourself.",
+	"app.aiHost.allow": "Allow",
+	"app.aiHost.deny": "Cancel",
 } as const;

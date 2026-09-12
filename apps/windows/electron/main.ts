@@ -28,6 +28,7 @@ import { BrowserWindow, app, net, protocol, shell } from "electron";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
+import { setLanguage } from "../../../src/i18n";
 import { enregistrerCanaux } from "./canaux";
 import { perimetreInitial } from "./perimetre";
 import type { Perimetre } from "./perimetre";
@@ -343,9 +344,12 @@ function creerFenetre(): void {
  * liste » sans autre recours.
  * Une URL absente ou illisible n'ajoute rien, en silence : le défaut
  * (`localhost`) est déjà dans la liste.
- * À LA DIFFÉRENCE de `folders`, la clé `ai` n'est pas encore gardée à
- * l'écriture : le résiduel (un rendu compromis obtient un hôte au prochain
- * lancement) est écrit sur `autoriserHote`, et la garde vient à la tâche 6.
+ * COMME `folders`, la clé `ai` est GARDÉE à l'écriture (`canaux.ts`,
+ * `garderReglagesIa`) : ce qui est relu ici a été vérifié avant d'être écrit —
+ * une URL en http(s), un hôte de la liste ou du réseau local, ou un hôte que
+ * l'UTILISATEUR a confirmé par la porte native. L'écriture l'admet aussitôt ;
+ * cette lecture ne fait que le RÉTABLIR au lancement suivant, la liste du
+ * réseau vivant en mémoire.
  */
 async function admettreHoteOllama(reg: Reglages): Promise<void> {
 	let ia: unknown;
@@ -430,6 +434,13 @@ if (!app.requestSingleInstanceLock()) {
 	});
 
 	void app.whenReady().then(async () => {
+		/* La langue du PRINCIPAL, pour les seuls textes qu'il affiche lui-même :
+		   les dialogues natifs (`canaux.ts`, `garderReglagesIa`). Même source que
+		   la fenêtre : `app.getLocale()` est la locale de Chromium, celle que le
+		   rendu lit par `navigator.language` (`src/host/platform.ts`). Le mode
+		   « auto » de `src/i18n.ts` n'a ni hôte ni `navigator` ici — la langue
+		   est posée EXPLICITEMENT. */
+		setLanguage(/^fr/i.test(app.getLocale()) ? "fr" : "en");
 		const donnees = app.getPath("userData");
 		reglages = creerReglages(path.join(donnees, "settings.json"));
 		/* La liste blanche des dossiers que le pont a le droit de toucher — voir
@@ -448,6 +459,7 @@ if (!app.requestSingleInstanceLock()) {
 			envoyer(canal, charge) {
 				if (fenetre && !fenetre.isDestroyed()) fenetre.webContents.send(canal, charge);
 			},
+			fenetreCourante: () => (fenetre && !fenetre.isDestroyed() ? fenetre : null),
 			fermeture: {
 				armer() { fermetureArmee = true; },
 				terminee: terminerFermeture,

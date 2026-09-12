@@ -264,6 +264,30 @@ réponse étant toujours non.
   fenêtre, sans qu'aucun contrôle ne rougisse. Le corps d'un gestionnaire est
   délimité par ses parenthèses équilibrées, pas par une regex de ligne. Éprouvé
   : `listerDossier` sans `borner` → rouge, nommé.
+  Depuis la tranche 5 (tâche 6, ruling R-B), **la garde de la clé `ai`**
+  (`apps/windows/electron/garde-ia.ts`, pur — ni `electron` ni `node:*`, chargé
+  tel quel). Le défaut qu'elle empêche : la clé `ai` est la première que le
+  RENDU écrit et que le PRINCIPAL relit pour élargir ce qu'il accepte — l'hôte
+  d'`aiOllamaUrl` entre dans la liste du réseau (`reseau.ts`), et
+  `aiMentionExtraFolders` désigne des dossiers que les canaux `fichiers.*`
+  liront. Sans garde, un rendu compromis obtenait un hôte Internet au prochain
+  lancement. Les cas : `hoteEstPrive` (boucle locale, RFC 1918 aux bornes
+  exactes — 172.15 et 172.32 sont publics —, `.local`) ; `validerReglagesIa` :
+  une valeur qui n'est pas un objet, une URL illisible / non-chaîne / hors
+  `http(s)` (`file://127.0.0.1/…` porte un hôte DE LA LISTE, la même moitié que
+  `hoteAutorise`) sont REFUSÉES avec leur cause ; un hôte de la liste ou du
+  réseau local passe et est À ADMETTRE aussitôt (pas au prochain lancement) ;
+  un hôte Internet hors liste demande CONFIRMATION, par son nom en minuscules ;
+  un dossier hors périmètre dans `aiMentionExtraFolders` est refusé et nommé,
+  et prime sur une URL valide (rien n'est admis quand une moitié est refusée).
+  Puis, STATIQUE comme la borne des canaux : `reglagesEcrire` appelle
+  `garderReglagesIa(` AVANT `.ecrire(`, et celle-ci passe par le verdict pur
+  et admet par `autoriserHote(verdict.…)`. Le dialogue natif lui-même
+  (`dialog.showMessageBox`, traduit par le principal sur `app.getLocale()`)
+  n'est pas chargé — `canaux.ts` tire Electron. Éprouvé par rupture, chacune ne
+  rougissant que son cas : plage 172.16/12 retirée ; 172.32 admis ; protocole
+  non vérifié ; `confirmer` remplacé par `ok` ; périmètre non consulté ;
+  `garderReglagesIa` déplacée APRÈS `.ecrire(`.
 - `npm run check:electron-reseau` — la PORTE RÉSEAU du processus principal
   (`apps/windows/electron/reseau.ts`, tâche 2 de la génération IA dans
   l'application). Le défaut qu'il empêche : **un rendu compromis fait de
@@ -276,14 +300,13 @@ réponse étant toujours non.
   la liste (`localhost`, `127.0.0.1`, `ollama.com`, `api.anthropic.com`) vit
   dans le principal, et le seul ajout possible est l'hôte d'`aiOllamaUrl`, lu
   des RÉGLAGES par `main.ts` au démarrage (`autoriserHote`), comme `folders`
-  nourrit le périmètre. **Le résiduel, dit tel quel** : la liste est PILOTÉE
-  PAR LES RÉGLAGES, et la clé `ai` n'est pas encore GARDÉE à l'écriture comme
-  `folders` l'est (`reglagesEcrire`) — un rendu compromis peut donc y écrire
-  `{ aiOllamaUrl: "https://attaquant.example" }` et obtenir cet hôte AU
-  PROCHAIN LANCEMENT ; la garde se construit à la tâche 6, la première qui
-  écrit cette clé (http(s) obligatoire, confirmation native pour un hôte hors
-  liste et hors réseau local, hôte accepté admis aussitôt). Deux autres
-  résiduels sont admis et nommés dans `reseau.ts` : `net.fetch` SUIT les
+  nourrit le périmètre. La liste est PILOTÉE PAR LES
+  RÉGLAGES, et c'est pourquoi la clé `ai` est GARDÉE à l'écriture comme
+  `folders` l'est (`reglagesEcrire` → `garderReglagesIa`, tranche 5, tâche 6 ;
+  le verdict pur vit dans `garde-ia.ts` et son groupe dans
+  `check:electron-reglages`) : sans elle, un rendu compromis y écrivait
+  `{ aiOllamaUrl: "https://attaquant.example" }` et obtenait cet hôte AU
+  PROCHAIN LANCEMENT. Deux autres résiduels sont admis et nommés dans `reseau.ts` : `net.fetch` SUIT les
   redirections d'un hôte de la liste vers n'importe où (un 307/308 renvoie le
   corps du POST ; qui contrôle la réponse d'un hôte listé tient déjà ce corps,
   et `redirect: "manual"` casserait le catalogue d'`ollama.com`), et

@@ -76,6 +76,24 @@ export interface AiSettings {
 	hotkeyAddFiles?: Hotkey | null;
 	hotkeyAddNotes?: Hotkey | null;
 	aiMentionExtraFolders?: string[];
+	/* ── LES CHEMINS D'EXÉCUTABLE DES CLI (application seulement) ──
+
+	   Vides/absents par défaut, et c'est l'état NORMAL : les deux hôtes
+	   cherchent d'abord le CLI dans un `PATH` étendu. Ils n'existent que pour la
+	   machine où cette recherche échoue — une APPLICATION INSTALLÉE démarre avec
+	   le `PATH` du SYSTÈME, pas celui du terminal, et un installateur qui écrit
+	   dans le `PATH` du registre n'atteint jamais un processus déjà lancé.
+
+	   LUS PAR LE SEUL PROCESSUS PRINCIPAL DE L'APPLICATION
+	   (`apps/windows/electron/canaux.ts`, dans SON magasin — jamais envoyés par
+	   la fenêtre), et GARDÉS à l'écriture (`garde-ia.ts` : absolu, existant,
+	   d'une extension lançable). Le greffon les ignore : sous Obsidian, le
+	   `PATH` étendu de `buildChildEnv` a toujours suffi, et un réglage qu'aucun
+	   écran ne montre serait un réglage mort. Déclarés ici quand même, dans la
+	   seule liste des réglages IA, parce que les deux hôtes persistent le MÊME
+	   objet : une clé connue d'un seul côté serait rognée par l'autre. */
+	cheminClaude?: string;
+	cheminCodex?: string;
 	/* NB : cette interface s'appelle « AiSettings » mais elle est en réalité
 	   le sous-ensemble des réglages du plugin que le DASHBOARD lit — le nom
 	   ne suit plus. Le champ ci-dessous n'a rien d'IA ; le renommage est un

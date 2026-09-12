@@ -14,4 +14,9 @@ export const FR_SETTINGS: Record<keyof typeof EN_SETTINGS, string> = {
 	"settings.ai.mentionFolders.invalid": "Ce n'est pas un dossier : {dir}",
 	"settings.ai.mentionFolders.placeholder": "Chemin du dossier",
 	"settings.ai.mentionFolders.vaultCollision": "Votre coffre a déjà un dossier de premier niveau nommé « {name} ». Dans le picker « @ », descendre dans « {name}/ » ouvrira toujours celui du coffre — ce dossier reste trouvable en tapant une recherche, pas en descendant dedans.",
+	"settings.ai.cliPath.title": "Outils IA en ligne de commande",
+	"settings.ai.cliPath.desc": "À laisser vide, sauf si Neo Quiz annonce le CLI comme non installé alors qu'il répond dans votre terminal : une application installée démarre avec le PATH du système, pas celui de votre terminal. Indiquez le chemin complet de l'exécutable.",
+	"settings.ai.cliPath.claude": "Chemin de claude",
+	"settings.ai.cliPath.codex": "Chemin de codex",
+	"settings.ai.cliPath.placeholder": "Chemin complet de l'exécutable",
 };

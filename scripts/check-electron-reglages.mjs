@@ -424,23 +424,36 @@ await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ hoteEstPrive, 
 	r.check("un hôte public, une plage voisine de 172.16/12, ou un nom Internet ne sont pas privés",
 		publics.filter(h => hoteEstPrive(h)), []);
 
-	/* ── validerReglagesIa : les trois verdicts ── */
+	/* ── validerReglagesIa : les trois verdicts ──
+
+	   DEUX prédicats, et ils ne se confondent pas. Le PÉRIMÈTRE juge les
+	   dossiers que le sélecteur « @ » lira. L'EXISTENCE juge le chemin d'un
+	   exécutable de CLI — lequel vit précisément HORS du périmètre (un CLI est
+	   dans `Program Files`, jamais dans un dossier de quiz) : le borner serait
+	   refuser d'avance tout chemin valide. Les doubles sont de simples listes,
+	   comme le vrai `perimetre.contient` et le vrai `statEntree` vus d'ici. */
 	const contient = async (chemin) => chemin.startsWith("D:/Quiz");
+	/* « outils/claude.exe » EXISTE dans le double, exprès : sans lui, retirer
+	   la garde « absolu » laisserait le refus tomber sur « ne désigne aucun
+	   fichier », et le cas resterait VERT sur la mauvaise raison. */
+	const fichiersReels = new Set(["c:/outils/claude.exe", "c:/outils/codex.cmd", "c:/outils/note.docx", "c:/outils/lance.ps1", "c:/outils/shim.js", "c:/outils/claude", "outils/claude.exe"]);
+	const existe = async (chemin) => fichiersReels.has(chemin.toLowerCase());
+	const valider = (v) => validerReglagesIa(v, contient, existe);
 	await cas(r, "une valeur qui n'est pas un objet est refusée", async () => {
-		const verdicts = await Promise.all([null, "x", 3, [1]].map(v => validerReglagesIa(v, contient)));
+		const verdicts = await Promise.all([null, "x", 3, [1]].map(v => valider(v)));
 		r.check("une valeur qui n'est pas un objet est refusée",
 			verdicts.map(v => "refus" in v), [true, true, true, true]);
 	});
 	await cas(r, "sans aiOllamaUrl, rien à admettre", async () => {
 		r.check("sans aiOllamaUrl, rien à admettre",
-			await validerReglagesIa({ aiModel: "x" }, contient), { ok: true, admettre: null });
+			await valider({ aiModel: "x" }), { ok: true, admettre: null });
 	});
 	await cas(r, "une URL illisible, non-chaîne ou hors http(s) est refusée, nommée", async () => {
 		const [pasChaine, illisible, fichier, ftp] = await Promise.all([
-			validerReglagesIa({ aiOllamaUrl: 42 }, contient),
-			validerReglagesIa({ aiOllamaUrl: "pas une url" }, contient),
-			validerReglagesIa({ aiOllamaUrl: "file://127.0.0.1/C:/x" }, contient),
-			validerReglagesIa({ aiOllamaUrl: "ftp://localhost/x" }, contient),
+			valider({ aiOllamaUrl: 42 }),
+			valider({ aiOllamaUrl: "pas une url" }),
+			valider({ aiOllamaUrl: "file://127.0.0.1/C:/x" }),
+			valider({ aiOllamaUrl: "ftp://localhost/x" }),
 		]);
 		r.check("une URL illisible, non-chaîne ou hors http(s) est refusée, nommée",
 			[pasChaine, illisible, fichier, ftp].map(v => "refus" in v && /aiOllamaUrl/.test(v.refus)), [true, true, true, true]);
@@ -448,10 +461,10 @@ await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ hoteEstPrive, 
 	await cas(r, "un hôte de la liste ou du réseau local passe, et l'hôte est à admettre", async () => {
 		r.check("un hôte de la liste ou du réseau local passe, et l'hôte est à admettre",
 			await Promise.all([
-				validerReglagesIa({ aiOllamaUrl: "http://localhost:11434" }, contient),
-				validerReglagesIa({ aiOllamaUrl: "HTTP://192.168.1.10:11434/" }, contient),
-				validerReglagesIa({ aiOllamaUrl: "https://ollama.com" }, contient),
-				validerReglagesIa({ aiOllamaUrl: "http://mon-nas.local:11434" }, contient),
+				valider({ aiOllamaUrl: "http://localhost:11434" }),
+				valider({ aiOllamaUrl: "HTTP://192.168.1.10:11434/" }),
+				valider({ aiOllamaUrl: "https://ollama.com" }),
+				valider({ aiOllamaUrl: "http://mon-nas.local:11434" }),
 			]),
 			[
 				{ ok: true, admettre: "localhost" },
@@ -462,26 +475,83 @@ await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ hoteEstPrive, 
 	});
 	await cas(r, "un hôte Internet hors liste demande confirmation, par son nom", async () => {
 		r.check("un hôte Internet hors liste demande confirmation, par son nom",
-			await validerReglagesIa({ aiOllamaUrl: "https://Attaquant.Example:8443/api" }, contient),
+			await valider({ aiOllamaUrl: "https://Attaquant.Example:8443/api" }),
 			{ confirmer: "attaquant.example" });
 	});
 	await cas(r, "aiMentionExtraFolders : un dossier hors périmètre est refusé, nommé", async () => {
-		const v = await validerReglagesIa({ aiMentionExtraFolders: ["D:/Quiz/Cours", "E:/Ailleurs"] }, contient);
+		const v = await valider({ aiMentionExtraFolders: ["D:/Quiz/Cours", "E:/Ailleurs"] });
 		r.check("aiMentionExtraFolders : un dossier hors périmètre est refusé, nommé",
 			"refus" in v && v.refus.includes("E:/Ailleurs"), true);
 	});
 	await cas(r, "aiMentionExtraFolders : tous dans le périmètre passe ; une forme autre qu'un tableau de chaînes est refusée", async () => {
 		const [ok, pasTableau, pasChaines] = await Promise.all([
-			validerReglagesIa({ aiMentionExtraFolders: ["D:/Quiz/Cours"] }, contient),
-			validerReglagesIa({ aiMentionExtraFolders: "D:/Quiz" }, contient),
-			validerReglagesIa({ aiMentionExtraFolders: [1] }, contient),
+			valider({ aiMentionExtraFolders: ["D:/Quiz/Cours"] }),
+			valider({ aiMentionExtraFolders: "D:/Quiz" }),
+			valider({ aiMentionExtraFolders: [1] }),
 		]);
 		r.check("aiMentionExtraFolders : tous dans le périmètre passe ; une forme autre qu'un tableau de chaînes est refusée",
 			[ok, "refus" in pasTableau, "refus" in pasChaines], [{ ok: true, admettre: null }, true, true]);
 	});
 	await cas(r, "le refus d'un dossier prime sur l'URL : rien n'est admis quand une moitié est refusée", async () => {
-		const v = await validerReglagesIa({ aiOllamaUrl: "http://localhost:11434", aiMentionExtraFolders: ["E:/x"] }, contient);
+		const v = await valider({ aiOllamaUrl: "http://localhost:11434", aiMentionExtraFolders: ["E:/x"] });
 		r.check("le refus d'un dossier prime sur l'URL : rien n'est admis quand une moitié est refusée", "refus" in v, true);
+	});
+
+	/* ── cheminClaude / cheminCodex : le champ qui fait LANCER un programme ──
+
+	   C'est la garde la plus importante de cette clé depuis la tâche 7. Le
+	   réglage désigne un exécutable que le PRINCIPAL lancera : une liste blanche
+	   de NOMS d'outils ne sépare plus rien si le chemin, lui, peut être
+	   n'importe quoi. Les trois conditions ne se remplacent pas —
+	   — ABSOLU : un chemin relatif serait résolu contre le dossier courant du
+	     processus principal, que l'utilisateur ne connaît pas ;
+	   — EXISTANT : dit à l'ÉCRITURE, là où on peut encore le corriger, plutôt
+	     qu'à la prochaine génération sous la forme « CLI introuvable » ;
+	   — LANÇABLE : `.js`, `.ps1`, `.vbs` sont des SCRIPTS qu'un interpréteur
+	     choisi par le système exécuterait — le pont refuse déjà de les OUVRIR
+	     (`EXTENSIONS_EXECUTABLES`), les admettre ici rouvrirait la même porte
+	     par l'autre bout ; un `.docx` ne se lance pas du tout, et produirait un
+	     échec obscur très loin de l'écran où il a été saisi. */
+	await cas(r, "un chemin de CLI absolu, existant et lançable est admis ; vide l'efface", async () => {
+		const [exe, cmd, sansExtension, vide, absent] = await Promise.all([
+			valider({ cheminClaude: "C:/Outils/claude.exe" }),
+			valider({ cheminCodex: "C:/Outils/codex.cmd" }),
+			// Sans extension : la forme normale d'un exécutable sous Unix.
+			valider({ cheminClaude: "C:/Outils/claude" }),
+			valider({ cheminClaude: "   " }),
+			valider({ aiModel: "x" }),
+		]);
+		r.check("un chemin de CLI absolu, existant et lançable est admis ; vide l'efface",
+			[exe, cmd, sansExtension, vide, absent].map(v => "ok" in v), [true, true, true, true, true]);
+	});
+	await cas(r, "un chemin de CLI relatif, inexistant, non-chaîne ou non lançable est refusé, nommé", async () => {
+		const [relatif, inexistant, pasChaine, script, document] = await Promise.all([
+			// EXISTANT et LANÇABLE : seule la règle « absolu » peut le refuser.
+			valider({ cheminClaude: "outils/claude.exe" }),
+			valider({ cheminClaude: "C:/Outils/absent.exe" }),
+			valider({ cheminClaude: 42 }),
+			valider({ cheminCodex: "C:/Outils/lance.ps1" }),
+			valider({ cheminCodex: "C:/Outils/note.docx" }),
+		]);
+		r.check("un chemin de CLI relatif, inexistant, non-chaîne ou non lançable est refusé, nommé",
+			[relatif, inexistant, pasChaine, script, document]
+				.map(v => "refus" in v && /cheminC(laude|odex)/.test(v.refus)),
+			[true, true, true, true, true]);
+	});
+	await cas(r, "un .js existant est refusé : ce n'est pas un CLI, c'est un script qu'un interpréteur exécuterait", async () => {
+		/* Le cas le plus dangereux, et le seul que l'existence ne filtre PAS :
+		   le fichier existe pour de bon. C'est la séquence « écris un `.js` dans
+		   un dossier ouvert, puis désigne-le comme CLI » — celle que le refus
+		   d'extension, et lui seul, empêche. */
+		const v = await valider({ cheminClaude: "C:/Outils/shim.js" });
+		r.check("un .js existant est refusé : ce n'est pas un CLI, c'est un script qu'un interpréteur exécuterait",
+			"refus" in v && v.refus.includes(".js"), true);
+	});
+	await cas(r, "le refus d'un chemin de CLI prime sur une URL valide", async () => {
+		/* Rien n'est admis quand une moitié est refusée : sinon l'hôte d'Ollama
+		   entrerait dans la liste du réseau alors que l'écriture est refusée. */
+		const v = await valider({ aiOllamaUrl: "http://localhost:11434", cheminCodex: "C:/Outils/lance.ps1" });
+		r.check("le refus d'un chemin de CLI prime sur une URL valide", "refus" in v, true);
 	});
 
 	/* ── STATIQUE : la garde est appelée AVANT l'écriture, dans le gestionnaire ── */
@@ -500,7 +570,10 @@ await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ hoteEstPrive, 
 	r.check("reglagesEcrire garde la clé ai (garderReglagesIa) AVANT d'écrire",
 		{ gardee: garde >= 0, avantEcriture: garde >= 0 && ecriture > garde }, { gardee: true, avantEcriture: true });
 	r.check("garderReglagesIa passe par le verdict pur validerReglagesIa, et n'écrit qu'après avoir admis l'hôte",
-		{ verdict: source.includes("validerReglagesIa(valeur"), admet: source.includes("autoriserHote(verdict.") },
+		// L'appel tient sur plusieurs lignes depuis qu'il porte DEUX prédicats
+		// (périmètre, existence) : le motif tolère le retour à la ligne, il ne
+		// tolère pas un autre premier argument que `valeur`.
+		{ verdict: /validerReglagesIa\(\s*valeur\s*,/.test(source), admet: source.includes("autoriserHote(verdict.") },
 		{ verdict: true, admet: true });
 	r.done();
 });

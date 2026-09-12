@@ -446,8 +446,13 @@ export interface HostProcess {
 	    `introuvable` (l'exécutable manque), `timeout` (`timeoutMs` dépassé,
 	    process tué), `annule` (`signal` abandonné, l'ARBRE de process est tué
 	    — `claude` et `codex` spawnent des enfants), `refuse` (outil hors liste,
-	    argument incitable), `indisponible` (l'hôte ne sait pas encore lancer de
-	    CLI : l'application jusqu'à la tâche 7). */
+	    argument incitable, pièces jointes ou `sortieFichier` sans
+	    `marqueur` — aucun jeton ne pourrait alors les désigner, et l'appel
+	    réussirait en les IGNORANT), `occupe` (un `run` du MÊME outil est déjà en
+	    cours : l'hôte n'en lance qu'un à la fois, et le dire vaut mieux que
+	    laisser deux générations écrire dans le même terminal),
+	    `indisponible` (l'hôte ne sait pas lancer de CLI du tout — Obsidian sur
+	    mobile, où il n'y a pas de processus enfants). */
 	run(spec: {
 		tool: CliTool;
 		args: string[];

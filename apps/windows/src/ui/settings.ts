@@ -21,11 +21,24 @@ import { ajouter } from "../../../../src/dom";
 import type { Scanner } from "../../../../src/dashboard/scanner";
 import { MAX_DOSSIERS, addFolder, estVaultObsidian, examDates, pickFolder, removeFolder, savedFolders, setExamDate } from "../host/folder";
 import { cleModule, libelleModule } from "../review/catalogue";
+import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host";
 import { poserLogoObsidian } from "./marques";
 
 export function renderSettings(
 	root: HTMLElement,
-	deps: { scanner: Scanner; onBack(): void; onFoldersChanged(): void; onExamDatesChanged(): void },
+	deps: {
+		scanner: Scanner;
+		/** Les réglages IA de l'application — le MÊME objet que la page
+		    « Générer » consomme (`main.ts`, `reglagesIa`). Les deux champs de
+		    chemin de CLI n'ont aucun autre écran, et son `save` porte déjà le
+		    retour arrière sur refus du principal : la garde de la clé `ai` peut
+		    REFUSER un chemin (absolu, existant, lançable), et un cache laissé en
+		    avance sur le disque afficherait un réglage que rien n'a enregistré. */
+		aiSettings: AiSettingsHost;
+		onBack(): void;
+		onFoldersChanged(): void;
+		onExamDatesChanged(): void;
+	},
 ): () => void {
 	const contenu = ajouter(root, "div", "qbd-content");
 
@@ -144,6 +157,49 @@ export function renderSettings(
 				   plan est DÉRIVÉ, il n'y a rien à invalider. C'est la propriété
 				   qui a justifié « journal seul, état dérivé ». */
 				deps.onExamDatesChanged();
+			})();
+		});
+	}
+
+	/* ── Les chemins des CLI d'IA ──
+
+	   POURQUOI CES DEUX CHAMPS EXISTENT. Une application INSTALLÉE démarre avec
+	   le `PATH` du SYSTÈME, pas celui du terminal où l'utilisateur a installé
+	   son CLI ; et un installateur qui écrit dans le `PATH` du registre
+	   n'atteint jamais un processus déjà lancé. Le principal étend déjà ce
+	   `PATH` avec les emplacements connus (npm, Codex officiel, `~/.local/bin`)
+	   — ces champs sont le DERNIER recours, pour l'installation qui n'est à
+	   aucun d'eux. Vides, ils ne font rien : c'est l'état normal.
+
+	   Section STATIQUE (pas de `dessiner`) : rien d'extérieur ne peut changer
+	   ces deux valeurs pendant que la page est ouverte.
+
+	   ÉCRITURE À LA PERTE DU FOCUS (`change`), jamais à chaque frappe : le
+	   principal GARDE cette clé et REFUSE un chemin incomplet — écrire à chaque
+	   caractère ferait donc une Notice de refus par lettre tapée. */
+	const cli = ajouter(contenu, "section", "nq-reglages-section");
+	ajouter(cli, "h3", "nq-reglages-titre", t("settings.ai.cliPath.title"));
+	ajouter(cli, "p", "nq-reglages-aide", t("settings.ai.cliPath.desc"));
+	for (const outil of ["cheminClaude", "cheminCodex"] as const) {
+		const ligne = ajouter(cli, "div", "nq-reglages-module");
+		const texte = ajouter(ligne, "div", "nq-reglages-texte");
+		ajouter(texte, "span", "nq-reglages-nom",
+			t(outil === "cheminClaude" ? "settings.ai.cliPath.claude" : "settings.ai.cliPath.codex"));
+		const champ = ajouter(ligne, "input", "nq-reglages-chemin-cli");
+		champ.type = "text";
+		champ.placeholder = t("settings.ai.cliPath.placeholder");
+		champ.value = deps.aiSettings.get()[outil] ?? "";
+		champ.addEventListener("change", () => {
+			void (async () => {
+				const voulu = champ.value.trim();
+				try {
+					await deps.aiSettings.save({ [outil]: voulu });
+				} catch (e) {
+					/* REFUSÉ par le principal : `save` a déjà remis le cache en
+					   arrière et affiché la cause. Le champ doit suivre le cache,
+					   sinon l'écran montrerait un réglage que le disque n'a pas. */
+					champ.value = deps.aiSettings.get()[outil] ?? "";
+				}
 			})();
 		});
 	}

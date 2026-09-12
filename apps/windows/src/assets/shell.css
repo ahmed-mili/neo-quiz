@@ -431,3 +431,27 @@ body {
 .nq-reglages-date:focus {
 	border-color: var(--interactive-accent);
 }
+
+/* Le champ « chemin de l'exécutable » : le même contrôle que la date, en
+   LARGE — un chemin absolu (« C:\Users\…\AppData\Roaming\npm\claude.cmd »)
+   tronqué à 150 px serait illisible au moment précis où il faut le relire pour
+   le corriger. `min-width: 0` parce que la ligne est un flex : sans lui, la
+   largeur intrinsèque du champ empêcherait le libellé de rétrécir et la ligne
+   déborderait. */
+.nq-reglages-chemin-cli {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 34px;
+	padding: 0 10px;
+	font: inherit;
+	font-size: 13px;
+	color: var(--text-normal);
+	background: var(--background-modifier-form-field);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	outline: none;
+}
+
+.nq-reglages-chemin-cli:focus {
+	border-color: var(--interactive-accent);
+}

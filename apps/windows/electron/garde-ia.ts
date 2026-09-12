@@ -61,6 +61,95 @@ export function hoteEstPrive(hostname: string): boolean {
 }
 
 /**
+ * Les extensions qu'un CHEMIN DE CLI a le droit de porter. Une liste BLANCHE,
+ * à l'inverse d'`EXTENSIONS_EXECUTABLES` (`ressources.ts`, une liste noire) —
+ * et l'inversion n'est pas un caprice : `ouvrir` doit accepter tout ce qu'un
+ * quiz peut livrer (PDF, image, `.docx`, `.ipynb`…) et n'exclure que ce qui
+ * s'exécute, là où un CLI est au contraire une chose très précise.
+ *
+ * LA RÈGLE, ET SA RAISON. Ce réglage désigne un programme que l'application
+ * LANCERA. Il n'a donc de sens que pour ce que son lanceur sait lancer :
+ * `spawn` direct (`.exe`, `.com`, ou un fichier sans extension sous Unix), ou
+ * le repli `cmd.exe` des installations npm (`.cmd`, `.bat`) ; `.sh` pour un
+ * shim Unix. TOUT LE RESTE EST REFUSÉ, et les deux moitiés du refus comptent :
+ * — un `.docx`, un `.txt`, un `.png` ne se lancent pas : accepté, le réglage
+ *   produirait un échec obscur au moment de générer, très loin de l'écran où
+ *   il a été saisi ;
+ * — un `.js`, un `.ps1`, un `.vbs`, un `.hta`, un `.reg` sont des SCRIPTS
+ *   qu'un interpréteur choisi par le SYSTÈME exécuterait, pas nous. Le pont
+ *   refuse déjà de les OUVRIR (`systeme.ouvrir`, `EXTENSIONS_EXECUTABLES`) ;
+ *   les admettre ici rouvrirait la même porte par l'autre bout — `write` d'un
+ *   `.js` dans un dossier ouvert, puis ce chemin dans le réglage, et la
+ *   génération suivante l'exécute.
+ *
+ * Un fichier SANS extension passe : c'est la forme normale d'un exécutable sous
+ * Unix. Sous Windows il ne se lancera pas, et le rejet `introuvable` le dira au
+ * moment du lancement — un refus ici serait faux pour l'autre moitié du monde.
+ */
+export const EXTENSIONS_CLI: ReadonlySet<string> = new Set(["exe", "com", "cmd", "bat", "sh"]);
+
+/**
+ * Un chemin ABSOLU ? PURE, et sans `node:path` (ce module ne tire aucun Node,
+ * c'est ce qui le rend chargeable par `check:electron-reglages`).
+ *
+ * Les trois formes absolues qui existent : lettre de lecteur (`C:\…`, `C:/…`),
+ * UNC (`\\serveur\part`), et racine POSIX (`/usr/bin/claude`). Un chemin
+ * RELATIF est refusé parce qu'il serait résolu contre le dossier courant du
+ * PROCESSUS PRINCIPAL — que l'utilisateur ne connaît pas et qui n'a rien à voir
+ * avec l'écran où il a saisi le réglage : `claude` y désignerait tout autre
+ * chose que ce qu'il croit, et un `../` y remonterait où il ne pense pas.
+ */
+export function estCheminAbsolu(chemin: string): boolean {
+	return /^[a-zA-Z]:[\\/]/.test(chemin) || chemin.startsWith("\\\\") || chemin.startsWith("/");
+}
+
+/** L'extension d'un chemin, en minuscules, ou la chaîne vide s'il n'en a pas.
+    Sur le DERNIER point du NOM seul : `C:/a.b/claude` n'a pas d'extension, et
+    `claude.pdf.exe` en a une — `.exe`. */
+function extensionDe(chemin: string): string {
+	const nom = chemin.replace(/\\/g, "/").split("/").pop() ?? "";
+	const point = nom.lastIndexOf(".");
+	return point <= 0 ? "" : nom.slice(point + 1).toLowerCase();
+}
+
+/**
+ * Le verdict sur un chemin de CLI saisi dans les réglages. `null` = admis.
+ *
+ * TROIS CONDITIONS, ET AUCUNE NE REMPLACE LES AUTRES : une chaîne, ABSOLUE (le
+ * dossier courant du principal n'est pas celui de l'utilisateur), EXISTANTE (un
+ * chemin fautif saisi ici ne se verrait qu'à la prochaine génération, sous la
+ * forme « CLI introuvable » — le dire à l'ÉCRITURE, c'est le dire là où on peut
+ * encore le corriger), et d'une extension que le lanceur sait lancer.
+ *
+ * CE QUE CETTE GARDE N'EST PAS : une garantie que le programme désigné est bien
+ * un CLI d'IA. Elle ne peut pas l'être — c'est l'UTILISATEUR qui désigne son
+ * exécutable, et l'y autoriser est tout l'objet du réglage. Elle empêche qu'un
+ * RENDU compromis transforme ce réglage en « lance ce que je viens d'écrire sur
+ * le disque » avec un type de fichier que le pont refuse par ailleurs.
+ */
+async function verifierCheminCli(
+	cle: string,
+	valeur: unknown,
+	fichierExiste: (chemin: string) => Promise<boolean>,
+): Promise<string | null> {
+	if (typeof valeur !== "string") return "réglages IA refusés : " + cle + " doit être une chaîne";
+	const chemin = valeur.trim();
+	// Vide = « pas de chemin réglé », et c'est comme ça qu'on l'efface.
+	if (!chemin) return null;
+	if (!estCheminAbsolu(chemin)) {
+		return "réglages IA refusés : " + cle + " doit être un chemin absolu : " + chemin;
+	}
+	const ext = extensionDe(chemin);
+	if (ext && !EXTENSIONS_CLI.has(ext)) {
+		return "réglages IA refusés : " + cle + " n'est pas un exécutable lançable (." + ext + ") : " + chemin;
+	}
+	if (!(await fichierExiste(chemin))) {
+		return "réglages IA refusés : " + cle + " ne désigne aucun fichier : " + chemin;
+	}
+	return null;
+}
+
+/**
  * Le verdict sur la valeur que le rendu veut écrire sous la clé `ai`.
  *
  * `aiOllamaUrl`, s'il est présent, doit être une URL `http(s)` lisible : son
@@ -72,17 +161,35 @@ export function hoteEstPrive(hostname: string): boolean {
  * sélecteur « @ » au prochain lancement. L'application n'a aucune interface
  * pour remplir cette clé aujourd'hui ; la garde existe avant l'interface.
  *
+ * `cheminClaude` et `cheminCodex`, s'ils sont présents, désignent un EXÉCUTABLE
+ * que le principal lancera : la garde la plus importante de cette clé depuis la
+ * tâche 7 — voir `verifierCheminCli`. Un réglage qui pointe sur quelque chose
+ * n'est PAS un blanc-seing pour lancer n'importe quoi.
+ *
  * Les autres champs (modèle, effort, journal d'usage) ne donnent aucun droit
  * au principal : ils passent tels quels.
  */
 export async function validerReglagesIa(
 	valeur: unknown,
 	perimetreContient: (chemin: string) => Promise<boolean>,
+	fichierExiste: (chemin: string) => Promise<boolean>,
 ): Promise<VerdictReglagesIa> {
 	if (!valeur || typeof valeur !== "object" || Array.isArray(valeur)) {
 		return { refus: "réglages IA refusés : la valeur n'est pas un objet" };
 	}
-	const { aiOllamaUrl, aiMentionExtraFolders } = valeur as { aiOllamaUrl?: unknown; aiMentionExtraFolders?: unknown };
+	const { aiOllamaUrl, aiMentionExtraFolders, cheminClaude, cheminCodex } = valeur as {
+		aiOllamaUrl?: unknown; aiMentionExtraFolders?: unknown; cheminClaude?: unknown; cheminCodex?: unknown;
+	};
+
+	/* LES CHEMINS D'EXÉCUTABLE D'ABORD : c'est le champ qui donne le droit le
+	   plus fort (lancer un programme), et un refus ici doit primer sur tout le
+	   reste — rien n'est admis quand une moitié est refusée, exactement comme
+	   pour `aiMentionExtraFolders`. */
+	for (const [cle, v] of [["cheminClaude", cheminClaude], ["cheminCodex", cheminCodex]] as const) {
+		if (v === undefined) continue;
+		const refus = await verifierCheminCli(cle, v, fichierExiste);
+		if (refus) return { refus };
+	}
 
 	if (aiMentionExtraFolders !== undefined) {
 		if (!Array.isArray(aiMentionExtraFolders) || aiMentionExtraFolders.some(d => typeof d !== "string")) {

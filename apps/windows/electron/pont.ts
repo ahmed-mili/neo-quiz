@@ -46,13 +46,36 @@
    et la clé `folders` des réglages est gardée à l'écriture.
 ══════════════════════════════════════════════════════════ */
 
-import type { HostNetRequest, HostNetResponse } from "../../../src/host/types";
+import type { HostNetRequest, HostNetResponse, HostProcess } from "../../../src/host/types";
 
 /** Une requête réseau telle qu'elle TRAVERSE le pont : `HostNetRequest` sans
     son `signal`. Un `AbortSignal` ne se clone pas (l'IPC sérialise par clonage
     structuré, et `invoke` rejetterait) ; l'annulation voyage à part, par un
     identifiant — voir `Pont.reseau`. */
 export type RequeteReseau = Omit<HostNetRequest, "signal">;
+
+/** Un appel de CLI tel qu'il TRAVERSE le pont : la spec de `HostProcess.run`
+    sans son `signal`, pour exactement la même raison que `RequeteReseau`.
+    DÉRIVÉE du contrat, jamais recopiée : un champ ajouté là-bas (les pièces
+    jointes de la tâche 4 en sont un) doit faire rougir la compilation ici. */
+export type RequeteCli = Omit<Parameters<HostProcess["run"]>[0], "signal">;
+
+/**
+ * Ce que le canal `process.run` REND — une ENVELOPPE, jamais un rejet.
+ *
+ * POURQUOI, et ce n'est pas un goût : l'IPC d'Electron sérialise une erreur
+ * jetée par un gestionnaire en message + pile, et PERD son `name`. Or tout le
+ * contrat de `HostProcess.run` tient dans ce nom (`introuvable`, `timeout`,
+ * `annule`, `refuse`, `occupe`, `indisponible`) : c'est lui, et lui seul, que
+ * `ai-client.ts` traduit en « Claude Code n'est pas installé » ou « délai
+ * dépassé ». Jeté, chaque échec serait arrivé côté fenêtre sous le nom
+ * « Error » — donc traité comme une réponse illisible du modèle. L'enveloppe
+ * fait voyager le nom comme une DONNÉE, et l'hôte du rendu le reconstruit
+ * (`apps/windows/src/host/process.ts`).
+ */
+export type ResultatCli =
+	| { ok: true; stdout: string; stderr: string; code: number | null; sortie?: string }
+	| { ok: false; nom: string; message: string };
 
 /** Un vault Obsidian connu de la machine (remplace la commande Rust
     `obsidian_vaults`). */
@@ -334,8 +357,22 @@ export interface Pont {
 
 	/**
 	 * LES CLI ET LEURS FICHIERS : `HostProcess` (`src/host/types.ts`) vu du
-	 * rendu, moins `run` — qui n'a pas encore de canal (tâche 7) et que l'hôte
-	 * du rendu rejette sur place, `name === "indisponible"`.
+	 * rendu.
+	 *
+	 * `run` LANCE UN PROGRAMME — la capacité la plus dangereuse de ce pont. Ce
+	 * qui traverse est un NOM d'outil, jamais un chemin : `canaux.ts` refuse
+	 * tout nom hors d'`OUTILS` (`process.ts`) AVANT toute autre chose, et le
+	 * chemin de l'exécutable est résolu par le PRINCIPAL — réglage
+	 * `cheminClaude`/`cheminCodex` lu dans SON magasin (jamais pris de cet
+	 * appel), sinon le `PATH` étendu. Un rendu compromis ne peut donc pas
+	 * choisir le programme lancé, seulement lequel des trois CLI connus part.
+	 *
+	 * `requeteId` : le `signal` de `HostProcess.run` ne traverse pas l'IPC —
+	 * même patron qu'au réseau. Le rendu choisit un identifiant, l'envoie avec
+	 * l'appel, et `annuler(requeteId)` relaie l'abandon ; le principal tient un
+	 * `AbortController` par identifiant tant que le CLI vit, et l'abandon tue
+	 * l'ARBRE de process (`claude` et `codex` spawnent des enfants). Un
+	 * identifiant inconnu (appel déjà fini) est ignoré.
 	 *
 	 * `lireCache` prend un NOM D'OUTIL, jamais un chemin, et c'est toute la
 	 * sûreté de ce canal : les chemins (`$CODEX_HOME/models_cache.json`,
@@ -350,6 +387,8 @@ export interface Pont {
 	 * qui constate si le serveur répond, jamais ce booléen.
 	 */
 	processus: {
+		run(spec: RequeteCli, requeteId: number): Promise<ResultatCli>;
+		annuler(requeteId: number): Promise<void>;
 		lireCache(tool: "claude" | "codex"): Promise<{ mtimeMs: number; json: unknown } | null>;
 		ollamaInstalle(): Promise<boolean>;
 		demarrerOllama(): Promise<boolean>;
@@ -418,6 +457,8 @@ export const CANAUX = {
 	vaultsObsidian: "neo:systeme/vaults-obsidian",
 	reseauFetch: "neo:reseau/fetch",
 	reseauAnnuler: "neo:reseau/annuler",
+	processusRun: "neo:process/run",
+	processusAnnuler: "neo:process/annuler",
 	processusLireCache: "neo:process/lire-cache",
 	processusOllamaInstalle: "neo:process/ollama-installe",
 	processusDemarrerOllama: "neo:process/demarrer-ollama",

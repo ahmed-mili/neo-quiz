@@ -33,6 +33,11 @@ import type { CliTool, Host, HostFile, HostFileEvent, HostModalHandle, HostModal
    copies avaient divergé en une tranche. */
 import { nomDeFichierSur, substituerJetons } from "../../src/host/jetons";
 import type { FichierJoint } from "../../src/host/jetons";
+/* MÊME RAISON pour la citation des arguments et les extensions du PATH : la
+   règle de `cmd.exe` a été durcie ici après une injection prouvée, et une
+   seconde copie dans le processus principal de l'application aurait donné deux
+   règles pour un même appel du code partagé. Voir `src/host/cli-args.ts`. */
+import { extensionsExecutables, ligneCmd, porteSautDeLigne } from "../../src/host/cli-args";
 import { QbdModal } from "../../src/modal-base";
 import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../src/review/paths";
 
@@ -229,9 +234,7 @@ function tuerArbre(child: import("child_process").ChildProcess): void {
 function trouverExecutable(nom: string, env: NodeJS.ProcessEnv): string | null {
 	const fs = require("fs") as typeof import("fs");
 	const path = require("path") as typeof import("path");
-	const extensions = process.platform === "win32"
-		? (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)
-		: [""];
+	const extensions = extensionsExecutables(env, process.platform);
 	for (const dossier of (env.PATH || "").split(path.delimiter).filter(Boolean)) {
 		for (const ext of extensions) {
 			try {
@@ -243,42 +246,13 @@ function trouverExecutable(nom: string, env: NodeJS.ProcessEnv): string | null {
 	return null;
 }
 
-/**
- * Un argument, cité pour la ligne de commande de `cmd.exe`. Ne sert QU'au repli
- * Windows ci-dessous — le chemin direct (`spawn`) ne traverse aucun shell et
- * n'a rien à citer.
- *
- * LA RÈGLE DE `cmd.exe`, et elle n'a rien de celle d'un shell POSIX : le
- * BACKSLASH N'ÉCHAPPE RIEN. `cmd` ne fait que basculer un état « dans des
- * guillemets / dehors » à chaque `"` qu'il rencontre, et ne traite `&`, `|`,
- * `>`, `(` comme des opérateurs que HORS de cet état. Écrire `\"` — ce que
- * faisait la première version — FERME donc le guillemet : avec l'argument
- * `a" & notepad & "b`, la ligne devenait `codex "a\" & notepad & \"b"`, cmd
- * sortait de l'état cité après `a\`, voyait un `&` nu et lançait `notepad`.
- * Le NOM de l'outil restait borné par `CLI_AUTORISES`, mais ses ARGUMENTS
- * atteignaient un interpréteur — ce que le chemin direct ne fait jamais.
- *
- * La forme correcte est le guillemet DOUBLÉ (`"` → `""`) : ferme et rouvre
- * aussitôt, donc l'état « cité » n'est jamais quitté et aucun métacaractère
- * n'est vu comme un opérateur.
- *
- * TROIS CAS QUI NE SE CITENT PAS :
- * — la chaîne VIDE doit s'écrire `""`, sinon elle n'apparaît pas du tout dans
- *   la ligne et l'enfant reçoit un argument de MOINS (les positions décalent) ;
- * — un retour à la ligne (CR ou LF) est un SÉPARATEUR DE COMMANDES pour `cmd`
- *   qu'aucune citation ne neutralise : il est REFUSÉ, avec un nom, jamais
- *   retiré en silence — un argument amputé produirait un appel faux et muet ;
- * — `%VAR%` reste développé par `cmd` même entre guillemets (verrue connue,
- *   sans échappement fiable). C'est le seul résiduel de ce repli, et l'ancien
- *   `cp.exec` l'avait déjà.
- */
-function citerPourCmd(arg: string): string {
-	if (/[\r\n]/.test(arg)) {
-		throw erreurCli("refuse", "argument refusé : un retour à la ligne est un séparateur de commandes pour cmd.exe");
-	}
-	if (arg === "") return '""';
-	return /[\s"&|<>^()%!,;=]/.test(arg) ? '"' + arg.replace(/"/g, '""') + '"' : arg;
-}
+/* LA CITATION DES ARGUMENTS POUR `cmd.exe` vit dans `src/host/cli-args.ts`
+   (`citerPourCmd`, `ligneCmd`), partagée avec le processus principal de
+   l'application. Elle a été durcie ici après une injection PROUVÉE — le
+   backslash n'échappe rien sous `cmd`, seul le guillemet DOUBLÉ ferme et
+   rouvre l'état cité — et le POURQUOI complet est écrit sur place. Une seconde
+   copie côté application aurait donné deux règles de citation pour un même
+   appel du code partagé, dont une seule éprouvée par le cas témoin. */
 
 /**
  * Lance un CLI, `stdin` écrit EN ENTIER puis fermé, `stdout` et `stderr`
@@ -299,6 +273,15 @@ function lancerCli(spec: {
 	timeoutMs?: number;
 }, parCmd = false, envHote: NodeJS.ProcessEnv = process.env): Promise<{ stdout: string; stderr: string; code: number | null }> {
 	return new Promise((resolve, reject) => {
+		/* DÉJÀ ABANDONNÉ : on ne lance RIEN. Jugé avant le `spawn` et non après,
+		   parce qu'un process lancé puis tué a le temps d'agir — mesuré côté
+		   application : l'enfant écrivait son fichier avant que `taskkill`
+		   n'arrive. Même garde, même place, dans `lancer` du processus principal
+		   de l'application (`apps/windows/electron/process.ts`). */
+		if (spec.signal?.aborted) {
+			reject(erreurCli("annule", "CLI annulé avant son lancement : " + spec.tool));
+			return;
+		}
 		const cp = require("child_process") as typeof import("child_process");
 		const env = buildChildEnv(envHote);
 		const options = { env, cwd: dossierPersonnel(envHote), windowsHide: true };
@@ -307,13 +290,13 @@ function lancerCli(spec: {
 		   `refuse`), et le faire dans le `try` transformerait ce refus nommé en
 		   « introuvable » — le contraire de ce qu'il dit. Un jet ici rejette la
 		   promesse avec son propre nom, ce qui est exactement le contrat. */
-		const ligneCmd = parCmd ? '"' + [spec.tool, ...spec.args].map(citerPourCmd).join(" ") + '"' : "";
+		const ligne = parCmd ? ligneCmd(spec.tool, spec.args) : "";
 		let child: import("child_process").ChildProcess;
 		try {
 			child = parCmd
 				? cp.spawn(
 					envHote.ComSpec || "cmd.exe",
-					["/d", "/s", "/c", ligneCmd],
+					["/d", "/s", "/c", ligne],
 					Object.assign({ windowsVerbatimArguments: true }, options),
 				)
 				: cp.spawn(spec.tool, spec.args, options);
@@ -367,10 +350,9 @@ function lancerCli(spec: {
 				sortir(() => reject(erreurCli("timeout", "CLI expiré : " + spec.tool)));
 			}, spec.timeoutMs);
 		}
-		if (spec.signal) {
-			if (spec.signal.aborted) { surAbandon(); return; }
-			spec.signal.addEventListener("abort", surAbandon, { once: true });
-		}
+		/* Le cas « déjà abandonné » est traité tout en haut, avant le `spawn` :
+		   il ne reste ici que l'abandon qui SURVIENDRA. */
+		spec.signal?.addEventListener("abort", surAbandon, { once: true });
 		/* Le prompt COMPLET sur `stdin`, puis fermé : aucun argument à
 		   échapper, et le CLI sait que l'entrée est finie. Un `stdin` resté
 		   ouvert ferait attendre `claude -p` indéfiniment. */
@@ -1206,6 +1188,19 @@ export function createObsidianHost(
 			if (!Platform.isDesktopApp) {
 				throw erreurCli("indisponible", "aucun CLI sur mobile");
 			}
+			/* DES FICHIERS SANS MARQUEUR SONT REFUSÉS. Sans marqueur, `avecFichiers`
+			   ne substitue RIEN (c'est son défaut sûr) : les pièces jointes seraient
+			   bel et bien écrites sur le disque, mais AUCUN jeton ne pourrait les
+			   désigner, le CLI partirait sans savoir qu'elles existent, et l'appel
+			   RÉUSSIRAIT — une génération qui ignore l'image jointe, sans un mot.
+			   Même chose pour `sortieFichier` : le fichier serait créé, jamais
+			   nommé au CLI, et `sortie` reviendrait toujours `undefined`. Le refus
+			   est jugé AVANT `avecFichiers`, qui écrirait sinon un dossier
+			   temporaire pour rien. (Mineur laissé ouvert par la revue de la
+			   tâche 4, fermé ici dans LES DEUX hôtes.) */
+			if (spec.marqueur === undefined && ((spec.fichiers && spec.fichiers.length > 0) || spec.sortieFichier)) {
+				throw erreurCli("refuse", "pièces jointes ou fichier de sortie sans marqueur : aucun jeton ne pourrait les désigner");
+			}
 			const { resultat, sortie } = await avecFichiers(spec, async resolu => {
 				/* ET AUCUN ARGUMENT NE PORTE DE SAUT DE LIGNE, sur TOUS les systèmes.
 				   Il n'est dangereux que sur le chemin `cmd.exe` (un séparateur de
@@ -1217,7 +1212,7 @@ export function createObsidianHost(
 				   diagnostique ; une différence silencieuse, non.
 				   Jugé APRÈS substitution : un jeton se remplace par un chemin, et
 				   c'est ce qui part sur la ligne de commande qu'il faut juger. */
-				const fautif = resolu.args.find(a => /[\r\n]/.test(a));
+				const fautif = resolu.args.find(porteSautDeLigne);
 				if (fautif !== undefined) {
 					throw erreurCli("refuse", "argument refusé : un saut de ligne ne peut pas être cité");
 				}

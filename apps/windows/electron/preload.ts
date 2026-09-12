@@ -111,6 +111,8 @@ const pont: Pont = {
 	},
 
 	processus: {
+		run: (spec, requeteId) => ipcRenderer.invoke(CANAUX.processusRun, spec, requeteId),
+		annuler: requeteId => ipcRenderer.invoke(CANAUX.processusAnnuler, requeteId),
 		lireCache: tool => ipcRenderer.invoke(CANAUX.processusLireCache, tool),
 		ollamaInstalle: () => ipcRenderer.invoke(CANAUX.processusOllamaInstalle),
 		demarrerOllama: () => ipcRenderer.invoke(CANAUX.processusDemarrerOllama),

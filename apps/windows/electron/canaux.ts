@@ -42,9 +42,9 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, erreurCli, lireCache, ollamaInstalle } from "./process";
+import { demarrerOllama, erreurCli, estOutilAutorise, lireCache, ollamaInstalle, run } from "./process";
 import { CANAUX, CLE_REGLAGES_IA } from "./pont";
-import type { EvenementDisque, RequeteReseau } from "./pont";
+import type { EvenementDisque, RequeteCli, RequeteReseau, ResultatCli } from "./pont";
 import type { Reglages } from "./reglages";
 import { autoriserHote, fetchBorne } from "./reseau";
 import { extensionRefusee } from "./ressources";
@@ -145,6 +145,27 @@ async function ecrireTexte(etat: EtatDisque, abs: string, contenu: string): Prom
 }
 
 /* ─────────── les canaux ─────────── */
+
+/**
+ * Le réglage « chemin de l'exécutable » de CET outil, lu dans le magasin du
+ * PRINCIPAL — jamais pris de l'appel IPC. C'est la moitié qui fait que la liste
+ * blanche de noms tient : si le rendu pouvait envoyer un chemin, elle ne
+ * séparerait plus rien.
+ *
+ * `undefined` quand il est absent, vide ou d'un autre type, et quand l'outil
+ * n'a pas de réglage (Ollama : il est cherché à ses emplacements officiels, et
+ * l'utilisateur n'a rien à saisir). `run` retombe alors sur le `PATH` étendu.
+ */
+async function cheminCliRegle(reglages: Reglages, tool: string): Promise<string | undefined> {
+	const cle = tool === "claude" ? "cheminClaude" : tool === "codex" ? "cheminCodex" : null;
+	if (!cle) return undefined;
+	const valeur = await reglages.lire(CLE_REGLAGES_IA);
+	const ia = valeur && typeof valeur === "object" && !Array.isArray(valeur)
+		? (valeur as Record<string, unknown>)
+		: {};
+	const chemin = ia[cle];
+	return typeof chemin === "string" && chemin.trim() ? chemin.trim() : undefined;
+}
 
 /** REJETTE si un des dossiers de la valeur n'est pas déjà dans le périmètre. */
 async function verifierDossiers(perimetre: Perimetre, valeur: unknown): Promise<void> {
@@ -307,7 +328,17 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	    lancement : un NAS déclaré dans les réglages doit répondre dans la
 	    session où on l'a déclaré. */
 	async function garderReglagesIa(valeur: unknown): Promise<void> {
-		const verdict = await validerReglagesIa(valeur, chemin => perimetre.contient(chemin));
+		/* DEUX prédicats, et ils ne se confondent pas : le PÉRIMÈTRE juge les
+		   dossiers que le sélecteur « @ » lira, l'EXISTENCE juge le chemin d'un
+		   exécutable — lequel vit précisément HORS du périmètre (un CLI est dans
+		   `Program Files`, pas dans un dossier de quiz). Le borner serait refuser
+		   d'avance tout chemin valide ; ce qui le tient, c'est la liste blanche
+		   d'extensions et le fait que l'utilisateur, et lui seul, le saisit. */
+		const verdict = await validerReglagesIa(
+			valeur,
+			chemin => perimetre.contient(chemin),
+			async chemin => (await statEntree(chemin))?.isFile === true,
+		);
 		if ("refus" in verdict) throw new Error(verdict.refus);
 		if ("confirmer" in verdict) {
 			/* Une porte NATIVE, comme `choisirDossier` : la question est rédigée
@@ -440,6 +471,76 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	});
 	ipcMain.handle(CANAUX.processusOllamaInstalle, () => ollamaInstalle());
 	ipcMain.handle(CANAUX.processusDemarrerOllama, () => demarrerOllama());
+
+	/* ─── LANCER UN CLI ───
+
+	   La capacité la plus dangereuse du pont, et elle tient sur trois règles
+	   qui ne se remplacent pas :
+
+	   1. LE NOM EST JUGÉ AVANT TOUT ce qui suit — avant de lire un réglage,
+	      avant de toucher au disque, avant le moindre `spawn`. C'est la liste
+	      blanche d'`OUTILS` (`process.ts`, la même que l'hôte Obsidian), et
+	      c'est elle qui rend impossible « écris `x.bat` dans un dossier ouvert,
+	      puis lance-le » — une séquence que le périmètre des chemins, qui ne
+	      borne que la lecture et l'écriture, ne voit pas.
+	   2. LE CHEMIN DE L'EXÉCUTABLE VIENT DU MAGASIN DU PRINCIPAL, jamais de cet
+	      appel : un chemin envoyé par le rendu annulerait la règle 1 d'un trait.
+	      Le réglage lui-même est gardé À L'ÉCRITURE (`garde-ia.ts`).
+	   3. L'APPEL EST RECOMPOSÉ CHAMP PAR CHAMP, comme `reseau.fetch` : une
+	      propriété inattendue glissée dans l'objet reçu n'atteint pas `run`.
+
+	   L'ENVELOPPE (`ResultatCli`, `pont.ts`) et non un rejet : l'IPC perd le
+	   `name` d'une erreur, et tout le contrat de `run` tient dans ce nom. */
+	const cliEnVol = new Map<number, AbortController>();
+
+	ipcMain.handle(CANAUX.processusRun, async (_e, spec: unknown, requeteId: unknown): Promise<ResultatCli> => {
+		const s = (spec && typeof spec === "object" ? spec : {}) as Partial<RequeteCli>;
+		if (!estOutilAutorise(s.tool)) {
+			console.warn(LOG_PREFIX, "CLI refusé, outil hors liste:", s.tool);
+			return { ok: false, nom: "refuse", message: "outil hors liste : " + String(s.tool) };
+		}
+		const tool = s.tool;
+		const args = Array.isArray(s.args) ? s.args.filter((a): a is string => typeof a === "string") : [];
+		const fichiers = Array.isArray(s.fichiers)
+			? s.fichiers
+				.filter((f): f is { nom: string; base64: string } =>
+					!!f && typeof f === "object" && typeof f.nom === "string" && typeof f.base64 === "string")
+				.map(f => ({ nom: f.nom, base64: f.base64 }))
+			: undefined;
+		const id = typeof requeteId === "number" ? requeteId : NaN;
+		const controleur = new AbortController();
+		if (!Number.isNaN(id)) cliEnVol.set(id, controleur);
+		try {
+			const res = await run({
+				tool,
+				args,
+				stdin: typeof s.stdin === "string" ? s.stdin : "",
+				timeoutMs: typeof s.timeoutMs === "number" ? s.timeoutMs : undefined,
+				marqueur: typeof s.marqueur === "string" ? s.marqueur : undefined,
+				fichiers,
+				sortieFichier: typeof s.sortieFichier === "string" ? s.sortieFichier : undefined,
+				signal: controleur.signal,
+			}, { cheminRegle: await cheminCliRegle(reglagesOuErreur(), tool) });
+			return { ok: true, stdout: res.stdout, stderr: res.stderr, code: res.code, sortie: res.sortie };
+		} catch (e) {
+			/* Le NOM survit, c'est tout l'objet de l'enveloppe. « erreur » est le
+			   défaut d'une exception qui n'en porterait pas — jamais un nom du
+			   contrat choisi au hasard, qui mentirait sur la cause. */
+			const nom = e instanceof Error && e.name ? e.name : "erreur";
+			const message = e instanceof Error ? e.message : String(e);
+			console.warn(LOG_PREFIX, "CLI", tool, "en échec:", nom, message);
+			return { ok: false, nom, message };
+		} finally {
+			/* Retirée SEULEMENT si c'est encore la sienne : le compteur du rendu
+			   repart à 1 après un `location.reload()`, et le `finally` d'un appel
+			   de l'ancienne page ne doit pas emporter l'entrée de la nouvelle —
+			   qui deviendrait inannulable. Même raison qu'au réseau. */
+			if (cliEnVol.get(id) === controleur) cliEnVol.delete(id);
+		}
+	});
+	ipcMain.handle(CANAUX.processusAnnuler, (_e, requeteId: unknown) => {
+		if (typeof requeteId === "number") cliEnVol.get(requeteId)?.abort();
+	});
 
 	ipcMain.handle(CANAUX.armerFermeture, () => deps.fermeture.armer());
 	ipcMain.handle(CANAUX.fermetureTerminee, () => deps.fermeture.terminee());

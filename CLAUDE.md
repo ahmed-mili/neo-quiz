@@ -98,7 +98,18 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   accès disque total depuis la fenêtre. Et il ne borne que l'écriture et la
   lecture, pas l'EXÉCUTION : `systeme.ouvrir` refuse en plus les extensions
   exécutables (`EXTENSIONS_EXECUTABLES`), sans quoi `write` puis `ouvrir` d'un
-  `.bat` — deux appels bornés — le contournaient.
+  `.bat` — deux appels bornés — le contournaient. La clé `ai` des réglages est
+  GARDÉE de la même façon (`garde-ia.ts`) : l'hôte d'`aiOllamaUrl` entre dans la
+  liste du réseau, et `cheminClaude`/`cheminCodex` désignent un exécutable que le
+  principal LANCERA — absolu, existant, extension lançable (un `.js` qui existe
+  pour de bon est refusé : ce serait « écris-le puis lance-le »).
+- `npm run check:electron-process` — les fichiers de cache des CLI ET le
+  LANCEMENT d'un CLI (`apps/windows/electron/process.ts`), sur de vrais process.
+  C'est la capacité la plus dangereuse du pont : la liste blanche de NOMS
+  (jamais un chemin venu du rendu), l'ordre réglage-puis-`PATH`, la citation des
+  arguments sur le repli `cmd.exe`, l'ARBRE tué à l'annulation (un `kill` sur le
+  seul parent laisse la génération tourner après le clic sur Stop), et le verrou
+  par outil relâché sur TOUTES les issues.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` avant `$…$`).
 - `npm run check:ai-providers` — les FOURNISSEURS IA : le catalogue cloud vient
   de `net.fetchJson` (jamais codé en dur), un `/api/tags` qui répond 200 SANS

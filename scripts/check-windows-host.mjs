@@ -737,6 +737,17 @@ function installerPont(fichiers = {}, perimetre = null) {
 		   pouvoir surprendre. Les réponses sont celles du principal ; le rendu
 		   n'a rien à en traduire. */
 		processus: {
+			/* `run` ATTEND `terminer` quand un cas le pose, pour observer
+			   l'annulation PENDANT le lancement — c'est le seul moment où
+			   `annuler` a un sens. Et il rend une ENVELOPPE, jamais un rejet :
+			   l'IPC perd le `name` d'une erreur jetée, or tout le contrat de
+			   `HostProcess.run` tient dans ce nom. */
+			async run(spec, requeteId) {
+				journal.push(["processus.run", spec, requeteId]);
+				if (reponseCli.attente) await reponseCli.attente;
+				return reponseCli.valeur;
+			},
+			async annuler(requeteId) { journal.push(["processus.annuler", requeteId]); },
 			async lireCache(tool) {
 				journal.push(["processus.lireCache", tool]);
 				return { mtimeMs: 1234, json: { models: [] } };
@@ -747,6 +758,7 @@ function installerPont(fichiers = {}, perimetre = null) {
 		fenetre: { async surFermeture() {} },
 	};
 	const reponseReseau = { valeur: { status: 200, body: "ok" }, attente: null };
+	const reponseCli = { valeur: { ok: true, stdout: "OUT", stderr: "", code: 0 }, attente: null };
 
 	globalThis.window = { neo };
 
@@ -760,6 +772,8 @@ function installerPont(fichiers = {}, perimetre = null) {
 		emettre: (ev) => { for (const cb of abonnes) cb(ev); },
 		/** Ce que le prochain `reseau.fetch` rend, et ce qu'il attend avant. */
 		reseau: reponseReseau,
+		/** Idem pour le prochain `processus.run`. */
+		cli: reponseCli,
 		retirer() {
 			if (precedent === undefined) delete globalThis.window;
 			else globalThis.window = precedent;
@@ -1771,10 +1785,18 @@ await withSrcModule("apps/windows/src/host/net.ts", async ({ createWindowsNet })
  *   sont fixes et connus du seul principal ; un chemin composé ici ferait de
  *   ce canal une lecture disque hors périmètre, et `canaux.ts` refuserait de
  *   toute façon tout nom hors de sa liste ;
- * — `run` rejette SUR PLACE, sans traverser : il n'a pas encore de canal
- *   (tâche 7). Le nom du rejet (`indisponible`) est ce que le code partagé
- *   sait traduire — un `invoke` vers un canal inexistant donnerait « No
- *   handler registered », une phrase qui ne désigne rien.
+ * — `run` TRAVERSE depuis la tâche 7, et ce qui traverse est encore un NOM : le
+ *   chemin de l'exécutable est résolu par le PRINCIPAL, dans son propre magasin.
+ *   Un chemin qui partirait d'ici annulerait la liste blanche de noms d'un
+ *   trait — le rendu choisirait le programme lancé.
+ *
+ * ET DEUX CHOSES QUI SONT À NOUS. Le `signal` ne se clone pas : il ne traverse
+ * pas, et l'abandon est relayé par `annuler(id)` — le même patron qu'au réseau.
+ * Et le NOM de l'erreur : le canal rend une ENVELOPPE parce que l'IPC
+ * d'Electron perd le `name` d'une erreur jetée ; ce module le RECONSTRUIT, et
+ * c'est le seul endroit du rendu qui le fasse. Sans lui, « Claude Code n'est
+ * pas installé » arriverait dans la page sous le nom « Error », donc traduit en
+ * « réponse illisible du modèle ».
  */
 await withSrcModule("apps/windows/src/host/process.ts", async ({ createWindowsProcess }) => {
 	const r = makeReporter("Hôte Windows — les CLI");
@@ -1799,17 +1821,98 @@ await withSrcModule("apps/windows/src/host/process.ts", async ({ createWindowsPr
 				appels: ["processus.lireCache:codex", "processus.ollamaInstalle", "processus.demarrerOllama"],
 			});
 
-		/* Le rejet est NOMMÉ, et RIEN ne traverse : un canal `process.run`
-		   n'existe pas encore côté principal. */
-		const avant = pont.journal.length;
+		/* ── `run` ── */
+
+		/* CE QUI TRAVERSE : le NOM, les arguments, le stdin, les jetons — et
+		   JAMAIS le `signal` (il ne se clone pas : `invoke` rejetterait avant
+		   même que le principal ne voie l'appel), ni un chemin d'exécutable. */
+		const c1 = new AbortController();
+		const res = await processus.run({
+			tool: "claude", args: ["-p"], stdin: "PROMPT", timeoutMs: 1000,
+			marqueur: "0123456789abcdef0123456789abcdef",
+			fichiers: [{ nom: "i.png", base64: "AA==" }],
+			sortieFichier: "last-message.txt",
+			signal: c1.signal,
+		});
+		const envoye = pont.journal.filter(e => e[0] === "processus.run").at(-1);
+		r.check("run traverse le pont avec le NOM de l'outil, sans le signal ni aucun chemin",
+			{
+				spec: envoye && envoye[1],
+				id: typeof (envoye && envoye[2]),
+				signal: !!(envoye && envoye[1] && "signal" in envoye[1]),
+			},
+			{
+				spec: {
+					tool: "claude", args: ["-p"], stdin: "PROMPT", timeoutMs: 1000,
+					marqueur: "0123456789abcdef0123456789abcdef",
+					fichiers: [{ nom: "i.png", base64: "AA==" }],
+					sortieFichier: "last-message.txt",
+				},
+				id: "number",
+				signal: false,
+			});
+		r.check("une enveloppe ok est rendue telle quelle", res, { stdout: "OUT", stderr: "", code: 0, sortie: undefined });
+
+		/* LE NOM DE L'ERREUR EST RECONSTRUIT. Sans cette moitié, chaque échec
+		   d'un CLI arriverait dans la page sous le nom « Error » — donc traité
+		   par `ai-client.ts` comme une réponse illisible du modèle, au lieu de
+		   « Claude Code n'est pas installé ». */
+		pont.cli.valeur = { ok: false, nom: "introuvable", message: "CLI introuvable : claude" };
 		let nom = "(aucun rejet)";
+		let message = "";
 		try {
-			await processus.run({ tool: "claude", args: ["--version"], stdin: "" });
+			await processus.run({ tool: "claude", args: [], stdin: "" });
 		} catch (e) {
 			nom = e.name;
+			message = e.message;
 		}
-		r.check("run rejette « indisponible » sans traverser le pont",
-			{ nom, traverse: pont.journal.length - avant }, { nom: "indisponible", traverse: 0 });
+		r.check("une enveloppe en échec redevient un rejet NOMMÉ, avec son message",
+			{ nom, message }, { nom: "introuvable", message: "CLI introuvable : claude" });
+		pont.cli.valeur = { ok: true, stdout: "OUT", stderr: "", code: 0 };
+
+		/* L'ANNULATION EST RELAYÉE PAR L'IDENTIFIANT, pendant que le CLI tourne :
+		   c'est le seul moment où elle a un sens, et c'est ce qui fait tuer
+		   l'ARBRE côté principal. */
+		let terminer = null;
+		pont.cli.attente = new Promise(resolve => { terminer = resolve; });
+		const c2 = new AbortController();
+		const enCours = processus.run({ tool: "codex", args: [], stdin: "", signal: c2.signal });
+		await Promise.resolve();
+		const idEnvoye = pont.journal.filter(e => e[0] === "processus.run").at(-1)[2];
+		c2.abort();
+		await Promise.resolve();
+		const annule = pont.journal.filter(e => e[0] === "processus.annuler").at(-1);
+		terminer();
+		await enCours;
+		pont.cli.attente = null;
+		r.check("l'abandon du signal relaie annuler(id) avec l'identifiant de CET appel",
+			annule, ["processus.annuler", idEnvoye]);
+
+		/* Déjà abandonné AVANT l'appel : rien ne traverse. Le principal n'a pas à
+		   voir partir un CLI que personne n'attend plus — et le contrat nomme
+		   cette issue `annule`. */
+		const avant = pont.journal.length;
+		const c3 = new AbortController();
+		c3.abort();
+		let nomDeja = "(aucun rejet)";
+		try {
+			await processus.run({ tool: "codex", args: [], stdin: "", signal: c3.signal });
+		} catch (e) {
+			nomDeja = e.name;
+		}
+		r.check("un signal déjà abandonné rejette « annule » sans traverser le pont",
+			{ nomDeja, traverse: pont.journal.length - avant }, { nomDeja: "annule", traverse: 0 });
+
+		/* Après la fin d'un appel, abandonner son signal n'annule plus rien :
+		   l'écouteur est retiré dans un `finally`, sinon chaque appel fini
+		   laisserait un écouteur sur un signal que l'appelant peut réutiliser. */
+		const c4 = new AbortController();
+		await processus.run({ tool: "codex", args: [], stdin: "", signal: c4.signal });
+		const avantAbandon = pont.journal.filter(e => e[0] === "processus.annuler").length;
+		c4.abort();
+		await Promise.resolve();
+		r.check("abandonner le signal d'un appel fini n'annule rien",
+			pont.journal.filter(e => e[0] === "processus.annuler").length - avantAbandon, 0);
 	} finally {
 		pont.retirer();
 	}

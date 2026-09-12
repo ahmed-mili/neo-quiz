@@ -1503,6 +1503,64 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		{ sortieSansFichier: nomSortieSeule, indexHorsBornes: nomIndex },
 		{ sortieSansFichier: "refuse", indexHorsBornes: "refuse" });
 
+	/* DES FICHIERS SANS MARQUEUR SONT REFUSÉS, et c'est la combinaison la plus
+	   traître des trois : les deux au-dessus produisent un appel FAUX, celle-ci
+	   produit un appel qui RÉUSSIT. Sans marqueur, l'hôte ne substitue RIEN
+	   (défaut sûr) : les pièces jointes seraient bel et bien écrites dans le
+	   dossier temporaire, mais aucun jeton ne pourrait les désigner, le CLI
+	   partirait sans savoir qu'elles existent, et la génération rendrait un quiz
+	   qui IGNORE l'image jointe — sans un mot. Même chose pour `sortieFichier` :
+	   le fichier serait créé, jamais nommé au CLI, et `sortie` reviendrait
+	   toujours `undefined`, donc `callCodex` retomberait éternellement sur sa
+	   reconstitution. Mineur laissé ouvert par la revue de la tâche 4, fermé ici
+	   et dans le processus principal de l'application, à l'identique.
+	   AUCUN FAUX CLI N'EST POSÉ : le refus doit tomber AVANT tout lancement. */
+	const nomDuRefus = async (spec) => {
+		try {
+			await host.process.run(spec);
+			return "(aucun rejet)";
+		} catch (e) {
+			return e.name;
+		}
+	};
+	const avantSansMarqueur = nbDossiersTemp();
+	const refusSansMarqueur = {
+		fichiers: await nomDuRefus({ tool: "codex", args: [], stdin: "", fichiers: [piece] }),
+		sortie: await nomDuRefus({ tool: "codex", args: [], stdin: "", sortieFichier: "last-message.txt" }),
+	};
+	r.check("des pièces jointes ou un fichier de sortie sans marqueur sont refusés, sans rien écrire",
+		{ ...refusSansMarqueur, dossiersLaisses: nbDossiersTemp() - avantSansMarqueur },
+		{ fichiers: "refuse", sortie: "refuse", dossiersLaisses: 0 });
+
+	/* UN SIGNAL DÉJÀ ABANDONNÉ NE LANCE RIEN — jugé AVANT le `spawn`, pas après.
+	   Les deux hôtes lançaient puis tuaient : mesuré côté application, l'enfant
+	   avait le temps d'ÉCRIRE son fichier avant que `taskkill` n'arrive. La
+	   garde est posée à la même place dans `lancerCli` ici et dans `lancer` du
+	   processus principal (`apps/windows/electron/process.ts`), pour que les deux
+	   restent jumeaux. Le faux CLI écrit un fichier DÈS SON DÉMARRAGE : c'est lui
+	   qui distingue « rien n'a été lancé » de « lancé puis tué à temps ». */
+	let rejetDeja = "(aucun rejet)";
+	let lance = true;
+	await avecFausseMaison(() => avecFauxCli(
+		"require('fs').writeFileSync(process.argv[2], 'LANCE');",
+		async () => {
+			const marqueurDeVie = join(fausseMaison, "lance.txt");
+			const abandonne = new AbortController();
+			abandonne.abort();
+			try {
+				await host.process.run({
+					tool: "codex", args: [marqueurDeVie], stdin: "", signal: abandonne.signal,
+				});
+			} catch (e) {
+				rejetDeja = e.name;
+			}
+			await new Promise(resolve => setTimeout(resolve, 200));
+			lance = existsSync(marqueurDeVie);
+		},
+	));
+	r.check("un signal déjà abandonné rejette « annule » sans rien lancer",
+		{ rejet: rejetDeja, lance }, { rejet: "annule", lance: false });
+
 	/* LE DOSSIER EST EFFACÉ EN `finally`, TOUJOURS — les deux sorties de `run`
 	   qui ne sont pas un succès. Un CLI qui sort en erreur RÉSOUT (c'est
 	   l'appelant qui juge le code) ; un argument refusé REJETTE avant tout

@@ -13,4 +13,9 @@ export const EN_SETTINGS = {
 	"settings.ai.mentionFolders.invalid": "Not a folder: {dir}",
 	"settings.ai.mentionFolders.placeholder": "Folder path",
 	"settings.ai.mentionFolders.vaultCollision": "Your vault already has a top-level folder named “{name}”. In the “@” picker, browsing into “{name}/” will always open the vault one — this folder stays findable by typing a search, just not by browsing.",
+	"settings.ai.cliPath.title": "AI command-line tools",
+	"settings.ai.cliPath.desc": "Leave empty unless Neo Quiz says the CLI is not installed while it works in your terminal: an installed application starts with the system PATH, not the one of your terminal. Give the full path to the executable.",
+	"settings.ai.cliPath.claude": "Path to claude",
+	"settings.ai.cliPath.codex": "Path to codex",
+	"settings.ai.cliPath.placeholder": "Full path to the executable",
 } as const;

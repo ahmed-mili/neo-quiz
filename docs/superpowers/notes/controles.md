@@ -296,6 +296,24 @@ réponse étant toujours non.
   un hôte Internet hors liste demande CONFIRMATION, par son nom en minuscules ;
   un dossier hors périmètre dans `aiMentionExtraFolders` est refusé et nommé,
   et prime sur une URL valide (rien n'est admis quand une moitié est refusée).
+  **Depuis la tâche 7, la même garde couvre `cheminClaude`/`cheminCodex`** — le
+  champ qui donne le droit le plus fort de toute la clé, puisque le principal
+  LANCERA ce qu'il désigne. Trois conditions qui ne se remplacent pas : ABSOLU
+  (un chemin relatif serait résolu contre le dossier courant du principal, que
+  l'utilisateur ne connaît pas), EXISTANT (dit à l'ÉCRITURE, là où on peut
+  encore corriger, plutôt qu'à la prochaine génération sous la forme « CLI
+  introuvable »), et d'une EXTENSION LANÇABLE — une liste BLANCHE
+  (`exe`, `com`, `cmd`, `bat`, `sh`, plus le fichier sans extension d'Unix),
+  à l'inverse de la liste noire d'`EXTENSIONS_EXECUTABLES` qui garde `ouvrir` :
+  là-bas il faut accepter tout ce qu'un quiz livre et n'exclure que ce qui
+  s'exécute, ici un CLI est une chose très précise. Le cas le plus dangereux
+  est celui que l'existence ne filtre PAS : un `.js` qui existe pour de bon —
+  la séquence « écris un `.js` dans un dossier ouvert, puis désigne-le comme
+  CLI », que le refus d'extension et lui seul empêche ; le pont refuse déjà de
+  l'OUVRIR, l'admettre ici rouvrirait la même porte par l'autre bout. Le
+  prédicat d'existence est INJECTÉ, comme celui du périmètre, et les deux ne se
+  confondent pas : un CLI vit dans `Program Files`, hors du périmètre — le
+  borner serait refuser d'avance tout chemin valide.
   Puis, STATIQUE comme la borne des canaux : `reglagesEcrire` appelle
   `garderReglagesIa(` AVANT `.ecrire(`, et celle-ci passe par le verdict pur
   et admet par `autoriserHote(verdict.…)`. Le dialogue natif lui-même
@@ -393,11 +411,48 @@ réponse étant toujours non.
   aussi les deux façons de n'avoir pas de cache (absent, JSON invalide), les
   emplacements d'installation d'Ollama système par système — la SECONDE sonde,
   celle qui distingue « serveur arrêté » de « non installé » quand le binaire
-  n'est pas sur le PATH d'une application de bureau — et le rejet NOMMÉ de
-  `run` (`indisponible`) tant que la tâche 7 ne l'a pas implémenté : un
-  `stdout` vide passerait pour une génération qui a tourné pour rien. La
-  tâche 7 étend ce script avec les cas à vrais process (stdin écrit puis fermé,
-  flux séparés, arbre tué à l'annulation). Côté greffon, les mêmes règles sont
+  n'est pas sur le PATH d'une application de bureau.
+  **Depuis la tâche 7, il porte le groupe « lancer un CLI », sur de VRAIS
+  process** — la capacité la plus dangereuse du pont. Cinq propriétés, dont
+  aucune ne se voit à l'écran quand elle casse. (a) La LISTE BLANCHE de noms
+  (`OUTILS`, la même que `CLI_AUTORISES` sous Obsidian, `ollama` compris : le
+  même code partagé appelle les deux hôtes, et un outil accepté d'un côté et
+  refusé de l'autre ferait dépendre le sort d'un appel de l'hôte qui
+  l'exécute) ; c'est elle, et non le périmètre des chemins, qui rend impossible
+  « écris `x.bat` dans un dossier ouvert » + « lance-le », une séquence dont
+  chaque moitié est dans les règles. (b) L'ORDRE des deux sources de
+  l'exécutable : le réglage `cheminClaude`/`cheminCodex` d'abord, le `PATH`
+  étendu ensuite. Inversé, le réglage ne servirait à rien — or on ne le remplit
+  QUE parce que la recherche automatique échoue ou trouve la mauvaise
+  installation ; et un réglage fautif est rendu TEL QUEL, sans repli sur le
+  `PATH`, sinon l'application lancerait en silence une AUTRE installation que
+  celle que l'utilisateur a désignée. (c) La CITATION des arguments sur le
+  repli `cmd.exe` — le chemin PAR DÉFAUT d'une installation npm, et le seul où
+  un interpréteur voit nos arguments : le cas témoin (`a" & echo PWN & "b` +
+  un fichier sur disque) est ce qui distingue « bien cité » de « cmd a exécuté
+  la charge ». (d) L'ARBRE tué à l'annulation (`taskkill /T /F`, ou le GROUPE
+  hors Windows, ce qui suppose `detached: true`) : `claude` et `codex`
+  spawnent des enfants, et un `kill` sur le seul parent laisse la génération
+  tourner APRÈS le clic sur Stop, avec un process orphelin dans le Gestionnaire
+  des tâches. Le cas le prouve par un PETIT-ENFANT qui écrit un fichier 1,5 s
+  après sa naissance — l'annulation part dès que le parent a confirmé l'avoir
+  lancé, jamais après un délai fixe, et le fichier ne doit jamais exister.
+  (e) Le VERROU par outil (`occupe`), relâché sur TOUTES les issues : une fuite
+  rend le fournisseur définitivement inutilisable jusqu'au redémarrage, sans
+  qu'aucun message ne dise pourquoi — d'où un cas qui rejoue un appel normal
+  APRÈS un rejet et après un CLI sorti non nul. S'y ajoutent le `stdin` écrit
+  en entier puis FERMÉ (un `claude -p` dont l'entrée reste ouverte attend
+  indéfiniment), les flux SÉPARÉS avec le code de sortie, `introuvable` et
+  `timeout` NOMMÉS, et le refus d'un signal DÉJÀ abandonné **avant** le
+  `spawn` : mesuré, un process lancé puis tué a le temps d'écrire son fichier.
+  L'environnement est DÉDIÉ (`APPDATA`, `LOCALAPPDATA`, `CODEX_INSTALL_DIR`
+  ABSENTS) : sans quoi le `PATH` étendu réintroduit le VRAI Codex de la machine
+  derrière le faux, et le cas lit la réponse du vrai CLI — défaut vécu, ronde 2
+  de la tâche 4. Un dernier groupe est STATIQUE, sur la source de `canaux.ts`
+  (que nul harnais ne charge, il tire `electron`) : le canal `process.run` juge
+  le NOM avant de lancer, et lit le chemin de l'exécutable dans le magasin du
+  PRINCIPAL — jamais dans l'appel IPC, faute de quoi la liste de noms ne
+  séparerait plus rien. Côté greffon, les mêmes règles sont
   gardées par `check:obsidian-host` (groupe « les CLI ») sur le code qui a
   quitté `src/dashboard/ai-providers.ts` ; côté rendu, `check:windows-host`
   garde le passe-plat : le NOM de l'outil traverse le pont, jamais un chemin.
@@ -427,11 +482,23 @@ réponse étant toujours non.
   `{{home}}` ou `{{fichier:1}}` ressort INTACT » est le seul filet contre le
   retour à une forme fixe. Un jeton qui ne désigne rien REFUSE au lieu de
   s'effacer, des deux côtés : rendu vide, il donnerait `-o ""` au CLI, un appel
-  faux et MUET.
+  faux et MUET. **Et des pièces jointes SANS marqueur sont refusées** (tâche 7,
+  dans les deux hôtes) : c'est la combinaison la plus traître des trois, parce
+  qu'elle produit un appel qui RÉUSSIT. Sans marqueur rien n'est substitué —
+  les images seraient écrites, aucun jeton ne pourrait les désigner, le CLI
+  partirait sans savoir qu'elles existent, et l'utilisateur recevrait un quiz
+  qui IGNORE sa fiche, sans un mot.
   Le script porte enfin un second groupe, **« Jetons de pièces jointes (code
   partagé) »**, sur `src/host/jetons.ts` : la moitié PURE (composer un jeton,
   le substituer, réduire un nom de fichier) est partagée par les deux hôtes
-  depuis la ronde 1 — dupliquée, elle avait divergé en une tranche. Il y tient
+  depuis la ronde 1 — dupliquée, elle avait divergé en une tranche. La tâche 7
+  a partagé de la même façon la moitié pure de la LIGNE DE COMMANDE
+  (`src/host/cli-args.ts` : `citerPourCmd`, `ligneCmd`, le refus d'un retour à
+  la ligne, les extensions de `PATHEXT`) — recopiée dans le principal, la règle
+  de citation durcie à la tâche 3 aurait eu deux versions pour un même appel du
+  code partagé, dont une seule éprouvée par le témoin de l'injection. Elle n'a
+  pas de groupe à elle : elle est éprouvée là où elle SERT, par le cas témoin
+  des deux hôtes. Il y tient
   la FORME des jetons, l'unicité du marqueur, le refus d'un marqueur non
   hexadécimal (qui composerait une expression régulière depuis une chaîne
   étrangère) et le fait qu'un chemin contenant `$&` ou `$1` est posé tel quel —

@@ -131,6 +131,7 @@ function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore,
 	root.textContent = "";
 	demonterCourant = renderSettings(root, {
 		scanner,
+		aiSettings: reglagesIa,
 		onBack: () => mount(root, scanner, store, stats),
 		/* RECHARGER : ajouter ou retirer un dossier change les racines de
 		   l'hôte, et l'hôte est installé une seule fois. Un remontage à chaud

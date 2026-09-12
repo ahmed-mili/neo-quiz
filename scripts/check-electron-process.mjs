@@ -41,7 +41,7 @@ async function cas(r, nom, fn) {
 }
 
 await withSrcModule("apps/windows/electron/process.ts", async ({
-	avecFichiers, cheminCache, dossierPersonnel, emplacementsOllama, lireCache, run,
+	OUTILS, avecFichiers, cheminCache, dossierPersonnel, emplacementsOllama, estOutilAutorise, lireCache,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -132,14 +132,23 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				});
 		});
 
-		await cas(r, "run rejette « indisponible », et le nomme", async () => {
-			let nom = "(aucun rejet)";
-			try {
-				await run({ tool: "claude", args: ["--version"], stdin: "" });
-			} catch (e) {
-				nom = e.name;
-			}
-			r.check("run rejette « indisponible », et le nomme", nom, "indisponible");
+		await cas(r, "la liste blanche est celle de l'hôte Obsidian, et elle est jugée à l'exécution", async () => {
+			/* Le NOM vient du RENDU. `CliTool` le borne à la COMPILATION ; ceci le
+			   borne à l'EXÉCUTION, où arrive un jour une valeur venue d'un
+			   réglage, d'un quiz partagé ou d'une fenêtre compromise. La liste
+			   doit être EXACTEMENT celle de `CLI_AUTORISES` (`apps/obsidian/
+			   host.ts`) : le même code partagé appelle les deux hôtes, et un outil
+			   accepté d'un côté et refusé de l'autre ferait dépendre le sort d'un
+			   appel de l'hôte qui l'exécute. */
+			r.check("la liste blanche est celle de l'hôte Obsidian, et elle est jugée à l'exécution",
+				{
+					liste: [...OUTILS],
+					juge: ["claude", "codex", "ollama", "notepad", "x.bat", "", null, 3].map(estOutilAutorise),
+				},
+				{
+					liste: ["claude", "codex", "ollama"],
+					juge: [true, true, true, false, false, false, false, false],
+				});
 		});
 
 		/* ── LES PIÈCES JOINTES, ET LE DOSSIER QUI LES PORTE ──
@@ -228,14 +237,26 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 
 		await cas(r, "sans marqueur, aucun jeton n'est substitué", async () => {
 			/* Le défaut SÛR : un appelant qui ne fournit pas de marqueur ne veut
-			   pas de substitution, et son texte traverse tel quel. */
+			   pas de substitution, et son texte traverse tel quel.
+
+			   SANS PIÈCE JOINTE, et c'est une correction : ce cas en passait,
+			   c'est-à-dire qu'il DÉCRIVAIT la combinaison que `run` refuse
+			   désormais (des fichiers écrits qu'aucun jeton ne peut désigner).
+			   Il resterait vert sur cette combinaison alors qu'elle est un défaut,
+			   ce qui affaiblirait le cas qui la refuse un peu plus bas. Ce qu'il
+			   éprouve — « pas de marqueur, pas de substitution » — n'a besoin
+			   d'aucune pièce jointe pour être vu. */
+			const sansFichiers = {
+				args: ["-i", jeton(MARQ, "fichier:1"), "-C", jeton(MARQ, "home")],
+				stdin: "PROMPT " + jeton(MARQ, "home"),
+			};
 			let vu = null;
-			await avecFichiers({ ...specImage, marqueur: undefined }, async resolu => {
-				vu = { args: resolu.args[1], stdin: resolu.stdin };
+			await avecFichiers(sansFichiers, async resolu => {
+				vu = { args: resolu.args, stdin: resolu.stdin };
 				return null;
 			}, envMaisonSeule);
 			r.check("sans marqueur, aucun jeton n'est substitué",
-				vu, { args: jeton(MARQ, "fichier:1"), stdin: specImage.stdin });
+				vu, { args: sansFichiers.args, stdin: sansFichiers.stdin });
 		});
 
 		await cas(r, "sortieFichier rend le contenu écrit par l'enfant", async () => {
@@ -409,3 +430,383 @@ await withSrcModule("src/host/jetons.ts", async ({
 
 	r.done();
 });
+
+/**
+ * LANCER UN CLI — SUR DE VRAIS PROCESS (tâche 7).
+ *
+ * CE QUE CE GROUPE EMPÊCHE, et c'est la capacité la plus dangereuse du pont :
+ * lancer un programme. Cinq propriétés, dont aucune ne se voit à l'écran quand
+ * elle casse :
+ * — la LISTE BLANCHE de noms et le REFUS d'un `tool` hors liste ; sans elle,
+ *   « écris `x.bat` dans un dossier ouvert » + « lance-le » composent une
+ *   exécution que le périmètre des chemins ne voit pas ;
+ * — l'ORDRE des deux sources de l'exécutable (le réglage de l'utilisateur, puis
+ *   le `PATH` étendu) : inversé, le réglage ne servirait à rien, et une machine
+ *   avec deux installations lancerait l'autre ;
+ * — la CITATION des arguments sur le repli `cmd.exe` (installations npm) : la
+ *   première version citait `\"`, qui FERME le guillemet, et `a" & echo … & "b`
+ *   exécutait la charge. Le témoin sur disque est ce qui distingue « bien cité »
+ *   de « cmd a exécuté la charge » ;
+ * — l'ARBRE tué à l'annulation : `claude` et `codex` spawnent des enfants, et
+ *   un `kill` sur le seul parent laisse la génération tourner APRÈS le clic sur
+ *   Stop, avec un process orphelin dans le Gestionnaire des tâches ;
+ * — le VERROU par outil, relâché sur TOUTES les issues : une fuite rend le
+ *   fournisseur définitivement inutilisable jusqu'au redémarrage.
+ *
+ * SUR LE MODULE RÉEL, avec de VRAIS enfants — `process.execPath` (Node
+ * lui-même, le seul exécutable dont on soit sûr qu'il existe) lancé soit
+ * DIRECTEMENT par le réglage « chemin », soit par un faux `codex.cmd` posé sur
+ * un `PATH` bricolé, qui force le repli `cmd.exe`.
+ *
+ * L'ENVIRONNEMENT EST DÉDIÉ, jamais `process.env` : `APPDATA`, `LOCALAPPDATA`
+ * et `CODEX_INSTALL_DIR` en sont ABSENTS. `environnementEnfant` les lit pour
+ * ajouter des chemins en dur au `PATH` — et c'est précisément `LOCALAPPDATA`
+ * qui, sur la machine d'Ahmed, pointe vers le VRAI Codex officiel. Un `PATH`
+ * scopé ne sert à rien si ces trois variables réintroduisent un dossier réel
+ * juste après : le cas recevrait la réponse du vrai CLI au lieu de celle du
+ * faux (défaut vécu, `check:obsidian-host`, ronde 2 de la tâche 4).
+ */
+await withSrcModule("apps/windows/electron/process.ts", async ({ resoudreExecutable, run }) => {
+	const r = makeReporter("Électron — lancer un CLI");
+	const racine = mkdtempSync(join(tmpdir(), "quiz-lancer-"));
+	const maison = join(racine, "maison");
+	const vide = join(racine, "vide");
+	mkdirSync(maison, { recursive: true });
+	mkdirSync(vide, { recursive: true });
+
+	/** Un environnement où RIEN d'autre que ce dossier n'est joignable. */
+	const envDe = (dossier) => ({
+		PATH: dossier,
+		// Ce qu'il faut à `cmd.exe` pour se lancer lui-même.
+		SystemRoot: process.env.SystemRoot,
+		ComSpec: process.env.ComSpec,
+		PATHEXT: process.env.PATHEXT,
+		TEMP: process.env.TEMP,
+		TMP: process.env.TMP,
+		// Le dossier personnel : c'est le `cwd` des enfants, il doit exister.
+		USERPROFILE: maison,
+		HOME: maison,
+	});
+
+	/** Un faux CLI : un script Node, plus un lanceur du nom demandé.
+	    `codex.cmd` sous Windows — même là où un `.exe` marcherait : c'est le
+	    lanceur d'une installation npm réelle, et c'est délibérément le repli
+	    `cmd.exe` (le chemin durci contre l'injection) qui doit être exercé. */
+	const poserFauxCli = (nom, corps) => {
+		const dossier = mkdtempSync(join(racine, "cli-"));
+		const script = join(dossier, "faux.js");
+		writeFileSync(script, corps);
+		const lanceur = join(dossier, process.platform === "win32" ? nom + ".cmd" : nom);
+		if (process.platform === "win32") {
+			writeFileSync(lanceur, '@echo off\r\n"' + process.execPath + '" "' + script + '" %*\r\n');
+		} else {
+			writeFileSync(lanceur, '#!/bin/sh\nexec "' + process.execPath + '" "' + script + '" "$@"\n', { mode: 0o755 });
+		}
+		return { dossier, lanceur };
+	};
+
+	const nomDuRejet = async (promesse) => {
+		try {
+			await promesse;
+			return "(aucun rejet)";
+		} catch (e) {
+			return e && e.name ? e.name : String(e);
+		}
+	};
+	const dodo = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+	try {
+		/* ── L'ORDRE DES DEUX SOURCES ── */
+		const surPath = poserFauxCli("codex", "process.stdout.write('DU-PATH');");
+		const ailleurs = poserFauxCli("autre", "process.stdout.write('DU-REGLAGE');");
+		const env = envDe(surPath.dossier);
+
+		await cas(r, "resoudreExecutable : le réglage l'emporte sur le PATH, sinon le PATH, sinon null", async () => {
+			/* Le réglage EN PREMIER, sinon il ne servirait à rien : on ne le
+			   remplit QUE parce que la recherche automatique échoue ou trouve la
+			   mauvaise installation. Comparaison en minuscules : sous Windows
+			   `PATHEXT` est écrit en MAJUSCULES, donc le chemin trouvé porte
+			   « .CMD » là où le fichier posé s'appelle « .cmd » — même fichier,
+			   système insensible à la casse, et rien de ce qui suit n'en dépend. */
+			const bas = (p) => (typeof p === "string" ? p.toLowerCase() : p);
+			r.check("resoudreExecutable : le réglage l'emporte sur le PATH, sinon le PATH, sinon null",
+				{
+					regle: bas(resoudreExecutable("codex", ailleurs.lanceur, env)),
+					parLePath: bas(resoudreExecutable("codex", undefined, env)),
+					videIgnore: bas(resoudreExecutable("codex", "   ", env)),
+					aucun: resoudreExecutable("claude", undefined, env),
+				},
+				{
+					regle: bas(ailleurs.lanceur),
+					parLePath: bas(surPath.lanceur),
+					videIgnore: bas(surPath.lanceur),
+					aucun: null,
+				});
+		});
+
+		await cas(r, "run lance l'exécutable du réglage, et celui du PATH quand il n'y en a pas", async () => {
+			/* LA MOITIÉ QUI MANQUERAIT à la vérification ci-dessus : `resoudre`
+			   peut rendre le bon chemin et `run` en lancer un autre. Les deux
+			   appels passent par le repli `cmd.exe` sous Windows (le lanceur est
+			   un `.cmd`), donc ce cas éprouve AUSSI que ce repli aboutit. */
+			const parReglage = await run({ tool: "codex", args: [], stdin: "" }, { cheminRegle: ailleurs.lanceur, env });
+			const parPath = await run({ tool: "codex", args: [], stdin: "" }, { env });
+			r.check("run lance l'exécutable du réglage, et celui du PATH quand il n'y en a pas",
+				{ parReglage: parReglage.stdout, parPath: parPath.stdout, code: parPath.code },
+				{ parReglage: "DU-REGLAGE", parPath: "DU-PATH", code: 0 });
+		});
+
+		/* ── LE STDIN, LES FLUX, LE CODE DE SORTIE ──
+		   Lancés par `process.execPath` DIRECTEMENT (le réglage « chemin ») :
+		   c'est le chemin `spawn` sans interpréteur, l'autre moitié du repli
+		   `cmd.exe` éprouvé juste au-dessus. */
+		const rapporteur = join(racine, "rapporteur.js");
+		writeFileSync(rapporteur, [
+			"let entree = '';",
+			"process.stdin.on('data', d => { entree += d; });",
+			"process.stdin.on('end', () => {",
+			"  process.stdout.write('OUT:' + entree.length + ':' + process.argv.slice(2).join(','));",
+			"  process.stderr.write('ERR:diagnostic');",
+			"  process.exit(7);",
+			"});",
+		].join("\n"));
+
+		await cas(r, "run écrit le stdin complet puis le ferme, et passe les arguments", async () => {
+			/* Le stdin COMPLET, puis FERMÉ : sans le `end()`, le faux CLI
+			   n'atteindrait jamais son `'end'` et `run` n'aboutirait pas — le cas
+			   expirerait au lieu de rougir, mais il rougirait aussi sur la
+			   LONGUEUR si une partie du prompt était perdue. */
+			const res = await run(
+				{ tool: "codex", args: [rapporteur, "-p", "--model", "opus"], stdin: "x".repeat(5000) },
+				{ cheminRegle: process.execPath, env },
+			);
+			r.check("run écrit le stdin complet puis le ferme, et passe les arguments",
+				res.stdout, "OUT:5000:-p,--model,opus");
+			r.check("stdout et stderr sont rendus séparés, avec le code de sortie",
+				{ stderr: res.stderr, code: res.code }, { stderr: "ERR:diagnostic", code: 7 });
+		});
+
+		/* ── LES ARGUMENTS N'ATTEIGNENT PAS UN INTERPRÉTEUR ──
+		   Le témoin sur disque est ce qui distingue « bien cité » de « cmd a
+		   exécuté la charge » : l'`argv` seul ne le dirait pas. */
+		await cas(r, "un argument à guillemets et métacaractères arrive intact, sans rien exécuter", async () => {
+			const echo = poserFauxCli("codex", "process.stdout.write(JSON.stringify(process.argv.slice(2)));");
+			const temoin = join(racine, "pwn.txt");
+			const charge = 'a" & echo PWN > ' + temoin.split("\\").join("/") + ' & "b';
+			const argsCites = ["--model", charge, "", "espace et suite"];
+			let recus = "(pas de sortie)";
+			try {
+				recus = (await run({ tool: "codex", args: argsCites, stdin: "" }, { env: envDe(echo.dossier) })).stdout;
+			} catch (e) {
+				recus = "EXCEPTION: " + (e && e.message ? e.message : String(e));
+			}
+			r.check("un argument à guillemets et métacaractères arrive intact, sans rien exécuter",
+				{ argv: recus, temoin: existsSync(temoin) },
+				{ argv: JSON.stringify(argsCites), temoin: false });
+		});
+
+		await cas(r, "les refus sont jugés avant tout lancement, et nommés", async () => {
+			/* Les quatre refus que `run` prononce SANS rien lancer ni rien écrire.
+			   « fichiers sans marqueur » est le mineur laissé ouvert par la revue
+			   de la tâche 4 : sans marqueur rien n'est substitué, donc les pièces
+			   jointes seraient écrites, aucun jeton ne pourrait les désigner, le
+			   CLI partirait sans savoir qu'elles existent — et l'appel
+			   RÉUSSIRAIT, en ignorant l'image, sans un mot. */
+			const piece = { nom: "image-1.png", base64: Buffer.from("X").toString("base64") };
+			r.check("les refus sont jugés avant tout lancement, et nommés",
+				{
+					horsListe: await nomDuRejet(run({ tool: "notepad", args: [], stdin: "" }, { env })),
+					sautDeLigne: await nomDuRejet(run(
+						{ tool: "codex", args: [rapporteur, "a\nb"], stdin: "" },
+						{ cheminRegle: process.execPath, env },
+					)),
+					fichiersSansMarqueur: await nomDuRejet(run(
+						{ tool: "codex", args: [rapporteur], stdin: "", fichiers: [piece] },
+						{ cheminRegle: process.execPath, env },
+					)),
+					sortieSansMarqueur: await nomDuRejet(run(
+						{ tool: "codex", args: [rapporteur], stdin: "", sortieFichier: "out.txt" },
+						{ cheminRegle: process.execPath, env },
+					)),
+				},
+				{ horsListe: "refuse", sautDeLigne: "refuse", fichiersSansMarqueur: "refuse", sortieSansMarqueur: "refuse" });
+		});
+
+		await cas(r, "un exécutable absent rejette « introuvable », que le chemin vienne du PATH ou du réglage", async () => {
+			/* C'est le rejet que le code partagé traduit en « CLI non installé »,
+			   et un rejet ANONYME ferait chercher une panne ailleurs. Le réglage
+			   est rendu TEL QUEL par `resoudreExecutable`, sans repli sur le
+			   `PATH` : un repli lancerait une AUTRE installation que celle que
+			   l'utilisateur a désignée, en silence. */
+			r.check("un exécutable absent rejette « introuvable », que le chemin vienne du PATH ou du réglage",
+				{
+					pathVide: await nomDuRejet(run({ tool: "claude", args: [], stdin: "" }, { env: envDe(vide) })),
+					regleFausse: await nomDuRejet(run(
+						{ tool: "claude", args: [], stdin: "" },
+						{ cheminRegle: join(racine, "n-existe-pas.exe"), env },
+					)),
+				},
+				{ pathVide: "introuvable", regleFausse: "introuvable" });
+		});
+
+		await cas(r, "un timeout tue le process et rejette « timeout »", async () => {
+			const dormeur = join(racine, "dormeur.js");
+			writeFileSync(dormeur, "setTimeout(() => { process.stdout.write('TROP TARD'); }, 5000);");
+			r.check("un timeout tue le process et rejette « timeout »",
+				await nomDuRejet(run(
+					{ tool: "codex", args: [dormeur], stdin: "", timeoutMs: 300 },
+					{ cheminRegle: process.execPath, env },
+				)),
+				"timeout");
+		});
+
+		/* ── UN SEUL `run` PAR OUTIL, ET LE VERROU EST RELÂCHÉ ── */
+		await cas(r, "un second run du même outil rejette « occupe » ; un autre outil passe", async () => {
+			const lent = join(racine, "lent.js");
+			writeFileSync(lent, "setTimeout(() => { process.stdout.write('FINI'); }, 500);");
+			const premier = run({ tool: "codex", args: [lent], stdin: "" }, { cheminRegle: process.execPath, env });
+			const second = await nomDuRejet(run({ tool: "codex", args: [lent], stdin: "" }, { cheminRegle: process.execPath, env }));
+			/* Le verrou est par OUTIL : bloquer Codex pendant que Claude tourne
+			   serait une limite inventée, et l'utilisateur ne peut de toute façon
+			   lancer qu'une génération à la fois par fournisseur. */
+			const autre = await run({ tool: "claude", args: [lent], stdin: "" }, { cheminRegle: process.execPath, env });
+			r.check("un second run du même outil rejette « occupe » ; un autre outil passe",
+				{ second, autre: autre.stdout, premier: (await premier).stdout },
+				{ second: "occupe", autre: "FINI", premier: "FINI" });
+		});
+
+		await cas(r, "le verrou est relâché sur TOUTES les issues, y compris un échec", async () => {
+			/* UNE FUITE DU VERROU REND LE FOURNISSEUR INUTILISABLE jusqu'au
+			   redémarrage de l'application, sans qu'aucun message ne dise
+			   pourquoi. Les deux issues non-heureuses passent d'abord (un rejet
+			   après acquisition du verrou, un CLI qui sort NON NUL), puis un appel
+			   normal : s'il rend « occupe », le verrou a fui. */
+			const echoue = join(racine, "echoue.js");
+			writeFileSync(echoue, "process.exit(3);");
+			const apresIntrouvable = await nomDuRejet(run(
+				{ tool: "codex", args: [], stdin: "" },
+				{ cheminRegle: join(racine, "n-existe-pas.exe"), env },
+			));
+			const apresEchec = await run({ tool: "codex", args: [echoue], stdin: "" }, { cheminRegle: process.execPath, env });
+			const ensuite = await run({ tool: "codex", args: [rapporteur], stdin: "ok" }, { cheminRegle: process.execPath, env });
+			r.check("le verrou est relâché sur TOUTES les issues, y compris un échec",
+				{ apresIntrouvable, codeEchec: apresEchec.code, ensuite: ensuite.stdout },
+				{ apresIntrouvable: "introuvable", codeEchec: 3, ensuite: "OUT:2:" });
+		});
+
+		/* ── L'ANNULATION TUE L'ARBRE ── */
+		await cas(r, "l'annulation tue l'ARBRE : le petit-enfant n'écrit jamais", async () => {
+			/* `claude` et `codex` spawnent des enfants. Un `kill` sur le seul
+			   premier process laisse la génération tourner APRÈS le clic sur
+			   Stop : le fichier de sortie s'écrit, un process orphelin reste dans
+			   le Gestionnaire des tâches, et la fenêtre, elle, est déjà revenue à
+			   l'état repos. Le TÉMOIN est le seul moyen de le voir — un
+			   petit-enfant qui écrit un fichier 1,5 s après son démarrage.
+
+			   PAR LE FAUX `codex.cmd`, DONC PAR LE REPLI `cmd.exe`, et c'est
+			   MESURÉ, pas supposé. Avec un enfant lancé DIRECTEMENT (Node par son
+			   chemin), le `/T` ne se voit pas : libuv place un enfant non détaché
+			   dans un Job Object qui meurt avec son parent, donc le petit-enfant
+			   disparaît même sans `/T`, et le cas resterait VERT quoi qu'on casse.
+			   `cmd.exe`, lui, lance son enfant sans job — c'est la forme d'une
+			   installation npm sous Windows, le chemin PAR DÉFAUT pour
+			   `claude.cmd`/`codex.cmd`, et celle où `killTree` est né. Mesuré sur
+			   cette machine : sans `/T`, le témoin est écrit ; avec, jamais.
+
+			   L'annulation part dès que le petit-enfant a confirmé être NÉ
+			   (deux fichiers de rendez-vous), jamais après un délai fixe : un
+			   délai trop court annulerait avant le `spawn`, et le cas passerait
+			   pour une raison étrangère à ce qu'il éprouve. */
+			const petit = join(racine, "petit.js");
+			const temoin = join(racine, "petit-enfant.txt");
+			const pret = join(racine, "pret.txt");
+			writeFileSync(petit, [
+				"const fs = require('fs');",
+				"fs.writeFileSync(process.argv[2] + '.ne', 'ne');",
+				"setTimeout(() => { fs.writeFileSync(process.argv[2], 'VIVANT'); }, 1500);",
+			].join("\n"));
+			const arbre = poserFauxCli("codex", [
+				"const cp = require('child_process');",
+				"const fs = require('fs');",
+				"const a = process.argv.slice(2);",
+				"cp.spawn(process.execPath, [a[0], a[1]], { stdio: 'ignore' });",
+				"fs.writeFileSync(a[2], 'ok');",
+				"setTimeout(() => { process.stdout.write('SURVIVANT'); }, 10000);",
+			].join("\n"));
+
+			const controleur = new AbortController();
+			const promesse = run(
+				{ tool: "codex", args: [petit, temoin, pret], stdin: "", signal: controleur.signal },
+				{ env: envDe(arbre.dossier) },
+			);
+			const debut = Date.now();
+			while (!existsSync(pret) && Date.now() - debut < 8000) await dodo(25);
+			const debut2 = Date.now();
+			while (!existsSync(temoin + ".ne") && Date.now() - debut2 < 8000) await dodo(25);
+			const petitEnfantNe = existsSync(temoin + ".ne");
+			controleur.abort();
+			const rejet = await nomDuRejet(promesse);
+			// Bien APRÈS l'instant où le petit-enfant aurait écrit.
+			await dodo(2500);
+			r.check("l'annulation tue l'ARBRE : le petit-enfant n'écrit jamais",
+				{ petitEnfantNe, rejet, aEcrit: existsSync(temoin) },
+				{ petitEnfantNe: true, rejet: "annule", aEcrit: false });
+		});
+
+		await cas(r, "un signal déjà abandonné rejette « annule » sans rien lancer", async () => {
+			const c = new AbortController();
+			c.abort();
+			const marqueurDeVie = join(racine, "jamais.txt");
+			const ecrivain = join(racine, "ecrivain.js");
+			writeFileSync(ecrivain, "require('fs').writeFileSync(process.argv[2], 'LANCE');");
+			const nom = await nomDuRejet(run(
+				{ tool: "codex", args: [ecrivain, marqueurDeVie], stdin: "", signal: c.signal },
+				{ cheminRegle: process.execPath, env },
+			));
+			await dodo(150);
+			r.check("un signal déjà abandonné rejette « annule » sans rien lancer",
+				{ nom, lance: existsSync(marqueurDeVie) }, { nom: "annule", lance: false });
+		});
+	} finally {
+		rmSync(racine, { recursive: true, force: true, maxRetries: 5, retryDelay: 150 });
+	}
+	r.done();
+});
+
+/**
+ * STATIQUE — LE CANAL `process.run` JUGE LE NOM AVANT TOUT.
+ *
+ * `canaux.ts` importe `electron` : aucun harnais ne peut le charger, et c'est
+ * pourquoi cette assertion lit sa SOURCE, comme celle des canaux `fichiers.*`
+ * et celle de la garde de la clé `ai` (`check:electron-reglages`).
+ *
+ * Ce qu'elle empêche : que la liste blanche glisse APRÈS le lancement, et
+ * surtout que le CHEMIN de l'exécutable vienne un jour de l'appel IPC plutôt
+ * que du magasin du principal — auquel cas la liste de noms ne séparerait plus
+ * rien, le rendu envoyant le chemin qu'il veut.
+ */
+{
+	const r = makeReporter("Électron — le canal process.run (statique)");
+	const source = readFileSync("apps/windows/electron/canaux.ts", "utf-8");
+	const debut = source.indexOf("ipcMain.handle(CANAUX.processusRun,");
+	let corps = null;
+	if (debut >= 0) {
+		let niveau = 0;
+		for (let i = source.indexOf("(", debut); i < source.length; i++) {
+			if (source[i] === "(") niveau++;
+			else if (source[i] === ")" && --niveau === 0) { corps = source.slice(debut, i + 1); break; }
+		}
+	}
+	const garde = corps ? corps.indexOf("estOutilAutorise(") : -1;
+	const lancement = corps ? corps.indexOf("await run(") : -1;
+	r.check("le canal process.run juge le NOM (estOutilAutorise) AVANT de lancer",
+		{ trouve: corps !== null, garde: garde >= 0, avantLancement: garde >= 0 && lancement > garde },
+		{ trouve: true, garde: true, avantLancement: true });
+	r.check("le chemin de l'exécutable est lu dans le magasin du PRINCIPAL, jamais reçu du rendu",
+		{
+			duMagasin: corps !== null && corps.includes("cheminCliRegle(reglagesOuErreur()"),
+			pasDeCheminRecu: corps !== null && !/s\.chemin/.test(corps),
+		},
+		{ duMagasin: true, pasDeCheminRecu: true });
+	r.done();
+}

@@ -18,6 +18,13 @@ apps/windows/node_modules/
 # commit).
 apps/windows/src-tauri/
 
+# Le vault d'essai du bac à sable (apps/windows/sandbox/neo-quiz.wsb) est
+# commité avec ses deux notes ; ce que l'application y écrit pendant une
+# épreuve ne l'est pas.
+apps/windows/sandbox/vault/.neo-quiz/
+apps/windows/sandbox/vault/Generated/
+apps/windows/sandbox/vault/.trash/
+
 # Environment & secrets
 .env
 .env.local

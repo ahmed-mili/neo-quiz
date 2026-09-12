@@ -188,6 +188,18 @@ The recommended way to install **Neo Quiz** is via **BRAT** (Beta Reviewers Auto
 
 BRAT will notify you whenever a new version is available and update with one click.
 
+### Desktop app (Windows, Linux)
+
+The desktop app reads the same quiz folders and the same review log as the plugin, and generates quizzes with the same local AI tools.
+
+1. Download the latest release from the [releases page](https://github.com/ahmed-mili/neo-quiz/releases): `neo-quiz-setup-<version>.exe` on Windows, `neo-quiz-<version>.AppImage` on Linux.
+2. **Windows:** the installer is not code-signed, so SmartScreen shows "Windows protected your PC" on first run. Click **More info**, then **Run anyway**. Pick an install folder; the app is per-user and needs no admin rights.
+3. **Linux:** `chmod +x neo-quiz-<version>.AppImage` and run it. Without FUSE, run it with `--appimage-extract-and-run`.
+
+**Updating:** download the new installer and run it over the existing installation. Your folders and settings live in `%APPDATA%\Neo Quiz` and are kept; the review log lives in your quiz folder (`.neo-quiz/`) and is never touched. The version you are running is shown at the bottom of **Settings**.
+
+**Uninstalling** removes the app only. Your quiz folders and their review log stay where they are.
+
 ---
 
 ## Keyboard Shortcuts

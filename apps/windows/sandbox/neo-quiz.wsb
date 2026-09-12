@@ -1,0 +1,30 @@
+<!--
+  LA MACHINE PROPRE : Windows Sandbox (Windows 11 Pro, hyperviseur actif).
+  Sans Node, sans Ollama, sans CLI, sans %APPDATA%\Neo Quiz, jetée à la
+  fermeture : c'est la définition de « machine propre », reproductible à
+  chaque essai. Activation unique, en administrateur puis redémarrage :
+    Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM
+  Puis double-clic sur ce fichier.
+
+  Les chemins d'hôte sont ABSOLUS parce que le format .wsb n'admet ni
+  variable ni chemin relatif ; ils sont ceux du poste d'Ahmed.
+-->
+<Configuration>
+  <Networking>Enable</Networking>
+  <MappedFolders>
+    <!-- Les installeurs, en lecture seule : le bac à sable ne peut rien y écrire. -->
+    <MappedFolder>
+      <HostFolder>C:\dev\neo-quiz\apps\windows\dist-installer</HostFolder>
+      <SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\installeur</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <!-- Le vault d'essai, en lecture-écriture : le journal de révision
+         (.neo-quiz/) et les quiz générés (Generated/) s'y écrivent, et
+         restent lisibles depuis le poste après la fermeture du bac à sable. -->
+    <MappedFolder>
+      <HostFolder>C:\dev\neo-quiz\apps\windows\sandbox\vault</HostFolder>
+      <SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\vault</SandboxFolder>
+      <ReadOnly>false</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+</Configuration>

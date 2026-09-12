@@ -64,6 +64,21 @@ réponse étant toujours non.
   identité (aller-retour sans perte), et une résolution de lien par nom ne doit jamais
   franchir la racine de la note qui cite — sans cette borne, une image du dossier A
   se servirait, en silence, à une note du dossier B.
+  **`createObsidianHost` reçoit un troisième paramètre, `envHote` (défaut
+  `process.env`)** : la couture d'environnement du ruling 9. Sans elle, le groupe
+  « les CLI » n'atteint pas sa propre entrée sur une machine avec l'installateur
+  officiel de Codex — `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin\codex.exe` existe
+  pour de vrai, et `buildChildEnv` l'ajoute TOUJOURS au PATH tant que
+  `LOCALAPPDATA` pointe dessus. Muter `process.env.PATH` pour poser un faux
+  `codex.cmd` en TÊTE ne suffit pas : `spawn` direct ne résout qu'un `.exe` et
+  saute le faux, le repli `cmd.exe` retrouve le VRAI `codex.exe` plus loin dans
+  le PATH, et trois cas reçoivent la réponse du VRAI CLI (`error: a value is
+  required for '--profile ...'`) au lieu de celle du faux — MACHINE-DÉPENDANT :
+  vert sur une machine sans Codex installé, rouge sur celle d'Ahmed. Le
+  contrôle construit désormais un environnement dédié (`envTest`, muté en
+  place) où `PATH` ne contient QUE le dossier du faux CLI et où `APPDATA` /
+  `LOCALAPPDATA` / `CODEX_INSTALL_DIR` sont ABSENTS, pour que `buildChildEnv`
+  ne réintroduise aucun chemin réel derrière.
   **Le groupe « réseau » de `check:obsidian-host` tient les DEUX VOIES de
   `net.fetchJson`**, et c'est l'HÔTE de l'URL qui tranche, jamais l'appelant :
   `fetch` pour la boucle locale, `requestUrl` partout ailleurs. Le défaut qu'il

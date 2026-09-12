@@ -11,7 +11,7 @@
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { parseHTML } from "linkedom";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
@@ -1030,29 +1030,45 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
  */
 await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	const r = makeReporter("Hôte Obsidian — les CLI");
-	const host = createObsidianHost(fausseApp([]), { manifest: {} });
+	/* L'ENVIRONNEMENT DE L'HÔTE EST UN OBJET DÉDIÉ (ruling 9), jamais
+	   `process.env` : sa PROPRIÉTÉ (pas sa valeur figée) est capturée une
+	   fois par `createObsidianHost`, donc muter ses champs EN PLACE (jamais
+	   réassigner `envTest`) atteint tout ce que l'hôte compose — `run`,
+	   `lireCache`, `ollamaInstalle`, `demarrerOllama`.
+
+	   LE DÉFAUT QUE CECI CORRIGE : sur une machine avec l'installateur
+	   officiel de Codex, `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin\codex.exe`
+	   existe pour de vrai, et `buildChildEnv` l'ajoute TOUJOURS au PATH tant
+	   que `LOCALAPPDATA` pointe dessus — quel que soit ce que `PATH`
+	   contient par ailleurs. L'ancienne version de ce contrôle ajoutait le
+	   faux CLI en TÊTE de `process.env.PATH` sans y toucher : un
+	   `spawn("codex")` direct ne résout que des `.exe` et sautait donc le
+	   faux `codex.cmd`, tombait sur le VRAI `codex.exe` plus loin dans le
+	   PATH, et le contrôle recevait la réponse du VRAI Codex CLI
+	   (`error: a value is required for '--profile ...'`) au lieu de celle du
+	   faux. Le seul environnement qui empêche ça, quoi que la machine ait
+	   d'installé, est un environnement où RIEN d'autre que le faux CLI n'est
+	   joignable. */
+	const envTest = Object.assign({}, process.env);
+	const host = createObsidianHost(fausseApp([]), { manifest: {} }, envTest);
 
 	/* Un dossier temporaire qui contient un faux `codex` : un script Node,
-	   plus un lanceur du nom que la liste blanche autorise. `buildChildEnv`
-	   AJOUTE au PATH du processus sans le remplacer, donc poser le dossier en
-	   tête de `process.env.PATH` suffit à ce que le lancement tombe sur le
-	   nôtre.
+	   plus un lanceur du nom que la liste blanche autorise.
 
 	   POURQUOI `codex` ET PAS `claude` : sur la machine qui écrit ce contrôle,
-	   `claude.exe` existe pour de bon dans `~/.local/bin`, que `buildChildEnv`
-	   ajoute au PATH — le premier jet de ce cas a donc lancé le VRAI Claude
-	   Code, et attendu sa réponse. Le nom éprouvé doit être celui que RIEN
-	   d'autre que nous ne résout. */
+	   `claude.exe` existe pour de bon dans `~/.local/bin`. Le nom éprouvé doit
+	   être celui que RIEN d'autre que nous ne résout — d'où, en plus, le
+	   PATH scopé au SEUL dossier du faux CLI ci-dessous. */
 	function avecFauxCli(corps, executer) {
 		const dossier = mkdtempSync(join(tmpdir(), "quiz-cli-"));
 		const script = join(dossier, "faux.js");
 		writeFileSync(script, corps);
-		/* Sous Windows, `spawn` ne lance qu'un `.exe` : un `.cmd` est le seul
-		   lanceur qu'on puisse poser à la main — et c'est EXACTEMENT le cas
-		   que le repli par `cmd.exe` de l'hôte existe pour servir (une
-		   installation npm de `codex` est un `codex.cmd`). Ailleurs, un script
-		   shell exécutable, lancé par le chemin DIRECT : les deux chemins de
-		   `lancerCli` sont donc éprouvés, un par système. */
+		/* `codex.cmd`, TOUJOURS — même sous Windows où un `.exe` marcherait
+		   aussi bien : c'est le lanceur d'une installation npm réelle, et
+		   c'est délibérément le chemin `spawn` direct qui doit échouer en
+		   ENOENT pour que ce soit le REPLI `cmd.exe` (le chemin qu'I1 a
+		   durci contre l'injection) qui soit exercé ici — pas le chemin
+		   direct, déjà couvert par le cas `child_process` plus haut. */
 		if (process.platform === "win32") {
 			writeFileSync(join(dossier, "codex.cmd"),
 				'@echo off\r\n"' + process.execPath + '" "' + script + '" %*\r\n');
@@ -1060,13 +1076,35 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 			writeFileSync(join(dossier, "codex"),
 				'#!/bin/sh\nexec "' + process.execPath + '" "' + script + '" "$@"\n', { mode: 0o755 });
 		}
-		const avant = process.env.PATH;
-		process.env.PATH = dossier + delimiter + avant;
+		const avant = Object.assign({}, envTest);
+		for (const cle of Object.keys(envTest)) delete envTest[cle];
+		Object.assign(envTest, {
+			/* PATH RÉDUIT AU SEUL DOSSIER DU FAUX CLI — pas ajouté en tête. */
+			PATH: dossier,
+			/* Ce qu'il faut à `cmd.exe` pour se lancer lui-même. */
+			SystemRoot: process.env.SystemRoot,
+			ComSpec: process.env.ComSpec,
+			PATHEXT: process.env.PATHEXT,
+			TEMP: process.env.TEMP,
+			TMP: process.env.TMP,
+			// Le dossier personnel EN COURS (une fausse maison posée par
+			// `avecFausseMaison`, sinon celui de la vraie machine) : préservé
+			// tel quel, jamais réinitialisé au réel par ce bloc.
+			USERPROFILE: avant.USERPROFILE,
+			HOME: avant.HOME,
+			/* APPDATA, LOCALAPPDATA, CODEX_INSTALL_DIR : ABSENTS, exprès.
+			   `buildChildEnv` les lit pour ajouter des chemins en dur au
+			   PATH — et c'est précisément `LOCALAPPDATA` qui, sur cette
+			   machine, pointe vers le VRAI Codex officiel. Un `PATH` scopé
+			   ne sert à rien si ces trois variables réintroduisent un
+			   dossier réel juste après. */
+		});
 		return (async () => {
 			try {
 				return await executer();
 			} finally {
-				process.env.PATH = avant;
+				for (const cle of Object.keys(envTest)) delete envTest[cle];
+				Object.assign(envTest, avant);
 				rmSync(dossier, { recursive: true, force: true });
 			}
 		})();
@@ -1076,8 +1114,8 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	const maison = mkdtempSync(join(tmpdir(), "quiz-codex-"));
 	mkdirSync(join(maison, "cache"), { recursive: true });
 	writeFileSync(join(maison, "cache", "models_cache.json"), '{"models":[{"slug":"gpt-test"}]}');
-	const codexHomeAvant = process.env.CODEX_HOME;
-	process.env.CODEX_HOME = join(maison, "cache");
+	const codexHomeAvant = envTest.CODEX_HOME;
+	envTest.CODEX_HOME = join(maison, "cache");
 	try {
 		/* `lire` ATTRAPE : sans ça, un `lireCache` qui laisserait remonter son
 		   exception (la rupture « pas de catch ») tuerait le script au lieu de
@@ -1096,11 +1134,11 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 			{ json: { models: [{ slug: "gpt-test" }] }, date: true });
 		/* Un fichier absent n'est PAS une erreur : une machine sans Codex est
 		   un état normal, et le code partagé retombe sur son repli embarqué. */
-		process.env.CODEX_HOME = join(maison, "vide");
+		envTest.CODEX_HOME = join(maison, "vide");
 		r.check("un cache absent rend null, sans lever", await lire("codex"), null);
 	} finally {
-		if (codexHomeAvant === undefined) delete process.env.CODEX_HOME;
-		else process.env.CODEX_HOME = codexHomeAvant;
+		if (codexHomeAvant === undefined) delete envTest.CODEX_HOME;
+		else envTest.CODEX_HOME = codexHomeAvant;
 		rmSync(maison, { recursive: true, force: true });
 	}
 
@@ -1183,33 +1221,32 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	/* Un exécutable ABSENT : c'est le rejet que `checkClaudeCode` traduit en
 	   « non installé », et un rejet ANONYME ferait chercher une panne. Le PATH
 	   est vidé le temps du cas, et les variables dont `buildChildEnv` compose
-	   ses chemins en dur pointent vers un dossier vide.
-	   RÉSIDUEL, écrit plutôt que découvert : `buildChildEnv` ajoute AUSSI
-	   `~/.local/bin`, `/opt/homebrew/bin` et `/usr/local/bin`, que rien ici ne
-	   peut détourner (`os.homedir()` ignore `HOME` sous Windows). Une machine
-	   qui aurait `codex` dans l'un de ces trois-là verrait ce cas rouge — un
-	   faux rouge, bruyant et expliqué ici, jamais un faux vert. */
+	   ses chemins en dur pointent vers un dossier vide — `USERPROFILE`/`HOME`
+	   compris, désormais que `dossierPersonnel` lit l'environnement DONNÉ
+	   (`envTest`) : le résiduel « `~/.local/bin` de la vraie machine » que ce
+	   commentaire signalait avant la couture d'environnement est fermé. */
 	const vide = mkdtempSync(join(tmpdir(), "quiz-vide-"));
-	const envAvant = {
-		PATH: process.env.PATH,
-		APPDATA: process.env.APPDATA,
-		LOCALAPPDATA: process.env.LOCALAPPDATA,
-		CODEX_INSTALL_DIR: process.env.CODEX_INSTALL_DIR,
-	};
+	const envAvant = Object.assign({}, envTest);
 	let nom = "(aucun rejet)";
 	try {
-		process.env.PATH = vide;
-		process.env.APPDATA = vide;
-		process.env.LOCALAPPDATA = vide;
-		process.env.CODEX_INSTALL_DIR = vide;
+		for (const cle of Object.keys(envTest)) delete envTest[cle];
+		Object.assign(envTest, {
+			PATH: vide,
+			APPDATA: vide,
+			LOCALAPPDATA: vide,
+			CODEX_INSTALL_DIR: vide,
+			USERPROFILE: vide,
+			HOME: vide,
+			SystemRoot: process.env.SystemRoot,
+			ComSpec: process.env.ComSpec,
+			PATHEXT: process.env.PATHEXT,
+		});
 		await host.process.run({ tool: "codex", args: ["--version"], stdin: "" });
 	} catch (e) {
 		nom = e.name;
 	} finally {
-		for (const [cle, valeur] of Object.entries(envAvant)) {
-			if (valeur === undefined) delete process.env[cle];
-			else process.env[cle] = valeur;
-		}
+		for (const cle of Object.keys(envTest)) delete envTest[cle];
+		Object.assign(envTest, envAvant);
 		rmSync(vide, { recursive: true, force: true });
 	}
 	r.check("un exécutable absent rejette « introuvable »", nom, "introuvable");
@@ -1288,16 +1325,16 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	   comparer qu'à une formule recopiée du code, et resterait vert quoi qu'on
 	   change : un contrôle qui n'atteint pas sa propre entrée ne contrôle rien. */
 	const fausseMaison = mkdtempSync(join(tmpdir(), "quiz-maison-"));
-	const maisonAvant = { USERPROFILE: process.env.USERPROFILE, HOME: process.env.HOME };
+	const maisonAvant = { USERPROFILE: envTest.USERPROFILE, HOME: envTest.HOME };
 	const avecFausseMaison = async (executer) => {
-		process.env.USERPROFILE = fausseMaison;
-		process.env.HOME = fausseMaison;
+		envTest.USERPROFILE = fausseMaison;
+		envTest.HOME = fausseMaison;
 		try {
 			return await executer();
 		} finally {
 			for (const [cle, valeur] of Object.entries(maisonAvant)) {
-				if (valeur === undefined) delete process.env[cle];
-				else process.env[cle] = valeur;
+				if (valeur === undefined) delete envTest[cle];
+				else envTest[cle] = valeur;
 			}
 		}
 	};

@@ -297,11 +297,11 @@ function lancerCli(spec: {
 	stdin: string;
 	signal?: AbortSignal;
 	timeoutMs?: number;
-}, parCmd = false): Promise<{ stdout: string; stderr: string; code: number | null }> {
+}, parCmd = false, envHote: NodeJS.ProcessEnv = process.env): Promise<{ stdout: string; stderr: string; code: number | null }> {
 	return new Promise((resolve, reject) => {
 		const cp = require("child_process") as typeof import("child_process");
-		const env = buildChildEnv();
-		const options = { env, cwd: dossierPersonnel(env), windowsHide: true };
+		const env = buildChildEnv(envHote);
+		const options = { env, cwd: dossierPersonnel(envHote), windowsHide: true };
 		/* La ligne de `cmd.exe` est composée AVANT le `try` : `citerPourCmd`
 		   REJETTE un argument qui porte un retour à la ligne (`name` valant
 		   `refuse`), et le faire dans le `try` transformerait ce refus nommé en
@@ -312,7 +312,7 @@ function lancerCli(spec: {
 		try {
 			child = parCmd
 				? cp.spawn(
-					process.env.ComSpec || "cmd.exe",
+					envHote.ComSpec || "cmd.exe",
 					["/d", "/s", "/c", ligneCmd],
 					Object.assign({ windowsVerbatimArguments: true }, options),
 				)
@@ -352,7 +352,7 @@ function lancerCli(spec: {
 			   lieu du rejet que `checkClaudeCode` attend. */
 			if (!parCmd && process.platform === "win32" && e.code === "ENOENT"
 				&& trouverExecutable(spec.tool, options.env)) {
-				sortir(() => { resolve(lancerCli(spec, true)); });
+				sortir(() => { resolve(lancerCli(spec, true, envHote)); });
 				return;
 			}
 			sortir(() => reject(erreurCli(
@@ -490,10 +490,24 @@ function estBoucleLocale(url: string): boolean {
 
 /** Le second paramètre est réduit à ce dont l'hôte a besoin — le manifeste,
     pour retrouver l'ANCIEN journal. Typer `Plugin` entier obligerait le jeu
-    de cas à en fabriquer un, alors qu'un objet littéral suffit. */
+    de cas à en fabriquer un, alors qu'un objet littéral suffit.
+
+    LE TROISIÈME PARAMÈTRE EST LA COUTURE D'ENVIRONNEMENT (ruling 9). Par
+    défaut `process.env`, donc rien ne change pour le greffon. Sans elle,
+    `buildChildEnv`/`trouverExecutable`/`lancerCli`/`dossierPersonnel` lisaient
+    `process.env` en dur : un contrôle qui mute `process.env.PATH` pour poser
+    un faux CLI en tête de liste ne l'empêche pas de retomber sur un VRAI CLI
+    installé plus loin sur le PATH (Codex officiel dans
+    `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`, atteint par le repli
+    `cmd.exe`) — le cas répond alors avec la vraie sortie du vrai CLI au lieu
+    de celle du faux. Capturé UNE fois ici et transmis à tout ce qui compose
+    une ligne de commande ou résout un chemin d'exécutable, pour que le
+    contrôle puisse fabriquer un environnement où RIEN d'autre que le faux CLI
+    n'est joignable, quel que soit ce que la machine a d'installé. */
 export function createObsidianHost(
 	app: App,
 	plugin: { manifest: { dir?: string } },
+	envHote: NodeJS.ProcessEnv = process.env,
 ): Host {
 	const adapter = (): DataAdapter => app.vault.adapter;
 
@@ -1145,8 +1159,8 @@ export function createObsidianHost(
 					stdin: resolu.stdin,
 					signal: spec.signal,
 					timeoutMs: spec.timeoutMs,
-				});
-			}, process.env);
+				}, false, envHote);
+			}, envHote);
 			return Object.assign({}, resultat, { sortie });
 		},
 
@@ -1164,9 +1178,9 @@ export function createObsidianHost(
 				   `buildChildEnv` — c'est ce qui rend ces deux chemins atteignables
 				   par un contrôle. Les deux valent la même chose en production
 				   (`os.homedir()` lit `USERPROFILE` sous Windows, `HOME` ailleurs). */
-				const maison = dossierPersonnel();
+				const maison = dossierPersonnel(envHote);
 				const file = tool === "codex"
-					? path.join(process.env.CODEX_HOME || path.join(maison, ".codex"), "models_cache.json")
+					? path.join(envHote.CODEX_HOME || path.join(maison, ".codex"), "models_cache.json")
 					: path.join(maison, ".claude.json");
 				const mtimeMs = fs.statSync(file).mtimeMs;
 				return { mtimeMs, json: JSON.parse(fs.readFileSync(file, "utf8")) as unknown };
@@ -1182,7 +1196,7 @@ export function createObsidianHost(
 		   l'utilisateur). */
 		async ollamaInstalle() {
 			if (!Platform.isDesktopApp) return false;
-			const repond = await lancerCli({ tool: "ollama", args: ["--version"], stdin: "", timeoutMs: 4000 })
+			const repond = await lancerCli({ tool: "ollama", args: ["--version"], stdin: "", timeoutMs: 4000 }, false, envHote)
 				.then(res => res.code === 0)
 				.catch(() => false);
 			if (repond) return true;
@@ -1190,7 +1204,7 @@ export function createObsidianHost(
 				const fs = require("fs") as typeof import("fs");
 				const path = require("path") as typeof import("path");
 				const candidates = Platform.isWin
-					? [path.join(process.env.LOCALAPPDATA || "", "Programs", "Ollama", "ollama app.exe")]
+					? [path.join(envHote.LOCALAPPDATA || "", "Programs", "Ollama", "ollama app.exe")]
 					: Platform.isMacOS
 						? ["/Applications/Ollama.app", "/opt/homebrew/bin/ollama", "/usr/local/bin/ollama"]
 						: ["/usr/local/bin/ollama", "/usr/bin/ollama"];
@@ -1212,14 +1226,14 @@ export function createObsidianHost(
 				let child;
 				if (Platform.isWin) {
 					const fs = require("fs") as typeof import("fs");
-					const exe = path.join(process.env.LOCALAPPDATA || "", "Programs", "Ollama", "ollama app.exe");
+					const exe = path.join(envHote.LOCALAPPDATA || "", "Programs", "Ollama", "ollama app.exe");
 					child = fs.existsSync(exe)
 						? cp.spawn(exe, [], { detached: true, stdio: "ignore" })
-						: cp.spawn("ollama", ["serve"], { detached: true, stdio: "ignore", env: buildChildEnv() });
+						: cp.spawn("ollama", ["serve"], { detached: true, stdio: "ignore", env: buildChildEnv(envHote) });
 				} else if (Platform.isMacOS) {
 					child = cp.spawn("open", ["-a", "Ollama"], { detached: true, stdio: "ignore" });
 				} else {
-					child = cp.spawn("ollama", ["serve"], { detached: true, stdio: "ignore", env: buildChildEnv() });
+					child = cp.spawn("ollama", ["serve"], { detached: true, stdio: "ignore", env: buildChildEnv(envHote) });
 				}
 				child.on("error", () => { /* constaté par le poll de l'appelant */ });
 				child.unref();

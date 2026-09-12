@@ -29,6 +29,10 @@ export const EN_APP = {
 	   pouvoir rédiger la question qu'on lui pose. Le principal traduit avec
 	   ce même dictionnaire, sur la langue du système (`app.getLocale()`), la
 	   source que la fenêtre lit elle aussi par `navigator.language`. */
+	/* L'écriture des réglages IA a été REFUSÉE par le processus principal
+	   (URL illisible, hôte refusé). La page le dit : un réglage qu'on croit
+	   enregistré et qui disparaît au redémarrage est pire qu'un refus. */
+	"app.aiSettings.refused": "Could not save the AI settings: {error}",
 	"app.aiHost.title": "Allow this Ollama server?",
 	"app.aiHost.message": "Neo Quiz will send your requests and the notes you attach to {host}.",
 	"app.aiHost.detail": "This server is neither a known host nor on your local network. Allow it only if you set it up yourself.",

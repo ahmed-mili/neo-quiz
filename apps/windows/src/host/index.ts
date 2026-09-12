@@ -130,5 +130,13 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		platform: createWindowsPlatform(),
 		shell,
 		paths,
+		/* PAS de `pdf` — et c'est une divergence ÉCRITE, pas un oubli (tranche 5,
+		   tâche 6). `HostPdf` est optionnel au contrat : sous Obsidian il porte
+		   le pdf.js EMBARQUÉ de l'application (`loadPdfJs`), que la fenêtre n'a
+		   pas. Sans ce membre, la page « Générer » REFUSE un PDF joint avec la
+		   Notice `ai.error.pdfUnsupportedInApp` au lieu d'en attacher le texte
+		   vide en silence. Le poser ici avec un moteur qui ne lit rien serait
+		   pire que son absence ; une tranche future qui embarquerait pdf.js n'a
+		   qu'à l'implémenter, sans toucher `ai.ts`. */
 	};
 }

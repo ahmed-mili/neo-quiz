@@ -1,4 +1,5 @@
 import type { AiSettings } from "../types/dashboard-ctx";
+import type { Hotkey } from "../hotkey-format";
 
 /* ══════════════════════════════════════════════════════════
    LES RÉGLAGES IA, VUS DU CLIENT DE GÉNÉRATION
@@ -23,4 +24,52 @@ export interface AiSettingsHost {
 	get(): AiSettings;
 	/** Fusionne un correctif dans les réglages et les persiste. */
 	save(patch: Partial<AiSettings>): Promise<void>;
+}
+
+/**
+ * LES DÉFAUTS DES RÉGLAGES IA — UNE SEULE LISTE POUR LES DEUX HÔTES.
+ *
+ * Le greffon les étale dans son `DEFAULT_SETTINGS` (`apps/obsidian/plugin.ts`) ;
+ * l'application hydrate son cache (`apps/windows/src/main.ts`, clé
+ * `CLE_REGLAGES_IA` de `neo.reglages`) avec les MÊMES. Deux listes recopiées
+ * divergeraient sans une erreur : un `aiEffort` à « high » d'un côté et à
+ * « medium » de l'autre changerait le coût d'une génération selon l'hôte, pour
+ * le même réglage affiché.
+ *
+ * Une FONCTION, pas une constante : `aiUsageLog` et `aiMentionExtraFolders`
+ * sont des tableaux, et un tableau partagé par tous les appelants finirait
+ * muté par l'un d'eux.
+ */
+export function aiSettingsDefaults(): Required<Pick<AiSettings,
+	"aiProvider" | "aiModel" | "aiEffort" | "aiCodexFast" | "aiOllamaUrl" | "aiOllamaCloudKey"
+	| "aiOllamaModels" | "aiOllamaCatalog" | "aiUsageLog" | "aiUsageLimitsEnabled"
+	| "aiMentionExtraFolders">> & { hotkeyAddFiles: Hotkey; hotkeyAddNotes: Hotkey } {
+	return {
+		// Aucun fournisseur par défaut : le choix reste la première étape.
+		aiProvider: "",
+		aiModel: "",
+		aiEffort: "high",
+		// Mode Fast de Codex (service tier « priority », 1.5x speed) — l'éclair
+		// du popover effort ChatGPT. Ignoré si le modèle ne l'expose pas.
+		aiCodexFast: false,
+		aiOllamaUrl: "http://localhost:11434",
+		aiOllamaCloudKey: "",
+		// Modèles Ollama affichés dans le menu (ordre réglable, max 7). null →
+		// sélection par défaut (cf. aiProviders.resolveOllamaSelection).
+		aiOllamaModels: null,
+		// Cache du catalogue cloud récupéré de ollama.com. null → repli embarqué.
+		aiOllamaCatalog: null,
+		// Journal d'usage : purement informatif, borné à 300 entrées (ai-usage.ts).
+		aiUsageLog: [],
+		// Désactivé par défaut : lire les quotas du compte suppose d'ouvrir le
+		// fichier de session du CLI installé — jamais sans demande explicite.
+		aiUsageLimitsEnabled: false,
+		// Raccourcis du composer IA (menu « + »). Ctrl+U = le raccourci de
+		// claude.ai pour « Ajouter des fichiers » ; Ctrl+F reste le réflexe
+		// « recherche » partout ailleurs.
+		hotkeyAddFiles: { modifiers: ["Mod"], key: "u" },
+		hotkeyAddNotes: { modifiers: ["Mod"], key: "e" },
+		// Vide par défaut : le « @ » se limite au vault tant qu'on n'ajoute rien.
+		aiMentionExtraFolders: [],
+	};
 }

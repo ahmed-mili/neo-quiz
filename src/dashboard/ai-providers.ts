@@ -1,9 +1,13 @@
 import { currentHost } from "../host/current";
 import { t, currentLang } from "../i18n";
 import type { Lang } from "../i18n";
-// Le forfait Claude est lu par ai-usage (trousseau du CLI) : une seule source
-// pour les deux modules. ai-usage n'importe rien d'ici — pas de cycle.
-import { readClaudePlan } from "./ai-usage";
+/* PLUS D'IMPORT d'`ai-usage.ts` (tâche 6 de la tranche 5) : ce module lisait
+   le forfait Claude par `readClaudePlan`, qui ouvre le trousseau du CLI avec
+   `fs` derrière `Platform` d'Obsidian — un import qui faisait entrer Obsidian
+   dans le paquet Vite de l'application par ricochet. Le forfait est devenu
+   une ENTRÉE de `getClaudeModels` : le greffon le lit et le passe ; l'app,
+   qui ne porte pas l'écran d'usage, ne le connaît pas et n'affiche donc pas
+   le badge de Fable — un badge absent, jamais un badge deviné. */
 
 /* ══════════════════════════════════════════════════════════
    AI PROVIDERS — Registry central
@@ -488,14 +492,20 @@ function promoNoticesFrom(raw: unknown): ClaudePromoNotice[] {
 	return out;
 }
 
+/** Le forfait Claude tel que l'appelant le connaît — `readClaudePlan()`
+    d'`ai-usage.ts` sous le greffon, rien dans l'application. Seul `name`
+    (« Max », « Pro ») décide du badge. */
+export type ClaudePlanHint = { name: string } | null | undefined;
+
 /* Badge d'accès à Fable, déduit du FORFAIT local (~/.claude/.credentials.json,
-   déjà lu par ai-usage — on ne rouvre pas une seconde source). Max → inclus ;
-   Pro → crédits d'usage. Team/Enterprise dépendent du SIÈGE (premium ou
-   standard), que le trousseau ne dit pas : aucun badge plutôt qu'un badge faux. */
-function fableAccessBadge(): string | undefined {
-	const plan = readClaudePlan()?.name.toLowerCase();
-	if (plan === "max") return t("ai.badge.included");
-	if (plan === "pro") return t("ai.badge.usageCredits");
+   lu par ai-usage et PASSÉ ici — on ne rouvre pas une seconde source). Max →
+   inclus ; Pro → crédits d'usage. Team/Enterprise dépendent du SIÈGE (premium
+   ou standard), que le trousseau ne dit pas : aucun badge plutôt qu'un badge
+   faux. */
+function fableAccessBadge(plan: ClaudePlanHint): string | undefined {
+	const nom = plan?.name.toLowerCase();
+	if (nom === "max") return t("ai.badge.included");
+	if (nom === "pro") return t("ai.badge.usageCredits");
 	return undefined;
 }
 
@@ -610,11 +620,13 @@ export function claudePromoNoticesFor(bar: string): ClaudePromoNotice[] {
 /* Liste des modèles Claude visibles maintenant : libellés à jour de ce que le
    CLI a servi, et Fable inclus seulement s'il est proposé, avec le badge qui
    correspond au forfait détecté (« Inclus » sur Max, « Crédits d'usage » sur
-   Pro, aucun quand le forfait ne tranche pas). */
-export function getClaudeModels(): ModelDef[] {
+   Pro, aucun quand le forfait ne tranche pas). `plan` : voir `ClaudePlanHint` ;
+   un appelant qui ne connaît pas le forfait (résolution d'un modèle, l'app)
+   l'omet, et Fable s'affiche sans badge. */
+export function getClaudeModels(plan?: ClaudePlanHint): ModelDef[] {
 	const { fableOffered, labels } = readClaudeCliInfo();
 	const models = fableOffered
-		? CLAUDE_CODE_MODELS.map(m => m.value === "fable" ? { ...m, badge: fableAccessBadge() } : m)
+		? CLAUDE_CODE_MODELS.map(m => m.value === "fable" ? { ...m, badge: fableAccessBadge(plan) } : m)
 		: CLAUDE_CODE_MODELS.filter(m => m.value !== "fable");
 	// L'alias EST le nom de famille (« opus ») : un libellé appris le remplace.
 	return models.map(m => labels[m.value] ? { ...m, label: labels[m.value] } : m);

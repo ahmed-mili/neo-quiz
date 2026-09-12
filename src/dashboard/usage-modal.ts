@@ -5,7 +5,8 @@ import { t, currentLang } from "../i18n";
 import { isFableOffered, getClaudeModels, claudePromoNoticesFor } from "./ai-providers";
 import {
 	fetchPlanUsage, readUsageLog, summarize, startOfToday, providerPublishesPlan,
-	formatTokens, formatCost, formatDuration, formatCountdown, formatResetMoment, formatAge
+	formatTokens, formatCost, formatDuration, formatCountdown, formatResetMoment, formatAge,
+	readClaudePlan, usageRowLabel
 } from "./ai-usage";
 import type { AiUsage, PlanUsage, UsagePlugin, UsageRow, UsageReadError } from "./ai-usage";
 
@@ -215,7 +216,7 @@ class UsageModal extends QbdModal {
 		if (!included && !metered) return;
 		// Le libellé exact de Fable vient de la même table que le sélecteur de
 		// modèles (donc du CLI), jamais d'un « Fable 5 » réécrit ici.
-		const fable = getClaudeModels().find(m => m.value === "fable");
+		const fable = getClaudeModels(readClaudePlan()).find(m => m.value === "fable");
 		if (!fable) return;
 
 		const box = parent.createDiv({ cls: "qbd-usage-info" });
@@ -304,17 +305,6 @@ class UsageModal extends QbdModal {
 	}
 }
 
-/** Libellé d'une ligne, traduit AU RENDU (le modèle, lui, vient de l'API). */
-export function usageRowLabel(row: UsageRow): string {
-	if (row.kind === "session") return t("ai.usage.sessionCurrent");
-	if (row.kind === "weekly-all") return t("ai.usage.allModels");
-	if (row.kind === "weekly-model") return row.modelName || t("ai.usage.allModels");
-	const mins = row.windowMinutes || 0;
-	if (mins >= 1440) return t("ai.usage.windowDays", { n: Math.round(mins / 1440) });
-	if (mins > 0) return t("ai.usage.windowHours", { n: Math.max(1, Math.round(mins / 60)) });
-	return t("ai.usage.windowPlan");
-}
-
 /** Réarmement : en COMPTE À REBOURS pour une fenêtre courte (ce qui compte est
     le temps qui reste), en MOMENT ABSOLU pour une fenêtre longue (« dans 5 j »
     ne dit pas quand on est débloqué). */
@@ -338,12 +328,6 @@ function readErrorText(error: UsageReadError): string {
 		? t("ai.usage.durationSeconds", { n: seconds })
 		: t("ai.usage.durationMinutes", { m: Math.ceil(seconds / 60) });
 	return t("ai.usage.readRateLimitedIn", { duration });
-}
-
-/** Résumé d'un coup d'œil pour le survol du bouton : la jauge la plus
-    contrainte, celle qui décide s'il reste de la marge. */
-export function tightestRow(rows: UsageRow[]): UsageRow | null {
-	return rows.slice().sort((a, b) => b.usedPercent - a.usedPercent)[0] || null;
 }
 
 export function openUsageModal(app: App, options: UsageModalOptions): void {

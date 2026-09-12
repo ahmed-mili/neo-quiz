@@ -88,7 +88,18 @@ const OBSIDIAN_STUB = [
 	"	return nope('requestUrl');",
 	"};",
 	"export const MarkdownRenderer = {};",
-	"export const loadPdfJs = () => nope('loadPdfJs');",
+	/* `loadPdfJs` DÉLÈGUE à un double posé par le script (`globalThis
+	   .__obsidianLoadPdfJs`), et jette sinon : `HostPdf.extractText`
+	   (apps/obsidian/host.ts) l'appelle pour de bon, et c'est la seule façon de
+	   voir ce qu'il fait de la bibliothèque rendue (une section par page, dans
+	   l'ordre). Le double reproduit la forme RÉELLE du pdf.js d'Obsidian —
+	   `getDocument({data}).promise` → `{ numPages, getPage(n) }` → `page
+	   .getTextContent()` → `{ items: [{ str }] }` — et un cas qui le traverse
+	   ne prouve QUE ce que cette forme reproduit fidèlement. */
+	"export const loadPdfJs = () => {",
+	"	if (typeof globalThis.__obsidianLoadPdfJs === 'function') return globalThis.__obsidianLoadPdfJs();",
+	"	return nope('loadPdfJs');",
+	"};",
 	"export const loadMathJax = () => nope('loadMathJax');",
 	"export const renderMath = () => nope('renderMath');",
 	"export const finishRenderMath = () => nope('finishRenderMath');",

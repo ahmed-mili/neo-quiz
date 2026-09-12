@@ -440,7 +440,7 @@ if (!app.requestSingleInstanceLock()) {
 		   rendu lit par `navigator.language` (`src/host/platform.ts`). Le mode
 		   « auto » de `src/i18n.ts` n'a ni hôte ni `navigator` ici — la langue
 		   est posée EXPLICITEMENT. */
-		setLanguage(/^fr/i.test(app.getLocale()) ? "fr" : "en");
+		setLanguage(/^fr\b/i.test(app.getLocale()) ? "fr" : "en");
 		const donnees = app.getPath("userData");
 		reglages = creerReglages(path.join(donnees, "settings.json"));
 		/* La liste blanche des dossiers que le pont a le droit de toucher — voir

@@ -21,6 +21,10 @@ import { creerJournalApp } from "./review/store";
 import { creerStatsApp } from "./review/stats";
 import { createRenameDetector } from "../../../src/review/rename-match";
 import { chargerReglagesPages, monterDashboard } from "./ui/dashboard-shell";
+import { aiSettingsDefaults } from "../../../src/dashboard/ai-settings-host";
+import type { AiSettingsHost } from "../../../src/dashboard/ai-settings-host";
+import type { AiSettings } from "../../../src/types/dashboard-ctx";
+import { CLE_REGLAGES_IA } from "../electron/pont";
 import { openQuizPage } from "./ui/quiz-page";
 import { renderSettings } from "./ui/settings";
 
@@ -52,6 +56,46 @@ import { renderSettings } from "./ui/settings";
  */
 let demonterCourant: (() => void | Promise<void>) | null = null;
 
+/* ═══ LES RÉGLAGES IA — l'`AiSettingsHost` de l'application ═══
+
+   La page « Générer » (`src/dashboard/ai.ts`) et le client de génération
+   lisent leurs réglages par ce seul objet, sous les deux hôtes. Ici : un cache
+   en mémoire, hydraté UNE FOIS au démarrage (`chargerReglagesIa`) sur la clé
+   `CLE_REGLAGES_IA` de `neo.reglages` — la MÊME clé que le principal relit
+   pour admettre l'hôte d'Ollama (`electron/main.ts`), d'où l'import depuis
+   `pont.ts` plutôt qu'un littéral « ai » recopié. Les défauts sont ceux du
+   greffon (`aiSettingsDefaults`, une seule liste pour les deux hôtes).
+
+   `save` FUSIONNE dans le cache PUIS écrit l'objet entier : le principal GARDE
+   cette clé (`garderReglagesIa`, `canaux.ts`) et peut REFUSER l'écriture (URL
+   illisible, hôte refusé par l'utilisateur). Le refus rejette ici, et le cache
+   est alors REMIS à ce qu'il était : sans ça, la page afficherait un réglage
+   que le disque n'a pas — et qu'un redémarrage ferait disparaître sans un mot.
+   `get` rend l'objet lui-même, jamais une copie : le client lit le fournisseur
+   au moment où la génération part. */
+let reglagesIaCache: AiSettings = aiSettingsDefaults();
+
+async function chargerReglagesIa(): Promise<void> {
+	const lu = await pont().reglages.lire(CLE_REGLAGES_IA);
+	const persiste = lu && typeof lu === "object" && !Array.isArray(lu) ? (lu as Partial<AiSettings>) : {};
+	reglagesIaCache = { ...aiSettingsDefaults(), ...persiste };
+}
+
+const reglagesIa: AiSettingsHost = {
+	get: () => reglagesIaCache,
+	save: async (patch) => {
+		const avant: AiSettings = { ...reglagesIaCache };
+		Object.assign(reglagesIaCache, patch);
+		try {
+			await pont().reglages.ecrire(CLE_REGLAGES_IA, reglagesIaCache);
+		} catch (e) {
+			reglagesIaCache = avant;
+			currentHost().ui.notice(t("app.aiSettings.refused", { error: e instanceof Error ? e.message : String(e) }));
+			throw e;
+		}
+	},
+};
+
 /** Démonte l'écran courant et rend ce qu'il reste à attendre (l'écriture en
     attente de la page d'un quiz), ou rien. `demonterCourant` est remis à
     `null` AVANT de rendre : un second appel pendant l'attente ne démonte pas
@@ -71,6 +115,7 @@ export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore, s
 		scanner,
 		statsStore: stats,
 		reviewStore: store,
+		aiSettings: reglagesIa,
 		onOpenQuiz: (entry) => { void ouvrirQuiz(root, scanner, store, stats, entry); },
 		onOpenSettings: () => ouvrirReglages(root, scanner, store, stats),
 	});
@@ -297,6 +342,9 @@ async function demarrer(): Promise<void> {
 		   réglages de page vides (aucun dossier déplié, axe par défaut) au
 		   lieu de ceux de la session précédente. */
 		await chargerReglagesPages();
+		/* Idem pour les réglages IA : la page « Générer » lit le fournisseur et
+		   le modèle de la session précédente dès son premier rendu. */
+		await chargerReglagesIa();
 		const store = await creerJournalApp(currentHost(), scanner);
 		/* Les STATISTIQUES par quiz : à côté du journal, mais un système
 		   distinct (spec de l'ordonnanceur §9.1 — voir `review/stats.ts`).

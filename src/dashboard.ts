@@ -1,6 +1,10 @@
 import { PRODUCT_NAME } from "./branding";
-import { ItemView, Notice, Scope, TFile } from "obsidian";
-import type { App, WorkspaceLeaf, KeymapEventHandler } from "obsidian";
+import { ItemView, MarkdownRenderer, Notice, Scope, TFile } from "obsidian";
+import type { App, WorkspaceLeaf, KeymapEventHandler, View } from "obsidian";
+import { currentHost } from "./host/current";
+import { fetchPlanUsageFor, readClaudePlan, recordUsage } from "./dashboard/ai-usage";
+import type { UsagePlugin } from "./dashboard/ai-usage";
+import { openUsageModal } from "./dashboard/usage-modal";
 import { openQuizForPlay, openQuizPathInEditor } from "../apps/obsidian/quiz-open";
 import { buildQuizCardMenu, buildModuleCardMenu } from "./dashboard/quiz-menu";
 import { ShareModal, moduleShareSource, quizShareSource } from "./dashboard/share";
@@ -19,7 +23,7 @@ import { createNavHandlers, type NavHandlers } from "./dashboard/nav";
 import { createHomeHandlers, type HomeHandlers } from "./dashboard/home";
 import { createQuizzesHandlers, type QuizzesHandlers } from "./dashboard/quizzes";
 import { createDetailHandlers, type DetailHandlers } from "./dashboard/detail";
-import { createAiHandlers, type AiHandlers } from "./dashboard/ai";
+import { createAiHandlers, type AiHandlers, type AiPageDeps } from "./dashboard/ai";
 
 import type { DashboardCtx, DashboardView, DashboardViewName, DashboardPlugin } from "./types/dashboard-ctx";
 import type { Scanner, QuizIndexEntry } from "./dashboard/scanner";
@@ -295,7 +299,7 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 		this.home = createHomeHandlers(ctx);
 		this.quizzes = createQuizzesHandlers(ctx);
 		this.detail = createDetailHandlers(ctx);
-		this.ai = createAiHandlers(ctx);
+		this.ai = createAiHandlers(this.aiPageDeps(ctx));
 
 		// ── Boutons latéraux souris (3 = précédent, 4 = suivant) : historique
 		// interne du dashboard (spec 2026-07-20-mouse-nav-history). En CAPTURE
@@ -336,6 +340,59 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 		// Rendu initial
 		this.renderSidebar();
 		this.renderCurrentView();
+	}
+
+	/* Ce que la page « Générer » demande à son hôte (`AiPageDeps`), construit
+	   ICI parce que c'est le greffon qui possède les réglages, les onglets
+	   ouverts, l'écran d'usage et le moteur Markdown — l'application construit
+	   le même littéral sans rien de tout cela (`dashboard-shell.ts`). */
+	private aiPageDeps(ctx: DashboardCtx): AiPageDeps {
+		const plugin = this.plugin;
+		const usagePlugin = plugin as unknown as UsagePlugin;
+		return {
+			/* Le MÊME objet que `plugin.settings`, jamais une copie : `save`
+			   fusionne sur place puis persiste, comme `saveSettings` l'a
+			   toujours fait — un autre onglet lit ces valeurs à jour. */
+			settings: {
+				get: () => plugin.settings,
+				save: async patch => {
+					Object.assign(plugin.settings, patch);
+					await plugin.saveSettings();
+				},
+			},
+			scanner: ctx.scanner,
+			statsStore: ctx.statsStore,
+			navigate: (view, data) => this.navigate(view, data),
+			/* Les notes OUVERTES, en tête des pickers : des `TFile` réduits en
+			   `HostFile` par l'hôte (`getFile`), le seul endroit qui convertit. */
+			openFiles: () => {
+				const seen = new Set<string>();
+				const files = [];
+				for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+					const f = (leaf.view as View & { file?: TFile | null }).file;
+					if (!f || seen.has(f.path)) continue;
+					seen.add(f.path);
+					const hf = currentHost().fs.getFile(f.path);
+					if (hf) files.push(hf);
+				}
+				return files;
+			},
+			/* L'écran d'usage reste au greffon (décision 2026-09-12) : c'est ici,
+			   et nulle part dans le code partagé, que `usage-modal.ts` s'ouvre. */
+			usage: {
+				open: async (opts) => openUsageModal(this.app, { plugin: usagePlugin, ...opts }),
+				record: (entry) => recordUsage(usagePlugin, entry),
+				fetchPlan: (usage) => fetchPlanUsageFor(usagePlugin, usage),
+				claudePlan: () => readClaudePlan(),
+			},
+			/* Un VRAI bloc de code Obsidian : coloration Prism, style de bloc de
+			   l'utilisateur, bouton « copier » du post-processeur natif.
+			   Component = la vue (pas le plugin) : le rendu est libéré quand
+			   l'onglet se ferme, pas seulement au déchargement du plugin. */
+			renderCodeBlock: (box, code, lang) => {
+				void MarkdownRenderer.render(this.app, "```" + lang + "\n" + code + "\n```", box, "", this);
+			},
+		};
 	}
 
 	/* (Re)bind les raccourcis du composer depuis les réglages — appelé à

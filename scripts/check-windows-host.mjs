@@ -767,11 +767,32 @@ function installerPont(fichiers = {}, perimetre = null) {
 	};
 }
 
+/* L'ABSENCE DU MOTEUR PDF, statiquement. `HostPdf` est un membre OPTIONNEL du
+   contrat : l'hôte Obsidian le porte (pdf.js embarqué, éprouvé par
+   `check:obsidian-host`), la fenêtre ne le porte PAS, et c'est cette absence
+   qui fait refuser un PDF joint avec `ai.error.pdfUnsupportedInApp` plutôt que
+   d'en attacher le texte vide. Un `pdf:` posé ici « en attendant » rendrait la
+   page acquiesçante et muette. STATIQUE parce que `index.ts` importe MathLive,
+   qu'esbuild ne charge pas hors de la fenêtre — c'est justement pourquoi
+   `platform.ts` et `roots.ts` en ont été extraits. */
+{
+	const r = makeReporter("Hôte Windows — pas de moteur PDF (statique)");
+	const source = readFileSync("apps/windows/src/host/index.ts", "utf-8");
+	const nu = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+	r.check("l'hôte assemblé ne déclare aucun membre pdf", /\bpdf\s*:/.test(nu), false);
+	/* Sans ce second cas, renommer la fonction assembleuse viderait le premier
+	   de tout sens : il resterait vert sur un fichier qu'il ne reconnaît plus. */
+	r.check("… et c'est bien l'hôte assemblé qui a été lu", nu.includes("export function createWindowsHost("), true);
+	r.done();
+}
+
 await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs }) => {
 	const r = makeReporter("Hôte Windows — process, octets et corbeille");
 	const pont = installerPont({
 		"D:/Quiz/Cours/ch1.md": "avant",
 		"D:/Quiz/Cours/notes.txt": "autre",
+		// Une pièce jointe du vault, pour `readBinary` (chemin du contrat).
+		"D:/Quiz/Cours/schema.png": "png",
 	});
 
 	try {
@@ -853,6 +874,18 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs }) =
 		}
 		r.check("process abandonne en nommant le fichier plutôt que de boucler sans fin",
 			sansFin && sansFin.includes("Quiz/Cours/notes.txt"), true);
+
+		/* ── readBinary (chemin du CONTRAT) : le MÊME canal borné qu'`externe
+		      .readBinary`, sur un chemin converti ici — le rendu est le seul
+		      endroit qui sait convertir contrat → absolu. ── */
+		/* Le rejet devient une VALEUR : sans ça, un hôte qui passerait le chemin
+		   du CONTRAT au pont ferait MOURIR le groupe (le faux principal rejette
+		   sur un chemin absent) au lieu de le faire rougir — et la mort
+		   masquerait tous les cas suivants. */
+		const lu = await fs.readBinary("Quiz/Cours/schema.png").then(o => [...o], e => "REJET : " + e.message);
+		r.check("readBinary traverse le pont avec le chemin ABSOLU, et rend les octets",
+			{ octets: lu, appel: pont.journal.at(-1) },
+			{ octets: [...new TextEncoder().encode("png")], appel: ["readBinary", "D:/Quiz/Cours/schema.png"] });
 
 		/* ── writeBinary ── */
 
@@ -1605,7 +1638,35 @@ await withSrcModule("apps/windows/src/host/platform.ts", async ({ createWindowsP
 	const r = makeReporter("Hôte Windows — plateforme");
 	const platform = createWindowsPlatform();
 	r.check("platform est renseigné",
-		["isMobile", "isMacOS", "isDesktopApp", "uiLanguage"].filter(k => !(k in platform)), []);
+		["isMobile", "isMacOS", "isWindows", "isDesktopApp", "uiLanguage"].filter(k => !(k in platform)), []);
+	/* `isMacOS` et `isWindows` sont lus SÉPARÉMENT de Chromium, jamais déduits
+	   l'un de l'autre : la page « Générer » affiche une commande d'installation
+	   par système, et « pas un Mac » aurait donné du PowerShell à un Linux.
+	   `navigator` est posé ici le temps du cas — le module le lit à l'appel. */
+	{
+	/* `navigator` est une propriété ACCESSEUR de `globalThis` sous Node (lecture
+	   seule) : on la REDÉFINIT le temps des cas, et on restaure le descripteur
+	   d'origine — une simple réaffectation lève un TypeError, et ce jet tuerait
+	   tous les groupes suivants. */
+	const descripteurNav = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+	const poser = (p) => Object.defineProperty(globalThis, "navigator", {
+		value: { platform: p, language: "fr-FR" }, configurable: true, writable: true,
+	});
+	try {
+		poser("Win32");
+		r.check("sous Windows : isWindows vrai, isMacOS faux",
+			[platform.isWindows, platform.isMacOS], [true, false]);
+		poser("MacIntel");
+		r.check("sous macOS : isMacOS vrai, isWindows faux",
+			[platform.isMacOS, platform.isWindows], [true, false]);
+		poser("Linux x86_64");
+		r.check("sous Linux : ni l'un ni l'autre (la commande d'installation y est celle d'Unix)",
+			[platform.isWindows, platform.isMacOS], [false, false]);
+	} finally {
+		if (descripteurNav) Object.defineProperty(globalThis, "navigator", descripteurNav);
+		else delete globalThis.navigator;
+	}
+	}
 	r.check("isDesktopApp est vrai dans l'application", platform.isDesktopApp, true);
 	r.check("isMobile est faux dans l'application", platform.isMobile, false);
 	// Hors de toute fenêtre, `navigator` n'existe pas : l'anglais, pas une mort.

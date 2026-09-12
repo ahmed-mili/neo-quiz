@@ -70,6 +70,16 @@ const LIBERES = [
 	"src/dashboard/file-sources.ts",
 	"src/dashboard/mention-picker.ts",
 	"src/dashboard/prompt-paths.ts",
+	/* Tranche 5, tâche 6 : la page « Générer » elle-même, et les deux modules
+	   qu'elle a fait naître ou libérer — `usage-format.ts` (les types et le
+	   formatage de l'usage, extraits d'`ai-usage.ts`, qui reste lié) et
+	   `hotkey-format.ts` (la plateforme vient du contrat). C'est le fichier
+	   le plus exposé du lot : 92 extensions DOM y ont été converties d'un
+	   coup, et un `import { setIcon } from "obsidian"` remis « pour aller
+	   vite » les rendrait toutes invisibles à `check:host`. */
+	"src/dashboard/ai.ts",
+	"src/dashboard/usage-format.ts",
+	"src/hotkey-format.ts",
 ];
 
 /** Retire les commentaires : une extension CITÉE en commentaire (par exemple

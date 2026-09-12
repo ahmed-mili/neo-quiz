@@ -132,6 +132,59 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	r.check("resourceUrl d'un chemin inconnu rend null (résout, ne préfixe pas)",
 		host.links.resourceUrl("Nulle/part/inexistant.png"), null);
 
+	/* ── readBinary : le miroir de `read`, pour joindre une image ou un PDF du
+	      vault à une génération (`ai.ts`, sélecteur « @ »). Deux chemins, comme
+	      `read` : le vault pour un fichier indexé, l'adaptateur sinon — et un
+	      `Uint8Array`, jamais l'`ArrayBuffer` nu que `vault.readBinary` rend
+	      (`new File([...])` accepte les deux, mais le contrat en promet un). ── */
+	{
+		const octets = new TextEncoder().encode("PNG");
+		const binApp = fausseApp([fichier("Cours/schema.png", "png")], {
+			vault: {
+				readBinary: async (f) => (f.path === "Cours/schema.png" ? octets.buffer : null),
+				adapter: { readBinary: async () => new TextEncoder().encode("ADAPTER").buffer },
+			},
+		});
+		const binHost = createObsidianHost(binApp, { manifest: {} });
+		const lu = await binHost.fs.readBinary("Cours/schema.png");
+		r.check("readBinary d'un fichier indexé passe par le vault, en Uint8Array",
+			{ type: lu?.constructor?.name, texte: new TextDecoder().decode(lu) },
+			{ type: "Uint8Array", texte: "PNG" });
+		r.check("readBinary d'un fichier hors index passe par l'adaptateur",
+			new TextDecoder().decode(await binHost.fs.readBinary(".obsidian/hors-index.png")), "ADAPTER");
+	}
+
+	/* ── Le moteur PDF (`HostPdf`, membre optionnel) : le pdf.js EMBARQUÉ
+	      d'Obsidian, UNE section par page, dans l'ordre. C'est la moitié du
+	      contrat que l'application n'a pas — et la page « Générer » refuse alors
+	      le PDF (`ai.error.pdfUnsupportedInApp`) au lieu de joindre du vide. ── */
+	{
+		let recu = null;
+		globalThis.__obsidianLoadPdfJs = () => ({
+			getDocument: (src) => {
+				recu = src;
+				return {
+					promise: Promise.resolve({
+						numPages: 2,
+						getPage: async (n) => ({
+							getTextContent: async () => ({ items: [{ str: "page" + n }, { str: "suite" + n }] }),
+						}),
+					}),
+				};
+			},
+		});
+		try {
+			const donnees = new TextEncoder().encode("%PDF-x");
+			const texte = await host.pdf.extractText(donnees);
+			r.check("le texte d'un PDF : une section par page, les fragments d'une page joints par un espace",
+				texte, "page1 suite1\n\npage2 suite2");
+			r.check("les octets reçus sont passés tels quels à pdf.js",
+				new TextDecoder().decode(recu.data), "%PDF-x");
+		} finally {
+			delete globalThis.__obsidianLoadPdfJs;
+		}
+	}
+
 	// readCached et read sont deux chemins distincts, pas un alias.
 	r.check("readCached passe par le cache", await host.fs.readCached("Cours/ch1.md"), "cache:Cours/ch1.md");
 	r.check("read passe par le disque", await host.fs.read("Cours/ch1.md"), "disque:Cours/ch1.md");
@@ -143,7 +196,7 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 
 	// Le contrat est complet : une méthode manquante rendrait un pan inerte.
 	const attendu = {
-		fs: ["read", "readCached", "write", "process", "writeBinary", "trash", "exists", "mkdirs", "append", "list", "remove", "rename", "listMarkdown", "findByName", "getFile", "listFiles", "listDir"],
+		fs: ["read", "readCached", "write", "process", "writeBinary", "readBinary", "trash", "exists", "mkdirs", "append", "list", "remove", "rename", "listMarkdown", "findByName", "getFile", "listFiles", "listDir"],
 		"fs.externe": ["list", "stat", "read", "readBinary"],
 		paths: ["resultsDirFor", "attachmentPathFor", "roots", "rootOf", "localPath", "contractPath"],
 		links: ["resolve", "resourceUrl"],
@@ -151,6 +204,10 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		ui: ["notice", "setIcon"],
 		math: ["ready", "render", "flush"],
 		shell: ["openExternal", "revealInHost"],
+		/* Le moteur PDF : membre OPTIONNEL du contrat (`HostPdf`), que CET
+		   hôte-ci possède — c'est la moitié de la divergence écrite, l'autre
+		   étant son absence côté application (`check:windows-host`). */
+		pdf: ["extractText"],
 	};
 	const manquantes = [];
 	for (const [zone, noms] of Object.entries(attendu)) {
@@ -160,7 +217,7 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	}
 	r.check("aucune méthode du contrat ne manque", manquantes, []);
 	r.check("platform est renseigné",
-		["isMobile", "isMacOS", "isDesktopApp", "uiLanguage"].filter(k => !(k in host.platform)), []);
+		["isMobile", "isMacOS", "isWindows", "isDesktopApp", "uiLanguage"].filter(k => !(k in host.platform)), []);
 	/* La VALEUR, pas seulement la clé : le bouchon `Platform` de load-src.mjs
 	   décrit un Obsidian de bureau, et c'est ce que la génération IA lit pour
 	   savoir si un CLI local se lance. Un `false` codé en dur, ou une lecture

@@ -48,14 +48,30 @@ réponse étant toujours non.
   signale. Ce script nomme, indépendamment de `RESTANTS`, les pages libérées
   POUR DE BON par la tranche 2.5 : sa liste ne peut que grandir, jamais rétrécir,
   et un retour d'obsidian dans l'une d'elles y échoue directement, sans dépendre
-  de l'état de l'autre liste.
+  de l'état de l'autre liste. La tranche 5 (tâche 6) y fait entrer la page
+  « Générer » (`src/dashboard/ai.ts`) et les deux modules qu'elle a fait naître
+  ou libérer (`usage-format.ts`, `hotkey-format.ts`) : c'est le fichier le plus
+  exposé du lot — **92 extensions DOM y ont été converties d'un coup** vers
+  `ajouter` (`src/dom.ts`), et un seul `import { setIcon } from "obsidian"`
+  remis « pour aller vite » les rendrait toutes invisibles à `check:host`.
 - `npm run check:theme` — exhaustivité du thème de l'app (`apps/windows/src/theme/
   host-vars.css`) : le greffon hérite des variables CSS d'Obsidian, l'app doit les
   définir. Une oubliée ne produit AUCUNE erreur — un texte invisible sur un fond de la
   même couleur. Symétrique, comme le cliquet : une variable devenue morte dans le thème
   doit en être retirée. Dans la CI aussi.
 - `npm run check:obsidian-host` et `check:windows-host` — les deux implémentations du
-  contrat `src/host/types.ts`, chargées avec une fausse `App` / un faux index. Une
+  contrat `src/host/types.ts`, chargées avec une fausse `App` / un faux index.
+  Tranche 5, tâche 6 : `fs.readBinary` (les octets d'un fichier du CONTRAT — la
+  pièce jointe d'une génération ; le vault pour un fichier indexé, l'adaptateur
+  sinon, et un `Uint8Array`, jamais l'`ArrayBuffer` nu), `platform.isWindows`
+  (LU séparément d'`isMacOS`, jamais déduit de lui : la commande d'installation
+  d'un CLI est différente sur les TROIS systèmes, et « pas un Mac » aurait donné
+  du PowerShell à un Linux) et le membre OPTIONNEL `HostPdf` — que l'hôte
+  Obsidian PORTE (pdf.js embarqué, une section par page, dans l'ordre) et que
+  celui de l'application n'a PAS, ce qu'une assertion STATIQUE garde
+  (`index.ts` importe MathLive, donc ne se charge pas ici) : sans cette absence,
+  la page « Générer » accepterait un PDF dans la fenêtre et en joindrait le
+  texte vide au lieu de le refuser (`ai.error.pdfUnsupportedInApp`). Une
   méthode d'hôte qui rend `null` en silence rendrait les images, le bouton ressource ou
   la sauvegarde inertes sans un mot. Chaque cas neuf doit être éprouvé par DISCRIMINANCE
   (casser la règle, voir rougir, restaurer) : un cas qui passe au vert quoi qu'on fasse
@@ -288,6 +304,29 @@ réponse étant toujours non.
   rougissant que son cas : plage 172.16/12 retirée ; 172.32 admis ; protocole
   non vérifié ; `confirmer` remplacé par `ok` ; périmètre non consulté ;
   `garderReglagesIa` déplacée APRÈS `.ecrire(`.
+- `npm run check:ai-providers` — les FOURNISSEURS IA (`src/dashboard/
+  ai-providers.ts`), que AUCUN script ne chargeait avant la tranche 5 (tâche 6)
+  alors que ce module décide de ce que la page « Générer » propose ET affiche
+  comme statut, et qu'il est passé tout entier par le contrat d'hôte
+  (`net.fetchJson`, `process.lireCache`). Ce qu'il empêche, et qui échouerait EN
+  SILENCE : (a) un catalogue cloud qui retomberait sur son repli embarqué sans
+  jamais consulter l'hôte — une liste périmée indistinguable d'une liste à jour,
+  quand la règle du dépôt est « jamais de modèle codé en dur » (mémoire
+  `ollama-latest-version-only`) ; (b) un `/api/tags` qui répond **200 avec du
+  HTML** (portail captif, proxy, n'importe quel service qui occupe le port)
+  pris pour un serveur Ollama : l'ancien `resp.json()` levait et tombait dans le
+  `catch`, mais le contrat rend le corps BRUT, et un `JSON.parse` oublié
+  donnerait « joignable, 0 modèle » — l'utilisateur chercherait où sont passés
+  ses modèles ; (c) `refreshCliCaches` qui ne remplirait plus l'instantané que
+  les deux lecteurs SYNCHRONES (`getCodexModels`, `isFableOffered`) lisent :
+  ils rendraient le repli embarqué pour toujours, sans erreur. Le premier cas du
+  groupe vérifie EXPRÈS que ces lecteurs rendent le repli AVANT tout
+  rafraîchissement, pour que le suivant ne soit pas vert par construction.
+  Aussi : l'URL du réglage est normalisée avant composition (« …:11434//api/tags »
+  sinon), `/api/version` est best-effort (son échec ne coûte qu'un numéro), et
+  le badge de Fable suit le forfait PASSÉ — le module ne lit plus le trousseau
+  lui-même, c'est ce qui l'a détaché d'`ai-usage.ts` donc d'Obsidian. Éprouvé
+  par rupture, chacune ne rougissant que son cas.
 - `npm run check:electron-reseau` — la PORTE RÉSEAU du processus principal
   (`apps/windows/electron/reseau.ts`, tâche 2 de la génération IA dans
   l'application). Le défaut qu'il empêche : **un rendu compromis fait de

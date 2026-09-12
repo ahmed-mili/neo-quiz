@@ -180,6 +180,9 @@ export const EN_AI = {
 	/* L'hôte ne sait pas lancer de CLI (rejet `indisponible` de
 	   `host.process.run`). Ce n'est ni une panne ni une absence d'installation :
 	   le dire autrement enverrait l'utilisateur réinstaller un CLI qu'il a déjà. */
+	/* L'application n'embarque pas de moteur PDF (`HostPdf`, membre optionnel
+	   du contrat, absent côté app) : le PDF est refusé, jamais joint vide. */
+	"ai.error.pdfUnsupportedInApp": "PDF attachments are not supported in the Neo Quiz app yet. Attach the text or an image instead.",
 	"ai.error.providerUnavailable": "This provider is not available here yet. Pick Ollama, or generate the quiz from the Obsidian plugin.",
 	"ai.result.count": "{count} questions generated",
 	"ai.result.untitled": "Generated quiz",

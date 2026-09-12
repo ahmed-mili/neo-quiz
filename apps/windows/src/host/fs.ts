@@ -471,6 +471,11 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 			const { mtime } = await pont().fichiers.writeBinary(abs(path), data);
 			recaler(path, mtime);
 		},
+		/* Le MÊME canal borné que `externe.readBinary`, sur un chemin du contrat
+		   converti ici — le seul endroit qui sait le convertir. */
+		async readBinary(path) {
+			return await pont().fichiers.readBinary(abs(path));
+		},
 		/* `<racine>/.trash/<chemin local>`, composé et numéroté par le PRINCIPAL
 		   (`fichiers.ts`) : le rendu ne lui passe que le fichier et SA racine —
 		   par `carte`, jamais à la main, c'est le SEUL endroit qui sait de quelle

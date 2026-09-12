@@ -57,8 +57,11 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   `import { readFile } from "node:fs"` dans le rendu ne rougissait nulle part, et
   `perimetre.ts` importé du rendu recréait côté Chromium l'accès disque total que
   le pont existe pour retirer. Il annonce le nombre de fichiers encore liés
-  (**8**). Dans la CI : lancé à la main, ce serait la discipline et non le
-  contrôle qui tiendrait la frontière.
+  (**6** — la tranche 5 a libéré la page « Générer » et `hotkey-format.ts` ;
+  les deux derniers de `src/dashboard/` sont `ai-usage.ts` et `usage-modal.ts`,
+  l'ÉCRAN D'USAGE, qui reste au greffon par décision et non par reste). Dans la
+  CI : lancé à la main, ce serait la discipline et non le contrôle qui
+  tiendrait la frontière.
 - `npm run check:dashboard-dom` — **le cliquet ne suffit pas seul** : `check:host`
   ne protège un fichier de ses extensions DOM que TANT QU'il reste hors de
   `RESTANTS`. Rien n'empêche qu'une tranche future y remette
@@ -97,6 +100,12 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   exécutables (`EXTENSIONS_EXECUTABLES`), sans quoi `write` puis `ouvrir` d'un
   `.bat` — deux appels bornés — le contournaient.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` avant `$…$`).
+- `npm run check:ai-providers` — les FOURNISSEURS IA : le catalogue cloud vient
+  de `net.fetchJson` (jamais codé en dur), un `/api/tags` qui répond 200 SANS
+  JSON (portail captif, proxy) vaut hors ligne et non « Ollama joignable, 0
+  modèle », et `refreshCliCaches` remplit bien l'instantané que les deux
+  lecteurs SYNCHRONES (`getCodexModels`, `isFableOffered`) lisent — sans quoi le
+  menu resterait à jamais sur son repli embarqué, sans une erreur.
 - `npm run check:md`, `check:export` — rendu markdown des champs texte, écriture
   d'un bloc. Ils chargent le CODE RÉEL, jamais une réplique. **Pas de framework de
   test au-delà** ; ne pas en ajouter pour du code qu'une lecture suffit à juger.
@@ -305,10 +314,30 @@ mécaniquement ; la preuve complémentaire, qui couvre les imports transitifs, e
 ## Génération IA (`dashboard/ai*.ts`)
 
 Via **CLIs locaux, jamais de clé API** : Claude Code CLI (abonnement), Codex CLI
-(ChatGPT), Ollama (local + cloud). `ai-client.ts` spawn les process (prompt en stdin,
-sortie JSON ; `taskkill /T /F` sous Windows pour l'annulation). Les **modèles sont lus
+(ChatGPT), Ollama (local + cloud). `ai-client.ts` passe par le CONTRAT
+(`host.process.run` pour les CLI, `host.net.fetchJson` pour Ollama) ; c'est
+l'hôte qui lance et qui tue l'arbre de processus. Les **modèles sont lus
 dynamiquement** (cache des CLIs, catalogue `ollama.com`), **jamais codés en dur** — voir
 mémoire projet `codex-models-dynamic` et `ollama-latest-version-only`.
+
+**La page « Générer » sert les DEUX hôtes** depuis la tranche 5 (tâche 6) :
+`createAiHandlers(deps: AiPageDeps)` ne reçoit plus ni `plugin` ni `app` — les
+réglages arrivent par un `AiSettingsHost` (`dashboard/ai-settings-host.ts`, dont
+`aiSettingsDefaults()` est la SEULE liste de défauts, lue par le greffon comme
+par l'app), et trois membres sont OPTIONNELS parce que l'application ne les a
+pas : `openFiles` (pas d'onglets), `usage` (l'écran d'usage reste au greffon —
+`ai-usage.ts` lit le trousseau du CLI et `usage-modal.ts` est une `Modal`) et
+`renderCodeBlock` (sans lui, un `<pre><code>` nu). **Le texte d'un PDF joint est
+un membre OPTIONNEL du contrat** (`HostPdf`) : le greffon le sert par le pdf.js
+embarqué d'Obsidian, l'application ne l'a pas et REFUSE le PDF
+(`ai.error.pdfUnsupportedInApp`) plutôt que d'en joindre le vide.
+
+**La clé `ai` des réglages de l'application est GARDÉE dans le processus
+principal** (`electron/garde-ia.ts` pour le verdict pur, `canaux.ts` pour la
+porte native) : `aiOllamaUrl` doit être en `http(s)`, un hôte hors de la liste
+du réseau et hors réseau local demande une confirmation NATIVE, et
+`aiMentionExtraFolders` doit déjà être au périmètre. Sans elle, un rendu
+compromis obtenait un hôte Internet dans la liste au lancement suivant.
 
 Le CLI est lancé **sans aucun outil** : le modèle ne peut ouvrir aucun fichier. C'est
 le PLUGIN qui lit les sources — `dashboard/prompt-paths.ts` résout les chemins écrits

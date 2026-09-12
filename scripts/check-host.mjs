@@ -32,13 +32,18 @@ const EXTENSIONS_TS = [".ts", ".tsx", ".mts", ".cts"];
 const RESTANTS = [
 	// Tableau de bord — tranches 2 et 3.
 	"src/dashboard.ts",
-	"src/dashboard/ai-usage.ts",
-	"src/dashboard/ai.ts",
 	"src/dashboard/share.ts",
-	"src/dashboard/usage-modal.ts",
 	"src/types/dashboard-ctx.ts",
+	/* L'USAGE DU FORFAIT reste au greffon (décision du 2026-09-12, tranche 5,
+	   tâche 6) : `ai-usage.ts` lit le trousseau du CLI Claude et les rollouts
+	   de Codex par `fs` derrière `Platform`, et `usage-modal.ts` est une
+	   `Modal` d'Obsidian. La page « Générer » ne les importe plus — l'écran
+	   d'usage lui arrive par `AiPageDeps.usage`, absent dans l'application. Ce
+	   sont donc les DEUX SEULS fichiers de `src/dashboard/` que la tranche 5
+	   laisse liés, et c'est un choix, pas un reste. */
+	"src/dashboard/ai-usage.ts",
+	"src/dashboard/usage-modal.ts",
 	// Divers du greffon — tranche 4.
-	"src/hotkey-format.ts",
 	"src/modal-base.ts",
 ];
 

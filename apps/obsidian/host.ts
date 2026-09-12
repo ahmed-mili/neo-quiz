@@ -24,7 +24,7 @@
    diverge en silence le jour où `HostFile` gagne un champ.
 ══════════════════════════════════════════════════════════ */
 
-import { Notice, Platform, requestUrl, setIcon, getIconIds, loadMathJax, renderMath, finishRenderMath } from "obsidian";
+import { Notice, Platform, requestUrl, setIcon, getIconIds, loadMathJax, loadPdfJs, renderMath, finishRenderMath } from "obsidian";
 import type { App, DataAdapter, EventRef, TAbstractFile, TFile, View, WorkspaceLeaf } from "obsidian";
 import type { CliTool, Host, HostFile, HostFileEvent, HostModalHandle, HostModalSpec, HostRoot } from "../../src/host/types";
 /* La moitié PURE des jetons de pièces jointes, partagée avec le processus
@@ -666,6 +666,14 @@ export function createObsidianHost(
 			}
 			await app.vault.createBinary(path, octets);
 		},
+		/* Le miroir de `read` : `vault.readBinary` pour un fichier indexé, sinon
+		   l'adaptateur. Recopié en `Uint8Array` propre : un `ArrayBuffer` nu
+		   n'est pas ce que le contrat promet, et l'appelant en fabrique un `File`. */
+		async readBinary(path) {
+			const f = tfile(path);
+			const octets = f ? await app.vault.readBinary(f) : await adapter().readBinary(path);
+			return new Uint8Array(octets);
+		},
 		/* `fileManager.trashFile` et NON `vault.delete` : lui seul respecte le
 		   réglage « Fichiers supprimés » de l'utilisateur (corbeille système,
 		   `.trash` du vault, ou définitif). Choisir à sa place serait décider
@@ -1052,6 +1060,7 @@ export function createObsidianHost(
 	const platform: Host["platform"] = {
 		isMobile: Platform.isMobile,
 		isMacOS: Platform.isMacOS,
+		isWindows: Platform.isWin,
 		/* La même source qu'`isMobile` : c'est Obsidian qui sait s'il tourne
 		   dans son enveloppe Electron de bureau ou dans l'application mobile,
 		   et c'est la seule question que la génération IA a le droit de poser
@@ -1303,5 +1312,30 @@ export function createObsidianHost(
 		},
 	};
 
-	return { fs, links, watcher, ui, math, shell, platform, paths, modals, net, process: processus };
+	/* Le texte d'un PDF par le pdf.js EMBARQUÉ d'Obsidian (`loadPdfJs`, API
+	   officielle — worker configuré par l'app, aucune dépendance ajoutée). Une
+	   section par page. Les PDF scannés (images) n'ont pas de couche texte →
+	   chaîne vide, que la page signale. Vivait dans `dashboard/ai.ts` ; c'est
+	   le membre OPTIONNEL que l'application n'a pas (voir `HostPdf`). */
+	const pdf: Host["pdf"] = {
+		async extractText(data) {
+			const pdfjs = await loadPdfJs() as PdfJsLib;
+			const doc = await pdfjs.getDocument({ data }).promise;
+			const pages: string[] = [];
+			for (let i = 1; i <= doc.numPages; i++) {
+				const page = await doc.getPage(i);
+				const content = await page.getTextContent();
+				pages.push(content.items.map(it => it.str).join(" "));
+			}
+			return pages.join("\n\n");
+		},
+	};
+
+	return { fs, links, watcher, ui, math, shell, platform, paths, modals, net, process: processus, pdf };
 }
+
+/** Surface (minimale) du pdf.js embarqué d'Obsidian (`loadPdfJs`). */
+interface PdfTextItem { str: string; }
+interface PdfPage { getTextContent(): Promise<{ items: PdfTextItem[] }>; }
+interface PdfDocument { numPages: number; getPage(n: number): Promise<PdfPage>; }
+interface PdfJsLib { getDocument(src: { data: Uint8Array }): { promise: Promise<PdfDocument> }; }

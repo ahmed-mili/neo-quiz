@@ -157,6 +157,13 @@ export interface HostFs {
 	    Fraîcheur : voir « LA FRAÎCHEUR APRÈS UNE ÉCRITURE ». Elle compte ici
 	    aussi — l'aperçu d'une question relit l'image qu'on vient d'y coller. */
 	writeBinary(path: string, data: Uint8Array): Promise<void>;
+	/** Lit les OCTETS d'un fichier du contrat — le miroir de `writeBinary`, et
+	    pour un seul appelant : joindre une image ou un PDF du vault à une
+	    génération (`dashboard/ai.ts`, `attachVaultPath`, sélecteur « @ »). Le
+	    greffon lisait `vault.readBinary(TFile)` ; `externe.readBinary` ne
+	    convient pas, il attend un chemin ABSOLU que le code partagé ne sait
+	    pas composer. Rejette si absent ou illisible, comme `read`. */
+	readBinary(path: string): Promise<Uint8Array>;
 	/** Retire un fichier en le rendant RÉCUPÉRABLE. Ce n'est pas `remove` :
 	    supprimer le quiz d'un semestre par mégarde ne doit pas être définitif.
 
@@ -353,6 +360,12 @@ export interface HostShell {
 export interface HostPlatform {
 	isMobile: boolean;
 	isMacOS: boolean;
+	/** Windows. Un seul appelant, et il n'a pas d'autre voie : la page
+	    « Générer » affiche la COMMANDE d'installation d'un CLI absent, et elle
+	    n'est pas la même sur Windows (`irm … | iex`, `winget`) qu'ailleurs
+	    (`curl … | sh`). Trois systèmes, trois commandes : `isMacOS` seul ne les
+	    sépare pas, et « pas un Mac » aurait donné du PowerShell à un Linux. */
+	isWindows: boolean;
 	/** Vrai quand un CLI local peut être lancé et qu'un réseau est atteignable
 	    depuis l'hôte : Obsidian de bureau, l'application Windows. Faux sur
 	    Obsidian mobile — et l'hôte Android le dira lui-même. C'est le SEUL
@@ -601,6 +614,26 @@ export interface HostModals {
 	open(spec: HostModalSpec): HostModalHandle;
 }
 
+/**
+ * LE TEXTE D'UN PDF — un membre OPTIONNEL, et c'est une divergence ÉCRITE.
+ *
+ * La page « Générer » accepte un PDF en pièce jointe et en extrait le texte
+ * localement. Sous Obsidian, c'est `loadPdfJs()` — le pdf.js EMBARQUÉ de
+ * l'application, worker déjà configuré, aucune dépendance ajoutée. L'application
+ * Windows n'embarque pas pdf.js (tranche 5, tâche 6, tranché) : elle n'a pas ce
+ * membre, et la page REFUSE le PDF avec la Notice `ai.error.pdfUnsupportedInApp`
+ * au lieu de le joindre vide en silence. Une tranche future peut poser pdf.js
+ * côté app en implémentant ce seul membre, sans toucher `ai.ts`.
+ *
+ * `data` : les OCTETS, pas un `HostFile` — un PDF déposé ou choisi par le
+ * dialogue de fichiers n'a pas de chemin du contrat, seulement son contenu.
+ */
+export interface HostPdf {
+	/** Le texte de toutes les pages, une section par page. Chaîne vide pour un
+	    PDF scanné (sans couche texte) : c'est à l'appelant de le dire. */
+	extractText(data: Uint8Array): Promise<string>;
+}
+
 export interface Host {
 	fs: HostFs;
 	links: HostLinks;
@@ -613,4 +646,6 @@ export interface Host {
 	modals: HostModals;
 	net: HostNet;
 	process: HostProcess;
+	/** Absent quand l'hôte n'a pas de moteur PDF — voir `HostPdf`. */
+	pdf?: HostPdf;
 }

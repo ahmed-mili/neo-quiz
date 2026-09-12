@@ -1,10 +1,15 @@
-import { setIcon, Notice, loadPdfJs, Platform, MarkdownRenderer, TFile } from "obsidian";
 import JSON5 from "json5";
-import type { App, View } from "obsidian";
-import type { DashboardCtx } from "../types/dashboard-ctx";
 import type { EditorExamOptions } from "../types/editor-ctx";
+import type { DashboardViewName } from "../types/dashboard-ctx";
+import type { HostFile } from "../host/types";
 import { currentHost } from "../host/current";
+import { ajouter } from "../dom";
+import { LOG_PREFIX } from "../branding";
 import * as aiProviders from "./ai-providers";
+import type { Scanner, QuizIndexEntry } from "./scanner";
+import type { StatsStore } from "./stats-store";
+import type { AiSettingsHost } from "./ai-settings-host";
+import { createAiClient } from "./ai-client";
 import { createSelect, closeAllSelects, openActionMenu, openModelMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
 import type { SelectHandle, SelectOption } from "./ui-select";
 import { formatHotkey } from "../hotkey-format";
@@ -12,15 +17,14 @@ import { findQuizModeConfigIndex } from "../quiz-utils";
 import { attachMentionPicker } from "./mention-picker";
 import type { MentionPickerHandle } from "./mention-picker";
 import type { AiClient, ImagePayload } from "./ai-client";
-import {
-	recordUsage, readUsageLog, fetchPlanUsageFor, providerPublishesPlan,
-	formatTokens, formatCost, formatDuration, totalTokens
-} from "./ai-usage";
-import type { AiUsage, PlanUsage, UsagePlugin } from "./ai-usage";
-import { openUsageModal, tightestRow, usageRowLabel } from "./usage-modal";
+import { formatTokens, formatCost, formatDuration, totalTokens, tightestRow, usageRowLabel, providerPublishesPlan } from "./usage-format";
+import type { AiUsage, AiUsageEntry, PlanUsage } from "./usage-format";
+import { scanPromptPaths, MAX_PROMPT_PATHS } from "./prompt-paths";
 import { createQuizPage } from "./detail";
 import type { QuizPageHandlers } from "./detail";
 import type { QuizDraft } from "./detail-io";
+import { convertParsedToInternal, readModeConfig } from "../editor/convert";
+import { exportAll } from "../editor/export";
 import type { DraftQuestion } from "../editor/utils";
 import type { ParsedQuizItem } from "../editor/modals";
 import { t } from "../i18n";
@@ -125,12 +129,6 @@ interface RefreshArgs {
 	force?: boolean;
 }
 
-/** Surface (minimale) du pdf.js embarqué d'Obsidian (loadPdfJs). */
-interface PdfTextItem { str: string; }
-interface PdfPage { getTextContent(): Promise<{ items: PdfTextItem[] }>; }
-interface PdfDocument { numPages: number; getPage(n: number): Promise<PdfPage>; }
-interface PdfJsLib { getDocument(src: { data: Uint8Array }): { promise: Promise<PdfDocument> }; }
-
 /** Action optionnelle d'un hint contextuel. */
 interface HintAction {
 	label: string;
@@ -149,7 +147,48 @@ interface HintOptions {
 }
 
 
-/** Handlers de la vue « Générer » — retour de createAiHandlers(ctx). */
+/** L'écran d'usage du forfait — OPTIONNEL, et fourni par le seul greffon.
+    Décision du 2026-09-12 : le modal d'usage (`usage-modal.ts`, `ai-usage.ts`)
+    n'est pas porté dans l'application ; il reste lié à Obsidian, et la page ne
+    l'importe plus. Absent, la page ne rend ni le bouton d'usage du composer
+    ni la relecture du forfait après une génération — les compteurs de la
+    génération elle-même (tokens, coût, durée) restent affichés : ils viennent
+    du client, pas d'ici. */
+export interface AiUsageDeps {
+	/** Ouvre l'écran d'usage avec la dernière lecture connue ; `onData` retient
+	    ce qu'il lit pour le survol du bouton. */
+	open(opts: { provider: string; usage: AiUsage | null; known: PlanUsage | null; onData: (data: PlanUsage) => void }): Promise<void>;
+	/** Journalise une génération. Ne doit jamais faire échouer la génération
+	    qui, elle, a réussi. */
+	record(entry: AiUsageEntry): Promise<void>;
+	/** Relit le forfait du fournisseur qui vient de répondre. */
+	fetchPlan(usage: AiUsage): Promise<PlanUsage>;
+	/** Le forfait Claude connu localement (badge de Fable dans le menu). */
+	claudePlan(): aiProviders.ClaudePlanHint;
+}
+
+/** Ce que la page « Générer » demande à son hôte, et rien de plus. Plus de
+    `DashboardCtx` ni de `plugin` (tâche 6 de la tranche 5) : l'application
+    construit ce littéral sans greffon (`apps/windows/src/ui/dashboard-shell.ts`),
+    le greffon le construit dans `src/dashboard.ts`. */
+export interface AiPageDeps {
+	settings: AiSettingsHost;
+	/** Pour indexer la note où le quiz vient d'être inséré, puis ouvrir sa page. */
+	scanner: Scanner;
+	statsStore: StatsStore;
+	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void;
+	/** Les notes OUVERTES dans l'hôte (onglets Obsidian), en tête des deux
+	    pickers de notes. Absent = aucune : l'application n'a pas d'onglets. */
+	openFiles?(): HostFile[];
+	usage?: AiUsageDeps;
+	/** Rend un BLOC de code (commande d'installation d'un CLI) dans `host`.
+	    Sous Obsidian, le moteur Markdown de l'app : coloration Prism, style de
+	    bloc de l'utilisateur, bouton « copier » du post-processeur natif.
+	    Absent, la page pose un `<pre><code>` nu — le texte est le même. */
+	renderCodeBlock?(host: HTMLElement, code: string, lang: string): void;
+}
+
+/** Handlers de la vue « Générer » — retour de createAiHandlers(deps). */
 export interface AiHandlers {
 	render(container: HTMLElement): Promise<void>;
 	openAddFiles(): void;
@@ -161,7 +200,12 @@ export interface AiHandlers {
 	dispose(): void;
 }
 
-export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
+export function createAiHandlers(deps: AiPageDeps): AiHandlers {
+	const host = currentHost();
+	/* Lus À CHAQUE usage, jamais copiés : une génération lit le fournisseur,
+	   le modèle et l'effort au moment où elle part. */
+	const settings = () => deps.settings.get();
+	const saveSettings = (patch: Parameters<AiSettingsHost["save"]>[0]) => deps.settings.save(patch);
 	let composerText = "";
 	/* Caret du composer, préservé à travers les render() : render détruit et
 	   recrée le textarea, et sans ça tout attachement (chip, image, mention)
@@ -240,7 +284,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	};
 
 	function canGenerate(): boolean {
-		const providerId = ctx.plugin.settings.aiProvider || "";
+		const providerId = settings().aiProvider || "";
 		if (!providerId) return false;
 		// Un fournisseur desktop-only (Claude Code CLI) est inutilisable sur
 		// mobile : on bloque l'envoi à la source (le bouton d'envoi lit
@@ -248,7 +292,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// qui échouera — sinon composer « cassé ». Le hint « desktop
 		// uniquement » explique déjà pourquoi.
 		const provider = aiProviders.getProvider(providerId);
-		if (provider && provider.desktopOnly && (ctx.app as App & { isMobile?: boolean }).isMobile) return false;
+		if (provider && provider.desktopOnly && host.platform.isMobile) return false;
 		return !!(composerText.trim() || images.length > 0 || noteAttachments.length > 0);
 	}
 
@@ -259,11 +303,11 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// Tooltips portalés au <body> (stop, effort) : un re-render détruit
 		// leur ancre sans mouseleave → purge pour éviter les orphelins.
 		document.querySelectorAll(".qbd-hover-tip").forEach(t => t.remove());
-		// Le composer (et son ResizeObserver) est détruit par container.empty() :
+		// Le composer (et son ResizeObserver) est détruit par container.replaceChildren() :
 		// déconnecter AVANT, sinon l'ancien observer continue de viser un élément
 		// détaché (fuite silencieuse, un de plus à chaque render).
 		if (composerResizeObserver) { composerResizeObserver.disconnect(); composerResizeObserver = null; }
-		container.empty();
+		container.replaceChildren();
 
 		// ── Scène unique (le layout 2 colonnes est supprimé — maquette
 		// validée 2026-07-10) : idle/loading/error → titre + composer
@@ -271,9 +315,9 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// « Aperçu » vide) ; result → l'ÉDITEUR embarqué pleine page et
 		// le composer EN BAS (variante B « chat »). `formCol` reste le
 		// nom du parent du composer pour ne pas réécrire tout le bloc.
-		const stage = container.createDiv({ cls: "qbd-ai-stage qbd-ai-stage--" + phase });
+		const stage = ajouter(container, "div", "qbd-ai-stage qbd-ai-stage--" + phase);
 		// Zone résultat créée AVANT le composer : l'ordre DOM le met en bas.
-		const resultZone = phase === "result" ? stage.createDiv({ cls: "qbd-ai-result-zone" }) : null;
+		const resultZone = phase === "result" ? ajouter(stage, "div", "qbd-ai-result-zone") : null;
 		const formCol = stage;
 
 		// ── Page header ──
@@ -282,12 +326,12 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// place à la conversation à la seconde où l'on envoie. Le garder
 		// au-dessus de la bulle donnerait l'impression de n'être jamais parti.
 		if (phase !== "result" && !sentMessage) {
-			const titleRow = formCol.createDiv({ cls: "qbd-ai-title-row" });
-			const titleIcon = titleRow.createSpan({ cls: "qbd-ai-title-icon" });
+			const titleRow = ajouter(formCol, "div", "qbd-ai-title-row");
+			const titleIcon = ajouter(titleRow, "span", "qbd-ai-title-icon");
 			// Glyphe de marque NU à côté du titre serif, comme l'astérisque de
 			// claude.ai — « sparkles » retenu sur planche comparative (2026-07-16).
-			setIcon(titleIcon, "sparkles");
-			titleRow.createEl("h2", { cls: "qbd-ai-title", text: t("ai.page.title") });
+			host.ui.setIcon(titleIcon, "sparkles");
+			ajouter(titleRow, "h2", "qbd-ai-title", t("ai.page.title"));
 		}
 
 		// ── La demande PARTIE, en bulle (référence claude.ai) ──
@@ -300,21 +344,21 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// Zone du loader de génération : AU-DESSUS du composer (demande
 		// 2026-07-10 — le loader préfigure le résultat, qui vit en haut).
 		// display: contents en CSS → la carte reste un enfant flex direct.
-		const loadingZone = phase === "loading" ? stage.createDiv({ cls: "qbd-ai-loading-zone" }) : null;
+		const loadingZone = phase === "loading" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
 		/* L'erreur se lit SOUS la demande, au-dessus du composer — comme la
 		   réponse qu'elle remplace. Rendue en dernier, elle passait sous le
 		   composer : on lisait la demande, puis un champ vide, puis seulement
 		   l'échec. */
-		const errorZone = phase === "error" ? stage.createDiv({ cls: "qbd-ai-loading-zone" }) : null;
+		const errorZone = phase === "error" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
 
 		// ── Fournisseur : bouton LOGO SEUL dans le pied du composer (la
 		// carte « Modèle IA » est supprimée) — le menu garde logos, statut
 		// et sous-titre ; le tooltip au survol porte nom + statut.
 		// Aucun fournisseur par défaut : le choix reste la première étape,
 		// le contrôle Modèle n'apparaît qu'une fois le fournisseur choisi.
-		const provider = ctx.plugin.settings.aiProvider || "";
+		const provider = settings().aiProvider || "";
 		const currentModel = provider
-			? (ctx.plugin.settings.aiModel || aiProviders.getProvider(provider).defaultModel)
+			? (settings().aiModel || aiProviders.getProvider(provider).defaultModel)
 			: "";
 
 		let providerSelect: SelectHandle<ProviderSelectOption> | null = null;
@@ -325,26 +369,24 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				renderTrigger: (el, o) => {
 					if (!o) {
 						// Aucun fournisseur : slot vide, le tooltip guide.
-						const ic = el.createSpan({ cls: "qbd-provider-logo" });
-						setIcon(ic, "circle-dashed");
+						const ic = ajouter(el, "span", "qbd-provider-logo");
+						host.ui.setIcon(ic, "circle-dashed");
 						return;
 					}
-					const logo = el.createSpan({ cls: "qbd-provider-logo qbd-provider-logo--" + o.logo });
+					const logo = ajouter(el, "span", "qbd-provider-logo qbd-provider-logo--" + o.logo);
 					aiProviders.setBrandLogo(logo, o.logo);
 				},
 				renderOption: (el, o) => {
-					const logo = el.createSpan({ cls: "qbd-provider-logo qbd-provider-logo--" + o.logo });
+					const logo = ajouter(el, "span", "qbd-provider-logo qbd-provider-logo--" + o.logo);
 					aiProviders.setBrandLogo(logo, o.logo);
-					const body = el.createDiv({ cls: "qbd-provider-option-body" });
-					body.createSpan({ cls: "qbd-select-option-label", text: o.label });
+					const body = ajouter(el, "div", "qbd-provider-option-body");
+					ajouter(body, "span", "qbd-select-option-label", o.label);
 					const st = providerStatus[o.value];
-					body.createSpan({ cls: "qbd-provider-option-sub", text: st ? st.text : o.sub });
-					el.createSpan({ cls: "qbd-status-dot qbd-status-dot--" + (st ? st.dot : "checking") });
+					ajouter(body, "span", "qbd-provider-option-sub", st ? st.text : o.sub);
+					ajouter(el, "span", "qbd-status-dot qbd-status-dot--" + (st ? st.dot : "checking"));
 				},
 				onChange: async (id) => {
-					ctx.plugin.settings.aiProvider = id;
-					ctx.plugin.settings.aiModel = aiProviders.getProvider(id).defaultModel;
-					await ctx.plugin.saveSettings();
+					await saveSettings({ aiProvider: id, aiModel: aiProviders.getProvider(id).defaultModel });
 					render(container);
 				},
 				// Re-vérifie les CLI à CHAQUE ouverture du menu (force = sans TTL) :
@@ -354,18 +396,18 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				onOpen: () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true })
 			});
 			providerSelect = sel;
-			sel.el.addClass("qbd-provider-trigger-logo");
+			sel.el.classList.add("qbd-provider-trigger-logo");
 			// Tooltip : nom + statut, relus à chaque survol (les détections
 			// async peuvent arriver après le rendu).
 			let tip: HTMLElement | null = null;
 			const hide = () => { if (tip) { tip.remove(); tip = null; } };
 			sel.el.addEventListener("mouseenter", () => {
 				if (tip) return;
-				tip = document.body.createDiv({ cls: "qbd-hover-tip" });
-				const p = aiProviders.PROVIDERS.find(x => x.id === (ctx.plugin.settings.aiProvider || ""));
-				tip.createDiv({ cls: "qbd-hover-tip-title", text: p ? p.name : t("ai.provider.choose") });
+				tip = ajouter(document.body, "div", "qbd-hover-tip");
+				const p = aiProviders.PROVIDERS.find(x => x.id === (settings().aiProvider || ""));
+				ajouter(tip, "div", "qbd-hover-tip-title", p ? p.name : t("ai.provider.choose"));
 				const st = p && providerStatus[p.id];
-				if (st) tip.createDiv({ cls: "qbd-hover-tip-body", text: st.text });
+				if (st) ajouter(tip, "div", "qbd-hover-tip-body", st.text);
 				const r = sel.el.getBoundingClientRect();
 				tip.style.visibility = "hidden";
 				const tr = tip.getBoundingClientRect();
@@ -409,8 +451,8 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				return { value: meta.value, label: meta.label, cloud: meta.cloud,
 					thinking: meta.thinking !== false, installed, icon: iconFor(meta.cloud, installed) };
 			};
-			const catalog = ctx.plugin.settings.aiOllamaCatalog;
-			const list = aiProviders.resolveOllamaSelection(ctx.plugin.settings.aiOllamaModels, catalog).map(decorate);
+			const catalog = settings().aiOllamaCatalog;
+			const list = aiProviders.resolveOllamaSelection(settings().aiOllamaModels, catalog).map(decorate);
 			// Modèles locaux installés hors sélection → ajoutés en fin de liste.
 			(detected || []).forEach(m => {
 				const norm = m.name.replace(/:latest$/, "");
@@ -419,7 +461,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 					installed: true, thinking: (m.capabilities || []).includes("thinking"), icon: null });
 			});
 			// Modèle courant hors liste → placé en tête.
-			const cur = ctx.plugin.settings.aiModel || currentModel;
+			const cur = settings().aiModel || currentModel;
 			if (cur && !list.some(o => o.value === cur)) {
 				list.unshift(decorate(aiProviders.getOllamaModelMeta(cur, catalog)));
 			}
@@ -434,7 +476,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			// Claude, Fable expire à date ; côté Codex, la liste suit
 			// ~/.codex/models_cache.json (nouveau modèle du compte → présent au
 			// prochain clic, sans mise à jour manuelle du plugin).
-			const getModels = (): aiProviders.ModelDef[] => isClaude ? aiProviders.getClaudeModels() : aiProviders.getDefaultModels("codex");
+			const getModels = (): aiProviders.ModelDef[] => isClaude ? aiProviders.getClaudeModels(deps.usage?.claudePlan()) : aiProviders.getDefaultModels("codex");
 			const resolveMv = (v?: string): string => isClaude ? aiProviders.resolveClaudeModel(v) : aiProviders.resolveCodexModel(v);
 			// Modèle et effort = DEUX boutons séparés (référence claude.ai /
 			// ChatGPT). Le modèle ouvre le menu de modèles (sans ligne Effort) ;
@@ -442,19 +484,19 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			// claude ou codex. Les efforts Codex dépendent du modèle courant
 			// (supported_reasoning_levels) → tout est relu à chaque usage.
 			buildModelControl = (parent: HTMLElement): void => {
-				const currentMv = () => resolveMv(ctx.plugin.settings.aiModel || currentModel);
+				const currentMv = () => resolveMv(settings().aiModel || currentModel);
 				const currentEfforts = () => aiProviders.getEfforts(provider, currentMv());
-				const currentEv = () => aiProviders.resolveEffort(provider, ctx.plugin.settings.aiEffort, currentMv());
+				const currentEv = () => aiProviders.resolveEffort(provider, settings().aiEffort, currentMv());
 
 				// Référence Claude Code : « Opus 4.8  Max » — libellés nus,
 				// SANS chevrons, rapprochés (l'effort en Capitalisé).
-				const trigger = parent.createEl("button", { cls: "qbd-select qbd-model-trigger qbd-composer-plain" });
+				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger qbd-composer-plain");
 				trigger.type = "button";
-				const trigLabel = trigger.createSpan({ cls: "qbd-select-label" });
+				const trigLabel = ajouter(trigger, "span", "qbd-select-label");
 
-				const effortBtn = parent.createEl("button", { cls: "qbd-select qbd-effort-trigger qbd-composer-plain" });
+				const effortBtn = ajouter(parent, "button", "qbd-select qbd-effort-trigger qbd-composer-plain");
 				effortBtn.type = "button";
-				const effortLabel = effortBtn.createSpan({ cls: "qbd-select-label qbd-effort-trigger-label" });
+				const effortLabel = ajouter(effortBtn, "span", "qbd-select-label qbd-effort-trigger-label");
 
 				const EFFORT_DISPLAY: Record<string, string> = {
 					low: "Low", medium: "Medium", high: "High",
@@ -462,19 +504,19 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				};
 
 				const refreshTriggers = () => {
-					trigLabel.empty();
+					trigLabel.replaceChildren();
 					const models = getModels();
 					const cur = models.find(m => m.value === currentMv()) || models[0];
 					// Fast actif (codex) → éclair à gauche du nom du modèle,
 					// comme la pill du composer ChatGPT.
-					if (!isClaude && ctx.plugin.settings.aiCodexFast && cur.fast) {
-						const z = trigLabel.createSpan({ cls: "qbd-model-trigger-zap" });
-						setIcon(z, "zap");
+					if (!isClaude && settings().aiCodexFast && cur.fast) {
+						const z = ajouter(trigLabel, "span", "qbd-model-trigger-zap");
+						host.ui.setIcon(z, "zap");
 					}
-					trigLabel.createSpan({ cls: "qbd-model-trigger-name", text: cur.label });
+					ajouter(trigLabel, "span", "qbd-model-trigger-name", cur.label);
 					const ev = currentEv();
 					const ef = currentEfforts().find(e => e.value === ev);
-					effortLabel.setText(EFFORT_DISPLAY[ev] || (ef ? ef.label : ev));
+					effortLabel.textContent = (EFFORT_DISPLAY[ev] || (ef ? ef.label : ev));
 					effortBtn.classList.toggle("is-ultra", !!(ef && ef.accent));
 				};
 				refreshTriggers();
@@ -502,8 +544,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 						// L'effort a son propre bouton → pas de ligne Effort ici.
 						efforts: [],
 						onPickModel: async (v) => {
-							ctx.plugin.settings.aiModel = v;
-							await ctx.plugin.saveSettings();
+							await saveSettings({ aiModel: v });
 							refreshTriggers();
 						}
 					});
@@ -514,10 +555,9 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 					// « priority » (models_cache) — toggle persisté aiCodexFast.
 					const curModel = getModels().find(m => m.value === currentMv());
 					const fast = (!isClaude && curModel && curModel.fast) ? {
-						on: !!ctx.plugin.settings.aiCodexFast,
+						on: !!settings().aiCodexFast,
 						onToggle: async (v: boolean) => {
-							ctx.plugin.settings.aiCodexFast = v;
-							await ctx.plugin.saveSettings();
+							await saveSettings({ aiCodexFast: v });
 							refreshTriggers(); // éclair du bouton modèle
 						}
 					} : null;
@@ -527,8 +567,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 						currentEffort: currentEv(),
 						fast,
 						onPickEffort: async (v) => {
-							ctx.plugin.settings.aiEffort = v;
-							await ctx.plugin.saveSettings();
+							await saveSettings({ aiEffort: v });
 							refreshTriggers();
 						}
 					});
@@ -547,22 +586,22 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			ollamaCtl = { options: buildOllamaList(null), detected: null, refreshTrigger: null };
 			const ctl = ollamaCtl;
 			buildModelControl = (parent: HTMLElement): void => {
-				const trigger = parent.createEl("button", { cls: "qbd-select qbd-model-trigger" });
+				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger");
 				trigger.type = "button";
-				const trigLabel = trigger.createSpan({ cls: "qbd-select-label" });
-				const trigChev = trigger.createSpan({ cls: "qbd-select-chevron" });
-				setIcon(trigChev, "chevron-down");
+				const trigLabel = ajouter(trigger, "span", "qbd-select-label");
+				const trigChev = ajouter(trigger, "span", "qbd-select-chevron");
+				host.ui.setIcon(trigChev, "chevron-down");
 				const curOpt = (): OllamaListItem | undefined => {
-					const mv = ctx.plugin.settings.aiModel || currentModel;
+					const mv = settings().aiModel || currentModel;
 					return ctl.options.find(o => o.value === mv) || ctl.options[0];
 				};
 				const refreshTrigger = () => {
-					trigLabel.empty();
+					trigLabel.replaceChildren();
 					const cur = curOpt();
-					const mv = ctx.plugin.settings.aiModel || currentModel;
-					trigLabel.createSpan({ cls: "qbd-model-trigger-name", text: cur ? cur.label : (mv || "").replace(":latest", "") });
+					const mv = settings().aiModel || currentModel;
+					ajouter(trigLabel, "span", "qbd-model-trigger-name", cur ? cur.label : (mv || "").replace(":latest", ""));
 					if (cur && cur.thinking) {
-						trigLabel.createSpan({ cls: "qbd-model-trigger-effort", text: aiProviders.getEffortLabel(aiProviders.resolveEffort(provider, ctx.plugin.settings.aiEffort), provider) });
+						ajouter(trigLabel, "span", "qbd-model-trigger-effort", aiProviders.getEffortLabel(aiProviders.resolveEffort(provider, settings().aiEffort), provider));
 					}
 				};
 				refreshTrigger();
@@ -576,17 +615,15 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 					openModelMenu(trigger, {
 						models: ctl.options,
 						searchable: true,
-						currentModel: ctx.plugin.settings.aiModel || currentModel,
+						currentModel: settings().aiModel || currentModel,
 						efforts: (cur && cur.thinking) ? efforts : [],
-						currentEffort: aiProviders.resolveEffort(provider, ctx.plugin.settings.aiEffort),
+						currentEffort: aiProviders.resolveEffort(provider, settings().aiEffort),
 						onPickModel: async (v) => {
-							ctx.plugin.settings.aiModel = v;
-							await ctx.plugin.saveSettings();
+							await saveSettings({ aiModel: v });
 							refreshTrigger();
 						},
 						onPickEffort: async (v) => {
-							ctx.plugin.settings.aiEffort = v;
-							await ctx.plugin.saveSettings();
+							await saveSettings({ aiEffort: v });
 							refreshTrigger();
 						}
 					});
@@ -598,20 +635,20 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// ── Composer (champ unique + bouton « + » d'attachements) ──
 		let generateBtnRef: HTMLButtonElement | null = null;
 
-		const composer = formCol.createDiv({ cls: "qbd-ai-composer" });
+		const composer = ajouter(formCol, "div", "qbd-ai-composer");
 
 		// Vignettes d'images : rangée à PART, au-dessus du champ — ~40px de
 		// haut, les mêler à une ligne de texte de 13,5px les déformerait.
 		// Seules les chips « notes » passent en superposition sur la 1ʳᵉ
 		// ligne du texte (cf. textZone ci-dessous).
 		if (images.length > 0) {
-			const imagesRow = composer.createDiv({ cls: "qbd-ai-composer-attachments" });
+			const imagesRow = ajouter(composer, "div", "qbd-ai-composer-attachments");
 			for (let i = 0; i < images.length; i++) {
-				const thumb = imagesRow.createDiv({ cls: "qbd-ai-image-thumb" });
-				const imgEl = thumb.createEl("img", { cls: "qbd-ai-image-thumb-img" });
+				const thumb = ajouter(imagesRow, "div", "qbd-ai-image-thumb");
+				const imgEl = ajouter(thumb, "img", "qbd-ai-image-thumb-img");
 				imgEl.src = images[i].url;
-				const removeBtn = thumb.createEl("button", { cls: "qbd-ai-image-remove" });
-				setIcon(removeBtn, "x");
+				const removeBtn = ajouter(thumb, "button", "qbd-ai-image-remove");
+				host.ui.setIcon(removeBtn, "x");
 				const idx = i;
 				removeBtn.addEventListener("click", () => {
 					URL.revokeObjectURL(images[idx].url);
@@ -631,19 +668,16 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// mesure la largeur réelle de la rangée et pose `text-indent` en
 		// conséquence — ou bascule en repli (rangée au-dessus, en flux
 		// normal) si elle est trop large pour laisser de la place au texte.
-		const textZone = composer.createDiv({ cls: "qbd-ai-composer-textzone" });
+		const textZone = ajouter(composer, "div", "qbd-ai-composer-textzone");
 		let chipsRow: HTMLElement | null = null;
 		if (noteAttachments.length > 0) {
-			chipsRow = textZone.createDiv({ cls: "qbd-ai-composer-chips" });
+			chipsRow = ajouter(textZone, "div", "qbd-ai-composer-chips");
 			for (let i = 0; i < noteAttachments.length; i++) {
 				const note = noteAttachments[i];
-				const chip = chipsRow.createDiv({ cls: "qbd-ai-note-chip" });
-				const chipIcon = chip.createSpan({ cls: "qbd-ai-note-chip-icon" });
-				setIcon(chipIcon, "file-text");
-				const chipName = chip.createSpan({
-					cls: "qbd-ai-note-chip-name",
-					text: (note.expanded && note.path) ? note.path : note.name
-				});
+				const chip = ajouter(chipsRow, "div", "qbd-ai-note-chip");
+				const chipIcon = ajouter(chip, "span", "qbd-ai-note-chip-icon");
+				host.ui.setIcon(chipIcon, "file-text");
+				const chipName = ajouter(chip, "span", "qbd-ai-note-chip-name", (note.expanded && note.path) ? note.path : note.name);
 				// Tooltip natif = le chemin ENTIER, toujours, y compris replié :
 				// `max-width` + ellipsis peuvent tronquer même le chemin déplié
 				// (mesuré : scrollWidth > clientWidth dès un chemin un peu long),
@@ -654,15 +688,15 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				// connue — ni vault ni racine externe — n'en a pas : alors rien
 				// à déplier, la chip ne réagit pas au clic).
 				if (note.path) {
-					chip.addClass("qbd-ai-note-chip--toggle");
+					chip.classList.add("qbd-ai-note-chip--toggle");
 					chip.addEventListener("click", (e) => {
 						if ((e.target as HTMLElement).closest(".qbd-ai-note-chip-remove")) return;
 						note.expanded = !note.expanded;
 						render(containerRef);
 					});
 				}
-				const chipRemove = chip.createEl("button", { cls: "qbd-ai-note-chip-remove" });
-				setIcon(chipRemove, "x");
+				const chipRemove = ajouter(chip, "button", "qbd-ai-note-chip-remove");
+				host.ui.setIcon(chipRemove, "x");
 				const idx = i;
 				chipRemove.addEventListener("click", (e) => {
 					e.stopPropagation(); // ne déclenche pas le basculement du chip
@@ -672,7 +706,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			}
 		}
 
-		const composerInput = textZone.createEl("textarea", { cls: "qbd-ai-composer-input" });
+		const composerInput = ajouter(textZone, "textarea", "qbd-ai-composer-input");
 		let mentions: MentionPickerHandle | null = null;
 		// Au moins une pièce jointe (chip note/PDF ou vignette image) : la
 		// question d'origine n'a plus de sens (le fichier EST le sujet) — le
@@ -827,25 +861,23 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				updateGenerateBtn(generateBtnRef);
 			},
 			// Lu au rendu (le réglage peut changer sans rouvrir la vue).
-			// Accesseur vérifié le 2026-07-16 : ai.ts lit « ctx.plugin.settings.<clé> »
-			// (cf. ligne 171 par ex.), il n'existe PAS de ctx.settings() dans ce module.
-			getExtraRoots: () => ctx.plugin.settings.aiMentionExtraFolders || [],
+			getExtraRoots: () => settings().aiMentionExtraFolders || [],
 		});
 
 		// Rangée du bas : bouton « + » (gauche), puis à droite le modèle +
 		// effort (façon claude.ai) et le bouton d'envoi.
-		const composerBottom = composer.createDiv({ cls: "qbd-ai-composer-bottom" });
-		const addBtn = composerBottom.createEl("button", { cls: "qbd-ai-composer-add" });
+		const composerBottom = ajouter(composer, "div", "qbd-ai-composer-bottom");
+		const addBtn = ajouter(composerBottom, "button", "qbd-ai-composer-add");
 		addBtn.type = "button";
 		addBtn.setAttribute("aria-label", t("ai.composer.addContent"));
-		setIcon(addBtn, "plus");
+		host.ui.setIcon(addBtn, "plus");
 
 		// Bouton Options (questions + type) : JUSTE à droite du « + » (façon
 		// pills gauche de claude.ai, demande 2026-07-16) — popover à la
 		// demande, tooltip d'état.
-		const optsBtn = composerBottom.createEl("button", { cls: "qbd-ai-composer-opts" });
+		const optsBtn = ajouter(composerBottom, "button", "qbd-ai-composer-opts");
 		optsBtn.type = "button";
-		setIcon(optsBtn, "sliders-horizontal");
+		host.ui.setIcon(optsBtn, "sliders-horizontal");
 		labelIconButton(optsBtn, t("ai.composer.quizOptions"));
 		optsBtn.addEventListener("click", () => {
 			// Le menu ne connaît que des libellés : on traduit à l'aller et on
@@ -860,35 +892,34 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// Tooltip au survol : l'état courant (« 5 questions · Mixte »),
 		// relu à chaque hover — pattern attachHoverTip.
 		attachHoverTip(optsBtn, (tip) => {
-			tip.createDiv({ cls: "qbd-hover-tip-title", text: t("ai.options.tooltip", { count: questionCount, type: typeLabel(questionType) }) });
+			ajouter(tip, "div", "qbd-hover-tip-title", t("ai.options.tooltip", { count: questionCount, type: typeLabel(questionType) }));
 		});
 
 		/* Consultation du forfait, à sa place de contrôle : dans le composer,
 		   avec le « + » et les options (référence Ahmed 2026-07-30). Savoir ce
 		   qu'il reste n'a d'intérêt que si on peut le demander SANS dépenser,
 		   d'où un bouton toujours accessible plutôt qu'un badge d'après-coup.
-		   Réservé aux fournisseurs qui publient réellement un forfait. */
-		if (Platform.isDesktopApp && providerPublishesPlan(ctx.plugin.settings.aiProvider || "")) {
-			const usageBtn = composerBottom.createEl("button", { cls: "qbd-ai-composer-usage" });
+		   Réservé aux fournisseurs qui publient réellement un forfait — et aux
+		   hôtes qui savent le lire (`deps.usage`, le greffon seul). */
+		const usage = deps.usage;
+		if (usage && host.platform.isDesktopApp && providerPublishesPlan(settings().aiProvider || "")) {
+			const usageBtn = ajouter(composerBottom, "button", "qbd-ai-composer-usage");
 			usageBtn.type = "button";
-			setIcon(usageBtn, "gauge");
+			host.ui.setIcon(usageBtn, "gauge");
 			labelIconButton(usageBtn, t("ai.usage.title"));
 			attachHoverTip(usageBtn, (tip) => {
-				tip.createDiv({ cls: "qbd-hover-tip-title", text: t("ai.usage.title") });
+				ajouter(tip, "div", "qbd-hover-tip-title", t("ai.usage.title"));
 				const tightest = tightestRow(lastPlan?.rows || []);
 				if (tightest) {
-					tip.createDiv({
-						cls: "qbd-hover-tip-body",
-						text: `${usageRowLabel(tightest)} · ${t("ai.usage.usedPercent", { n: Math.round(tightest.usedPercent) })}`
-					});
+					ajouter(tip, "div", "qbd-hover-tip-body", `${usageRowLabel(tightest)} · ${t("ai.usage.usedPercent", { n: Math.round(tightest.usedPercent) })}`);
 				}
 			});
-			usageBtn.addEventListener("click", () => void openUsage());
+			usageBtn.addEventListener("click", () => void openUsage(usage));
 		}
 
 		// Groupe droite : logo fournisseur, sélecteur modèle + effort, puis
 		// bouton d'envoi.
-		const composerTools = composerBottom.createDiv({ cls: "qbd-ai-composer-tools" });
+		const composerTools = ajouter(composerBottom, "div", "qbd-ai-composer-tools");
 		buildProviderControl(composerTools);
 		if (buildModelControl) buildModelControl(composerTools);
 
@@ -896,20 +927,20 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// caché tant que le champ est vide, flèche ↑ blanche sur fond accent.
 		// Pendant la génération il devient le bouton STOP (carré + tooltip
 		// « Arrêter Esc ») qui annule réellement la génération.
-		const sendBtn = composerTools.createEl("button", { cls: "qbd-ai-composer-send" });
+		const sendBtn = ajouter(composerTools, "button", "qbd-ai-composer-send");
 		sendBtn.type = "button";
-		const sendIcon = sendBtn.createSpan({ cls: "qbd-ai-composer-send-icon" });
+		const sendIcon = ajouter(sendBtn, "span", "qbd-ai-composer-send-icon");
 		if (phase === "loading") {
-			sendBtn.addClass("is-stop");
+			sendBtn.classList.add("is-stop");
 			// Pas d'aria-label ici : Obsidian en fait un tooltip natif,
 			// redondant avec le tooltip custom « Arrêter Esc ».
 			// Carré dessiné en CSS (l'icône Lucide est trop fine/petite).
-			sendIcon.createDiv({ cls: "qbd-ai-stop-square" });
+			ajouter(sendIcon, "div", "qbd-ai-stop-square");
 			attachStopTip(sendBtn);
 			sendBtn.addEventListener("click", () => { if (activeClient) activeClient.abort(); });
 		} else {
 			sendBtn.setAttribute("aria-label", t("ai.composer.generate"));
-			setIcon(sendIcon, "arrow-up");
+			host.ui.setIcon(sendIcon, "arrow-up");
 			sendBtn.addEventListener("click", () => {
 				if (canGenerate()) startGeneration(containerRef);
 			});
@@ -921,7 +952,8 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// les fichiers (*.*) » (référence claude.ai, capture Ahmed) au lieu
 		// d'une liste d'extensions illisible — la validation par type se
 		// fait dans addComposerFiles, avec explication en cas de refus.
-		const fileInput = composer.createEl("input", { type: "file", cls: "qbd-ai-file-input" });
+		const fileInput = ajouter(composer, "input", "qbd-ai-file-input");
+		fileInput.type = "file";
 		fileInput.multiple = true;
 		fileInput.addEventListener("change", (e) => {
 			const target = e.target as HTMLInputElement;
@@ -939,13 +971,13 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 				{
 					icon: "paperclip",
 					label: t("ai.add.files"),
-					hint: formatHotkey(ctx.plugin.settings.hotkeyAddFiles),
+					hint: formatHotkey(settings().hotkeyAddFiles),
 					onClick: () => fileInput.click()
 				},
 				{
 					icon: "file-text",
 					label: t("ai.add.notes"),
-					hint: formatHotkey(ctx.plugin.settings.hotkeyAddNotes),
+					hint: formatHotkey(settings().hotkeyAddNotes),
 					onClick: () => openAddNotes()
 				}
 			]);
@@ -978,7 +1010,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// Hint contextuel du fournisseur (CLI absent, serveur offline…) :
 		// sous le composer depuis la suppression de la carte « Modèle IA ».
 		// :empty → masqué ; rempli par refreshProviderStatuses/renderHint.
-		if (provider) hintZone = formCol.createDiv({ cls: "qbd-ai-model-hint" });
+		if (provider) hintZone = ajouter(formCol, "div", "qbd-ai-model-hint");
 
 		// Détections async (statut fournisseur + modèles réels) : APRÈS la
 		// création de hintZone — l'appel fige ses arguments, et un hintZone
@@ -1030,13 +1062,6 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		}
 	}
 
-	/* Ajoute le modèle courant à la liste s'il n'y figure pas
-	   (modèle personnalisé saisi ailleurs). */
-	function withCurrentOption(models: aiProviders.ModelDef[], current?: string): aiProviders.ModelDef[] {
-		if (!current || models.some(m => m.value === current)) return models;
-		return [...models, { value: current, label: current, hint: "personnalisé" }];
-	}
-
 	/* Derniers statuts connus par provider : { dot, text }.
 	   Lus par le sélecteur de fournisseur (trigger + options). */
 	const providerStatus: Record<string, ProviderStatusEntry> = {};
@@ -1059,7 +1084,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// Redessine le trigger (dot de statut du fournisseur choisi) et les
 		// options du menu s'il est ouvert (versions re-détectées à l'ouverture).
 		if (providerSelect && providerSelect.el.isConnected) {
-			providerSelect.setValue((ctx.plugin.settings.aiProvider || undefined) as string);
+			providerSelect.setValue((settings().aiProvider || undefined) as string);
 			if (providerSelect.refreshMenu) providerSelect.refreshMenu();
 		}
 	}
@@ -1075,7 +1100,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	     script officiel ailleurs — docs.ollama.com ne publie pas de one-liner
 	     PowerShell, l'exe d'installation étant la voie mise en avant. */
 	function installCmd(provider: "claude-code" | "codex" | "ollama"): { code: string; lang: string } {
-		const win = Platform.isWin;
+		const win = host.platform.isWindows;
 		if (provider === "claude-code") {
 			return win
 				? { code: "irm https://claude.ai/install.ps1 | iex", lang: "powershell" }
@@ -1099,56 +1124,44 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	   deux morceaux dans une colonne étroite. */
 	function renderHint(zone: HTMLElement | null, opts: HintOptions | null): void {
 		if (!zone || !zone.isConnected) return;
-		zone.empty();
+		zone.replaceChildren();
 		if (!opts) return;
-		const hint = zone.createDiv({
-			cls: "qbd-ai-hint qbd-ai-hint--" + (opts.type || "info")
-				+ (opts.code ? " qbd-ai-hint--has-code" : "")
-		});
-		const icon = hint.createSpan({ cls: "qbd-ai-hint-icon" });
-		setIcon(icon, opts.icon || (opts.type === "err" ? "alert-circle" : "info"));
-		const body = hint.createDiv({ cls: "qbd-ai-hint-body" });
-		body.createSpan({ cls: "qbd-ai-hint-text", text: opts.text });
+		const hint = ajouter(zone, "div", "qbd-ai-hint qbd-ai-hint--" + (opts.type || "info")
+				+ (opts.code ? " qbd-ai-hint--has-code" : ""));
+		const icon = ajouter(hint, "span", "qbd-ai-hint-icon");
+		host.ui.setIcon(icon, opts.icon || (opts.type === "err" ? "alert-circle" : "info"));
+		const body = ajouter(hint, "div", "qbd-ai-hint-body");
+		ajouter(body, "span", "qbd-ai-hint-text", opts.text);
 		if (opts.action) {
-			const btn = hint.createEl("button", { cls: "qbd-ai-hint-action" });
+			const btn = ajouter(hint, "button", "qbd-ai-hint-action");
 			btn.type = "button";
 			if (opts.action.icon) {
-				const aIcon = btn.createSpan({ cls: "qbd-ai-hint-action-icon" });
-				setIcon(aIcon, opts.action.icon);
+				const aIcon = ajouter(btn, "span", "qbd-ai-hint-action-icon");
+				host.ui.setIcon(aIcon, opts.action.icon);
 			}
-			btn.createSpan({ text: opts.action.label });
+			ajouter(btn, "span", undefined, opts.action.label);
 			btn.addEventListener("click", opts.action.onClick);
 		}
 		if (opts.code) renderHintCode(hint, opts.code, opts.lang || "bash");
 	}
 
-	/* Bloc commande = VRAI bloc code Obsidian, rendu par le moteur Markdown de
-	   l'app plutôt qu'imité. On hérite ainsi de la coloration Prism, du style
-	   de bloc code de l'utilisateur (thème + snippets — d'où markdown-rendered
-	   ET markdown-preview-view, les deux racines que ces CSS ciblent) et du
-	   bouton « copier » posé par le post-processeur natif. */
+	/* Bloc commande = un BLOC, pas un énoncé : c'est l'hôte qui sait le rendre
+	   en vrai bloc de code (sous Obsidian, le moteur Markdown de l'app —
+	   coloration Prism, style de bloc de l'utilisateur, d'où markdown-rendered
+	   ET markdown-preview-view, les deux racines que ces CSS ciblent, et le
+	   bouton « copier » du post-processeur natif). Sans `renderCodeBlock`, un
+	   `<pre><code>` nu porte le même texte — `textContent`, jamais du HTML. */
 	function renderHintCode(hint: HTMLElement, code: string, lang: string): void {
-		const box = hint.createDiv({
-			cls: "qbd-ai-hint-code markdown-rendered markdown-preview-view"
-		});
-		// Component = la vue (pas le plugin) : le rendu est libéré quand
-		// l'onglet se ferme, pas seulement au déchargement du plugin.
-		void MarkdownRenderer.render(
-			ctx.app, "```" + lang + "\n" + code + "\n```", box, "", ctx.view
-		);
-	}
-
-	function openPluginSettings(): void {
-		const setting = (ctx.app as App & { setting: { open(): void; openTabById(id: string): void } }).setting;
-		setting.open();
-		setting.openTabById(ctx.plugin.manifest.id);
+		const box = ajouter(hint, "div", "qbd-ai-hint-code markdown-rendered markdown-preview-view");
+		if (deps.renderCodeBlock) { deps.renderCodeBlock(box, code, lang); return; }
+		ajouter(ajouter(box, "pre"), "code", "language-" + lang, code);
 	}
 
 	/* Détections async : statut de chaque provider (trigger + menu du
 	   sélecteur), et pour le provider actif, hint contextuel + liste
 	   réelle de modèles. */
 	function refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force }: RefreshArgs): void {
-		const settings = ctx.plugin.settings;
+		const ollamaUrl = settings().aiOllamaUrl;
 
 		// Affichage IMMÉDIAT du dernier hint connu pour ce fournisseur : les
 		// détections ci-dessous ne font que le confirmer ou le corriger.
@@ -1216,7 +1229,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			}
 		});
 
-		aiProviders.checkOllama(settings.aiOllamaUrl, force).then(async (res) => {
+		aiProviders.checkOllama(ollamaUrl, force).then(async (res) => {
 			if (res.ok) {
 				// Affiche la version d'Ollama installée (comme Claude/Codex), ex.
 				// « Ollama v0.31.2 ». Repli sur l'état du cache si version absente.
@@ -1267,7 +1280,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 									tries++;
 									// force : le serveur vient de démarrer, le cache
 									// de détection dirait encore « injoignable ».
-									aiProviders.checkOllama(settings.aiOllamaUrl, true).then(r2 => {
+									aiProviders.checkOllama(ollamaUrl, true).then(r2 => {
 										if (!r2.ok && tries < 10) return;
 										if (ollamaPoll) { window.clearInterval(ollamaPoll); ollamaPoll = null; }
 										if (r2.ok) render(containerRef);
@@ -1337,14 +1350,18 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			if (file.type.startsWith("image/")) {
 				imgs.push(file);
 			} else if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+				/* Le texte d'un PDF vient de l'HÔTE (`host.pdf`, membre OPTIONNEL) :
+				   l'application n'en a pas, et le dit plutôt que de joindre un
+				   PDF vide en silence — voir `HostPdf` dans le contrat. */
+				if (!host.pdf) { host.ui.notice(t("ai.error.pdfUnsupportedInApp")); continue; }
 				try {
-					const content = await extractPdfText(file);
+					const content = await host.pdf.extractText(new Uint8Array(await file.arrayBuffer()));
 					if (!content.trim()) {
-						new Notice(t("ai.notice.pdfNoText", { name: file.name }));
+						host.ui.notice(t("ai.notice.pdfNoText", { name: file.name }));
 					} else {
 						const key = attachmentKey({ source, path: origin?.path, name: file.name });
 						if (noteAttachments.some(n => attachmentKey(n) === key)) {
-							new Notice(t("ai.notice.noteAlreadyAttached", { name: file.name }));
+							host.ui.notice(t("ai.notice.noteAlreadyAttached", { name: file.name }));
 						} else {
 							noteAttachments.push({ name: file.name, content, path: origin?.path, source });
 						}
@@ -1357,7 +1374,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 					const content = await file.text();
 					const key = attachmentKey({ source, path: origin?.path, name: file.name });
 					if (noteAttachments.some(n => attachmentKey(n) === key)) {
-						new Notice(t("ai.notice.noteAlreadyAttached", { name: file.name }));
+						host.ui.notice(t("ai.notice.noteAlreadyAttached", { name: file.name }));
 					} else {
 						noteAttachments.push({ name: file.name, content, path: origin?.path, source });
 					}
@@ -1374,48 +1391,31 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			render(containerRef);
 		}
 		if (rejected.length) {
-			new Notice(t("ai.notice.unsupportedFormat", { files: rejected.join(", ") }));
+			host.ui.notice(t("ai.notice.unsupportedFormat", { files: rejected.join(", ") }));
 		}
-	}
-
-	/* Texte d'un PDF via le pdf.js EMBARQUÉ d'Obsidian (loadPdfJs, API
-	   officielle — worker configuré par l'app, aucune dépendance
-	   ajoutée). Une section par page. Les PDF scannés (images) n'ont pas
-	   de couche texte → chaîne vide, signalée à l'appelant. */
-	async function extractPdfText(file: File): Promise<string> {
-		const pdfjs = await loadPdfJs() as PdfJsLib;
-		const buf = await file.arrayBuffer();
-		const pdf = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
-		const pages: string[] = [];
-		for (let i = 1; i <= pdf.numPages; i++) {
-			const page = await pdf.getPage(i);
-			const content = await page.getTextContent();
-			pages.push(content.items.map(it => it.str).join(" "));
-		}
-		return pages.join("\n\n");
 	}
 
 	/* Attache une note du vault comme source du quiz (menu « Ajouter des
 	   notes » et raccourci — remplace l'ancienne « note active »). */
-	async function attachNoteVaultFile(file: TFile): Promise<void> {
+	async function attachNoteVaultFile(file: HostFile): Promise<void> {
 		// Dédoublonnage par attachmentKey (source « vault » + path), PAS par
 		// name seul : sinon un « AGENTS.md » du vault percute à tort un
 		// « AGENTS.md » externe/déposé de contenu différent (régression
 		// corrigée ici — cf. rapport de tâche).
 		const key = attachmentKey({ source: "vault", path: file.path, name: file.name });
 		if (noteAttachments.some(n => attachmentKey(n) === key)) {
-			new Notice(t("ai.notice.noteAlreadyAttached", { name: file.basename }));
+			host.ui.notice(t("ai.notice.noteAlreadyAttached", { name: file.basename }));
 			return;
 		}
 		try {
-			const content = await ctx.app.vault.read(file);
+			const content = await host.fs.read(file.path);
 			// file.name (PAS file.basename) : la chip affiche le nom complet
 			// AVEC son extension, comme les fichiers .md/.txt/PDF attachés via
 			// addComposerFiles (déjà sur file.name).
 			noteAttachments.push({ name: file.name, content, path: file.path, source: "vault" });
 			render(containerRef);
 		} catch (e) {
-			new Notice(t("ai.notice.noteReadFailed", { name: file.basename }));
+			host.ui.notice(t("ai.notice.noteReadFailed", { name: file.basename }));
 		}
 	}
 
@@ -1440,16 +1440,17 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	   pas un dédoublonnage par nom seul qui le confondrait avec un fichier
 	   externe homonyme. */
 	async function attachVaultPath(path: string): Promise<void> {
-		const f = ctx.app.vault.getAbstractFileByPath(path);
-		if (!(f instanceof TFile)) return;
+		const f = host.fs.getFile(path);
+		if (!f) return;
 		const ext = f.extension.toLowerCase();
 		if (ext === "md" || ext === "txt") { await attachNoteVaultFile(f); return; }
 		try {
-			const buf = await ctx.app.vault.readBinary(f);
-			const file = new File([new Uint8Array(buf)], f.name, { type: mimeForName(f.name) });
+			const octets = await host.fs.readBinary(f.path);
+			// `slice()` : un `Uint8Array` sur un tampon partagé n'est pas un `BlobPart`.
+			const file = new File([octets.slice()], f.name, { type: mimeForName(f.name) });
 			await addComposerFiles([file], { source: "vault", path: f.path });
 		} catch (e) {
-			new Notice(t("ai.notice.noteReadFailed", { name: f.name }));
+			host.ui.notice(t("ai.notice.noteReadFailed", { name: f.name }));
 		}
 	}
 
@@ -1461,25 +1462,25 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	   (ex. deux « Styling Coiffure.pdf ») restent deux pièces jointes
 	   distinctes, joignables ENSEMBLE — c'était impossible avant (régression
 	   corrigée ici, cf. rapport de tâche). Vérifié AVANT la lecture disque :
-	   pas de fs.readFileSync pour un doublon détecté à l'avance. */
+	   pas de lecture pour un doublon détecté à l'avance. */
 	async function attachExternalPath(path: string): Promise<void> {
-		if (!Platform.isDesktopApp) return;
+		if (!host.platform.isDesktopApp) return;
 		const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 		const key = attachmentKey({ source: "external", path, name });
 		if (noteAttachments.some(n => attachmentKey(n) === key)) {
-			new Notice(t("ai.notice.noteAlreadyAttached", { name }));
+			host.ui.notice(t("ai.notice.noteAlreadyAttached", { name }));
 			return;
 		}
 		try {
-			const fs = require("fs") as typeof import("fs");
-			const buf = fs.readFileSync(path);
-			// mimeForName vient de la Task 2 : addComposerFiles teste file.type
-			// EN PREMIER pour les images, un File sans type finirait en chip
-			// texte au lieu d'une vignette.
-			const file = new File([new Uint8Array(buf)], name, { type: mimeForName(name) });
+			/* Par le contrat (`externe.readBinary`, chemin ABSOLU) : dans
+			   l'application, c'est un canal BORNÉ au périmètre, pas un `fs`. */
+			const octets = await host.fs.externe.readBinary(path);
+			// mimeForName : addComposerFiles teste file.type EN PREMIER pour les
+			// images, un File sans type finirait en chip texte au lieu d'une vignette.
+			const file = new File([octets.slice()], name, { type: mimeForName(name) });
 			await addComposerFiles([file], { source: "external", path });
 		} catch (e) {
-			new Notice(t("ai.notice.noteReadFailed", { name }));
+			host.ui.notice(t("ai.notice.noteReadFailed", { name }));
 		}
 	}
 
@@ -1491,16 +1492,9 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 
 	function openAddNotes(): void {
 		if (!addBtnRef || !addBtnRef.isConnected) return;
-		const seen = new Set<string>();
-		const openFiles: TFile[] = [];
-		for (const leaf of ctx.app.workspace.getLeavesOfType("markdown")) {
-			const view = leaf.view as View & { file?: TFile | null };
-			const f = view && view.file;
-			if (f && !seen.has(f.path)) { seen.add(f.path); openFiles.push(f); }
-		}
 		openNotePicker(addBtnRef, {
-			openFiles,
-			allFiles: ctx.app.vault.getMarkdownFiles(),
+			openFiles: deps.openFiles?.() ?? [],
+			allFiles: host.fs.listMarkdown(),
 			onPick: (file) => attachNoteVaultFile(file)
 		});
 	}
@@ -1511,37 +1505,37 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	   2026-07-31 — le composer qui gardait le texte donnait l'impression
 	   que rien n'était parti). Pour la reprendre : annuler la génération,
 	   elle retourne alors dans le composer. */
-	function renderSentMessage(host: HTMLElement): void {
+	function renderSentMessage(parent: HTMLElement): void {
 		const msg = sentMessage;
 		if (!msg) return;
-		const bubble = host.createDiv({ cls: "qbd-ai-sent" });
+		const bubble = ajouter(parent, "div", "qbd-ai-sent");
 		// L'entrée ne joue qu'au PREMIER rendu qui suit l'envoi : pendant la
 		// génération, la page se re-rend (statuts de fournisseur, quotas) et
 		// une bulle qui rebondit à chaque fois ferait clignoter la scène.
 		if (sentAnimPending) {
 			sentAnimPending = false;
-			bubble.addClass("qbd-ai-sent--in");
+			bubble.classList.add("qbd-ai-sent--in");
 		}
 
 		if (msg.images.length > 0) {
-			const row = bubble.createDiv({ cls: "qbd-ai-sent-images" });
+			const row = ajouter(bubble, "div", "qbd-ai-sent-images");
 			for (const img of msg.images) {
-				const thumb = row.createDiv({ cls: "qbd-ai-image-thumb" });
-				thumb.createEl("img", { cls: "qbd-ai-image-thumb-img" }).src = img.url;
+				const thumb = ajouter(row, "div", "qbd-ai-image-thumb");
+				ajouter(thumb, "img", "qbd-ai-image-thumb-img").src = img.url;
 			}
 		}
 
 		if (msg.notes.length > 0) {
-			const chips = bubble.createDiv({ cls: "qbd-ai-sent-chips" });
+			const chips = ajouter(bubble, "div", "qbd-ai-sent-chips");
 			for (const note of msg.notes) {
-				const chip = chips.createDiv({ cls: "qbd-ai-note-chip" });
-				setIcon(chip.createSpan({ cls: "qbd-ai-note-chip-icon" }), "file-text");
-				const name = chip.createSpan({ cls: "qbd-ai-note-chip-name", text: note.name });
+				const chip = ajouter(chips, "div", "qbd-ai-note-chip");
+				host.ui.setIcon(ajouter(chip, "span", "qbd-ai-note-chip-icon"), "file-text");
+				const name = ajouter(chip, "span", "qbd-ai-note-chip-name", note.name);
 				name.title = note.path || note.name;
 			}
 		}
 
-		if (msg.text.trim()) bubble.createDiv({ cls: "qbd-ai-sent-text", text: msg.text.trim() });
+		if (msg.text.trim()) ajouter(bubble, "div", "qbd-ai-sent-text", msg.text.trim());
 	}
 
 	/** Vide le composer au profit de la bulle « envoyé ». Les URL d'objet des
@@ -1596,29 +1590,26 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	   icône sparkles, dots pulsants) est reprise à l'identique : mêmes
 	   classes, mêmes keyframes. Seul le conteneur change (carte centrée
 	   sous le composer, plus de colonne d'aperçu). */
-	function renderLoading(host: HTMLElement): void {
-		const loader = host.createDiv({ cls: "qbd-ai-preview-loading" });
-		const iconWrap = loader.createDiv({ cls: "qbd-ai-loading-icon" });
-		setIcon(iconWrap, "sparkles");
-		loader.createEl("p", { cls: "qbd-ai-loading-title", text: t("ai.loading.title") });
+	function renderLoading(parent: HTMLElement): void {
+		const loader = ajouter(parent, "div", "qbd-ai-preview-loading");
+		const iconWrap = ajouter(loader, "div", "qbd-ai-loading-icon");
+		host.ui.setIcon(iconWrap, "sparkles");
+		ajouter(loader, "p", "qbd-ai-loading-title", t("ai.loading.title"));
 
-		const dots = loader.createDiv({ cls: "qbd-ai-loading-dots" });
+		const dots = ajouter(loader, "div", "qbd-ai-loading-dots");
 		for (let i = 0; i < 3; i++) {
-			dots.createDiv({ cls: "qbd-ai-loading-dot" });
+			ajouter(dots, "div", "qbd-ai-loading-dot");
 		}
 	}
 
-	function renderError(host: HTMLElement): void {
-		const errorEl = host.createDiv({ cls: "qbd-ai-preview-error" });
-		const errorIcon = errorEl.createDiv({ cls: "qbd-ai-error-icon" });
-		setIcon(errorIcon, "alert-triangle");
-		errorEl.createEl("p", { cls: "qbd-ai-error-title", text: t("ai.error.title") });
-		errorEl.createEl("p", { cls: "qbd-ai-error-msg", text: errorMessage });
+	function renderError(parent: HTMLElement): void {
+		const errorEl = ajouter(parent, "div", "qbd-ai-preview-error");
+		const errorIcon = ajouter(errorEl, "div", "qbd-ai-error-icon");
+		host.ui.setIcon(errorIcon, "alert-triangle");
+		ajouter(errorEl, "p", "qbd-ai-error-title", t("ai.error.title"));
+		ajouter(errorEl, "p", "qbd-ai-error-msg", errorMessage);
 
-		const retryBtn = errorEl.createEl("button", {
-			cls: "qbd-btn qbd-btn--ghost qbd-ai-error-retry",
-			text: t("ai.error.retry")
-		});
+		const retryBtn = ajouter(errorEl, "button", "qbd-btn qbd-btn--ghost qbd-ai-error-retry", t("ai.error.retry"));
 		// Réessayer = RENVOYER la même demande (référence claude.ai), pas la
 		// rendre au composer : le passage par restore/take garde un seul
 		// chemin d'envoi (startGeneration reprend le message tel quel).
@@ -1632,48 +1623,18 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	/** Ouvre l'écran d'usage en lui passant la dernière lecture connue (il ne
 	    rappellera l'endpoint que si elle a vieilli) et retient ce qu'il lit,
 	    pour que le survol du bouton puisse le résumer sans relire. */
-	async function openUsage(): Promise<void> {
-		const plugin = ctx.plugin as unknown as UsagePlugin;
+	async function openUsage(usage: AiUsageDeps): Promise<void> {
 		/* L'écran d'usage lit lui aussi l'instantané de `~/.claude.json` (Fable
 		   proposé ?, notes promo en cours) par `ai-providers`. Une entrée
 		   d'affichage de plus, donc un `await` de plus — le seul du fichier avec
 		   le menu de modèles. */
 		await aiProviders.refreshCliCaches();
-		openUsageModal(ctx.app, {
-			plugin,
-			provider: ctx.plugin.settings.aiProvider || "",
+		await usage.open({
+			provider: settings().aiProvider || "",
 			usage: lastUsage,
 			known: lastPlan,
 			onData: (data) => { lastPlan = data; }
 		});
-	}
-
-	/* ── Ce que la génération a coûté ──
-	   Badge compact dans la barre de résultat ; le détail complet vit dans
-	   l'écran d'usage. Un fournisseur qui ne publie pas ses compteurs le DIT
-	   (il n'affiche pas « 0 ») : c'est la seule façon de distinguer « rien
-	   consommé » de « rien mesuré ». */
-	function renderUsageBadge(host: HTMLElement): void {
-		if (!lastUsage) {
-			host.createSpan({ cls: "qbd-ai-usage-badge is-muted", text: t("ai.usage.tokensUnavailable") });
-			return;
-		}
-		const usage = lastUsage;
-
-		const badge = host.createEl("button", {
-			cls: "qbd-ai-usage-badge",
-			attr: { type: "button" }
-		});
-		const gaugeIcon = badge.createSpan({ cls: "qbd-ai-usage-icon" });
-		setIcon(gaugeIcon, "gauge");
-		badge.createSpan({ text: t("ai.usage.badge", { tokens: formatTokens(totalTokens(usage)) }) });
-
-		const cost = formatCost(usage.costUsd);
-		if (cost) badge.createSpan({ cls: "qbd-ai-usage-sep", text: cost });
-		const dur = formatDuration(usage.durationMs);
-		if (dur) badge.createSpan({ cls: "qbd-ai-usage-sep", text: dur });
-
-		badge.addEventListener("click", () => void openUsage());
 	}
 
 	/* Zone résultat (pleine page, composer en bas) : barre compacte +
@@ -1685,10 +1646,12 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		// qui bascule le mode. L'éditeur en trois colonnes qui vivait ici
 		// n'était pas assez simple (retour Ahmed 2026-07-31) — et il n'avait
 		// aucune raison d'être un écran différent de celui d'un quiz existant.
-		const host = container.createDiv({ cls: "qbd-ai-quiz-page" });
-		if (!resultPage) resultPage = createQuizPage({ statsStore: ctx.statsStore });
+		/* `page` et non `host` : `host` est l'HÔTE de ce module (`currentHost()`),
+		   et le masquer ici rendrait illisible tout ajout futur à cette fonction. */
+		const page = ajouter(container, "div", "qbd-ai-quiz-page");
+		if (!resultPage) resultPage = createQuizPage({ statsStore: deps.statsStore });
 
-		resultPage.render(host, {
+		resultPage.render(page, {
 			// La clé change à chaque génération : la page repart alors de la
 			// question 1, en consultation. Un re-render de la scène (statut de
 			// fournisseur, quota) garde la même clé, donc l'édition en cours.
@@ -1749,8 +1712,6 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	    généré et un quiz relu d'un .md doivent être le même objet. */
 	function loadGeneratedDraft(): QuizDraft {
 		if (generatedDraft && generatedDraft.genId === generationId) return generatedDraft.draft;
-		const { convertParsedToInternal, readModeConfig } =
-			require("../editor/convert") as typeof import("../editor/convert");
 		const questions: DraftQuestion[] = [];
 		let examOptions: EditorExamOptions | null = null;
 		// Par son INDEX : le critère dépend de la POSITION dans le bloc
@@ -1770,16 +1731,9 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 
 	/** Picker d'insertion : notes OUVERTES en tête + recherche dans tout le vault. */
 	function openInsertPicker(anchor: HTMLElement): void {
-		const seen = new Set<string>();
-		const openFiles: TFile[] = [];
-		for (const leaf of ctx.app.workspace.getLeavesOfType("markdown")) {
-			const view = leaf.view as View & { file?: TFile | null };
-			const f = view && view.file;
-			if (f && !seen.has(f.path)) { seen.add(f.path); openFiles.push(f); }
-		}
 		openNotePicker(anchor, {
-			openFiles,
-			allFiles: ctx.app.vault.getMarkdownFiles(),
+			openFiles: deps.openFiles?.() ?? [],
+			allFiles: host.fs.listMarkdown(),
 			onPick: (file) => insertIntoNote(file)
 		});
 	}
@@ -1828,7 +1782,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	   par un texte hors écran, lu par les lecteurs d'écran, invisible à la
 	   souris. À appeler APRÈS setIcon, qui réécrit le contenu du bouton. */
 	function labelIconButton(btn: HTMLElement, label: string): void {
-		btn.createSpan({ cls: "qbd-sr-only", text: label });
+		ajouter(btn, "span", "qbd-sr-only", label);
 	}
 
 	/* Bulle au survol d'un bouton du composer. Le CONTENU est reconstruit à
@@ -1840,7 +1794,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		const hide = () => { if (tip) { tip.remove(); tip = null; } };
 		btn.addEventListener("mouseenter", () => {
 			if (tip) return;
-			tip = document.body.createDiv({ cls: "qbd-hover-tip" });
+			tip = ajouter(document.body, "div", "qbd-hover-tip");
 			fill(tip);
 			const r = btn.getBoundingClientRect();
 			tip.style.visibility = "hidden";
@@ -1859,9 +1813,9 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	/* Tooltip du bouton stop (référence Claude Code : « Arrêter  Esc »). */
 	function attachStopTip(btn: HTMLElement): void {
 		attachHoverTip(btn, (tip) => {
-			const row = tip.createDiv({ cls: "qbd-hover-tip-row" });
-			row.createSpan({ cls: "qbd-hover-tip-title", text: t("ai.composer.stop") });
-			row.createSpan({ cls: "qbd-hover-tip-esc", text: "Esc" });
+			const row = ajouter(tip, "div", "qbd-hover-tip-row");
+			ajouter(row, "span", "qbd-hover-tip-title", t("ai.composer.stop"));
+			ajouter(row, "span", "qbd-hover-tip-esc", "Esc");
 		});
 	}
 
@@ -1873,8 +1827,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	async function attachPromptPaths(): Promise<void> {
 		const text = composerText.trim();
 		if (!text) return;
-		const { scanPromptPaths, MAX_PROMPT_PATHS } = require("./prompt-paths") as typeof import("./prompt-paths");
-		const roots = ctx.plugin.settings.aiMentionExtraFolders || [];
+		const roots = settings().aiMentionExtraFolders || [];
 		const { refs, unresolved, ambiguous, truncated } = await scanPromptPaths(roots, text);
 
 		// Déjà joint (via « @ » ou « + ») : on ne le redit pas. Le passer à
@@ -1890,18 +1843,18 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			else await attachExternalPath(r.path);
 		}
 		if (fresh.length) {
-			new Notice(t("ai.notice.pathsAttached", {
+			host.ui.notice(t("ai.notice.pathsAttached", {
 				files: fresh.map(r => r.name).join(", ")
 			}));
 		}
 		if (truncated) {
-			new Notice(t("ai.notice.pathsTooMany", { max: String(MAX_PROMPT_PATHS) }));
+			host.ui.notice(t("ai.notice.pathsTooMany", { max: String(MAX_PROMPT_PATHS) }));
 		}
 		for (const a of ambiguous) {
-			new Notice(t("ai.notice.pathsAmbiguous", { file: a.text, count: String(a.count) }));
+			host.ui.notice(t("ai.notice.pathsAmbiguous", { file: a.text, count: String(a.count) }));
 		}
 		if (unresolved.length) {
-			new Notice(t("ai.notice.pathsUnresolved", { files: unresolved.join(", ") }));
+			host.ui.notice(t("ai.notice.pathsUnresolved", { files: unresolved.join(", ") }));
 		}
 	}
 
@@ -1939,21 +1892,9 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		errorMessage = "";
 		render(container);
 
-		const { createAiClient } = require("./ai-client") as typeof import("./ai-client");
-		/* L'ADAPTATEUR OBSIDIAN DES RÉGLAGES IA, ici et TEMPORAIREMENT.
-		   `createAiClient` ne prend plus un `obsidian.Plugin` mais un
-		   `AiSettingsHost` (`ai-settings-host.ts`) — c'est ce qui a sorti
-		   `ai-client.ts` de la liste des fichiers liés à Obsidian. `ai.ts`, lui,
-		   y figure encore : la tâche 6 de la tranche 5 (la page « Générer » de
-		   l'application) déménage cet objet hors d'ici, chez celui qui possède
-		   les réglages. */
-		const client = createAiClient({
-			get: () => ctx.plugin.settings,
-			save: async patch => {
-				Object.assign(ctx.plugin.settings, patch);
-				await ctx.plugin.saveSettings();
-			},
-		});
+		/* Le client lit les réglages par le MÊME hôte que la page : celui qui
+		   possède les réglages (le greffon, ou le cache de l'application). */
+		const client = createAiClient(deps.settings);
 		activeClient = client;
 		// Esc annule la génération (référence : tooltip « Arrêter  Esc »)
 		const onEsc = (e: KeyboardEvent) => {
@@ -2016,10 +1957,9 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			   génération qui, elle, a réussi. */
 			lastUsage = client.lastUsage;
 			lastPlan = null;
-			if (lastUsage) {
-				const usagePlugin = ctx.plugin as unknown as UsagePlugin;
+			if (lastUsage && deps.usage) {
 				try {
-					await recordUsage(usagePlugin, {
+					await deps.usage.record({
 						...lastUsage,
 						at: Date.now(),
 						questionCount: generatedQuestions.length
@@ -2027,9 +1967,9 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 					// La génération vient de consommer du forfait : relire tout de
 					// suite garde le survol du bouton d'usage juste, sans attendre
 					// que l'écran soit ouvert.
-					lastPlan = await fetchPlanUsageFor(usagePlugin, lastUsage);
+					lastPlan = await deps.usage.fetchPlan(lastUsage);
 				} catch (e) {
-					console.warn("[quiz-blocks] usage non enregistré:", e);
+					console.warn(LOG_PREFIX, "usage non enregistré:", e);
 				}
 			}
 		} catch (err) {
@@ -2068,14 +2008,13 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 	/* Insère le quiz dans la note choisie via le picker (« Insérer dans une
 	   note »). L'état ÉDITÉ de l'éditeur embarqué prime sur les questions
 	   générées brutes (les retouches faites dans l'éditeur sont insérées). */
-	async function insertIntoNote(file: TFile): Promise<void> {
+	async function insertIntoNote(file: HostFile): Promise<void> {
 		if (!file) return;
 		let quizJson: string;
 		// L'état ÉDITÉ prime sur les questions générées brutes : les retouches
 		// faites dans la page (réponses, ordre, mode) sont ce qu'on insère.
 		const draft = generatedDraft && generatedDraft.genId === generationId ? generatedDraft.draft : null;
 		if (draft && draft.questions.length) {
-			const { exportAll } = require("../editor/export") as typeof import("../editor/export");
 			quizJson = exportAll(draft.questions, draft.examOptions);
 		} else if (generatedQuestions.length) {
 			quizJson = JSON5.stringify(generatedQuestions, null, 2);
@@ -2085,25 +2024,26 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 
 		try {
 			const quizBlock = "```quiz-blocks\n" + quizJson + "\n```";
-			/* `vault.process` et non `read` + `modify` : entre les deux, une
+			/* `fs.process` et non `read` + `write` : entre les deux, une
 			   modification faite ailleurs (éditeur markdown, synchro) était
 			   écrasée — et l'insertion annonçait quand même « Quiz inséré ».
-			   Ici la lecture et l'écriture sont indivisibles, et le contenu
-			   ajouté l'est à ce qui EST dans le fichier, pas à ce qu'on avait lu.
-			   La détection d'un bloc existant se fait dans le même passage : la
-			   tester avant laissait la place à un bloc arrivé entre-temps. */
+			   Ici la lecture et l'écriture sont indivisibles (voir le contrat),
+			   et le contenu ajouté l'est à ce qui EST dans le fichier, pas à ce
+			   qu'on avait lu. La détection d'un bloc existant se fait dans le même
+			   passage : la tester avant laissait la place à un bloc arrivé
+			   entre-temps. */
 			let dejaUnBloc = false;
-			await ctx.app.vault.process(file, (content) => {
+			await host.fs.process(file.path, (content) => {
 				// Le rappel peut être rejoué : repartir de zéro à chaque essai.
 				dejaUnBloc = content.includes("```quiz-blocks");
 				if (dejaUnBloc) return content;
 				return content + "\n\n" + quizBlock;
 			});
 			if (dejaUnBloc) {
-				new Notice(t("ai.notice.blockExists", { name: file.basename }));
+				host.ui.notice(t("ai.notice.blockExists", { name: file.basename }));
 				return;
 			}
-			new Notice(t("ai.notice.quizInserted", { name: file.basename }));
+			host.ui.notice(t("ai.notice.quizInserted", { name: file.basename }));
 
 			/* Le quiz a maintenant une NOTE : on va sur sa page, celle qui écrit
 			   dans le fichier. Rester sur la page « Générer » laisserait deux
@@ -2111,15 +2051,15 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 			   part, une sur le disque — et la première retouche irait dans le
 			   vide. Le scan du seul fichier suffit à obtenir son entrée : le
 			   scan de vault complet arriverait trop tard. */
-			const hostFile = currentHost().fs.getFile(file.path);
-			if (hostFile) await ctx.scanner.scanFile(hostFile);
-			const entry = ctx.scanner.getQuiz(file.path);
+			const hostFile = host.fs.getFile(file.path);
+			if (hostFile) await deps.scanner.scanFile(hostFile);
+			const entry = deps.scanner.getQuiz(file.path);
 			if (entry) {
 				resetGeneration();
-				ctx.navigate("detail", { quiz: entry });
+				deps.navigate("detail", { quiz: entry });
 			}
 		} catch (err) {
-			new Notice(t("ai.notice.insertFailed"));
+			host.ui.notice(t("ai.notice.insertFailed"));
 		}
 	}
 

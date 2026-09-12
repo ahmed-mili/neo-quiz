@@ -35,6 +35,8 @@ import { createNavHandlers } from "../../../../src/dashboard/nav";
 import { createHomeHandlers } from "../../../../src/dashboard/home";
 import { createQuizzesHandlers } from "../../../../src/dashboard/quizzes";
 import { createDetailHandlers } from "../../../../src/dashboard/detail";
+import { createAiHandlers } from "../../../../src/dashboard/ai";
+import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host";
 import { openIconPicker } from "../../../../src/dashboard/icon-picker";
 import { openCreateFolderModal, openCreateQuizModal } from "../../../../src/dashboard/folder-create";
 import { buildModuleCardMenu, buildQuizCardMenu } from "../../../../src/dashboard/quiz-menu";
@@ -132,6 +134,8 @@ export interface MonterDashboardDeps {
 	    peut manquer. Le champ reste néanmoins celui de `DashboardShellCtx`
 	    (optionnel), pour ne pas inventer un second contrat. */
 	reviewStore: ReviewStore;
+	/** Les réglages IA de l'application (`main.ts`), pour la page « Générer ». */
+	aiSettings: AiSettingsHost;
 	onOpenQuiz(entry: QuizIndexEntry): void;
 	onOpenSettings(): void;
 }
@@ -180,7 +184,11 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 		recordNav: () => {},
 		openQuiz: (quiz) => deps.onOpenQuiz(quiz),
 		openSettings: () => deps.onOpenSettings(),
-		canOpen: (vue) => vue !== "ai",
+		/* Toutes les vues, la génération comprise (tranche 5, tâche 6) : la page
+		   « Générer » tourne ici, Ollama pour de bon ; Claude et Codex jusqu'à
+		   ce que l'hôte sache lancer un CLI (tâche 7 — d'ici là, une Notice
+		   « fournisseur indisponible » propre, jamais un composer mort). */
+		canOpen: () => true,
 		reviewStore: deps.reviewStore,
 		pickIcon: (anchor, courante, onPick, suggestions) => {
 			openIconPicker(anchor, courante, onPick, document.body, suggestions ?? []);
@@ -242,6 +250,18 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	const home = createHomeHandlers(ctx);
 	const quizzes = createQuizzesHandlers(ctx);
 	const detail = createDetailHandlers(ctx);
+	/* La page « Générer », la MÊME que sous Obsidian (`src/dashboard/ai.ts`),
+	   sur ce que l'application sait fournir : ses réglages, le catalogue, la
+	   navigation. Ni onglets ouverts (`openFiles`), ni écran d'usage (`usage`,
+	   resté au greffon), ni moteur Markdown (`renderCodeBlock`, un `<pre>` nu
+	   porte la même commande) : trois absences PRÉVUES par `AiPageDeps`, pas
+	   des trous. */
+	const ai = createAiHandlers({
+		settings: deps.aiSettings,
+		scanner: deps.scanner,
+		statsStore: deps.statsStore,
+		navigate: (vue, data) => naviguer(vue, data),
+	});
 
 	/** Demande « ouvrir en édition » posée par `naviguer("detail", { edit })`
 	    et consommée par le prochain `peindre()` — une seule fois, le mode
@@ -294,12 +314,11 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 				});
 				break;
 			}
+			case "ai":
+				void ai.render(contentEl);
+				break;
 			case "home":
 			default:
-				// Repli défensif : `naviguer` n'assigne jamais `vueCourante` à
-				// "ai" (voir plus bas) — ce `default` ne devrait donc jamais
-				// s'exécuter, mais un rendu de secours vaut mieux qu'un contenu
-				// vide si un futur appelant l'atteignait quand même.
 				home.render(contentEl, entering);
 				break;
 		}
@@ -317,15 +336,11 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	 *   Sans quiz dans `data`, rien ne se passe — il n'y a pas de page à
 	 *   montrer, et le greffon garde alors son `selectedQuiz` précédent, ce qui
 	 *   afficherait ICI un quiz que l'utilisateur n'a pas demandé.
-	 * - `"ai"` : le bouton « Générer » de l'accueil (CTA d'en-tête ET
-	 *   onboarding) appelle `ctx.navigate("ai")` SANS jamais consulter
-	 *   `ctx.canOpen` — `canOpen` ne gouverne que l'état du rail (grisé,
-	 *   inatteignable au clic natif d'un `<button disabled>`), pas les CTA
-	 *   internes des pages. La génération est la tranche 4 : tant qu'aucune
-	 *   page « ai » n'existe, la coquille doit refuser elle-même la
-	 *   navigation plutôt que de peindre un contenu vide ou un mauvais repli.
-	 *   Réutiliser `ctx.canOpen` ici plutôt qu'une liste séparée garde une
-	 *   SEULE source de vérité entre le rail et le routeur.
+	 * - `"ai"` : la page « Générer » (tranche 5, tâche 6), demandée par le rail
+	 *   ou par le bouton « Générer » de l'accueil (CTA d'en-tête ET onboarding),
+	 *   qui appelle `ctx.navigate("ai")` SANS consulter `ctx.canOpen` — celui-ci
+	 *   ne gouverne que l'état du rail. Le routeur le consulte quand même :
+	 *   une SEULE source de vérité entre le rail et lui.
 	 */
 	function naviguer(vue: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void {
 		if (vue === "detail") {
@@ -364,7 +379,10 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	// SAUF la page d'un quiz (même exclusion que le greffon) : elle ÉCRIT dans
 	// la note, donc réveille le scanner, et se ferait repeindre sous les
 	// doigts à chaque frappe — brouillon et mode d'édition perdus.
-	const desabonner = deps.scanner.onChange(() => { if (vueCourante !== "detail") peindre(); });
+	// SAUF aussi la page « Générer » (même exclusion que le greffon) : elle
+	// porte un composer en cours de frappe et un popover d'options qu'un
+	// rendu détruirait.
+	const desabonner = deps.scanner.onChange(() => { if (vueCourante !== "detail" && vueCourante !== "ai") peindre(); });
 
 	/* Le retour DÉSABONNE, et l'appelant DOIT l'invoquer avant tout
 	   remontage — même contrat que `renderSettings`/`openQuizPage` : sans lui,
@@ -380,6 +398,11 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	return () => {
 		if (demonte) return demonte;
 		desabonner();
+		/* La page « Générer » aussi : une génération en vol, son écoute Échap
+		   sur le document, son sondage Ollama et les URL d'objet de ses images
+		   survivraient sinon à la coquille (même geste que l'`onClose` du
+		   greffon). */
+		ai.dispose();
 		demonte = detail.dispose();
 		return demonte;
 	};

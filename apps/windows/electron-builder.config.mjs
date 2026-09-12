@@ -62,6 +62,16 @@ export default async function () {
 			// paquet.
 			output: "dist-installer",
 		},
+		/* LE FLUX DES MISES À JOUR : la dernière release GitHub de ce dépôt.
+		   Cette clé fait deux choses à l'empaquetage : écrire `latest.yml` /
+		   `latest-linux.yml` (version + sha512 des paquets) dans
+		   `dist-installer/`, et embarquer `resources/app-update.yml` dans le
+		   paquet — c'est ce fichier que lit electron-updater, jamais une URL
+		   venue du rendu. Elle ne PUBLIE rien : les scripts `pack:*` passent
+		   `--publish never`, parce que sous un tag et avec `GH_TOKEN`,
+		   electron-builder créerait lui-même une release brouillon à côté de
+		   celle de `release.yml`. */
+		publish: { provider: "github", owner: "ahmed-mili", repo: "neo-quiz" },
 		/* Les DEUX sorties et rien d'autre. Le principal est bundlé par esbuild
 		   (`chokidar` compris — raison 2 de l'en-tête de `construire.mjs`), le
 		   rendu par Vite (`lucide` compris) : rien dans le paquet n'appelle

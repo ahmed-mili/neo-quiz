@@ -11,11 +11,12 @@
     "typecheck:electron": "tsc --noEmit -p tsconfig.electron.json",
     "build:electron": "node electron/construire.mjs",
     "build": "npm run typecheck && npm run typecheck:electron && npm run build:electron && vite build",
-    "pack:win": "npm run build && electron-builder --win nsis --config electron-builder.config.mjs",
-    "pack:linux": "npm run build && electron-builder --linux AppImage --config electron-builder.config.mjs"
+    "pack:win": "npm run build && electron-builder --win nsis --publish never --config electron-builder.config.mjs",
+    "pack:linux": "npm run build && electron-builder --linux AppImage --publish never --config electron-builder.config.mjs"
   },
   "dependencies": {
     "chokidar": "^5.0.0",
+    "electron-updater": "^6.8.9",
     "lucide": "^1.41.0"
   },
   "devDependencies": {

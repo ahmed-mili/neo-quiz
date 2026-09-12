@@ -151,16 +151,23 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: neo-quiz-windows-setup
-          path: apps/windows/dist-installer/*.exe
+          path: |
+            apps/windows/dist-installer/*.exe
+            apps/windows/dist-installer/*.exe.blockmap
+            apps/windows/dist-installer/latest.yml
           if-no-files-found: error
-      # Le `.blockmap` n'est PAS attaché : il ne sert qu'à electron-updater,
-      # qui n'est pas branché (spec, §2.5).
+      # `latest.yml` et le `.blockmap` sont ce qu'electron-updater lit : la
+      # version à comparer, le sha512 à vérifier, et les blocs à ne pas
+      # retélécharger (spec de la mise à jour automatique, §3.1).
       - name: Attach installer to release
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ needs.plugin.outputs.tag }}"
-          files: apps/windows/dist-installer/*.exe
+          files: |
+            apps/windows/dist-installer/*.exe
+            apps/windows/dist-installer/*.exe.blockmap
+            apps/windows/dist-installer/latest.yml
 
   app-linux:
     needs: plugin
@@ -197,11 +204,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: neo-quiz-linux-appimage
-          path: apps/windows/dist-installer/*.AppImage
+          path: |
+            apps/windows/dist-installer/*.AppImage
+            apps/windows/dist-installer/latest-linux.yml
           if-no-files-found: error
       - name: Attach AppImage to release
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ needs.plugin.outputs.tag }}"
-          files: apps/windows/dist-installer/*.AppImage
+          files: |
+            apps/windows/dist-installer/*.AppImage
+            apps/windows/dist-installer/latest-linux.yml

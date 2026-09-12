@@ -17,7 +17,7 @@
  *
  *     npm run check:package
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readFile } from "node:fs/promises";
@@ -46,6 +46,13 @@ r.check("files exclut node_modules et les sourcemaps",
 	[config.files.includes("!node_modules/**"), config.files.includes("!dist-electron/**/*.map")],
 	[true, true]);
 r.check("la désinstallation garde les données", config.nsis?.deleteAppDataOnUninstall, false);
+/* LA CLÉ `publish` : c'est elle qui fait générer `latest*.yml` et embarquer
+   `app-update.yml` — sans elle, electron-updater n'a aucun flux à lire et
+   se tait. Le dépôt est FIXE : un rendu ne choisit jamais d'où vient une
+   mise à jour. */
+r.check("publish vise les releases GitHub du dépôt",
+	[config.publish?.provider, config.publish?.owner, config.publish?.repo],
+	["github", "ahmed-mili", "neo-quiz"]);
 r.done();
 
 /* LE PAQUET, s'il a été construit (`npm run pack:win` laisse `win-unpacked/`).
@@ -62,6 +69,17 @@ if (existsSync(asar)) {
 	p.check("les deux sorties sont là",
 		[chemins.includes("/dist-electron/main.cjs"), chemins.includes("/dist-electron/preload.cjs"), chemins.includes("/dist/index.html")],
 		[true, true, true]);
+	/* Le paquet porte son flux (`app-update.yml`, écrit par electron-builder à
+	   côté de l'asar), et le dossier de sortie porte les métadonnées que la
+	   release publie. La version de `latest.yml` DOIT être celle du manifeste :
+	   c'est elle qu'electron-updater compare à `app.getVersion()`. */
+	p.check("app-update.yml est dans le paquet",
+		existsSync(`${appWindows}dist-installer/win-unpacked/resources/app-update.yml`), true);
+	const latest = `${appWindows}dist-installer/latest.yml`;
+	p.check("latest.yml existe à côté de l'installeur", existsSync(latest), true);
+	p.check("latest.yml porte la version du manifeste",
+		existsSync(latest) ? /^version:\s*(.+)$/m.exec(readFileSync(latest, "utf8"))?.[1]?.trim() : null,
+		manifeste.version);
 	p.done();
 } else {
 	console.log("Empaquetage — contenu de app.asar : aucun paquet local (npm run pack:win), groupe sauté");

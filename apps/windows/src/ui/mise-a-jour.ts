@@ -21,17 +21,24 @@ import { ajouter } from "../../../../src/dom";
 let etat: EtatMiseAJour = { phase: "inactif", auto: true };
 const abonnes = new Set<(etat: EtatMiseAJour) => void>();
 let desabonnerPont: (() => void) | null = null;
+let pousse = false;
 
 /** Un seul abonnement au pont pour toute la fenêtre, posé au premier appel. */
 function garantirAbonnement(): void {
 	if (desabonnerPont) return;
 	desabonnerPont = pont().miseAJour.surEtat(e => {
+		pousse = true;
 		etat = e;
 		for (const a of abonnes) a(etat);
 	});
+	// La lecture initiale rattrape l'état d'AVANT l'abonnement ; si un état a
+	// été poussé pendant l'aller-retour, il est plus récent que cette réponse
+	// et gagne, sinon une mise à jour prête disparaîtrait jusqu'au prochain événement.
 	void pont().miseAJour.etat().then(e => {
-		etat = e;
-		for (const a of abonnes) a(etat);
+		if (!pousse) {
+			etat = e;
+			for (const a of abonnes) a(etat);
+		}
 	});
 }
 

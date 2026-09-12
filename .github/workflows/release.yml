@@ -45,10 +45,13 @@ jobs:
       - name: Resolve version
         id: version
         shell: bash
+        # L'entrée passe par l'environnement, jamais interpolée dans le script : interpolée, une valeur saisie serait exécutée comme du shell.
+        env:
+          VERSION_SAISIE: ${{ github.event.inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-            echo "tag=v${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION_SAISIE" >> "$GITHUB_OUTPUT"
+            echo "tag=v$VERSION_SAISIE" >> "$GITHUB_OUTPUT"
           else
             tag="${GITHUB_REF#refs/tags/}"
             echo "tag=$tag" >> "$GITHUB_OUTPUT"

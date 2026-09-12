@@ -13,7 +13,8 @@ Exactement le comportement de Neo Calendar, dans l'application Neo Quiz :
 1. L'application **vérifie seule** s'il existe une version plus récente : au
    lancement, au retour du focus sur la fenêtre, et toutes les quatre heures.
 2. S'il y en a une, elle la **télécharge seule**, en arrière-plan, sans rien
-   demander (téléchargement différentiel par les `.blockmap`).
+   demander (téléchargement différentiel par les `.blockmap` sous Windows ;
+   une AppImage n'a pas de `.blockmap`, Linux retélécharge le fichier entier).
 3. Quand c'est prêt, un bouton apparaît dans le rail : « Redémarrer pour
    mettre à jour ». **Un clic.**
 4. L'application se ferme, l'installeur tourne **en silence**, et

@@ -1,16 +1,33 @@
 name: Release Neo Quiz
 
+# Deux déclencheurs, une seule chaîne :
+#   - un tag `v*` PUBLIE : release GitHub avec le greffon (main.js, styles.css,
+#     manifest.json), l'installeur Windows et l'AppImage ;
+#   - `workflow_dispatch` RÉPÈTE sans publier : mêmes jobs, mêmes builds, mais
+#     les fichiers sont déposés en artefacts de workflow et aucune release
+#     n'est créée. C'est ainsi qu'on éprouve cette chaîne sur un dépôt public
+#     sans laisser une release de test derrière soi.
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à répéter (sans le v), écrite dans le manifeste le temps du build"
+        required: true
+        default: "0.0.0-repetition"
 
 jobs:
-  build:
+  plugin:
     runs-on: ubuntu-latest
 
     permissions:
       contents: write
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Checkout
@@ -24,19 +41,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Get version from tag
+      # Sur tag : la version vient du tag. En répétition : de l'entrée saisie.
+      - name: Resolve version
         id: version
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Update manifest version
+        shell: bash
         run: |
-          node -e "
-            const fs = require('fs');
-            const m = JSON.parse(fs.readFileSync('src/assets/manifest.json', 'utf8'));
-            m.version = '${{ steps.version.outputs.tag }}'.replace(/^v/, '');
-            fs.writeFileSync('src/assets/manifest.json', JSON.stringify(m, null, 2) + '\n');
-            console.log('Manifest version updated to:', m.version);
-          "
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "tag=v${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # UNE SEULE façon d'écrire la version : le script du dépôt, jamais un
+      # `node -e` inline qui divergerait de lui.
+      - name: Update manifest version
+        run: node scripts/set-version.mjs "${{ steps.version.outputs.version }}"
 
       - name: Type check
         run: npm run check
@@ -52,11 +74,18 @@ jobs:
           mkdir -p release
           cp dist/main.js dist/styles.css release/
           cp src/assets/manifest.json release/manifest.json
+          ls -lh release/
 
-      - name: List release files
-        run: ls -lh release/
+      - name: Upload plugin (répétition)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: neo-quiz-plugin
+          path: release/*
+          if-no-files-found: error
 
       - name: Create Release
+        if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           name: "${{ steps.version.outputs.tag }}"
@@ -70,3 +99,85 @@ jobs:
             release/main.js
             release/manifest.json
             release/styles.css
+
+  # L'application, deux paquets, deux runners. `needs: plugin` pour deux
+  # raisons : la release existe déjà quand ils y attachent leurs fichiers, et
+  # un greffon qui ne compile pas n'a pas à produire d'installeur. Un échec
+  # de l'un des deux n'annule ni l'autre ni la release du greffon.
+  app-windows:
+    needs: plugin
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - name: Install dependencies (racine)
+        run: npm ci
+      - name: Install dependencies (apps/windows)
+        run: npm ci
+        working-directory: apps/windows
+      - name: Update manifest version
+        run: node scripts/set-version.mjs "${{ needs.plugin.outputs.version }}"
+      - name: Build and package (NSIS)
+        run: npm run pack:win
+        working-directory: apps/windows
+      - name: Package config and contents
+        run: npm run check:package
+      - name: Upload installer (répétition)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: neo-quiz-windows-setup
+          path: apps/windows/dist-installer/*.exe
+          if-no-files-found: error
+      # Le `.blockmap` n'est PAS attaché : il ne sert qu'à electron-updater,
+      # qui n'est pas branché (spec, §2.5).
+      - name: Attach installer to release
+        if: github.event_name != 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "${{ needs.plugin.outputs.tag }}"
+          files: apps/windows/dist-installer/*.exe
+
+  app-linux:
+    needs: plugin
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - name: Install dependencies (racine)
+        run: npm ci
+      - name: Install dependencies (apps/windows)
+        run: npm ci
+        working-directory: apps/windows
+      - name: Update manifest version
+        run: node scripts/set-version.mjs "${{ needs.plugin.outputs.version }}"
+      - name: Build and package (AppImage)
+        run: npm run pack:linux
+        working-directory: apps/windows
+      - name: Package config and contents
+        run: npm run check:package
+      - name: Upload AppImage (répétition)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: neo-quiz-linux-appimage
+          path: apps/windows/dist-installer/*.AppImage
+          if-no-files-found: error
+      - name: Attach AppImage to release
+        if: github.event_name != 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "${{ needs.plugin.outputs.tag }}"
+          files: apps/windows/dist-installer/*.AppImage

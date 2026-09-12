@@ -51,31 +51,21 @@ jobs:
           test -f dist/styles.css
           ls -lh dist/
 
-  # Le paquet Linux de l'application Windows (tâche 7 de la migration
-  # Tauri → Electron) : AppImage exige un runner Linux pour se construire,
-  # ce que la machine de développement (Windows) ne peut pas fournir. Job
-  # séparé du greffon ci-dessus : une casse ici ne doit pas bloquer la
-  # publication du greffon Obsidian, qui n'a aucun rapport avec la coquille.
+  # Le paquet Linux de l'application : AppImage exige un runner Linux, ce
+  # que le poste de développement (Windows) ne peut pas fournir. Job séparé du
+  # greffon : une casse ici ne bloque pas la publication du greffon Obsidian.
   #
-  # DEUX `npm ci`, DANS CET ORDRE (Ruling 22, ronde de correction 1). Le code
-  # partagé qu'`apps/windows` compile importe des paquets déclarés
-  # uniquement dans le `package.json` de la RACINE (`mathlive` par
-  # `apps/windows/src/host/math.ts` et `src/engine/math-input.ts`, `json5`
-  # par `src/quiz-utils.ts`) : un `npm ci` limité à `apps/windows` laisse ces
-  # imports introuvables. En local ça passait par accident, parce que
-  # `node_modules` de la racine existait déjà sur le poste ; un runner CI
-  # neuf n'a rien de tel — vérifié en simulant l'un et l'autre dans un
-  # worktree sans `node_modules` racine (`tsc --noEmit` : 125 erreurs sans
-  # le premier `npm ci`, 0 avec).
+  # DEUX `npm ci`, DANS CET ORDRE (Ruling 22). Le code partagé qu'`apps/windows`
+  # compile importe des paquets déclarés uniquement dans le `package.json` de
+  # la RACINE (`mathlive`, `json5`) : un `npm ci` limité à `apps/windows`
+  # laisse ces imports introuvables (125 erreurs `tsc` sans le premier
+  # `npm ci`, 0 avec, mesuré dans un worktree sans `node_modules` racine).
   #
-  # `continue-on-error: true` TANT QUE CE JOB N'A JAMAIS ÉTÉ VU VERT SUR
-  # GITHUB : un rouge permanent sur une branche `push: '**'` finit ignoré
-  # par réflexe, et masquerait alors un vrai rouge du job `build` (le
-  # cliquet `check:host`, entre autres) — pire que l'absence d'AppImage.
-  # À retirer une fois ce job observé vert au moins une fois sur GitHub.
+  # Plus de `continue-on-error` : il masquait un job qui n'a JAMAIS été vert
+  # (chaque run échouait sur `executableName` dérivé de `@neo-quiz/windows`,
+  # réparé par `executableName: "neo-quiz"` dans la config, tranche 6).
   app-linux-package:
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -98,6 +88,9 @@ jobs:
         run: npm run pack:linux
         working-directory: apps/windows
 
+      - name: Package config and contents
+        run: npm run check:package
+
       - name: Check package artifact
         run: ls -lh dist-installer/*.AppImage
         working-directory: apps/windows
@@ -107,4 +100,42 @@ jobs:
         with:
           name: neo-quiz-linux-appimage
           path: apps/windows/dist-installer/*.AppImage
+          if-no-files-found: error
+
+  # Le paquet Windows, symétrique. Il attrape ce que Linux ne voit pas : NSIS,
+  # `rcedit` sur l'exécutable, les chemins Windows. Dépôt public, minutes
+  # gratuites. `check:package` y lit AUSSI l'asar de `win-unpacked/`, que seul
+  # `pack:win` produit.
+  app-windows-package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies (racine)
+        run: npm ci
+
+      - name: Install dependencies (apps/windows)
+        run: npm ci
+        working-directory: apps/windows
+
+      - name: Build and package (NSIS)
+        run: npm run pack:win
+        working-directory: apps/windows
+
+      - name: Package config and contents
+        run: npm run check:package
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: neo-quiz-windows-setup
+          path: apps/windows/dist-installer/*.exe
           if-no-files-found: error

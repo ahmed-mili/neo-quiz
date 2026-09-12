@@ -22,4 +22,9 @@ export const FR_SETTINGS: Record<keyof typeof EN_SETTINGS, string> = {
 	"settings.ai.cliPath.claude": "Chemin de claude",
 	"settings.ai.cliPath.codex": "Chemin de codex",
 	"settings.ai.cliPath.placeholder": "Chemin complet de l'exécutable",
+
+	/* ── À propos (application seulement) ── */
+	"settings.about.title": "À propos",
+	"settings.about.version": "{product} {version}",
+	"settings.about.repo": "Code source et versions sur GitHub",
 };

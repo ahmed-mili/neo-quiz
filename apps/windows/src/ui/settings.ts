@@ -18,6 +18,8 @@
 import { currentHost } from "../../../../src/host/current";
 import { currentLang, t } from "../../../../src/i18n";
 import { ajouter } from "../../../../src/dom";
+import manifeste from "../../../../src/assets/manifest.json";
+import { PRODUCT_NAME } from "../../../../src/branding";
 import type { Scanner } from "../../../../src/dashboard/scanner";
 import { MAX_DOSSIERS, addFolder, estVaultObsidian, examDates, pickFolder, removeFolder, savedFolders, setExamDate } from "../host/folder";
 import { cleModule, libelleModule } from "../review/catalogue";
@@ -229,6 +231,26 @@ export function renderSettings(
 			})();
 		});
 	}
+
+	/* ── À propos ──
+	   LA VERSION VIENT DU MANIFESTE, importé en JSON et inliné par Vite : une
+	   seule source (`src/assets/manifest.json`, cf. CLAUDE.md « Release »),
+	   la même que l'installeur lit pour son numéro. Pas `app.getVersion()`
+	   par le pont : il lit le `package.json` du paquet, qui porte `0.0.0` en
+	   développement — cette ligne dirait alors deux choses selon qu'on est
+	   installé ou non. C'est cette ligne qu'on lit pour prouver qu'une mise à
+	   jour a remplacé l'ancienne version (épreuves de la tranche 6). */
+	const apropos = ajouter(contenu, "section", "nq-reglages-section");
+	ajouter(apropos, "h3", "nq-reglages-titre", t("settings.about.title"));
+	ajouter(apropos, "p", "nq-reglages-aide",
+		t("settings.about.version", { product: PRODUCT_NAME, version: manifeste.version }));
+	const depot = ajouter(apropos, "a", "nq-reglages-lien", t("settings.about.repo"));
+	depot.href = manifeste.helpUrl;
+	// `_blank` : le principal remet toute ouverture `https?:` au navigateur
+	// (`setWindowOpenHandler`, `main.ts`) — même geste que les liens de la
+	// page « Générer ».
+	depot.target = "_blank";
+	depot.rel = "noopener";
 
 	/* Rien à désabonner : la page ne s'abonne à rien. Le démontage est rendu
 	   quand même, parce que TOUT écran en rend un — `main.ts` appelle

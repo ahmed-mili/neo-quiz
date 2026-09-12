@@ -301,6 +301,15 @@ body {
 	color: var(--text-muted);
 }
 
+.nq-reglages-lien {
+	color: var(--text-accent);
+	font-size: 12.5px;
+}
+
+.nq-reglages-lien:hover {
+	text-decoration: underline;
+}
+
 .nq-reglages-liste {
 	display: flex;
 	flex-direction: column;

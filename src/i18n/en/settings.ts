@@ -21,4 +21,9 @@ export const EN_SETTINGS = {
 	"settings.ai.cliPath.claude": "Path to claude",
 	"settings.ai.cliPath.codex": "Path to codex",
 	"settings.ai.cliPath.placeholder": "Full path to the executable",
+
+	/* ── À propos (application seulement) ── */
+	"settings.about.title": "About",
+	"settings.about.version": "{product} {version}",
+	"settings.about.repo": "Source code and releases on GitHub",
 } as const;

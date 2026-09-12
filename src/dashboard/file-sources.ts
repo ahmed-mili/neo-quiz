@@ -58,7 +58,8 @@ export async function listVaultFolder(folderPath: string): Promise<FileEntry[]> 
 }
 
 /** Vrai si `folderPath` est un dossier RÉEL du vault. `listDir` rend `[]` pour
-    un dossier absent comme pour un dossier vide : c'est `getFile` qui
+    un dossier absent, hors des racines (« @Downloads/ » : une racine EXTERNE,
+    que l'appelant essaie ensuite) comme pour un dossier vide : c'est `getFile` qui
     tranche l'autre moitié (un fichier n'est pas un dossier), et un dossier
     vide reste un dossier — on y descend, et on n'y trouve rien. */
 export async function isVaultFolder(folderPath: string): Promise<boolean> {

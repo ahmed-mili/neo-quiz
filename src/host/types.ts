@@ -224,10 +224,13 @@ export interface HostFs {
 	listFiles(): HostFile[];
 	/** Les ENTRÉES d'un dossier du contrat — fichiers ET sous-dossiers, sans
 	    descendre. `dir` vide désigne la racine (le vault ; dans l'application,
-	    les dossiers ouverts eux-mêmes, un par racine). Un dossier absent rend
-	    `[]`, comme `list`. C'est la voie de NAVIGATION du sélecteur « @ »
-	    (« @Cours/ » liste `Cours`) : `list` ne rend que les fichiers, et rien
-	    d'autre au contrat ne sait nommer un sous-dossier. */
+	    les dossiers ouverts eux-mêmes, un par racine). Un dossier absent OU
+	    HORS DES RACINES rend `[]` (l'hôte nomme le refus dans sa console),
+	    jamais un rejet : l'appelant (`isVaultFolder`, file-sources.ts) demande
+	    « @Foo/ » avant de savoir si Foo est du vault ou une racine externe, et
+	    un rejet ici tuerait la navigation externe. C'est la voie de NAVIGATION
+	    du sélecteur « @ » (« @Cours/ » liste `Cours`) : `list` ne rend que les
+	    fichiers, et rien d'autre au contrat ne sait nommer un sous-dossier. */
 	listDir(dir: string): Promise<DirEntry[]>;
 	/**
 	 * LES RACINES EXTERNES — des chemins ABSOLUS, hors de toute racine du

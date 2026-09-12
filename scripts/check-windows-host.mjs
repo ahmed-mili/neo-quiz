@@ -984,10 +984,15 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, bui
 		r.check("listDir de « » rend les dossiers ouverts, sans toucher au pont",
 			[await tenter(fs.listDir("")), pont.journal.length - avant],
 			[[{ name: "Quiz", path: "Quiz", isFolder: true }], 0]);
-		let horsRacine = null;
-		try { await fs.listDir("Inconnu/x"); } catch (e) { horsRacine = String(e.message); }
-		r.check("listDir hors des dossiers ouverts rejette en nommant la cause",
-			horsRacine && horsRacine.includes("chemin hors des dossiers ouverts"), true);
+		/* `[]` et NON un rejet (ruling 13) : le sélecteur demande « @Foo/ » à
+		   `listDir` avant de savoir si Foo est du vault ou une racine externe —
+		   un rejet tuait « @Downloads/ » dans l'application, et toute faute de
+		   frappe avec. Le refus est NOMMÉ dans la console, comme pour
+		   `externe.list` hors périmètre, sans quoi « Foo est vide » mentirait. */
+		avertis.length = 0;
+		r.check("listDir hors des dossiers ouverts rend [], nommé dans la console",
+			[await tenter(fs.listDir("Inconnu/x")), avertis.some(a => a.includes("Inconnu/x") && a.includes("chemin hors des dossiers ouverts"))],
+			[[], true]);
 
 		/* ── externe : l'absolu TEL QUEL, dans le périmètre ── */
 

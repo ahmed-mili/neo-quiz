@@ -547,13 +547,24 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 		   Un `dir` VIDE désigne « la racine » : dans l'application, ce sont les
 		   dossiers ouverts eux-mêmes, un par racine, sans rien demander au pont
 		   (le contrat dit que `""` est la racine, et l'application en a
-		   plusieurs). Un chemin hors racines rejette avec sa cause, comme les
-		   autres méthodes ; un dossier absent rend `[]` côté principal. */
+		   plusieurs). Un chemin HORS des racines rend `[]` et se NOMME dans la
+		   console, comme `externe.list` hors périmètre — et NON un rejet comme
+		   les autres méthodes : le sélecteur « @ » demande « @Foo/ » à
+		   `listDir` AVANT de savoir si Foo est un dossier du vault ou une
+		   racine externe (`isVaultFolder`, file-sources.ts), et un rejet ici
+		   tuait la navigation externe (« @Downloads/ ») et toute faute de
+		   frappe. Un dossier absent rend `[]` côté principal. */
 		async listDir(dir) {
 			if (!String(dir ?? "").trim()) {
 				return carte.hostRoots().map(r => ({ name: r.name, path: r.id, isFolder: true }));
 			}
-			const a = abs(dir);
+			let a: string;
+			try {
+				a = abs(dir);
+			} catch (e) {
+				console.warn(LOG_PREFIX, "listDir hors des dossiers ouverts:", dir, e);
+				return [];
+			}
 			const entrees = await pont().fichiers.listerDossier(a);
 			const sortie: DirEntry[] = [];
 			for (const e of entrees) {

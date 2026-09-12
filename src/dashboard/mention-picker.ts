@@ -70,7 +70,18 @@ export function attachMentionPicker(
 ): MentionPickerHandle {
 	let menu: MentionMenuHandle | null = null;
 
+	/** La frappe la plus récente : une liste calculée pour une frappe plus
+	    ancienne est jetée à l'arrivée, sans quoi une réponse lente (un parcours
+	    de racine externe en vol) reposerait des entrées périmées PAR-DESSUS
+	    celles de la frappe suivante — ou rouvrirait un menu fermé. */
+	let generation = 0;
+
 	function close(): void {
+		/* Un menu fermé REND CADUQUE toute liste encore en vol : sans ce
+		   bump, une réponse tardive (parcours d'une racine externe) trouvait
+		   `cette === generation` et `!menu`, et ROUVRAIT le menu qu'Échap ou
+		   l'effacement du « @ » venait de fermer, avec des entrées périmées. */
+		generation++;
 		if (menu) { const m = menu; menu = null; m.close(); }
 	}
 
@@ -172,9 +183,9 @@ export function attachMentionPicker(
 				}
 				replaceToken(token, "");
 				if (entry.source === "external") {
-					// Callback contractuel : chemin ABSOLU (ai.ts en fait
-					// fs.readFileSync tel quel). Résolution relatif→absolu
-					// ICI, juste avant l'appel, jamais plus tôt.
+					// Callback contractuel : chemin ABSOLU (ai.ts le lit par
+					// `host.fs.externe.read`, qui attend de l'absolu). Résolution
+					// relatif→absolu ICI, juste avant l'appel, jamais plus tôt.
 					const resolved = resolveExternalPath(opts.getExtraRoots(), entry.path);
 					if (resolved) {
 						opts.onPickExternalFile(resolved.absPath);
@@ -192,16 +203,13 @@ export function attachMentionPicker(
 		}));
 	}
 
-	/** La frappe la plus récente : une liste calculée pour une frappe plus
-	    ancienne est jetée à l'arrivée, sans quoi une réponse lente (un parcours
-	    de racine externe en vol) reposerait des entrées périmées PAR-DESSUS
-	    celles de la frappe suivante. */
-	let generation = 0;
-
 	async function refresh(): Promise<void> {
+		/* Bumpé AVANT le test du token, pas après : un caret qui quitte le
+		   « @ » (plus de token) doit lui aussi rendre caduque la liste en vol,
+		   sinon elle rouvrirait le menu sur un texte qui n'a plus de mention. */
+		const cette = ++generation;
 		const token = findMentionToken(textarea.value, textarea.selectionStart ?? 0);
 		if (!token) { close(); return; }
-		const cette = ++generation;
 		if (!menu) {
 			/* L'ENTRÉE D'AFFICHAGE : l'instantané des racines externes est
 			   préchauffé ici, sans attendre — le vault s'affiche tout de suite,
@@ -212,7 +220,19 @@ export function attachMentionPicker(
 				console.warn(LOG_PREFIX, "index des racines externes:", e);
 			});
 		}
-		const { entries, footer } = await entriesFor(token.query);
+		let entries: FileEntry[];
+		let footer: string | undefined;
+		try {
+			({ entries, footer } = await entriesFor(token.query));
+		} catch (e) {
+			/* `refresh` est appelé en `void` depuis quatre écouteurs : un rejet
+			   d'`entriesFor` (un hôte qui refuse un chemin, un pont qui tombe)
+			   serait une promesse non gérée, et le menu resterait figé sur la
+			   liste d'avant. Fermer proprement, nommer, ne rien rouvrir. */
+			console.warn(LOG_PREFIX, "sélecteur « @ » :", e);
+			if (cette === generation) close();
+			return;
+		}
 		if (cette !== generation) return;
 		// Un espace qui ne mène nulle part termine le token.
 		if (!entries.length && token.query.includes(" ")) { close(); return; }

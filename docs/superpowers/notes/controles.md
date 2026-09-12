@@ -15,7 +15,7 @@ réponse étant toujours non.
 - `npm run check:host` — **le cliquet de la frontière d'hôte** : aucun fichier de `src/`
   n'importe Obsidian hors d'une liste `RESTANTS` qui ne peut que RÉTRÉCIR (une entrée
   qui n'importe plus rien fait échouer le contrôle, sinon la liste devient un tapis).
-  Il annonce le nombre de fichiers encore liés — **33** aujourd'hui. Il couvre les
+  Il annonce le nombre de fichiers encore liés — **8** aujourd'hui. Il couvre les
   trois formes (`from`, `require`, `import()` différé) et toutes les extensions TS ;
   chacune de ces mailles a été une échappatoire vérifiée. Il est dans la CI : lancé à
   la main, c'est la discipline et non le contrôle qui tiendrait la frontière.
@@ -254,6 +254,16 @@ réponse étant toujours non.
   de réglage `__proto__`** (M6) n'écrivait aucune propriété propre mais
   remplaçait le prototype de la table : refusée avec sa cause, et la table
   reste intacte après le refus.
+  Depuis la tranche 5 (tâche 5, ruling 14), un groupe STATIQUE : **chaque
+  gestionnaire `ipcMain.handle(CANAUX.<x>, …)` de `canaux.ts` dont le canal est
+  `neo:fichiers/*` contient `perimetre.borner(`**, la liste des canaux DÉRIVÉE
+  de `CANAUX` (`pont.ts`), jamais recopiée. `canaux.ts` tire Electron et ne se
+  charge dans aucun script : jusque-là, la borne de chaque canal n'était prouvée
+  par personne, et trois canaux nés d'un coup (`listerDossier`, `statEntree`,
+  `readBinary`) auraient pu arriver sans elle — un accès disque total depuis la
+  fenêtre, sans qu'aucun contrôle ne rougisse. Le corps d'un gestionnaire est
+  délimité par ses parenthèses équilibrées, pas par une regex de ligne. Éprouvé
+  : `listerDossier` sans `borner` → rouge, nommé.
 - `npm run check:electron-reseau` — la PORTE RÉSEAU du processus principal
   (`apps/windows/electron/reseau.ts`, tâche 2 de la génération IA dans
   l'application). Le défaut qu'il empêche : **un rendu compromis fait de

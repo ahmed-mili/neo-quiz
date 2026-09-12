@@ -57,7 +57,7 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   `import { readFile } from "node:fs"` dans le rendu ne rougissait nulle part, et
   `perimetre.ts` importé du rendu recréait côté Chromium l'accès disque total que
   le pont existe pour retirer. Il annonce le nombre de fichiers encore liés
-  (**11**). Dans la CI : lancé à la main, ce serait la discipline et non le
+  (**8**). Dans la CI : lancé à la main, ce serait la discipline et non le
   contrôle qui tiendrait la frontière.
 - `npm run check:dashboard-dom` — **le cliquet ne suffit pas seul** : `check:host`
   ne protège un fichier de ses extensions DOM que TANT QU'il reste hors de

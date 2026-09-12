@@ -346,3 +346,54 @@ await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetr
 	}
 	r.done();
 });
+
+/**
+ * LA BORNE DES CANAUX `fichiers.*`, STATIQUEMENT (tranche 5, tâche 5, ruling
+ * 14). `canaux.ts` tire Electron et ne se charge dans aucun script : la
+ * preuve que CHAQUE canal de fichiers passe par `perimetre.borner` était donc
+ * celle de personne — un canal ajouté sans sa borne (c'est arrivé trois fois
+ * d'un coup à la tranche 5 : `listerDossier`, `statEntree`, `readBinary`)
+ * serait un accès disque total depuis la fenêtre, et aucun contrôle ne
+ * rougirait. Ici : la liste des canaux est DÉRIVÉE de `CANAUX` (`pont.ts`, sans
+ * Node), jamais recopiée ; chaque `ipcMain.handle(CANAUX.<x>, …)` dont le canal
+ * commence par `neo:fichiers/` doit contenir `perimetre.borner(` dans son corps
+ * — délimité par les parenthèses équilibrées de l'appel, pas par une regex
+ * de ligne, parce qu'un gestionnaire s'étend souvent sur dix lignes.
+ */
+await withSrcModule("apps/windows/electron/pont.ts", async ({ CANAUX }) => {
+	const r = makeReporter("Périmètre — chaque canal fichiers.* est borné (statique)");
+	const source = await readFile("apps/windows/electron/canaux.ts", "utf-8");
+	const canauxFichiers = Object.entries(CANAUX)
+		.filter(([, canal]) => String(canal).startsWith("neo:fichiers/"))
+		.map(([nom]) => nom);
+
+	/** Le corps d'un `ipcMain.handle(CANAUX.<nom>, …)` : du `(` de l'appel à sa
+	    parenthèse fermante, en comptant les niveaux (les chaînes et
+	    commentaires du gestionnaire ne contiennent pas de parenthèse
+	    déséquilibrée — vérifié sur le fichier, et un déséquilibre rendrait
+	    `null`, donc rouge, jamais vert par accident). */
+	const corpsDe = (nom) => {
+		const debut = source.indexOf(`ipcMain.handle(CANAUX.${nom},`);
+		if (debut < 0) return null;
+		let niveau = 0;
+		for (let i = source.indexOf("(", debut); i < source.length; i++) {
+			if (source[i] === "(") niveau++;
+			else if (source[i] === ")" && --niveau === 0) return source.slice(debut, i + 1);
+		}
+		return null;
+	};
+
+	const sansGestionnaire = canauxFichiers.filter(nom => corpsDe(nom) === null);
+	r.check("chaque canal fichiers.* de CANAUX a un gestionnaire dans canaux.ts", sansGestionnaire, []);
+	const nonBornes = canauxFichiers.filter(nom => {
+		const corps = corpsDe(nom);
+		return corps !== null && !corps.includes("perimetre.borner(");
+	});
+	r.check("chaque gestionnaire fichiers.* appelle perimetre.borner(", nonBornes, []);
+	/* La liste dérivée n'est pas vide, et elle contient les trois canaux de la
+	   tranche 5 : sans ce cas, un `CANAUX` renommé (« neo:fs/… ») viderait la
+	   liste et rendrait les deux cas ci-dessus verts sur rien. */
+	r.check("la liste dérivée de CANAUX contient les canaux attendus",
+		["read", "write", "listerDossier", "statEntree", "readBinary"].filter(n => !canauxFichiers.includes(n)), []);
+	r.done();
+});

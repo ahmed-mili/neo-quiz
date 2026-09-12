@@ -60,8 +60,17 @@ jobs:
 
       # UNE SEULE façon d'écrire la version : le script du dépôt, jamais un
       # `node -e` inline qui divergerait de lui.
+      # `set-version.mjs` SORT EN 1 quand le manifeste porte déjà le numéro
+      # (« Rien à changer ») : c'est le cas normal d'un tag posé juste après
+      # le commit « Version X ». Le mode répétition ne le voyait pas, il change
+      # toujours le numéro. D'où le test avant l'appel.
       - name: Update manifest version
-        run: node scripts/set-version.mjs "${{ steps.version.outputs.version }}"
+        shell: bash
+        env:
+          VERSION_VOULUE: ${{ steps.version.outputs.version }}
+        run: |
+          actuelle=$(node -p "require('./src/assets/manifest.json').version")
+          if [ "$actuelle" != "$VERSION_VOULUE" ]; then node scripts/set-version.mjs "$VERSION_VOULUE"; fi
 
       - name: Type check
         run: npm run check
@@ -124,8 +133,14 @@ jobs:
       - name: Install dependencies (apps/windows)
         run: npm ci
         working-directory: apps/windows
+      # Même garde que le job `plugin` : « Rien à changer » sort en 1.
       - name: Update manifest version
-        run: node scripts/set-version.mjs "${{ needs.plugin.outputs.version }}"
+        shell: bash
+        env:
+          VERSION_VOULUE: ${{ needs.plugin.outputs.version }}
+        run: |
+          actuelle=$(node -p "require('./src/assets/manifest.json').version")
+          if [ "$actuelle" != "$VERSION_VOULUE" ]; then node scripts/set-version.mjs "$VERSION_VOULUE"; fi
       - name: Build and package (NSIS)
         run: npm run pack:win
         working-directory: apps/windows
@@ -164,8 +179,14 @@ jobs:
       - name: Install dependencies (apps/windows)
         run: npm ci
         working-directory: apps/windows
+      # Même garde que le job `plugin` : « Rien à changer » sort en 1.
       - name: Update manifest version
-        run: node scripts/set-version.mjs "${{ needs.plugin.outputs.version }}"
+        shell: bash
+        env:
+          VERSION_VOULUE: ${{ needs.plugin.outputs.version }}
+        run: |
+          actuelle=$(node -p "require('./src/assets/manifest.json').version")
+          if [ "$actuelle" != "$VERSION_VOULUE" ]; then node scripts/set-version.mjs "$VERSION_VOULUE"; fi
       - name: Build and package (AppImage)
         run: npm run pack:linux
         working-directory: apps/windows

@@ -116,6 +116,11 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   `win-unpacked/` existe, le contenu de l'asar. `appId` est la clé par laquelle
   NSIS retrouve l'installation à remplacer ; `executableName` dérivé de
   `@neo-quiz/windows` a fait échouer chaque run CI Linux jusqu'au 2026-09-12.
+- `npm run check:updater` — le noyau pur de la mise à jour automatique
+  (`apps/windows/electron/mise-a-jour-etat.ts`) : une erreur après « prête »
+  ne retire pas le paquet téléchargé, couper le réglage oublie une
+  vérification en cours mais garde « prête ». Le câblage electron-updater
+  (`mise-a-jour.ts`) ne s'éprouve qu'installé, sur deux releases.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` avant `$…$`).
 - `npm run check:ai-providers` — les FOURNISSEURS IA : le catalogue cloud vient
   de `net.fetchJson` (jamais codé en dur), un `/api/tags` qui répond 200 SANS

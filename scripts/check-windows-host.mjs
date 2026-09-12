@@ -756,6 +756,16 @@ function installerPont(fichiers = {}, perimetre = null) {
 			async demarrerOllama() { journal.push(["processus.demarrerOllama"]); return true; },
 		},
 		fenetre: { async surFermeture() {} },
+		/* La mise à jour automatique : le rendu ne fait que s'y abonner ; le
+		   contrôle n'a rien à éprouver ici, mais un membre absent ferait
+		   mourir le montage de la coquille avant les cas qui comptent. */
+		miseAJour: {
+			etat: async () => ({ phase: "inactif", auto: true }),
+			surEtat: () => () => {},
+			verifier: async () => {},
+			installer: async () => {},
+			reglerAuto: async () => {},
+		},
 	};
 	const reponseReseau = { valeur: { status: 200, body: "ok" }, attente: null };
 	const reponseCli = { valeur: { ok: true, stdout: "OUT", stderr: "", code: 0 }, attente: null };

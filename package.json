@@ -40,6 +40,7 @@
     "check:electron-reseau": "node scripts/check-electron-reseau.mjs",
     "check:electron-process": "node scripts/check-electron-process.mjs",
     "check:package": "node scripts/check-package.mjs",
+    "check:updater": "node scripts/check-updater.mjs",
     "test": "node --test scripts/set-version.test.mjs scripts/ship.test.mjs",
     "version:set": "node scripts/set-version.mjs",
     "version:patch": "node scripts/set-version.mjs patch",

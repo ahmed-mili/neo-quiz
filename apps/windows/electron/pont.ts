@@ -47,6 +47,8 @@
 ══════════════════════════════════════════════════════════ */
 
 import type { HostNetRequest, HostNetResponse, HostProcess } from "../../../src/host/types";
+export type { EtatMiseAJour, PhaseMiseAJour } from "./mise-a-jour-etat";
+import type { EtatMiseAJour } from "./mise-a-jour-etat";
 
 /** Une requête réseau telle qu'elle TRAVERSE le pont : `HostNetRequest` sans
     son `signal`. Un `AbortSignal` ne se clone pas (l'IPC sérialise par clonage
@@ -410,6 +412,22 @@ export interface Pont {
 		 */
 		surFermeture(rappel: () => Promise<void>): Promise<void>;
 	};
+
+	/**
+	 * LA MISE À JOUR AUTOMATIQUE, vue du rendu. Le rendu ne choisit RIEN de
+	 * ce qui traverse : ni URL, ni chemin, ni version — le flux est
+	 * `app-update.yml`, embarqué au paquet, et c'est le principal qui
+	 * télécharge, vérifie le sha512 et installe. Le rendu reçoit un état
+	 * (poussé, comme les événements disque) et donne trois ordres : vérifier
+	 * maintenant, installer ce qui est prêt, couper ou rétablir l'automatique.
+	 */
+	miseAJour: {
+		etat(): Promise<EtatMiseAJour>;
+		surEtat(rappel: (etat: EtatMiseAJour) => void): () => void;
+		verifier(): Promise<void>;
+		installer(): Promise<void>;
+		reglerAuto(auto: boolean): Promise<void>;
+	};
 }
 
 /**
@@ -462,6 +480,11 @@ export const CANAUX = {
 	processusLireCache: "neo:process/lire-cache",
 	processusOllamaInstalle: "neo:process/ollama-installe",
 	processusDemarrerOllama: "neo:process/demarrer-ollama",
+	miseAJourEtatLire: "neo:mise-a-jour/etat-lire",
+	miseAJourEtat: "neo:mise-a-jour/etat",
+	miseAJourVerifier: "neo:mise-a-jour/verifier",
+	miseAJourInstaller: "neo:mise-a-jour/installer",
+	miseAJourReglage: "neo:mise-a-jour/reglage",
 } as const;
 
 /** La clé des RÉGLAGES IA de l'application (`neo.reglages`) : les MÊMES
@@ -473,6 +496,13 @@ export const CANAUX = {
     littéraux « ai » recopiés divergeraient sans une erreur : l'hôte du NAS
     resterait refusé alors que le réglage est bien enregistré. */
 export const CLE_REGLAGES_IA = "ai";
+
+/** La clé des réglages de mise à jour (`neo.reglages`) : `{ auto: boolean }`,
+    lue par le principal au démarrage et écrite par lui seul — le rendu passe
+    par `reglerAuto`, jamais par `reglages.ecrire`, pour que le principal
+    applique le changement à l'instant (minuteur rearmé, vérification
+    relancée si on rallume l'automatique). */
+export const CLE_REGLAGES_MAJ = "updates";
 
 declare global {
 	interface Window {

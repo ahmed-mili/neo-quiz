@@ -21,7 +21,7 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import { CANAUX } from "./pont";
-import type { EvenementDisque, Pont } from "./pont";
+import type { EtatMiseAJour, EvenementDisque, Pont } from "./pont";
 
 /* Les rappels de fermeture, et l'écouteur UNIQUE qui les sert. Un écouteur par
    appel à `surFermeture` répondrait autant de fois au principal, qui détruirait
@@ -126,6 +126,18 @@ const pont: Pont = {
 			// ne sache qu'un rappel existe n'attendrait rien.
 			await ipcRenderer.invoke(CANAUX.armerFermeture);
 		},
+	},
+
+	miseAJour: {
+		etat: () => ipcRenderer.invoke(CANAUX.miseAJourEtatLire),
+		surEtat(rappel) {
+			const ecouteur = (_e: unknown, etat: EtatMiseAJour): void => rappel(etat);
+			ipcRenderer.on(CANAUX.miseAJourEtat, ecouteur);
+			return () => { ipcRenderer.off(CANAUX.miseAJourEtat, ecouteur); };
+		},
+		verifier: () => ipcRenderer.invoke(CANAUX.miseAJourVerifier),
+		installer: () => ipcRenderer.invoke(CANAUX.miseAJourInstaller),
+		reglerAuto: auto => ipcRenderer.invoke(CANAUX.miseAJourReglage, auto),
 	},
 };
 

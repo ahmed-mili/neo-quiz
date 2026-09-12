@@ -43,6 +43,7 @@ import { cheminCliPourLancement, validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { demarrerOllama, erreurCli, estOutilAutorise, lireCache, ollamaInstalle, run } from "./process";
+import type { MiseAJour } from "./mise-a-jour";
 import { CANAUX, CLE_REGLAGES_IA } from "./pont";
 import type { EvenementDisque, RequeteCli, RequeteReseau, ResultatCli } from "./pont";
 import type { Reglages } from "./reglages";
@@ -64,6 +65,11 @@ export interface DependancesCanaux {
 	    destruction — le dialogue s'ouvre alors seul. */
 	fenetreCourante(): BrowserWindow | null;
 	fermeture: { armer(): void; terminee(): void };
+	miseAJour: MiseAJour;
+	/** Ferme la fenêtre par le chemin de fermeture existant (écritures
+	    différées vidées) ; `main.ts` lance `quitAndInstall` une fois tout
+	    fermé. */
+	fermerPourInstaller(): void;
 }
 
 /** L'état du disque tenu par ce processus — voir `enregistrerCanaux`. */
@@ -555,4 +561,16 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 
 	ipcMain.handle(CANAUX.armerFermeture, () => deps.fermeture.armer());
 	ipcMain.handle(CANAUX.fermetureTerminee, () => deps.fermeture.terminee());
+
+	/* ─── LA MISE À JOUR ───
+	   Rien de ce qui traverse n'est un chemin ni une URL : le rendu demande,
+	   le principal décide avec son `app-update.yml`. `installer` ferme la
+	   fenêtre par le chemin de la croix (écritures différées vidées) ; c'est
+	   `main.ts` qui, tout fermé, lance `quitAndInstall`. */
+	ipcMain.handle(CANAUX.miseAJourEtatLire, () => deps.miseAJour.etat());
+	ipcMain.handle(CANAUX.miseAJourVerifier, () => deps.miseAJour.verifier());
+	ipcMain.handle(CANAUX.miseAJourInstaller, () => {
+		if (deps.miseAJour.armerInstallation()) deps.fermerPourInstaller();
+	});
+	ipcMain.handle(CANAUX.miseAJourReglage, (_e, auto: unknown) => deps.miseAJour.reglerAuto(auto === true));
 }

@@ -33,6 +33,8 @@ import { enregistrerCanaux } from "./canaux";
 import { perimetreInitial } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { CANAUX, CLE_REGLAGES_IA } from "./pont";
+import { creerMiseAJour, lireReglageAuto } from "./mise-a-jour";
+import type { MiseAJour } from "./mise-a-jour";
 import { creerReglages } from "./reglages";
 import type { Reglages } from "./reglages";
 import { autoriserHote } from "./reseau";
@@ -86,6 +88,7 @@ const DELAI_GARDE_FERMETURE_MS = 1500;
 
 let fenetre: BrowserWindow | null = null;
 let reglages: Reglages | null = null;
+let miseAJour: MiseAJour | null = null;
 let fermetureArmee = false;
 let fermetureEnCours = false;
 let gardeFermeture: NodeJS.Timeout | null = null;
@@ -453,6 +456,12 @@ if (!app.requestSingleInstanceLock()) {
 		// Le MÊME objet que les canaux : une racine admise par `choisirDossier`
 		// ou `vaultsObsidian` devient aussitôt servable, sans second registre.
 		servirRessources(perimetre);
+		miseAJour = creerMiseAJour({
+			reglages: reglagesOuErreur(),
+			envoyer: etat => {
+				if (fenetre && !fenetre.isDestroyed()) fenetre.webContents.send(CANAUX.miseAJourEtat, etat);
+			},
+		});
 		enregistrerCanaux({
 			perimetre,
 			reglagesOuErreur,
@@ -464,11 +473,23 @@ if (!app.requestSingleInstanceLock()) {
 				armer() { fermetureArmee = true; },
 				terminee: terminerFermeture,
 			},
+			miseAJour,
+			fermerPourInstaller: () => fenetre?.close(),
 		});
 		creerFenetre();
+		// APRÈS la fenêtre : une erreur réseau au démarrage ne doit rien
+		// retarder. `initialiser`, pas `reglerAuto` : il réécrirait le réglage
+		// qu'on vient de lire.
+		miseAJour.initialiser(await lireReglageAuto(reglagesOuErreur()));
 	});
 }
 
 /* Une seule fenêtre, et Windows pour seule plateforme à cette tranche : sa
-   fermeture est la fin de l'application. */
-app.on("window-all-closed", () => app.quit());
+   fermeture est la fin de l'application, sauf si une installation a été
+   armée : c'est alors `quitAndInstall` qui quitte, après avoir lancé
+   l'installeur silencieux ; l'application se relance seule. */
+app.on("window-all-closed", () => {
+	if (miseAJour?.installationArmee()) miseAJour.installerArmee();
+	else app.quit();
+});
+app.on("browser-window-focus", () => miseAJour?.surFocus());

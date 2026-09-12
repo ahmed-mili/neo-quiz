@@ -321,7 +321,16 @@ export async function modeles(tool, env): Promise<string[] | null>;  // Codex : 
 
 ---
 
-## Task 8 : `ai-usage.ts`
+## Task 8 : `ai-usage.ts` — RETIRÉE le 2026-09-12
+
+> **Décision d'Ahmed, 2026-09-12 :** un suivi d'usage qui ne peut pas être
+> fiable à 100 % pour les trois fournisseurs ne se livre pas. Cette tâche sort
+> de la tranche et devient une idée (note `Idées` du projet) : au lieu d'un
+> compteur, un accès à la page officielle d'usage du fournisseur, ou à sa
+> commande native (`/usage` Claude Code, `/status` Codex). `ai-usage.ts` et
+> `usage-modal.ts` restent au greffon ; `RESTANTS` finit à **6**, pas 5. Le
+> texte ci-dessous est conservé pour mémoire, il n'est plus exécuté.
+
 
 **Files:**
 - Modify: `src/dashboard/ai-usage.ts:1-2,318-330` (+ les 2 `Platform.`, 3 `plugin.settings`)

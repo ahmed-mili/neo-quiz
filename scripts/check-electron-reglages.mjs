@@ -413,7 +413,7 @@ await withSrcModule("apps/windows/electron/pont.ts", async ({ CANAUX }) => {
  * dernière assertion, STATIQUE comme celle des canaux `fichiers.*`, vérifie
  * que `reglagesEcrire` appelle la garde AVANT `.ecrire(`.
  */
-await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ cheminCliPourLancement, hoteEstPrive, validerReglagesIa }) => {
+await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ cheminCliPourLancement, estDossierSortieIaValide, hoteEstPrive, validerReglagesIa }) => {
 	const r = makeReporter("Électron — la garde de la clé ai");
 
 	/* ── hoteEstPrive : la boucle locale, la RFC 1918, `.local`, et rien d'autre ── */
@@ -447,6 +447,31 @@ await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ cheminCliPourL
 	await cas(r, "sans aiOllamaUrl, rien à admettre", async () => {
 		r.check("sans aiOllamaUrl, rien à admettre",
 			await valider({ aiModel: "x" }), { ok: true, admettre: null });
+	});
+	await cas(r, "aiOutputFolder accepte seulement un chemin relatif sûr", async () => {
+		const valides = ["Generated", "Quiz générés", "Cours/IA_2026"];
+		const invalides = ["", "   ", "/Generated", "C:/Generated", "../Generated", "Generated/../Privé", "Generated\\Privé", "Generated:Privé", "Generated?", "Generated//Privé", "./Generated"];
+		r.check("aiOutputFolder accepte seulement un chemin relatif sûr",
+			{
+				valides: valides.map(v => estDossierSortieIaValide?.(v)),
+				invalides: invalides.map(v => estDossierSortieIaValide?.(v)),
+			},
+			{ valides: [true, true, true], invalides: Array(11).fill(false) });
+	});
+	await cas(r, "aiOutputFolder est gardé comme une chaîne et un chemin relatif sûr", async () => {
+		const verdicts = await Promise.all([
+			valider({ aiOutputFolder: "Generated/Cours" }),
+			valider({ aiOutputFolder: 42 }),
+			valider({ aiOutputFolder: "C:/Generated" }),
+			valider({ aiOutputFolder: "Generated/../Privé" }),
+			valider({ aiOutputFolder: "Generated?" }),
+		]);
+		r.check("aiOutputFolder est gardé comme une chaîne et un chemin relatif sûr",
+			[
+				verdicts[0],
+				...verdicts.slice(1).map(v => "refus" in v && v.refus.includes("aiOutputFolder")),
+			],
+			[{ ok: true, admettre: null }, true, true, true, true]);
 	});
 	await cas(r, "une URL illisible, non-chaîne ou hors http(s) est refusée, nommée", async () => {
 		const [pasChaine, illisible, fichier, ftp] = await Promise.all([

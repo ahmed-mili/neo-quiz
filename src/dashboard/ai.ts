@@ -1,13 +1,14 @@
 import JSON5 from "json5";
 import type { EditorExamOptions } from "../types/editor-ctx";
 import type { DashboardViewName } from "../types/dashboard-ctx";
-import type { HostFile } from "../host/types";
+import type { HostFile, HostRoot } from "../host/types";
 import { currentHost } from "../host/current";
 import { ajouter } from "../dom";
 import { LOG_PREFIX } from "../branding";
 import * as aiProviders from "./ai-providers";
 import type { Scanner, QuizIndexEntry } from "./scanner";
 import type { StatsStore } from "./stats-store";
+import { aiSettingsDefaults } from "./ai-settings-host";
 import type { AiSettingsHost } from "./ai-settings-host";
 import { createAiClient } from "./ai-client";
 import { createSelect, closeAllSelects, openActionMenu, openModelMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
@@ -24,7 +25,8 @@ import { createQuizPage } from "./detail";
 import type { QuizPageHandlers } from "./detail";
 import type { QuizDraft } from "./detail-io";
 import { convertParsedToInternal, readModeConfig } from "../editor/convert";
-import { exportAll } from "../editor/export";
+import { exportAll, exportAllWithFence } from "../editor/export";
+import { ensureFolder, freeNotePath } from "./folder-create";
 import type { DraftQuestion } from "../editor/utils";
 import type { ParsedQuizItem } from "../editor/modals";
 import { t } from "../i18n";
@@ -67,6 +69,9 @@ interface NoteAttachment {
 	    fichier choisi/déposé sans origine connue. */
 	path?: string;
 	source: AttachmentSource;
+	/** Vrai seulement pour une note choisie dans le picker « @ » : ce signal
+	    décide de la racine de sortie dans l'application multi-racines. */
+	viaMention?: boolean;
 	/** Chip dépliée (chemin complet) ou repliée (nom+extension) — bascule
 	    au clic ; ignoré si `path` est absent (fichier déposé sans origine
 	    connue : ni vault ni racine externe, rien de plus à montrer). */
@@ -852,8 +857,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		requestAnimationFrame(() => { autoGrow(); layoutChipsRow(); });
 
 		mentions = attachMentionPicker(composerInput, composer, {
-			onPickVaultFile: (path) => { void attachVaultPath(path); },
-			onPickExternalFile: (path) => { void attachExternalPath(path); },
+			onPickVaultFile: (path) => { void attachVaultPath(path, true); },
+			onPickExternalFile: (path) => { void attachExternalPath(path, true); },
 			onTextReplaced: (value) => {
 				composerText = value;
 				composerCaret = composerInput.selectionStart;
@@ -1341,7 +1346,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   un skip silencieux — régression corrigée ici). */
 	async function addComposerFiles(
 		files: File[],
-		origin?: { source: "vault" | "external"; path: string }
+		origin?: { source: "vault" | "external"; path: string; viaMention?: boolean }
 	): Promise<void> {
 		const imgs: File[] = [];
 		const rejected: string[] = [];
@@ -1363,7 +1368,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 						if (noteAttachments.some(n => attachmentKey(n) === key)) {
 							host.ui.notice(t("ai.notice.noteAlreadyAttached", { name: file.name }));
 						} else {
-							noteAttachments.push({ name: file.name, content, path: origin?.path, source });
+							noteAttachments.push({ name: file.name, content, path: origin?.path, source, viaMention: origin?.viaMention });
 						}
 					}
 				} catch (e) {
@@ -1376,7 +1381,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					if (noteAttachments.some(n => attachmentKey(n) === key)) {
 						host.ui.notice(t("ai.notice.noteAlreadyAttached", { name: file.name }));
 					} else {
-						noteAttachments.push({ name: file.name, content, path: origin?.path, source });
+						noteAttachments.push({ name: file.name, content, path: origin?.path, source, viaMention: origin?.viaMention });
 					}
 				} catch (e) {
 					rejected.push(file.name);
@@ -1397,7 +1402,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 
 	/* Attache une note du vault comme source du quiz (menu « Ajouter des
 	   notes » et raccourci — remplace l'ancienne « note active »). */
-	async function attachNoteVaultFile(file: HostFile): Promise<void> {
+	async function attachNoteVaultFile(file: HostFile, viaMention = false): Promise<void> {
 		// Dédoublonnage par attachmentKey (source « vault » + path), PAS par
 		// name seul : sinon un « AGENTS.md » du vault percute à tort un
 		// « AGENTS.md » externe/déposé de contenu différent (régression
@@ -1412,7 +1417,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			// file.name (PAS file.basename) : la chip affiche le nom complet
 			// AVEC son extension, comme les fichiers .md/.txt/PDF attachés via
 			// addComposerFiles (déjà sur file.name).
-			noteAttachments.push({ name: file.name, content, path: file.path, source: "vault" });
+			noteAttachments.push({ name: file.name, content, path: file.path, source: "vault", viaMention });
 			render(containerRef);
 		} catch (e) {
 			host.ui.notice(t("ai.notice.noteReadFailed", { name: file.basename }));
@@ -1439,16 +1444,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   partage le même dédoublonnage cohérent (source « vault » + chemin),
 	   pas un dédoublonnage par nom seul qui le confondrait avec un fichier
 	   externe homonyme. */
-	async function attachVaultPath(path: string): Promise<void> {
+	async function attachVaultPath(path: string, viaMention = false): Promise<void> {
 		const f = host.fs.getFile(path);
 		if (!f) return;
 		const ext = f.extension.toLowerCase();
-		if (ext === "md" || ext === "txt") { await attachNoteVaultFile(f); return; }
+		if (ext === "md" || ext === "txt") { await attachNoteVaultFile(f, viaMention); return; }
 		try {
 			const octets = await host.fs.readBinary(f.path);
 			// `slice()` : un `Uint8Array` sur un tampon partagé n'est pas un `BlobPart`.
 			const file = new File([octets.slice()], f.name, { type: mimeForName(f.name) });
-			await addComposerFiles([file], { source: "vault", path: f.path });
+			await addComposerFiles([file], { source: "vault", path: f.path, viaMention });
 		} catch (e) {
 			host.ui.notice(t("ai.notice.noteReadFailed", { name: f.name }));
 		}
@@ -1463,7 +1468,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   distinctes, joignables ENSEMBLE — c'était impossible avant (régression
 	   corrigée ici, cf. rapport de tâche). Vérifié AVANT la lecture disque :
 	   pas de lecture pour un doublon détecté à l'avance. */
-	async function attachExternalPath(path: string): Promise<void> {
+	async function attachExternalPath(path: string, viaMention = false): Promise<void> {
 		if (!host.platform.isDesktopApp) return;
 		const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 		const key = attachmentKey({ source: "external", path, name });
@@ -1478,7 +1483,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			// mimeForName : addComposerFiles teste file.type EN PREMIER pour les
 			// images, un File sans type finirait en chip texte au lieu d'une vignette.
 			const file = new File([octets.slice()], name, { type: mimeForName(name) });
-			await addComposerFiles([file], { source: "external", path });
+			await addComposerFiles([file], { source: "external", path, viaMention });
 		} catch (e) {
 			host.ui.notice(t("ai.notice.noteReadFailed", { name }));
 		}
@@ -1664,19 +1669,72 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			// contient aussi l'objet de mode, qui n'est pas une question.
 			questionCount: loadGeneratedDraft().questions.length,
 			load: () => Promise.resolve(loadGeneratedDraft()),
-			// Pas de `save` : le quiz n'a pas encore de note. Les retouches
-			// vivent dans le brouillon jusqu'à « Insérer dans une note ».
+			// Cette page ne reste visible que si l'enregistrement automatique a
+			// échoué. Le brouillon édité permet alors de réessayer sans perte.
 			onBack: () => restartGeneration(),
 			start: {
+				label: t("ai.result.save"),
+				icon: "save",
+				onClick: () => { void saveGeneratedQuiz(); },
+			},
+			actions: [{
 				label: t("ai.result.insert"),
 				icon: "plus",
-				// Ancré sur le BOUTON : openNotePicker positionne son menu avec
-				// le rectangle de l'élément reçu — lui passer le conteneur de la
-				// page l'aurait posé hors écran.
+				// Ancré sur le bouton : le picker se positionne sur son rectangle.
 				onClick: (btn) => openInsertPicker(btn),
-			},
+			}],
 			isStale: () => phase !== "result",
 		});
+	}
+
+	/** Enregistre le quiz puis ouvre sa page détail, qui porte déjà le bouton
+	    principal « Lancer ». Dans l'application, choisir la racine de la
+	    première note jointe par « @ » garde le quiz à côté de son contexte ;
+	    sans note jointe, l'ordre affiché des racines fournit le seul défaut
+	    prévisible. Le greffon n'a qu'une racine et suit la même branche. */
+	async function saveGeneratedQuiz(): Promise<boolean> {
+		const roots = host.paths.roots();
+		let root: HostRoot | null = null;
+		for (const note of sentMessage?.notes ?? []) {
+			if (!note.viaMention || !note.path) continue;
+			root = host.paths.rootOf(note.path);
+			if (root) break;
+		}
+		root ??= roots[0] ?? null;
+		if (!root) {
+			host.ui.notice(t("ai.notice.saveFailed"));
+			return false;
+		}
+
+		try {
+			const draft = loadGeneratedDraft();
+			if (!draft.questions.length) return false;
+			const localFolder = settings().aiOutputFolder || aiSettingsDefaults().aiOutputFolder;
+			const folder = host.paths.contractPath(root.id, localFolder);
+			await ensureFolder(folder);
+			// Le même titre que la page affiche, sans les points de suspension
+			// qu'il ajoute à une demande coupée : ils n'ont rien à faire dans
+			// un nom de fichier.
+			const title = generatedTitle().replace(/…$/, "");
+			const name = title !== t("ai.result.untitled")
+				? title
+				: t("dashboard.quizzes.newQuizDefaultName");
+			const path = await freeNotePath(folder, name);
+			await host.fs.write(path, exportAllWithFence(draft.questions, draft.examOptions) + "\n");
+
+			const file = host.fs.getFile(path);
+			if (file) await deps.scanner.scanFile(file);
+			const entry = deps.scanner.getQuiz(path);
+			if (entry) {
+				resetGeneration();
+				deps.navigate("detail", { quiz: entry });
+				return true;
+			}
+		} catch (err) {
+			// La cause reste interne ; la Notice traduite évite l'échec silencieux.
+		}
+		host.ui.notice(t("ai.notice.saveFailed"));
+		return false;
 	}
 
 	/** Titre de la page d'un quiz fraîchement généré : la DEMANDE, abrégée.
@@ -1993,16 +2051,20 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 
 		document.removeEventListener("keydown", onEsc);
 		activeClient = null;
+		let navigated = false;
 		if (generatedQuestions.length > 0) {
 			// Nouvelle génération → l'éditeur embarqué repart des questions
 			// fraîches (renderResult le monte pleine page).
 			generationId++;
 			generatedDraft = null;
 			phase = "result";
+			// Le succès visible est directement la page de la note enregistrée :
+			// elle affiche déjà « Lancer », sans clic intermédiaire sur Enregistrer.
+			navigated = await saveGeneratedQuiz();
 		} else {
 			phase = "error";
 		}
-		render(container);
+		if (!navigated) render(container);
 	}
 
 	/* Insère le quiz dans la note choisie via le picker (« Insérer dans une
@@ -2074,8 +2136,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		closeAllSelects();
 		if (composerResizeObserver) { composerResizeObserver.disconnect(); composerResizeObserver = null; }
 		if (__focusRecheck) { window.removeEventListener("focus", __focusRecheck); __focusRecheck = null; }
-		// `void` : le quiz généré vit en mémoire (`save` absent de sa spec), il
-		// n'y a rien à attendre — la promesse rendue est déjà résolue.
+		// `void` : après un échec d'écriture, ce brouillon n'a toujours pas de
+		// note à autosauvegarder ; la promesse rendue est déjà résolue.
 		void resultPage?.dispose();
 		resultPage = null;
 		generatedDraft = null;

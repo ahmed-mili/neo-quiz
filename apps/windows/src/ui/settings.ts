@@ -161,6 +161,32 @@ export function renderSettings(
 		});
 	}
 
+	/* ── Les outils IA ──
+	   Le dossier est une donnée persistée, donc sa valeur n'est jamais
+	   traduite. La perte de focus évite de soumettre un chemin incomplet à la
+	   garde du processus principal à chaque caractère. */
+	const outilsIa = ajouter(contenu, "section", "nq-reglages-section");
+	ajouter(outilsIa, "h3", "nq-reglages-titre", t("settings.ai.tools.title"));
+	const dossierLigne = ajouter(outilsIa, "div", "nq-reglages-module");
+	const dossierTexte = ajouter(dossierLigne, "div", "nq-reglages-texte");
+	ajouter(dossierTexte, "span", "nq-reglages-nom", t("settings.ai.outputFolder.name"));
+	ajouter(dossierTexte, "span", "nq-reglages-chemin", t("settings.ai.outputFolder.desc"));
+	const dossierChamp = ajouter(dossierLigne, "input", "nq-reglages-chemin-cli");
+	dossierChamp.type = "text";
+	dossierChamp.value = deps.aiSettings.get().aiOutputFolder ?? "";
+	dossierChamp.addEventListener("change", () => {
+		void (async () => {
+			const voulu = dossierChamp.value.trim();
+			try {
+				await deps.aiSettings.save({ aiOutputFolder: voulu });
+			} catch (e) {
+				/* Le principal a déjà affiché la Notice et restauré le cache ; le
+				   champ revient lui aussi à la dernière valeur réellement écrite. */
+				dossierChamp.value = deps.aiSettings.get().aiOutputFolder ?? "";
+			}
+		})();
+	});
+
 	/* ── Les chemins des CLI d'IA ──
 
 	   POURQUOI CES DEUX CHAMPS EXISTENT. Une application INSTALLÉE démarre avec

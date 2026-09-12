@@ -43,7 +43,7 @@ export interface AiSettingsHost {
 export function aiSettingsDefaults(): Required<Pick<AiSettings,
 	"aiProvider" | "aiModel" | "aiEffort" | "aiCodexFast" | "aiOllamaUrl" | "aiOllamaCloudKey"
 	| "aiOllamaModels" | "aiOllamaCatalog" | "aiUsageLog" | "aiUsageLimitsEnabled"
-	| "aiMentionExtraFolders">> & { hotkeyAddFiles: Hotkey; hotkeyAddNotes: Hotkey } {
+	| "aiMentionExtraFolders" | "aiOutputFolder">> & { hotkeyAddFiles: Hotkey; hotkeyAddNotes: Hotkey } {
 	return {
 		// Aucun fournisseur par défaut : le choix reste la première étape.
 		aiProvider: "",
@@ -71,5 +71,7 @@ export function aiSettingsDefaults(): Required<Pick<AiSettings,
 		hotkeyAddNotes: { modifiers: ["Mod"], key: "e" },
 		// Vide par défaut : le « @ » se limite au vault tant qu'on n'ajoute rien.
 		aiMentionExtraFolders: [],
+		// Donnée persistée, donc jamais traduite : les deux hôtes écrivent au même endroit.
+		aiOutputFolder: "Generated",
 	};
 }

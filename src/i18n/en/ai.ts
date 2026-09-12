@@ -186,6 +186,7 @@ export const EN_AI = {
 	"ai.error.providerUnavailable": "This provider is not available here yet. Pick Ollama, or generate the quiz from the Obsidian plugin.",
 	"ai.result.count": "{count} questions generated",
 	"ai.result.untitled": "Generated quiz",
+	"ai.result.save": "Save",
 	"ai.result.insert": "Insert into a note",
 
 	/* ── Notices ── */
@@ -201,6 +202,7 @@ export const EN_AI = {
 	"ai.notice.blockExists": "A quiz-blocks block already exists in “{name}”. Open the editor to change it.",
 	"ai.notice.quizInserted": "Quiz inserted into “{name}”",
 	"ai.notice.insertFailed": "Insertion failed",
+	"ai.notice.saveFailed": "The generated quiz could not be saved.",
 
 	/* ── Erreurs de génération (affichées dans l'écran d'erreur) ── */
 	"ai.err.unknown": "Unknown error",

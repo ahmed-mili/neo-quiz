@@ -75,6 +75,8 @@ interface QuizBlocksSettings {
 	hotkeyAddNotes: Hotkey;
 	/** Dossiers hors vault proposés par le picker « @ » (desktop uniquement). */
 	aiMentionExtraFolders: string[];
+	/** Dossier relatif où les générations sont enregistrées automatiquement. */
+	aiOutputFolder: string;
 	/** Chemins COMPLETS des groupes DÉPLIÉS dans « Mes quiz » (dossiers, et
 	    clés préfixées « recent: »/« type: » pour les deux autres axes). État
 	    d'interface, pas une préférence : aucune section dans l'onglet de
@@ -509,6 +511,16 @@ class QuizBlocksSettingTab extends PluginSettingTab {
 			text: t("plugin.ai.intro"),
 			cls: "setting-item-description"
 		});
+
+		new Setting(containerEl)
+			.setName(t("settings.ai.outputFolder.name"))
+			.setDesc(t("settings.ai.outputFolder.desc"))
+			.addText(text => text
+				.setValue(this.plugin.settings.aiOutputFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.aiOutputFolder = value.trim();
+					await this.plugin.saveSettings();
+				}));
 
 		const TUTORIALS = buildTutorials();
 

@@ -103,6 +103,20 @@ export function estCheminAbsolu(chemin: string): boolean {
 	return /^[a-zA-Z]:[\\/]/.test(chemin) || chemin.startsWith("\\\\") || chemin.startsWith("/");
 }
 
+/**
+ * Un dossier de sortie IA reste une clé RELATIVE dans une racine ouverte.
+ * Le rendu le passe ensuite à `HostPaths.contractPath` : accepter ici un
+ * chemin absolu, un retour `..` ou un séparateur Windows permettrait de
+ * contourner cette composition et de viser ailleurs que la racine choisie.
+ * Le prédicat reste pur pour que la garde soit éprouvée sans Electron ni Node.
+ */
+export function estDossierSortieIaValide(valeur: unknown): valeur is string {
+	if (typeof valeur !== "string" || !valeur || valeur !== valeur.trim()) return false;
+	if (estCheminAbsolu(valeur) || /[<>:"|?*\\\u0000-\u001f]/.test(valeur)) return false;
+	const segments = valeur.split("/");
+	return segments.every(segment => !!segment && segment !== "." && !segment.includes(".."));
+}
+
 /** L'extension d'un chemin, en minuscules, ou la chaîne vide s'il n'en a pas.
     Sur le DERNIER point du NOM seul : `C:/a.b/claude` n'a pas d'extension, et
     `claude.pdf.exe` en a une — `.exe`. */
@@ -232,9 +246,13 @@ export async function validerReglagesIa(
 	if (!valeur || typeof valeur !== "object" || Array.isArray(valeur)) {
 		return { refus: "réglages IA refusés : la valeur n'est pas un objet" };
 	}
-	const { aiOllamaUrl, aiMentionExtraFolders, cheminClaude, cheminCodex } = valeur as {
-		aiOllamaUrl?: unknown; aiMentionExtraFolders?: unknown; cheminClaude?: unknown; cheminCodex?: unknown;
+	const { aiOllamaUrl, aiMentionExtraFolders, aiOutputFolder, cheminClaude, cheminCodex } = valeur as {
+		aiOllamaUrl?: unknown; aiMentionExtraFolders?: unknown; aiOutputFolder?: unknown; cheminClaude?: unknown; cheminCodex?: unknown;
 	};
+
+	if (aiOutputFolder !== undefined && !estDossierSortieIaValide(aiOutputFolder)) {
+		return { refus: "réglages IA refusés : aiOutputFolder doit être un chemin relatif sûr" };
+	}
 
 	/* LES CHEMINS D'EXÉCUTABLE D'ABORD : c'est le champ qui donne le droit le
 	   plus fort (lancer un programme), et un refus ici doit primer sur tout le

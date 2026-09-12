@@ -76,6 +76,8 @@ export interface AiSettings {
 	hotkeyAddFiles?: Hotkey | null;
 	hotkeyAddNotes?: Hotkey | null;
 	aiMentionExtraFolders?: string[];
+	/** Chemin relatif persistant du dossier qui reçoit les quiz générés. */
+	aiOutputFolder?: string;
 	/* ── LES CHEMINS D'EXÉCUTABLE DES CLI (application seulement) ──
 
 	   Vides/absents par défaut, et c'est l'état NORMAL : les deux hôtes

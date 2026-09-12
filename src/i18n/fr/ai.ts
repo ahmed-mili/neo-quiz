@@ -146,6 +146,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.error.providerUnavailable": "Ce fournisseur n'est pas encore disponible ici. Choisissez Ollama, ou générez le quiz depuis le greffon Obsidian.",
 	"ai.result.count": "{count} questions générées",
 	"ai.result.untitled": "Quiz généré",
+	"ai.result.save": "Enregistrer",
 	"ai.result.insert": "Insérer dans une note",
 
 	/* ── Notices ── */
@@ -160,6 +161,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.notice.blockExists": "Un bloc quiz-blocks existe déjà dans « {name} ». Ouvrez l'éditeur pour le modifier.",
 	"ai.notice.quizInserted": "Quiz inséré dans « {name} »",
 	"ai.notice.insertFailed": "Erreur lors de l'insertion",
+	"ai.notice.saveFailed": "Impossible d’enregistrer le quiz généré.",
 
 	/* ── Erreurs de génération (affichées dans l'écran d'erreur) ── */
 	"ai.err.unknown": "Erreur inconnue",

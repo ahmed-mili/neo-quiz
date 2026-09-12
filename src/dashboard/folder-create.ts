@@ -188,7 +188,7 @@ export async function importSharedFolder(
     de 300 ms (`apps/windows/src/host/fs.ts`). Interroger l'index y rendrait deux
     fois le même nom libre dans les boucles d'import, et la seconde note
     écraserait la première. Le disque, lui, dit la vérité sous les deux hôtes. */
-async function freeNotePath(folder: string, name: string, ext = ".md"): Promise<string> {
+export async function freeNotePath(folder: string, name: string, ext = ".md"): Promise<string> {
 	const base = name.replace(/[\\/:*?"<>|]/g, "-").trim() || "quiz";
 	const prefix = folder ? `${folder}/` : "";
 	let path = `${prefix}${base}${ext}`;
@@ -199,7 +199,7 @@ async function freeNotePath(folder: string, name: string, ext = ".md"): Promise<
 /** Le dossier physique peut manquer (module déclaré par simple override).
     `mkdirs` ne rejette pas s'il est déjà là : le test d'existence qui le
     précédait n'apportait rien. */
-async function ensureFolder(folder: string): Promise<void> {
+export async function ensureFolder(folder: string): Promise<void> {
 	if (folder) await currentHost().fs.mkdirs(folder);
 }
 

@@ -271,8 +271,9 @@ d'appel externe est nommé `context`, le god-object interne `ctx` — jamais con
 questions à gauche, question courante à droite, bouton « Editor » qui bascule
 consultation ⇄ édition **sur place**. Décrite par une `QuizPageSpec` (titre,
 `load()`, `save?()`, retour, bouton principal), elle sert **trois hôtes** : la vue
-détail du dashboard, la page « Générer » (quiz encore en mémoire, `save` absent,
-`QuizDraft.file === null`) et l'onglet `quiz-blocks-builder` (`src/editor.ts`).
+détail du dashboard, la page « Générer » (brouillon sans note jusqu'à son
+enregistrement automatique, `QuizDraft.file === null`) et l'onglet
+`quiz-blocks-builder` (`src/editor.ts`).
 L'**éditeur en trois colonnes a été supprimé** le 2026-07-31 (« pas assez
 intuitif ») : il ne reste de `src/editor/` que ce que la page consomme —
 `editor-form.ts` (les champs par type, atteints via `dashboard/detail-form-bridge.ts`),

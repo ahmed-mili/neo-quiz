@@ -1,4 +1,4 @@
-import { App, Platform, TFile } from "obsidian";
+import { currentHost } from "../host/current";
 import { ATTACHABLE_EXT, isAttachable, resolveExternalPath } from "./file-sources";
 
 /* ══════════════════════════════════════════════════════════
@@ -107,10 +107,15 @@ function baseName(p: string): string {
 	return i < 0 ? p : p.slice(i + 1);
 }
 
-function isFileOnDisk(absPath: string): boolean {
-	if (!Platform.isDesktopApp) return false;
-	const fs = require("fs") as typeof import("fs");
-	try { return fs.statSync(absPath).isFile(); } catch (e) { return false; }
+/* Par `host.fs.externe.stat` : sous Obsidian c'est `fs` de Node, dans
+   l'application un canal BORNÉ du pont — un chemin hors des dossiers ouverts
+   y rend `null`, donc « pas un fichier », jamais une lecture. Sur mobile,
+   l'hôte n'a pas de disque : `false`. */
+async function isFileOnDisk(absPath: string): Promise<boolean> {
+	const host = currentHost();
+	if (!host.platform.isDesktopApp) return false;
+	const info = await host.fs.externe.stat(absPath);
+	return info?.isFile === true;
 }
 
 type Outcome =
@@ -121,26 +126,30 @@ type Outcome =
 /** Une lecture candidate → fichier réel. Ordre : chemin absolu, chemin exact
     du vault, suffixe de chemin / nom de fichier UNIQUE dans le vault, puis
     racine externe configurée (forme du picker « @ »). */
-function resolveCandidate(app: App, roots: string[], cand: string): Outcome {
+async function resolveCandidate(roots: string[], cand: string): Promise<Outcome> {
+	const fs = currentHost().fs;
 	const norm = cand.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
 	if (!isAttachable(baseName(norm))) return { kind: "miss" };
 
 	if (/^[A-Za-z]:\//.test(norm) || norm.startsWith("/")) {
-		return isFileOnDisk(norm)
+		return (await isFileOnDisk(norm))
 			? { kind: "hit", ref: { kind: "external", path: norm, name: baseName(norm), raw: cand } }
 			: { kind: "miss" };
 	}
 
-	const exact = app.vault.getAbstractFileByPath(norm);
-	if (exact instanceof TFile && isAttachable(exact.name)) {
+	const exact = fs.getFile(norm);
+	if (exact && isAttachable(exact.name)) {
 		return { kind: "hit", ref: { kind: "vault", path: exact.path, name: exact.name, raw: cand } };
 	}
 
 	/* Chemin partiel (« CCNA 1/TOBEADMIN.md ») ou nom seul. Comparaison
 	   insensible à la casse — Windows l'est, et un chemin recopié à la main
-	   l'est souvent aussi. */
+	   l'est souvent aussi. Par `findByName` (casse ignorée, tous les
+	   homonymes) : un chemin qui FINIT par « …/nom.md » porte forcément ce
+	   nom, donc les candidats sont exactement les homonymes du nom de base —
+	   pas besoin de balayer tout le vault. */
 	const low = norm.toLowerCase();
-	const hits = app.vault.getFiles().filter(f =>
+	const hits = fs.findByName(baseName(norm)).filter(f =>
 		isAttachable(f.name) &&
 		(f.path.toLowerCase() === low || f.path.toLowerCase().endsWith("/" + low))
 	);
@@ -153,7 +162,7 @@ function resolveCandidate(app: App, roots: string[], cand: string): Outcome {
 	if (hits.length > 1) return { kind: "ambiguous", count: hits.length };
 
 	const ext = resolveExternalPath(roots, norm);
-	if (ext && isFileOnDisk(ext.absPath)) {
+	if (ext && (await isFileOnDisk(ext.absPath))) {
 		return { kind: "hit", ref: { kind: "external", path: ext.absPath, name: baseName(ext.absPath), raw: cand } };
 	}
 	return { kind: "miss" };
@@ -180,8 +189,10 @@ function missLabel(cands: string[], quoted: boolean): string | null {
 	return pick;
 }
 
-/** Scanne le texte du composer et résout tout ce qui désigne un fichier. */
-export function scanPromptPaths(app: App, roots: string[], text: string): PromptPathScan {
+/** Scanne le texte du composer et résout tout ce qui désigne un fichier.
+    Asynchrone parce que le disque l'est derrière le contrat (`externe.stat`) ;
+    l'unique appelant (`ai.ts`, `attachPromptPaths`) l'était déjà. */
+export async function scanPromptPaths(roots: string[], text: string): Promise<PromptPathScan> {
 	const refs: ResolvedRef[] = [];
 	const unresolved: string[] = [];
 	const ambiguous: { text: string; count: number }[] = [];
@@ -195,7 +206,7 @@ export function scanPromptPaths(app: App, roots: string[], text: string): Prompt
 		let hit: ResolvedRef | null = null;
 		let amb: { text: string; count: number } | null = null;
 		for (const c of cands) {
-			const r = resolveCandidate(app, roots, c);
+			const r = await resolveCandidate(roots, c);
 			if (r.kind === "hit") { hit = r.ref; break; }
 			// La lecture la plus longue qui touche plusieurs fichiers est la
 			// plus proche de ce que l'utilisateur a écrit : c'est elle qu'on

@@ -28,8 +28,12 @@ await withSrcModule("src/host/current.ts", ({ installHost }) => {
 		   (onze cachés, une fois). Complété à la tranche 3 (tâche 10) : quatre
 		   méthodes de `HostFs`, `onRenameDir`, `iconNames` et `modals`
 		   manquaient. Et à la tranche 5 (tâche 2) : `platform.isDesktopApp` et
-		   `net`. */
-		fs: { read: async () => "", readCached: async () => "", write: async () => {}, process: async () => {}, writeBinary: async () => {}, trash: async () => {}, exists: async () => false, mkdirs: async () => {}, append: async () => {}, list: async () => [], remove: async () => {}, rename: async () => {}, listMarkdown: () => [], findByName: () => [], getFile: () => null },
+		   `net` ; (tâche 5) : `fs.listFiles`, `fs.listDir` et `fs.externe`. */
+		fs: {
+			read: async () => "", readCached: async () => "", write: async () => {}, process: async () => {}, writeBinary: async () => {}, trash: async () => {}, exists: async () => false, mkdirs: async () => {}, append: async () => {}, list: async () => [], remove: async () => {}, rename: async () => {}, listMarkdown: () => [], findByName: () => [], getFile: () => null,
+			listFiles: () => [], listDir: async () => [],
+			externe: { list: async () => [], stat: async () => null, read: async () => "", readBinary: async () => new Uint8Array() },
+		},
 		links: { resolve: () => null, resourceUrl: () => null },
 		watcher: { onChange: () => () => {}, onRenameDir: () => () => {} },
 		ui: { notice: () => {}, setIcon: () => {}, iconNames: () => [] },

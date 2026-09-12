@@ -12,6 +12,14 @@
  * (`.superpowers/sdd/2026-09-11-migration-electron/progress.md`). Ce
  * contrôle éprouve donc les huit cas du brief PLUS un par méthode ajoutée.
  *
+ * Puis les primitives nées à la tranche 5, tâche 5 (le sélecteur « @ » sur
+ * le contrat) : `listerDossier`, `statEntree` et `readBinary`, derrière les
+ * canaux `HostFs.listDir` et `HostFs.externe`. Elles sont éprouvées ICI sur
+ * leur comportement disque ; leur BORNAGE (« hors périmètre → refus nommé »)
+ * est celui de `perimetre.borner`, que `canaux.ts` applique à chaque canal
+ * `fichiers.*` et que `npm run check:electron-reglages` éprouve — `canaux.ts`
+ * tire Electron et ne se charge pas ici.
+ *
  * Chaque cas est isolé dans son propre `try/catch` (`cas()` ci-dessous) : une
  * rupture (écriture non attendue, par exemple) jette parfois une exception
  * NON CAPTURÉE par une assertion — sans cette isolation, ce cas ferait
@@ -56,7 +64,7 @@ async function cas(r, nom, fn) {
 	}
 }
 
-await withSrcModule("apps/windows/electron/fichiers.ts", async ({ creerFichiers }) => {
+await withSrcModule("apps/windows/electron/fichiers.ts", async ({ creerFichiers, statEntree }) => {
 	const r = makeReporter("Primitives de fichiers Electron");
 	const dir = await mkdtemp(join(tmpdir(), "electron-fs-check-"));
 
@@ -217,6 +225,52 @@ await withSrcModule("apps/windows/electron/fichiers.ts", async ({ creerFichiers 
 			// partiel — sinon un renommage refusé perdrait quand même le fichier.
 			r.check("rename REJETTE si la destination existe (source intacte)",
 				[rejette, await fichiers.read(de)], [true, "source"]);
+		});
+
+		/* ── tranche 5, tâche 5 : listerDossier, statEntree, readBinary ── */
+
+		await cas(r, "listerDossier rend les entrées avec leur type", async () => {
+			const d = join(dir, "j-dossier");
+			await fichiers.mkdirs(join(d, "Sous"));
+			await fichiers.write(join(d, "a.md"), "a");
+			await fichiers.write(join(d, "b.png"), "b");
+			const entrees = (await fichiers.listerDossier(d)).sort((x, y) => x.name.localeCompare(y.name));
+			/* Des NOMS avec leur type, jamais des chemins : c'est le rendu qui
+			   recompose (contrat ou absolu). Un chemin rendu ici serait
+			   réempilé une seconde fois par l'hôte du rendu. */
+			r.check("listerDossier rend les entrées avec leur type",
+				entrees,
+				[{ name: "a.md", isFolder: false }, { name: "b.png", isFolder: false }, { name: "Sous", isFolder: true }]);
+		});
+
+		await cas(r, "listerDossier d'un dossier absent rend []", async () => {
+			r.check("listerDossier d'un dossier absent rend []",
+				await fichiers.listerDossier(join(dir, "n-existe-pas")), []);
+		});
+
+		await cas(r, "statEntree distingue fichier et dossier, null si absent", async () => {
+			const f = join(dir, "k-fichier.txt");
+			const d = join(dir, "k-dossier");
+			await fichiers.write(f, "x");
+			await fichiers.mkdirs(d);
+			const sf = await statEntree(f);
+			const sd = await statEntree(d);
+			/* `stat` (celui de la fraîcheur) rend `null` pour un dossier ; ici,
+			   c'est le `mtime` du DOSSIER qui invalide l'index d'une racine
+			   externe — un `null` le laisserait périmé à jamais. */
+			r.check("statEntree distingue fichier et dossier, null si absent",
+				[sf?.isFile, sf?.mtimeMs > 0, sd?.isFile, sd?.mtimeMs > 0, await statEntree(join(dir, "k-rien"))],
+				[true, true, false, true, null]);
+		});
+
+		await cas(r, "readBinary rend les octets en Uint8Array, jamais un Buffer", async () => {
+			const p = join(dir, "l-octets.bin");
+			await fichiers.writeBinary(p, new Uint8Array([0, 255, 7]));
+			const lu = await fichiers.readBinary(p);
+			/* Un `Buffer` peut être une VUE sur le pool partagé de Node : le
+			   clonage structuré de l'IPC emporterait tout le tampon. */
+			r.check("readBinary rend les octets en Uint8Array, jamais un Buffer",
+				[lu.constructor.name, [...lu]], ["Uint8Array", [0, 255, 7]]);
 		});
 	} finally {
 		// `finally` : le dossier temporaire doit disparaître même si un cas a

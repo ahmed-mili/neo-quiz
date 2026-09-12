@@ -20,6 +20,7 @@
     "check:scanner": "node scripts/check-scanner.mjs",
     "check:scheduler": "node scripts/check-scheduler.mjs",
     "check:host": "node scripts/check-host.mjs",
+    "check:text-search": "node scripts/check-text-search.mjs",
     "check:dashboard-dom": "node scripts/check-dashboard-dom.mjs",
     "check:folders": "node scripts/check-folders.mjs",
     "check:windows-host": "node scripts/check-windows-host.mjs",

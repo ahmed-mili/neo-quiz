@@ -758,6 +758,65 @@ export function createObsidianHost(
 			const f = tfile(path);
 			return f ? toHostFile(f) : null;
 		},
+		/* TOUS les fichiers indexés, `.md` ou non : la recherche floue du
+		   sélecteur « @ » note chaque chemin, images et PDF compris. */
+		listFiles() {
+			return app.vault.getFiles().map(toHostFile);
+		},
+		/* Les enfants d'un `TFolder`, réduits à des `DirEntry` — un dossier se
+		   reconnaît à son tableau `children`, comme un fichier à son
+		   `extension` (`asTFile`) : le bouchon des contrôles ne fabrique pas de
+		   vrai `TFolder`, et `instanceof` rendrait ce chemin intestable. Un
+		   chemin absent ou qui désigne un fichier rend `[]`, comme `list`. */
+		async listDir(dir) {
+			const cible = dir ? app.vault.getAbstractFileByPath(dir) : app.vault.getRoot();
+			const enfants = (cible as { children?: TAbstractFile[] } | null)?.children;
+			if (!Array.isArray(enfants)) return [];
+			return enfants.map(c => ({
+				name: c.name,
+				path: c.path,
+				isFolder: Array.isArray((c as { children?: unknown }).children),
+			}));
+		},
+		/* Les racines externes (`aiMentionExtraFolders`) : `fs` de Node, requis
+		   PARESSEUSEMENT derrière `Platform.isDesktopApp` — le greffon reste
+		   `isDesktopOnly: false` et se charge sur mobile, où ces méthodes
+		   rendent `[]`/`null` et rejettent. Code DÉPLACÉ de
+		   `src/dashboard/file-sources.ts` et `prompt-paths.ts` (tranche 5,
+		   tâche 5), ligne pour ligne : les mêmes lectures synchrones qu'avant,
+		   sous des méthodes asynchrones parce que l'autre hôte traverse un
+		   pont. `path` d'une entrée est ABSOLU, composé avec « / » : c'est ce
+		   que `walk` (file-sources.ts) réempile pour descendre. */
+		externe: {
+			async list(abs) {
+				if (!Platform.isDesktopApp) return [];
+				const fs = require("fs") as typeof import("fs");
+				let dirents: import("fs").Dirent[];
+				try { dirents = fs.readdirSync(abs, { withFileTypes: true }); } catch (e) { return []; }
+				const dirAbs = abs.replace(/[\\/]+$/, "");
+				return dirents.map(d => ({ name: d.name, path: dirAbs + "/" + d.name, isFolder: d.isDirectory() }));
+			},
+			async stat(abs) {
+				if (!Platform.isDesktopApp) return null;
+				const fs = require("fs") as typeof import("fs");
+				try {
+					const s = fs.statSync(abs);
+					return { isFile: s.isFile(), mtimeMs: s.mtimeMs };
+				} catch (e) {
+					return null;
+				}
+			},
+			async read(abs) {
+				if (!Platform.isDesktopApp) throw new Error("pas de disque sur cet hôte : " + abs);
+				const fs = require("fs") as typeof import("fs");
+				return fs.readFileSync(abs, "utf8");
+			},
+			async readBinary(abs) {
+				if (!Platform.isDesktopApp) throw new Error("pas de disque sur cet hôte : " + abs);
+				const fs = require("fs") as typeof import("fs");
+				return new Uint8Array(fs.readFileSync(abs));
+			},
+		},
 	};
 
 	/* ─── links ─── */

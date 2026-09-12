@@ -128,6 +128,10 @@ export interface Pont {
 		    `fichiers.ts`. Présente pour que l'hôte du rendu ait la méthode que
 		    le contrat nomme, sans inventer d'alias. */
 		readCached(abs: string): Promise<string>;
+		/** Des OCTETS, pour `HostFs.externe.readBinary` (une image jointe hors
+		    vault). BORNÉ comme `read` : une racine externe n'entre au périmètre
+		    que par les réglages, le sélecteur ou les vaults d'Obsidian. */
+		readBinary(abs: string): Promise<Uint8Array>;
 
 		/* ─── LES QUATRE ÉCRITURES RENDENT LE `mtime` NEUF ───
 
@@ -206,6 +210,20 @@ export interface Pont {
 		    N'est PAS une méthode du contrat `HostFs` — elle sert au rendu à
 		    recaler son miroir sur un chemin précis. */
 		stat(abs: string): Promise<{ mtime: number } | null>;
+		/** Fichier OU dossier, avec sa date : `HostFs.externe.stat`. Distinct
+		    de `stat`, qui rend `null` pour un dossier — or c'est le `mtime` de
+		    la RACINE externe (un dossier) qui invalide son index. `null` si
+		    absent ; et REJETTE hors périmètre comme tout canal `fichiers.*`,
+		    l'hôte du rendu traduit ce rejet en `null`. */
+		statEntree(abs: string): Promise<{ isFile: boolean; mtimeMs: number } | null>;
+		/** TOUTES les entrées d'un dossier, avec leur type, sans descendre —
+		    `HostFs.listDir` (navigation « @Cours/ ») et `HostFs.externe.list`
+		    (les racines externes). Le NOM seul : le rendu recompose le chemin,
+		    contrat ou absolu, il est le seul à le savoir (règle de chemins de
+		    l'en-tête). Un dossier absent rend `[]` ; hors périmètre, REJETTE —
+		    c'est ce qui fait qu'une racine externe non ouverte n'est jamais
+		    lue, et l'hôte du rendu en fait `[]`. */
+		listerDossier(dossier: string): Promise<Array<{ name: string; isFolder: boolean }>>;
 
 		/**
 		 * TOUS les fichiers d'une racine, récursivement, pour HYDRATER le
@@ -379,6 +397,9 @@ export const CANAUX = {
 	remove: "neo:fichiers/remove",
 	rename: "neo:fichiers/rename",
 	stat: "neo:fichiers/stat",
+	statEntree: "neo:fichiers/stat-entree",
+	listerDossier: "neo:fichiers/lister-dossier",
+	readBinary: "neo:fichiers/read-binary",
 	liste: "neo:fichiers/liste",
 	surveiller: "neo:surveiller",
 	/** POUSSÉ par le principal vers la fenêtre (`webContents.send`). C'est le

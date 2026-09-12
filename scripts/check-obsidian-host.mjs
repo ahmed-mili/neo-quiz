@@ -143,7 +143,8 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 
 	// Le contrat est complet : une méthode manquante rendrait un pan inerte.
 	const attendu = {
-		fs: ["read", "readCached", "write", "process", "writeBinary", "trash", "exists", "mkdirs", "append", "list", "remove", "rename", "listMarkdown", "findByName", "getFile"],
+		fs: ["read", "readCached", "write", "process", "writeBinary", "trash", "exists", "mkdirs", "append", "list", "remove", "rename", "listMarkdown", "findByName", "getFile", "listFiles", "listDir"],
+		"fs.externe": ["list", "stat", "read", "readBinary"],
 		paths: ["resultsDirFor", "attachmentPathFor", "roots", "rootOf", "localPath", "contractPath"],
 		links: ["resolve", "resourceUrl"],
 		watcher: ["onChange", "onRenameDir"],
@@ -153,7 +154,9 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	};
 	const manquantes = [];
 	for (const [zone, noms] of Object.entries(attendu)) {
-		for (const nom of noms) if (typeof host[zone]?.[nom] !== "function") manquantes.push(zone + "." + nom);
+		// « fs.externe » : une zone IMBRIQUÉE, lue segment par segment.
+		const cible = zone.split(".").reduce((o, k) => o?.[k], host);
+		for (const nom of noms) if (typeof cible?.[nom] !== "function") manquantes.push(zone + "." + nom);
 	}
 	r.check("aucune méthode du contrat ne manque", manquantes, []);
 	r.check("platform est renseigné",
@@ -1469,6 +1472,120 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		{ apresEchec: dossierApresEchec, apresRejet: nbDossiersTemp() - avantRejet },
 		{ apresEchec: false, apresRejet: 0 });
 	rmSync(fausseMaison, { recursive: true, force: true });
+
+	r.done();
+});
+
+/**
+ * LE SÉLECTEUR « @ » SUR LE CONTRAT (tranche 5, tâche 5) : `listDir`,
+ * `listFiles` et les RACINES EXTERNES (`HostFs.externe`).
+ *
+ * `listDir` et `listFiles` traversent la fausse `App` — un `TFolder` s'y
+ * reconnaît à son tableau `children`, exactement comme l'hôte le fait (il
+ * n'emploie pas `instanceof`, et le double n'a pas de vrai `TFolder`). Les
+ * quatre méthodes d'`externe` touchent un VRAI dossier temporaire : c'est le
+ * `fs` de Node que le greffon appelle pour de bon, et un double l'aurait
+ * validé par construction.
+ */
+await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
+	const r = makeReporter("Hôte Obsidian — listDir, listFiles et racines externes");
+
+	const ch1 = fichier("Cours/ch1.md", "md");
+	const schema = fichier("Cours/schema.png", "png");
+	const sous = { path: "Cours/Sous", name: "Sous", children: [] };
+	const cours = { path: "Cours", name: "Cours", children: [ch1, schema, sous] };
+	const racine = { path: "/", name: "", children: [cours] };
+	const app = fausseApp([ch1, schema], {
+		vault: {
+			getRoot: () => racine,
+			getAbstractFileByPath: (p) => ({ "Cours": cours, "Cours/Sous": sous, "Cours/ch1.md": ch1 })[p] ?? null,
+		},
+	});
+	const host = createObsidianHost(app, { manifest: {} });
+
+	/* ── listDir ── */
+
+	/* Fichiers ET dossiers, chacun avec son type : `list` ne rend que les
+	   fichiers, et la navigation « @Cours/ » du sélecteur descend dans les
+	   dossiers — sans `isFolder`, elle ne saurait pas lesquels. */
+	r.check("listDir rend les enfants d'un dossier avec leur type",
+		await host.fs.listDir("Cours"),
+		[
+			{ name: "ch1.md", path: "Cours/ch1.md", isFolder: false },
+			{ name: "schema.png", path: "Cours/schema.png", isFolder: false },
+			{ name: "Sous", path: "Cours/Sous", isFolder: true },
+		]);
+	/* `""` désigne la racine du vault (`getRoot`), pas
+	   `getAbstractFileByPath("")` qui rend `null` dans Obsidian : sans cette
+	   branche, le premier « @ » tapé listerait une racine vide. */
+	r.check("listDir de « » lit la racine du vault",
+		await host.fs.listDir(""), [{ name: "Cours", path: "Cours", isFolder: true }]);
+	r.check("listDir d'un dossier vide rend []", await host.fs.listDir("Cours/Sous"), []);
+	/* Un fichier n'a pas d'enfants, un chemin absent non plus : `[]` dans les
+	   deux cas, comme `list` — une exception ici fermerait le menu. */
+	r.check("listDir d'un fichier ou d'un chemin absent rend []",
+		[await host.fs.listDir("Cours/ch1.md"), await host.fs.listDir("Nulle/Part")], [[], []]);
+
+	/* ── listFiles ── */
+
+	/* TOUS les fichiers indexés, `.md` ou non : la recherche floue note les
+	   images et PDF joignables, que `listMarkdown` ne voit pas. */
+	r.check("listFiles rend tous les fichiers, .md ou non",
+		(await host.fs.listFiles()).map(f => f.path), ["Cours/ch1.md", "Cours/schema.png"]);
+
+	/* ── externe : un VRAI dossier ── */
+
+	const dossier = mkdtempSync(join(tmpdir(), "quiz-externe-")).replace(/\\/g, "/");
+	try {
+		mkdirSync(join(dossier, "Sous"));
+		writeFileSync(join(dossier, "notes.txt"), "texte externe");
+		writeFileSync(join(dossier, "octets.bin"), new Uint8Array([1, 2, 3, 250]));
+
+		/* Le chemin de chaque entrée est ABSOLU, composé avec « / » quelle que
+		   soit la forme reçue : c'est ce que `walk` (file-sources.ts) réempile
+		   pour descendre, et un chemin relatif l'aurait fait lire à côté. Le
+		   séparateur final est retiré AVANT la composition : « C:/x//Sous »
+		   n'est pas égal à « C:/x/Sous » pour le cache de l'index. */
+		const entrees = (await host.fs.externe.list(dossier + "/")).sort((a, b) => a.name.localeCompare(b.name));
+		r.check("externe.list rend les entrées d'un vrai dossier, chemin absolu composé avec « / »",
+			entrees,
+			[
+				{ name: "notes.txt", path: dossier + "/notes.txt", isFolder: false },
+				{ name: "octets.bin", path: dossier + "/octets.bin", isFolder: false },
+				{ name: "Sous", path: dossier + "/Sous", isFolder: true },
+			]);
+		/* Une racine configurée puis supprimée, ou un disque débranché : `[]`,
+		   sans quoi le parcours de `walk` mourrait sur le premier dossier
+		   disparu et la recherche entière avec lui. */
+		r.check("externe.list d'un dossier absent rend []", await host.fs.externe.list(dossier + "/absent"), []);
+
+		/* `isFile` distingue le fichier du dossier (`prompt-paths.ts` refuse un
+		   dossier cité comme pièce jointe) ; `mtimeMs` d'un DOSSIER est ce qui
+		   invalide l'index d'une racine (`indexOf`) — un `stat` qui rendrait
+		   `null` pour un dossier, comme celui du principal Electron, laisserait
+		   l'index périmé à jamais. */
+		const statFichier = await host.fs.externe.stat(dossier + "/notes.txt");
+		const statDossier = await host.fs.externe.stat(dossier + "/Sous");
+		r.check("externe.stat distingue fichier et dossier, avec une date",
+			[statFichier?.isFile, statDossier?.isFile, statFichier?.mtimeMs > 0, statDossier?.mtimeMs > 0],
+			[true, false, true, true]);
+		r.check("externe.stat d'un chemin absent rend null", await host.fs.externe.stat(dossier + "/rien"), null);
+
+		r.check("externe.read lit le texte", await host.fs.externe.read(dossier + "/notes.txt"), "texte externe");
+		/* Un `Uint8Array`, pas un `Buffer` : `HostFs.readBinary` rend la même
+		   forme, et l'appelant (les images jointes, tâche 6) ne doit pas avoir
+		   à distinguer d'où viennent les octets. */
+		const octets = await host.fs.externe.readBinary(dossier + "/octets.bin");
+		r.check("externe.readBinary rend les octets, en Uint8Array",
+			[octets.constructor.name, [...octets]], ["Uint8Array", [1, 2, 3, 250]]);
+		/* Un chemin absent REJETTE : `read` n'a pas de valeur « vide » honnête,
+		   et une chaîne vide attachée au prompt passerait pour un fichier lu. */
+		let rejet = false;
+		try { await host.fs.externe.read(dossier + "/rien.txt"); } catch (e) { rejet = true; }
+		r.check("externe.read d'un chemin absent rejette", rejet, true);
+	} finally {
+		rmSync(dossier, { recursive: true, force: true });
+	}
 
 	r.done();
 });

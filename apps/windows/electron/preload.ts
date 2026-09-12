@@ -70,6 +70,9 @@ const pont: Pont = {
 		remove: abs => ipcRenderer.invoke(CANAUX.remove, abs),
 		rename: (de, vers) => ipcRenderer.invoke(CANAUX.rename, de, vers),
 		stat: abs => ipcRenderer.invoke(CANAUX.stat, abs),
+		statEntree: abs => ipcRenderer.invoke(CANAUX.statEntree, abs),
+		listerDossier: dossier => ipcRenderer.invoke(CANAUX.listerDossier, dossier),
+		readBinary: abs => ipcRenderer.invoke(CANAUX.readBinary, abs),
 		liste: racine => ipcRenderer.invoke(CANAUX.liste, racine),
 	},
 

@@ -550,9 +550,22 @@ await withSrcModule("apps/windows/src/host/links.ts", async ({ createWindowsLink
  * préchargement réel le fait avant l'IPC : c'est ce qui rend le cas « les
  * octets de la vue, pas ceux du tampon » discriminant ici aussi.
  *
+ * LE PÉRIMÈTRE, pour les trois canaux nés à la tranche 5 (`listerDossier`,
+ * `statEntree`, `readBinary`, qui servent `HostFs.listDir` et
+ * `HostFs.externe`) : le vrai principal les BORNE comme tout canal
+ * `fichiers.*` (`canaux.ts`, `perimetre.borner`), et c'est ce rejet, avec son
+ * message, que l'hôte du rendu doit traduire en `[]`/`null` pour `list` et
+ * `stat`, et laisser remonter pour `read`/`readBinary`. Le double le reproduit
+ * sur ces trois canaux et sur `read`, les quatre qu'`externe` emploie : les
+ * autres ne sont exercés qu'avec des chemins que la carte des racines a déjà
+ * bornés côté rendu. `perimetre` est
+ * la liste des dossiers ouverts, absolus ; `null` ne borne rien (les groupes
+ * antérieurs à la tranche 5).
+ *
  * @param fichiers état initial du disque, `{ "<chemin absolu>": "<texte>" }`
+ * @param perimetre les dossiers ouverts, absolus — ou `null`
  */
-function installerPont(fichiers = {}) {
+function installerPont(fichiers = {}, perimetre = null) {
 	const precedent = globalThis.window;
 	const encodeur = new TextEncoder();
 	const decodeur = new TextDecoder();
@@ -571,6 +584,16 @@ function installerPont(fichiers = {}) {
 		if (!octets) throw new Error("ENOENT: " + p);
 		return decodeur.decode(octets);
 	};
+	/* Le rejet du vrai `borner` (`perimetre.ts`), même message : un chemin qui
+	   n'est sous aucun dossier ouvert ne passe pas. Insensible à la casse,
+	   comme la carte des racines et comme Windows. */
+	const borner = (p) => {
+		if (perimetre === null) return;
+		const bas = String(p).toLowerCase();
+		if (!perimetre.some(r => bas === r.toLowerCase() || bas.startsWith(r.toLowerCase() + "/"))) {
+			throw new Error("chemin hors des dossiers ouverts : " + p);
+		}
+	};
 	const ecrireTexte = (nom, p, contenu) => {
 		journal.push([nom, p, contenu]);
 		disque.set(p, encodeur.encode(contenu));
@@ -586,7 +609,7 @@ function installerPont(fichiers = {}) {
 			journal.push(["demarrer", ...racines]);
 		},
 		fichiers: {
-			async read(p) { return lire(p); },
+			async read(p) { borner(p); return lire(p); },
 			async readCached(p) { return lire(p); },
 			async write(p, contenu) { return ecrireTexte("write", p, String(contenu)); },
 			async lirePourEcriture(p) {
@@ -629,6 +652,39 @@ function installerPont(fichiers = {}) {
 			async remove(p) { journal.push(["remove", p]); disque.delete(p); },
 			async rename(de, vers) { journal.push(["rename", de, vers]); },
 			async stat(p) { return disque.has(p) ? { mtime: dates.get(p) ?? 1000 } : null; },
+			/* Les trois canaux de la tranche 5, BORNÉS comme `read` (voir l'en-tête). Un
+			   dossier est ce qui a au moins un descendant sur le disque, ou ce que
+			   `mkdirs` a créé. `listerDossier` rend des NOMS avec leur type,
+			   jamais des chemins : c'est la règle du vrai canal, et c'est ce qui
+			   oblige le rendu à recomposer — contrat ou absolu — lui-même. */
+			async listerDossier(dossier) {
+				journal.push(["listerDossier", dossier]);
+				borner(dossier);
+				const prefixe = dossier + "/";
+				const noms = new Map();
+				for (const p of [...disque.keys(), ...dossiers]) {
+					if (!p.startsWith(prefixe)) continue;
+					const reste = p.slice(prefixe.length);
+					const nom = reste.split("/")[0];
+					if (!nom) continue;
+					noms.set(nom, noms.get(nom) || reste.includes("/") || dossiers.has(p));
+				}
+				return [...noms].map(([name, isFolder]) => ({ name, isFolder }));
+			},
+			async statEntree(p) {
+				journal.push(["statEntree", p]);
+				borner(p);
+				if (disque.has(p)) return { isFile: true, mtimeMs: dates.get(p) ?? 1000 };
+				const estDossier = dossiers.has(p) || [...disque.keys()].some(k => k.startsWith(p + "/"));
+				return estDossier ? { isFile: false, mtimeMs: 1000 } : null;
+			},
+			async readBinary(p) {
+				journal.push(["readBinary", p]);
+				borner(p);
+				const octets = disque.get(p);
+				if (!octets) throw new Error("ENOENT: " + p);
+				return new Uint8Array(octets);
+			},
 			async liste(racine) {
 				/* JOURNALISÉE, comme `surveiller` : c'est la COMPARAISON des deux
 				   places dans le journal qui prouve l'ordre, et rien d'autre ne
@@ -854,6 +910,130 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs }) =
 		/* `try/finally` comme les groupes des modales : un groupe qui MEURT sur
 		   une exception laisserait `globalThis.window` remplacé pour tous ceux
 		   qui suivent. */
+		pont.retirer();
+	}
+
+	r.done();
+});
+
+/**
+ * LE SÉLECTEUR « @ » SUR LE CONTRAT (tranche 5, tâche 5) : `listDir`,
+ * `listFiles` et les RACINES EXTERNES (`HostFs.externe`), moitié FENÊTRE.
+ *
+ * Deux natures de chemin traversent le même pont, et c'est ce que chaque cas
+ * doit pouvoir surprendre : `listDir` reçoit un chemin du CONTRAT et doit
+ * passer l'ABSOLU au pont puis rendre du CONTRAT ; `externe.*` reçoit de
+ * l'absolu et le passe TEL QUEL, sans conversion — un hôte qui convertirait
+ * une racine externe par la carte des racines la trouverait « hors des
+ * dossiers ouverts » à tous les coups, et le sélecteur ne verrait jamais
+ * Downloads. Le PÉRIMÈTRE du principal est doublé ici (voir `installerPont`)
+ * pour éprouver la seconde promesse du contrat : hors périmètre, `list` et
+ * `stat` rendent `[]`/`null`, `read` et `readBinary` rejettent.
+ */
+await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, buildIndex }) => {
+	const r = makeReporter("Hôte Windows — listDir, listFiles et racines externes");
+	const pont = installerPont({
+		"D:/Quiz/Cours/ch1.md": "avant",
+		"D:/Quiz/Cours/schema.png": "png",
+		"D:/Quiz/Cours/Sous/td.md": "td",
+		"C:/Users/x/Downloads/poly.pdf": "pdf",
+		"C:/Users/x/Downloads/Cours/notes.txt": "notes",
+	}, ["D:/Quiz", "C:/Users/x/Downloads"]);
+	const avertis = [];
+	const warnAvant = console.warn;
+	console.warn = (...args) => { avertis.push(args.map(String).join(" ")); };
+
+	try {
+		const carte = creerCarteRacines([{ id: "Quiz", name: "Quiz", path: "D:/Quiz", vault: false }]);
+		const index = buildIndex([
+			{ path: "Quiz/Cours/ch1.md", mtime: 1 },
+			{ path: "Quiz/Cours/schema.png", mtime: 0 },
+			{ path: "Quiz/Cours/Sous/td.md", mtime: 1 },
+		]);
+		const fs = createWindowsFs(carte, index);
+		/* Un rejet devient une VALEUR : un cas qui mourrait sur `await`
+		   masquerait tous les groupes suivants, et la promesse « rend `[]` »
+		   se juge précisément sur l'absence de rejet. */
+		const tenter = (promesse) => promesse.then(v => v, e => "REJET : " + e.message);
+
+		/* ── listFiles ── */
+
+		r.check("listFiles rend tous les fichiers du miroir, .md ou non",
+			fs.listFiles().map(f => f.path).sort(),
+			["Quiz/Cours/Sous/td.md", "Quiz/Cours/ch1.md", "Quiz/Cours/schema.png"]);
+
+		/* ── listDir : contrat → absolu → contrat ── */
+
+		const cours = await tenter(fs.listDir("Quiz/Cours"));
+		r.check("listDir traverse le pont avec le chemin absolu de la racine",
+			[pont.journal.at(-1), Array.isArray(cours)], [["listerDossier", "D:/Quiz/Cours"], true]);
+		/* Le pont rend des NOMS ; c'est l'hôte qui recompose le chemin du
+		   CONTRAT. Un hôte qui rendrait l'absolu donnerait au sélecteur des
+		   chemins qu'aucun `getFile` ne saurait rouvrir. */
+		r.check("listDir rend des chemins du CONTRAT avec leur type",
+			Array.isArray(cours) ? cours.sort((a, b) => a.name.localeCompare(b.name)) : cours,
+			[
+				{ name: "ch1.md", path: "Quiz/Cours/ch1.md", isFolder: false },
+				{ name: "schema.png", path: "Quiz/Cours/schema.png", isFolder: false },
+				{ name: "Sous", path: "Quiz/Cours/Sous", isFolder: true },
+			]);
+		/* `""` est « la racine » : dans l'application, les dossiers ouverts
+		   eux-mêmes. Le pont n'est pas consulté — il n'y a pas de dossier
+		   absolu qui les contienne tous. */
+		const avant = pont.journal.length;
+		r.check("listDir de « » rend les dossiers ouverts, sans toucher au pont",
+			[await tenter(fs.listDir("")), pont.journal.length - avant],
+			[[{ name: "Quiz", path: "Quiz", isFolder: true }], 0]);
+		let horsRacine = null;
+		try { await fs.listDir("Inconnu/x"); } catch (e) { horsRacine = String(e.message); }
+		r.check("listDir hors des dossiers ouverts rejette en nommant la cause",
+			horsRacine && horsRacine.includes("chemin hors des dossiers ouverts"), true);
+
+		/* ── externe : l'absolu TEL QUEL, dans le périmètre ── */
+
+		const dl = await tenter(fs.externe.list("C:\\Users\\x\\Downloads\\"));
+		r.check("externe.list passe au pont le chemin absolu tel quel, normalisé",
+			pont.journal.at(-1), ["listerDossier", "C:/Users/x/Downloads"]);
+		r.check("externe.list rend des chemins ABSOLUS avec leur type",
+			Array.isArray(dl) ? dl.sort((a, b) => a.name.localeCompare(b.name)) : dl,
+			[
+				{ name: "Cours", path: "C:/Users/x/Downloads/Cours", isFolder: true },
+				{ name: "poly.pdf", path: "C:/Users/x/Downloads/poly.pdf", isFolder: false },
+			]);
+		r.check("externe.stat distingue fichier et dossier",
+			[(await fs.externe.stat("C:/Users/x/Downloads/poly.pdf"))?.isFile,
+				(await fs.externe.stat("C:/Users/x/Downloads/Cours"))?.isFile,
+				await fs.externe.stat("C:/Users/x/Downloads/rien")],
+			[true, false, null]);
+		r.check("externe.read lit par le pont", await fs.externe.read("C:/Users/x/Downloads/Cours/notes.txt"), "notes");
+		r.check("externe.readBinary rend les octets",
+			[...await fs.externe.readBinary("C:/Users/x/Downloads/poly.pdf")], [...new TextEncoder().encode("pdf")]);
+
+		/* ── externe : HORS périmètre ── */
+
+		/* C'est la promesse qui rend cette porte admissible côté application
+		   (`HostFs.externe`, src/host/types.ts) : une racine configurée qui
+		   n'est pas un dossier ouvert n'est JAMAIS lue. Le principal rejette ;
+		   le rendu en fait une racine vide (`[]`, `null`) pour que le sélecteur
+		   s'affiche au lieu de mourir — et le NOMME dans la console, sans quoi
+		   « Downloads est vide » serait un mensonge silencieux. */
+		avertis.length = 0;
+		r.check("externe.list hors périmètre rend []", await tenter(fs.externe.list("E:/Ailleurs")), []);
+		r.check("… et nomme la racine refusée dans la console",
+			avertis.some(a => a.includes("E:/Ailleurs") && a.includes("chemin hors des dossiers ouverts")), true);
+		r.check("externe.stat hors périmètre rend null", await tenter(fs.externe.stat("E:/Ailleurs/x.pdf")), null);
+		/* `read` et `readBinary` LAISSENT REMONTER : un appelant qui lit veut
+		   savoir, et une chaîne vide attachée au prompt passerait pour un
+		   fichier lu. */
+		let lectureRejetee = null;
+		try { await fs.externe.read("E:/Ailleurs/x.txt"); } catch (e) { lectureRejetee = String(e.message); }
+		let octetsRejetes = null;
+		try { await fs.externe.readBinary("E:/Ailleurs/x.pdf"); } catch (e) { octetsRejetes = String(e.message); }
+		r.check("externe.read et readBinary hors périmètre rejettent en nommant la cause",
+			[lectureRejetee?.includes("chemin hors des dossiers ouverts"), octetsRejetes?.includes("chemin hors des dossiers ouverts")],
+			[true, true]);
+	} finally {
+		console.warn = warnAvant;
 		pont.retirer();
 	}
 

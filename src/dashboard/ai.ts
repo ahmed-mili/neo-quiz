@@ -817,7 +817,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		});
 		requestAnimationFrame(() => { autoGrow(); layoutChipsRow(); });
 
-		mentions = attachMentionPicker(ctx.app, composerInput, composer, {
+		mentions = attachMentionPicker(composerInput, composer, {
 			onPickVaultFile: (path) => { void attachVaultPath(path); },
 			onPickExternalFile: (path) => { void attachExternalPath(path); },
 			onTextReplaced: (value) => {
@@ -1875,7 +1875,7 @@ export function createAiHandlers(ctx: DashboardCtx): AiHandlers {
 		if (!text) return;
 		const { scanPromptPaths, MAX_PROMPT_PATHS } = require("./prompt-paths") as typeof import("./prompt-paths");
 		const roots = ctx.plugin.settings.aiMentionExtraFolders || [];
-		const { refs, unresolved, ambiguous, truncated } = scanPromptPaths(ctx.app, roots, text);
+		const { refs, unresolved, ambiguous, truncated } = await scanPromptPaths(roots, text);
 
 		// Déjà joint (via « @ » ou « + ») : on ne le redit pas. Le passer à
 		// attach*Path afficherait « déjà attachée » pour un doublon que

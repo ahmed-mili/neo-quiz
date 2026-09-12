@@ -1,7 +1,8 @@
-import { App, Notice, TFolder } from "obsidian";
+import { LOG_PREFIX } from "../branding";
+import { currentHost } from "../host/current";
 import {
-	FileEntry, listExternalFolder, listExternalRoots, listVaultFolder,
-	primeExternalIndex, resolveExternalPath, searchAll,
+	FileEntry, isVaultFolder, listExternalFolder, listExternalRoots, listVaultFolder,
+	primeExternalIndex, resolveExternalPath, revalidateExternalIndex, searchAll,
 } from "./file-sources";
 import { MentionMenuHandle, MentionMenuItem, openMentionMenu } from "./ui-select";
 import { t } from "../i18n";
@@ -63,7 +64,6 @@ function iconFor(entry: FileEntry): string {
    anchorEl = le composer (la liste s'affiche au-dessus, comme dans la
    référence), surtout PAS le caret. */
 export function attachMentionPicker(
-	app: App,
 	textarea: HTMLTextAreaElement,
 	anchorEl: HTMLElement,
 	opts: MentionPickerOptions
@@ -94,12 +94,16 @@ export function attachMentionPicker(
 		opts.onTextReplaced(next);
 	}
 
-	function entriesFor(query: string): { entries: FileEntry[]; footer?: string } {
+	/* ASYNCHRONE depuis que le disque est derrière le contrat : `listDir` et
+	   `externe.list` traversent un pont dans l'application. `refresh` garde
+	   une génération pour qu'une réponse en retard n'écrase pas la liste d'une
+	   frappe plus récente. */
+	async function entriesFor(query: string): Promise<{ entries: FileEntry[]; footer?: string }> {
 		const roots = opts.getExtraRoots();
 		// Token vide → racine du vault, puis les racines externes en fin de
 		// liste (elles ont leur icône propre).
 		if (!query) {
-			return { entries: [...listVaultFolder(app, ""), ...listExternalRoots(roots)] };
+			return { entries: [...await listVaultFolder(""), ...listExternalRoots(roots)] };
 		}
 		// Token finissant par « / » → on liste ce dossier. `dir` est un
 		// chemin RELATIF (vault, ou racine externe préfixée de son nom —
@@ -120,16 +124,19 @@ export function attachMentionPicker(
 			// Notice l'avertit si le nom percute un dossier du vault (cf.
 			// plugin.ts, section « Dossiers hors vault »). Ici, silencieux
 			// par design, pas par oubli.
-			const vaultFolder = app.vault.getAbstractFileByPath(dir);
-			if (vaultFolder instanceof TFolder) return { entries: listVaultFolder(app, dir) };
+			if (await isVaultFolder(dir)) return { entries: await listVaultFolder(dir) };
 			const resolved = resolveExternalPath(roots, dir);
-			if (resolved) return { entries: listExternalFolder(resolved.absPath, resolved.root) };
-			return { entries: listVaultFolder(app, dir) }; // ni l'un ni l'autre → liste vide
+			if (resolved) return { entries: await listExternalFolder(resolved.absPath, resolved.root) };
+			return { entries: [] }; // ni l'un ni l'autre → liste vide
 		}
 		// Sinon : recherche TOUJOURS globale, vault + toutes les racines,
 		// fusionnées et triées par score commun (searchAll) — jamais une
 		// simple concaténation qui évincerait les résultats externes.
-		const result = searchAll(app, roots, query);
+		// La revalidation d'abord : `searchAll` ne lit que l'instantané des
+		// racines externes, et c'est ici que le contrôle de mtime tourne
+		// pendant la frappe (voir `primeExternalIndex`).
+		await revalidateExternalIndex(roots);
+		const result = searchAll(roots, query);
 		const footer = result.truncated.length
 			? t("ai.mention.truncated", { roots: result.truncated.join(", ") })
 			: undefined;
@@ -160,7 +167,7 @@ export function attachMentionPicker(
 					// préfixée de son nom) : le token reste lisible, jamais
 					// de chemin absolu écrit dans le texte.
 					replaceToken(token, "@" + entry.path + "/");
-					refresh();
+					void refresh();
 					return;
 				}
 				replaceToken(token, "");
@@ -176,7 +183,7 @@ export function attachMentionPicker(
 						// ouvert (cas réel) : replaceToken a déjà effacé le
 						// « @… », rien n'est attaché — sans Notice, échec
 						// totalement muet.
-						new Notice(t("ai.mention.externalRootGone", { name: entry.name }));
+						currentHost().ui.notice(t("ai.mention.externalRootGone", { name: entry.name }));
 					}
 				} else {
 					opts.onPickVaultFile(entry.path);
@@ -185,20 +192,37 @@ export function attachMentionPicker(
 		}));
 	}
 
-	function refresh(): void {
+	/** La frappe la plus récente : une liste calculée pour une frappe plus
+	    ancienne est jetée à l'arrivée, sans quoi une réponse lente (un parcours
+	    de racine externe en vol) reposerait des entrées périmées PAR-DESSUS
+	    celles de la frappe suivante. */
+	let generation = 0;
+
+	async function refresh(): Promise<void> {
 		const token = findMentionToken(textarea.value, textarea.selectionStart ?? 0);
 		if (!token) { close(); return; }
-		const { entries, footer } = entriesFor(token.query);
+		const cette = ++generation;
+		if (!menu) {
+			/* L'ENTRÉE D'AFFICHAGE : l'instantané des racines externes est
+			   préchauffé ici, sans attendre — le vault s'affiche tout de suite,
+			   et la première frappe qui cherche l'attend par
+			   `revalidateExternalIndex` (parcours partagé, jamais lancé deux
+			   fois). */
+			void primeExternalIndex(opts.getExtraRoots()).catch(e => {
+				console.warn(LOG_PREFIX, "index des racines externes:", e);
+			});
+		}
+		const { entries, footer } = await entriesFor(token.query);
+		if (cette !== generation) return;
 		// Un espace qui ne mène nulle part termine le token.
 		if (!entries.length && token.query.includes(" ")) { close(); return; }
 		if (!menu) {
-			primeExternalIndex(opts.getExtraRoots());
 			menu = openMentionMenu(anchorEl, () => { menu = null; });
 		}
 		menu.setItems(itemsFor(token, entries), footer);
 	}
 
-	function onInput(): void { refresh(); }
+	function onInput(): void { void refresh(); }
 
 	/* Touches qui déplacent le caret SANS produire d'« input » : le token
 	   sous le curseur change alors qu'aucun texte n'a bougé. */
@@ -212,13 +236,13 @@ export function attachMentionPicker(
 		// flèches paraîtraient bloquées sur la première entrée.
 		if (menu && (e.key === "ArrowUp" || e.key === "ArrowDown")) return;
 		if (!CARET_KEYS.has(e.key)) return;
-		refresh();
+		void refresh();
 	}
 
 	/* Un clic déplace le caret sans déclencher « input ». Sans ça, cliquer
 	   juste à droite d'un « @ » déjà tapé ne rouvrait pas le menu : il
 	   fallait effacer le « @ » et le retaper. */
-	function onClick(): void { refresh(); }
+	function onClick(): void { void refresh(); }
 
 	function onKeyDown(e: KeyboardEvent): void {
 		if (!menu) return;

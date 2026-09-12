@@ -48,7 +48,7 @@
 ══════════════════════════════════════════════════════════ */
 
 import { LOG_PREFIX } from "../../../../src/branding";
-import type { HostFile, HostFileEvent, HostFs, HostWatcher } from "../../../../src/host/types";
+import type { DirEntry, HostFile, HostFileEvent, HostFs, HostWatcher } from "../../../../src/host/types";
 import type { CarteRacines } from "./roots";
 import { pont } from "./pont";
 import type { EvenementDisque } from "../../electron/pont";
@@ -534,6 +534,70 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 		},
 		getFile(path) {
 			return index.get(path);
+		},
+		/* TOUS les fichiers du miroir : le parcours (`parcours.ts`) y met chaque
+		   fichier hors dossier ignoré, `.md` ou non — c'est ce que le contrat
+		   promet (`HostFs.listFiles`), et ce que la recherche floue du
+		   sélecteur « @ » lit. */
+		listFiles() {
+			return index.all();
+		},
+		/* Le pont rend des NOMS avec leur type ; le chemin du contrat de chaque
+		   entrée est recomposé ICI, par `depuisAbsolu` — la seule conversion.
+		   Un `dir` VIDE désigne « la racine » : dans l'application, ce sont les
+		   dossiers ouverts eux-mêmes, un par racine, sans rien demander au pont
+		   (le contrat dit que `""` est la racine, et l'application en a
+		   plusieurs). Un chemin hors racines rejette avec sa cause, comme les
+		   autres méthodes ; un dossier absent rend `[]` côté principal. */
+		async listDir(dir) {
+			if (!String(dir ?? "").trim()) {
+				return carte.hostRoots().map(r => ({ name: r.name, path: r.id, isFolder: true }));
+			}
+			const a = abs(dir);
+			const entrees = await pont().fichiers.listerDossier(a);
+			const sortie: DirEntry[] = [];
+			for (const e of entrees) {
+				const path = carte.depuisAbsolu(a + "/" + e.name);
+				if (path !== null) sortie.push({ name: e.name, path, isFolder: e.isFolder });
+			}
+			return sortie;
+		},
+		/* LES RACINES EXTERNES (`HostFs.externe`) : les MÊMES canaux bornés que
+		   le reste de ce fichier, sur des chemins ABSOLUS que le rendu passe
+		   TELS QUELS — aucune conversion, ce ne sont pas des chemins du contrat.
+		   Une racine hors périmètre fait REJETER le principal (`borner`, qui la
+		   nomme dans sa console) : `list` et `stat` en font `[]`/`null`, comme
+		   le contrat le promet, pour que le sélecteur montre simplement une
+		   racine vide au lieu de mourir ; `read` et `readBinary` laissent
+		   remonter le rejet, un appelant qui lit veut savoir. C'est le
+		   périmètre qui rend cette porte admissible côté application — voir le
+		   contrat. */
+		externe: {
+			async list(abs) {
+				const a = normaliser(abs);
+				let entrees;
+				try {
+					entrees = await pont().fichiers.listerDossier(a);
+				} catch (e) {
+					console.warn(LOG_PREFIX, "racine externe refusée:", a, e);
+					return [];
+				}
+				return entrees.map(e => ({ name: e.name, path: a + "/" + e.name, isFolder: e.isFolder }));
+			},
+			async stat(abs) {
+				try {
+					return await pont().fichiers.statEntree(normaliser(abs));
+				} catch (e) {
+					console.warn(LOG_PREFIX, "racine externe refusée:", abs, e);
+					return null;
+				}
+			},
+			async read(abs) {
+				return await pont().fichiers.read(normaliser(abs));
+			},
+			async readBinary(abs) {
+				return await pont().fichiers.readBinary(normaliser(abs));
+			},
 		},
 	};
 }

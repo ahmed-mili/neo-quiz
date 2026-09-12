@@ -32,6 +32,25 @@ export interface HostFile {
 	mtime: number;
 }
 
+/**
+ * Une ENTRÉE d'un dossier, telle que `HostFs.listDir` et `HostFs.externe.list`
+ * la rendent. Plate et sérialisable, comme `HostFile` — un `TFolder`
+ * d'Obsidian et un `Dirent` de Node s'y réduisent sans rien inventer.
+ *
+ * `path` change de NATURE selon la porte : chemin du CONTRAT sous `listDir`,
+ * chemin ABSOLU du disque sous `externe.list`. C'est le seul type du contrat
+ * qui porte les deux, et c'est écrit ici pour qu'un appelant ne mélange jamais
+ * les deux — un chemin absolu qui fuirait vers `HostFs.read` serait refusé par
+ * l'hôte, un chemin du contrat passé à `externe.read` ne désignerait rien.
+ */
+export interface DirEntry {
+	/** Nom avec extension : « TD3.md », « Cours ». */
+	name: string;
+	/** Voir l'en-tête du type : contrat ou absolu selon la porte. */
+	path: string;
+	isFolder: boolean;
+}
+
 /** Changement observé dans le dossier. `rename` est distinct de
     delete+create : le journal de révision suit les clés par renommage, et
     reconstituer un renommage à partir de deux évènements est impossible. */
@@ -191,6 +210,65 @@ export interface HostFs {
 	    prévient l'utilisateur (engine/resources.ts). */
 	findByName(name: string): HostFile[];
 	getFile(path: string): HostFile | null;
+	/** TOUS les fichiers de l'index, `.md` ou non, synchrone comme
+	    `listMarkdown`. Un seul appelant le justifie, et il ne peut pas faire
+	    autrement : la recherche floue du sélecteur « @ » (`dashboard/
+	    file-sources.ts`, `searchAll`) note CHAQUE chemin du vault contre ce
+	    que l'utilisateur tape — images et PDF compris, puisque ce sont des
+	    pièces jointes — et `findByName` ne sait chercher qu'un nom EXACT.
+	    Les dossiers en sont DÉRIVÉS (chaque préfixe d'un chemin de fichier) :
+	    un dossier vide n'y figure pas, et il n'a rien à attacher. Dans
+	    l'application, l'index tient déjà tous les fichiers du parcours
+	    (`parcours.ts` n'écarte que les dossiers ignorés), `mtime` à 0 hors des
+	    `.md` — ce que `HostFile` autorise. */
+	listFiles(): HostFile[];
+	/** Les ENTRÉES d'un dossier du contrat — fichiers ET sous-dossiers, sans
+	    descendre. `dir` vide désigne la racine (le vault ; dans l'application,
+	    les dossiers ouverts eux-mêmes, un par racine). Un dossier absent rend
+	    `[]`, comme `list`. C'est la voie de NAVIGATION du sélecteur « @ »
+	    (« @Cours/ » liste `Cours`) : `list` ne rend que les fichiers, et rien
+	    d'autre au contrat ne sait nommer un sous-dossier. */
+	listDir(dir: string): Promise<DirEntry[]>;
+	/**
+	 * LES RACINES EXTERNES — des chemins ABSOLUS, hors de toute racine du
+	 * contrat.
+	 *
+	 * POURQUOI ÇA EXISTE : le réglage `aiMentionExtraFolders` désigne des
+	 * dossiers HORS du vault (« C:/Users/…/Downloads ») dont le sélecteur « @ »
+	 * et les chemins cités dans le prompt tirent des pièces jointes.
+	 * `dashboard/file-sources.ts` et `prompt-paths.ts` y faisaient quatre
+	 * `require("fs")` — inexistant dans le rendu de l'application, où chaque
+	 * racine externe aurait rendu une liste vide en silence. Tout ce qui touche
+	 * un chemin absolu passe donc ici, et `DirEntry.path` y est ABSOLU.
+	 *
+	 * POURQUOI C'EST SÛR, et ce n'est pas la même raison des deux côtés. Sous
+	 * Obsidian, le greffon a déjà `fs` entier ; cette porte ne lui donne rien
+	 * qu'il n'avait. Dans l'application, ces quatre méthodes sont les MÊMES
+	 * canaux `fichiers.*` du pont que le reste de `HostFs`, BORNÉS par le
+	 * périmètre (`apps/windows/electron/perimetre.ts`) : une racine externe qui
+	 * n'est pas un dossier ouvert rend `[]`/`null` (`list`, `stat`) ou rejette
+	 * (`read`, `readBinary`), et le processus principal la NOMME dans sa
+	 * console — elle n'est jamais lue. Sans le périmètre, cette interface
+	 * serait un accès disque total depuis la fenêtre ; c'est lui, et lui seul,
+	 * qui autorise son existence côté application. Un hôte MOBILE rend
+	 * `[]`/`null` et rejette : il n'a pas de disque à offrir.
+	 *
+	 * `readBinary` entre au contrat MAINTENANT, sans appelant dans cette
+	 * tranche : les images jointes (`ai.ts`, `attachExternalPath`) en auront
+	 * besoin à la tâche suivante, et rouvrir le contrat pour une méthode de
+	 * plus rouvrirait aussi les quatre contrôles qui l'éprouvent.
+	 */
+	externe: {
+		/** Les entrées d'un dossier absolu, `path` ABSOLU. Absent, illisible ou
+		    hors périmètre → `[]`. */
+		list(abs: string): Promise<DirEntry[]>;
+		/** `isFile` distingue un fichier d'un dossier ; `mtimeMs` sert à
+		    invalider l'index d'une racine. Absent ou hors périmètre → `null`. */
+		stat(abs: string): Promise<{ isFile: boolean; mtimeMs: number } | null>;
+		/** Rejette si absent, illisible ou hors périmètre. */
+		read(abs: string): Promise<string>;
+		readBinary(abs: string): Promise<Uint8Array>;
+	};
 }
 
 export interface HostLinks {

@@ -17,7 +17,8 @@
  * libérés en tranche 2.6, et ceux de la tranche 3 (l'entrée/sortie du bloc,
  * les trois satellites de la page « quiz », puis la page elle-même —
  * `detail.ts`, celle qui sert trois hôtes — et le menu « ⋯ » des cartes,
- * `quiz-menu.ts`, la dernière conversion). Contrairement à `RESTANTS`,
+ * `quiz-menu.ts`, la dernière conversion), puis les trois fichiers du
+ * sélecteur « @ » libérés en tranche 5 (tâche 5). Contrairement à `RESTANTS`,
  * cette liste ne peut que
  * GRANDIR : un fichier qui y figure sans plus être libre (import d'Obsidian
  * retrouvé, extension DOM réintroduite) fait échouer le contrôle au lieu d'en
@@ -65,6 +66,10 @@ const LIBERES = [
 	"src/dashboard/detail.ts",
 	"src/dashboard/quiz-menu.ts",
 	"src/editor/utils.ts",
+	// Tranche 5, tâche 5 : le sélecteur « @ » sur le contrat.
+	"src/dashboard/file-sources.ts",
+	"src/dashboard/mention-picker.ts",
+	"src/dashboard/prompt-paths.ts",
 ];
 
 /** Retire les commentaires : une extension CITÉE en commentaire (par exemple

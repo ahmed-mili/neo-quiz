@@ -112,6 +112,20 @@ réponse étant toujours non.
   puisque c'est lui qui décide ce qui EST une formule. Il tourne sur un faux `HostMath`,
   ce qui prouve du même coup que plus rien n'appelle Obsidian — le bouchon de
   `load-src.mjs` jetterait bruyamment.
+- `npm run check:text-search` — la RECHERCHE FLOUE partagée (`src/text-search.ts`,
+  tranche 5, tâche 5), qui remplace `prepareFuzzySearch` d'Obsidian dans le
+  sélecteur « @ » (`dashboard/file-sources.ts`, `searchAll`). Le défaut qu'il
+  empêche : un ordre de résultats qui diverge de celui qu'Obsidian montrait —
+  « td » qui mettrait `std.md` devant `Cours/TD3.md` (bonus de début de mot),
+  `no-te.md` devant `Cours/notes.md` (coût de rupture), ou `Cache/h.md` devant
+  `Cours/ch1.md` (un glouton qui saisit le premier « c » ; c'est ce défaut, vu
+  rouge, qui a fait passer l'alignement en programmation dynamique). Ses cas
+  sont des ORDRES observés sur le vrai `prepareFuzzySearch` (Obsidian 1.12.7,
+  vault Efrei, scores cités en commentaire), jamais ses valeurs : c'est ce que le
+  module promet. Chaque cas a rougi sous sa rupture (retirer le bonus, retirer
+  la rupture, comparer la casse, glouton). Un score `null` y devient `NaN` avant
+  toute comparaison : un cas qui mourrait sur `null.score` masquerait tous les
+  suivants — c'est arrivé lors de sa preuve de discriminance.
 - `npm run check:app` — build Vite (rendu) + typecheck du processus principal Electron
   (`tsconfig.electron.json`) de l'application Windows. C'est le contrôle qui attrape
   une rupture du code PARTAGÉ vue depuis l'autre hôte, là où `npm run check` ne voit
@@ -198,6 +212,18 @@ réponse étant toujours non.
   qu'un `trash` supprime au lieu de déplacer, et qu'un homonyme déjà dans la
   corbeille soit écrasé plutôt que numéroté. Tourne sur un vrai dossier temporaire
   (`fs.mkdtemp`), retiré dans un `finally`.
+  Depuis la tranche 5 (tâche 5), il éprouve aussi `listerDossier`, `statEntree`
+  et `readBinary`, les primitives derrière `HostFs.listDir` et `HostFs.externe`
+  (le sélecteur « @ » : sous-dossiers du vault, racines externes) : un
+  `listerDossier` sans type ne saurait plus dire dans quoi descendre, un
+  `statEntree` qui rendrait `null` pour un dossier — comme `stat` le fait exprès
+  — laisserait l'index d'une racine externe périmé à jamais, un `readBinary` qui
+  rendrait un `Buffer` nu emporterait le pool de Node dans l'IPC. Leur BORNAGE
+  (« hors périmètre → refus nommé ») n'est pas ici : c'est `perimetre.borner`,
+  que `canaux.ts` applique à chaque canal et que `check:electron-reglages`
+  éprouve ; côté rendu, `check:windows-host` (groupe « listDir, listFiles et
+  racines externes ») prouve que ce refus devient `[]`/`null` pour `list`/`stat`
+  et remonte pour `read`/`readBinary`.
 - `npm run check:electron-reglages` — les trois modules du processus principal que
   la fenêtre ne peut pas éprouver à sa place : `reglages.ts`, `vaults.ts`,
   `perimetre.ts` (tâche 3, ronde de correction 1). Il empêche des défauts qui

@@ -30,11 +30,16 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
-/** Les primitives de fichiers du processus principal. Onze méthodes, plus
-    `stat` — interne, voir plus haut. */
+/** Les primitives de fichiers du processus principal. Onze méthodes du
+    contrat, plus `readBinary` et `listerDossier` (tranche 5, tâche 5 — les
+    racines externes du sélecteur « @ », `HostFs.externe`), plus `stat` et
+    `statEntree` — internes, voir plus haut et plus bas. */
 export interface PrimitivesFichiers {
 	/** Lit un fichier texte. Rejette si absent ou illisible. */
 	read(chemin: string): Promise<string>;
+	/** Lit des OCTETS. Rejette si absent ou illisible. Sert
+	    `HostFs.externe.readBinary` (les images jointes hors vault). */
+	readBinary(chemin: string): Promise<Uint8Array>;
 	/** Pas de cache ici — voir le commentaire sur `readCached` ci-dessous. */
 	readCached(chemin: string): Promise<string>;
 	/** CRÉE OU REMPLACE, sans jamais rejeter parce que la cible existe déjà. */
@@ -65,6 +70,14 @@ export interface PrimitivesFichiers {
 	/** Les FICHIERS d'un dossier, sans descendre dans les sous-dossiers. Un
 	    dossier absent rend `[]` : ce n'est pas une erreur. */
 	list(dossier: string): Promise<string[]>;
+	/** TOUTES les entrées d'un dossier, fichiers ET sous-dossiers, avec leur
+	    type, sans descendre. Le NOM seul, jamais un chemin : c'est le rendu qui
+	    recompose `dossier + "/" + nom` (contrat ou absolu, il est seul à le
+	    savoir — voir l'en-tête de `pont.ts`). Un dossier absent rend `[]`. Un
+	    lien symbolique n'est ni fichier ni dossier ici (`isDirectory()` est
+	    faux sur un `Dirent` de lien) : il n'est pas descendu, comme dans
+	    `parcours.ts`. Sert `HostFs.listDir` et `HostFs.externe.list`. */
+	listerDossier(dossier: string): Promise<Array<{ name: string; isFolder: boolean }>>;
 	/** Retire un fichier. Ne rejette PAS si le fichier est déjà absent. */
 	remove(chemin: string): Promise<void>;
 	/** Renomme. REJETTE si la destination existe déjà — la migration du
@@ -136,11 +149,32 @@ export async function stat(chemin: string): Promise<{ mtime: number } | null> {
 	}
 }
 
+/** Fichier ou dossier, avec sa date : ce que `HostFs.externe.stat` demande.
+    DISTINCTE de `stat` ci-dessus, qui rend `null` pour un dossier et dont
+    `fraicheur` (canaux.ts) et `parcours.ts` dépendent : l'index d'une racine
+    externe s'invalide sur le `mtime` de la RACINE, qui est un dossier. */
+export async function statEntree(chemin: string): Promise<{ isFile: boolean; mtimeMs: number } | null> {
+	try {
+		const info = await fs.stat(chemin);
+		return { isFile: info.isFile(), mtimeMs: info.mtimeMs };
+	} catch {
+		return null;
+	}
+}
+
 /** Construit les primitives de fichiers du processus principal. */
 export function creerFichiers(): PrimitivesFichiers {
 	return {
 		async read(chemin) {
 			return await fs.readFile(chemin, "utf-8");
+		},
+		/* `new Uint8Array(buffer)` et non le `Buffer` de Node : un `Buffer` peut
+		   être une VUE sur un tampon partagé plus grand (le pool de Node pour
+		   les petits fichiers), et le clonage structuré de l'IPC emporterait
+		   tout le tampon avec lui. La copie coûte la taille du fichier, une
+		   fois. */
+		async readBinary(chemin) {
+			return new Uint8Array(await fs.readFile(chemin));
 		},
 		/* PAS de cache : un processus unique, sans autre écrivain que lui-même,
 		   n'a rien à gagner à en inventer un — même raison que l'hôte Windows
@@ -180,6 +214,15 @@ export function creerFichiers(): PrimitivesFichiers {
 			} catch {
 				// Dossier absent (ou illisible) : le contrat demande `[]`, pas une
 				// exception.
+				return [];
+			}
+		},
+		async listerDossier(dossier) {
+			try {
+				const entrees = await fs.readdir(dossier, { withFileTypes: true });
+				return entrees.map(e => ({ name: e.name, isFolder: e.isDirectory() }));
+			} catch {
+				// Absent ou illisible : `[]`, comme `list`.
 				return [];
 			}
 		},

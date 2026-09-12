@@ -1,4 +1,6 @@
-import { App, Platform, TAbstractFile, TFolder, prepareFuzzySearch } from "obsidian";
+import { currentHost } from "../host/current";
+import type { DirEntry, HostFile } from "../host/types";
+import { fuzzyMatch } from "../text-search";
 
 /* Une entrée listable dans le picker de mentions. Le picker ne connaît que
    ce type : d'où vient l'entrée (vault, disque) ne le regarde pas. */
@@ -38,27 +40,45 @@ function compareEntries(a: FileEntry, b: FileEntry): number {
 	return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
-function toVaultEntry(f: TAbstractFile): FileEntry {
-	return { name: f.name, path: f.path, isFolder: f instanceof TFolder, source: "vault" };
+function toVaultEntry(e: DirEntry): FileEntry {
+	return { name: e.name, path: e.path, isFolder: e.isFolder, source: "vault" };
 }
 
 /* Contenu d'un dossier du vault. folderPath vide → racine.
-   Zéro I/O : l'arbre est déjà en mémoire dans Obsidian. */
-export function listVaultFolder(app: App, folderPath: string): FileEntry[] {
-	const folder = folderPath
-		? app.vault.getAbstractFileByPath(folderPath)
-		: app.vault.getRoot();
-	if (!(folder instanceof TFolder)) return [];
-	return folder.children
-		.filter(c => c instanceof TFolder || isAttachable(c.name))
+   Par `host.fs.listDir`, la seule voie du contrat qui nomme les
+   SOUS-DOSSIERS : `list` ne rend que les fichiers, et la navigation du
+   sélecteur (« @Cours/ ») descend précisément dans les dossiers. Un dossier
+   absent rend `[]`, comme le contrat le promet. */
+export async function listVaultFolder(folderPath: string): Promise<FileEntry[]> {
+	const entrees = await currentHost().fs.listDir(folderPath);
+	return entrees
+		.filter(e => e.isFolder || isAttachable(e.name))
 		.map(toVaultEntry)
 		.sort(compareEntries);
 }
 
+/** Vrai si `folderPath` est un dossier RÉEL du vault. `listDir` rend `[]` pour
+    un dossier absent comme pour un dossier vide : c'est `getFile` qui
+    tranche l'autre moitié (un fichier n'est pas un dossier), et un dossier
+    vide reste un dossier — on y descend, et on n'y trouve rien. */
+export async function isVaultFolder(folderPath: string): Promise<boolean> {
+	const fs = currentHost().fs;
+	if (fs.getFile(folderPath)) return false;
+	if ((await fs.listDir(folderPath)).length > 0) return true;
+	/* Vide ou absent : le parent le sait. `listDir` du parent nomme ses
+	   sous-dossiers, vides compris. */
+	const coupe = folderPath.lastIndexOf("/");
+	const parent = coupe < 0 ? "" : folderPath.slice(0, coupe);
+	const nom = coupe < 0 ? folderPath : folderPath.slice(coupe + 1);
+	return (await fs.listDir(parent)).some(e => e.isFolder && e.name === nom);
+}
+
 /* ── Racines hors vault (desktop uniquement) ──
-   fs est requis PARESSEUSEMENT, dans la fonction, derrière
-   Platform.isDesktopApp : le plugin doit rester isDesktopOnly: false et se
-   charger sur mobile (cf. le pattern d'ai-client.ts / ai-providers.ts). */
+   Tout accès au disque hors vault passe par `host.fs.externe`
+   (`src/host/types.ts`) : sous Obsidian c'est `fs` de Node, dans
+   l'application les canaux BORNÉS du pont — une racine hors périmètre y rend
+   `[]`/`null`, jamais une lecture. `isDesktopApp` reste la garde du code
+   partagé : sur mobile, l'hôte n'a pas de disque à offrir. */
 
 /** Gardes anti-explosion : un utilisateur peut pointer C:\ ou un dossier de projets. */
 const MAX_DEPTH = 8;
@@ -69,7 +89,15 @@ const MAX_ENTRIES = 20000;
 const SKIP_DIRS = new Set(["node_modules"]);
 
 interface ExternalIndex { entries: FileEntry[]; mtimeMs: number; truncated: boolean }
+/** L'INSTANTANÉ que `searchAll` lit de façon synchrone : rempli par
+    `primeExternalIndex` / `revalidateExternalIndex`, jamais par `searchAll`
+    lui-même — l'accès disque est asynchrone (le pont, dans l'application), et
+    la recherche tourne à chaque frappe. */
 const externalCache = new Map<string, ExternalIndex>();
+/** Les parcours EN VOL, par racine : deux appelants concurrents (le prime à
+    l'ouverture du menu, la revalidation de la première frappe) partagent le
+    même parcours au lieu d'en lancer deux. */
+const enCours = new Map<string, Promise<ExternalIndex | null>>();
 
 function baseName(p: string): string {
 	const norm = p.replace(/[\\/]+$/, "");
@@ -124,83 +152,87 @@ export function resolveExternalPath(roots: string[], relPath: string): { absPath
 
 /** Les racines configurées, en entrées listables (fin de la liste initiale). */
 export function listExternalRoots(roots: string[]): FileEntry[] {
-	if (!Platform.isDesktopApp) return [];
+	if (!currentHost().platform.isDesktopApp) return [];
 	return roots.map(r => ({
 		name: baseName(r), path: baseName(r), isFolder: true, source: "external" as const,
 	}));
 }
 
-/** Contenu d'un dossier externe. readdir du SEUL dossier affiché : le coût
+/** Une entrée du disque, telle que le sélecteur la montre — ou `null` si
+    elle est cachée, ignorée, ou d'un format qu'on refuserait d'attacher. La
+    MÊME règle pour la navigation (`listExternalFolder`) et le parcours
+    (`walk`) : deux copies avaient chacune leur chance de diverger. */
+function externalEntryOf(e: DirEntry, root: string): FileEntry | null {
+	if (e.name.startsWith(".")) return null;
+	if (e.isFolder ? SKIP_DIRS.has(e.name) : !isAttachable(e.name)) return null;
+	return { name: e.name, path: toRelPath(e.path, root), isFolder: e.isFolder, source: "external" };
+}
+
+/** Contenu d'un dossier externe. Lecture du SEUL dossier affiché : le coût
     ne dépend pas de la taille du disque. `root` = la racine configurée dont
     `dirPath` descend, nécessaire pour reconstruire un chemin relatif correct
     même en profondeur (sinon on ne verrait que le nom du dossier courant,
     pas tout le chemin depuis la racine — cf. `walk`). */
-export function listExternalFolder(dirPath: string, root: string): FileEntry[] {
-	if (!Platform.isDesktopApp) return [];
-	const fs = require("fs") as typeof import("fs");
-	let dirents: import("fs").Dirent[];
-	try { dirents = fs.readdirSync(dirPath, { withFileTypes: true }); } catch (e) { return []; }
-	const dirAbs = dirPath.replace(/[\\/]+$/, "");
-	return dirents
-		.filter(d => !d.name.startsWith("."))
-		.filter(d => d.isDirectory() ? !SKIP_DIRS.has(d.name) : isAttachable(d.name))
-		.map(d => ({
-			name: d.name,
-			path: toRelPath(dirAbs + "/" + d.name, root),
-			isFolder: d.isDirectory(),
-			source: "external" as const,
-		}))
+export async function listExternalFolder(dirPath: string, root: string): Promise<FileEntry[]> {
+	const host = currentHost();
+	if (!host.platform.isDesktopApp) return [];
+	const entrees = await host.fs.externe.list(dirPath.replace(/[\\/]+$/, ""));
+	return entrees
+		.map(e => externalEntryOf(e, root))
+		.filter((e): e is FileEntry => e !== null)
 		.sort(compareEntries);
 }
 
-function walk(root: string): ExternalIndex {
-	const fs = require("fs") as typeof import("fs");
+async function walk(root: string): Promise<ExternalIndex> {
+	const externe = currentHost().fs.externe;
 	const entries: FileEntry[] = [];
 	let truncated = false;
 	const stack: { dir: string; depth: number }[] = [{ dir: root, depth: 0 }];
 	// Étiquette sur le while : le `break` de la garde MAX_ENTRIES doit sortir
 	// des DEUX boucles d'un coup. Un `break` nu ne quitterait que le `for`
-	// interne — le `while` reprendrait alors la pile et referait un
-	// `readdirSync` par dossier déjà empilé, pour re-déclencher aussitôt le
-	// même garde : borné, mais du travail disque pour rien.
+	// interne — le `while` reprendrait alors la pile et referait une lecture
+	// par dossier déjà empilé, pour re-déclencher aussitôt le même garde :
+	// borné, mais du travail disque pour rien.
 	outer: while (stack.length) {
 		const cur = stack.pop();
 		if (!cur) break;
 		if (cur.depth > MAX_DEPTH) { truncated = true; continue; }
-		let dirents: import("fs").Dirent[];
-		try { dirents = fs.readdirSync(cur.dir, { withFileTypes: true }); } catch (e) { continue; }
+		// Un dossier illisible rend `[]` par contrat : on passe au suivant.
+		const dirents = await externe.list(cur.dir.replace(/[\\/]+$/, ""));
 		for (const d of dirents) {
 			if (entries.length >= MAX_ENTRIES) { truncated = true; break outer; }
-			if (d.name.startsWith(".")) continue;
-			const full = cur.dir.replace(/[\\/]+$/, "") + "/" + d.name;
-			if (d.isDirectory()) {
-				if (SKIP_DIRS.has(d.name)) continue;
-				entries.push({ name: d.name, path: toRelPath(full, root), isFolder: true, source: "external" });
-				stack.push({ dir: full, depth: cur.depth + 1 });
-			} else if (isAttachable(d.name)) {
-				entries.push({ name: d.name, path: toRelPath(full, root), isFolder: false, source: "external" });
-			}
+			const entry = externalEntryOf(d, root);
+			if (!entry) continue;
+			entries.push(entry);
+			if (d.isFolder) stack.push({ dir: d.path, depth: cur.depth + 1 });
 		}
 	}
-	let mtimeMs = 0;
-	try { mtimeMs = fs.statSync(root).mtimeMs; } catch (e) { mtimeMs = 0; }
-	return { entries, mtimeMs, truncated };
+	const info = await externe.stat(root);
+	return { entries, mtimeMs: info?.mtimeMs ?? 0, truncated };
 }
 
-function indexOf(root: string): ExternalIndex | null {
-	if (!Platform.isDesktopApp) return null;
-	const fs = require("fs") as typeof import("fs");
-	let mtimeMs = 0;
-	try { mtimeMs = fs.statSync(root).mtimeMs; } catch (e) { return null; }
+/** L'index d'une racine, à jour : réutilisé si le `mtime` de la racine n'a
+    pas bougé, reparcouru sinon. `null` si la racine n'existe pas (ou, dans
+    l'application, si elle est hors périmètre — `stat` y rend `null`). */
+async function indexOf(root: string): Promise<ExternalIndex | null> {
+	const host = currentHost();
+	if (!host.platform.isDesktopApp) return null;
+	const info = await host.fs.externe.stat(root);
+	if (!info) return null;
 	const hit = externalCache.get(root);
-	if (hit && hit.mtimeMs === mtimeMs) return hit;
-	const fresh = walk(root);
-	externalCache.set(root, fresh);
-	return fresh;
+	if (hit && hit.mtimeMs === info.mtimeMs) return hit;
+	const deja = enCours.get(root);
+	if (deja) return deja;
+	const parcours = walk(root)
+		.then(fresh => { externalCache.set(root, fresh); return fresh; })
+		.finally(() => { enCours.delete(root); });
+	enCours.set(root, parcours);
+	return parcours;
 }
 
 /** Préchauffe l'index (première ouverture du picker) : le vault s'affiche
-    tout de suite, le disque se greffe ensuite.
+    tout de suite, le disque se greffe ensuite — l'appelant n'attend cette
+    promesse que s'il veut la recherche COMPLÈTE dès la première frappe.
     Vide le cache AVANT de relancer l'indexation. Pourquoi : `externalCache`
     est une Map de MODULE, donc persistante tant que le plugin est chargé, et
     `indexOf` ne réinvalide que si le mtime de la RACINE elle-même a changé.
@@ -208,8 +240,8 @@ function indexOf(root: string): ExternalIndex | null {
     jour le mtime de ce sous-dossier, jamais celui de la racine — sur NTFS
     comme ailleurs. Sans ce clear, un fichier ajouté en profondeur resterait
     invisible à la recherche jusqu'au rechargement du plugin (la navigation,
-    elle, n'est pas touchée : `listExternalFolder` fait un `readdirSync` live
-    à chaque appel).
+    elle, n'est pas touchée : `listExternalFolder` lit le disque à chaque
+    appel).
     Ne PAS remplacer ce clear par un scan récursif des mtimes de
     sous-dossiers pour décider s'il faut invalider : ce serait aussi coûteux
     que le parcours qu'on cherche à éviter. Le compromis retenu marche parce
@@ -217,8 +249,9 @@ function indexOf(root: string): ExternalIndex | null {
     réel (mesuré, Node, à chaud : Downloads — 18 entrées, 4 dossiers, < 1 ms ;
     pire cas plausible C:\Users\Ahmed — 12309 entrées, 7383 dossiers, ~158 ms)
     et (b) le contrôle de mtime dans `indexOf` garde tout son intérêt PENDANT
-    la frappe : tant que le menu reste OUVERT, chaque frappe (`refresh` sans
-    passer par ce prime) réutilise l'index déjà calculé, sans reclear.
+    la frappe : tant que le menu reste OUVERT, chaque frappe
+    (`revalidateExternalIndex`, sans passer par ce prime) réutilise l'index
+    déjà calculé, sans reclear.
     ATTENTION, ce n'est PAS « un seul clear par session de menu » : choisir un
     dossier FERME le menu (`closeMenu()` dans ui-select.ts tourne avant
     `item.onChoose()`, y compris au clic comme à Entrée/Tab) puis le rouvre
@@ -227,46 +260,80 @@ function indexOf(root: string): ExternalIndex | null {
     session. Le coût reste borné (mesures ci-dessus), mais ne pas décrire ce
     comportement comme « un seul clear » : ce projet s'est déjà fait piéger
     par un commentaire qui promettait moins de travail que le code n'en fait
-    réellement. Ne pas retirer ce clear pour « optimiser ». */
-export function primeExternalIndex(roots: string[]): void {
-	if (!Platform.isDesktopApp) return;
+    réellement. Ne pas retirer ce clear pour « optimiser ».
+    Un parcours encore EN VOL au moment du clear n'est pas relancé : `indexOf`
+    le partage, et son résultat est assez frais pour ce que le clear cherche. */
+export async function primeExternalIndex(roots: string[]): Promise<void> {
+	if (!currentHost().platform.isDesktopApp) return;
 	externalCache.clear();
-	for (const r of roots) setTimeout(() => indexOf(r), 0);
+	await Promise.all(roots.map(r => indexOf(r)));
+}
+
+/** La revalidation PENDANT la frappe : le contrôle de mtime d'`indexOf`, sans
+    le clear du prime. À attendre avant `searchAll`, qui ne lit que
+    l'instantané. */
+export async function revalidateExternalIndex(roots: string[]): Promise<void> {
+	if (!currentHost().platform.isDesktopApp) return;
+	await Promise.all(roots.map(r => indexOf(r)));
+}
+
+/** Les dossiers du vault, DÉRIVÉS des chemins de fichiers : chaque préfixe
+    d'un chemin est un dossier. Un dossier vide n'y figure pas — il n'a rien à
+    attacher (voir `HostFs.listFiles`). */
+function vaultFoldersOf(files: HostFile[]): FileEntry[] {
+	const chemins = new Set<string>();
+	for (const f of files) {
+		let coupe = f.path.indexOf("/");
+		while (coupe > 0) {
+			chemins.add(f.path.slice(0, coupe));
+			coupe = f.path.indexOf("/", coupe + 1);
+		}
+	}
+	return [...chemins].map(p => ({ name: baseName(p), path: p, isFolder: true, source: "vault" as const }));
 }
 
 /* Recherche fuzzy FUSIONNÉE : vault et racines externes scorés avec le
-   MÊME prepareFuzzySearch(query), puis triés ENSEMBLE par score décroissant.
+   MÊME fuzzyMatch(query), puis triés ENSEMBLE par score décroissant.
    Sans fusion (une simple concaténation vault puis externe), un vault de
    plusieurs milliers de fichiers remplit à lui seul la limite d'affichage
    avant que les externes soient pris en compte : un fichier de Downloads ne
    remonterait qu'avec une requête très spécifique — l'intention d'Ahmed
    (« chercher dans TOUT le vault ET TOUT Downloads ») ne serait pas tenue.
    `truncated` nomme les racines externes où une garde a coupé le parcours
-   (jamais de troncature silencieuse). */
-export function searchAll(app: App, roots: string[], query: string): { entries: FileEntry[]; truncated: string[] } {
-	const fuzzy = prepareFuzzySearch(query);
+   (jamais de troncature silencieuse).
+   SYNCHRONE : elle ne lit que l'index en mémoire du vault (`listFiles`) et
+   l'instantané des racines externes — c'est `primeExternalIndex` /
+   `revalidateExternalIndex` qui le remplissent, avant. Une racine qui n'y est
+   pas encore (parcours en vol) n'apparaît simplement pas à cette frappe. */
+export function searchAll(roots: string[], query: string): { entries: FileEntry[]; truncated: string[] } {
+	const host = currentHost();
+	const fuzzy = fuzzyMatch(query);
 	const scored: { entry: FileEntry; score: number }[] = [];
 
 	// Vault : chemin complet, toujours global (décision d'Ahmed) — « Cours/ja »
 	// matche « Cours/Java/TD3.md » parce que le motif tapé fait simplement
 	// partie du chemin, sans notion de périmètre.
-	for (const f of app.vault.getAllLoadedFiles()) {
-		if (f.path === "/") continue; // la racine elle-même n'est pas une entrée
-		if (!(f instanceof TFolder) && !isAttachable(f.name)) continue;
+	const files = host.fs.listFiles();
+	for (const f of files) {
+		if (!isAttachable(f.name)) continue;
 		const r = fuzzy(f.path);
-		if (r) scored.push({ entry: toVaultEntry(f), score: r.score });
+		if (r) scored.push({ entry: { name: f.name, path: f.path, isFolder: false, source: "vault" }, score: r.score });
+	}
+	for (const entry of vaultFoldersOf(files)) {
+		const r = fuzzy(entry.path);
+		if (r) scored.push({ entry, score: r.score });
 	}
 
 	// Externe (desktop uniquement) : chaque racine configurée, intégralement.
 	// `entry.path` (produit par `walk`) est DÉJÀ le chemin relatif préfixé du
 	// nom de la racine (« Downloads/x.pdf »), symétrique du chemin relatif du
-	// vault — même échelle pour `prepareFuzzySearch`, pas de biais de
-	// préfixe absolu (~25 caractères de bruit de tête sinon, qui handicaperait
+	// vault — même échelle pour `fuzzyMatch`, pas de biais de préfixe absolu
+	// (~25 caractères de bruit de tête sinon, qui handicaperait
 	// systématiquement l'externe dans le tri par score commun).
 	const truncated: string[] = [];
-	if (Platform.isDesktopApp) {
+	if (host.platform.isDesktopApp) {
 		for (const root of roots) {
-			const idx = indexOf(root);
+			const idx = externalCache.get(root);
 			if (!idx) continue;
 			if (idx.truncated) truncated.push(baseName(root));
 			for (const entry of idx.entries) {

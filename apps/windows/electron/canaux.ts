@@ -30,7 +30,7 @@
 import { dialog, ipcMain, net, shell } from "electron";
 import * as path from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
-import { creerFichiers, stat } from "./fichiers";
+import { creerFichiers, stat, statEntree } from "./fichiers";
 import { absoluDepuisContrat, contratDepuisAbsolu, creerIndex, renameDirVersAbsolu } from "./index-fichiers";
 import type { EvenementSurveillant, Index } from "./index-fichiers";
 import { listerRacine, normaliser } from "./parcours";
@@ -241,6 +241,17 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	ipcMain.handle(CANAUX.rename, async (_e, de: unknown, vers: unknown) =>
 		fichiers.rename(await perimetre.borner(de), await perimetre.borner(vers)));
 	ipcMain.handle(CANAUX.stat, async (_e, abs: unknown) => stat(await perimetre.borner(abs)));
+	/* Les trois canaux des RACINES EXTERNES du sélecteur « @ » (`HostFs.externe`,
+	   `src/host/types.ts`), BORNÉS comme tous les autres : c'est le périmètre,
+	   et lui seul, qui autorise cette interface côté application — une racine
+	   externe qui n'est pas un dossier ouvert rejette ici, nommée par `borner`,
+	   et le rendu en fait `[]`/`null`. `listerDossier` rend des NOMS, jamais
+	   des chemins : le rendu recompose, contrat ou absolu (règle de l'en-tête
+	   de `pont.ts`). */
+	ipcMain.handle(CANAUX.statEntree, async (_e, abs: unknown) => statEntree(await perimetre.borner(abs)));
+	ipcMain.handle(CANAUX.listerDossier, async (_e, dossier: unknown) =>
+		fichiers.listerDossier(await perimetre.borner(dossier)));
+	ipcMain.handle(CANAUX.readBinary, async (_e, abs: unknown) => fichiers.readBinary(await perimetre.borner(abs)));
 	ipcMain.handle(CANAUX.liste, async (_e, racine: unknown) => listerRacine(await perimetre.borner(racine)));
 
 	ipcMain.handle(CANAUX.surveiller, () => {

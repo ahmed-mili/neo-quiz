@@ -200,6 +200,13 @@ The desktop app reads the same quiz folders and the same review log as the plugi
 
 **Uninstalling** removes the app only. Your quiz folders and their review log stay where they are.
 
+### Code signing policy
+
+The Windows installer is currently unsigned. A free certificate has been requested from [SignPath Foundation](https://signpath.org); once granted, this section will read: "Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org)".
+
+- Committers, reviewers and approvers: [Ahmed Mili](https://github.com/ahmed-mili), the sole maintainer. Every release is built by GitHub Actions from a tagged commit of this repository and approved by him.
+- Privacy: this program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. AI generation talks only to the local CLI or Ollama server you configure; the Ollama model catalogue is fetched from ollama.com when you open the model list.
+
 ---
 
 ## Keyboard Shortcuts
@@ -215,7 +222,7 @@ The desktop app reads the same quiz folders and the same review log as the plugi
 
 ## Notes & limitations
 
-This plugin is in active beta development — bugs are possible. Feel free to [open an issue](https://github.com/ahmed-mili/neo-quiz/issues/new) and share feedback.
+Bugs are possible. Feel free to [open an issue](https://github.com/ahmed-mili/neo-quiz/issues/new) and share feedback.
 
 - Answers are not persisted between sessions
 - The `esbuild.config.mjs` build path is configured for a local Obsidian vault — adjust it for your setup

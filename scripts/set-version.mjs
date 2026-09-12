@@ -16,13 +16,14 @@
  *   CORRECTIF rien de neuf : ce qui existait déjà marche enfin comme il
  *             devait.
  *
- * SUFFIXE -beta. Ce dépôt publie en pré-version tant que le plugin n'est pas
- * soumis à la liste communautaire d'Obsidian (2.4.0-beta au 2026-08-31). Un
- * bump garde le suffixe : la série reste « en beta » jusqu'à ce qu'un numéro
- * exact, écrit en toutes lettres sans suffixe, la fasse sortir de ce statut.
- * Perdre le suffixe en bumpant serait publier une release stable par accident
- * — c'est `.github/workflows/release.yml` qui décide `prerelease` sur la
- * présence d'un `-` dans le tag, donc ce choix a un effet direct sur GitHub.
+ * SUFFIXE. Un bump GARDE le suffixe qu'il trouve : une série `-beta` reste en
+ * beta jusqu'à ce qu'un numéro exact, écrit en toutes lettres sans suffixe,
+ * la fasse sortir de ce statut (ce dépôt a publié en `-beta` de 2.4.0-beta,
+ * 2026-08-31, à 2.5.0-beta ; la sortie de beta est 2.5.0, le 2026-09-13).
+ * Perdre ou gagner un suffixe en bumpant serait changer le statut d'une
+ * release par accident — c'est `.github/workflows/release.yml` qui décide
+ * `prerelease` sur la présence d'un `-` dans le tag, donc ce choix a un effet
+ * direct sur GitHub.
  *
  * UN SEUL FICHIER PORTE LE NUMÉRO ICI, contrairement à neo-calendar (six
  * fichiers, dont un `versionCode` Android à incrémenter séparément) : ce

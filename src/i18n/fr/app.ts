@@ -16,4 +16,16 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.aiHost.detail": "Ce serveur n'est ni un hôte connu ni sur votre réseau local. Ne l'autorisez que si vous l'avez configuré vous-même.",
 	"app.aiHost.allow": "Autoriser",
 	"app.aiHost.deny": "Annuler",
+
+	/* ── Mise à jour automatique (application seulement) ── */
+	"app.update.restart": "Redémarrer pour mettre à jour",
+	"app.update.auto": "Mises à jour automatiques",
+	"app.update.autoHint": "Neo Quiz cherche une version plus récente sur GitHub, la télécharge en arrière-plan, et l'installe quand vous cliquez sur Redémarrer ou quand vous fermez l'application.",
+	"app.update.checkNow": "Vérifier maintenant",
+	"app.update.state.inactif": "Les mises à jour automatiques sont coupées.",
+	"app.update.state.verification": "Recherche d'une mise à jour…",
+	"app.update.state.aJour": "Vous avez la dernière version.",
+	"app.update.state.telechargement": "Téléchargement de {version} : {pourcent} %",
+	"app.update.state.prete": "La version {version} est prête à être installée.",
+	"app.update.state.erreur": "Impossible de vérifier les mises à jour.",
 };

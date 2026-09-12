@@ -403,6 +403,12 @@ body {
 	margin-top: 6px;
 }
 
+/* ── La mise à jour automatique (rail + « À propos ») ── */
+.nq-maj-bouton { color: var(--text-accent); }
+.nq-maj-bloc { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.nq-maj-auto { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.nq-maj-installer, .nq-maj-verifier { align-self: flex-start; }
+
 /* ── Les dates d'examen (tâche 10) ──
    Une rangée par module : nom + racine, puis le champ de date. Pas d'icône ici
    — contrairement à `.nq-reglages-dossier`, un module n'a rien de visuel à

@@ -25,6 +25,7 @@ import { MAX_DOSSIERS, addFolder, estVaultObsidian, examDates, pickFolder, remov
 import { cleModule, libelleModule } from "../review/catalogue";
 import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host";
 import { poserLogoObsidian } from "./marques";
+import { monterEtatApropos } from "./mise-a-jour";
 
 export function renderSettings(
 	root: HTMLElement,
@@ -252,8 +253,12 @@ export function renderSettings(
 	depot.target = "_blank";
 	depot.rel = "noopener";
 
-	/* Rien à désabonner : la page ne s'abonne à rien. Le démontage est rendu
-	   quand même, parce que TOUT écran en rend un — `main.ts` appelle
+	// L'état de la mise à jour automatique : la ligne, « Vérifier
+	// maintenant », l'interrupteur — voir `mise-a-jour.ts`.
+	const demonterMaj = monterEtatApropos(apropos);
+
+	/* Le démontage désabonne désormais la mise à jour. Il est rendu quand
+	   même parce que TOUT écran en rend un — `main.ts` appelle
 	   `demonterCourant` sans savoir de quel écran il s'agit. */
-	return () => { root.replaceChildren(); };
+	return () => { demonterMaj(); root.replaceChildren(); };
 }

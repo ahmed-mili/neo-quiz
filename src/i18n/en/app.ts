@@ -38,4 +38,16 @@ export const EN_APP = {
 	"app.aiHost.detail": "This server is neither a known host nor on your local network. Allow it only if you set it up yourself.",
 	"app.aiHost.allow": "Allow",
 	"app.aiHost.deny": "Cancel",
+
+	/* ── Mise à jour automatique (application seulement) ── */
+	"app.update.restart": "Restart to update",
+	"app.update.auto": "Automatic updates",
+	"app.update.autoHint": "Neo Quiz checks GitHub for a newer version, downloads it in the background, and installs it when you click Restart or when you close the app.",
+	"app.update.checkNow": "Check now",
+	"app.update.state.inactif": "Automatic updates are off.",
+	"app.update.state.verification": "Checking for updates…",
+	"app.update.state.aJour": "You have the latest version.",
+	"app.update.state.telechargement": "Downloading {version}: {pourcent}%",
+	"app.update.state.prete": "Version {version} is ready to install.",
+	"app.update.state.erreur": "Could not check for updates.",
 } as const;

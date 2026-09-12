@@ -47,6 +47,7 @@ import type { StatsStore } from "../../../../src/dashboard/stats-store";
 import type { ReviewStore } from "../../../../src/review/review-store";
 import type { ModuleOverride } from "../../../../src/dashboard/quiz-modules";
 import { ecrireReglage, lireReglage } from "../host/folder";
+import { monterBoutonRail } from "./mise-a-jour";
 
 /* ══════════════════════════════════════════════════════════
    LES RÉGLAGES DES PAGES « ACCUEIL » / « MES QUIZ »
@@ -366,6 +367,10 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	}
 
 	nav.render(navEl);
+	// Le bouton « Redémarrer pour mettre à jour » vit dans le pied du rail,
+	// posé une fois pour toute la durée de la coquille — un seul abonnement
+	// au pont pour toute la fenêtre (`mise-a-jour.ts`).
+	const demonterMaj = monterBoutonRail(navEl);
 	// Synchronise le rail sur la vue persistée (retour d'un quiz sur « Mes
 	// quiz », par exemple) : `createNavHandlers` démarre chaque fois avec son
 	// propre `activeNav` interne à "home".
@@ -398,6 +403,7 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	return () => {
 		if (demonte) return demonte;
 		desabonner();
+		demonterMaj();
 		/* La page « Générer » aussi : une génération en vol, son écoute Échap
 		   sur le document, son sondage Ollama et les URL d'objet de ses images
 		   survivraient sinon à la coquille (même geste que l'`onClose` du

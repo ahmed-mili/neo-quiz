@@ -476,7 +476,7 @@ await withSrcModule("src/host/jetons.ts", async ({
  * juste après : le cas recevrait la réponse du vrai CLI au lieu de celle du
  * faux (défaut vécu, `check:obsidian-host`, ronde 2 de la tâche 4).
  */
-await withSrcModule("apps/windows/electron/process.ts", async ({ resoudreExecutable, run, tuerArbre }) => {
+await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle, resoudreExecutable, run, tuerArbre }) => {
 	const r = makeReporter("Électron — lancer un CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-lancer-"));
 	const maison = join(racine, "maison");
@@ -778,6 +778,40 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ resoudreExecuta
 				{ nom, lance: existsSync(marqueurDeVie) }, { nom: "annule", lance: false });
 		});
 
+		await cas(r, "un CLI qui sort sans lire son entrée ne tue pas le processus principal", async () => {
+			/* Revue finale, I1. Un CLI qui sort AUSSITÔT (mauvaise
+			   authentification) ferme son `stdin` pendant qu'on y écrit encore un
+			   prompt de plusieurs Mo : l'`EPIPE`/`EOF` arrive de façon ASYNCHRONE
+			   sur le flux, et un flux sans écouteur `error` lève une exception
+			   NON RATTRAPÉE — mesuré : Node sort en 1 avec « Unhandled 'error'
+			   event », c'est-à-dire que le processus PRINCIPAL de l'application
+			   mourrait, la fenêtre avec. Sous la rupture (écouteur retiré), ce
+			   cas ne rougit pas : il TUE le contrôle — c'est exactement le défaut. */
+			const quitteur = join(racine, "quitteur.js");
+			writeFileSync(quitteur, "process.exit(2);");
+			const res = await run(
+				{ tool: "codex", args: [quitteur], stdin: "x".repeat(4000000) },
+				{ cheminRegle: process.execPath, env },
+			);
+			r.check("un CLI qui sort sans lire son entrée ne tue pas le processus principal",
+				{ code: res.code, vivant: true }, { code: 2, vivant: true });
+		});
+
+		await cas(r, "ollamaInstalle cherche ollama dans le PATH étendu, comme run", async () => {
+			/* Revue finale, I2. La première écriture faisait un `spawn("ollama")`
+			   nu sur le `PATH` donné : un Ollama installé par npm ou à un
+			   emplacement personnalisé répondait « non installé » dans
+			   l'APPLICATION seulement, là où le greffon (par `buildChildEnv`) le
+			   voyait. `CODEX_INSTALL_DIR` est un dossier que SEUL le `PATH` étendu
+			   ajoute ; `LOCALAPPDATA` est absent, donc la seconde sonde (le
+			   dossier d'installation officiel) ne peut pas répondre à sa place. */
+			const fauxOllama = poserFauxCli("ollama", "process.exit(0);");
+			const envEtendu = { ...envDe(vide), CODEX_INSTALL_DIR: fauxOllama.dossier };
+			r.check("ollamaInstalle cherche ollama dans le PATH étendu, comme run",
+				{ parLeSeulPathEtendu: await ollamaInstalle(envEtendu), sansRien: await ollamaInstalle(envDe(vide)) },
+				{ parLeSeulPathEtendu: true, sansRien: false });
+		});
+
 		/* ── `run` NE SE RÈGLE QU'UNE FOIS L'ARBRE MORT (ruling 15) ──
 
 		   CE QUE CES DEUX CAS EMPÊCHENT. La première écriture de `lancer`
@@ -907,5 +941,23 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ resoudreExecuta
 			pasDeCheminRecu: corps !== null && !/s\.chemin/.test(corps),
 		},
 		{ duMagasin: true, pasDeCheminRecu: true });
+	/* REJUGÉ AU LANCEMENT (ruling 16) : `cheminCliRegle` ne LIT pas seulement le
+	   réglage, elle le repasse par le verdict pur (`cheminCliPourLancement`,
+	   éprouvé par `check:electron-reglages`) avec le périmètre D'AUJOURD'HUI —
+	   qui a pu grandir depuis l'écriture — et l'existence du fichier. Sans ce
+	   rejeu, un `.cmd` écrit par la fenêtre dans un dossier ouvert APRÈS coup
+	   serait lancé tel quel. */
+	const debutRegle = source.indexOf("async function cheminCliRegle(");
+	const finRegle = debutRegle >= 0 ? source.indexOf("\n}\n", debutRegle) : -1;
+	const corpsRegle = debutRegle >= 0 && finRegle > debutRegle ? source.slice(debutRegle, finRegle) : "";
+	r.check("cheminCliRegle rejoue le verdict pur avec le périmètre du jour avant de rendre un chemin",
+		{
+			trouve: corpsRegle.length > 0,
+			verdict: corpsRegle.includes("cheminCliPourLancement("),
+			perimetre: corpsRegle.includes("perimetre.contient("),
+			existence: corpsRegle.includes("statEntree("),
+			refusNomme: corpsRegle.includes('erreurCli("refuse"'),
+		},
+		{ trouve: true, verdict: true, perimetre: true, existence: true, refusNomme: true });
 	r.done();
 }

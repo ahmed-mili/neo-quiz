@@ -34,8 +34,12 @@
       « lancer le CLI de l'utilisateur » de « lancer ce qu'on vient d'écrire sur
       son disque » ;
    2. le RÉGLAGE « chemin », lu par le PRINCIPAL dans son propre magasin, jamais
-      pris de l'appel IPC — et gardé à l'ÉCRITURE (`garde-ia.ts`) : absolu,
-      existant, et d'une extension qu'un lanceur sait lancer ;
+      pris de l'appel IPC — gardé à l'ÉCRITURE (`garde-ia.ts`) : absolu, d'une
+      extension qu'un lanceur sait lancer, HORS DU PÉRIMÈTRE (là où la fenêtre
+      peut écrire, un CLI ne vit jamais — sinon `write("<racine>/x.cmd")` puis
+      ce chemin dans le réglage lançaient ce que le rendu venait d'écrire), et
+      existant — et REJUGÉ AU LANCEMENT par `canaux.ts` avec le périmètre du
+      jour, parce que celui-ci grandit après l'écriture ;
    3. la CITATION des arguments (`src/host/cli-args.ts`), sans laquelle le repli
       `cmd.exe` des installations npm laisse passer un `&`.
 
@@ -159,9 +163,9 @@ export function emplacementsOllama(
  * ce n'est pas `run` (tâche 7), c'est une question fermée à laquelle seul le
  * code de sortie répond.
  */
-export async function ollamaInstalle(): Promise<boolean> {
-	if (await repondAVersion("ollama")) return true;
-	return emplacementsOllama().some(p => {
+export async function ollamaInstalle(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+	if (await repondAVersion("ollama", env)) return true;
+	return emplacementsOllama(process.platform, env).some(p => {
 		try {
 			return existsSync(p);
 		} catch (e) {
@@ -170,26 +174,28 @@ export async function ollamaInstalle(): Promise<boolean> {
 	});
 }
 
-/** `<exe> --version` sort-il en 0 ? Toute autre issue (introuvable, code non
+/** `<outil> --version` sort-il en 0 ? Toute autre issue (introuvable, code non
     nul, plus de 4 s) vaut « non » : la question n'a que deux réponses, et une
-    exception ici ferait échouer une DÉTECTION. */
-function repondAVersion(exe: string): Promise<boolean> {
-	return new Promise(resolve => {
-		let tranche = false;
-		const fini = (valeur: boolean): void => {
-			if (tranche) return;
-			tranche = true;
-			resolve(valeur);
-		};
-		try {
-			const enfant = spawn(exe, ["--version"], { windowsHide: true, stdio: "ignore" });
-			const minuteur = setTimeout(() => { enfant.kill(); fini(false); }, 4000);
-			enfant.on("error", () => { clearTimeout(minuteur); fini(false); });
-			enfant.on("close", code => { clearTimeout(minuteur); fini(code === 0); });
-		} catch (e) {
-			fini(false);
-		}
-	});
+    exception ici ferait échouer une DÉTECTION.
+
+    PAR `resoudreExecutable` ET `lancer`, comme `run` (revue finale, I2) : donc
+    dans le `PATH` ÉTENDU (`environnementEnfant`), avec le repli `cmd.exe` pour
+    un shim. La première écriture faisait un `spawn("ollama")` nu, sur le `PATH`
+    du système — un Ollama installé par npm ou à un emplacement personnalisé
+    répondait « non installé » DANS L'APPLICATION SEULEMENT, là où le greffon
+    (qui passe par `lancerCli` et `buildChildEnv`) le voyait. */
+async function repondAVersion(outil: Outil, env: NodeJS.ProcessEnv): Promise<boolean> {
+	const executable = resoudreExecutable(outil, undefined, env);
+	if (!executable) return false;
+	try {
+		const res = await lancer({
+			executable, args: ["--version"], stdin: "", timeoutMs: 4000,
+			env: environnementEnfant(env), cwd: dossierPersonnel(env),
+		});
+		return res.code === 0;
+	} catch (e) {
+		return false;
+	}
 }
 
 /**
@@ -201,19 +207,22 @@ function repondAVersion(exe: string): Promise<boolean> {
  * lancé. C'est le poll de l'appelant, qui interroge le serveur, qui constate
  * le résultat — et lui seul peut le faire honnêtement.
  */
-export async function demarrerOllama(): Promise<boolean> {
+export async function demarrerOllama(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
 	try {
-		const env = process.env;
+		/* Le `PATH` ÉTENDU ici aussi (revue finale, I2) : `spawn` cherche
+		   l'exécutable dans le `PATH` de l'environnement DONNÉ, et `ollama serve`
+		   d'une installation npm n'est pas sur celui du système. */
+		const options = { detached: true, stdio: "ignore" as const, env: environnementEnfant(env) };
 		let enfant;
 		if (process.platform === "win32") {
 			const exe = join(env.LOCALAPPDATA || "", "Programs", "Ollama", "ollama app.exe");
 			enfant = existsSync(exe)
-				? spawn(exe, [], { detached: true, stdio: "ignore" })
-				: spawn("ollama", ["serve"], { detached: true, stdio: "ignore" });
+				? spawn(exe, [], options)
+				: spawn(resoudreExecutable("ollama", undefined, env) || "ollama", ["serve"], options);
 		} else if (process.platform === "darwin") {
-			enfant = spawn("open", ["-a", "Ollama"], { detached: true, stdio: "ignore" });
+			enfant = spawn("open", ["-a", "Ollama"], options);
 		} else {
-			enfant = spawn("ollama", ["serve"], { detached: true, stdio: "ignore" });
+			enfant = spawn(resoudreExecutable("ollama", undefined, env) || "ollama", ["serve"], options);
 		}
 		enfant.on("error", () => { /* constaté par le poll de l'appelant */ });
 		enfant.unref();
@@ -618,6 +627,15 @@ export function lancer(spec: {
 		/* Le prompt COMPLET sur `stdin`, puis FERMÉ : aucun argument à échapper,
 		   et le CLI sait que l'entrée est finie. Un `stdin` resté ouvert ferait
 		   attendre `claude -p` indéfiniment. */
+		/* UN ÉCOUTEUR D'ERREUR SUR `stdin`, AVANT D'ÉCRIRE (revue finale, I1). Un
+		   CLI qui sort AUSSITÔT sans lire son entrée (mauvaise authentification)
+		   ferme le tuyau pendant qu'on y écrit encore un prompt de plusieurs
+		   centaines de Ko : l'`EPIPE` arrive de façon ASYNCHRONE, sur le flux —
+		   pas dans le `try` ci-dessous — et un flux Node sans écouteur `error`
+		   lève une exception NON RATTRAPÉE, qui tue le PROCESSUS PRINCIPAL
+		   entier, la fenêtre avec. Ce qui compte est déjà tenu par `close` et
+		   `error` de l'enfant ; cette erreur-là n'apporte rien de plus. */
+		enfant.stdin?.on("error", () => { /* `close` de l'enfant tranche */ });
 		try {
 			enfant.stdin?.write(spec.stdin);
 			enfant.stdin?.end();
@@ -647,7 +665,9 @@ const verrous = new Set<string>();
  * `cheminRegle` est le réglage « chemin de l'exécutable », lu par `canaux.ts`
  * dans le magasin du PRINCIPAL — jamais pris de l'appel IPC, sinon la liste
  * blanche de noms ne servirait à rien : le rendu enverrait le chemin qu'il
- * veut. Le réglage lui-même est gardé À L'ÉCRITURE (`garde-ia.ts`).
+ * veut. Le réglage est gardé À L'ÉCRITURE et REJUGÉ AU LANCEMENT par l'appelant
+ * (`garde-ia.ts`, `cheminCliPourLancement` : hors du périmètre, entre autres) —
+ * ce qui arrive ici a déjà passé les deux ; `run` le prend tel quel.
  */
 export async function run(spec: {
 	tool: string;

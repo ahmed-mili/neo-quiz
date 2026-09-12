@@ -410,6 +410,12 @@ function lancerCli(spec: {
 		/* Le prompt COMPLET sur `stdin`, puis fermé : aucun argument à
 		   échapper, et le CLI sait que l'entrée est finie. Un `stdin` resté
 		   ouvert ferait attendre `claude -p` indéfiniment. */
+		/* UN ÉCOUTEUR D'ERREUR SUR `stdin`, AVANT D'ÉCRIRE (revue finale, I1) : un
+		   CLI qui sort aussitôt sans lire son entrée ferme le tuyau pendant qu'on
+		   y écrit encore ; l'`EPIPE` arrive de façon ASYNCHRONE, sur le flux, hors
+		   du `try` — et un flux sans écouteur `error` lève une exception non
+		   rattrapée dans le processus de rendu d'Obsidian. `close` tranche. */
+		child.stdin?.on("error", () => { /* `close` de l'enfant tranche */ });
 		try {
 			child.stdin?.write(spec.stdin);
 			child.stdin?.end();

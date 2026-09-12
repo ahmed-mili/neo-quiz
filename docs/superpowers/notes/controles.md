@@ -311,9 +311,24 @@ réponse étant toujours non.
   la séquence « écris un `.js` dans un dossier ouvert, puis désigne-le comme
   CLI », que le refus d'extension et lui seul empêche ; le pont refuse déjà de
   l'OUVRIR, l'admettre ici rouvrirait la même porte par l'autre bout. Le
-  prédicat d'existence est INJECTÉ, comme celui du périmètre, et les deux ne se
-  confondent pas : un CLI vit dans `Program Files`, hors du périmètre — le
-  borner serait refuser d'avance tout chemin valide.
+  prédicat d'existence est INJECTÉ, comme celui du périmètre. **Et le chemin
+  doit être HORS DU PÉRIMÈTRE (revue finale, C1) — c'est la condition qui tient
+  tout le reste** : `fichiers.write("<racine>/x.cmd")` passe `borner` (le
+  périmètre borne l'ÉCRITURE, et l'extension n'est jugée qu'à l'OUVERTURE),
+  puis ce chemin dans `cheminClaude` passait absolu + extension + existence, et
+  la génération suivante lançait ce que la fenêtre venait d'écrire, dans le
+  processus principal. Un CLI légitime vit dans `Program Files`, `~/.local/bin`,
+  `%APPDATA%
+pm` — jamais dans un dossier de quiz : refuser le périmètre (qui
+  couvre aussi `aiMentionExtraFolders`, admis seulement s'ils y sont déjà) ne
+  coûte aucun chemin valide. **Et le verdict est REJOUÉ AU LANCEMENT**
+  (`cheminCliPourLancement`, pur, appelé par `cheminCliRegle` dans `canaux.ts`
+  avec le périmètre et le disque d'AUJOURD'HUI) : le périmètre grandit après
+  l'écriture — l'utilisateur ouvre plus tard le dossier qui contient le `.cmd` —
+  et un chemin admis hier peut être dedans aujourd'hui ; refusé, nommé, RIEN
+  n'est lancé, pas même un repli. Le rejeu côté `canaux.ts` est tenu par une
+  assertion STATIQUE dans `check:electron-process` (le corps de `cheminCliRegle`
+  contient `cheminCliPourLancement(`, `perimetre.contient(`, `statEntree(`).
   Puis, STATIQUE comme la borne des canaux : `reglagesEcrire` appelle
   `garderReglagesIa(` AVANT `.ecrire(`, et celle-ci passe par le verdict pur
   et admet par `autoriserHote(verdict.…)`. Le dialogue natif lui-même
@@ -460,6 +475,15 @@ réponse étant toujours non.
   ce script a un délai de garde (30 s) : un `run` qui n'aboutit jamais rougit
   avec son libellé au lieu de figer la commande — ce qui masquait tous les cas
   suivants, la mort en route que `check:lesson` a déjà payée.
+  Deux cas de la revue finale : un CLI qui SORT SANS LIRE son entrée (un prompt
+  de 4 Mo sur un `stdin` que l'enfant a déjà fermé) ne tue pas le processus —
+  l'`EOF`/`EPIPE` arrive de façon asynchrone sur le flux, et sans écouteur
+  `error` sur `stdin` c'est une exception non rattrapée qui emporte le
+  processus PRINCIPAL entier, mesuré (sous la rupture, ce cas ne rougit pas : il
+  tue le contrôle, ce qui est le défaut lui-même) ; et `ollamaInstalle` cherche
+  `ollama` dans le `PATH` ÉTENDU par `resoudreExecutable`/`lancer`, comme `run`
+  et comme le greffon — un `spawn("ollama")` nu sur le `PATH` du système disait
+  « non installé » dans l'application seulement.
   L'environnement est DÉDIÉ (`APPDATA`, `LOCALAPPDATA`, `CODEX_INSTALL_DIR`
   ABSENTS) : sans quoi le `PATH` étendu réintroduit le VRAI Codex de la machine
   derrière le faux, et le cas lit la réponse du vrai CLI — défaut vécu, ronde 2

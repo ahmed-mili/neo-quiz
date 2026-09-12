@@ -39,7 +39,7 @@ import { absoluDepuisContrat, contratDepuisAbsolu, creerIndex, renameDirVersAbso
 import type { EvenementSurveillant, Index } from "./index-fichiers";
 import { listerRacine, normaliser } from "./parcours";
 import { t } from "../../../src/i18n";
-import { validerReglagesIa } from "./garde-ia";
+import { cheminCliPourLancement, validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { demarrerOllama, erreurCli, estOutilAutorise, lireCache, ollamaInstalle, run } from "./process";
@@ -148,23 +148,34 @@ async function ecrireTexte(etat: EtatDisque, abs: string, contenu: string): Prom
 
 /**
  * Le réglage « chemin de l'exécutable » de CET outil, lu dans le magasin du
- * PRINCIPAL — jamais pris de l'appel IPC. C'est la moitié qui fait que la liste
- * blanche de noms tient : si le rendu pouvait envoyer un chemin, elle ne
- * séparerait plus rien.
+ * PRINCIPAL — jamais pris de l'appel IPC — ET REJUGÉ AU LANCEMENT (ruling 16).
  *
- * `undefined` quand il est absent, vide ou d'un autre type, et quand l'outil
- * n'a pas de réglage (Ollama : il est cherché à ses emplacements officiels, et
- * l'utilisateur n'a rien à saisir). `run` retombe alors sur le `PATH` étendu.
+ * C'est la moitié qui fait que la liste blanche de noms tient : si le rendu
+ * pouvait envoyer un chemin, elle ne séparerait plus rien. Mais la lire ne
+ * suffit pas : la garde à l'ÉCRITURE (`garde-ia.ts`) a jugé ce chemin contre le
+ * périmètre D'ALORS, et le périmètre grandit — l'utilisateur ouvre plus tard le
+ * dossier qui contient un `x.cmd` écrit par la fenêtre, et le chemin admis hier
+ * est dedans aujourd'hui. Le verdict est donc REJOUÉ ici, avec `perimetre.contient`
+ * et `statEntree` d'aujourd'hui (`cheminCliPourLancement`, pur, éprouvé par
+ * `check:electron-reglages`) ; un refus est NOMMÉ (`refuse`), journalisé, et
+ * rien n'est lancé — ni ce chemin, ni un repli sur le `PATH`.
+ *
+ * `undefined` quand rien n'est réglé, ou quand l'outil n'a pas de réglage
+ * (Ollama : cherché à ses emplacements officiels). `run` retombe alors sur le
+ * `PATH` étendu.
  */
-async function cheminCliRegle(reglages: Reglages, tool: string): Promise<string | undefined> {
-	const cle = tool === "claude" ? "cheminClaude" : tool === "codex" ? "cheminCodex" : null;
-	if (!cle) return undefined;
-	const valeur = await reglages.lire(CLE_REGLAGES_IA);
-	const ia = valeur && typeof valeur === "object" && !Array.isArray(valeur)
-		? (valeur as Record<string, unknown>)
-		: {};
-	const chemin = ia[cle];
-	return typeof chemin === "string" && chemin.trim() ? chemin.trim() : undefined;
+async function cheminCliRegle(reglages: Reglages, tool: string, perimetre: Perimetre): Promise<string | undefined> {
+	const verdict = await cheminCliPourLancement(
+		await reglages.lire(CLE_REGLAGES_IA),
+		tool,
+		async chemin => (await statEntree(chemin))?.isFile === true,
+		chemin => perimetre.contient(chemin),
+	);
+	if ("refus" in verdict) {
+		console.warn(LOG_PREFIX, "CLI", tool, "refusé :", verdict.refus);
+		throw erreurCli("refuse", verdict.refus);
+	}
+	return verdict.chemin;
 }
 
 /** REJETTE si un des dossiers de la valeur n'est pas déjà dans le périmètre. */
@@ -520,7 +531,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 				fichiers,
 				sortieFichier: typeof s.sortieFichier === "string" ? s.sortieFichier : undefined,
 				signal: controleur.signal,
-			}, { cheminRegle: await cheminCliRegle(reglagesOuErreur(), tool) });
+			}, { cheminRegle: await cheminCliRegle(reglagesOuErreur(), tool, perimetre) });
 			return { ok: true, stdout: res.stdout, stderr: res.stderr, code: res.code, sortie: res.sortie };
 		} catch (e) {
 			/* Le NOM survit, c'est tout l'objet de l'enveloppe. « erreur » est le

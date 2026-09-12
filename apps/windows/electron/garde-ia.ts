@@ -115,22 +115,44 @@ function extensionDe(chemin: string): string {
 /**
  * Le verdict sur un chemin de CLI saisi dans les réglages. `null` = admis.
  *
- * TROIS CONDITIONS, ET AUCUNE NE REMPLACE LES AUTRES : une chaîne, ABSOLUE (le
- * dossier courant du principal n'est pas celui de l'utilisateur), EXISTANTE (un
+ * QUATRE CONDITIONS, ET AUCUNE NE REMPLACE LES AUTRES : une chaîne, ABSOLUE (le
+ * dossier courant du principal n'est pas celui de l'utilisateur), d'une
+ * extension que le lanceur sait lancer, HORS DU PÉRIMÈTRE, et EXISTANTE (un
  * chemin fautif saisi ici ne se verrait qu'à la prochaine génération, sous la
  * forme « CLI introuvable » — le dire à l'ÉCRITURE, c'est le dire là où on peut
- * encore le corriger), et d'une extension que le lanceur sait lancer.
+ * encore le corriger).
+ *
+ * HORS DU PÉRIMÈTRE, ET C'EST LA CONDITION QUI TIENT TOUT LE RESTE (revue
+ * finale, C1). Le périmètre est l'ensemble des dossiers où la fenêtre peut
+ * ÉCRIRE : les racines ouvertes, et les dossiers de `aiMentionExtraFolders`
+ * (admis seulement s'ils y sont déjà, donc `perimetreContient` couvre les
+ * deux). Un chemin de CLI qui y tombe est la séquence en deux appels que la
+ * liste blanche de NOMS existe pour rendre impossible : `fichiers.write(
+ * "<racine>/x.cmd", …)` — borné, dans les règles, l'extension n'est jugée qu'à
+ * l'OUVERTURE — puis `reglages.ecrire("ai", { cheminClaude: "<racine>/x.cmd" })`,
+ * et la génération suivante lance ce que le rendu vient d'écrire, dans le
+ * processus principal, avec ses droits. Un CLI légitime, lui, vit dans
+ * `Program Files`, `~/.local/bin`, `%APPDATA%
+pm` — JAMAIS dans un dossier de
+ * quiz : refuser le périmètre ne coûte aucun chemin valide. Le prédicat résout
+ * les jonctions et liens (`perimetre.resoudre`) : une jonction posée dans une
+ * racine et pointant sur un `.cmd` est jugée sur sa CIBLE.
+ *
+ * ET LA CONDITION EST REJOUÉE AU LANCEMENT (`cheminCliPourLancement`) : le
+ * périmètre GRANDIT après l'écriture — l'utilisateur ouvre plus tard le dossier
+ * qui contient le `.cmd` — et un chemin admis hier peut être dedans aujourd'hui.
  *
  * CE QUE CETTE GARDE N'EST PAS : une garantie que le programme désigné est bien
  * un CLI d'IA. Elle ne peut pas l'être — c'est l'UTILISATEUR qui désigne son
  * exécutable, et l'y autoriser est tout l'objet du réglage. Elle empêche qu'un
  * RENDU compromis transforme ce réglage en « lance ce que je viens d'écrire sur
- * le disque » avec un type de fichier que le pont refuse par ailleurs.
+ * le disque ».
  */
-async function verifierCheminCli(
+export async function verifierCheminCli(
 	cle: string,
 	valeur: unknown,
 	fichierExiste: (chemin: string) => Promise<boolean>,
+	perimetreContient: (chemin: string) => Promise<boolean>,
 ): Promise<string | null> {
 	if (typeof valeur !== "string") return "réglages IA refusés : " + cle + " doit être une chaîne";
 	const chemin = valeur.trim();
@@ -143,10 +165,43 @@ async function verifierCheminCli(
 	if (ext && !EXTENSIONS_CLI.has(ext)) {
 		return "réglages IA refusés : " + cle + " n'est pas un exécutable lançable (." + ext + ") : " + chemin;
 	}
+	if (await perimetreContient(chemin)) {
+		return "réglages IA refusés : " + cle + " est dans un dossier ouvert, où la fenêtre peut écrire — un CLI n'y vit jamais : " + chemin;
+	}
 	if (!(await fichierExiste(chemin))) {
 		return "réglages IA refusés : " + cle + " ne désigne aucun fichier : " + chemin;
 	}
 	return null;
+}
+
+/**
+ * Le chemin de CLI à LANCER pour cet outil, relu des réglages ET REJUGÉ — avec
+ * le périmètre d'AUJOURD'HUI, pas celui de l'écriture. PURE : `canaux.ts`
+ * l'appelle avec `perimetre.contient` et `statEntree`, le contrôle avec deux
+ * listes.
+ *
+ * `{ chemin: undefined }` quand rien n'est réglé (absent, vide, autre type) ou
+ * quand l'outil n'a pas de réglage (Ollama) : le lanceur retombe sur le `PATH`
+ * étendu. `{ refus }` quand le chemin réglé ne passe plus la garde — et alors
+ * RIEN n'est lancé, ni ce chemin, ni un repli : un repli sur le `PATH` lancerait
+ * en silence une autre installation que celle que l'utilisateur a désignée.
+ */
+export async function cheminCliPourLancement(
+	valeurAi: unknown,
+	tool: string,
+	fichierExiste: (chemin: string) => Promise<boolean>,
+	perimetreContient: (chemin: string) => Promise<boolean>,
+): Promise<{ chemin: string | undefined } | { refus: string }> {
+	const cle = tool === "claude" ? "cheminClaude" : tool === "codex" ? "cheminCodex" : null;
+	if (!cle) return { chemin: undefined };
+	const ia = valeurAi && typeof valeurAi === "object" && !Array.isArray(valeurAi)
+		? (valeurAi as Record<string, unknown>)
+		: {};
+	const brut = ia[cle];
+	if (typeof brut !== "string" || !brut.trim()) return { chemin: undefined };
+	const refus = await verifierCheminCli(cle, brut, fichierExiste, perimetreContient);
+	if (refus) return { refus: "au lancement, " + refus };
+	return { chemin: brut.trim() };
 }
 
 /**
@@ -187,7 +242,7 @@ export async function validerReglagesIa(
 	   pour `aiMentionExtraFolders`. */
 	for (const [cle, v] of [["cheminClaude", cheminClaude], ["cheminCodex", cheminCodex]] as const) {
 		if (v === undefined) continue;
-		const refus = await verifierCheminCli(cle, v, fichierExiste);
+		const refus = await verifierCheminCli(cle, v, fichierExiste, perimetreContient);
 		if (refus) return { refus };
 	}
 

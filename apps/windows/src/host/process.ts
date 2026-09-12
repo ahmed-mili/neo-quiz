@@ -75,8 +75,10 @@ export function createWindowsProcess(): HostProcess {
 			}
 		},
 		/* Le NOM, et rien d'autre. Un rejet du principal (outil hors liste)
-		   remonte tel quel : l'appelant (`ai-providers.ts`) le rattrape et
-		   retombe sur son repli embarqué. */
+		   remonte ici comme une erreur ANONYME — l'IPC ne conserve pas son
+		   `name`, c'est précisément pourquoi `run` passe par une enveloppe — et
+		   ça suffit à l'appelant (`ai-providers.ts`), qui ne lit pas le nom : il
+		   rattrape tout rejet et retombe sur son repli embarqué. */
 		lireCache(tool) {
 			return pont().processus.lireCache(tool);
 		},

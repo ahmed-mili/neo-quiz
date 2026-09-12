@@ -413,7 +413,7 @@ await withSrcModule("apps/windows/electron/pont.ts", async ({ CANAUX }) => {
  * dernière assertion, STATIQUE comme celle des canaux `fichiers.*`, vérifie
  * que `reglagesEcrire` appelle la garde AVANT `.ecrire(`.
  */
-await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ hoteEstPrive, validerReglagesIa }) => {
+await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ cheminCliPourLancement, hoteEstPrive, validerReglagesIa }) => {
 	const r = makeReporter("Électron — la garde de la clé ai");
 
 	/* ── hoteEstPrive : la boucle locale, la RFC 1918, `.local`, et rien d'autre ── */
@@ -436,7 +436,7 @@ await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ hoteEstPrive, 
 	/* « outils/claude.exe » EXISTE dans le double, exprès : sans lui, retirer
 	   la garde « absolu » laisserait le refus tomber sur « ne désigne aucun
 	   fichier », et le cas resterait VERT sur la mauvaise raison. */
-	const fichiersReels = new Set(["c:/outils/claude.exe", "c:/outils/codex.cmd", "c:/outils/note.docx", "c:/outils/lance.ps1", "c:/outils/shim.js", "c:/outils/claude", "outils/claude.exe"]);
+	const fichiersReels = new Set(["c:/outils/claude.exe", "c:/outils/codex.cmd", "c:/outils/note.docx", "c:/outils/lance.ps1", "c:/outils/shim.js", "c:/outils/claude", "outils/claude.exe", "d:/quiz/cours/claude.cmd"]);
 	const existe = async (chemin) => fichiersReels.has(chemin.toLowerCase());
 	const valider = (v) => validerReglagesIa(v, contient, existe);
 	await cas(r, "une valeur qui n'est pas un objet est refusée", async () => {
@@ -546,6 +546,50 @@ await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ hoteEstPrive, 
 		const v = await valider({ cheminClaude: "C:/Outils/shim.js" });
 		r.check("un .js existant est refusé : ce n'est pas un CLI, c'est un script qu'un interpréteur exécuterait",
 			"refus" in v && v.refus.includes(".js"), true);
+	});
+	await cas(r, "un chemin de CLI DANS le périmètre est refusé à l'écriture, nommé", async () => {
+		/* LA CONDITION QUI TIENT TOUT LE RESTE (revue finale, C1). Le fichier
+		   EXISTE et porte une extension lançable : seule la règle « hors du
+		   périmètre » peut le refuser. Sans elle : `fichiers.write(
+		   "<racine>/x.cmd")` — borné, l'extension n'est jugée qu'à l'ouverture —
+		   puis ce chemin dans `cheminClaude`, et la génération suivante lance ce
+		   que la fenêtre vient d'écrire, dans le processus principal. Un CLI
+		   légitime n'est jamais dans un dossier de quiz. */
+		const v = await valider({ cheminClaude: "D:/Quiz/Cours/claude.cmd" });
+		r.check("un chemin de CLI DANS le périmètre est refusé à l'écriture, nommé",
+			"refus" in v && v.refus.includes("dossier ouvert") && v.refus.includes("cheminClaude"), true);
+	});
+	await cas(r, "au lancement, le chemin réglé est REJUGÉ avec le périmètre du jour", async () => {
+		/* Le périmètre GRANDIT après l'écriture : l'utilisateur ouvre plus tard
+		   le dossier qui contient le `.cmd`. Le même chemin, admis contre un
+		   périmètre qui ne le contient pas, est REFUSÉ contre celui qui le
+		   contient — et alors rien n'est lancé, pas même un repli. */
+		const dansQuiz = { cheminClaude: "D:/Quiz/Cours/claude.cmd" };
+		const [hier, aujourdhui, valide, rien, autreOutil, disparu] = await Promise.all([
+			cheminCliPourLancement(dansQuiz, "claude", existe, async () => false),
+			cheminCliPourLancement(dansQuiz, "claude", existe, contient),
+			cheminCliPourLancement({ cheminClaude: " C:/Outils/claude.exe " }, "claude", existe, contient),
+			cheminCliPourLancement({ aiModel: "x" }, "claude", existe, contient),
+			cheminCliPourLancement({ cheminClaude: "D:/Quiz/Cours/claude.cmd" }, "ollama", existe, contient),
+			cheminCliPourLancement({ cheminCodex: "C:/Outils/absent.exe" }, "codex", existe, contient),
+		]);
+		r.check("au lancement, le chemin réglé est REJUGÉ avec le périmètre du jour",
+			{
+				hier,
+				aujourdhui: "refus" in aujourdhui && aujourdhui.refus.includes("dossier ouvert"),
+				valide,
+				rien,
+				autreOutil,
+				disparu: "refus" in disparu && disparu.refus.includes("aucun fichier"),
+			},
+			{
+				hier: { chemin: "D:/Quiz/Cours/claude.cmd" },
+				aujourdhui: true,
+				valide: { chemin: "C:/Outils/claude.exe" },
+				rien: { chemin: undefined },
+				autreOutil: { chemin: undefined },
+				disparu: true,
+			});
 	});
 	await cas(r, "le refus d'un chemin de CLI prime sur une URL valide", async () => {
 		/* Rien n'est admis quand une moitié est refusée : sinon l'hôte d'Ollama

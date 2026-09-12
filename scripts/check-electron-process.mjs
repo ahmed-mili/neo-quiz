@@ -13,17 +13,14 @@
  * d'erreur. Un modèle du repli retiré du compte donne un 404 au CLI, et on
  * cherche le défaut du côté du CLI.
  *
- * Et `run` n'est pas encore implémenté (tâche 7) : son rejet doit être NOMMÉ
- * (`indisponible`). Un `stdout` vide passerait pour une génération qui a
- * tourné pour rien.
- *
  * Sur le module RÉEL, par `withSrcModule`, avec un faux DOSSIER PERSONNEL
  * (l'environnement est un paramètre de `lireCache` et de `cheminCache`
  * exprès) : aucun des vrais fichiers de la machine n'est lu, et le contrôle
  * ne dépend pas de ce qu'ils contiennent.
  *
- * La tâche 7 étend ce script avec les cas à VRAIS process (stdin écrit puis
- * fermé, flux séparés, arbre tué à l'annulation, un `run` par outil).
+ * Depuis la tâche 7, le groupe « lancer un CLI » éprouve `run` sur de VRAIS
+ * process (stdin écrit puis fermé, flux séparés, arbre tué à l'annulation, un
+ * `run` par outil, et `run` qui ne se règle qu'une fois l'arbre mort).
  *
  *     npm run check:electron-process
  */
@@ -32,11 +29,24 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
+/** Le délai de garde d'UN cas. Ce script lance de VRAIS process : un `run` qui
+    n'aboutit jamais (un `stdin` jamais fermé, un filet de sécurité retiré)
+    figeait toute la commande au lieu de rougir — et une commande figée masque
+    tous les cas suivants, exactement le défaut que `CLAUDE.md` décrit pour
+    `check:lesson`. Vécu pendant la discriminance de la tâche 7. */
+const DELAI_CAS_MS = 30000;
+
 async function cas(r, nom, fn) {
+	let minuteur = null;
+	const garde = new Promise((_, reject) => {
+		minuteur = setTimeout(() => reject(new Error("DÉLAI DÉPASSÉ (" + DELAI_CAS_MS + " ms) : le cas n'a jamais rendu la main")), DELAI_CAS_MS);
+	});
 	try {
-		await fn();
+		await Promise.race([fn(), garde]);
 	} catch (e) {
 		r.check(nom, "EXCEPTION: " + (e && e.message ? e.message : String(e)), "pas d'exception");
+	} finally {
+		clearTimeout(minuteur);
 	}
 }
 
@@ -466,7 +476,7 @@ await withSrcModule("src/host/jetons.ts", async ({
  * juste après : le cas recevrait la réponse du vrai CLI au lieu de celle du
  * faux (défaut vécu, `check:obsidian-host`, ronde 2 de la tâche 4).
  */
-await withSrcModule("apps/windows/electron/process.ts", async ({ resoudreExecutable, run }) => {
+await withSrcModule("apps/windows/electron/process.ts", async ({ resoudreExecutable, run, tuerArbre }) => {
 	const r = makeReporter("Électron — lancer un CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-lancer-"));
 	const maison = join(racine, "maison");
@@ -766,6 +776,95 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ resoudreExecuta
 			await dodo(150);
 			r.check("un signal déjà abandonné rejette « annule » sans rien lancer",
 				{ nom, lance: existsSync(marqueurDeVie) }, { nom: "annule", lance: false });
+		});
+
+		/* ── `run` NE SE RÈGLE QU'UNE FOIS L'ARBRE MORT (ruling 15) ──
+
+		   CE QUE CES DEUX CAS EMPÊCHENT. La première écriture de `lancer`
+		   rejetait `annule` AUSSITÔT après avoir lancé `taskkill` : `run` se
+		   réglait, son `finally` relâchait le verrou de l'outil, celui
+		   d'`avecFichiers` effaçait le dossier temporaire — tout ça AVANT que
+		   le système ait tué quoi que ce soit. Un petit-enfant pouvait encore
+		   lire les pièces jointes pendant qu'on les effaçait, et un second `run`
+		   du même outil partir pendant que l'arbre précédent écrivait encore. Le
+		   témoin du cas « tue l'ARBRE » ne le voyait pas : il regardait 2,5 s
+		   plus tard. Ici on regarde AU MOMENT où `run` se règle : l'enfant
+		   doit déjà être mort (`process.kill(pid, 0)` échoue). */
+		const estVivant = (pid) => {
+			try {
+				process.kill(pid, 0);
+				return true;
+			} catch (e) {
+				return false;
+			}
+		};
+		const dormeur = join(racine, "dormeur-long.js");
+		writeFileSync(dormeur, "setTimeout(() => { process.stdout.write('TROP TARD'); }, 8000);");
+
+		await cas(r, "après un abandon, run ne se règle qu'une fois l'enfant fermé", async () => {
+			/* L'ESPION voit le PID que `lancer` demande de tuer, et délègue au
+			   vrai `tuerArbre` : la mort est réelle, seule l'observation est
+			   ajoutée. `vivantAuReglement` est lu dans le `catch` de `run` —
+			   c'est-à-dire à la microtâche où `run` se règle, pas après. */
+			let pidVu = null;
+			const c = new AbortController();
+			const promesse = run(
+				{ tool: "codex", args: [dormeur], stdin: "", signal: c.signal },
+				{ cheminRegle: process.execPath, env, tuer: async (pid) => { pidVu = pid; await tuerArbre(pid); } },
+			);
+			await dodo(400); // l'enfant tourne
+			c.abort();
+			let rejet = "(aucun rejet)";
+			let vivantAuReglement = null;
+			try {
+				await promesse;
+			} catch (e) {
+				rejet = e.name;
+				vivantAuReglement = typeof pidVu === "number" ? estVivant(pidVu) : "(pid inconnu)";
+			}
+			r.check("après un abandon, run ne se règle qu'une fois l'enfant fermé",
+				{ rejet, vivantAuReglement }, { rejet: "annule", vivantAuReglement: false });
+		});
+
+		await cas(r, "après un abandon dont le kill échoue, run rejette quand même, nommé", async () => {
+			/* LE FILET. `tuer` est un no-op (un `taskkill` qui échoue, un zombie) :
+			   l'enfant ne fermera jamais de lui-même. `run` doit rejeter QUAND
+			   MÊME, avec le motif, dans `delaiGardeMs` — et le DIRE dans la
+			   console. Le délai est réglé PAR LA COUTURE, jamais en dur ici :
+			   attendre les cinq secondes de production ne prouverait rien de
+			   plus. L'enfant est tué pour de bon ensuite, par le vrai `tuerArbre`. */
+			let pidVu = null;
+			const avertissements = [];
+			const warnAvant = console.warn;
+			console.warn = (...a) => { avertissements.push(a.map(String).join(" ")); };
+			const c = new AbortController();
+			const promesse = run(
+				{ tool: "codex", args: [dormeur], stdin: "", signal: c.signal },
+				{ cheminRegle: process.execPath, env, tuer: async (pid) => { pidVu = pid; }, delaiGardeMs: 300 },
+			);
+			await dodo(400);
+			const debut = Date.now();
+			c.abort();
+			let rejet = "(aucun rejet)";
+			try {
+				await promesse;
+			} catch (e) {
+				rejet = e.name;
+			}
+			const duree = Date.now() - debut;
+			console.warn = warnAvant;
+			const encoreVivant = typeof pidVu === "number" && estVivant(pidVu);
+			if (typeof pidVu === "number") await tuerArbre(pidVu);
+			r.check("après un abandon dont le kill échoue, run rejette quand même, nommé",
+				{
+					rejet,
+					dansLeDelai: duree < 3000,
+					// L'enfant était bien VIVANT au règlement : c'est le filet qui a
+					// rejeté, pas un `close` arrivé par hasard.
+					encoreVivant,
+					averti: avertissements.some(a => a.includes("n'a pas fermé") && a.includes("annule")),
+				},
+				{ rejet: "annule", dansLeDelai: true, encoreVivant: true, averti: true });
 		});
 	} finally {
 		rmSync(racine, { recursive: true, force: true, maxRetries: 5, retryDelay: 150 });

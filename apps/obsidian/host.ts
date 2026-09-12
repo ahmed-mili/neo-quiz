@@ -39,6 +39,7 @@ import type { FichierJoint } from "../../src/host/jetons";
    règles pour un même appel du code partagé. Voir `src/host/cli-args.ts`. */
 import { extensionsExecutables, ligneCmd, porteSautDeLigne } from "../../src/host/cli-args";
 import { QbdModal } from "../../src/modal-base";
+import { LOG_PREFIX } from "../../src/branding";
 import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../src/review/paths";
 
 /** Shell Electron minimal (surface réellement consommée : shell.openPath). */
@@ -210,17 +211,42 @@ function dossierPersonnel(env: NodeJS.ProcessEnv = process.env): string {
 /** L'ARBRE de process, pas seulement le premier : `claude` et `codex` en
     spawnent des enfants, et un `kill` sur le seul parent laisse la génération
     tourner (et le fichier de sortie s'écrire) après un clic sur Stop.
-    Recopié de `killTree` d'`ai-client.ts`, que la tâche 4 supprimera. */
-function tuerArbre(child: import("child_process").ChildProcess): void {
-	try {
-		if (process.platform === "win32") {
-			(require("child_process") as typeof import("child_process"))
-				.exec("taskkill /pid " + child.pid + " /T /F", { windowsHide: true });
-		} else {
-			child.kill("SIGTERM");
+    Recopié de `killTree` d'`ai-client.ts`, que la tâche 4 a supprimé.
+    ATTENDABLE : réglée quand `taskkill` a fini, ou aussitôt hors Windows.
+    `lancerCli` ne s'en sert pas pour se régler — c'est le `close` de l'ENFANT
+    qui fait foi (ruling 15) — mais un appelant qui veut savoir peut l'attendre.
+    Best effort : elle se règle TOUJOURS, une erreur ici ne doit pas remplacer
+    le rejet `annule` que l'appelant attend. Jumelle de `tuerArbre` dans
+    `apps/windows/electron/process.ts`. */
+function tuerArbre(child: import("child_process").ChildProcess): Promise<void> {
+	return new Promise(resolve => {
+		try {
+			if (process.platform === "win32") {
+				(require("child_process") as typeof import("child_process"))
+					.exec("taskkill /pid " + child.pid + " /T /F", { windowsHide: true }, () => resolve());
+			} else {
+				child.kill("SIGTERM");
+				resolve();
+			}
+		} catch (e) {
+			resolve(); // best effort : le filet de `lancerCli` constatera
 		}
-	} catch (e) { /* best effort : le poll de l'appelant constatera */ }
+	});
 }
+
+/** Les COUTURES du lancement d'un CLI, pour le contrôle — même patron que
+    `envHote` : ce qu'un contrôle ne peut pas atteindre n'est pas contrôlé.
+    `tuer` est `tuerArbre` par défaut (un espion y voit l'enfant, un no-op
+    éprouve le filet) ; `delaiGardeMs` est le filet de sécurité de `lancerCli`
+    (combien attendre le `close` de l'enfant après avoir demandé sa mort, avant
+    de rejeter quand même : un `run` ne doit jamais pendre). Jumeau des deux
+    paramètres de `lancer` dans `apps/windows/electron/process.ts`. */
+export interface CouturesCli {
+	tuer?: (child: import("child_process").ChildProcess) => Promise<void>;
+	delaiGardeMs?: number;
+}
+
+const DELAI_GARDE_MS = 5000;
 
 /**
  * Le premier fichier du PATH qui porte ce nom, `PATHEXT` compris sous Windows.
@@ -271,8 +297,10 @@ function lancerCli(spec: {
 	stdin: string;
 	signal?: AbortSignal;
 	timeoutMs?: number;
-}, parCmd = false, envHote: NodeJS.ProcessEnv = process.env): Promise<{ stdout: string; stderr: string; code: number | null }> {
+}, parCmd = false, envHote: NodeJS.ProcessEnv = process.env, coutures: CouturesCli = {}): Promise<{ stdout: string; stderr: string; code: number | null }> {
 	return new Promise((resolve, reject) => {
+		const tuer = coutures.tuer || tuerArbre;
+		const delaiGardeMs = coutures.delaiGardeMs ?? DELAI_GARDE_MS;
 		/* DÉJÀ ABANDONNÉ : on ne lance RIEN. Jugé avant le `spawn` et non après,
 		   parce qu'un process lancé puis tué a le temps d'agir — mesuré côté
 		   application : l'enfant écrivait son fichier avant que `taskkill`
@@ -306,16 +334,39 @@ function lancerCli(spec: {
 		}
 		let fini = false;
 		let minuteur: ReturnType<typeof setTimeout> | null = null;
+		let filet: ReturnType<typeof setTimeout> | null = null;
 		const sortir = (fn: () => void): void => {
 			if (fini) return;
 			fini = true;
 			if (minuteur) clearTimeout(minuteur);
+			if (filet) clearTimeout(filet);
 			spec.signal?.removeEventListener("abort", surAbandon);
 			fn();
 		};
+		/* LE MOTIF, ET NON LE RÈGLEMENT (ruling 15). Un abandon ou un délai
+		   dépassé ne règlent PLUS la promesse eux-mêmes : ils notent POURQUOI,
+		   demandent la mort de l'arbre, et c'est le `close` de l'ENFANT — qui ne
+		   vient qu'une fois l'enfant mort et ses flux fermés, l'arbre avec lui
+		   sous `/T /F` — qui rejette avec ce motif au lieu de résoudre. Sans ça,
+		   `run` se réglait AVANT que le système ait tué quoi que ce soit : le
+		   `finally` d'`avecFichiers` effaçait le dossier temporaire pendant qu'un
+		   petit-enfant lisait encore les pièces jointes. Même structure, même
+		   filet, dans `lancer` du processus principal de l'application.
+		   LE FILET : si `close` n'arrive pas dans `delaiGardeMs` après la demande
+		   de mort (un `taskkill` qui échoue, un zombie), on rejette QUAND MÊME
+		   avec le motif, et on le DIT — un `run` ne doit jamais pendre. */
+		let motif: "annule" | "timeout" | null = null;
+		const demanderLaMort = (cause: "annule" | "timeout"): void => {
+			if (fini || motif) return;
+			motif = cause;
+			void tuer(child);
+			filet = setTimeout(() => {
+				console.warn(LOG_PREFIX, "CLI", spec.tool, ": l'enfant n'a pas fermé", delaiGardeMs, "ms après", cause, "— rejeté quand même (pid", child.pid, ")");
+				sortir(() => reject(erreurCli(cause, "CLI " + (cause === "annule" ? "annulé" : "expiré") + ", sans confirmation de sa mort : " + spec.tool)));
+			}, delaiGardeMs);
+		};
 		function surAbandon(): void {
-			tuerArbre(child);
-			sortir(() => reject(erreurCli("annule", "CLI annulé : " + spec.tool)));
+			demanderLaMort("annule");
 		}
 		/* SÉPARÉS, et c'est le contrat : `stderr` porte le diagnostic (« not
 		   logged in »), `stdout` la réponse. Les concaténer rendrait la sortie
@@ -335,7 +386,7 @@ function lancerCli(spec: {
 			   lieu du rejet que `checkClaudeCode` attend. */
 			if (!parCmd && process.platform === "win32" && e.code === "ENOENT"
 				&& trouverExecutable(spec.tool, options.env)) {
-				sortir(() => { resolve(lancerCli(spec, true, envHote)); });
+				sortir(() => { resolve(lancerCli(spec, true, envHote, coutures)); });
 				return;
 			}
 			sortir(() => reject(erreurCli(
@@ -343,12 +394,15 @@ function lancerCli(spec: {
 				"CLI " + spec.tool + " : " + e.message,
 			)));
 		});
-		child.on("close", (code: number | null) => sortir(() => resolve({ stdout, stderr, code })));
+		child.on("close", (code: number | null) => sortir(() => {
+			if (motif) {
+				reject(erreurCli(motif, "CLI " + (motif === "annule" ? "annulé" : "expiré") + " : " + spec.tool));
+				return;
+			}
+			resolve({ stdout, stderr, code });
+		}));
 		if (spec.timeoutMs) {
-			minuteur = setTimeout(() => {
-				tuerArbre(child);
-				sortir(() => reject(erreurCli("timeout", "CLI expiré : " + spec.tool)));
-			}, spec.timeoutMs);
+			minuteur = setTimeout(() => demanderLaMort("timeout"), spec.timeoutMs);
 		}
 		/* Le cas « déjà abandonné » est traité tout en haut, avant le `spawn` :
 		   il ne reste ici que l'abandon qui SURVIENDRA. */
@@ -490,6 +544,9 @@ export function createObsidianHost(
 	app: App,
 	plugin: { manifest: { dir?: string } },
 	envHote: NodeJS.ProcessEnv = process.env,
+	/* La QUATRIÈME couture, pour le contrôle seulement : voir `CouturesCli`.
+	   Le greffon ne passe rien, et rien ne change pour lui. */
+	couturesCli: CouturesCli = {},
 ): Host {
 	const adapter = (): DataAdapter => app.vault.adapter;
 
@@ -1222,7 +1279,7 @@ export function createObsidianHost(
 					stdin: resolu.stdin,
 					signal: spec.signal,
 					timeoutMs: spec.timeoutMs,
-				}, false, envHote);
+				}, false, envHote, couturesCli);
 			}, envHote);
 			return Object.assign({}, resultat, { sortie });
 		},

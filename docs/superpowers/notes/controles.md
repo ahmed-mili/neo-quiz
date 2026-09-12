@@ -445,6 +445,21 @@ réponse étant toujours non.
   indéfiniment), les flux SÉPARÉS avec le code de sortie, `introuvable` et
   `timeout` NOMMÉS, et le refus d'un signal DÉJÀ abandonné **avant** le
   `spawn` : mesuré, un process lancé puis tué a le temps d'écrire son fichier.
+  **Et `run` ne se règle qu'une fois l'arbre MORT (ruling 15, revue de la
+  tâche 7)** : un abandon ou un délai dépassé notent un MOTIF et demandent la
+  mort, c'est le `close` de l'enfant qui rejette — sinon `run` se réglait avant
+  que le système ait tué quoi que ce soit, le verrou était relâché et le
+  dossier des pièces jointes effacé pendant qu'un petit-enfant les lisait
+  encore. Le cas regarde AU MOMENT du règlement (`process.kill(pid, 0)`
+  échoue), pas 2,5 s plus tard. Un FILET rejette quand même après
+  `delaiGardeMs` si `close` ne vient pas (un `taskkill` qui échoue, un zombie),
+  et le dit : un `run` qui pend est un bouton Stop qui ne rend jamais la main.
+  Les deux sont des COUTURES (`tuer`, `delaiGardeMs`), injectées par le
+  contrôle — même patron qu'`env`. Mêmes deux cas dans `check:obsidian-host`
+  (4e paramètre de `createObsidianHost`, `CouturesCli`). Enfin, CHAQUE cas de
+  ce script a un délai de garde (30 s) : un `run` qui n'aboutit jamais rougit
+  avec son libellé au lieu de figer la commande — ce qui masquait tous les cas
+  suivants, la mort en route que `check:lesson` a déjà payée.
   L'environnement est DÉDIÉ (`APPDATA`, `LOCALAPPDATA`, `CODEX_INSTALL_DIR`
   ABSENTS) : sans quoi le `PATH` étendu réintroduit le VRAI Codex de la machine
   derrière le faux, et le cas lit la réponse du vrai CLI — défaut vécu, ronde 2

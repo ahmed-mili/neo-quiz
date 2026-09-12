@@ -10,6 +10,7 @@
  *     npm run check:obsidian-host
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseHTML } from "linkedom";
@@ -1560,6 +1561,107 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	));
 	r.check("un signal déjà abandonné rejette « annule » sans rien lancer",
 		{ rejet: rejetDeja, lance }, { rejet: "annule", lance: false });
+
+	/* ── `run` NE SE RÈGLE QU'UNE FOIS L'ARBRE MORT (ruling 15) ──
+
+	   La première écriture de `lancerCli` rejetait `annule` AUSSITÔT après
+	   avoir lancé `taskkill` : `run` se réglait, et le `finally`
+	   d'`avecFichiers` effaçait le dossier temporaire AVANT que le système ait
+	   tué quoi que ce soit — un petit-enfant pouvait encore lire les pièces
+	   jointes pendant qu'on les effaçait. Ici on regarde AU MOMENT où `run` se
+	   règle : l'enfant (cmd.exe, sous Windows) doit déjà être mort. Un SECOND
+	   hôte, construit sur les mêmes `envTest` avec les COUTURES du lancement
+	   (`CouturesCli`, 4e paramètre de `createObsidianHost`) : un espion sur
+	   `tuer` qui voit l'enfant, puis un no-op pour éprouver le filet. Le
+	   greffon, lui, ne passe rien. */
+	const coutures = {};
+	const hostCoutures = createObsidianHost(fausseApp([]), { manifest: {} }, envTest, coutures);
+	const estVivant = (pid) => {
+		try {
+			process.kill(pid, 0);
+			return true;
+		} catch (e) {
+			return false;
+		}
+	};
+	const dodo = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+	const dormeur = "setTimeout(() => { process.stdout.write('TROP TARD'); }, 8000);";
+	/** Tue pour de bon un enfant que le no-op a laissé vivre — le VRAI
+	    `tuerArbre` n'est pas exporté, et ce n'est pas lui qu'on éprouve ici. */
+	const tuerPourDeBon = (child) => new Promise(resolve => {
+		if (process.platform === "win32") {
+			const t = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+			t.on("close", () => resolve());
+			t.on("error", () => resolve());
+		} else {
+			try { child.kill("SIGKILL"); } catch (e) { /* déjà mort */ }
+			resolve();
+		}
+	});
+
+	let enfantVu = null;
+	coutures.tuer = async (child) => {
+		enfantVu = child;
+		/* L'espion DÉLÈGUE au vrai geste : la mort est réelle, seule
+		   l'observation est ajoutée. Pas d'export de `tuerArbre` à imiter, donc
+		   le geste lui-même est recopié — `taskkill /T /F` par le PID. */
+		await tuerPourDeBon(child);
+	};
+	delete coutures.delaiGardeMs;
+	let rejetArbre = "(aucun rejet)";
+	let vivantAuReglement = null;
+	await avecFauxCli(dormeur, async () => {
+		const c = new AbortController();
+		const promesse = hostCoutures.process.run({ tool: "codex", args: [], stdin: "", signal: c.signal });
+		await dodo(600); // le repli cmd.exe puis Node : l'enfant tourne
+		c.abort();
+		try {
+			await promesse;
+		} catch (e) {
+			rejetArbre = e.name;
+			vivantAuReglement = enfantVu ? estVivant(enfantVu.pid) : "(enfant inconnu)";
+		}
+	});
+	r.check("après un abandon, run ne se règle qu'une fois l'enfant fermé",
+		{ rejet: rejetArbre, vivantAuReglement }, { rejet: "annule", vivantAuReglement: false });
+
+	/* LE FILET : `tuer` est un no-op, l'enfant ne fermera jamais de lui-même ;
+	   `run` doit rejeter QUAND MÊME, nommé, dans `delaiGardeMs` — réglé PAR LA
+	   COUTURE, jamais en dur ici — et le dire dans la console. L'enfant est tué
+	   pour de bon ensuite, AVANT que `avecFauxCli` n'efface son dossier. */
+	enfantVu = null;
+	coutures.tuer = async (child) => { enfantVu = child; };
+	coutures.delaiGardeMs = 300;
+	const avertissements = [];
+	const warnAvant = console.warn;
+	let rejetFilet = "(aucun rejet)";
+	let dureeFilet = 0;
+	let encoreVivant = null;
+	await avecFauxCli(dormeur, async () => {
+		console.warn = (...a) => { avertissements.push(a.map(String).join(" ")); };
+		const c = new AbortController();
+		const promesse = hostCoutures.process.run({ tool: "codex", args: [], stdin: "", signal: c.signal });
+		await dodo(600);
+		const debut = Date.now();
+		c.abort();
+		try {
+			await promesse;
+		} catch (e) {
+			rejetFilet = e.name;
+		}
+		dureeFilet = Date.now() - debut;
+		console.warn = warnAvant;
+		encoreVivant = enfantVu ? estVivant(enfantVu.pid) : "(enfant inconnu)";
+		if (enfantVu) await tuerPourDeBon(enfantVu);
+	});
+	r.check("après un abandon dont le kill échoue, run rejette quand même, nommé",
+		{
+			rejet: rejetFilet,
+			dansLeDelai: dureeFilet < 3000,
+			encoreVivant,
+			averti: avertissements.some(a => a.includes("n'a pas fermé") && a.includes("annule")),
+		},
+		{ rejet: "annule", dansLeDelai: true, encoreVivant: true, averti: true });
 
 	/* LE DOSSIER EST EFFACÉ EN `finally`, TOUJOURS — les deux sorties de `run`
 	   qui ne sont pas un succès. Un CLI qui sort en erreur RÉSOUT (c'est

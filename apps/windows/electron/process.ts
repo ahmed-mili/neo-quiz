@@ -56,6 +56,7 @@ import type { FichierJoint } from "../../../src/host/jetons";
    été durcie après une injection prouvée. Une seconde copie ici aurait donné
    deux règles pour un même appel du code partagé. */
 import { extensionsExecutables, ligneCmd, porteSautDeLigne } from "../../../src/host/cli-args";
+import { LOG_PREFIX } from "../../../src/branding";
 
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
@@ -432,19 +433,37 @@ export function resoudreExecutable(
  * sont inséparables, et c'est pourquoi elles sont écrites l'une en face de
  * l'autre (voir `lancer`).
  *
- * Best effort, comme l'hôte Obsidian : une erreur ici ne doit pas remplacer le
- * rejet `annule` que l'appelant attend.
+ * ATTENDABLE : la promesse se règle quand `taskkill` a FINI (son propre `close`),
+ * ou aussitôt hors Windows (`kill` est synchrone). `lancer` ne s'en sert pas
+ * pour se régler — c'est le `close` de l'ENFANT qui fait foi, voir ruling 15 —
+ * mais un appelant qui veut savoir peut l'attendre. Best effort, comme l'hôte
+ * Obsidian : une erreur ici ne doit pas remplacer le rejet `annule` que
+ * l'appelant attend, elle se règle donc toujours.
  */
-export function tuerArbre(pid: number | undefined): void {
-	if (typeof pid !== "number" || !Number.isFinite(pid)) return;
-	try {
-		if (process.platform === "win32") {
-			spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
-		} else {
-			process.kill(-pid, "SIGTERM");
+export function tuerArbre(pid: number | undefined): Promise<void> {
+	if (typeof pid !== "number" || !Number.isFinite(pid)) return Promise.resolve();
+	return new Promise(resolve => {
+		try {
+			if (process.platform === "win32") {
+				const tueur = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+				tueur.on("error", () => resolve());
+				tueur.on("close", () => resolve());
+			} else {
+				process.kill(-pid, "SIGTERM");
+				resolve();
+			}
+		} catch (e) {
+			resolve(); // best effort : le filet de `lancer` constatera
 		}
-	} catch (e) { /* best effort : le poll de l'appelant constatera */ }
+	});
 }
+
+/** Le filet de sécurité de `lancer` : combien de temps attendre le `close` de
+    l'enfant après avoir demandé sa mort, avant de rejeter QUAND MÊME. Un
+    `taskkill` qui échoue ou un zombie ne doit jamais faire pendre un `run` —
+    et un `run` qui pend fige le bouton Stop. Un PARAMÈTRE de `lancer`, pour
+    que le contrôle puisse l'éprouver sans attendre cinq secondes. */
+export const DELAI_GARDE_MS = 5000;
 
 /**
  * Lance un exécutable, `stdin` écrit EN ENTIER puis fermé, `stdout` et `stderr`
@@ -469,8 +488,16 @@ export function lancer(spec: {
 	timeoutMs?: number;
 	env?: NodeJS.ProcessEnv;
 	cwd?: string;
+	/* DEUX COUTURES DE CONTRÔLE, comme `env` : ce qu'un contrôle ne peut pas
+	   atteindre n'est pas contrôlé. `tuer` est `tuerArbre` par défaut ; un
+	   contrôle y pose un espion (qui voit le PID) ou un no-op (pour éprouver le
+	   filet). `delaiGardeMs` est `DELAI_GARDE_MS` par défaut. */
+	tuer?: (pid: number | undefined) => Promise<void>;
+	delaiGardeMs?: number;
 }, parCmd = false): Promise<{ stdout: string; stderr: string; code: number | null }> {
 	return new Promise((resolve, reject) => {
+		const tuer = spec.tuer || tuerArbre;
+		const delaiGardeMs = spec.delaiGardeMs ?? DELAI_GARDE_MS;
 		/* DÉJÀ ABANDONNÉ : on ne lance RIEN. Jugé avant le `spawn` et non après,
 		   parce qu'un process lancé puis tué a le temps d'agir — mesuré :
 		   l'enfant écrivait son fichier avant que `taskkill` n'arrive. Le rendu
@@ -520,16 +547,43 @@ export function lancer(spec: {
 		}
 		let fini = false;
 		let minuteur: ReturnType<typeof setTimeout> | null = null;
+		let filet: ReturnType<typeof setTimeout> | null = null;
 		const sortir = (fn: () => void): void => {
 			if (fini) return;
 			fini = true;
 			if (minuteur) clearTimeout(minuteur);
+			if (filet) clearTimeout(filet);
 			spec.signal?.removeEventListener("abort", surAbandon);
 			fn();
 		};
+		/* LE MOTIF, ET NON LE RÈGLEMENT (ruling 15). Un abandon ou un délai
+		   dépassé ne règlent PLUS la promesse eux-mêmes : ils notent POURQUOI,
+		   demandent la mort de l'arbre, et c'est le `close` de l'ENFANT — qui ne
+		   vient qu'une fois l'enfant mort et ses flux fermés, l'arbre avec lui
+		   sous `/T /F` — qui rejette avec ce motif au lieu de résoudre. Sans ça,
+		   `run` se réglait AVANT que le système ait tué quoi que ce soit : le
+		   `finally` de `run` relâchait le verrou de l'outil et celui
+		   d'`avecFichiers` effaçait le dossier temporaire pendant qu'un
+		   petit-enfant lisait encore les pièces jointes, et un second `run` du
+		   même outil pouvait partir pendant que l'arbre précédent écrivait
+		   encore. Le témoin du contrôle ne le voyait pas : il regardait 2,5 s
+		   plus tard, quand tout était fini.
+		   LE FILET : si `close` n'arrive pas dans `delaiGardeMs` après la demande
+		   de mort (un `taskkill` qui échoue, un zombie), on rejette QUAND MÊME
+		   avec le motif, et on le DIT — un `run` ne doit jamais pendre, ce
+		   serait un bouton Stop qui ne rend jamais la main. */
+		let motif: "annule" | "timeout" | null = null;
+		const demanderLaMort = (cause: "annule" | "timeout"): void => {
+			if (fini || motif) return;
+			motif = cause;
+			void tuer(enfant.pid);
+			filet = setTimeout(() => {
+				console.warn(LOG_PREFIX, "CLI", spec.executable, ": l'enfant n'a pas fermé", delaiGardeMs, "ms après", cause, "— rejeté quand même (pid", enfant.pid, ")");
+				sortir(() => reject(erreurCli(cause, "CLI " + (cause === "annule" ? "annulé" : "expiré") + ", sans confirmation de sa mort : " + spec.executable)));
+			}, delaiGardeMs);
+		};
 		function surAbandon(): void {
-			tuerArbre(enfant.pid);
-			sortir(() => reject(erreurCli("annule", "CLI annulé : " + spec.executable)));
+			demanderLaMort("annule");
 		}
 		/* SÉPARÉS, et c'est le contrat : `stderr` porte le diagnostic (« not
 		   logged in »), `stdout` la réponse. Les concaténer rendrait la sortie
@@ -548,12 +602,15 @@ export function lancer(spec: {
 				"CLI " + spec.executable + " : " + e.message,
 			)));
 		});
-		enfant.on("close", (code: number | null) => sortir(() => resolve({ stdout, stderr, code })));
+		enfant.on("close", (code: number | null) => sortir(() => {
+			if (motif) {
+				reject(erreurCli(motif, "CLI " + (motif === "annule" ? "annulé" : "expiré") + " : " + spec.executable));
+				return;
+			}
+			resolve({ stdout, stderr, code });
+		}));
 		if (spec.timeoutMs) {
-			minuteur = setTimeout(() => {
-				tuerArbre(enfant.pid);
-				sortir(() => reject(erreurCli("timeout", "CLI expiré : " + spec.executable)));
-			}, spec.timeoutMs);
+			minuteur = setTimeout(() => demanderLaMort("timeout"), spec.timeoutMs);
 		}
 		/* Le cas « déjà abandonné » est traité tout en haut, avant le `spawn` :
 		   il ne reste ici que l'abandon qui SURVIENDRA. */
@@ -601,7 +658,13 @@ export async function run(spec: {
 	marqueur?: string;
 	fichiers?: FichierJoint[];
 	sortieFichier?: string;
-}, options: { cheminRegle?: string; env?: NodeJS.ProcessEnv } = {}): Promise<{
+}, options: {
+	cheminRegle?: string;
+	env?: NodeJS.ProcessEnv;
+	/** Les deux coutures de `lancer`, transmises telles quelles. */
+	tuer?: (pid: number | undefined) => Promise<void>;
+	delaiGardeMs?: number;
+} = {}): Promise<{
 	stdout: string; stderr: string; code: number | null; sortie?: string;
 }> {
 	const env = options.env || process.env;
@@ -650,6 +713,8 @@ export async function run(spec: {
 				timeoutMs: spec.timeoutMs,
 				env: environnementEnfant(env),
 				cwd: dossierPersonnel(env),
+				tuer: options.tuer,
+				delaiGardeMs: options.delaiGardeMs,
 			});
 		}, env);
 		return Object.assign({}, resultat, { sortie });

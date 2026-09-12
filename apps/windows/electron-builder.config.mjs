@@ -37,8 +37,19 @@ async function lireVersionDuManifeste() {
 
 export default async function () {
 	return {
+		/* IMMUABLE, comme `PLUGIN_ID` : c'est la clé de registre par laquelle
+		   l'installeur NSIS retrouve une installation existante pour la
+		   remplacer. Changé, chaque mise à jour deviendrait une seconde
+		   installation à côté de la première — deux raccourcis, deux entrées
+		   dans « Applications ». `npm run check:package` le fige. */
 		appId: "com.ahmed.neoquiz",
 		productName: "Neo Quiz",
+		/* IMMUABLE aussi. Sans lui, electron-builder dérive le nom du binaire
+		   du `name` de package.json (`@neo-quiz/windows`) et REFUSE le `@` :
+		   c'est ce qui a fait échouer chaque run CI Linux jusqu'au
+		   2026-09-12. Sous Linux, c'est le nom du binaire dans l'AppImage et
+		   de l'entrée `.desktop`. */
+		executableName: "neo-quiz",
 		// Injecte la version du manifeste sans toucher a package.json : c'est
 		// cette valeur qu'electron-builder utilise pour le nom du fichier
 		// produit et les metadonnees de l'installeur.
@@ -51,19 +62,40 @@ export default async function () {
 			// paquet.
 			output: "dist-installer",
 		},
-		files: ["dist/**/*", "dist-electron/**/*", "package.json"],
+		/* Les DEUX sorties et rien d'autre. Le principal est bundlé par esbuild
+		   (`chokidar` compris — raison 2 de l'en-tête de `construire.mjs`), le
+		   rendu par Vite (`lucide` compris) : rien dans le paquet n'appelle
+		   `require` vers `node_modules`. Sans l'exclusion, electron-builder y
+		   copiait 3 659 fichiers de dépendances de production, et les
+		   sourcemaps du principal avec. Si cette affirmation devenait fausse,
+		   l'application ne démarrerait pas : l'épreuve « premier lancement sur
+		   machine propre » l'attraperait. */
+		files: ["dist/**/*", "dist-electron/**/*", "!dist-electron/**/*.map", "!dist/**/*.map", "package.json", "!node_modules/**"],
 		win: {
 			target: "nsis",
 			icon: "icons/icon.ico",
+			// Sans espace : un nom qu'on `curl` sans guillemets depuis la release.
+			artifactName: "neo-quiz-setup-${version}.${ext}",
 		},
 		linux: {
 			target: "AppImage",
 			icon: "icons/icon.png",
 			category: "Education",
+			artifactName: "neo-quiz-${version}.${ext}",
+			/* `StartupWMClass` = `executableName` : c'est ainsi qu'un bureau
+			   Linux relie la fenêtre à son entrée `.desktop` (avertissement
+			   `WM_CLASS` du journal CI). */
+			desktop: { entry: { Name: "Neo Quiz", StartupWMClass: "neo-quiz" } },
 		},
 		nsis: {
 			oneClick: false,
 			allowToChangeInstallationDirectory: true,
+			/* La valeur par défaut, ÉCRITE pour qu'une lecture future ne la
+			   « nettoie » pas : la mise à jour désinstalle l'ancienne version
+			   avant d'installer la neuve, et `userData`
+			   (`%APPDATA%\Neo Quiz\settings.json`, les dossiers ouverts) ne
+			   survit que parce que ceci est faux. */
+			deleteAppDataOnUninstall: false,
 		},
 	};
 }

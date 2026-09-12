@@ -110,6 +110,12 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   arguments sur le repli `cmd.exe`, l'ARBRE tué à l'annulation (un `kill` sur le
   seul parent laisse la génération tourner après le clic sur Stop), et le verrou
   par outil relâché sur TOUTES les issues.
+- `npm run check:package` — la configuration RÉSOLUE d'electron-builder (version
+  = manifeste, `appId` et `executableName` immuables, `files` sans
+  `node_modules` ni sourcemaps, `deleteAppDataOnUninstall` faux) et, si un
+  `win-unpacked/` existe, le contenu de l'asar. `appId` est la clé par laquelle
+  NSIS retrouve l'installation à remplacer ; `executableName` dérivé de
+  `@neo-quiz/windows` a fait échouer chaque run CI Linux jusqu'au 2026-09-12.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` avant `$…$`).
 - `npm run check:ai-providers` — les FOURNISSEURS IA : le catalogue cloud vient
   de `net.fetchJson` (jamais codé en dur), un `/api/tags` qui répond 200 SANS
@@ -416,6 +422,12 @@ entier aurait décoloré 594 fragments des quiz d'Ahmed. Mesurer avant de tranch
   `<racine>/.neo-quiz/`, partagé avec l'app — voir plus haut) ;
   `QUIZ_BLOCK_LANGUAGE = "quiz-blocks"` est écrit dans **chaque note du
   vault**. C'est le rapport entre Obsidian et `.md`.
+
+- **Deux autres valeurs immuables, côté application** : `appId =
+  "com.ahmed.neoquiz"` et `executableName = "neo-quiz"`
+  (`apps/windows/electron-builder.config.mjs`). Le premier est la clé de
+  registre de l'installation NSIS (changé, chaque mise à jour installe une
+  seconde copie), le second le nom du binaire Linux. `check:package` les fige.
 
 - **`manifest.json` vit dans `src/assets/`, pas à la racine** (inhabituel pour un plugin
   Obsidian). La version **réelle** est celle de `src/assets/manifest.json`, bumpée par

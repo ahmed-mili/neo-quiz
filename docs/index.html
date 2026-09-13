@@ -33,8 +33,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		justify-content: center;
-		padding: 24px 16px;
+		padding: 0 16px 40px;
 		text-align: center;
 		/* Même voile sombre que apps/windows/src/assets/shell.css, sur le même
 		   fond d'écran que l'application. */
@@ -46,10 +45,33 @@
 			var(--fond) url("wallpaper.jpg") center / cover no-repeat fixed;
 	}
 
-	.langue {
-		position: fixed;
-		top: 16px;
-		right: 16px;
+	a { color: inherit; }
+
+	/* ===== Barre de navigation ===== */
+
+	.barre {
+		width: 100%;
+		max-width: 960px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 12px 24px;
+		padding: 20px 0;
+	}
+
+	.barre-marque {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-weight: 700;
+		font-size: 16px;
+	}
+
+	.barre-marque img {
+		width: 28px;
+		height: 28px;
+		border-radius: 7px;
 	}
 
 	.langue a {
@@ -64,87 +86,153 @@
 
 	.langue a:hover { color: var(--texte); }
 
+	/* ===== En-tête ===== */
+
+	main {
+		width: 100%;
+		max-width: 960px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+
+	h1 {
+		font-size: 34px;
+		margin: 24px 0 8px;
+	}
+
+	.accroche {
+		color: var(--texte-attenue);
+		font-size: 16px;
+		line-height: 1.5;
+		margin: 0 0 36px;
+		max-width: 560px;
+	}
+
+	/* ===== Cartes plateformes ===== */
+
+	.cartes {
+		width: 100%;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 20px;
+	}
+
 	/* La carte en verre : fond semi-transparent + flou de ce qu'il y a derrière. */
 	.carte {
-		width: 100%;
-		max-width: 440px;
-		padding: 40px 32px;
+		position: relative;
+		width: 220px;
+		padding: 32px 20px 26px;
 		border-radius: 20px;
 		border: 1px solid var(--bordure);
 		background: color-mix(in srgb, var(--fond-secondaire) 55%, transparent);
 		backdrop-filter: blur(18px);
 		-webkit-backdrop-filter: blur(18px);
 		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-	}
-
-	.logo {
-		width: 96px;
-		height: 96px;
-		border-radius: 22px;
-		margin-bottom: 20px;
-	}
-
-	h1 {
-		font-size: 28px;
-		margin: 0 0 12px;
-	}
-
-	.accroche {
-		color: var(--texte-attenue);
-		font-size: 15px;
-		line-height: 1.5;
-		margin: 0 0 32px;
-	}
-
-	.bouton {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 10px;
-		width: 100%;
-		padding: 16px 24px;
-		font-size: 17px;
-		font-weight: 600;
-		color: var(--sur-accent);
-		background: var(--accent);
-		border-radius: 12px;
 		text-decoration: none;
-		box-shadow: 0 8px 24px rgba(101, 143, 242, 0.35);
-	}
-
-	.bouton:hover { filter: brightness(1.08); }
-
-	.bouton svg {
-		width: 20px;
-		height: 20px;
-		flex-shrink: 0;
-	}
-
-	.info-version {
-		margin: 14px 0 0;
-		font-size: 13px;
-		color: var(--texte-attenue);
-	}
-
-	.liens-secondaires {
-		margin: 24px 0 0;
+		color: var(--texte);
 		display: flex;
-		flex-wrap: wrap;
-		gap: 8px 18px;
-		justify-content: center;
+		flex-direction: column;
+		align-items: center;
+		transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+	}
+
+	.carte:hover,
+	.carte:focus-visible {
+		transform: translateY(-2px);
+		border-color: var(--accent);
+		box-shadow: 0 28px 70px rgba(0, 0, 0, 0.55);
+	}
+
+	.carte-icone {
+		width: 56px;
+		height: 56px;
+		margin-bottom: 18px;
+		color: var(--texte);
+	}
+
+	.carte-icone svg {
+		width: 100%;
+		height: 100%;
+	}
+
+	.carte-nom {
+		font-size: 17px;
+		font-weight: 700;
+		margin-bottom: 8px;
+	}
+
+	/* Version affichée sous le nom ; devient un bouton au survol quand le
+	   choix de version est disponible (classe posée par le script). */
+	.carte-version {
 		font-size: 13px;
-	}
-
-	.liens-secondaires a {
 		color: var(--texte-attenue);
-		text-decoration: underline;
+		border: 1px solid transparent;
+		border-radius: 8px;
+		padding: 4px 10px;
+		background: none;
+		font-family: inherit;
 	}
 
-	.liens-secondaires a:hover { color: var(--texte); }
+	.carte-version.selectionnable {
+		cursor: pointer;
+	}
+
+	.carte-version.selectionnable:hover,
+	.carte-version.selectionnable:focus-visible {
+		color: var(--texte);
+		border-color: var(--bordure);
+		background: color-mix(in srgb, var(--fond) 60%, transparent);
+	}
+
+	/* Menu déroulant des versions publiées. */
+	.menu-versions {
+		position: absolute;
+		top: 100%;
+		left: 50%;
+		transform: translateX(-50%);
+		margin-top: 6px;
+		width: 200px;
+		max-height: 240px;
+		overflow-y: auto;
+		border: 1px solid var(--bordure);
+		border-radius: 12px;
+		background: var(--fond-secondaire);
+		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+		z-index: 20;
+		text-align: left;
+		padding: 6px;
+	}
+
+	.menu-versions[hidden] { display: none; }
+
+	.menu-versions .item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 8px 10px;
+		border-radius: 8px;
+		font-size: 13px;
+		cursor: pointer;
+	}
+
+	.menu-versions .item:hover,
+	.menu-versions .item:focus-visible {
+		background: color-mix(in srgb, var(--accent) 20%, transparent);
+	}
+
+	.menu-versions .beta {
+		font-size: 11px;
+		color: var(--texte-attenue);
+	}
+
+	/* ===== Avertissements ===== */
 
 	.avertissements {
-		max-width: 440px;
-		margin-top: 20px;
+		max-width: 480px;
+		margin-top: 32px;
 		font-size: 12px;
 		line-height: 1.6;
 		color: var(--texte-attenue);
@@ -152,74 +240,332 @@
 
 	.avertissements p { margin: 6px 0; }
 
-	.code-source {
-		margin-top: 18px;
+	/* ===== Pied de page ===== */
+
+	.pied {
+		width: 100%;
+		max-width: 960px;
+		margin-top: 48px;
+		padding-top: 28px;
+		border-top: 1px solid var(--bordure);
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: 28px;
+		text-align: left;
 	}
 
-	.code-source a {
+	.pied-marque {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-weight: 700;
+	}
+
+	.pied-marque img {
+		width: 24px;
+		height: 24px;
+		border-radius: 6px;
+	}
+
+	.pied-colonnes {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 40px;
+	}
+
+	.pied-colonne h2 {
+		font-size: 12px;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 		color: var(--texte-attenue);
+		margin: 0 0 12px;
+	}
+
+	.pied-colonne ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.pied-colonne a {
+		color: var(--texte);
+		text-decoration: none;
 		font-size: 13px;
+	}
+
+	.pied-colonne a:hover { text-decoration: underline; }
+
+	.pied-bas {
+		width: 100%;
+		max-width: 960px;
+		margin-top: 20px;
+		padding-top: 16px;
+		border-top: 1px solid var(--bordure);
+		font-size: 12px;
+		color: var(--texte-attenue);
+	}
+
+	/* ===== Repli mobile ===== */
+
+	@media (max-width: 500px) {
+		.barre {
+			flex-direction: column;
+			align-items: center;
+			text-align: center;
+		}
+
+		.langue { position: static; }
+
+		.carte { width: 100%; max-width: 300px; }
 	}
 </style>
 </head>
 <body>
-	<nav class="langue">
-		<a href="en/">English</a>
+	<nav class="barre">
+		<div class="barre-marque">
+			<img src="icon.png" alt="Logo Neo Quiz">
+			Neo Quiz
+		</div>
+		<div class="langue">
+			<a href="en/">English</a>
+		</div>
 	</nav>
 
-	<main class="carte">
-		<img class="logo" src="icon.png" alt="Logo Neo Quiz">
-		<h1>Neo Quiz</h1>
-		<p class="accroche">Des quiz interactifs dans vos notes, générés par vos propres outils IA. Windows, Linux, et Obsidian.</p>
+	<main>
+		<h1>Télécharger</h1>
+		<p class="accroche">Des quiz interactifs dans vos notes, générés par vos propres outils IA.</p>
 
-		<a class="bouton" download
-			href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz-setup.exe">
-			<!-- Icône Lucide « download », tracé inline (pas de CDN, cf. CLAUDE.md du dépôt). -->
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-				stroke-linecap="round" stroke-linejoin="round">
-				<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-				<polyline points="7 10 12 15 17 10"></polyline>
-				<line x1="12" y1="15" x2="12" y2="3"></line>
-			</svg>
-			Télécharger pour Windows
-		</a>
-		<p class="info-version" id="info-version">Windows 10 et 11</p>
+		<div class="cartes" id="cartes">
+			<!-- Windows -->
+			<a class="carte" id="carte-windows"
+				href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz-setup.exe"
+				data-releases-ext=".exe">
+				<span class="carte-icone">
+					<!-- Logo Windows (quatre carreaux), couleur de marque officielle
+					     #0078D4. Absent de Simple Icons (Microsoft n'y figure pas) :
+					     tracé du logo actuel, couleur vérifiée sur learn.microsoft.com. -->
+					<svg viewBox="0 0 24 24" fill="#0078D4">
+						<path d="M3 5.5 10.5 4.4V11.4H3V5.5ZM11.4 4.3 21 3V11.3H11.4V4.3ZM3 12.4H10.5V19.5L3 18.4V12.4ZM11.4 12.4H21V20.9L11.4 19.6V12.4Z"></path>
+					</svg>
+				</span>
+				<span class="carte-nom">Windows</span>
+				<span class="carte-version" id="version-windows">…</span>
+				<div class="menu-versions" id="menu-windows" hidden></div>
+			</a>
 
-		<div class="liens-secondaires">
-			<a href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz.AppImage">Linux (AppImage)</a>
-			<a href="https://github.com/ahmed-mili/neo-quiz#installation">Greffon Obsidian</a>
+			<!-- Linux -->
+			<a class="carte" id="carte-linux"
+				href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz.AppImage"
+				data-releases-ext=".appimage">
+				<span class="carte-icone">
+					<!-- Logo Linux (Tux), tracé officiel Simple Icons
+					     (icons/linux.svg, licence CC0), couleur de marque #FCC624. -->
+					<svg viewBox="0 0 24 24" fill="#FCC624">
+						<path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.132 1.884 1.071.771-.06 1.592-.536 2.257-1.306.631-.765 1.683-1.084 2.378-1.503.348-.199.629-.469.649-.853.023-.4-.2-.811-.714-1.376v-.097l-.003-.003c-.17-.2-.25-.535-.338-.926-.085-.401-.182-.786-.492-1.046h-.003c-.059-.054-.123-.067-.188-.135a.357.357 0 00-.19-.064c.431-1.278.264-2.55-.173-3.694-.533-1.41-1.465-2.638-2.175-3.483-.796-1.005-1.576-1.957-1.56-3.368.026-2.152.236-6.133-3.544-6.139zm.529 3.405h.013c.213 0 .396.062.584.198.19.135.33.332.438.533.105.259.158.459.166.724 0-.02.006-.04.006-.06v.105a.086.086 0 01-.004-.021l-.004-.024a1.807 1.807 0 01-.15.706.953.953 0 01-.213.335.71.71 0 00-.088-.042c-.104-.045-.198-.064-.284-.133a1.312 1.312 0 00-.22-.066c.05-.06.146-.133.183-.198.053-.128.082-.264.088-.402v-.02a1.21 1.21 0 00-.061-.4c-.045-.134-.101-.2-.183-.333-.084-.066-.167-.132-.267-.132h-.016c-.093 0-.176.03-.262.132a.8.8 0 00-.205.334 1.18 1.18 0 00-.09.4v.019c.002.089.008.179.02.267-.193-.067-.438-.135-.607-.202a1.635 1.635 0 01-.018-.2v-.02a1.772 1.772 0 01.15-.768c.082-.22.232-.406.43-.533a.985.985 0 01.594-.2zm-2.962.059h.036c.142 0 .27.048.399.135.146.129.264.288.344.465.09.199.14.4.153.667v.004c.007.134.006.2-.002.266v.08c-.03.007-.056.018-.083.024-.152.055-.274.135-.393.2.012-.09.013-.18.003-.267v-.015c-.012-.133-.04-.2-.082-.333a.613.613 0 00-.166-.267.248.248 0 00-.183-.064h-.021c-.071.006-.13.04-.186.132a.552.552 0 00-.12.27.944.944 0 00-.023.33v.015c.012.135.037.2.08.334.046.134.098.2.166.268.01.009.02.018.034.024-.07.057-.117.07-.176.136a.304.304 0 01-.131.068 2.62 2.62 0 01-.275-.402 1.772 1.772 0 01-.155-.667 1.759 1.759 0 01.08-.668 1.43 1.43 0 01.283-.535c.128-.133.26-.2.418-.2zm1.37 1.706c.332 0 .733.065 1.216.399.293.2.523.269 1.052.468h.003c.255.136.405.266.478.399v-.131a.571.571 0 01.016.47c-.123.31-.516.643-1.063.842v.002c-.268.135-.501.333-.775.465-.276.135-.588.292-1.012.267a1.139 1.139 0 01-.448-.067 3.566 3.566 0 01-.322-.198c-.195-.135-.363-.332-.612-.465v-.005h-.005c-.4-.246-.616-.512-.686-.71-.07-.268-.005-.47.193-.6.224-.135.38-.271.483-.336.104-.074.143-.102.176-.131h.002v-.003c.169-.202.436-.47.839-.601.139-.036.294-.065.466-.065zm2.8 2.142c.358 1.417 1.196 3.475 1.735 4.473.286.534.855 1.659 1.102 3.024.156-.005.33.018.513.064.646-1.671-.546-3.467-1.089-3.966-.22-.2-.232-.335-.123-.335.59.534 1.365 1.572 1.646 2.757.13.535.16 1.104.021 1.67.067.028.135.06.205.067 1.032.534 1.413.938 1.23 1.537v-.043c-.06-.003-.12 0-.18 0h-.016c.151-.467-.182-.825-1.065-1.224-.915-.4-1.646-.336-1.77.465-.008.043-.013.066-.018.135-.068.023-.139.053-.209.064-.43.268-.662.669-.793 1.187-.13.533-.17 1.156-.205 1.869v.003c-.02.334-.17.838-.319 1.35-1.5 1.072-3.58 1.538-5.348.334a2.645 2.645 0 00-.402-.533 1.45 1.45 0 00-.275-.333c.182 0 .338-.03.465-.067a.615.615 0 00.314-.334c.108-.267 0-.697-.345-1.163-.345-.467-.931-.995-1.788-1.521-.63-.4-.986-.87-1.15-1.396-.165-.534-.143-1.085-.015-1.645.245-1.07.873-2.11 1.274-2.763.107-.065.037.135-.408.974-.396.751-1.14 2.497-.122 3.854a8.123 8.123 0 01.647-2.876c.564-1.278 1.743-3.504 1.836-5.268.048.036.217.135.289.202.218.133.38.333.59.465.21.201.477.335.876.335.039.003.075.006.11.006.412 0 .73-.134.997-.268.29-.134.52-.334.74-.4h.005c.467-.135.835-.402 1.044-.7zm2.185 8.958c.037.6.343 1.245.882 1.377.588.134 1.434-.333 1.791-.765l.211-.01c.315-.007.577.01.847.268l.003.003c.208.199.305.53.391.876.085.4.154.78.409 1.066.486.527.645.906.636 1.14l.003-.007v.018l-.003-.012c-.015.262-.185.396-.498.595-.63.401-1.746.712-2.457 1.57-.618.737-1.37 1.14-2.036 1.191-.664.053-1.237-.2-1.574-.898l-.005-.003c-.21-.4-.12-1.025.056-1.69.176-.668.428-1.344.463-1.897.037-.714.076-1.335.195-1.814.12-.465.308-.797.641-.984l.045-.022zm-10.814.049h.01c.053 0 .105.005.157.014.376.055.706.333 1.023.752l.91 1.664.003.003c.243.533.754 1.064 1.189 1.637.434.598.77 1.131.729 1.57v.006c-.057.744-.48 1.148-1.125 1.294-.645.135-1.52.002-2.395-.464-.968-.536-2.118-.469-2.857-.602-.369-.066-.61-.2-.723-.4-.11-.2-.113-.602.123-1.23v-.004l.002-.003c.117-.334.03-.752-.027-1.118-.055-.401-.083-.71.043-.94.16-.334.396-.4.69-.533.294-.135.64-.202.915-.47h.002v-.002c.256-.268.445-.601.668-.838.19-.201.38-.336.663-.336zm7.159-9.074c-.435.201-.945.535-1.488.535-.542 0-.97-.267-1.28-.466-.154-.134-.28-.268-.373-.335-.164-.134-.144-.333-.074-.333.109.016.129.134.199.2.096.066.215.2.36.333.292.2.68.467 1.167.467.485 0 1.053-.267 1.398-.466.195-.135.445-.334.648-.467.156-.136.149-.267.279-.267.128.016.034.134-.147.332a8.097 8.097 0 01-.69.468zm-1.082-1.583V5.64c-.006-.02.013-.042.029-.05.074-.043.18-.027.26.004.063 0 .16.067.15.135-.006.049-.085.066-.135.066-.055 0-.092-.043-.141-.068-.052-.018-.146-.008-.163-.065zm-.551 0c-.02.058-.113.049-.166.066-.047.025-.086.068-.14.068-.05 0-.13-.02-.136-.068-.01-.066.088-.133.15-.133.08-.031.184-.047.259-.005.019.009.036.03.03.05v.02h.003z"></path>
+					</svg>
+				</span>
+				<span class="carte-nom">Linux</span>
+				<span class="carte-version" id="version-linux">…</span>
+				<div class="menu-versions" id="menu-linux" hidden></div>
+			</a>
+
+			<!-- Obsidian -->
+			<a class="carte" id="carte-obsidian"
+				href="https://github.com/ahmed-mili/neo-quiz/blob/main/docs/guide/install.md#obsidian-plugin">
+				<span class="carte-icone">
+					<!-- Logo Obsidian, même tracé que apps/windows/src/ui/marques.ts
+					     (source Simple Icons, licence CC0), couleur de marque #7C3AED. -->
+					<svg viewBox="0 0 24 24" fill="#7C3AED">
+						<path d="M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z"></path>
+					</svg>
+				</span>
+				<span class="carte-nom">Obsidian</span>
+				<span class="carte-version" id="version-obsidian">…</span>
+			</a>
+		</div>
+
+		<div class="avertissements">
+			<p>Windows peut afficher « Windows a protégé votre ordinateur » : cliquez Informations complémentaires, puis Exécuter quand même. L'application n'est pas encore signée.</p>
+			<p>Les mises à jour suivantes sont automatiques.</p>
 		</div>
 	</main>
 
-	<div class="avertissements">
-		<p>Windows peut afficher « Windows a protégé votre ordinateur » : cliquez Informations complémentaires, puis Exécuter quand même. L'application n'est pas encore signée.</p>
-		<p>Les mises à jour suivantes sont automatiques.</p>
-		<p class="code-source"><a href="https://github.com/ahmed-mili/neo-quiz">Code source</a></p>
-	</div>
+	<footer class="pied">
+		<a href="https://github.com/ahmed-mili/neo-quiz">Code source</a>
+		<span aria-hidden="true">·</span>
+		<a href="https://github.com/ahmed-mili/neo-quiz/tree/main/docs/guide">Documentation</a>
+		<span aria-hidden="true">·</span>
+		<a href="https://github.com/ahmed-mili/neo-quiz/issues">Signaler un bug</a>
+		<span aria-hidden="true">·</span>
+		<span>MIT</span>
+	</footer>
 
 	<script>
 		// Version et taille réelles de la dernière release, sans jamais coder
 		// un numéro en dur (cf. CLAUDE.md racine, skill source-of-truth).
-		// En cas d'échec (hors ligne, quota API), la ligne reste sur son texte
-		// par défaut plutôt que d'afficher une erreur.
-		fetch("https://api.github.com/repos/ahmed-mili/neo-quiz/releases/latest")
+		// En cas d'échec (hors ligne, quota API), les cartes restent de simples
+		// liens vers /releases/latest et aucune version ne s'affiche.
+		var DEPOT = "ahmed-mili/neo-quiz";
+
+		// Trouve, dans la liste des assets d'une release, celui dont le nom se
+		// termine par l'extension demandée (insensible à la casse).
+		function trouverActif(assets, extension) {
+			return (assets || []).find(function (a) {
+				return String(a.name || "").toLowerCase().endsWith(extension);
+			});
+		}
+
+		function formaterTaille(octets) {
+			return Math.round(octets / (1024 * 1024)) + " Mo";
+		}
+
+		// Remplit la version affichée sous le nom d'une plateforme, à partir de
+		// la dernière release. `extension` vaut null pour Obsidian (pas d'asset
+		// dédié : seul le numéro de version compte).
+		function afficherVersionCourante(id, donnees, extension) {
+			var el = document.getElementById(id);
+			if (!el) return;
+			var version = String(donnees.tag_name || "").replace(/^v/, "");
+			if (!version) return;
+			if (!extension) {
+				el.textContent = "v" + version;
+				return;
+			}
+			var actif = trouverActif(donnees.assets, extension);
+			if (!actif) return;
+			el.textContent = "v" + version + " · " + formaterTaille(actif.size);
+		}
+
+		fetch("https://api.github.com/repos/" + DEPOT + "/releases/latest")
 			.then(function (reponse) {
 				if (!reponse.ok) throw new Error("reponse non ok");
 				return reponse.json();
 			})
 			.then(function (donnees) {
-				var version = String(donnees.tag_name || "").replace(/^v/, "");
-				var actif = (donnees.assets || []).find(function (a) {
-					return a.name === "neo-quiz-setup.exe";
-				});
-				if (!version || !actif) return;
-				var mo = Math.round(actif.size / (1024 * 1024));
-				document.getElementById("info-version").textContent =
-					"Version " + version + " · " + mo + " Mo · Windows 10 et 11";
+				afficherVersionCourante("version-windows", donnees, ".exe");
+				afficherVersionCourante("version-linux", donnees, ".appimage");
+				afficherVersionCourante("version-obsidian", donnees, null);
+				activerSelecteurVersion("windows", ".exe");
+				activerSelecteurVersion("linux", ".appimage");
 			})
 			.catch(function () {
-				// Ligne par défaut déjà en place, rien à faire.
+				// Textes « … » restent visibles ; on les efface plutôt que de
+				// mentir sur une version qu'on n'a pas pu vérifier.
+				["version-windows", "version-linux", "version-obsidian"].forEach(function (id) {
+					var el = document.getElementById(id);
+					if (el) el.textContent = "";
+				});
 			});
+
+		// Rend la version d'une plateforme cliquable : au clic, un menu liste
+		// les dix dernières releases publiées et télécharge celle choisie.
+		function activerSelecteurVersion(plateforme, extension) {
+			var bouton = document.getElementById("version-" + plateforme);
+			var menu = document.getElementById("menu-" + plateforme);
+			var carte = document.getElementById("carte-" + plateforme);
+			if (!bouton || !menu || !carte) return;
+
+			bouton.classList.add("selectionnable");
+			bouton.setAttribute("tabindex", "0");
+			bouton.setAttribute("role", "button");
+			bouton.setAttribute("aria-haspopup", "true");
+
+			var releasesChargees = null;
+
+			function fermerMenu() {
+				menu.hidden = true;
+			}
+
+			function remplirMenu(releases) {
+				menu.innerHTML = "";
+				releases.slice(0, 10).forEach(function (release) {
+					var actif = trouverActif(release.assets, extension);
+					if (!actif) return;
+					var version = String(release.tag_name || "").replace(/^v/, "");
+					if (!version) return;
+					var item = document.createElement("div");
+					item.className = "item";
+					item.tabIndex = 0;
+					item.setAttribute("role", "menuitem");
+
+					var libelle = document.createElement("span");
+					libelle.textContent = "v" + version;
+					item.appendChild(libelle);
+
+					if (release.prerelease) {
+						var beta = document.createElement("span");
+						beta.className = "beta";
+						beta.textContent = "bêta";
+						item.appendChild(beta);
+					}
+
+					function choisir() {
+						fermerMenu();
+						window.location.href = actif.browser_download_url;
+					}
+
+					item.addEventListener("click", function (e) {
+						e.preventDefault();
+						e.stopPropagation();
+						choisir();
+					});
+					item.addEventListener("keydown", function (e) {
+						if (e.key === "Enter" || e.key === " ") {
+							e.preventDefault();
+							e.stopPropagation();
+							choisir();
+						}
+					});
+
+					menu.appendChild(item);
+				});
+			}
+
+			function ouvrirMenu() {
+				if (releasesChargees) {
+					remplirMenu(releasesChargees);
+					menu.hidden = false;
+					return;
+				}
+				fetch("https://api.github.com/repos/" + DEPOT + "/releases")
+					.then(function (reponse) {
+						if (!reponse.ok) throw new Error("reponse non ok");
+						return reponse.json();
+					})
+					.then(function (releases) {
+						releasesChargees = releases;
+						remplirMenu(releases);
+						menu.hidden = false;
+					})
+					.catch(function () {
+						// Liste indisponible : le clic sur la version ne fait
+						// simplement rien, la carte reste un lien vers latest.
+					});
+			}
+
+			function basculerMenu(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if (menu.hidden) ouvrirMenu();
+				else fermerMenu();
+			}
+
+			bouton.addEventListener("click", basculerMenu);
+			bouton.addEventListener("keydown", function (e) {
+				if (e.key === "Enter" || e.key === " ") basculerMenu(e);
+			});
+
+			document.addEventListener("click", function (e) {
+				if (!carte.contains(e.target)) fermerMenu();
+			});
+			document.addEventListener("keydown", function (e) {
+				if (e.key === "Escape") fermerMenu();
+			});
+		}
 	</script>
 </body>
 </html>

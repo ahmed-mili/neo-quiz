@@ -33,8 +33,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		justify-content: center;
-		padding: 24px 16px;
+		padding: 0 16px 40px;
 		text-align: center;
 		/* Same dark overlay as apps/windows/src/assets/shell.css, over the
 		   same wallpaper as the app. */
@@ -46,11 +45,47 @@
 			var(--fond) url("../wallpaper.jpg") center / cover no-repeat fixed;
 	}
 
-	.langue {
-		position: fixed;
-		top: 16px;
-		right: 16px;
+	a { color: inherit; }
+
+	/* ===== Nav bar ===== */
+
+	.barre {
+		width: 100%;
+		max-width: 960px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 12px 24px;
+		padding: 20px 0;
 	}
+
+	.barre-marque {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-weight: 700;
+		font-size: 16px;
+	}
+
+	.barre-marque img {
+		width: 28px;
+		height: 28px;
+		border-radius: 7px;
+	}
+
+	.barre-liens {
+		display: flex;
+		gap: 24px;
+		font-size: 14px;
+	}
+
+	.barre-liens a {
+		color: var(--texte-attenue);
+		text-decoration: none;
+	}
+
+	.barre-liens a:hover { color: var(--texte); }
 
 	.langue a {
 		color: var(--texte-attenue);
@@ -64,87 +99,153 @@
 
 	.langue a:hover { color: var(--texte); }
 
+	/* ===== Header ===== */
+
+	main {
+		width: 100%;
+		max-width: 960px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+
+	h1 {
+		font-size: 34px;
+		margin: 24px 0 8px;
+	}
+
+	.accroche {
+		color: var(--texte-attenue);
+		font-size: 16px;
+		line-height: 1.5;
+		margin: 0 0 36px;
+		max-width: 560px;
+	}
+
+	/* ===== Platform cards ===== */
+
+	.cartes {
+		width: 100%;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 20px;
+	}
+
 	/* Glass card: semi-transparent background + blur of what is behind it. */
 	.carte {
-		width: 100%;
-		max-width: 440px;
-		padding: 40px 32px;
+		position: relative;
+		width: 220px;
+		padding: 32px 20px 26px;
 		border-radius: 20px;
 		border: 1px solid var(--bordure);
 		background: color-mix(in srgb, var(--fond-secondaire) 55%, transparent);
 		backdrop-filter: blur(18px);
 		-webkit-backdrop-filter: blur(18px);
 		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-	}
-
-	.logo {
-		width: 96px;
-		height: 96px;
-		border-radius: 22px;
-		margin-bottom: 20px;
-	}
-
-	h1 {
-		font-size: 28px;
-		margin: 0 0 12px;
-	}
-
-	.accroche {
-		color: var(--texte-attenue);
-		font-size: 15px;
-		line-height: 1.5;
-		margin: 0 0 32px;
-	}
-
-	.bouton {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 10px;
-		width: 100%;
-		padding: 16px 24px;
-		font-size: 17px;
-		font-weight: 600;
-		color: var(--sur-accent);
-		background: var(--accent);
-		border-radius: 12px;
 		text-decoration: none;
-		box-shadow: 0 8px 24px rgba(101, 143, 242, 0.35);
-	}
-
-	.bouton:hover { filter: brightness(1.08); }
-
-	.bouton svg {
-		width: 20px;
-		height: 20px;
-		flex-shrink: 0;
-	}
-
-	.info-version {
-		margin: 14px 0 0;
-		font-size: 13px;
-		color: var(--texte-attenue);
-	}
-
-	.liens-secondaires {
-		margin: 24px 0 0;
+		color: var(--texte);
 		display: flex;
-		flex-wrap: wrap;
-		gap: 8px 18px;
-		justify-content: center;
+		flex-direction: column;
+		align-items: center;
+		transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+	}
+
+	.carte:hover,
+	.carte:focus-visible {
+		transform: translateY(-2px);
+		border-color: var(--accent);
+		box-shadow: 0 28px 70px rgba(0, 0, 0, 0.55);
+	}
+
+	.carte-icone {
+		width: 56px;
+		height: 56px;
+		margin-bottom: 18px;
+		color: var(--texte);
+	}
+
+	.carte-icone svg {
+		width: 100%;
+		height: 100%;
+	}
+
+	.carte-nom {
+		font-size: 17px;
+		font-weight: 700;
+		margin-bottom: 8px;
+	}
+
+	/* Version shown below the name; becomes a button on hover when a version
+	   choice is available (class set by the script). */
+	.carte-version {
 		font-size: 13px;
-	}
-
-	.liens-secondaires a {
 		color: var(--texte-attenue);
-		text-decoration: underline;
+		border: 1px solid transparent;
+		border-radius: 8px;
+		padding: 4px 10px;
+		background: none;
+		font-family: inherit;
 	}
 
-	.liens-secondaires a:hover { color: var(--texte); }
+	.carte-version.selectionnable {
+		cursor: pointer;
+	}
+
+	.carte-version.selectionnable:hover,
+	.carte-version.selectionnable:focus-visible {
+		color: var(--texte);
+		border-color: var(--bordure);
+		background: color-mix(in srgb, var(--fond) 60%, transparent);
+	}
+
+	/* Dropdown menu of published versions. */
+	.menu-versions {
+		position: absolute;
+		top: 100%;
+		left: 50%;
+		transform: translateX(-50%);
+		margin-top: 6px;
+		width: 200px;
+		max-height: 240px;
+		overflow-y: auto;
+		border: 1px solid var(--bordure);
+		border-radius: 12px;
+		background: var(--fond-secondaire);
+		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+		z-index: 20;
+		text-align: left;
+		padding: 6px;
+	}
+
+	.menu-versions[hidden] { display: none; }
+
+	.menu-versions .item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 8px 10px;
+		border-radius: 8px;
+		font-size: 13px;
+		cursor: pointer;
+	}
+
+	.menu-versions .item:hover,
+	.menu-versions .item:focus-visible {
+		background: color-mix(in srgb, var(--accent) 20%, transparent);
+	}
+
+	.menu-versions .beta {
+		font-size: 11px;
+		color: var(--texte-attenue);
+	}
+
+	/* ===== Warnings ===== */
 
 	.avertissements {
-		max-width: 440px;
-		margin-top: 20px;
+		max-width: 480px;
+		margin-top: 32px;
 		font-size: 12px;
 		line-height: 1.6;
 		color: var(--texte-attenue);
@@ -152,73 +253,358 @@
 
 	.avertissements p { margin: 6px 0; }
 
-	.code-source {
-		margin-top: 18px;
+	/* ===== Footer ===== */
+
+	.pied {
+		width: 100%;
+		max-width: 960px;
+		margin-top: 48px;
+		padding-top: 28px;
+		border-top: 1px solid var(--bordure);
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: 28px;
+		text-align: left;
 	}
 
-	.code-source a {
+	.pied-marque {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-weight: 700;
+	}
+
+	.pied-marque img {
+		width: 24px;
+		height: 24px;
+		border-radius: 6px;
+	}
+
+	.pied-colonnes {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 40px;
+	}
+
+	.pied-colonne h2 {
+		font-size: 12px;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 		color: var(--texte-attenue);
+		margin: 0 0 12px;
+	}
+
+	.pied-colonne ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.pied-colonne a {
+		color: var(--texte);
+		text-decoration: none;
 		font-size: 13px;
+	}
+
+	.pied-colonne a:hover { text-decoration: underline; }
+
+	.pied-bas {
+		width: 100%;
+		max-width: 960px;
+		margin-top: 20px;
+		padding-top: 16px;
+		border-top: 1px solid var(--bordure);
+		font-size: 12px;
+		color: var(--texte-attenue);
+	}
+
+	/* ===== Mobile fallback ===== */
+
+	@media (max-width: 500px) {
+		.barre {
+			flex-direction: column;
+			align-items: center;
+			text-align: center;
+		}
+
+		.langue { position: static; }
+
+		.carte { width: 100%; max-width: 300px; }
 	}
 </style>
 </head>
 <body>
-	<nav class="langue">
-		<a href="../">Français</a>
+	<nav class="barre">
+		<div class="barre-marque">
+			<img src="../icon.png" alt="Neo Quiz logo">
+			Neo Quiz
+		</div>
+		<div class="barre-liens">
+			<a href="#cartes">Download</a>
+			<a href="https://github.com/ahmed-mili/neo-quiz/tree/main/docs/guide">Documentation</a>
+			<a href="https://github.com/ahmed-mili/neo-quiz">GitHub</a>
+		</div>
+		<div class="langue">
+			<a href="../">Français</a>
+		</div>
 	</nav>
 
-	<main class="carte">
-		<img class="logo" src="../icon.png" alt="Neo Quiz logo">
-		<h1>Neo Quiz</h1>
-		<p class="accroche">Interactive quizzes inside your notes, generated by your own local AI tools. Windows, Linux, and Obsidian.</p>
+	<main>
+		<h1>Download</h1>
+		<p class="accroche">Interactive quizzes inside your notes, generated by your own AI tools.</p>
 
-		<a class="bouton" download
-			href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz-setup.exe">
-			<!-- Lucide "download" icon, inline path (no CDN, per the repo's CLAUDE.md). -->
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-				stroke-linecap="round" stroke-linejoin="round">
-				<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-				<polyline points="7 10 12 15 17 10"></polyline>
-				<line x1="12" y1="15" x2="12" y2="3"></line>
-			</svg>
-			Download for Windows
-		</a>
-		<p class="info-version" id="info-version">Windows 10 and 11</p>
+		<div class="cartes" id="cartes">
+			<!-- Windows -->
+			<a class="carte" id="carte-windows"
+				href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz-setup.exe"
+				data-releases-ext=".exe">
+				<span class="carte-icone">
+					<!-- Windows logo (four tiles), official brand color #0078D4.
+					     Absent from Simple Icons (Microsoft is not listed there):
+					     current logo shape, color checked on learn.microsoft.com. -->
+					<svg viewBox="0 0 24 24" fill="#0078D4">
+						<path d="M3 5.5 10.5 4.4V11.4H3V5.5ZM11.4 4.3 21 3V11.3H11.4V4.3ZM3 12.4H10.5V19.5L3 18.4V12.4ZM11.4 12.4H21V20.9L11.4 19.6V12.4Z"></path>
+					</svg>
+				</span>
+				<span class="carte-nom">Windows</span>
+				<span class="carte-version" id="version-windows">…</span>
+				<div class="menu-versions" id="menu-windows" hidden></div>
+			</a>
 
-		<div class="liens-secondaires">
-			<a href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz.AppImage">Linux (AppImage)</a>
-			<a href="https://github.com/ahmed-mili/neo-quiz#installation">Obsidian plugin</a>
+			<!-- Linux -->
+			<a class="carte" id="carte-linux"
+				href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz.AppImage"
+				data-releases-ext=".appimage">
+				<span class="carte-icone">
+					<!-- Simplified Tux, inline path. -->
+					<svg viewBox="0 0 24 24" fill="currentColor">
+						<path d="M12 2c-1.7 0-3 1.6-3 3.6 0 1 .3 1.9.8 2.6-1.4.7-2.4 2.3-2.7 4.2-.2 1.2-1.5 1.6-2.1 2.9-.4.9 0 1.9.9 2 .5.1.7.5.6 1-.2.9.6 1.7 1.6 1.4.6-.2 1 .1 1.1.6.2.8 1.2 1.1 1.9.6.5-.4 1-.4 1.5-.4h1.6c.5 0 1 0 1.5.4.7.5 1.7.2 1.9-.6.1-.5.5-.8 1.1-.6 1 .3 1.8-.5 1.6-1.4-.1-.5.1-.9.6-1 .9-.1 1.3-1.1.9-2-.6-1.3-1.9-1.7-2.1-2.9-.3-1.9-1.3-3.5-2.7-4.2.5-.7.8-1.6.8-2.6C15 3.6 13.7 2 12 2Zm-1.7 5.4c.4 0 .8.5.8 1.1s-.4 1.1-.8 1.1-.8-.5-.8-1.1.4-1.1.8-1.1Zm3.4 0c.4 0 .8.5.8 1.1s-.4 1.1-.8 1.1-.8-.5-.8-1.1.4-1.1.8-1.1ZM12 10.4c.6 0 1.3.5 1.3 1.1 0 .5-.5.8-1.3 1.5-.8-.7-1.3-1-1.3-1.5 0-.6.7-1.1 1.3-1.1Z"></path>
+					</svg>
+				</span>
+				<span class="carte-nom">Linux</span>
+				<span class="carte-version" id="version-linux">…</span>
+				<div class="menu-versions" id="menu-linux" hidden></div>
+			</a>
+
+			<!-- Obsidian -->
+			<a class="carte" id="carte-obsidian"
+				href="https://github.com/ahmed-mili/neo-quiz/blob/main/docs/guide/install.md#obsidian-plugin">
+				<span class="carte-icone">
+					<!-- Obsidian logo, same path as apps/windows/src/ui/marques.ts. -->
+					<svg viewBox="0 0 24 24" fill="currentColor">
+						<path d="M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z"></path>
+					</svg>
+				</span>
+				<span class="carte-nom">Obsidian</span>
+				<span class="carte-version" id="version-obsidian">…</span>
+			</a>
+		</div>
+
+		<div class="avertissements">
+			<p>Windows may show "Windows protected your PC": click More info, then Run anyway. The app is not code-signed yet.</p>
+			<p>Later updates are automatic.</p>
 		</div>
 	</main>
 
-	<div class="avertissements">
-		<p>Windows may show "Windows protected your PC": click More info, then Run anyway. The app is not code-signed yet.</p>
-		<p>Later updates are automatic.</p>
-		<p class="code-source"><a href="https://github.com/ahmed-mili/neo-quiz">Source code</a></p>
-	</div>
+	<footer class="pied">
+		<div class="pied-marque">
+			<img src="../icon.png" alt="Neo Quiz logo">
+			Neo Quiz
+		</div>
+		<div class="pied-colonnes">
+			<div class="pied-colonne">
+				<h2>Download</h2>
+				<ul>
+					<li><a href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz-setup.exe">Windows</a></li>
+					<li><a href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz.AppImage">Linux</a></li>
+					<li><a href="https://github.com/ahmed-mili/neo-quiz/blob/main/docs/guide/install.md#obsidian-plugin">Obsidian</a></li>
+				</ul>
+			</div>
+			<div class="pied-colonne">
+				<h2>Support</h2>
+				<ul>
+					<li><a href="https://github.com/ahmed-mili/neo-quiz/issues">Report a bug</a></li>
+					<li><a href="https://github.com/ahmed-mili/neo-quiz/tree/main/docs/guide">Documentation</a></li>
+				</ul>
+			</div>
+			<div class="pied-colonne">
+				<h2>Project</h2>
+				<ul>
+					<li><a href="https://github.com/ahmed-mili/neo-quiz">Source code</a></li>
+					<li><a href="https://github.com/ahmed-mili/neo-quiz/blob/main/LICENSE">MIT license</a></li>
+				</ul>
+			</div>
+		</div>
+	</footer>
+
+	<div class="pied-bas">Neo Quiz · MIT</div>
 
 	<script>
 		// Real version and size of the latest release, never hardcoded
 		// (see root CLAUDE.md, source-of-truth skill). On failure (offline,
-		// API quota) the line keeps its default text instead of showing an error.
-		fetch("https://api.github.com/repos/ahmed-mili/neo-quiz/releases/latest")
+		// API quota) the cards stay plain links to /releases/latest and no
+		// version is shown.
+		var DEPOT = "ahmed-mili/neo-quiz";
+
+		// Finds, among a release's assets, the one whose name ends with the
+		// requested extension (case-insensitive).
+		function trouverActif(assets, extension) {
+			return (assets || []).find(function (a) {
+				return String(a.name || "").toLowerCase().endsWith(extension);
+			});
+		}
+
+		function formaterTaille(octets) {
+			return Math.round(octets / (1024 * 1024)) + " MB";
+		}
+
+		// Fills in the version shown below a platform's name, from the latest
+		// release. `extension` is null for Obsidian (no dedicated asset: only
+		// the version number matters).
+		function afficherVersionCourante(id, donnees, extension) {
+			var el = document.getElementById(id);
+			if (!el) return;
+			var version = String(donnees.tag_name || "").replace(/^v/, "");
+			if (!version) return;
+			if (!extension) {
+				el.textContent = "v" + version;
+				return;
+			}
+			var actif = trouverActif(donnees.assets, extension);
+			if (!actif) return;
+			el.textContent = "v" + version + " · " + formaterTaille(actif.size);
+		}
+
+		fetch("https://api.github.com/repos/" + DEPOT + "/releases/latest")
 			.then(function (reponse) {
 				if (!reponse.ok) throw new Error("bad response");
 				return reponse.json();
 			})
 			.then(function (donnees) {
-				var version = String(donnees.tag_name || "").replace(/^v/, "");
-				var actif = (donnees.assets || []).find(function (a) {
-					return a.name === "neo-quiz-setup.exe";
-				});
-				if (!version || !actif) return;
-				var mo = Math.round(actif.size / (1024 * 1024));
-				document.getElementById("info-version").textContent =
-					"Version " + version + " · " + mo + " MB · Windows 10 and 11";
+				afficherVersionCourante("version-windows", donnees, ".exe");
+				afficherVersionCourante("version-linux", donnees, ".appimage");
+				afficherVersionCourante("version-obsidian", donnees, null);
+				activerSelecteurVersion("windows", ".exe");
+				activerSelecteurVersion("linux", ".appimage");
 			})
 			.catch(function () {
-				// Default line already in place, nothing to do.
+				// The "…" placeholders stay if we clear them: better than
+				// showing a version we could not verify.
+				["version-windows", "version-linux", "version-obsidian"].forEach(function (id) {
+					var el = document.getElementById(id);
+					if (el) el.textContent = "";
+				});
 			});
+
+		// Makes a platform's version clickable: on click, a menu lists the
+		// last ten published releases and downloads the chosen one.
+		function activerSelecteurVersion(plateforme, extension) {
+			var bouton = document.getElementById("version-" + plateforme);
+			var menu = document.getElementById("menu-" + plateforme);
+			var carte = document.getElementById("carte-" + plateforme);
+			if (!bouton || !menu || !carte) return;
+
+			bouton.classList.add("selectionnable");
+			bouton.setAttribute("tabindex", "0");
+			bouton.setAttribute("role", "button");
+			bouton.setAttribute("aria-haspopup", "true");
+
+			var releasesChargees = null;
+
+			function fermerMenu() {
+				menu.hidden = true;
+			}
+
+			function remplirMenu(releases) {
+				menu.innerHTML = "";
+				releases.slice(0, 10).forEach(function (release) {
+					var actif = trouverActif(release.assets, extension);
+					if (!actif) return;
+					var version = String(release.tag_name || "").replace(/^v/, "");
+					if (!version) return;
+					var item = document.createElement("div");
+					item.className = "item";
+					item.tabIndex = 0;
+					item.setAttribute("role", "menuitem");
+
+					var libelle = document.createElement("span");
+					libelle.textContent = "v" + version;
+					item.appendChild(libelle);
+
+					if (release.prerelease) {
+						var beta = document.createElement("span");
+						beta.className = "beta";
+						beta.textContent = "beta";
+						item.appendChild(beta);
+					}
+
+					function choisir() {
+						fermerMenu();
+						window.location.href = actif.browser_download_url;
+					}
+
+					item.addEventListener("click", function (e) {
+						e.preventDefault();
+						e.stopPropagation();
+						choisir();
+					});
+					item.addEventListener("keydown", function (e) {
+						if (e.key === "Enter" || e.key === " ") {
+							e.preventDefault();
+							e.stopPropagation();
+							choisir();
+						}
+					});
+
+					menu.appendChild(item);
+				});
+			}
+
+			function ouvrirMenu() {
+				if (releasesChargees) {
+					remplirMenu(releasesChargees);
+					menu.hidden = false;
+					return;
+				}
+				fetch("https://api.github.com/repos/" + DEPOT + "/releases")
+					.then(function (reponse) {
+						if (!reponse.ok) throw new Error("bad response");
+						return reponse.json();
+					})
+					.then(function (releases) {
+						releasesChargees = releases;
+						remplirMenu(releases);
+						menu.hidden = false;
+					})
+					.catch(function () {
+						// List unavailable: clicking the version simply does
+						// nothing, the card stays a link to latest.
+					});
+			}
+
+			function basculerMenu(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if (menu.hidden) ouvrirMenu();
+				else fermerMenu();
+			}
+
+			bouton.addEventListener("click", basculerMenu);
+			bouton.addEventListener("keydown", function (e) {
+				if (e.key === "Enter" || e.key === " ") basculerMenu(e);
+			});
+
+			document.addEventListener("click", function (e) {
+				if (!carte.contains(e.target)) fermerMenu();
+			});
+			document.addEventListener("keydown", function (e) {
+				if (e.key === "Escape") fermerMenu();
+			});
+		}
 	</script>
 </body>
 </html>

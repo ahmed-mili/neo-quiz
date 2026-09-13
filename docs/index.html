@@ -509,6 +509,9 @@
 
 	/* ===== La modale Obsidian ===== */
 	.modale { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+	/* `display: flex` écraserait l'attribut `hidden` : la modale s'ouvrait
+	   toute seule au chargement. */
+	.modale[hidden] { display: none; }
 	.modale-fond { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
 	.modale-panneau {
 		position: relative;
@@ -543,6 +546,7 @@
 	}
 	.etape h3 { margin: 0 0 6px; font-size: 15px; }
 	.etape p { margin: 0 0 12px; font-size: 13.5px; line-height: 1.6; color: var(--texte-attenue); }
+	.etape p a { color: var(--texte); text-decoration: underline; text-underline-offset: 2px; }
 	.bouton-etape {
 		display: inline-block; padding: 9px 16px; border-radius: 10px;
 		border: 1px solid var(--bordure);
@@ -672,7 +676,7 @@
 			<p class="modale-sous">Deux clics : BRAT, puis Neo Quiz.</p>
 			<div class="etape">
 				<h3>1. Installer BRAT</h3>
-				<p>BRAT est le plugin d'Obsidian qui installe des plugins depuis GitHub et les met à jour tout seul.</p>
+				<p><a href="https://github.com/TfTHacker/obsidian42-brat">BRAT</a> installe des plugins depuis GitHub et les met à jour tout seul.</p>
 				<a class="bouton-etape" href="obsidian://show-plugin?id=obsidian42-brat">Installer BRAT</a>
 			</div>
 			<div class="etape">

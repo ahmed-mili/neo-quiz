@@ -502,17 +502,10 @@ body {
 .nq-barre-controle:focus-visible { outline: 1px solid color-mix(in srgb, var(--text-normal) 50%, transparent); outline-offset: -1px; }
 .nq-barre-controle svg, .nq-barre-menu svg { transition: opacity 100ms ease; }
 .nq-barre-controle { transition: color 100ms ease; }
-.nq-barre-menu svg { width: 16px; height: 16px; }
-/* Les trois glyphes de Lucide n'occupent pas la même part de leur boîte de
-   24 (le trait fait 14, le carré 18, la croix 12) : sans correction, la croix
-   paraît petite et le carré énorme. Chaque boîte est mise à l'échelle pour
-   que le DESSIN fasse ~9,5 px dans les trois cas. Trait fin (1,5) : les
-   contrôles de Windows 11 sont des traits, pas des pictogrammes. */
-.nq-barre-controle svg { stroke-width: 1.5; }
-.nq-barre-controle[data-icone="minus"] svg { width: 16px; height: 16px; }
-.nq-barre-controle[data-icone="square"] svg { width: 12.5px; height: 12.5px; }
-.nq-barre-controle[data-icone="copy"] svg { width: 13px; height: 13px; }
-.nq-barre-controle[data-icone="x"] svg { width: 19px; height: 19px; }
+/* Les glyphes portent leur taille (attributs `width`/`height`, reprise de
+   Neo Calendar : 16, 20, 24) ; seul « restaurer », icône Lucide, est fixé ici
+   à 16 px comme `.nc-desktop-window-control > svg` chez la référence. */
+.nq-barre-controle svg.svg-icon { width: 16px; height: 16px; }
 .nq-barre[data-focused="false"] .nq-barre-menu svg, .nq-barre[data-focused="false"] .nq-barre-controle svg { opacity: 0.3; }
 #neo-quiz-root { padding-top: var(--nq-barre-hauteur); box-sizing: border-box; }
 

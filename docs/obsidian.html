@@ -511,6 +511,50 @@
 		font-size: 13px;
 	}
 	.page-obsidian .retour a { color: var(--texte-attenue); }
+
+	/* Les deux étapes BRAT : un paragraphe et un bouton chacune, rien à
+	   copier. Le second bouton est accentué : c'est l'arrivée. */
+	.etapes-brat .etape {
+		border: 1px solid var(--bordure);
+		border-radius: 14px;
+		padding: 18px 20px;
+		background: color-mix(in srgb, var(--fond-secondaire) 55%, transparent);
+		backdrop-filter: blur(18px);
+		-webkit-backdrop-filter: blur(18px);
+		margin-bottom: 14px;
+	}
+	.etapes-brat .etape h2 {
+		margin: 0 0 6px;
+		text-transform: none;
+		letter-spacing: 0;
+		font-size: 15px;
+		color: var(--texte);
+	}
+	.etapes-brat .etape p {
+		margin: 0 0 14px;
+		font-size: 13.5px;
+		line-height: 1.6;
+		color: var(--texte-attenue);
+	}
+	.bouton-etape {
+		display: inline-block;
+		padding: 9px 16px;
+		border-radius: 10px;
+		border: 1px solid var(--bordure);
+		background: color-mix(in srgb, var(--fond) 60%, transparent);
+		color: var(--texte);
+		text-decoration: none;
+		font-size: 13.5px;
+		font-weight: 600;
+		transition: border-color 100ms ease, background-color 100ms ease;
+	}
+	.bouton-etape:hover { border-color: var(--accent); }
+	.bouton-etape--accent {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: #fff;
+	}
+	.bouton-etape--accent:hover { filter: brightness(1.08); }
 </style>
 </head>
 <body>
@@ -536,39 +580,20 @@
 
 	<main class="page-obsidian">
 		<h1>Neo Quiz pour Obsidian</h1>
-		<p class="sous-titre">Une commande installe le plugin dans votre vault, ou en crée un.</p>
+		<p class="sous-titre">Deux clics : BRAT, puis Neo Quiz.</p>
 
-		<section class="bloc-install">
-			<h2>Windows (PowerShell)</h2>
-			<div class="carte-code">
-				<code id="commande-ps">irm https://ahmed-mili.github.io/neo-quiz/install.ps1 | iex</code>
-				<button class="carte-copier" id="copier-ps" data-cible="commande-ps" aria-label="Copier">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<rect x="9" y="9" width="13" height="13" rx="2"></rect>
-						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-					</svg>
-				</button>
+		<section class="bloc-install etapes-brat">
+			<div class="etape">
+				<h2>1. Installer BRAT</h2>
+				<p>BRAT est le plugin d'Obsidian qui installe des plugins depuis GitHub et les met à jour tout seul.</p>
+				<a class="bouton-etape" href="obsidian://show-plugin?id=obsidian42-brat">Installer BRAT</a>
 			</div>
-			<h2>Linux</h2>
-			<div class="carte-code">
-				<code id="commande-sh-code">curl -fsSL https://ahmed-mili.github.io/neo-quiz/install.sh | bash</code>
-				<button class="carte-copier" id="copier-sh" data-cible="commande-sh-code" aria-label="Copier">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<rect x="9" y="9" width="13" height="13" rx="2"></rect>
-						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-					</svg>
-				</button>
+			<div class="etape">
+				<h2>2. Installer Neo Quiz</h2>
+				<p>Obsidian s'ouvre et BRAT ajoute Neo Quiz au vault courant. Activez-le si Obsidian le demande.</p>
+				<a class="bouton-etape bouton-etape--accent" href="obsidian://brat?plugin=ahmed-mili/neo-quiz">Installer Neo Quiz</a>
 			</div>
-			<p class="brat">Déjà BRAT ? <a href="obsidian://brat?plugin=ahmed-mili/neo-quiz">Installer en un clic</a>.</p>
-		</section>
-
-		<section class="bloc-etapes">
-			<h2>Ce que fait la commande</h2>
-			<ol>
-				<li>Lit la liste de vos vaults Obsidian et vous fait choisir (ou en crée un nouveau, C:/Neo Quiz).</li>
-				<li>Télécharge la dernière version du plugin depuis GitHub et l'active.</li>
-				<li>Ouvre Obsidian sur le vault.</li>
-			</ol>
+			<p class="brat">Les mises à jour arrivent ensuite d'elles-mêmes, par BRAT.</p>
 		</section>
 
 		<p class="retour"><a href="./">Retour</a></p>

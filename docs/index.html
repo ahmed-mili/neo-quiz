@@ -281,45 +281,54 @@
 
 	.carte-code {
 		width: 100%;
-		margin-top: 10px;
-		display: flex;
-		align-items: center;
-		gap: 6px;
+		margin-top: 12px;
+		position: relative;
 		border: 1px solid var(--bordure);
 		border-radius: 10px;
 		background: color-mix(in srgb, var(--fond) 70%, transparent);
-		padding: 8px 8px 8px 10px;
+		padding: 10px 40px 10px 12px;
+		text-align: left;
 	}
 
+	/* La commande VA À LA LIGNE, jamais de barre de défilement : c'est une
+	   ligne à copier, pas à lire mot à mot, et une barre dans une carte de
+	   260 px faisait un ascenseur miniature. `break-all` coupe l'URL. */
 	.carte-code code {
-		flex: 1;
-		min-width: 0;
-		overflow-x: auto;
-		white-space: nowrap;
+		display: block;
+		white-space: pre-wrap;
+		word-break: break-all;
 		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-		font-size: 11px;
+		font-size: 11.5px;
+		line-height: 1.55;
 		color: var(--texte);
-		text-align: left;
 		-webkit-user-select: all;
 		user-select: all;
 	}
 
 	.carte-copier {
-		flex-shrink: 0;
+		position: absolute;
+		top: 8px;
+		right: 8px;
 		border: 1px solid var(--bordure);
-		border-radius: 8px;
-		background: none;
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--fond) 80%, transparent);
 		color: var(--texte-attenue);
 		cursor: pointer;
 		padding: 5px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		transition: color 100ms ease, border-color 100ms ease;
 	}
 
 	.carte-copier:hover,
 	.carte-copier:focus-visible {
 		color: var(--texte);
+		border-color: var(--accent);
+	}
+
+	.carte-copier[data-copie] {
+		color: var(--accent);
 		border-color: var(--accent);
 	}
 
@@ -329,12 +338,26 @@
 	}
 
 	.carte-obsidian-plus {
-		margin-top: 8px;
-		font-size: 11px;
-		line-height: 1.6;
+		margin-top: 10px;
+		font-size: 11.5px;
 		color: var(--texte-attenue);
-		text-align: left;
-		width: 100%;
+	}
+
+	.carte-obsidian-plus a,
+	.carte-obsidian-plus button {
+		color: var(--texte-attenue);
+		background: none;
+		border: 0;
+		padding: 0;
+		font: inherit;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		cursor: pointer;
+	}
+
+	.carte-obsidian-plus a:hover,
+	.carte-obsidian-plus button:hover {
+		color: var(--texte);
 	}
 
 	.carte-obsidian-plus .ligne-copiable {
@@ -533,9 +556,9 @@
 				</div>
 
 				<div class="carte-obsidian-plus">
-					<span>Linux, macOS :</span>
-					<code class="ligne-copiable" id="commande-sh" data-copiable="true">curl -fsSL https://ahmed-mili.github.io/neo-quiz/install.sh | bash</code>
-					<span>ou <a href="obsidian://brat?plugin=ahmed-mili/neo-quiz">en un clic avec BRAT</a></span>
+					<button type="button" id="commande-sh" data-commande="curl -fsSL https://ahmed-mili.github.io/neo-quiz/install.sh | bash">Linux</button>
+					·
+					<a href="obsidian://brat?plugin=ahmed-mili/neo-quiz">BRAT</a>
 				</div>
 			</div>
 		</div>
@@ -725,7 +748,7 @@
 			});
 		}
 
-		// Carte Obsidian : boutons copier + ligne "Linux, macOS" copiable.
+		// Carte Obsidian : le bouton copier de la commande PowerShell.
 		function copierTexte(texte, bouton) {
 			navigator.clipboard.writeText(texte).then(function () {
 				if (!bouton) return;
@@ -742,18 +765,22 @@
 			boutonCopierPs.addEventListener("click", function () {
 				var cible = document.getElementById(boutonCopierPs.getAttribute("data-cible"));
 				if (cible) copierTexte(cible.textContent, null);
-				boutonCopierPs.setAttribute("aria-label", "Copié");
-				setTimeout(function () {
-					boutonCopierPs.setAttribute("aria-label", "Copier");
-				}, 2000);
+				boutonCopierPs.setAttribute("data-copie", "");
+				setTimeout(function () { boutonCopierPs.removeAttribute("data-copie"); }, 2000);
 			});
 		}
 
-		var ligneSh = document.getElementById("commande-sh");
-		if (ligneSh) {
-			ligneSh.title = "Copier";
-			ligneSh.addEventListener("click", function () {
-				navigator.clipboard.writeText(ligneSh.textContent);
+		// « Linux » : un bouton qui COPIE la commande curl (pas de second bloc
+		// dans la carte : un seul bloc suffit, l'autre commande tient dans un
+		// mot). Le libellé dit « Copié » deux secondes.
+		var boutonSh = document.getElementById("commande-sh");
+		if (boutonSh) {
+			boutonSh.addEventListener("click", function () {
+				var original = boutonSh.textContent;
+				navigator.clipboard.writeText(boutonSh.getAttribute("data-commande")).then(function () {
+					boutonSh.textContent = "Copié";
+					setTimeout(function () { boutonSh.textContent = original; }, 2000);
+				});
 			});
 		}
 

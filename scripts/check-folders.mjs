@@ -59,6 +59,20 @@ await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, id
 	r.check("un identifiant persisté est reconduit",
 		lireDossiers({ folders: [{ id: "Ancien", path: "C:/x", name: "Nouveau nom" }] })[0].id, "Ancien");
 
+	/* SAUF « Neo Quiz » (fix round 1, tranche 9) : c'est l'id RÉSERVÉ du
+	   dossier par défaut, posé par `savedFolders` et jamais par ce qui vient
+	   de `folders`. Un utilisateur qui avait déjà un dossier persisté sous cet
+	   id (rare, mais un fichier de réglages édité à la main le permet) le
+	   verrait sinon confondu avec le défaut — même id, deux dossiers, et
+	   `removeFolder("Neo Quiz")` retirerait le mauvais des deux. Il est donc
+	   renuméroté comme n'importe quelle collision : « Neo Quiz-2 ». Il PERD
+	   son historique sous l'ancien id (les chemins du contrat qui en
+	   dépendaient changent de préfixe) — c'est le prix d'un id qui doit rester
+	   univoque. */
+	r.check("l'identifiant réservé du défaut, s'il était déjà persisté, est renuméroté",
+		lireDossiers({ folders: [{ id: "Neo Quiz", path: "D:/x", name: "x" }] }).map(d => d.id),
+		["Neo Quiz-2"]);
+
 	/* Un `/` dans un identifiant en ferait DEUX segments, et le premier ne
 	   désignerait plus aucune racine. */
 	r.check("un séparateur est neutralisé", segmentValide("a/b"), "a-b");
@@ -180,6 +194,40 @@ await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, id
 			reglagesEcrits.length = 0;
 			await removeFolder("Perso");
 			r.check("removeFolder retire un dossier ordinaire sans jamais écrire le défaut",
+				reglagesEcrits, [["folders", []]]);
+		} finally {
+			if (precedent === undefined) delete globalThis.window;
+			else globalThis.window = precedent;
+		}
+	}
+
+	/* ── La collision avec un dossier DÉJÀ persisté sous l'id réservé (fix
+	   round 1) ── Un `folders` qui porte déjà `{ id: "Neo Quiz", … }` (un
+	   utilisateur qui avait ouvert un dossier nommé ainsi avant cette
+	   version) ne doit produire qu'UNE seule entrée `id: "Neo Quiz"` — le
+	   défaut — l'autre étant renumérotée par `lireDossiers`. */
+	{
+		const precedent = globalThis.window;
+		const reglagesEcrits = [];
+		globalThis.window = {
+			neo: {
+				fichiers: { async exists() { return true; } },
+				reglages: {
+					async lire(cle) { return cle === "folders" ? [{ id: "Neo Quiz", path: "D:/x", name: "x" }] : undefined; },
+					async ecrire(cle, valeur) { reglagesEcrits.push([cle, valeur]); },
+					async supprimer() {},
+				},
+				systeme: { async dossierDefaut() { return "C:/Neo Quiz"; } },
+			},
+		};
+		try {
+			const dossiers = await savedFolders();
+			r.check("un dossier persisté sous l'id réservé est renuméroté, le défaut garde le sien",
+				dossiers.map(d => ({ id: d.id, parDefaut: !!d.parDefaut })),
+				[{ id: "Neo Quiz", parDefaut: true }, { id: "Neo Quiz-2", parDefaut: false }]);
+
+			await removeFolder("Neo Quiz-2");
+			r.check("removeFolder retire le dossier renuméroté, pas le défaut",
 				reglagesEcrits, [["folders", []]]);
 		} finally {
 			if (precedent === undefined) delete globalThis.window;

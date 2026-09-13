@@ -66,6 +66,12 @@ const CLE_DOSSIERS = "folders";
 /** L'ancienne clé, au SINGULIER (tranche 1). Lue une fois, puis retirée. */
 const CLE_DOSSIER_LEGACY = "folder";
 
+/** L'identifiant et le nom du dossier par défaut — DONNÉES PERSISTÉES dans
+    les chemins du contrat (le premier segment) : jamais traduites, comme
+    `id`/`name` de tout autre dossier. RÉSERVÉ dans `lireDossiers` (voir plus
+    bas) : aucun dossier persisté ne peut plus obtenir cet id. */
+const ID_DOSSIER_DEFAUT = "Neo Quiz";
+
 /**
  * LA CONVERSION DES VALEURS DÉJÀ PERSISTÉES (Ruling 14). Un `folders` écrit
  * par la version Tauri porte les `\` que le sélecteur natif rendait
@@ -131,7 +137,22 @@ export function idUnique(nom: string, pris: ReadonlySet<string>): string {
  * Ici, `npm run check:folders` l'exécute.
  */
 export function lireDossiers(brut: { folders?: unknown; folder?: unknown }): DossierQuiz[] {
-	const pris = new Set<string>();
+	/* `ID_DOSSIER_DEFAUT` ("Neo Quiz") est RÉSERVÉ (tranche 9, fix round 1) :
+	   c'est l'id de contrat du dossier par défaut, posé par `savedFolders`,
+	   jamais par ce qui vient de `folders`. Le préchargé dans `pris` avant
+	   toute lecture : un dossier persisté qui portait déjà cet id (un
+	   utilisateur qui avait ouvert un dossier nommé « Neo Quiz » avant cette
+	   version) se voit renuméroté en « Neo Quiz-2 » par `idUnique`, comme
+	   n'importe quelle collision. Il PERD alors son historique sous l'ancien
+	   id — les chemins du contrat qui en dépendent changent de préfixe — mais
+	   c'est le prix d'un id qui doit rester univoque : sans cette réservation,
+	   `savedFolders()` produirait DEUX entrées `id: "Neo Quiz"` (le défaut et
+	   ce dossier), indiscernables l'une de l'autre, et `removeFolder("Neo
+	   Quiz")` retirerait le mauvais des deux (ou aucun — voir son garde-fou).
+	   Ceci ne contredit PAS « un identifiant persisté est reconduit tel
+	   quel » (commentaire plus bas, éprouvé par `check-folders.mjs`) : cette
+	   règle vaut pour tout id SAUF celui-ci, désormais réservé. */
+	const pris = new Set<string>([ID_DOSSIER_DEFAUT]);
 	const out: DossierQuiz[] = [];
 
 	if (Array.isArray(brut.folders)) {
@@ -141,9 +162,9 @@ export function lireDossiers(brut: { folders?: unknown; folder?: unknown }): Dos
 			if (!path) continue;
 			const name = typeof o?.name === "string" && o.name.trim() ? o.name.trim() : nomDeDossier(path);
 			/* L'identifiant persisté est reconduit tel quel — sauf collision,
-			   qu'un fichier de réglages édité à la main peut produire. Le
-			   recalculer systématiquement changerait les chemins affichés à
-			   chaque renommage de dossier. */
+			   qu'un fichier de réglages édité à la main peut produire, ou
+			   celle réservée ci-dessus. Le recalculer systématiquement
+			   changerait les chemins affichés à chaque renommage de dossier. */
 			const voulu = typeof o?.id === "string" && o.id.trim() ? segmentValide(o.id) : segmentValide(name);
 			const id = idUnique(voulu, pris);
 			pris.add(id);
@@ -161,15 +182,10 @@ export function lireDossiers(brut: { folders?: unknown; folder?: unknown }): Dos
 	if (typeof brut.folder === "string" && brut.folder.trim()) {
 		const path = normaliserChemin(brut.folder.trim());
 		const name = nomDeDossier(path);
-		return [{ id: segmentValide(name), path, name }];
+		return [{ id: idUnique(segmentValide(name), pris), path, name }];
 	}
 	return [];
 }
-
-/** L'identifiant et le nom du dossier par défaut — DONNÉES PERSISTÉES dans
-    les chemins du contrat (le premier segment) : jamais traduites, comme
-    `id`/`name` de tout autre dossier. */
-const ID_DOSSIER_DEFAUT = "Neo Quiz";
 
 /**
  * Le dossier par défaut, tel que le principal le sert (déjà créé et autorisé

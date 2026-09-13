@@ -24,13 +24,13 @@
    RÉPOND par un `invoke`.
 ══════════════════════════════════════════════════════════ */
 
-import { BrowserWindow, Menu, app, net, protocol, shell } from "electron";
+import { BrowserWindow, Menu, app, dialog, net, protocol, shell } from "electron";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
-import { setLanguage } from "../../../src/i18n";
+import { setLanguage, t } from "../../../src/i18n";
 import { enregistrerCanaux } from "./canaux";
 import { cheminDossierDefaut } from "./dossier-defaut";
 import { perimetreInitial } from "./perimetre";
@@ -513,9 +513,23 @@ if (!app.requestSingleInstanceLock()) {
 		/* Le dossier de quiz PAR DÉFAUT (tranche 9) : créé AVANT le périmètre,
 		   pour qu'il existe déjà quand `perimetreInitial` l'autorise — sans quoi
 		   la première ouverture d'un fichier dedans (« Nouveau quiz ») tomberait
-		   sur un dossier absent. */
+		   sur un dossier absent.
+		   GARDÉ (fix round 1) : un disque protégé (droits, quota, lecteur en
+		   lecture seule) faisait sinon REJETER toute la chaîne `whenReady`, sans
+		   qu'aucune fenêtre ne s'ouvre ni qu'aucun message ne le dise —
+		   l'application semblait simplement ne pas démarrer. `perimetreInitial`
+		   n'a pas besoin que ce dossier existe : `autoriser` ignore déjà en
+		   silence un chemin absent (`perimetre.ts`), donc le démarrage continue
+		   sans le défaut, sur les autres dossiers ouverts ou vide. */
 		dossierDefaut = cheminDossierDefaut(process.platform, os.homedir());
-		await fs.mkdir(dossierDefaut, { recursive: true });
+		try {
+			await fs.mkdir(dossierDefaut, { recursive: true });
+		} catch (e) {
+			console.error(LOG_PREFIX, "dossier par défaut introuvable:", dossierDefaut, e);
+			dialog.showErrorBox(PRODUCT_NAME, t("app.error.startup", {
+				error: `${dossierDefaut}: ${e instanceof Error ? e.message : String(e)}`,
+			}));
+		}
 		/* La liste blanche des dossiers que le pont a le droit de toucher — voir
 		   `perimetre.ts` : le défaut d'ABORD, puis les réglages, puis le sélecteur
 		   et les vaults d'Obsidian (`canaux.ts`). Le dossier de données est CRÉÉ
@@ -571,6 +585,14 @@ if (!app.requestSingleInstanceLock()) {
 		// retarder. `initialiser`, pas `reglerAuto` : il réécrirait le réglage
 		// qu'on vient de lire.
 		miseAJour.initialiser(await lireReglageAuto(reglagesOuErreur()));
+	}).catch(e => {
+		/* Le FILET FINAL (fix round 1) : sans lui, une exception n'importe où
+		   dans cette chaîne (réglages, périmètre, réseau, fenêtre) rejette une
+		   promesse que personne n'attend — Electron l'avale, aucune fenêtre ne
+		   s'ouvre, et rien ne le dit. `setLanguage` a pu échouer avant d'avoir
+		   tourné : pas de `t()` garanti, d'où le texte anglais brut. */
+		console.error(LOG_PREFIX, "démarrage impossible:", e);
+		dialog.showErrorBox(PRODUCT_NAME, `Neo Quiz failed to start: ${e instanceof Error ? e.message : String(e)}`);
 	});
 }
 

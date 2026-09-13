@@ -39,13 +39,14 @@ const COMMANDES_EDITION: Record<string, "undo" | "redo" | "cut" | "copy" | "past
    mêmes bouts ronds, ni la même part de leur boîte, et Ahmed les a vus
    différer à l'écran. Construits par le DOM (`createElementNS`), jamais en
    `innerHTML` : la règle des quatre portes vaut aussi pour un SVG constant.
-   Tailles de la référence : 16 px pour réduire et fermer, 20 px pour
-   agrandir, 24 px pour le chevron ; « restaurer » seul reste le `copy` de
+   Tailles de la référence (`.nc-desktop-window-control > .nc-toolbar-icon`,
+   24 px, qui l'emporte sur les 16 px de la règle générique) : 24 px pour
+   réduire, fermer et le chevron, 20 px pour agrandir ; « restaurer » seul reste le `copy` de
    Lucide à 16 px, comme chez Neo Calendar. */
 const GLYPHES = {
-	minimize: { boite: "0 0 20 20", taille: 16, trait: 1.5, chemins: ["M6.25 10H13.75"] },
+	minimize: { boite: "0 0 20 20", taille: 24, trait: 1.5, chemins: ["M6.25 10H13.75"] },
 	maximize: { boite: "0 0 24 24", taille: 20, trait: 1.75, rect: { x: 6.3, y: 6.3, w: 11.4, h: 11.4, rx: 1.5 } },
-	close: { boite: "0 0 24 24", taille: 16, trait: 1.75, chemins: ["M8 8L16 16M16 8L8 16"] },
+	close: { boite: "0 0 24 24", taille: 24, trait: 1.75, chemins: ["M8 8L16 16M16 8L8 16"] },
 	"chevron-down": { boite: "0 0 24 24", taille: 24, trait: 1.75, chemins: ["M7.8 9.6L12 13.8L16.2 9.6"], joint: true },
 } as const;
 

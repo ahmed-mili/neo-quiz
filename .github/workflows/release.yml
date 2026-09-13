@@ -5,7 +5,7 @@ name: Release Neo Quiz
 #   - un tag `vX.Y.Z` PUBLIE le GREFFON (main.js, styles.css, manifest.json) —
 #     sa release est marquée `make_latest: false` : BRAT et Obsidian ne
 #     lisent jamais « latest », ils lisent `manifest.json` sur `main` ;
-#   - un tag `app-vX.Y.Z` PUBLIE L'APPLICATION (installeur Windows,
+#   - un tag `desktop-vX.Y.Z` PUBLIE L'APPLICATION (installeur Windows,
 #     AppImage) — sa release est la release « latest » du dépôt
 #     (`make_latest: true`), parce qu'electron-updater (fournisseur github,
 #     sans `allowPrerelease`) lit `/releases/latest` puis le `latest.yml` de
@@ -22,7 +22,7 @@ on:
   push:
     tags:
       - 'v*'
-      - 'app-v*'
+      - 'desktop-v*'
   workflow_dispatch:
     inputs:
       version:
@@ -59,7 +59,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # `app-v*` → app, `v*` → plugin. En répétition, les deux entrées
+      # `desktop-v*` → app, `v*` → plugin. En répétition, les deux entrées
       # choisissent directement. Les entrées passent par l'environnement,
       # jamais interpolées dans le script : interpolées, une valeur saisie
       # serait exécutée comme du shell.
@@ -72,16 +72,16 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             produit="$PRODUIT_SAISI"
-            if [ "$produit" = "app" ]; then prefixe="app-v"; else prefixe="v"; fi
+            if [ "$produit" = "app" ]; then prefixe="desktop-v"; else prefixe="v"; fi
             echo "version=$VERSION_SAISIE" >> "$GITHUB_OUTPUT"
             echo "tag=$prefixe$VERSION_SAISIE" >> "$GITHUB_OUTPUT"
             echo "product=$produit" >> "$GITHUB_OUTPUT"
           else
             tag="${GITHUB_REF#refs/tags/}"
             case "$tag" in
-              app-v*)
+              desktop-v*)
                 echo "product=app" >> "$GITHUB_OUTPUT"
-                echo "version=${tag#app-v}" >> "$GITHUB_OUTPUT"
+                echo "version=${tag#desktop-v}" >> "$GITHUB_OUTPUT"
                 ;;
               v*)
                 echo "product=plugin" >> "$GITHUB_OUTPUT"

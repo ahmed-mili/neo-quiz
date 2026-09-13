@@ -734,7 +734,7 @@
 		function afficherVersion(plateforme, release, extension, suffixe) {
 			var elVersion = document.getElementById("version-" + plateforme);
 			var elTaille = document.getElementById("taille-" + plateforme);
-			var version = String(release.tag_name || "").replace(/^(app-)?v/, "");
+			var version = String(release.tag_name || "").replace(/^(desktop-)?v/, "");
 			if (!elVersion || !version) return;
 			elVersion.textContent = "v" + version + (suffixe ? " · " + suffixe : "");
 			if (!extension || !elTaille) return;
@@ -781,7 +781,7 @@
 		// « latest » de GitHub) : le repli parcourt `/releases` et garde la
 		// première qui n'est pas une pré-version et dont le tag commence par
 		// `v` suivi d'un chiffre — excluant les pré-versions et tout tag
-		// `app-v*`, que le même endpoint liste aussi.
+		// `desktop-v*`, que le même endpoint liste aussi.
 		function estTagPlugin(tagName) {
 			return /^v\d/.test(String(tagName || ""));
 		}
@@ -798,7 +798,7 @@
 			})
 			.then(function (donnees) {
 				var elObsidian = document.getElementById("version-obsidian");
-				var versionObsidian = String(donnees.tag_name || "").replace(/^(app-)?v/, "");
+				var versionObsidian = String(donnees.tag_name || "").replace(/^(desktop-)?v/, "");
 				if (elObsidian && versionObsidian) elObsidian.textContent = "v" + versionObsidian;
 				// La taille du plugin : ses trois fichiers (main.js, styles.css,
 				// manifest.json) additionnés, ce que la commande télécharge.
@@ -843,7 +843,7 @@
 				releases.slice(0, 10).forEach(function (release) {
 					var actif = trouverActif(release.assets, extension);
 					if (!actif) return;
-					var version = String(release.tag_name || "").replace(/^(app-)?v/, "");
+					var version = String(release.tag_name || "").replace(/^(desktop-)?v/, "");
 					if (!version) return;
 					var item = document.createElement("div");
 					item.className = "item";

@@ -65,7 +65,7 @@ export default async function () {
 		   (`make_latest: true`), tandis que celles du greffon sont publiées
 		   avec `make_latest: false` — c'est ce qui permet à un seul
 		   fournisseur github de coexister avec deux familles de tags
-		   (`app-vX.Y.Z` et `vX.Y.Z`) sans qu'electron-updater ne confonde
+		   (`desktop-vX.Y.Z` et `vX.Y.Z`) sans qu'electron-updater ne confonde
 		   jamais une release de greffon avec une mise à jour de l'app. */
 		publish: { provider: "github", owner: "ahmed-mili", repo: "neo-quiz" },
 		/* Les DEUX sorties et rien d'autre. Le principal est bundlé par esbuild

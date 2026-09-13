@@ -311,7 +311,7 @@ test("versionCommitArgs commite avec le message attendu", () => {
 });
 
 test("tagArgs pose l'étiquette applicative par défaut", () => {
-	assert.deepEqual(tagArgs("2.4.1-beta"), ["tag", "app-v2.4.1-beta"]);
+	assert.deepEqual(tagArgs("2.4.1-beta"), ["tag", "desktop-v2.4.1-beta"]);
 });
 
 test("pushArgs nomme la branche ET l'étiquette dans le même push atomique", () => {
@@ -320,7 +320,7 @@ test("pushArgs nomme la branche ET l'étiquette dans le même push atomique", ()
 		"--atomic",
 		"origin",
 		"main",
-		"app-v2.4.1-beta",
+		"desktop-v2.4.1-beta",
 	]);
 });
 
@@ -342,7 +342,7 @@ test("les étiquettes du plugin conservent leur famille vX", () => {
 });
 
 test("les conflits citent le tag et la commande de récupération de la bonne cible", () => {
-	assert.match(describeTagConflict({ local: true, remote: false }, "1.0.0"), /git tag -d app-v1\.0\.0/);
-	assert.match(describeTagConflict({ local: false, remote: true }, "1.0.0"), /app-v1\.0\.0/);
+	assert.match(describeTagConflict({ local: true, remote: false }, "1.0.0"), /git tag -d desktop-v1\.0\.0/);
+	assert.match(describeTagConflict({ local: false, remote: true }, "1.0.0"), /desktop-v1\.0\.0/);
 	assert.match(describeTagConflict({ local: true, remote: false }, "2.6.1", "plugin"), /git tag -d v2\.6\.1/);
 });

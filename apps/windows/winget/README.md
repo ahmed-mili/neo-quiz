@@ -29,7 +29,7 @@ winget install wingetcreate
 ```
 
 **Première soumission** (ce dossier n'en contient encore aucun — à générer
-après la première release `app-v1.0.0`, `wingetcreate` déjà installé, le CLA
+après la première release `desktop-v1.0.0`, `wingetcreate` déjà installé, le CLA
 `microsoft/winget-pkgs` déjà signé) : `wingetcreate` fork
 `microsoft/winget-pkgs`, pousse une branche et ouvre la pull request. Une PR =
 une version.
@@ -39,17 +39,17 @@ wingetcreate submit --token <PAT GitHub, scope public_repo> apps/windows/winget/
 ```
 
 L'URL de l'installeur, pour cette première soumission comme pour les
-suivantes, vise le tag `app-v`, pas `v` (celui du greffon Obsidian) :
+suivantes, vise le tag `desktop-v`, pas `v` (celui du greffon Obsidian) :
 
 ```
-https://github.com/ahmed-mili/neo-quiz/releases/download/app-vX.Y.Z/neo-quiz-setup-X.Y.Z.exe
+https://github.com/ahmed-mili/neo-quiz/releases/download/desktop-vX.Y.Z/neo-quiz-setup-X.Y.Z.exe
 ```
 
 **Versions suivantes** : `wingetcreate update` recalcule lui-même le SHA-256 à
 partir de l'URL de la release, pas besoin de le calculer à la main.
 
 ```
-wingetcreate update AhmedMili.NeoQuiz --version X.Y.Z --urls https://github.com/ahmed-mili/neo-quiz/releases/download/app-vX.Y.Z/neo-quiz-setup-X.Y.Z.exe --submit --token <PAT GitHub, scope public_repo>
+wingetcreate update AhmedMili.NeoQuiz --version X.Y.Z --urls https://github.com/ahmed-mili/neo-quiz/releases/download/desktop-vX.Y.Z/neo-quiz-setup-X.Y.Z.exe --submit --token <PAT GitHub, scope public_repo>
 ```
 
 Le PAT doit avoir le scope `public_repo` (voir la doc `wingetcreate` pour la

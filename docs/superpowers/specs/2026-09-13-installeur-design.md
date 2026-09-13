@@ -74,7 +74,7 @@ l'exécutable (icône, version de fichier) par `rcedit` : le paquet local du
 > **Note du 2026-09-13 (soir)** : ce paragraphe décrit l'état d'AVANT la
 > numérotation indépendante de l'application. Depuis, l'application a sa
 > propre version dans `apps/windows/package.json` (+ lockfile synchronisé),
-> tags `app-vX.Y.Z`, release GitHub « latest » ; le greffon garde
+> tags `desktop-vX.Y.Z`, release GitHub « latest » ; le greffon garde
 > `src/assets/manifest.json`, tags `vX.Y.Z`, `make_latest: false`. Voir
 > CLAUDE.md, « Release ». Le reste de cette section décrit un schéma à une
 > seule source qui n'est plus celui en vigueur — gardé pour l'historique de

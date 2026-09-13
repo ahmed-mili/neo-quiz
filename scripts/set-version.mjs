@@ -28,7 +28,7 @@
  * DEUX FICHIERS PORTENT UN NUMÉRO, DEUX FAMILLES DE TAGS. L'application et
  * le greffon sont deux produits indépendants, avec chacun leur numéro et
  * leur rythme de publication : l'application vit dans
- * `apps/windows/package.json` (lockfile synchronisé, tags `app-vX.Y.Z`), le
+ * `apps/windows/package.json` (lockfile synchronisé, tags `desktop-vX.Y.Z`), le
  * greffon dans `src/assets/manifest.json` (tags `vX.Y.Z`, cf. CLAUDE.md —
  * la version de `package.json` racine est statique et ignorée,
  * volontairement, elle ne porte la version d'aucun des deux produits). La
@@ -131,7 +131,7 @@ if (invokedScript === import.meta.url) {
 		if (words.length !== 1) throw new Error("Attendu : [--plugin] major | minor | patch | X.Y.Z.");
 		const version = await resolveVersion(words[0], target);
 		for (const file of await setVersion(version, target)) console.log("  " + file);
-		const tag = (target === "app" ? "app-v" : "v") + version;
+		const tag = (target === "app" ? "desktop-v" : "v") + version;
 		console.log(`\nVersion ${version}. Reste à publier :`);
 		console.log(`  git commit -am "Version ${version}"`);
 		console.log(`  git tag ${tag} && git push --atomic origin main ${tag}`);

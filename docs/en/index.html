@@ -554,6 +554,7 @@
 				<span class="carte-nom">Obsidian</span>
 				<span class="carte-meta">
 					<span class="carte-version" id="version-obsidian">…</span>
+					<span class="carte-taille" id="taille-obsidian"></span>
 				</span>
 
 			</a>
@@ -591,7 +592,9 @@
 		}
 
 		function formaterTaille(octets) {
-			return Math.round(octets / (1024 * 1024)) + " MB";
+			var mo = octets / (1024 * 1024);
+			// Sous 10 Mo (le plugin), une décimale ; au-dessus (l'app), un entier.
+			return (mo < 10 ? mo.toFixed(1) : Math.round(mo)) + " MB";
 		}
 
 		// Fills in the version (and its size, on its own line) shown below
@@ -624,6 +627,13 @@
 				var elObsidian = document.getElementById("version-obsidian");
 				var versionObsidian = String(donnees.tag_name || "").replace(/^v/, "");
 				if (elObsidian && versionObsidian) elObsidian.textContent = "v" + versionObsidian;
+				// La taille du plugin : ses trois fichiers (main.js, styles.css,
+				// manifest.json) additionnés, ce que la commande télécharge.
+				var elTailleObsidian = document.getElementById("taille-obsidian");
+				var octetsPlugin = (donnees.assets || []).filter(function (a) {
+					return ["main.js", "styles.css", "manifest.json"].indexOf(String(a.name || "")) !== -1;
+				}).reduce(function (total, a) { return total + (a.size || 0); }, 0);
+				if (elTailleObsidian && octetsPlugin) elTailleObsidian.textContent = formaterTaille(octetsPlugin);
 				activerSelecteurVersion("windows", ".exe");
 				activerSelecteurVersion("linux", ".appimage");
 			})

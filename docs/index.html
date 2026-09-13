@@ -242,72 +242,28 @@
 
 	/* ===== Pied de page ===== */
 
+	/* Une seule ligne discrète, pas de colonnes : Neo Quiz n'a rien d'autre
+	   à mettre dans un pied de page. */
 	.pied {
 		width: 100%;
 		max-width: 960px;
-		margin-top: 48px;
-		padding-top: 28px;
+		margin-top: 40px;
+		padding-top: 20px;
 		border-top: 1px solid var(--bordure);
 		display: flex;
 		flex-wrap: wrap;
-		justify-content: space-between;
-		gap: 28px;
-		text-align: left;
-	}
-
-	.pied-marque {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		font-weight: 700;
-	}
-
-	.pied-marque img {
-		width: 24px;
-		height: 24px;
-		border-radius: 6px;
-	}
-
-	.pied-colonnes {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 40px;
-	}
-
-	.pied-colonne h2 {
-		font-size: 12px;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: var(--texte-attenue);
-		margin: 0 0 12px;
-	}
-
-	.pied-colonne ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-
-	.pied-colonne a {
-		color: var(--texte);
-		text-decoration: none;
+		justify-content: center;
+		gap: 8px 12px;
 		font-size: 13px;
-	}
-
-	.pied-colonne a:hover { text-decoration: underline; }
-
-	.pied-bas {
-		width: 100%;
-		max-width: 960px;
-		margin-top: 20px;
-		padding-top: 16px;
-		border-top: 1px solid var(--bordure);
-		font-size: 12px;
 		color: var(--texte-attenue);
 	}
+
+	.pied a {
+		color: var(--texte-attenue);
+		text-decoration: underline;
+	}
+
+	.pied a:hover { color: var(--texte); }
 
 	/* ===== Repli mobile ===== */
 

@@ -240,7 +240,20 @@ export function creerFichiers(): PrimitivesFichiers {
 		   détruirait. */
 		async rename(de, vers) {
 			if (await existeSurDisque(vers)) throw new Error(`${vers} existe déjà`);
-			await fs.rename(de, vers);
+			try {
+				await fs.rename(de, vers);
+			} catch (e) {
+				/* EXDEV : la source et la destination sont sur deux VOLUMES
+				   distincts (« Déplacer vers… » peut traverser un vault sur `D:`
+				   et `C:\Neo Quiz`) — `fs.rename` de Node ne sait déplacer que
+				   sur un même volume. Repli : copie récursive (fichier ou
+				   dossier, `fs.cp` gère les deux) puis suppression de la
+				   source. Pas atomique, mais c'est la seule option hors du
+				   volume ; la garde d'écrasement ci-dessus a déjà eu lieu. */
+				if ((e as NodeJS.ErrnoException)?.code !== "EXDEV") throw e;
+				await fs.cp(de, vers, { recursive: true });
+				await fs.rm(de, { recursive: true, force: true });
+			}
 		},
 	};
 }

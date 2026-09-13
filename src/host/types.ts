@@ -203,9 +203,12 @@ export interface HostFs {
 	list(dir: string): Promise<string[]>;
 	/** Supprime un fichier. Ne rejette pas s'il est déjà absent. */
 	remove(path: string): Promise<void>;
-	/** Renomme (ou déplace) un fichier. Rejette si la destination existe :
-	    la migration du journal s'en sert pour ne jamais écraser une
-	    sauvegarde précédente. */
+	/** Renomme (ou déplace) un fichier, OU UN DOSSIER — auquel cas tout son
+	    contenu suit (menu « Déplacer vers… », qui peut traverser deux
+	    racines distinctes, donc deux volumes). Rejette si la destination
+	    existe : la migration du journal s'en sert pour ne jamais écraser une
+	    sauvegarde précédente, et un module déplacé vers un homonyme ne doit
+	    jamais l'écraser en silence. */
 	rename(from: string, to: string): Promise<void>;
 	/** Index EN MÉMOIRE des fichiers `.md`, synchrone. Obsidian tient déjà le
 	    sien ; l'app le construit au démarrage et le maintient par le watcher.

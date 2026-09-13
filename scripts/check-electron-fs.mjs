@@ -227,6 +227,42 @@ await withSrcModule("apps/windows/electron/fichiers.ts", async ({ creerFichiers,
 				[rejette, await fichiers.read(de)], [true, "source"]);
 		});
 
+		/* Tâche 3 : « Déplacer vers… » déplace un DOSSIER, pas seulement un
+		   fichier — c'est ce que `HostFs.rename` promet désormais
+		   explicitement (`src/host/types.ts`). Sur le même volume que ce
+		   dossier temporaire, `fs.rename` de Node le fait nativement ; le
+		   repli EXDEV (deux volumes) n'est pas reproductible ici sans un
+		   second disque, mais le comportement OBSERVABLE — les fichiers
+		   suivent, la source disparaît — doit être identique dans les deux
+		   cas, donc ce cas couvre déjà le contrat que le repli doit tenir. */
+		await cas(r, "rename déplace un dossier avec tout son contenu (les fichiers suivent, la source disparaît)", async () => {
+			const de = join(dir, "k-module");
+			const vers = join(dir, "k-module-deplace");
+			await fichiers.mkdirs(de);
+			await fichiers.write(join(de, "q1.md"), "un");
+			await fichiers.write(join(de, "q2.md"), "deux");
+			await fichiers.rename(de, vers);
+			r.check("rename déplace un dossier avec tout son contenu (les fichiers suivent, la source disparaît)",
+				[
+					await existeEncore(join(de, "q1.md")),
+					await fichiers.read(join(vers, "q1.md")),
+					await fichiers.read(join(vers, "q2.md")),
+				],
+				[false, "un", "deux"]);
+		});
+
+		await cas(r, "rename d'un dossier REJETTE si la destination existe déjà", async () => {
+			const de = join(dir, "l-module");
+			const vers = join(dir, "l-module-existe");
+			await fichiers.mkdirs(de);
+			await fichiers.mkdirs(vers);
+			await fichiers.write(join(de, "q1.md"), "source");
+			await fichiers.write(join(vers, "deja-la.md"), "déjà là");
+			const rejette = await aRejete(() => fichiers.rename(de, vers));
+			r.check("rename d'un dossier REJETTE si la destination existe déjà",
+				[rejette, await existeEncore(join(de, "q1.md"))], [true, true]);
+		});
+
 		/* ── tranche 5, tâche 5 : listerDossier, statEntree, readBinary ── */
 
 		await cas(r, "listerDossier rend les entrées avec leur type", async () => {

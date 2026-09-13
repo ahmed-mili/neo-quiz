@@ -234,7 +234,7 @@ export class QuizDashboardView extends ItemView implements DashboardView {
 				openActionMenu(anchor, buildQuizCardMenu(ctx, rerender)(quiz));
 			},
 			openModuleMenu: (group, anchor, rerender, map) => {
-				openActionMenu(anchor, buildModuleCardMenu(ctx, rerender, map)(group));
+				openActionMenu(anchor, buildModuleCardMenu(ctx, rerender, map)(group, anchor));
 			},
 			/* Le partage reste au greffon : `share.ts` livre par `child_process`
 			   et `electron.shell` (voir le contrat). Même modal pour un quiz

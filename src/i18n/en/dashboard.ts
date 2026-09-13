@@ -133,6 +133,15 @@ export const EN_DASHBOARD = {
 	"dashboard.quizzes.deleteConfirmCta": "Delete",
 	"dashboard.quizzes.menuDeleteModule": "Delete module quizzes",
 	"dashboard.quizzes.deleteModuleConfirmBody": "Remove the {count} quizzes of “{name}” and their stats ? This cannot be undone.",
+	/* « Déplacer vers… » (tranche 9, tâche 3) : n'apparaît que quand plusieurs
+	   racines sont ouvertes (l'application). L'historique de révision suit le
+	   dossier, jamais les wikilinks entrants — d'où l'avertissement. */
+	"dashboard.quizzes.menuMove": "Move to…",
+	"dashboard.quizzes.moveConfirmTitle": "Move module",
+	"dashboard.quizzes.moveConfirmBody": "Move “{name}” to {target}? Obsidian links to these notes are not rewritten.",
+	"dashboard.quizzes.moveConfirmCta": "Move",
+	"dashboard.quizzes.moved": "Module moved to {target}",
+	"dashboard.quizzes.moveExists": "A folder with this name already exists there.",
 	"dashboard.quizzes.fileSaved": "Saved: {path}",
 	"dashboard.quizzes.shareTitle": "Share folder",
 	"dashboard.quizzes.shareQuizTitle": "Share quiz",

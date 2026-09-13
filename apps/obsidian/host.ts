@@ -789,7 +789,15 @@ export function createObsidianHost(
 		   migration du journal (tâche 3) s'appuie sur ce rejet pour ne jamais
 		   écraser une sauvegarde `.migrated` déjà posée — un `rename` qui
 		   écraserait la destination en silence détruirait la sauvegarde que
-		   la migration vient de créer. */
+		   la migration vient de créer.
+
+		   `adapter().rename` fonctionne aussi pour un DOSSIER (menu
+		   « Déplacer vers… », tâche 3 de la tranche 9) : c'est une opération
+		   au niveau du système de fichiers de l'adaptateur, agnostique du
+		   type d'entrée — Obsidian l'utilise lui-même ainsi pour renommer un
+		   dossier depuis l'explorateur de fichiers. Pas besoin de détourner
+		   vers `app.vault.rename(TFolder)`, qui ne ferait qu'ajouter une
+		   résolution de `TAbstractFile` inutile ici. */
 		async rename(from, to) {
 			if (await adapter().exists(to)) throw new Error(`${to} existe déjà`);
 			await adapter().rename(from, to);

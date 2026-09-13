@@ -756,3 +756,89 @@ await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) 
 	});
 	r.done();
 });
+
+/* ══════════════════════════════════════════════════════════
+   PARTIE 3 — `src/review/transpose.ts` : le pur (Tâche 3).
+══════════════════════════════════════════════════════════ */
+
+await withSrcModule("src/review/transpose.ts", async ({ transposerLignes }) => {
+	const r = makeReporter("Transposition — le pur");
+
+	r.check("une réponse au préfixe exact est réécrite",
+		transposerLignes([{ t: "answer", q: "Cours/ch1.md::q1", at: 1, grade: "wrong" }], "Cours", "Reseaux"),
+		[{ t: "answer", q: "Reseaux/ch1.md::q1", at: 1, grade: "wrong" }]);
+
+	/* « Cours2 » ne doit JAMAIS être confondu avec « Cours » : sans le « / »
+	   final dans la comparaison, ce cas resterait vert par accident. */
+	r.check("un dossier homonyme sans le séparateur n'est pas confondu",
+		transposerLignes([{ t: "answer", q: "Cours2/ch1.md::q1", at: 1, grade: "wrong" }], "Cours", "Reseaux"),
+		[]);
+
+	r.check("une ligne de renommage dont from ET to sont sous le dossier est transposée des deux côtés",
+		transposerLignes([{ t: "rename", from: "Cours/ancien.md", to: "Cours/nouveau.md", at: 1 }], "Cours", "Reseaux"),
+		[{ t: "rename", from: "Reseaux/ancien.md", to: "Reseaux/nouveau.md", at: 1 }]);
+
+	r.check("une ligne hors du dossier déplacé est ignorée",
+		transposerLignes([{ t: "answer", q: "Autre/ch1.md::q1", at: 1, grade: "wrong" }], "Cours", "Reseaux"),
+		[]);
+
+	r.done();
+});
+
+/* ══════════════════════════════════════════════════════════
+   PARTIE 4 — `review-store.moved` : le déplacement entre racines.
+══════════════════════════════════════════════════════════ */
+
+await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
+	const r = makeReporter("Adaptateur — moved() entre deux racines");
+	await withManualDebounce(async clock => {
+		const historique = JSON.stringify({ t: "answer", q: "Cours/reseau.md::q1", at: 1, grade: "wrong" }) + "\n"
+			+ JSON.stringify({ t: "answer", q: "Autre/ch1.md::q1", at: 2, grade: "correct" }) + "\n";
+		const { host, ecritures, fichiers } = fauxHote({ fichiers: { "B/.neo-quiz/review-log.jsonl": historique } });
+		const store = createReviewStore({
+			fs: host.fs, watcher: host.watcher, paths: host.paths,
+			catalogue: () => [], horizons: () => ({}), now: () => 1_700_000_000_000,
+		});
+		await store.load();
+
+		await store.moved("B/Cours", "A/Cours");
+		clock.runNext();
+		await settle();
+
+		/* Seule la ligne du dossier déplacé rejoint le journal cible : celle
+		   de « Autre » ne doit jamais traverser. */
+		r.check("le journal cible reçoit la ligne transposée du dossier déplacé",
+			ecritures.map(([p]) => p), ["A/.neo-quiz/review-log.jsonl"]);
+		r.check("la clé écrite dans le journal cible est locale à SA racine",
+			JSON.parse(ecritures[0]?.[1] ?? "{}").q, "Cours/reseau.md::q1");
+		/* Le journal SOURCE n'est jamais réécrit : ajout seul, la ligne
+		   d'origine reste où elle était. */
+		r.check("le journal source garde ses lignes telles quelles",
+			fichiers.get("B/.neo-quiz/review-log.jsonl"), historique);
+
+		store.destroy();
+	});
+	r.done();
+});
+
+await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) => {
+	const r = makeReporter("Adaptateur — moved() dans la même racine délègue à renamed()");
+	await withManualDebounce(async clock => {
+		const historique = JSON.stringify({ t: "answer", q: "Cours/reseau.md::q1", at: 1, grade: "wrong" }) + "\n";
+		const { host, ecritures, derniereLigne } = fauxHote({ fichiers: { "B/.neo-quiz/review-log.jsonl": historique } });
+		const store = createReviewStore({
+			fs: host.fs, watcher: host.watcher, paths: host.paths,
+			catalogue: () => [], horizons: () => ({}), now: () => 1_700_000_000_000,
+		});
+		await store.load();
+		await store.moved("B/Cours", "B/Reseaux");
+		clock.runNext();
+		await settle();
+		r.check("un déplacement dans la même racine écrit un renommage, pas une transposition",
+			derniereLigne()?.t, "rename");
+		r.check("dans le seul journal de cette racine",
+			ecritures.map(([p]) => p), ["B/.neo-quiz/review-log.jsonl"]);
+		store.destroy();
+	});
+	r.done();
+});

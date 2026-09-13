@@ -246,7 +246,7 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 			openActionMenu(anchor, buildQuizCardMenu(ctx, rerender)(quiz));
 		},
 		openModuleMenu: (group, anchor, rerender, map) => {
-			openActionMenu(anchor, buildModuleCardMenu(ctx, rerender, map)(group));
+			openActionMenu(anchor, buildModuleCardMenu(ctx, rerender, map)(group, anchor));
 		},
 		// « Nouveau quiz » : une note vierge, puis sa page en ÉDITION par
 		// `openQuizPath` ci-dessous — l'éditeur existe désormais dans la fenêtre.

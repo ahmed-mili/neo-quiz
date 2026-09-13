@@ -7,6 +7,7 @@ import {
 } from "../scheduler";
 import type { QuestionRole } from "../types/quiz";
 import { createLogFile, type LogFile } from "./log-file";
+import { transposerLignes } from "./transpose";
 import { LOG_PREFIX } from "../branding";
 
 /* ══════════════════════════════════════════════════════════
@@ -66,6 +67,13 @@ export interface ReviewStore {
 	record(entries: Array<{ q: string; grade: ReviewGrade; role?: QuestionRole }>): void;
 	/** Un renommage OBSERVÉ (fichier ou dossier), en chemins du contrat. */
 	renamed(from: string, to: string): void;
+	/** Un déplacement VOULU d'un dossier entre deux racines (menu « Déplacer
+	    vers… »), en chemins du contrat. Si les deux chemins tombent dans la
+	    même racine, c'est un renommage : délégué à `renamed`. Sinon, les
+	    lignes du journal SOURCE qui concernent ce dossier sont transposées
+	    (préfixe réécrit) et ajoutées au journal CIBLE — le journal source
+	    garde les siennes, en ajout seul, comme toujours. */
+	moved(from: string, to: string): Promise<void>;
 	plan(now: number): Plan;
 	keyOf(path: string, id: string): string;
 	destroy(): void;
@@ -183,6 +191,36 @@ export function createReviewStore(deps: ReviewStoreDeps): ReviewStore {
 		journal.fichier.append([{ t: "rename", from: local, to: localTo, at: deps.now() }]);
 	}
 
+	async function moved(fromBrut: string, toBrut: string): Promise<void> {
+		if (detruit) return;
+		const from = sansSlashFinal(fromBrut);
+		const to = sansSlashFinal(toBrut);
+		if (from === to) return;
+		const source = deps.paths.rootOf(from);
+		const cible = deps.paths.rootOf(to);
+		if (!source || !cible) return;
+		/* Même racine : ce n'est pas un déplacement entre journaux, c'est un
+		   renommage — `renamed` sait déjà quoi en faire (et rejoue les
+		   renommages déjà journalisés avant de filtrer, ce que `moved` n'a
+		   pas à refaire). */
+		if (source.id === cible.id) { renamed(from, to); return; }
+
+		const journalSource = journaux.get(source.id);
+		const journalCible = journaux.get(cible.id);
+		if (!journalSource || !journalCible) return;
+		/* Le journal source peut ne pas avoir été chargé si `load()` a échoué
+		   pour cette racine (disque réseau absent, etc.) : sans lignes, rien à
+		   transposer, mais on ne DOIT pas fabriquer un déplacement à partir
+		   d'un historique qu'on n'a pas encore lu. */
+		if (!journalSource.fichier.loaded()) await journalSource.fichier.load();
+
+		const localFrom = deps.paths.localPath(from);
+		const localTo = deps.paths.localPath(to);
+		const lignesSource = applyRenames(journalSource.fichier.lines());
+		const transposees = transposerLignes(lignesSource, localFrom, localTo);
+		if (transposees.length) journalCible.fichier.append(transposees);
+	}
+
 	/* Les renommages que l'HÔTE sait nommer : fichiers (`onChange`) et
 	   dossiers (`onRenameDir`). Le second canal n'est pas un luxe — un dossier
 	   renommé déplace toutes ses notes en une seule ligne, et sans lui
@@ -213,7 +251,7 @@ export function createReviewStore(deps: ReviewStoreDeps): ReviewStore {
 		for (const { fichier } of journaux.values()) fichier.destroy();
 	}
 
-	return { load, record, renamed, plan, keyOf: keyOfQuestion, destroy };
+	return { load, record, renamed, moved, plan, keyOf: keyOfQuestion, destroy };
 }
 
 /** Construit les seules données que le noyau comprend. `moduleForQuiz` reste

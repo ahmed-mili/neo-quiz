@@ -5,7 +5,7 @@ import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { ModuleGroup, ModuleMap } from "./quiz-modules";
 import { openModuleEditModal } from "./module-edit";
-import type { ActionMenuItem } from "./ui-select";
+import { openActionMenu, type ActionMenuItem } from "./ui-select";
 import { QUIZ_BLOCK_RE } from "../quiz-utils";
 import { isFolderArchived, setFolderArchived } from "./folder-archive";
 
@@ -320,10 +320,36 @@ export function buildQuizCardMenu(ctx: DashboardShellCtx, rerender: () => void):
     d'entrée « Rename » ici), Archive = LE DOSSIER (flag unique
     quizzesArchivedFolders — jamais par quiz), Delete = tous les quiz du
     module (confirmation avec le compte). */
-export function buildModuleCardMenu(ctx: DashboardShellCtx, rerender: () => void, map: ModuleMap): (g: ModuleGroup) => ActionMenuItem[] {
-	return (g) => {
+/** Déplace le dossier `g.folder` vers la racine `toRoot`, sous le même nom
+    de dossier, puis transpose l'historique de révision qui lui appartient
+    (§2.3 de la spec) — voir `moveModuleTo` plus bas pour le détail. Séparée
+    de `buildModuleCardMenu` pour rester testable sans DOM. */
+async function moveModuleTo(ctx: DashboardShellCtx, g: ModuleGroup, toRootId: string): Promise<boolean> {
+	const host = currentHost();
+	const localFrom = host.paths.localPath(g.folder);
+	// Dernier segment du chemin local : « B1/Cours/Reseaux » → « Reseaux ».
+	// Le dossier arrive à la racine cible SOUS LE MÊME NOM (spec §2.3), pas
+	// sous son chemin complet — un module d'un vault n'a pas à recréer toute
+	// l'arborescence de son ancien vault dans le dossier par défaut.
+	const nomDossier = localFrom.split("/").pop() ?? localFrom;
+	const to = host.paths.contractPath(toRootId, nomDossier);
+	try {
+		await host.fs.rename(g.folder, to);
+	} catch {
+		// Le contrat de `rename` refuse d'écraser : un homonyme existe déjà
+		// à la cible, rien n'a bougé.
+		host.ui.notice(t("dashboard.quizzes.moveExists"));
+		return false;
+	}
+	await ctx.reviewStore?.moved(g.folder, to);
+	return true;
+}
+
+export function buildModuleCardMenu(ctx: DashboardShellCtx, rerender: () => void, map: ModuleMap): (g: ModuleGroup, anchorEl?: HTMLElement) => ActionMenuItem[] {
+	return (g, anchorEl) => {
 		const archived = isFolderArchived(ctx, g.folder);
 		const { shareQuiz } = ctx;
+		const host = currentHost();
 		const items: ActionMenuItem[] = [];
 		// Absente, jamais grise : voir `buildQuizCardMenu`.
 		if (shareQuiz) items.push({
@@ -350,6 +376,37 @@ export function buildModuleCardMenu(ctx: DashboardShellCtx, rerender: () => void
 			// étant vide).
 			onClick: () => { setFolderArchived(ctx, g.folder, !archived); rerender(); },
 		});
+		// Une seule racine (le vault, sous Obsidian) : rien où déplacer.
+		// `anchorEl` manquant (appelant qui n'aurait pas encore été mis à jour) :
+		// même chose, plutôt que d'ouvrir un sous-menu sans rien à y ancrer.
+		const roots = host.paths.roots();
+		if (anchorEl && roots.length > 1) {
+			items.push({
+				icon: "folder-input",
+				label: t("dashboard.quizzes.menuMove"),
+				onClick: () => {
+					const rootDeG = host.paths.rootOf(g.folder);
+					const cibles = roots.filter(root => root.id !== rootDeG?.id);
+					openActionMenu(anchorEl, cibles.map(root => ({
+						label: root.name,
+						onClick: () => {
+							openConfirm({
+								title: t("dashboard.quizzes.moveConfirmTitle"),
+								body: t("dashboard.quizzes.moveConfirmBody", { name: g.name, target: root.name }),
+								cta: t("dashboard.quizzes.moveConfirmCta"),
+							}, () => {
+								void moveModuleTo(ctx, g, root.id).then(ok => {
+									if (ok) {
+										host.ui.notice(t("dashboard.quizzes.moved", { target: root.name }));
+										rerender();
+									}
+								});
+							});
+						},
+					})));
+				},
+			});
+		}
 		items.push({
 			icon: "trash-2",
 			label: t("dashboard.quizzes.menuDeleteModule"),

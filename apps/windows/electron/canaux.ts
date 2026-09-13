@@ -58,6 +58,10 @@ export interface DependancesCanaux {
 	    un `null` silencieux ferait repartir l'utilisateur de l'écran de choix
 	    sans que rien ne dise pourquoi. */
 	reglagesOuErreur(): Reglages;
+	/** Le chemin absolu du dossier de quiz par défaut (tranche 9), déjà créé
+	    et autorisé au périmètre par `main.ts` — le canal `systeme.dossierDefaut`
+	    le sert tel quel, sans autre calcul. */
+	dossierDefaut: string;
 	/** Pousse une charge vers la fenêtre (`webContents.send`), si elle existe. */
 	envoyer(canal: string, charge: unknown): void;
 	/** La fenêtre, pour y RATTACHER un dialogue natif (modal de la fenêtre,
@@ -234,7 +238,7 @@ async function verifierDossierFond(perimetre: Perimetre, valeur: unknown): Promi
 }
 
 export function enregistrerCanaux(deps: DependancesCanaux): void {
-	const { perimetre, reglagesOuErreur } = deps;
+	const { perimetre, reglagesOuErreur, dossierDefaut } = deps;
 	/* L'état du DISQUE vu par ce processus : les racines déclarées, l'index et
 	   son surveillant. Il vit ici, pas dans `main.ts` : la fenêtre n'a pas à le
 	   connaître, elle ne fait que recevoir ce que `deps.envoyer` lui pousse. */
@@ -449,6 +453,11 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 		if (erreur) console.warn(LOG_PREFIX, "ouverture impossible:", a, erreur);
 		return !erreur;
 	});
+
+	/* Sans argument, comme `vaultsObsidian` : le chemin est fixé par le
+	   principal (`dossier-defaut.ts`), jamais choisi par le rendu. Déjà créé
+	   et autorisé au périmètre avant l'ouverture de la fenêtre — voir `main.ts`. */
+	ipcMain.handle(CANAUX.systemeDossierDefaut, async () => dossierDefaut);
 
 	ipcMain.handle(CANAUX.vaultsObsidian, async () => {
 		/* Les vaults qu'Obsidian déclare LUI-MÊME entrent au périmètre : l'écran

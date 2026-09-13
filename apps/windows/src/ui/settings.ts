@@ -21,7 +21,7 @@ import { ajouter } from "../../../../src/dom";
 import manifeste from "../../../../src/assets/manifest.json";
 import { PRODUCT_NAME } from "../../../../src/branding";
 import type { Scanner } from "../../../../src/dashboard/scanner";
-import { MAX_DOSSIERS, addFolder, estVaultObsidian, examDates, pickFolder, removeFolder, savedFolders, setExamDate } from "../host/folder";
+import { MAX_DOSSIERS, addFolder, estVaultObsidian, examDates, obsidianVaults, pickFolder, removeFolder, savedFolders, setExamDate } from "../host/folder";
 import { cleModule, libelleModule } from "../review/catalogue";
 import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host";
 import { poserLogoObsidian } from "./marques";
@@ -58,14 +58,37 @@ export function renderSettings(
 	retour.addEventListener("click", () => deps.onBack());
 	ajouter(entete, "h2", "qbd-quizzes-title", t("review.settings.title"));
 
+	/* ── Le dossier de quiz PAR DÉFAUT (tranche 9) ──
+	   Sans croix, sans bouton : c'est `C:\Neo Quiz`, créé par le principal, il
+	   ne se retire pas. Section STATIQUE, à la différence de celle des
+	   emplacements supplémentaires : rien ici ne change jamais en cours de
+	   page. */
+	const sectionDefaut = ajouter(contenu, "section", "nq-reglages-section");
+	ajouter(sectionDefaut, "h3", "nq-reglages-titre", t("app.settings.defaultFolder"));
+	ajouter(sectionDefaut, "p", "nq-reglages-aide", t("app.settings.defaultFolderHint"));
+	const ligneDefaut = ajouter(sectionDefaut, "div", "nq-reglages-dossier");
+	currentHost().ui.setIcon(ajouter(ligneDefaut, "span", "nq-reglages-icone"), "folder");
+	const texteDefaut = ajouter(ligneDefaut, "div", "nq-reglages-texte");
+	ajouter(texteDefaut, "span", "nq-reglages-nom", t("app.settings.defaultFolder"));
+	const cheminDefaut = ajouter(texteDefaut, "span", "nq-reglages-chemin");
+	// `textContent` (via `ajouter`) : ce chemin vient du disque.
+	void savedFolders().then(dossiers => {
+		const defaut = dossiers.find(d => d.parDefaut);
+		if (defaut) ajouter(cheminDefaut, "span", undefined, defaut.path);
+	});
+
+	/* ── Les emplacements SUPPLÉMENTAIRES ──
+	   Les dossiers ajoutés à la main, avec leur croix, comme avant la
+	   tranche 9. */
 	const section = ajouter(contenu, "section", "nq-reglages-section");
-	ajouter(section, "h3", "nq-reglages-titre", t("review.settings.folders"));
-	ajouter(section, "p", "nq-reglages-aide", t("review.settings.foldersHint"));
+	ajouter(section, "h3", "nq-reglages-titre", t("app.settings.extraFolders"));
+	ajouter(section, "p", "nq-reglages-aide", t("app.settings.extraFoldersHint"));
 	const liste = ajouter(section, "div", "nq-reglages-liste");
 	const actions = ajouter(section, "div", "nq-reglages-actions");
 
 	async function dessiner(): Promise<void> {
-		const dossiers = await savedFolders();
+		// Le défaut ne figure jamais dans cette liste — il a sa propre section.
+		const dossiers = (await savedFolders()).filter(d => !d.parDefaut);
 		liste.replaceChildren();
 		for (const d of dossiers) {
 			const ligne = ajouter(liste, "div", "nq-reglages-dossier");
@@ -92,6 +115,26 @@ export function renderSettings(
 				})();
 			});
 		}
+		/* Les vaults Obsidian détectés mais pas encore ouverts, proposés en un
+		   clic (tâche 5) : ce que faisait `mountSansDossier` au premier
+		   lancement, maintenant ici, à chaque affichage de cette section. */
+		const vaults = await obsidianVaults();
+		const dejaOuverts = new Set(dossiers.map(d => d.path.toLowerCase()));
+		const detectes = vaults.filter(v => !dejaOuverts.has(v.chemin.toLowerCase()));
+		for (const v of detectes) {
+			const ligne = ajouter(liste, "button", "nq-reglages-dossier");
+			ligne.type = "button";
+			poserLogoObsidian(ajouter(ligne, "span", "nq-reglages-icone"));
+			const texte = ajouter(ligne, "div", "nq-reglages-texte");
+			ajouter(texte, "span", "nq-reglages-nom", v.nom);
+			ajouter(texte, "span", "nq-reglages-chemin", v.chemin);
+			ligne.addEventListener("click", () => {
+				void (async () => {
+					await addFolder(v.chemin);
+					deps.onFoldersChanged();
+				})();
+			});
+		}
 		ajouter(liste, "p", "nq-reglages-aide", t("review.settings.removeHint"));
 
 		actions.replaceChildren();
@@ -100,7 +143,8 @@ export function renderSettings(
 		currentHost().ui.setIcon(ajouter(ajout, "span", "qbd-btn-icon"), "folder-plus");
 		ajouter(ajout, "span", undefined, t("review.settings.addFolder"));
 		/* La limite de la spec §6 est DITE, pas subie : un bouton qui ne fait
-		   rien serait pris pour une panne. */
+		   rien serait pris pour une panne. Elle compte les emplacements
+		   SUPPLÉMENTAIRES : le défaut est en plus (spec §2.1). */
 		if (dossiers.length >= MAX_DOSSIERS) {
 			ajout.disabled = true;
 			ajouter(actions, "p", "nq-reglages-aide", t("review.settings.full", { count: MAX_DOSSIERS }));

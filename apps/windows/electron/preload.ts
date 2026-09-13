@@ -103,6 +103,7 @@ const pont: Pont = {
 	systeme: {
 		ouvrir: abs => ipcRenderer.invoke(CANAUX.ouvrir, abs),
 		vaultsObsidian: () => ipcRenderer.invoke(CANAUX.vaultsObsidian),
+		dossierDefaut: () => ipcRenderer.invoke(CANAUX.systemeDossierDefaut),
 	},
 
 	reseau: {

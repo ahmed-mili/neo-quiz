@@ -340,6 +340,11 @@ export interface Pont {
 		/** Les vaults qu'Obsidian connaît. Une liste vide est un état NORMAL
 		    (Obsidian absent de la machine), pas une erreur. */
 		vaultsObsidian(): Promise<VaultConnu[]>;
+		/** Le chemin absolu du dossier de quiz par défaut (`C:/Neo Quiz`,
+		    tranche 9), déjà créé et autorisé au périmètre au démarrage. Sans
+		    argument : ce chemin n'est jamais choisi par le rendu, seulement
+		    lu — voir `electron/dossier-defaut.ts`. */
+		dossierDefaut(): Promise<string>;
 	};
 
 	/**
@@ -534,6 +539,7 @@ export const CANAUX = {
 	reglagesSupprimer: "neo:reglages/supprimer",
 	ouvrir: "neo:systeme/ouvrir",
 	vaultsObsidian: "neo:systeme/vaults-obsidian",
+	systemeDossierDefaut: "neo:systeme/dossier-defaut",
 	reseauFetch: "neo:reseau/fetch",
 	reseauAnnuler: "neo:reseau/annuler",
 	processusRun: "neo:process/run",

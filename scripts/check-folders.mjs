@@ -12,7 +12,7 @@
  */
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
-await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, idUnique, segmentValide, MAX_DOSSIERS, appliquerExamDate, saveFolders }) => {
+await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, idUnique, segmentValide, MAX_DOSSIERS, appliquerExamDate, saveFolders, savedFolders, removeFolder }) => {
 	const r = makeReporter("Dossiers — réglage et identifiants");
 
 	r.check("aucun réglage : aucune racine", lireDossiers({}), []);
@@ -144,6 +144,47 @@ await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, id
 		console.warn = avertir;
 		if (precedent === undefined) delete globalThis.window;
 		else globalThis.window = precedent;
+	}
+
+	/* ── Le dossier PAR DÉFAUT (tranche 9) : devant, jamais retiré ──
+
+	   `savedFolders` le pose devant à CHAQUE lecture, à partir de ce que le
+	   principal sert (`systeme.dossierDefaut`) — jamais lu ni écrit dans
+	   `folders`. `removeFolder` doit le refuser, et ne doit JAMAIS l'écrire
+	   dans `folders` en tentant de le retirer d'une liste qui le contient. */
+	{
+		const precedent = globalThis.window;
+		const reglagesEcrits = [];
+		globalThis.window = {
+			neo: {
+				fichiers: { async exists() { return true; } },
+				reglages: {
+					async lire(cle) { return cle === "folders" ? [{ id: "Perso", path: "D:/Perso", name: "Perso" }] : undefined; },
+					async ecrire(cle, valeur) { reglagesEcrits.push([cle, valeur]); },
+					async supprimer() {},
+				},
+				systeme: { async dossierDefaut() { return "C:/Neo Quiz"; } },
+			},
+		};
+		try {
+			const dossiers = await savedFolders();
+			r.check("le défaut est devant, marqué parDefaut, et n'écrase pas les dossiers déjà ouverts",
+				dossiers.map(d => ({ id: d.id, parDefaut: !!d.parDefaut })),
+				[{ id: "Neo Quiz", parDefaut: true }, { id: "Perso", parDefaut: false }]);
+
+			await removeFolder("Neo Quiz");
+			r.check("removeFolder refuse le défaut : aucune écriture ne le mentionne",
+				reglagesEcrits.every(([cle, valeur]) => cle !== "folders" || !valeur.some(d => d.id === "Neo Quiz")),
+				true);
+
+			reglagesEcrits.length = 0;
+			await removeFolder("Perso");
+			r.check("removeFolder retire un dossier ordinaire sans jamais écrire le défaut",
+				reglagesEcrits, [["folders", []]]);
+		} finally {
+			if (precedent === undefined) delete globalThis.window;
+			else globalThis.window = precedent;
+		}
 	}
 
 	r.done();

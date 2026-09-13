@@ -73,6 +73,14 @@ export const EN_APP = {
 	"app.menu.devtools": "Show developer tools",
 	"app.menu.nextWallpaper": "Next wallpaper",
 
+	/* ── Le dossier de quiz par défaut, et les emplacements supplémentaires
+	   (tranche 9) — Réglages, application seulement : le greffon n'a rien à
+	   choisir, il lit le vault qui le contient. ── */
+	"app.settings.defaultFolder": "Quiz folder",
+	"app.settings.defaultFolderHint": "Neo Quiz creates its quizzes here. This folder cannot be removed.",
+	"app.settings.extraFolders": "Additional locations",
+	"app.settings.extraFoldersHint": "Obsidian vaults and other folders you have opened.",
+
 	/* ── Réglages « Général » (application seulement) ── */
 	"app.settings.general": "General",
 	"app.reprise.label": "Reopen where you left off",

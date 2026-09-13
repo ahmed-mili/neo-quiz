@@ -194,6 +194,17 @@ await withSrcModule("apps/windows/electron/vaults.ts", async ({ vaultsObsidian }
 	r.done();
 });
 
+/* ─────────── le dossier par défaut ─────────── */
+
+await withSrcModule("apps/windows/electron/dossier-defaut.ts", async ({ cheminDossierDefaut }) => {
+	const r = makeReporter("Électron — dossier de quiz par défaut");
+	r.check("Windows : fixe, à la racine du disque système, jamais sous le dossier personnel",
+		cheminDossierDefaut("win32", "C:/Users/x"), "C:/Neo Quiz");
+	r.check("Linux : sous le dossier personnel (pas de C:, l'AppImage doit démarrer)",
+		cheminDossierDefaut("linux", "/home/x"), "/home/x/Neo Quiz");
+	r.done();
+});
+
 /* ─────────── le périmètre ─────────── */
 
 await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetre, perimetreInitial }) => {
@@ -212,7 +223,7 @@ await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetr
 			await mkdir(donnees, { recursive: true });
 			await writeFile(join(donnees, "settings.json"), JSON.stringify({ folders: [{ id: "v", path: vault, name: "v" }] }), "utf-8");
 			await withSrcModule("apps/windows/electron/reglages.ts", async ({ creerReglages }) => {
-				const p = await perimetreInitial({ dossierDonnees: donnees, reglages: creerReglages(join(donnees, "settings.json")) });
+				const p = await perimetreInitial({ dossierDonnees: donnees, reglages: creerReglages(join(donnees, "settings.json")), dossierDefaut: join(dir, "defaut-absent-1") });
 				r.check("le dossier de réglages (userData) est HORS périmètre au démarrage, les dossiers qu'il liste y sont",
 					{
 						settings: await aRejete(() => p.borner(join(donnees, "settings.json"))),
@@ -229,7 +240,7 @@ await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetr
 			await mkdir(donnees, { recursive: true });
 			await writeFile(join(donnees, "settings.json"), JSON.stringify({ fond: { dossier: dossierFond, image: "a.jpg" } }), "utf-8");
 			await withSrcModule("apps/windows/electron/reglages.ts", async ({ creerReglages }) => {
-				const p = await perimetreInitial({ dossierDonnees: donnees, reglages: creerReglages(join(donnees, "settings.json")) });
+				const p = await perimetreInitial({ dossierDonnees: donnees, reglages: creerReglages(join(donnees, "settings.json")), dossierDefaut: join(dir, "defaut-absent-2") });
 				r.check("le dossier du fond d'écran persisté est admis au démarrage, comme les dossiers de quiz",
 					await aRejete(() => p.borner(join(dossierFond, "a.jpg"))), false);
 			});
@@ -245,9 +256,29 @@ await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetr
 			await mkdir(donnees, { recursive: true });
 			await writeFile(join(donnees, "settings.json"), JSON.stringify({ fond: { dossier: "", image: "a.jpg" } }), "utf-8");
 			await withSrcModule("apps/windows/electron/reglages.ts", async ({ creerReglages }) => {
-				const p = await perimetreInitial({ dossierDonnees: donnees, reglages: creerReglages(join(donnees, "settings.json")) });
+				const p = await perimetreInitial({ dossierDonnees: donnees, reglages: creerReglages(join(donnees, "settings.json")), dossierDefaut: join(dir, "defaut-absent-3") });
 				r.check("discriminance : un fond avec un dossier non-chaîne ou vide n'admet rien",
 					p.racines(), []);
+			});
+		});
+
+		await cas(r, "le défaut est dans racines() même sans réglage (premier lancement)", async () => {
+			/* C'est TOUTE la raison d'être de `dossierDefaut` : un utilisateur qui
+			   n'a jamais rien réglé (`settings.json` absent) doit quand même
+			   pouvoir écrire dans le dossier par défaut dès le premier
+			   lancement — sans lui, le premier `Nouveau quiz` échouerait
+			   « chemin hors des dossiers ouverts ». */
+			const donnees = join(dir, "userData-premier-lancement");
+			const defaut = join(dir, "defaut-premier-lancement");
+			await mkdir(defaut, { recursive: true });
+			await withSrcModule("apps/windows/electron/reglages.ts", async ({ creerReglages }) => {
+				const p = await perimetreInitial({
+					dossierDonnees: donnees,
+					reglages: creerReglages(join(donnees, "settings.json")),
+					dossierDefaut: defaut,
+				});
+				r.check("le défaut est dans racines() même sans réglage (premier lancement)",
+					p.racines(), [defaut.replace(/\\/g, "/")]);
 			});
 		});
 

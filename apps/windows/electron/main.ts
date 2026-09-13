@@ -25,11 +25,14 @@
 ══════════════════════════════════════════════════════════ */
 
 import { BrowserWindow, Menu, app, net, protocol, shell } from "electron";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
 import { setLanguage } from "../../../src/i18n";
 import { enregistrerCanaux } from "./canaux";
+import { cheminDossierDefaut } from "./dossier-defaut";
 import { perimetreInitial } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { CANAUX, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
@@ -101,6 +104,9 @@ function etatFenetre(): EtatFenetre {
 
 let fenetre: BrowserWindow | null = null;
 let reglages: Reglages | null = null;
+/** Le chemin absolu du dossier de quiz par défaut (tranche 9), posé une fois
+    au démarrage — le canal `systeme.dossierDefaut` le sert tel quel. */
+let dossierDefaut = "";
 let miseAJour: MiseAJour | null = null;
 let fermetureArmee = false;
 let fermetureEnCours = false;
@@ -504,11 +510,18 @@ if (!app.requestSingleInstanceLock()) {
 		setLanguage(/^fr\b/i.test(app.getLocale()) ? "fr" : "en");
 		const donnees = app.getPath("userData");
 		reglages = creerReglages(path.join(donnees, "settings.json"));
+		/* Le dossier de quiz PAR DÉFAUT (tranche 9) : créé AVANT le périmètre,
+		   pour qu'il existe déjà quand `perimetreInitial` l'autorise — sans quoi
+		   la première ouverture d'un fichier dedans (« Nouveau quiz ») tomberait
+		   sur un dossier absent. */
+		dossierDefaut = cheminDossierDefaut(process.platform, os.homedir());
+		await fs.mkdir(dossierDefaut, { recursive: true });
 		/* La liste blanche des dossiers que le pont a le droit de toucher — voir
-		   `perimetre.ts` : les réglages, puis le sélecteur et les vaults d'Obsidian
-		   (`canaux.ts`). Le dossier de données est CRÉÉ là-dedans mais JAMAIS
-		   autorisé (Ruling 12) : la raison est écrite sur `perimetreInitial`. */
-		const perimetre = await perimetreInitial({ dossierDonnees: donnees, reglages: reglagesOuErreur() });
+		   `perimetre.ts` : le défaut d'ABORD, puis les réglages, puis le sélecteur
+		   et les vaults d'Obsidian (`canaux.ts`). Le dossier de données est CRÉÉ
+		   là-dedans mais JAMAIS autorisé (Ruling 12) : la raison est écrite sur
+		   `perimetreInitial`. */
+		const perimetre = await perimetreInitial({ dossierDonnees: donnees, reglages: reglagesOuErreur(), dossierDefaut });
 		// Même geste que le périmètre, pour les URL : l'hôte Ollama des réglages.
 		await admettreHoteOllama(reglagesOuErreur());
 		// Le MÊME objet que les canaux : une racine admise par `choisirDossier`
@@ -523,6 +536,7 @@ if (!app.requestSingleInstanceLock()) {
 		enregistrerCanaux({
 			perimetre,
 			reglagesOuErreur,
+			dossierDefaut,
 			envoyer(canal, charge) {
 				if (fenetre && !fenetre.isDestroyed()) fenetre.webContents.send(canal, charge);
 			},

@@ -52,6 +52,11 @@ export interface DossierQuiz {
 	/** Nom affiché. Modifiable un jour sans conséquence — l'identité, c'est
 	    `id`. */
 	name: string;
+	/** Le dossier par défaut (`C:\Neo Quiz`, tranche 9) : jamais écrit dans
+	    `folders`, toujours PREMIER dans `savedFolders()`, et `removeFolder`
+	    le refuse. Absent (pas `false`) pour tout autre dossier — c'est
+	    `savedFolders` qui pose `true`, personne d'autre n'a à le faire. */
+	parDefaut?: boolean;
 }
 
 /** La limite de la spec §6. Dix dossiers, pas onze. */
@@ -161,11 +166,42 @@ export function lireDossiers(brut: { folders?: unknown; folder?: unknown }): Dos
 	return [];
 }
 
+/** L'identifiant et le nom du dossier par défaut — DONNÉES PERSISTÉES dans
+    les chemins du contrat (le premier segment) : jamais traduites, comme
+    `id`/`name` de tout autre dossier. */
+const ID_DOSSIER_DEFAUT = "Neo Quiz";
+
 /**
- * Les dossiers retenus de la session précédente, ou `[]` au premier
- * lancement.
+ * Le dossier par défaut, tel que le principal le sert (déjà créé et autorisé
+ * au périmètre au démarrage — voir `electron/dossier-defaut.ts`).
+ *
+ * Une lecture impossible n'empêche pas le reste de démarrer : elle est
+ * gardée à part de celle des réglages, plus bas, pour la même raison que
+ * `obsidianVaults` — un incident sur cette lecture ne doit pas priver
+ * l'utilisateur des dossiers qu'il a lui-même ouverts.
+ */
+async function dossierParDefaut(): Promise<DossierQuiz | null> {
+	try {
+		const chemin = await pont().systeme.dossierDefaut();
+		if (typeof chemin !== "string" || !chemin.trim()) return null;
+		return { id: ID_DOSSIER_DEFAUT, path: normaliserChemin(chemin), name: ID_DOSSIER_DEFAUT, parDefaut: true };
+	} catch (e) {
+		console.warn(LOG_PREFIX, "dossier par défaut illisible:", e);
+		return null;
+	}
+}
+
+/**
+ * Les dossiers retenus de la session précédente, LE DÉFAUT DEVANT.
+ *
+ * Le défaut n'est jamais lu dans `folders` ni écrit dedans (Ruling — voir
+ * `DossierQuiz.parDefaut`) : il est ajouté ICI, à chaque appel, à partir de
+ * ce que le principal sert. Un utilisateur qui avait déjà des dossiers
+ * ouverts les garde tels quels, en emplacements supplémentaires — rien à
+ * migrer dans les réglages.
  */
 export async function savedFolders(): Promise<DossierQuiz[]> {
+	const defaut = await dossierParDefaut();
 	try {
 		const reglages = pont().reglages;
 		const legacy = await reglages.lire(CLE_DOSSIER_LEGACY);
@@ -180,12 +216,12 @@ export async function savedFolders(): Promise<DossierQuiz[]> {
 			await reglages.ecrire(CLE_DOSSIERS, liste);
 			await reglages.supprimer(CLE_DOSSIER_LEGACY);
 		}
-		return liste;
+		return defaut ? [defaut, ...liste] : liste;
 	} catch (e) {
-		// Réglages illisibles : on repart de l'écran de choix plutôt que
-		// d'empêcher le démarrage.
+		// Réglages illisibles : le défaut reste utilisable, seuls les
+		// emplacements supplémentaires manquent à l'appel.
 		console.warn(LOG_PREFIX, "réglages illisibles:", e);
-		return [];
+		return defaut ? [defaut] : [];
 	}
 }
 
@@ -218,7 +254,13 @@ export async function savedFolders(): Promise<DossierQuiz[]> {
  */
 export async function saveFolders(liste: DossierQuiz[]): Promise<void> {
 	const gardes: DossierQuiz[] = [];
+	/* LE DÉFAUT N'ENTRE JAMAIS DANS `folders` (Ruling, tranche 9) : il n'est
+	   pas produit par le sélecteur natif ni par un vault choisi, il est
+	   POSÉ par `savedFolders` à chaque lecture. Un appelant qui passerait ici
+	   la liste telle que `savedFolders` la rend (défaut compris — `addFolder`,
+	   `removeFolder`) ne doit pas le persister deux fois. */
 	for (const d of liste) {
+		if (d.parDefaut) continue;
 		let present = true;
 		try {
 			present = await pont().fichiers.exists(d.path);
@@ -240,20 +282,26 @@ export async function addFolder(chemin: string): Promise<DossierQuiz[]> {
 	const liste = await savedFolders();
 	const normalise = normaliserChemin(chemin);
 	if (liste.some(d => d.path.toLowerCase() === normalise.toLowerCase())) return liste;
-	if (liste.length >= MAX_DOSSIERS) return liste;
+	/* `MAX_DOSSIERS` compte les emplacements SUPPLÉMENTAIRES (spec §2.1) : le
+	   défaut est en plus, il ne mange pas de la limite. */
+	if (liste.filter(d => !d.parDefaut).length >= MAX_DOSSIERS) return liste;
 	const nom = nomDeDossier(normalise);
 	const suivante = [...liste, { id: idUnique(nom, new Set(liste.map(d => d.id))), path: normalise, name: nom }];
 	await saveFolders(suivante);
-	return suivante;
+	return savedFolders();
 }
 
 /** Retire un dossier. Le JOURNAL du dossier n'est pas touché : il vit dans le
     dossier, avec les notes qu'il décrit, et le rajouter plus tard doit rendre
     l'historique — c'est précisément ce que son nouvel emplacement permet. */
 export async function removeFolder(id: string): Promise<DossierQuiz[]> {
-	const suivante = (await savedFolders()).filter(d => d.id !== id);
+	if (id === ID_DOSSIER_DEFAUT) return savedFolders();
+	/* `saveFolders` écrit sous `folders`, où le défaut n'entre JAMAIS (voir
+	   `savedFolders`) : il est retiré ici de la liste écrite, puis
+	   `savedFolders` le replace devant à la prochaine lecture. */
+	const suivante = (await savedFolders()).filter(d => d.id !== id && !d.parDefaut);
 	await saveFolders(suivante);
-	return suivante;
+	return savedFolders();
 }
 
 /** Un vault Obsidian connu de la machine. */

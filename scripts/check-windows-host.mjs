@@ -717,6 +717,7 @@ function installerPont(fichiers = {}, perimetre = null) {
 		systeme: {
 			async ouvrir(p) { journal.push(["ouvrir", p]); return true; },
 			async vaultsObsidian() { return []; },
+			async dossierDefaut() { return "C:/Neo Quiz"; },
 		},
 		/* Le RÉSEAU du pont, journalisé : ce que le rendu a décidé d'envoyer (la
 		   requête SANS `signal`, l'identifiant) et ce qu'il annule. La réponse

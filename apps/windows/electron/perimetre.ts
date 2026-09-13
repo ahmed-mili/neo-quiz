@@ -167,9 +167,16 @@ export function cheminsDeDossiers(valeur: unknown): string[] {
 export async function perimetreInitial(options: {
 	dossierDonnees: string;
 	reglages: Reglages;
+	/** Le dossier de quiz par défaut (`dossier-defaut.ts`), déjà CRÉÉ par
+	    l'appelant (`main.ts`, `fs.mkdir` avant cet appel). Autorisé EN
+	    PREMIER, et sans dépendre d'aucun réglage : c'est ce qui rend le
+	    premier lancement possible sans écran de choix — un utilisateur qui
+	    n'a jamais rien réglé doit quand même pouvoir écrire dedans. */
+	dossierDefaut: string;
 }): Promise<Perimetre> {
 	const perimetre = creerPerimetre();
 	await fs.mkdir(options.dossierDonnees, { recursive: true });
+	await perimetre.autoriser(options.dossierDefaut);
 	for (const cle of [CLE_DOSSIERS, CLE_DOSSIER_LEGACY]) {
 		let valeur: unknown;
 		try {

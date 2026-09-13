@@ -4,7 +4,6 @@ import "./assets/toast.css";
 import "./assets/shell.css";
 import "./assets/modal.css";
 import { setLanguage, t } from "../../../src/i18n";
-import { ajouter } from "../../../src/dom";
 import { LOG_PREFIX } from "../../../src/branding";
 import { createScanner } from "../../../src/dashboard/scanner";
 import type { QuizIndexEntry, Scanner } from "../../../src/dashboard/scanner";
@@ -12,9 +11,7 @@ import { currentHost, installHost } from "../../../src/host/current";
 import { createWindowsHost, createWindowsIndex, creerCarteRacines } from "./host";
 import type { RacineOuverte } from "./host";
 import { pont } from "./host/pont";
-import { poserIcone } from "./host/ui";
-import { poserLogoObsidian } from "./ui/marques";
-import { addFolder, chargerExamDates, estVaultObsidian, obsidianVaults, pickFolder, savedFolders } from "./host/folder";
+import { chargerExamDates, estVaultObsidian, savedFolders } from "./host/folder";
 import type { ReviewStore } from "../../../src/review/review-store";
 import type { StatsStore } from "../../../src/dashboard/stats-store";
 import { creerJournalApp } from "./review/store";
@@ -60,13 +57,13 @@ import { appliquerFond, fondSuivant } from "./ui/fond";
 let demonterCourant: (() => void | Promise<void>) | null = null;
 
 /**
- * L'entrée « Réglages… » du menu d'application (et `Ctrl+,`) : ce que fait
- * exactement ce bouton dépend de l'écran affiché — ouvrir la page Réglages
- * une fois la coquille montée, ou le sélecteur de dossier tant qu'aucun
- * dossier n'est ouvert. La barre est montée UNE FOIS, avant le premier écran
- * (voir `demarrer`) : elle ne peut donc pas fermer directement sur `root` /
- * `scanner` / `store` / `stats`, qui n'existent pas encore à son montage.
- * `mount` et `mountSansDossier` réaffectent cette variable à chaque montage.
+ * L'entrée « Réglages… » du menu d'application (et `Ctrl+,`) : ouvre la page
+ * Réglages une fois la coquille montée. La barre est montée UNE FOIS, avant
+ * le premier écran (voir `demarrer`) : elle ne peut donc pas fermer
+ * directement sur `root` / `scanner` / `store` / `stats`, qui n'existent pas
+ * encore à son montage. `mount` réaffecte cette variable à chaque montage —
+ * il n'y a plus qu'un seul écran de départ depuis la tranche 9 (le dossier
+ * par défaut supprime l'écran « aucun dossier »).
  */
 let ouvrirReglagesCourant: () => void = () => {};
 
@@ -192,132 +189,6 @@ async function ouvrirQuiz(root: HTMLElement, scanner: Scanner, store: ReviewStor
 	}, store, stats);
 }
 
-/**
- * Choix d'un dossier : sélecteur natif → persistance → portées → rechargement.
- *
- * RECHARGER, et non remonter à chaud : l'hôte est un singleton installé une
- * seule fois (`src/host/current.ts`), et le rechargement est la façon la plus
- * honnête d'en obtenir un neuf — sans quoi il faudrait démonter un surveillant,
- * un index et un scanner déjà branchés. Rend `false` si l'utilisateur annule :
- * ce n'est pas une erreur, c'est la réponse « non ».
- */
-async function changerDossier(): Promise<boolean> {
-	const choix = await pickFolder();
-	if (!choix) return false;
-	await choisirDossier(choix);
-	return true;
-}
-
-/**
- * Retient un dossier et repart dessus.
- *
- * Le rechargement plutôt qu'un remontage à chaud : l'hôte est un singleton
- * installé une seule fois, et repartir de zéro est la façon la plus honnête
- * d'en obtenir un neuf. Un second `installHost` laisserait le premier index et
- * son surveillant vivants, sur l'ancien dossier.
- *
- * PLUS D'`allowFolder` ici, et ce n'est pas un oubli : le périmètre du
- * processus principal (`electron/perimetre.ts`) admet le dossier au moment où
- * il le PRODUIT — `choisirDossier` (le sélecteur natif) et `vaultsObsidian`
- * sont deux de ses trois portes, la troisième étant la clé `folders` relue au
- * démarrage. Le rendu ne déclare plus ce qu'il a le droit de lire ; c'est tout
- * l'objet du périmètre (voir l'en-tête de `host/folder.ts`).
- */
-async function choisirDossier(chemin: string): Promise<void> {
-	await addFolder(chemin);
-	location.reload();
-}
-
-/**
- * Le premier lancement : aucun dossier n'a encore été choisi. Le bouton passe
- * par `changerDossier`, comme celui de la liste — un seul enchaînement.
- */
-function mountSansDossier(root: HTMLElement): void {
-	void demonter();
-	root.textContent = "";
-	// Tant qu'aucun dossier n'est ouvert, « Réglages… » propose le même
-	// sélecteur natif que le bouton de cet écran — il n'y a rien d'autre à
-	// régler avant qu'un dossier existe. L'annulation n'est pas une erreur
-	// (voir `changerDossier`).
-	ouvrirReglagesCourant = () => { void changerDossier(); };
-
-	const ecran = ajouter(root, "div", "nq-accueil");
-
-	/* La TOQUE, seule image de l'écran : c'est la marque de l'icône de
-	   l'application. La fenêtre et la vignette de la barre des tâches doivent
-	   se reconnaître comme un seul produit.
-	   `poserIcone` et NON `currentHost().ui.setIcon` : cet écran s'affiche
-	   AVANT qu'un hôte soit installé, et `currentHost()` jette tant qu'il n'y
-	   en a pas — ce serait une exception au démarrage, pas une icône. */
-	poserIcone(ajouter(ecran, "div", "nq-accueil-marque"), "graduation-cap");
-
-	// t() AU RENDU, jamais dans une constante de module : sinon la langue est
-	// figée à celle du démarrage.
-	ajouter(ecran, "h1", "nq-accueil-titre", t("app.empty.title"));
-	ajouter(ecran, "p", "nq-accueil-texte", t("app.empty.body"));
-
-	/* Les vaults d'Obsidian, s'il y en a : les proposer d'un clic évite de
-	   faire naviguer l'utilisateur jusqu'à un dossier qu'il ouvre tous les
-	   jours. La liste arrive de façon asynchrone et s'insère AVANT le bouton —
-	   l'écran reste utilisable pendant ce temps, le sélecteur natif étant déjà
-	   là. Une liste vide est un état NORMAL (pas d'Obsidian sur la machine). */
-	const listeVaults = ajouter(ecran, "div", "nq-accueil-vaults");
-
-	const bouton = ajouter(ecran, "button", "qbd-btn qbd-btn--create");
-	bouton.type = "button";
-	poserIcone(ajouter(bouton, "span", "qbd-btn-icon"), "folder-open");
-	bouton.appendChild(document.createTextNode(t("app.empty.pickFolder")));
-
-	function echouer(e: unknown): void {
-		/* La cause est NOMMÉE, jamais résumée : cet écran est le seul endroit
-		   où l'utilisateur peut lire pourquoi le démarrage a échoué. */
-		ecran.replaceChildren();
-		ajouter(ecran, "p", "nq-accueil-erreur",
-			t("app.error.startup", { error: e instanceof Error ? e.message : String(e) }));
-	}
-
-	bouton.addEventListener("click", () => {
-		void (async () => {
-			bouton.disabled = true;
-			try {
-				// Annulation : ce n'est pas une erreur, l'écran reste tel quel.
-				await changerDossier();
-			} catch (e) {
-				echouer(e);
-			} finally {
-				bouton.disabled = false;
-			}
-		})();
-	});
-
-	void (async () => {
-		const vaults = await obsidianVaults();
-		if (vaults.length === 0) return;
-		ajouter(listeVaults, "p", "nq-accueil-vaults-titre", t("app.empty.yourVaults"));
-		for (const v of vaults) {
-			const ligne = ajouter(listeVaults, "button", "nq-vault");
-			ligne.type = "button";
-			/* Le LOGO d'Obsidian, pas une icône Lucide : ce que cette image
-			   transporte, c'est « ceci est un vault Obsidian » — une icône de
-			   dossier dirait seulement « ceci est un dossier ». */
-			poserLogoObsidian(ajouter(ligne, "span", "nq-vault-icone"));
-			const texte = ajouter(ligne, "span", "nq-vault-texte");
-			// `textContent` : un nom de dossier vient du disque de l'utilisateur.
-			ajouter(texte, "span", "nq-vault-nom", v.nom);
-			ajouter(texte, "span", "nq-vault-chemin", v.chemin);
-			ligne.addEventListener("click", () => {
-				void (async () => {
-					try {
-						await choisirDossier(v.chemin);
-					} catch (e) {
-						echouer(e);
-					}
-				})();
-			});
-		}
-	})();
-}
-
 async function demarrer(): Promise<void> {
 	const root = document.getElementById("neo-quiz-root");
 	if (!root) throw new Error("#neo-quiz-root introuvable");
@@ -325,8 +196,8 @@ async function demarrer(): Promise<void> {
 	setLanguage("auto");
 	document.title = t("app.window.title");
 	/* Montée UNE FOIS, avant le premier écran : elle survit à tous les
-	   changements d'écran qui suivent (coquille, réglages, écran vide), qui
-	   eux se démontent et se remontent par `demonterCourant`. */
+	   changements d'écran qui suivent (coquille, réglages), qui eux se
+	   démontent et se remontent par `demonterCourant`. */
 	monterBarreTitre(document.body, {
 		ouvrirReglages: () => ouvrirReglagesCourant(),
 		fondSuivant: () => { void fondSuivant(); },
@@ -337,7 +208,9 @@ async function demarrer(): Promise<void> {
 	await appliquerFond();
 	try {
 		const dossiers = await savedFolders();
-		if (!dossiers.length) return void mountSansDossier(root);
+		/* `dossiers` contient TOUJOURS au moins le dossier par défaut
+		   (tranche 9) : `savedFolders()` le pose devant à chaque lecture. Il
+		   n'y a donc plus d'écran « aucun dossier » à monter ici. */
 		/* Les dossiers persistés sont DÉJÀ au périmètre du processus principal,
 		   qui a lu la clé `folders` avant d'ouvrir la fenêtre — il n'y a plus
 		   rien à « ouvrir » d'ici. Reste la détection de vault, qui décide où
@@ -354,7 +227,13 @@ async function demarrer(): Promise<void> {
 				console.warn(LOG_PREFIX, "dossier inaccessible, ignoré:", d.path, e);
 			}
 		}
-		if (!ouvertes.length) return void mountSansDossier(root);
+		/* Plus d'écran de repli ici (`mountSansDossier` a disparu, tranche 9) :
+		   le dossier par défaut est créé par le principal AVANT l'ouverture de
+		   la fenêtre, `estVaultObsidian` ne jette jamais (elle rend `false`
+		   sur une erreur — voir son propre `catch`), donc `ouvertes` ne peut
+		   être vide qu'un instant entre la suppression du disque du dossier
+		   par défaut et son prochain démarrage, un cas qu'aucun écran ne
+		   protège mieux qu'une coquille simplement vide. */
 		const carte = creerCarteRacines(ouvertes);
 		const index = await createWindowsIndex(carte);
 		installHost(createWindowsHost(carte, index));

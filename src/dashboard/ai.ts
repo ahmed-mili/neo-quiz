@@ -26,6 +26,7 @@ import type { QuizPageHandlers } from "./detail";
 import type { QuizDraft } from "./detail-io";
 import { convertParsedToInternal, readModeConfig } from "../editor/convert";
 import { exportAll, exportAllWithFence } from "../editor/export";
+import { ecrireFrontmatterNeoQuiz } from "../quiz-frontmatter";
 import { ensureFolder, freeNotePath } from "./folder-create";
 import type { DraftQuestion } from "../editor/utils";
 import type { ParsedQuizItem } from "../editor/modals";
@@ -1715,7 +1716,17 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				? title
 				: t("dashboard.quizzes.newQuizDefaultName");
 			const path = await freeNotePath(folder, name);
-			await host.fs.write(path, exportAllWithFence(draft.questions, draft.examOptions) + "\n");
+			const provider = settings().aiProvider || "";
+			// Le modèle RÉELLEMENT utilisé si le client l'a publié (repli du
+			// fournisseur quand aiModel est vide) ; sinon le réglage tel quel.
+			const model = lastUsage?.model || settings().aiModel || "";
+			const frontmatter = ecrireFrontmatterNeoQuiz({
+				provider,
+				model,
+				effort: provider !== "ollama" ? settings().aiEffort : undefined,
+				generatedAt: new Date().toISOString(),
+			});
+			await host.fs.write(path, frontmatter + exportAllWithFence(draft.questions, draft.examOptions) + "\n");
 
 			const file = host.fs.getFile(path);
 			if (file) await deps.scanner.scanFile(file);

@@ -154,3 +154,59 @@ await withSrcModule("src/dashboard/scanner.ts", async ({ createScanner }) => {
 
 	r.done();
 });
+
+/* ── Frontmatter `neo-quiz:` (src/quiz-frontmatter.ts) ──
+   Module pur : qui a généré le quiz (fournisseur, modèle, effort,
+   horodatage), lu par le scanner depuis la tête de la note. */
+await withSrcModule("src/quiz-frontmatter.ts", async ({ lireFrontmatterNeoQuiz, ecrireFrontmatterNeoQuiz }) => {
+	const r = makeReporter("Frontmatter neo-quiz");
+
+	r.check("une note sans frontmatter rend null",
+		lireFrontmatterNeoQuiz("```quiz-blocks\n[]\n```"), null);
+
+	r.check("un `---` au milieu du texte n'est pas un frontmatter",
+		lireFrontmatterNeoQuiz("Avant\n---\nApres\n```quiz-blocks\n[]\n```"), null);
+
+	const complet = [
+		"---",
+		"neo-quiz:",
+		"  provider: claude-code",
+		"  model: claude-opus-5",
+		"  effort: high",
+		"  generatedAt: 2026-09-13T09:40:12Z",
+		"---",
+		"",
+		"```quiz-blocks",
+		"[]",
+		"```",
+	].join("\n");
+	r.check("un frontmatter complet rend les quatre champs",
+		lireFrontmatterNeoQuiz(complet),
+		{ provider: "claude-code", model: "claude-opus-5", effort: "high", generatedAt: "2026-09-13T09:40:12Z" });
+
+	const sansEffort = [
+		"---",
+		"neo-quiz:",
+		"  provider: ollama",
+		"  model: glm-5.3:cloud",
+		"  generatedAt: 2026-09-13T09:40:12Z",
+		"---",
+		"",
+	].join("\n");
+	r.check("effort absent (Ollama) rend undefined plutot qu'une chaine vide",
+		lireFrontmatterNeoQuiz(sansEffort),
+		{ provider: "ollama", model: "glm-5.3:cloud", generatedAt: "2026-09-13T09:40:12Z" });
+
+	r.check("un frontmatter sans cle neo-quiz: rend null",
+		lireFrontmatterNeoQuiz(["---", "autre: valeur", "---", ""].join("\n")), null);
+
+	r.check("aller-retour avec effort",
+		lireFrontmatterNeoQuiz(ecrireFrontmatterNeoQuiz({ provider: "codex", model: "gpt-5.6-terra", effort: "medium", generatedAt: "2026-09-13T00:00:00Z" })),
+		{ provider: "codex", model: "gpt-5.6-terra", effort: "medium", generatedAt: "2026-09-13T00:00:00Z" });
+
+	r.check("aller-retour sans effort",
+		lireFrontmatterNeoQuiz(ecrireFrontmatterNeoQuiz({ provider: "ollama", model: "glm-5.3:cloud", generatedAt: "2026-09-13T00:00:00Z" })),
+		{ provider: "ollama", model: "glm-5.3:cloud", generatedAt: "2026-09-13T00:00:00Z" });
+
+	r.done();
+});

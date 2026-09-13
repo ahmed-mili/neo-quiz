@@ -4,6 +4,8 @@ import { extractExamOptions, parseQuizSource, QUIZ_BLOCK_RE } from "../quiz-util
 import { QUESTION_ROLES } from "../types/quiz";
 import type { QuestionRole } from "../types/quiz";
 import type { Host, HostFile } from "../host/types";
+import { lireFrontmatterNeoQuiz } from "../quiz-frontmatter";
+import type { NeoQuizFrontmatter } from "../quiz-frontmatter";
 
 /* ══════════════════════════════════════════════════════════
    QUIZ SCANNER — Indexeur de vault
@@ -80,6 +82,9 @@ export interface QuizIndexEntry extends QuizMeta {
 	basename: string;
 	title: string;
 	mtime: number;
+	/** Qui a généré ce quiz — absent d'un quiz écrit à la main ou partagé
+	    sans frontmatter (lireFrontmatterNeoQuiz). */
+	generated?: NeoQuizFrontmatter;
 }
 
 /**
@@ -192,7 +197,8 @@ export function createScanner(host: Host): Scanner {
 					basename: file.basename,
 					title: file.basename,
 					...meta,
-					mtime: file.mtime
+					mtime: file.mtime,
+					generated: lireFrontmatterNeoQuiz(content) || undefined,
 				});
 			} catch {
 				// Ignorer les erreurs de lecture
@@ -227,7 +233,8 @@ export function createScanner(host: Host): Scanner {
 				basename: file.basename,
 				title: file.basename,
 				...meta,
-				mtime: file.mtime
+				mtime: file.mtime,
+				generated: lireFrontmatterNeoQuiz(content) || undefined,
 			};
 			// L'autosave d'Obsidian déclenche `modify` toutes les ~2 s
 			// pendant la frappe : ne notifier (→ re-render sidebar + vue)

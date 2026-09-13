@@ -460,9 +460,21 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		// 2026-07-21). Elles apparaissent à la première tentative, avec le
 		// compteur de tentatives qui, lui, n'a de sens qu'à partir de 1.
 		const played = stat.attempts > 0;
-		const cells: Array<{ label: string; value: string; accent?: string }> = [
+		const cells: Array<{ label: string; value: string; accent?: string; cls?: string; title?: string }> = [
 			{ label: t("dashboard.detail.statType"), value: quizTypeLabel(quiz.quizType) },
 		];
+		// Qui a généré ce quiz — absente pour une note écrite à la main ou
+		// pour un quiz partagé sans frontmatter. `effort` en libellé (absent
+		// pour Ollama : le nom du fournisseur, seule information qu'il ait).
+		if (quiz.generated) {
+			const g = quiz.generated;
+			cells.push({
+				label: g.effort ?? g.provider,
+				value: g.model,
+				cls: "qbd-qz-stat--generated",
+				title: t("dashboard.detail.generatedBy", { model: g.model, effort: g.effort ?? g.provider }),
+			});
+		}
 		if (played) {
 			cells.unshift({
 				label: t("dashboard.detail.statBest"),
@@ -475,7 +487,8 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			);
 		}
 		for (const c of cells) {
-			const cell = ajouter(row, "div", "qbd-qz-stat");
+			const cell = ajouter(row, "div", c.cls ? `qbd-qz-stat ${c.cls}` : "qbd-qz-stat");
+			if (c.title) cell.title = c.title;
 			const body = ajouter(cell, "div", "qbd-qz-stat-body");
 			const v = ajouter(body, "span", "qbd-qz-stat-value", c.value);
 			if (c.accent) v.style.color = c.accent;

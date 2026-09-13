@@ -1,0 +1,80 @@
+/**
+ * Frontmatter YAML minimal posé en tête d'une note générée par IA, sous la
+ * clé `neo-quiz:` — QUI a généré le quiz (provider, modèle, effort,
+ * horodatage). Module PUR, sans parseur YAML : on ne lit que les quatre
+ * clés attendues, ligne à ligne, jamais une structure YAML arbitraire.
+ *
+ * Ces clés sont des DONNÉES persistées dans les notes, jamais traduites
+ * (CLAUDE.md, « Langue (i18n) »).
+ */
+
+/** Ce que `saveGeneratedQuiz` (dashboard/ai.ts) écrit, et que le scanner
+ *  relit. `effort` est absent pour Ollama (pas de notion d'effort). */
+export interface NeoQuizFrontmatter {
+	provider: string;
+	model: string;
+	effort?: string;
+	generatedAt: string;
+}
+
+/** Retire les guillemets (simples ou doubles) qui entourent une valeur YAML,
+ *  si l'auteur en a mis — jamais posés par `ecrireFrontmatterNeoQuiz`, mais
+ *  un frontmatter modifié à la main peut en avoir. */
+function depouiller(valeur: string): string {
+	const v = valeur.trim();
+	if (v.length >= 2 && ((v.startsWith("\"") && v.endsWith("\"")) || (v.startsWith("'") && v.endsWith("'")))) {
+		return v.slice(1, -1);
+	}
+	return v;
+}
+
+/**
+ * Lit le frontmatter `neo-quiz:` en tête de `content`, s'il existe.
+ *
+ * Un frontmatter YAML commence STRICTEMENT à la ligne 1 par `---` ; un `---`
+ * ailleurs dans le texte (un séparateur, une ligne de tableau Markdown...)
+ * n'en est pas un — `null` dans ce cas comme dans celui d'une note sans
+ * frontmatter du tout, ou d'un frontmatter sans clé `neo-quiz:`.
+ */
+export function lireFrontmatterNeoQuiz(content: string): NeoQuizFrontmatter | null {
+	const lines = content.split(/\r\n|\n/);
+	if (lines[0] !== "---") return null;
+
+	let fin = -1;
+	for (let i = 1; i < lines.length; i++) {
+		if (lines[i] === "---") { fin = i; break; }
+	}
+	if (fin === -1) return null;
+
+	const bloc = lines.slice(1, fin);
+	const debut = bloc.findIndex(l => l === "neo-quiz:");
+	if (debut === -1) return null;
+
+	const champs: Record<string, string> = {};
+	for (let i = debut + 1; i < bloc.length; i++) {
+		const ligne = bloc[i];
+		// Une ligne non indentée referme la clé neo-quiz: (retour au niveau
+		// racine du frontmatter) — un `---` de fermeture n'atteint jamais
+		// cette boucle puisque `bloc` s'arrête avant.
+		if (!/^\s/.test(ligne)) break;
+		const m = ligne.match(/^\s+([a-zA-Z]+):\s*(.*)$/);
+		if (!m) continue;
+		champs[m[1]] = depouiller(m[2]);
+	}
+
+	const { provider, model, effort, generatedAt } = champs;
+	if (!provider || !model || !generatedAt) return null;
+	return { provider, model, effort: effort || undefined, generatedAt };
+}
+
+/**
+ * Sérialise le frontmatter `neo-quiz:`, prêt à être préfixé au bloc quiz
+ * exporté (`ecrireFrontmatterNeoQuiz(meta) + exportAllWithFence(...)`).
+ * Se termine par une ligne vide : le bloc qui suit ne colle pas au `---`.
+ */
+export function ecrireFrontmatterNeoQuiz(meta: NeoQuizFrontmatter): string {
+	const lignes = ["---", "neo-quiz:", `  provider: ${meta.provider}`, `  model: ${meta.model}`];
+	if (meta.effort) lignes.push(`  effort: ${meta.effort}`);
+	lignes.push(`  generatedAt: ${meta.generatedAt}`, "---", "");
+	return lignes.join("\n");
+}

@@ -178,6 +178,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.detail.statType": "Type",
 	"dashboard.detail.statLast": "Dernière fois",
 	"dashboard.detail.statAttempts": "Tentatives",
+	"dashboard.detail.generatedBy": "Généré par {model} ({effort})",
 	"dashboard.detail.fileNotFound": "Fichier introuvable",
 	"dashboard.detail.noBlock": "Aucun bloc quiz-blocks trouvé",
 	"dashboard.detail.loadError": "Impossible de charger les questions",

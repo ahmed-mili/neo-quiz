@@ -502,7 +502,12 @@
 			text-align: center;
 		}
 
-		.langue { position: static; }
+		/* `.langue` reste `relative` : c'est l'ancre du menu déroulant
+		   (`.langue-menu` est en `absolute`). En `static`, le menu se calait
+		   sur la page entière et s'ouvrait au milieu des cartes (test du
+		   2026-09-13). Sous 500 px la barre est en colonne : le menu se
+		   centre sous le bouton au lieu de s'aligner à droite. */
+		.langue-menu { right: auto; left: 50%; transform: translateX(-50%); }
 
 		.carte { width: 100%; max-width: 300px; }
 	}

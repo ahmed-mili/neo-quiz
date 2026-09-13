@@ -74,7 +74,14 @@
 		border-radius: 7px;
 	}
 
-	.langue a {
+	.langue {
+		position: relative;
+	}
+
+	.langue-bouton {
+		display: flex;
+		align-items: center;
+		gap: 6px;
 		color: var(--texte-attenue);
 		text-decoration: none;
 		font-size: 13px;
@@ -82,9 +89,66 @@
 		border-radius: 8px;
 		padding: 6px 10px;
 		background: color-mix(in srgb, var(--fond-secondaire) 60%, transparent);
+		cursor: pointer;
 	}
 
-	.langue a:hover { color: var(--texte); }
+	.langue-bouton:hover,
+	.langue-bouton:focus-visible { color: var(--texte); }
+
+	.langue-bouton svg {
+		width: 14px;
+		height: 14px;
+		stroke: currentColor;
+		fill: none;
+		stroke-width: 1.75;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	.langue-menu {
+		position: absolute;
+		top: 100%;
+		right: 0;
+		margin-top: 6px;
+		width: 150px;
+		border: 1px solid var(--bordure);
+		border-radius: 12px;
+		background: color-mix(in srgb, var(--fond-secondaire) 55%, transparent);
+		backdrop-filter: blur(18px);
+		-webkit-backdrop-filter: blur(18px);
+		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+		z-index: 20;
+		padding: 6px;
+	}
+
+	.langue-menu[hidden] { display: none; }
+
+	.langue-menu .item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 8px 10px;
+		border-radius: 8px;
+		font-size: 13px;
+		text-decoration: none;
+		color: var(--texte);
+	}
+
+	.langue-menu a.item:hover,
+	.langue-menu a.item:focus-visible {
+		background: color-mix(in srgb, var(--accent) 20%, transparent);
+	}
+
+	.langue-menu .item svg {
+		width: 14px;
+		height: 14px;
+		stroke: var(--accent);
+		fill: none;
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
 
 	/* ===== Header ===== */
 
@@ -157,8 +221,8 @@
 		height: 100%;
 	}
 
-	/* Le Tux n'est pas carré (216 x 256) : il prend la hauteur de la boîte
-	   et garde son ratio, centré. */
+	/* Tux isn't square (216 x 256): it takes the box's height and keeps its
+	   ratio, centered. */
 	.carte-icone .carte-tux {
 		width: auto;
 		height: 100%;
@@ -194,6 +258,99 @@
 		border-color: var(--bordure);
 		background: color-mix(in srgb, var(--fond) 60%, transparent);
 	}
+
+	/* Release size, below the version (Windows, Linux): same style, never
+	   clickable. */
+	.carte-taille {
+		display: block;
+		font-size: 12px;
+		color: var(--texte-attenue);
+		margin-top: 2px;
+	}
+
+	/* ===== Obsidian card: command block built in ===== */
+
+	.carte-obsidian {
+		width: 260px;
+		cursor: default;
+	}
+
+	.carte-code {
+		width: 100%;
+		margin-top: 10px;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		border: 1px solid var(--bordure);
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--fond) 70%, transparent);
+		padding: 8px 8px 8px 10px;
+	}
+
+	.carte-code code {
+		flex: 1;
+		min-width: 0;
+		overflow-x: auto;
+		white-space: nowrap;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		font-size: 11px;
+		color: var(--texte);
+		text-align: left;
+		-webkit-user-select: all;
+		user-select: all;
+	}
+
+	.carte-copier {
+		flex-shrink: 0;
+		border: 1px solid var(--bordure);
+		border-radius: 8px;
+		background: none;
+		color: var(--texte-attenue);
+		cursor: pointer;
+		padding: 5px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.carte-copier:hover,
+	.carte-copier:focus-visible {
+		color: var(--texte);
+		border-color: var(--accent);
+	}
+
+	.carte-copier svg {
+		width: 14px;
+		height: 14px;
+	}
+
+	.carte-obsidian-plus {
+		margin-top: 8px;
+		font-size: 11px;
+		line-height: 1.6;
+		color: var(--texte-attenue);
+		text-align: left;
+		width: 100%;
+	}
+
+	.carte-obsidian-plus .ligne-copiable {
+		cursor: pointer;
+		overflow-x: auto;
+		white-space: nowrap;
+		display: block;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	}
+
+	.carte-obsidian-plus .ligne-copiable:hover {
+		color: var(--texte);
+	}
+
+	.carte-obsidian-plus a {
+		color: var(--texte-attenue);
+		text-decoration: underline;
+	}
+
+	.carte-obsidian-plus a:hover { color: var(--texte); }
 
 	/* Dropdown menu of published versions. */
 	.menu-versions {
@@ -295,8 +452,18 @@
 			<img src="../icon.png" alt="Neo Quiz logo">
 			Neo Quiz
 		</div>
-		<div class="langue">
-			<a href="../">Français</a>
+		<div class="langue" id="langue">
+			<a class="langue-bouton" href="../" id="langue-bouton" aria-haspopup="true">
+				English
+				<svg viewBox="0 0 24 24"><path d="M7.8 9.6L12 13.8L16.2 9.6"></path></svg>
+			</a>
+			<div class="langue-menu" id="langue-menu" hidden>
+				<div class="item" aria-current="true">
+					English
+					<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"></path></svg>
+				</div>
+				<a class="item" href="../">Français</a>
+			</div>
 		</div>
 	</nav>
 
@@ -319,6 +486,7 @@
 				</span>
 				<span class="carte-nom">Windows</span>
 				<span class="carte-version" id="version-windows">…</span>
+				<span class="carte-taille" id="taille-windows"></span>
 				<div class="menu-versions" id="menu-windows" hidden></div>
 			</a>
 
@@ -333,12 +501,12 @@
 				</span>
 				<span class="carte-nom">Linux</span>
 				<span class="carte-version" id="version-linux">…</span>
+				<span class="carte-taille" id="taille-linux"></span>
 				<div class="menu-versions" id="menu-linux" hidden></div>
 			</a>
 
-			<!-- Obsidian -->
-			<a class="carte" id="carte-obsidian"
-				href="https://github.com/ahmed-mili/neo-quiz/blob/main/docs/guide/install.md#obsidian-plugin">
+			<!-- Obsidian: not a link, the install command fits inside the card. -->
+			<div class="carte carte-obsidian" id="carte-obsidian">
 				<span class="carte-icone">
 					<!-- Obsidian logo, same path as apps/windows/src/ui/marques.ts
 					     (source Simple Icons, CC0 license), brand color #7C3AED. -->
@@ -348,7 +516,23 @@
 				</span>
 				<span class="carte-nom">Obsidian</span>
 				<span class="carte-version" id="version-obsidian">…</span>
-			</a>
+
+				<div class="carte-code">
+					<code id="commande-ps">irm https://ahmed-mili.github.io/neo-quiz/install.ps1 | iex</code>
+					<button class="carte-copier" id="copier-ps" data-cible="commande-ps" aria-label="Copy">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<rect x="9" y="9" width="13" height="13" rx="2"></rect>
+							<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+						</svg>
+					</button>
+				</div>
+
+				<div class="carte-obsidian-plus">
+					<span>Linux, macOS:</span>
+					<code class="ligne-copiable" id="commande-sh" data-copiable="true">curl -fsSL https://ahmed-mili.github.io/neo-quiz/install.sh | bash</code>
+					<span>or <a href="obsidian://brat?plugin=ahmed-mili/neo-quiz">install in one click with BRAT</a></span>
+				</div>
+			</div>
 		</div>
 
 		<div class="avertissements">
@@ -386,46 +570,53 @@
 			return Math.round(octets / (1024 * 1024)) + " MB";
 		}
 
-		// Fills in the version shown below a platform's name, from the latest
-		// release. `extension` is null for Obsidian (no dedicated asset: only
-		// the version number matters).
-		function afficherVersionCourante(id, donnees, extension) {
-			var el = document.getElementById(id);
-			if (!el) return;
-			var version = String(donnees.tag_name || "").replace(/^v/, "");
-			if (!version) return;
-			if (!extension) {
-				el.textContent = "v" + version;
-				return;
-			}
-			var actif = trouverActif(donnees.assets, extension);
-			if (!actif) return;
-			el.textContent = "v" + version + " · " + formaterTaille(actif.size);
+		// Fills in the version (and its size, on its own line) shown below
+		// a platform's name, from a given release. `extension` is null for
+		// Obsidian (no dedicated asset: only the version number matters).
+		// `suffixe` ("latest" / "beta") flags that we're no longer looking
+		// at the latest stable release.
+		function afficherVersion(plateforme, release, extension, suffixe) {
+			var elVersion = document.getElementById("version-" + plateforme);
+			var elTaille = document.getElementById("taille-" + plateforme);
+			var version = String(release.tag_name || "").replace(/^v/, "");
+			if (!elVersion || !version) return;
+			elVersion.textContent = "v" + version + (suffixe ? " · " + suffixe : "");
+			if (!extension || !elTaille) return;
+			var actif = trouverActif(release.assets, extension);
+			elTaille.textContent = actif ? formaterTaille(actif.size) : "";
 		}
+
+		var latestChargee = null;
 
 		fetch("https://api.github.com/repos/" + DEPOT + "/releases/latest")
 			.then(function (reponse) {
-				if (!reponse.ok) throw new Error("bad response");
+				if (!reponse.ok) throw new Error("not ok");
 				return reponse.json();
 			})
 			.then(function (donnees) {
-				afficherVersionCourante("version-windows", donnees, ".exe");
-				afficherVersionCourante("version-linux", donnees, ".appimage");
-				afficherVersionCourante("version-obsidian", donnees, null);
+				latestChargee = donnees;
+				afficherVersion("windows", donnees, ".exe", null);
+				afficherVersion("linux", donnees, ".appimage", null);
+				var elObsidian = document.getElementById("version-obsidian");
+				var versionObsidian = String(donnees.tag_name || "").replace(/^v/, "");
+				if (elObsidian && versionObsidian) elObsidian.textContent = "v" + versionObsidian;
 				activerSelecteurVersion("windows", ".exe");
 				activerSelecteurVersion("linux", ".appimage");
 			})
 			.catch(function () {
-				// The "…" placeholders stay if we clear them: better than
-				// showing a version we could not verify.
+				// The "…" placeholders stay put; we clear them instead of
+				// lying about a version we couldn't verify.
 				["version-windows", "version-linux", "version-obsidian"].forEach(function (id) {
 					var el = document.getElementById(id);
 					if (el) el.textContent = "";
 				});
 			});
 
-		// Makes a platform's version clickable: on click, a menu lists the
-		// last ten published releases and downloads the chosen one.
+		// Makes a platform's version clickable: clicking opens a menu
+		// listing the ten latest published releases. Picking one DOWNLOADS
+		// NOTHING: it only updates the displayed version/size and the
+		// tile's href, which now points to that release's asset. Only
+		// clicking the tile itself (outside the version area) downloads.
 		function activerSelecteurVersion(plateforme, extension) {
 			var bouton = document.getElementById("version-" + plateforme);
 			var menu = document.getElementById("menu-" + plateforme);
@@ -466,22 +657,20 @@
 						item.appendChild(beta);
 					}
 
-					function choisir() {
-						fermerMenu();
-						window.location.href = actif.browser_download_url;
-					}
+					var estDerniere = latestChargee && release.tag_name === latestChargee.tag_name;
+					var suffixe = estDerniere ? null : (release.prerelease ? "beta" : "latest");
 
-					item.addEventListener("click", function (e) {
+					function choisir(e) {
 						e.preventDefault();
 						e.stopPropagation();
-						choisir();
-					});
+						fermerMenu();
+						afficherVersion(plateforme, release, extension, suffixe);
+						carte.setAttribute("href", actif.browser_download_url);
+					}
+
+					item.addEventListener("click", choisir);
 					item.addEventListener("keydown", function (e) {
-						if (e.key === "Enter" || e.key === " ") {
-							e.preventDefault();
-							e.stopPropagation();
-							choisir();
-						}
+						if (e.key === "Enter" || e.key === " ") choisir(e);
 					});
 
 					menu.appendChild(item);
@@ -496,7 +685,7 @@
 				}
 				fetch("https://api.github.com/repos/" + DEPOT + "/releases")
 					.then(function (reponse) {
-						if (!reponse.ok) throw new Error("bad response");
+						if (!reponse.ok) throw new Error("not ok");
 						return reponse.json();
 					})
 					.then(function (releases) {
@@ -529,6 +718,61 @@
 				if (e.key === "Escape") fermerMenu();
 			});
 		}
+
+		// Obsidian card: copy buttons + copiable "Linux, macOS" line.
+		function copierTexte(texte, bouton) {
+			navigator.clipboard.writeText(texte).then(function () {
+				if (!bouton) return;
+				var original = bouton.getAttribute("data-original");
+				bouton.textContent = "Copied";
+				setTimeout(function () {
+					bouton.textContent = original || "";
+				}, 2000);
+			});
+		}
+
+		var boutonCopierPs = document.getElementById("copier-ps");
+		if (boutonCopierPs) {
+			boutonCopierPs.addEventListener("click", function () {
+				var cible = document.getElementById(boutonCopierPs.getAttribute("data-cible"));
+				if (cible) copierTexte(cible.textContent, null);
+				boutonCopierPs.setAttribute("aria-label", "Copied");
+				setTimeout(function () {
+					boutonCopierPs.setAttribute("aria-label", "Copy");
+				}, 2000);
+			});
+		}
+
+		var ligneSh = document.getElementById("commande-sh");
+		if (ligneSh) {
+			ligneSh.title = "Copy";
+			ligneSh.addEventListener("click", function () {
+				navigator.clipboard.writeText(ligneSh.textContent);
+			});
+		}
+
+		// Language selector: without JS it's a plain link to the other
+		// page; with JS, clicking opens the menu instead of navigating.
+		(function () {
+			var conteneur = document.getElementById("langue");
+			var bouton = document.getElementById("langue-bouton");
+			var menu = document.getElementById("langue-menu");
+			if (!conteneur || !bouton || !menu) return;
+
+			function fermer() { menu.hidden = true; }
+			function basculer(e) {
+				e.preventDefault();
+				menu.hidden = !menu.hidden;
+			}
+
+			bouton.addEventListener("click", basculer);
+			document.addEventListener("click", function (e) {
+				if (!conteneur.contains(e.target)) fermer();
+			});
+			document.addEventListener("keydown", function (e) {
+				if (e.key === "Escape") fermer();
+			});
+		})();
 	</script>
 </body>
 </html>

@@ -15,7 +15,19 @@ The desktop app reads the same quiz folders and the same review log as the plugi
 
 ### Obsidian plugin
 
-The recommended way to install **Neo Quiz** is via **BRAT** (Beta Reviewers Auto-update Tool), which handles installation and automatic updates directly from GitHub.
+The fastest way: paste one command in a terminal. It installs the plugin into your vault, or creates one, and can be copied straight from the [download page](https://ahmed-mili.github.io/neo-quiz/)'s Obsidian card.
+
+- **Windows (PowerShell):**
+  ```powershell
+  irm https://ahmed-mili.github.io/neo-quiz/install.ps1 | iex
+  ```
+- **Linux, macOS:**
+  ```bash
+  curl -fsSL https://ahmed-mili.github.io/neo-quiz/install.sh | bash
+  ```
+- **Already have BRAT installed?** [Install in one click](obsidian://brat?plugin=ahmed-mili/neo-quiz).
+
+The recommended manual way to install **Neo Quiz** is via **BRAT** (Beta Reviewers Auto-update Tool), which handles installation and automatic updates directly from GitHub.
 
 1. Install the [BRAT plugin](https://obsidian.md/plugins?id=obsidian42-brat) from the Obsidian Community Plugins.
 2. Open BRAT settings and click **Add Beta Plugin**.

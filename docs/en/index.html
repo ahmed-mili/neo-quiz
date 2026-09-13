@@ -266,17 +266,17 @@
 	/* Release size, below the version (Windows, Linux): same style, never
 	   clickable. */
 	.carte-taille {
-		display: block;
 		font-size: 12px;
 		color: var(--texte-attenue);
-		margin-top: 2px;
+	}
+	.carte-taille:not(:empty)::before {
+		content: " · ";
 	}
 
 	/* ===== Obsidian card: command block built in ===== */
 
 	.carte-obsidian {
 		width: 260px;
-		cursor: default;
 	}
 
 	.carte-code {
@@ -533,7 +533,7 @@
 			</a>
 
 			<!-- Obsidian: not a link, the install command fits inside the card. -->
-			<div class="carte carte-obsidian" id="carte-obsidian">
+			<a class="carte carte-obsidian" id="carte-obsidian" href="obsidian.html">
 				<span class="carte-icone">
 					<!-- Obsidian logo, same path as apps/windows/src/ui/marques.ts
 					     (source Simple Icons, CC0 license), brand color #7C3AED. -->
@@ -544,22 +544,7 @@
 				<span class="carte-nom">Obsidian</span>
 				<span class="carte-version" id="version-obsidian">…</span>
 
-				<div class="carte-code">
-					<code id="commande-ps">irm https://ahmed-mili.github.io/neo-quiz/install.ps1 | iex</code>
-					<button class="carte-copier" id="copier-ps" data-cible="commande-ps" aria-label="Copy">
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<rect x="9" y="9" width="13" height="13" rx="2"></rect>
-							<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-						</svg>
-					</button>
-				</div>
-
-				<div class="carte-obsidian-plus">
-					<button type="button" id="commande-sh" data-commande="curl -fsSL https://ahmed-mili.github.io/neo-quiz/install.sh | bash">Linux</button>
-					·
-					<a href="obsidian://brat?plugin=ahmed-mili/neo-quiz">BRAT</a>
-				</div>
-			</div>
+			</a>
 		</div>
 
 		<div class="avertissements">

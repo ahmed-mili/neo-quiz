@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Télécharger Neo Quiz</title>
-<link rel="icon" href="icon.png">
+<title>Neo Quiz for Obsidian</title>
+<link rel="icon" href="../icon.png">
 <style>
-	/* Couleurs reprises telles quelles de apps/windows/src/theme/host-vars.css
-	   (le thème sombre de l'application, lui-même relevé sur Obsidian). */
+	/* Colors copied as-is from apps/windows/src/theme/host-vars.css
+	   (the app's dark theme, itself measured on Obsidian). */
 	:root {
 		--fond: rgb(30, 30, 46);
 		--fond-secondaire: rgb(24, 24, 37);
@@ -35,19 +35,19 @@
 		align-items: center;
 		padding: 0 16px 40px;
 		text-align: center;
-		/* Même voile sombre que apps/windows/src/assets/shell.css, sur le même
-		   fond d'écran que l'application. */
+		/* Same dark overlay as apps/windows/src/assets/shell.css, over the
+		   same wallpaper as the app. */
 		background:
 			linear-gradient(
 				color-mix(in srgb, var(--fond) 78%, transparent),
 				color-mix(in srgb, var(--fond) 88%, transparent)
 			),
-			var(--fond) url("wallpaper.jpg") center / cover no-repeat fixed;
+			var(--fond) url("../wallpaper.jpg") center / cover no-repeat fixed;
 	}
 
 	a { color: inherit; }
 
-	/* ===== Barre de navigation ===== */
+	/* ===== Nav bar ===== */
 
 	.barre {
 		width: 100%;
@@ -154,7 +154,7 @@
 		stroke-linejoin: round;
 	}
 
-	/* ===== En-tête ===== */
+	/* ===== Header ===== */
 
 	main {
 		width: 100%;
@@ -177,7 +177,7 @@
 		max-width: 560px;
 	}
 
-	/* ===== Cartes plateformes ===== */
+	/* ===== Platform cards ===== */
 
 	.cartes {
 		width: 100%;
@@ -187,7 +187,7 @@
 		gap: 20px;
 	}
 
-	/* La carte en verre : fond semi-transparent + flou de ce qu'il y a derrière. */
+	/* Glass card: semi-transparent background + blur of what is behind it. */
 	.carte {
 		position: relative;
 		width: 220px;
@@ -225,8 +225,8 @@
 		height: 100%;
 	}
 
-	/* Le Tux n'est pas carré (216 x 256) : il prend la hauteur de la boîte
-	   et garde son ratio, centré. */
+	/* Tux isn't square (216 x 256): it takes the box's height and keeps its
+	   ratio, centered. */
 	.carte-icone .carte-tux {
 		width: auto;
 		height: 100%;
@@ -240,8 +240,8 @@
 		margin-bottom: 8px;
 	}
 
-	/* Version affichée sous le nom ; devient un bouton au survol quand le
-	   choix de version est disponible (classe posée par le script). */
+	/* Version shown below the name; becomes a button on hover when a version
+	   choice is available (class set by the script). */
 	.carte-version {
 		font-size: 13px;
 		color: var(--texte-attenue);
@@ -263,8 +263,8 @@
 		background: color-mix(in srgb, var(--fond) 60%, transparent);
 	}
 
-	/* Taille de la release, sous la version (Windows, Linux) : même style,
-	   jamais cliquable. */
+	/* Release size, below the version (Windows, Linux): same style, never
+	   clickable. */
 	.carte-taille {
 		font-size: 12px;
 		color: var(--texte-attenue);
@@ -273,7 +273,7 @@
 		content: " · ";
 	}
 
-	/* ===== Carte Obsidian : bloc de commande intégré ===== */
+	/* ===== Obsidian card: command block built in ===== */
 
 	.carte-obsidian {
 		width: 260px;
@@ -379,7 +379,7 @@
 
 	.carte-obsidian-plus a:hover { color: var(--texte); }
 
-	/* Menu déroulant des versions publiées. */
+	/* Dropdown menu of published versions. */
 	.menu-versions {
 		position: absolute;
 		top: 100%;
@@ -421,7 +421,7 @@
 		color: var(--texte-attenue);
 	}
 
-	/* ===== Avertissements ===== */
+	/* ===== Warnings ===== */
 
 	.avertissements {
 		max-width: 480px;
@@ -433,10 +433,10 @@
 
 	.avertissements p { margin: 6px 0; }
 
-	/* ===== Pied de page ===== */
+	/* ===== Footer ===== */
 
-	/* Une seule ligne discrète, pas de colonnes : Neo Quiz n'a rien d'autre
-	   à mettre dans un pied de page. */
+	/* One discreet line, no columns: Neo Quiz has nothing else to put in a
+	   footer. */
 	.pied {
 		width: 100%;
 		max-width: 960px;
@@ -458,7 +458,7 @@
 
 	.pied a:hover { color: var(--texte); }
 
-	/* ===== Repli mobile ===== */
+	/* ===== Mobile fallback ===== */
 
 	@media (max-width: 500px) {
 		.barre {
@@ -471,108 +471,128 @@
 
 		.carte { width: 100%; max-width: 300px; }
 	}
+
+	/* ===== Page Obsidian ===== */
+	.page-obsidian .bloc-install, .page-obsidian .bloc-etapes {
+		width: min(560px, 100%);
+		margin: 28px auto 0;
+		text-align: left;
+	}
+	.page-obsidian h2 {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--texte-attenue);
+		margin: 18px 0 8px;
+		letter-spacing: 0.02em;
+		text-transform: uppercase;
+	}
+	.page-obsidian .carte-code {
+		margin-top: 0;
+		padding: 12px 44px 12px 14px;
+	}
+	.page-obsidian .carte-code code {
+		font-size: 13px;
+	}
+	.page-obsidian .brat {
+		margin-top: 16px;
+		font-size: 13px;
+		color: var(--texte-attenue);
+	}
+	.page-obsidian .brat a { color: var(--texte); }
+	.page-obsidian ol {
+		margin: 0;
+		padding-left: 20px;
+		color: var(--texte-attenue);
+		font-size: 14px;
+		line-height: 1.7;
+	}
+	.page-obsidian .retour {
+		margin-top: 32px;
+		font-size: 13px;
+	}
+	.page-obsidian .retour a { color: var(--texte-attenue); }
 </style>
 </head>
 <body>
 	<nav class="barre">
 		<a class="barre-marque" href="https://github.com/ahmed-mili/neo-quiz">
-			<img src="icon.png" alt="Logo Neo Quiz">
+			<img src="../icon.png" alt="Neo Quiz logo">
 			Neo Quiz
 		</a>
 		<div class="langue" id="langue">
-			<a class="langue-bouton" href="en/" id="langue-bouton" aria-haspopup="true">
-				Français
+			<a class="langue-bouton" href="../obsidian.html" id="langue-bouton" aria-haspopup="true">
+				English
 				<svg viewBox="0 0 24 24"><path d="M7.8 9.6L12 13.8L16.2 9.6"></path></svg>
 			</a>
 			<div class="langue-menu" id="langue-menu" hidden>
 				<div class="item" aria-current="true">
-					Français
+					English
 					<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"></path></svg>
 				</div>
-				<a class="item" href="en/">English</a>
+				<a class="item" href="../obsidian.html">Français</a>
 			</div>
 		</div>
 	</nav>
 
-	<main>
-		<h1>Télécharger</h1>
-		<p class="accroche">Des quiz interactifs dans vos notes, générés par vos propres outils IA.</p>
+	<main class="page-obsidian">
+		<h1>Neo Quiz for Obsidian</h1>
+		<p class="sous-titre">One command installs the plugin in your vault, or creates one.</p>
 
-		<div class="cartes" id="cartes">
-			<!-- Windows -->
-			<a class="carte" id="carte-windows"
-				href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz-setup.exe"
-				data-releases-ext=".exe">
-				<span class="carte-icone">
-					<!-- Logo Windows (quatre carreaux), couleur de marque officielle
-					     #0078D4. Absent de Simple Icons (Microsoft n'y figure pas) :
-					     tracé du logo actuel, couleur vérifiée sur learn.microsoft.com. -->
-					<svg viewBox="0 0 24 24" fill="#0078D4">
-						<path d="M3 5.5 10.5 4.4V11.4H3V5.5ZM11.4 4.3 21 3V11.3H11.4V4.3ZM3 12.4H10.5V19.5L3 18.4V12.4ZM11.4 12.4H21V20.9L11.4 19.6V12.4Z"></path>
+		<section class="bloc-install">
+			<h2>Windows (PowerShell)</h2>
+			<div class="carte-code">
+				<code id="commande-ps">irm https://ahmed-mili.github.io/neo-quiz/install.ps1 | iex</code>
+				<button class="carte-copier" id="copier-ps" data-cible="commande-ps" aria-label="Copy">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<rect x="9" y="9" width="13" height="13" rx="2"></rect>
+						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
 					</svg>
-				</span>
-				<span class="carte-nom">Windows</span>
-				<span class="carte-version" id="version-windows">…</span>
-				<span class="carte-taille" id="taille-windows"></span>
-				<div class="menu-versions" id="menu-windows" hidden></div>
-			</a>
-
-			<!-- Linux -->
-			<a class="carte" id="carte-linux"
-				href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz.AppImage"
-				data-releases-ext=".appimage">
-				<span class="carte-icone">
-					<!-- Le Tux OFFICIEL en couleurs, de Larry Ewing (lewing@isc.tamu.edu),
-					     fait avec The GIMP ; fichier Tux.svg de Wikimedia Commons. La
-					     silhouette monochrome de Simple Icons faisait une tache jaune. -->
-					<img src="./tux.svg" alt="" width="64" height="76" class="carte-tux">
-				</span>
-				<span class="carte-nom">Linux</span>
-				<span class="carte-version" id="version-linux">…</span>
-				<span class="carte-taille" id="taille-linux"></span>
-				<div class="menu-versions" id="menu-linux" hidden></div>
-			</a>
-
-			<!-- Obsidian : la carte mène à la page du plugin (commande, BRAT). -->
-			<a class="carte carte-obsidian" id="carte-obsidian" href="obsidian.html">
-				<span class="carte-icone">
-					<!-- Logo Obsidian, même tracé que apps/windows/src/ui/marques.ts
-					     (source Simple Icons, licence CC0), couleur de marque #7C3AED. -->
-					<svg viewBox="0 0 24 24" fill="#7C3AED">
-						<path d="M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z"></path>
+				</button>
+			</div>
+			<h2>Linux</h2>
+			<div class="carte-code">
+				<code id="commande-sh-code">curl -fsSL https://ahmed-mili.github.io/neo-quiz/install.sh | bash</code>
+				<button class="carte-copier" id="copier-sh" data-cible="commande-sh-code" aria-label="Copy">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<rect x="9" y="9" width="13" height="13" rx="2"></rect>
+						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
 					</svg>
-				</span>
-				<span class="carte-nom">Obsidian</span>
-				<span class="carte-version" id="version-obsidian">…</span>
+				</button>
+			</div>
+			<p class="brat">Already using BRAT? <a href="obsidian://brat?plugin=ahmed-mili/neo-quiz">Install in one click</a>.</p>
+		</section>
 
-			</a>
-		</div>
+		<section class="bloc-etapes">
+			<h2>What the command does</h2>
+			<ol>
+				<li>Reads your Obsidian vaults and lets you pick one (or creates a new one, C:/Neo Quiz).</li>
+				<li>Downloads the latest plugin release from GitHub and enables it.</li>
+				<li>Opens Obsidian on that vault.</li>
+			</ol>
+		</section>
 
-		<div class="avertissements">
-			<p>Windows peut afficher « Windows a protégé votre ordinateur » : cliquez Informations complémentaires, puis Exécuter quand même. L'application n'est pas encore signée.</p>
-			<p>Les mises à jour suivantes sont automatiques.</p>
-		</div>
+		<p class="retour"><a href="./">Back</a></p>
 	</main>
 
 	<footer class="pied">
-		<a href="https://github.com/ahmed-mili/neo-quiz">Code source</a>
+		<a href="https://github.com/ahmed-mili/neo-quiz">Source code</a>
 		<span aria-hidden="true">·</span>
 		<a href="https://github.com/ahmed-mili/neo-quiz/tree/main/docs/guide">Documentation</a>
 		<span aria-hidden="true">·</span>
-		<a href="https://github.com/ahmed-mili/neo-quiz/issues">Signaler un bug</a>
+		<a href="https://github.com/ahmed-mili/neo-quiz/issues">Report a bug</a>
 		<span aria-hidden="true">·</span>
 		<span>MIT</span>
 	</footer>
 
 	<script>
-		// Version et taille réelles de la dernière release, sans jamais coder
-		// un numéro en dur (cf. CLAUDE.md racine, skill source-of-truth).
-		// En cas d'échec (hors ligne, quota API), les cartes restent de simples
-		// liens vers /releases/latest et aucune version ne s'affiche.
+		// Real version and size of the latest release, never hardcoded
+		// (see root CLAUDE.md, source-of-truth skill). On failure (offline,
+		// API quota) the cards stay plain links to /releases/latest and no
+		// version is shown.
 		var DEPOT = "ahmed-mili/neo-quiz";
 
-		// Trouve, dans la liste des assets d'une release, celui dont le nom se
-		// termine par l'extension demandée (insensible à la casse).
+		// Finds, among a release's assets, the one whose name ends with the
+		// requested extension (case-insensitive).
 		function trouverActif(assets, extension) {
 			return (assets || []).find(function (a) {
 				return String(a.name || "").toLowerCase().endsWith(extension);
@@ -580,14 +600,14 @@
 		}
 
 		function formaterTaille(octets) {
-			return Math.round(octets / (1024 * 1024)) + " Mo";
+			return Math.round(octets / (1024 * 1024)) + " MB";
 		}
 
-		// Remplit la version (et sa taille, sur sa propre ligne) affichées
-		// sous le nom d'une plateforme, à partir d'une release donnée.
-		// `extension` vaut null pour Obsidian (pas d'asset dédié : seul le
-		// numéro de version compte). `suffixe` ("dernière" / "bêta") signale
-		// qu'on ne regarde plus la dernière release stable.
+		// Fills in the version (and its size, on its own line) shown below
+		// a platform's name, from a given release. `extension` is null for
+		// Obsidian (no dedicated asset: only the version number matters).
+		// `suffixe` ("latest" / "beta") flags that we're no longer looking
+		// at the latest stable release.
 		function afficherVersion(plateforme, release, extension, suffixe) {
 			var elVersion = document.getElementById("version-" + plateforme);
 			var elTaille = document.getElementById("taille-" + plateforme);
@@ -603,7 +623,7 @@
 
 		fetch("https://api.github.com/repos/" + DEPOT + "/releases/latest")
 			.then(function (reponse) {
-				if (!reponse.ok) throw new Error("reponse non ok");
+				if (!reponse.ok) throw new Error("not ok");
 				return reponse.json();
 			})
 			.then(function (donnees) {
@@ -617,20 +637,19 @@
 				activerSelecteurVersion("linux", ".appimage");
 			})
 			.catch(function () {
-				// Textes « … » restent visibles ; on les efface plutôt que de
-				// mentir sur une version qu'on n'a pas pu vérifier.
+				// The "…" placeholders stay put; we clear them instead of
+				// lying about a version we couldn't verify.
 				["version-windows", "version-linux", "version-obsidian"].forEach(function (id) {
 					var el = document.getElementById(id);
 					if (el) el.textContent = "";
 				});
 			});
 
-		// Rend la version d'une plateforme cliquable : au clic, un menu liste
-		// les dix dernières releases publiées. Choisir une entrée NE
-		// TÉLÉCHARGE RIEN : ça met seulement à jour la version/taille
-		// affichées et le href de la tuile, qui pointe désormais sur l'asset
-		// de cette release. Seul le clic sur la tuile (hors zone de version)
-		// télécharge.
+		// Makes a platform's version clickable: clicking opens a menu
+		// listing the ten latest published releases. Picking one DOWNLOADS
+		// NOTHING: it only updates the displayed version/size and the
+		// tile's href, which now points to that release's asset. Only
+		// clicking the tile itself (outside the version area) downloads.
 		function activerSelecteurVersion(plateforme, extension) {
 			var bouton = document.getElementById("version-" + plateforme);
 			var menu = document.getElementById("menu-" + plateforme);
@@ -667,12 +686,12 @@
 					if (release.prerelease) {
 						var beta = document.createElement("span");
 						beta.className = "beta";
-						beta.textContent = "bêta";
+						beta.textContent = "beta";
 						item.appendChild(beta);
 					}
 
 					var estDerniere = latestChargee && release.tag_name === latestChargee.tag_name;
-					var suffixe = estDerniere ? null : (release.prerelease ? "bêta" : "dernière");
+					var suffixe = estDerniere ? null : (release.prerelease ? "beta" : "latest");
 
 					function choisir(e) {
 						e.preventDefault();
@@ -699,7 +718,7 @@
 				}
 				fetch("https://api.github.com/repos/" + DEPOT + "/releases")
 					.then(function (reponse) {
-						if (!reponse.ok) throw new Error("reponse non ok");
+						if (!reponse.ok) throw new Error("not ok");
 						return reponse.json();
 					})
 					.then(function (releases) {
@@ -708,8 +727,8 @@
 						menu.hidden = false;
 					})
 					.catch(function () {
-						// Liste indisponible : le clic sur la version ne fait
-						// simplement rien, la carte reste un lien vers latest.
+						// List unavailable: clicking the version simply does
+						// nothing, the card stays a link to latest.
 					});
 			}
 
@@ -733,19 +752,29 @@
 			});
 		}
 
-		// Carte Obsidian : le bouton copier de la commande PowerShell.
+		// Obsidian card: the copy button of the PowerShell command.
 		function copierTexte(texte, bouton) {
 			navigator.clipboard.writeText(texte).then(function () {
 				if (!bouton) return;
 				var original = bouton.getAttribute("data-original");
-				bouton.textContent = "Copié";
+				bouton.textContent = "Copied";
 				setTimeout(function () {
 					bouton.textContent = original || "";
 				}, 2000);
 			});
 		}
 
-		var boutonCopierPs = document.getElementById("copier-ps");
+		["copier-ps", "copier-sh"].forEach(function (id) {
+			var b = document.getElementById(id);
+			if (!b) return;
+			b.addEventListener("click", function () {
+				var cible = document.getElementById(b.getAttribute("data-cible"));
+				if (cible) copierTexte(cible.textContent, null);
+				b.setAttribute("data-copie", "");
+				setTimeout(function () { b.removeAttribute("data-copie"); }, 2000);
+			});
+		});
+		var boutonCopierPs = null;
 		if (boutonCopierPs) {
 			boutonCopierPs.addEventListener("click", function () {
 				var cible = document.getElementById(boutonCopierPs.getAttribute("data-cible"));
@@ -763,14 +792,14 @@
 			boutonSh.addEventListener("click", function () {
 				var original = boutonSh.textContent;
 				navigator.clipboard.writeText(boutonSh.getAttribute("data-commande")).then(function () {
-					boutonSh.textContent = "Copié";
+					boutonSh.textContent = "Copied";
 					setTimeout(function () { boutonSh.textContent = original; }, 2000);
 				});
 			});
 		}
 
-		// Sélecteur de langue : sans JS c'est un lien direct vers l'autre
-		// page ; avec JS, le clic ouvre le menu au lieu de naviguer.
+		// Language selector: without JS it's a plain link to the other
+		// page; with JS, clicking opens the menu instead of navigating.
 		(function () {
 			var conteneur = document.getElementById("langue");
 			var bouton = document.getElementById("langue-bouton");

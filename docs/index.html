@@ -506,6 +506,54 @@
 
 		.carte { width: 100%; max-width: 300px; }
 	}
+
+	/* ===== La modale Obsidian ===== */
+	.modale { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+	.modale-fond { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+	.modale-panneau {
+		position: relative;
+		width: min(440px, 100%);
+		max-height: calc(100vh - 32px);
+		overflow: auto;
+		padding: 28px 26px 22px;
+		border-radius: 20px;
+		border: 1px solid var(--bordure);
+		background: color-mix(in srgb, var(--fond-secondaire) 82%, transparent);
+		backdrop-filter: blur(24px);
+		-webkit-backdrop-filter: blur(24px);
+		box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
+		text-align: left;
+	}
+	.modale-panneau h2 { margin: 0 0 4px; font-size: 20px; }
+	.modale-sous { margin: 0 0 18px; color: var(--texte-attenue); font-size: 14px; }
+	.modale-fermer {
+		position: absolute; top: 12px; right: 12px;
+		width: 28px; height: 28px; border: 0; border-radius: 8px; padding: 0;
+		background: transparent; color: var(--texte-attenue); cursor: pointer;
+		display: flex; align-items: center; justify-content: center;
+	}
+	.modale-fermer:hover { color: var(--texte); background: color-mix(in srgb, var(--texte) 10%, transparent); }
+	.modale-fermer svg { width: 18px; height: 18px; }
+	.etape {
+		border: 1px solid var(--bordure);
+		border-radius: 14px;
+		padding: 16px 18px;
+		background: color-mix(in srgb, var(--fond) 45%, transparent);
+		margin-bottom: 12px;
+	}
+	.etape h3 { margin: 0 0 6px; font-size: 15px; }
+	.etape p { margin: 0 0 12px; font-size: 13.5px; line-height: 1.6; color: var(--texte-attenue); }
+	.bouton-etape {
+		display: inline-block; padding: 9px 16px; border-radius: 10px;
+		border: 1px solid var(--bordure);
+		background: color-mix(in srgb, var(--fond) 60%, transparent);
+		color: var(--texte); text-decoration: none; font-size: 13.5px; font-weight: 600;
+		transition: border-color 100ms ease, filter 100ms ease;
+	}
+	.bouton-etape:hover { border-color: var(--accent); }
+	.bouton-etape--accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+	.bouton-etape--accent:hover { filter: brightness(1.08); }
+	.modale-note { margin: 4px 0 0; font-size: 12.5px; color: var(--texte-attenue); }
 </style>
 </head>
 <body>
@@ -589,7 +637,7 @@
 			</a>
 
 			<!-- Obsidian : la carte mène à la page du plugin (commande, BRAT). -->
-			<a class="carte carte-obsidian" id="carte-obsidian" href="obsidian.html">
+			<a class="carte carte-obsidian" id="carte-obsidian" href="https://github.com/ahmed-mili/neo-quiz/blob/main/docs/guide/install.md#obsidian-plugin">
 				<span class="carte-icone">
 					<!-- Logo Obsidian, même tracé que apps/windows/src/ui/marques.ts
 					     (source Simple Icons, licence CC0), couleur de marque #7C3AED. -->
@@ -611,6 +659,30 @@
 			<p>Les mises à jour suivantes sont automatiques.</p>
 		</div>
 	</main>
+
+	<!-- La modale Obsidian : deux boutons, rien à copier. Ouverte par la carte
+	     Obsidian (JS) ; sans JS la carte reste un lien vers le guide. -->
+	<div class="modale" id="modale-obsidian" hidden>
+		<div class="modale-fond" data-fermer></div>
+		<div class="modale-panneau" role="dialog" aria-modal="true" aria-labelledby="modale-obsidian-titre">
+			<button type="button" class="modale-fermer" data-fermer aria-label="Fermer">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M8 8L16 16M16 8L8 16"></path></svg>
+			</button>
+			<h2 id="modale-obsidian-titre">Neo Quiz pour Obsidian</h2>
+			<p class="modale-sous">Deux clics : BRAT, puis Neo Quiz.</p>
+			<div class="etape">
+				<h3>1. Installer BRAT</h3>
+				<p>BRAT est le plugin d'Obsidian qui installe des plugins depuis GitHub et les met à jour tout seul.</p>
+				<a class="bouton-etape" href="obsidian://show-plugin?id=obsidian42-brat">Installer BRAT</a>
+			</div>
+			<div class="etape">
+				<h3>2. Installer Neo Quiz</h3>
+				<p>Obsidian s'ouvre et BRAT ajoute Neo Quiz au vault courant. Activez-le si Obsidian le demande.</p>
+				<a class="bouton-etape bouton-etape--accent" href="obsidian://brat?plugin=ahmed-mili/neo-quiz">Installer Neo Quiz</a>
+			</div>
+			<p class="modale-note">Les mises à jour arrivent ensuite d'elles-mêmes, par BRAT.</p>
+		</div>
+	</div>
 
 	<footer class="pied">
 		<a href="https://github.com/ahmed-mili/neo-quiz">Code source</a>
@@ -860,6 +932,27 @@
 				if (e.key === "Escape") fermer();
 			});
 		})();
+
+		// La carte Obsidian ouvre la modale (deux boutons BRAT). Fermeture :
+		// la croix, le fond, Échap. Sans JS, la carte est un lien vers le guide.
+		var carteObsidian = document.getElementById("carte-obsidian");
+		var modaleObsidian = document.getElementById("modale-obsidian");
+		if (carteObsidian && modaleObsidian) {
+			var ouvrirModale = function (e) {
+				e.preventDefault();
+				modaleObsidian.hidden = false;
+				var f = modaleObsidian.querySelector(".modale-fermer");
+				if (f) f.focus();
+			};
+			var fermerModale = function () { modaleObsidian.hidden = true; };
+			carteObsidian.addEventListener("click", ouvrirModale);
+			modaleObsidian.querySelectorAll("[data-fermer]").forEach(function (el) {
+				el.addEventListener("click", fermerModale);
+			});
+			document.addEventListener("keydown", function (e) {
+				if (e.key === "Escape" && !modaleObsidian.hidden) fermerModale();
+			});
+		}
 	</script>
 </body>
 </html>

@@ -260,37 +260,36 @@
 	/* Le cadre n'apparaît qu'au SURVOL, et sur la ligne entière (version et
 	   taille) : c'est l'invitation à choisir une release. Seules les cartes
 	   qui ont une version sélectionnable le montrent (pas Obsidian). */
-	.carte-meta:has(.selectionnable):hover,
-	.carte-meta:has(.selectionnable:focus-visible) {
+	.carte-meta.selectionnable {
+		cursor: pointer;
+	}
+	.carte-meta.selectionnable:hover,
+	.carte-meta.selectionnable:focus-visible {
 		border-color: var(--bordure);
 		background: color-mix(in srgb, var(--fond) 60%, transparent);
+		outline: none;
 	}
-	.carte-meta:has(.selectionnable):hover .carte-version {
+	.carte-meta.selectionnable:hover .carte-version,
+	.carte-meta.selectionnable:hover .carte-taille,
+	.carte-meta.selectionnable:focus-visible .carte-version,
+	.carte-meta.selectionnable:focus-visible .carte-taille {
 		color: var(--texte);
 	}
 
 	.carte-version {
 		font-size: 13px;
 		color: var(--texte-attenue);
+		transition: color 100ms ease;
 		background: none;
 		border: 0;
 		padding: 0;
 		font-family: inherit;
 	}
 
-	.carte-version.selectionnable {
-		cursor: pointer;
-	}
-
-	.carte-version.selectionnable:hover,
-	.carte-version.selectionnable:focus-visible {
-		color: var(--texte);
-		outline: none;
-	}
-
 	.carte-taille {
 		font-size: 12px;
 		color: var(--texte-attenue);
+		transition: color 100ms ease;
 	}
 
 	/* Le séparateur : un trait vertical fin, pas un point qui flotte. */
@@ -672,7 +671,9 @@
 		// de cette release. Seul le clic sur la tuile (hors zone de version)
 		// télécharge.
 		function activerSelecteurVersion(plateforme, extension) {
-			var bouton = document.getElementById("version-" + plateforme);
+			// Le CADRE entier (version et taille) est le bouton : le clic marche
+			// partout dedans, et le survol éclaire les deux textes.
+			var bouton = document.getElementById("meta-" + plateforme);
 			var menu = document.getElementById("menu-" + plateforme);
 			var carte = document.getElementById("carte-" + plateforme);
 			if (!bouton || !menu || !carte) return;

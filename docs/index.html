@@ -265,19 +265,25 @@
 
 	/* Taille de la release, sous la version (Windows, Linux) : même style,
 	   jamais cliquable. */
+	/* Version et taille sur UNE ligne, centrée : la carte est une colonne
+	   flex, sans ce conteneur chaque span prenait sa propre ligne. */
+	.carte-meta {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		white-space: nowrap;
+	}
 	.carte-taille {
 		font-size: 12px;
 		color: var(--texte-attenue);
 	}
 	.carte-taille:not(:empty)::before {
-		content: " · ";
+		content: "· ";
 	}
 
 	/* ===== Carte Obsidian : bloc de commande intégré ===== */
 
-	.carte-obsidian {
-		width: 260px;
-	}
 
 	.carte-code {
 		width: 100%;
@@ -512,8 +518,10 @@
 					</svg>
 				</span>
 				<span class="carte-nom">Windows</span>
-				<span class="carte-version" id="version-windows">…</span>
-				<span class="carte-taille" id="taille-windows"></span>
+				<span class="carte-meta">
+					<span class="carte-version" id="version-windows">…</span>
+					<span class="carte-taille" id="taille-windows"></span>
+				</span>
 				<div class="menu-versions" id="menu-windows" hidden></div>
 			</a>
 
@@ -528,8 +536,10 @@
 					<img src="./tux.svg" alt="" width="64" height="76" class="carte-tux">
 				</span>
 				<span class="carte-nom">Linux</span>
-				<span class="carte-version" id="version-linux">…</span>
-				<span class="carte-taille" id="taille-linux"></span>
+				<span class="carte-meta">
+					<span class="carte-version" id="version-linux">…</span>
+					<span class="carte-taille" id="taille-linux"></span>
+				</span>
 				<div class="menu-versions" id="menu-linux" hidden></div>
 			</a>
 
@@ -543,7 +553,9 @@
 					</svg>
 				</span>
 				<span class="carte-nom">Obsidian</span>
-				<span class="carte-version" id="version-obsidian">…</span>
+				<span class="carte-meta">
+					<span class="carte-version" id="version-obsidian">…</span>
+				</span>
 
 			</a>
 		</div>

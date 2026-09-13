@@ -70,6 +70,11 @@ export function createNavHandlers(ctx: DashboardShellCtx): NavHandlers {
 				disabled ? "qbd-nav-item--disabled" : "",
 			].filter(Boolean).join(" ");
 			const btn = ajouter(navList, "button", cls);
+			// La clé sur le bouton : c'est par elle que le CSS anime l'icône
+			// « Générer » pendant une génération (`qbd-generating` sur la
+			// racine du document, posé par `ai.ts`), sans que le rail ait à
+			// connaître la page.
+			btn.dataset.nav = item.key;
 			buttons.push({ key: item.key, el: btn });
 
 			const iconWrap = ajouter(btn, "span", "qbd-nav-icon");

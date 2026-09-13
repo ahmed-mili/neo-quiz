@@ -114,6 +114,34 @@
 	height: 20px;
 }
 
+/* PENDANT UNE GÉNÉRATION (demande d'Ahmed, 2026-09-13) : l'étincelle de
+   « Générer » respire et tourne lentement, que l'on soit sur la page ou
+   ailleurs. La classe `qbd-generating` est posée sur la racine du document
+   par la page « Générer » (ai.ts) le temps de la phase « loading » : c'est
+   le seul signal, le rail ne connaît pas la page. `prefers-reduced-motion`
+   ne coupe que la rotation, la respiration reste lisible et douce. */
+.qbd-generating .qbd-nav-item[data-nav="ai"] .qbd-nav-icon {
+	opacity: 1;
+	color: var(--interactive-accent);
+	animation: qbd-generating-pulse 1.4s ease-in-out infinite;
+}
+.qbd-generating .qbd-nav-item[data-nav="ai"] .qbd-nav-icon svg {
+	animation: qbd-generating-spin 6s linear infinite;
+}
+.qbd-generating .qbd-nav-item--active[data-nav="ai"] .qbd-nav-icon {
+	color: var(--background-secondary);
+}
+@keyframes qbd-generating-pulse {
+	0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 transparent); }
+	50% { transform: scale(1.18); filter: drop-shadow(0 0 6px var(--interactive-accent)); }
+}
+@keyframes qbd-generating-spin {
+	to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.qbd-generating .qbd-nav-item[data-nav="ai"] .qbd-nav-icon svg { animation: none; }
+}
+
 .qbd-nav-label {
 	white-space: nowrap;
 	max-width: 100%;

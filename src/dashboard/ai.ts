@@ -238,6 +238,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	// déconnecté et recréé à chaque render (composer recréé) — cf. layoutChipsRow.
 	let composerResizeObserver: ResizeObserver | null = null;
 	let phase: Phase = "idle"; // idle | loading | result | error
+	/* Le SIGNAL de génération en cours, pour le rail (demande d'Ahmed du
+	   2026-09-13 : l'icône « Générer » s'anime tant que le modèle travaille,
+	   même depuis une autre page). Une classe sur la racine du document,
+	   posée et retirée ICI, au seul endroit qui connaît la phase ; le rail
+	   ne fait qu'y réagir en CSS (`dashboard-nav.css`, `qbd-generating`).
+	   Retirée aussi au démontage : une génération annulée par la fermeture
+	   de la vue ne doit pas laisser l'étincelle tourner. */
+	function signalerGeneration(enCours: boolean): void {
+		document.documentElement.classList.toggle("qbd-generating", enCours);
+	}
 	/* Demande PARTIE (bulle façon claude.ai). Non nulle dès l'envoi, remise à
 	   null quand la demande retourne dans le composer (annulation) ou qu'on
 	   recommence à zéro. */
@@ -1792,6 +1802,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    qui va de toute façon quitter la vue (insertion dans une note). */
 	function resetGeneration(): void {
 		phase = "idle";
+		signalerGeneration(false);
 		generatedQuestions = [];
 		generatedDraft = null;
 		dropSentMessage();
@@ -1932,6 +1943,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// plus la demande en vol dès cette ligne.
 		const msg = takeComposerMessage();
 		phase = "loading";
+		signalerGeneration(true);
 		errorMessage = "";
 		render(container);
 
@@ -2027,6 +2039,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				generatedQuestions = [];
 				restoreComposerMessage();
 				phase = "idle";
+				signalerGeneration(false);
 				render(container);
 				return;
 			}
@@ -2036,6 +2049,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 
 		document.removeEventListener("keydown", onEsc);
 		activeClient = null;
+		signalerGeneration(false);
 		let navigated = false;
 		if (generatedQuestions.length > 0) {
 			// Nouvelle génération → l'éditeur embarqué repart des questions
@@ -2123,6 +2137,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (__focusRecheck) { window.removeEventListener("focus", __focusRecheck); __focusRecheck = null; }
 		// `void` : après un échec d'écriture, ce brouillon n'a toujours pas de
 		// note à autosauvegarder ; la promesse rendue est déjà résolue.
+		signalerGeneration(false);
 		void resultPage?.dispose();
 		resultPage = null;
 		generatedDraft = null;

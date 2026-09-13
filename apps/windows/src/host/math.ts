@@ -11,8 +11,16 @@
    ce fichier ne fait que rendre un segment déjà découpé.
 ══════════════════════════════════════════════════════════ */
 
+import * as mathlive from "mathlive";
 import { convertLatexToMarkup, MathfieldElement } from "mathlive";
 import type { HostMath } from "../../../../src/host/types";
+import { provideMathlive } from "../../../../src/engine/math-input";
+
+/* L'éditeur d'équations partagé (`engine/math-input.ts`) charge MathLive par
+   `require` sous le greffon ; ici il n'y a pas de `require`. La bibliothèque
+   est déjà importée statiquement au-dessus : on la lui donne au chargement
+   de ce module, avant tout champ math. */
+provideMathlive(mathlive);
 
 /** Le réglage des fontes n'est posé qu'UNE fois par session. */
 let fontesConfigurees = false;

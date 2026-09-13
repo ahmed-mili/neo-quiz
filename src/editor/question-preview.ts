@@ -6,6 +6,13 @@ import type { DraftQuestion } from "./utils";
 import { mathifyElement } from "../engine/mathjax";
 import { markSlots, fillSlots } from "../engine/cloze";
 import { sanitizeQuizHtml } from "../engine/sanitizer";
+/* IMPORT STATIQUE, plus un `require` paresseux : `require` n'existe pas dans
+   le rendu de l'application (Vite, modules ES), et l'ancien appel faisait
+   échouer la page de TOUT quiz portant une question `text` avec « require is
+   not defined » (vu par Ahmed le 2026-09-13 sur un quiz généré). Le greffon
+   (bundle CommonJS) ne s'en apercevait pas. Aucun cycle : `math-input`
+   n'importe rien de l'éditeur. */
+import { isMathQuestion, createMathField } from "../engine/math-input";
 
 /* ══════════════════════════════════════════════════════════
    QUESTION PREVIEW — la question telle que l'apprenant la verra
@@ -23,12 +30,6 @@ import { sanitizeQuizHtml } from "../engine/sanitizer";
    Partagé par l'aperçu de l'éditeur (editor/preview.ts) et par la page
    d'un quiz du dashboard (dashboard/detail-question.ts).
 ══════════════════════════════════════════════════════════ */
-
-/** Sous-ensemble typé du module moteur engine/math-input.ts. */
-interface MathInputModule {
-	isMathQuestion(q: unknown): boolean;
-	createMathField(host: HTMLElement, opts?: { readOnly?: boolean; template?: unknown }): unknown;
-}
 
 export interface QuizPreviewOptions {
 	/** Titre de repli quand la question n'en porte pas (« Question 3 »). */
@@ -229,14 +230,15 @@ export function renderQuizPreviewCard(host: HTMLElement, q: DraftQuestion, opts:
 	}
 
 	if (type === "text") {
-		const mathInput = require("../engine/math-input") as MathInputModule;
-		if (mathInput.isMathQuestion(q)) {
+		if (isMathQuestion(q)) {
 			// Question math : le même éditeur d'équations que le quiz, en
 			// lecture seule, gabarit affiché s'il existe.
 			const mathWrap = ajouter(card, "div", "qcm-options quiz-text-wrap quiz-math-wrap");
-			mathInput.createMathField(mathWrap, {
+			createMathField(mathWrap, {
 				readOnly: true,
-				template: (q._extraFields && q._extraFields.answerTemplate) || q.answerTemplate || "",
+				// `_extraFields` est un sac non typé : on ne garde le gabarit que
+				// s'il est une chaîne, le type réel de `template`.
+				template: [q._extraFields?.answerTemplate, q.answerTemplate].find((v): v is string => typeof v === "string") ?? "",
 			});
 		} else {
 			const textWrap = ajouter(card, "div", "qcm-options quiz-text-wrap");

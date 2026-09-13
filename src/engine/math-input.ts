@@ -414,6 +414,19 @@ function matrixLayout(): VirtualKeyboardLayout {
 
 let __mathliveConfigured = false;
 
+/* LA BIBLIOTHÈQUE, FOURNIE PAR L'HÔTE OU CHARGÉE PARESSEUSEMENT. Le greffon
+   la charge par `require` au premier champ math (bundle CommonJS ; le
+   rechargement du plugin et le poids de MathLive justifient la paresse). Le
+   rendu de l'application est en modules ES : `require` n'y existe pas, et
+   la page de tout quiz portant une question `text` mourait sur « require is
+   not defined » (vu par Ahmed le 2026-09-13). L'hôte Windows, qui importe
+   déjà `mathlive` statiquement (`apps/windows/src/host/math.ts`), la FOURNIT
+   ici au démarrage ; le `require` ne reste que le repli du greffon. */
+let mathliveFournie: typeof import("mathlive") | null = null;
+function provideMathlive(lib: typeof import("mathlive")): void {
+	mathliveFournie = lib;
+}
+
 function configureMathlive(): void {
 	// Clavier virtuel NATIF MathLive (choix Ahmed 2026-07-11 : « c'est propre ce
 	// clavier-là ») — sans l'onglet alphabétique (« abc », inutile avec un clavier
@@ -426,7 +439,7 @@ function configureMathlive(): void {
 		window.mathVirtualKeyboard.layouts = ["numeric", "symbols", "greek", matrixLayout()];
 	}
 	if (__mathliveConfigured) return;
-	const lib = require("mathlive") as typeof import("mathlive");
+	const lib = mathliveFournie ?? (require("mathlive") as typeof import("mathlive"));
 	// PIÈGE reload plugin : customElements.define('math-field') ne peut
 	// arriver qu'UNE fois par page — après un disable/enable, l'élément
 	// enregistré reste la classe de l'ANCIEN bundle. document.createElement
@@ -546,5 +559,5 @@ function createMathField(host: HTMLElement, opts: CreateMathFieldOptions = {}): 
 
 export {
 	isMathQuestion, normalizeMathAnswer, matchesMathAnswer,
-	createMathField,
+	createMathField, provideMathlive,
 };

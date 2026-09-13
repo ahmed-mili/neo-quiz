@@ -322,6 +322,8 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	   valeur historique : la changer rendrait introuvables les exports déjà
 	   écrits chez l'utilisateur. */
 	r.check("resultsDirFor est constant", host.paths.resultsDirFor("n'importe/quoi.md"), ".obsidian/quiz-blocks-results");
+	/* Une seule racine sous Obsidian : le défaut est forcément elle. */
+	r.check("defaultRoot est roots()[0]", host.paths.defaultRoot(), roots[0]);
 
 	/* Sans manifeste, il n'y a rien à migrer — et surtout pas un chemin
 	   inventé, qui pointerait à côté et lirait le journal de personne. */

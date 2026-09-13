@@ -285,6 +285,10 @@ await withSrcModule("apps/windows/src/host/roots.ts", async (mod) => {
 		["Efrei/.neo-quiz/review-log.jsonl", "Perso/.neo-quiz/review-log.jsonl"]);
 	r.check("l'ancien journal est celui du greffon", hr[0].legacyReviewLog,
 		"Efrei/.obsidian/plugins/quiz-blocks/review-log.jsonl");
+	/* `index.ts` ne fait que `defaultRoot() { return carte.hostRoots()[0]; }` —
+	   non chargeable ici (il tire MathLive), donc éprouvé par équivalence sur
+	   `carte`, la seule logique derrière ce membre. */
+	r.check("defaultRoot() est roots()[0]", hr[0], carte.hostRoots()[0]);
 
 	/* RÈGLE SANS FILET (revue 1) : aucun cas n'éprouvait `resultsDirFor` —
 	   une erreur y écrirait les résultats d'un quiz du dossier B dans le
@@ -1434,6 +1438,7 @@ await withSrcModule("apps/windows/src/review/catalogue.ts", async ({ construireC
 		contractPath: (id, l) => (id ? `${id}/${l}` : l),
 		resultsDirFor: () => "",
 		roots: () => [],
+		defaultRoot: () => ({ id: "", name: "", reviewLog: "", legacyReviewLog: null }),
 	};
 
 	/* La clé de module porte la RACINE : sans elle, « Réseaux » de deux

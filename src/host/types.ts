@@ -569,6 +569,12 @@ export interface HostPaths {
 	attachmentPathFor(name: string, sourcePath?: string): Promise<string>;
 	/** Les racines ouvertes, dans l'ordre d'affichage. */
 	roots(): HostRoot[];
+	/**
+	 * La racine PAR DÉFAUT : où va un quiz généré, ou « Nouveau quiz » sans
+	 * dossier choisi. Sous Obsidian c'est la seule racine (le vault) ;
+	 * dans l'application c'est le dossier « Neo Quiz » créé au lancement.
+	 */
+	defaultRoot(): HostRoot;
 	/** La racine dont relève un chemin du contrat, ou `null`. */
 	rootOf(path: string): HostRoot | null;
 	/**

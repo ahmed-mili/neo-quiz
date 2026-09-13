@@ -47,7 +47,7 @@ await withSrcModule("src/host/current.ts", ({ installHost }) => {
 		// `resultsDirFor` (tâche 2) remplace la constante `resultsDir` : ce
 		// script n'exerce pas les résultats via `currentHost()`, seule la forme
 		// compte pour ne pas casser un appelant qui y toucherait un jour.
-		paths: { resultsDirFor: () => ".results", attachmentPathFor: async (n) => n, roots: () => [], rootOf: () => null, localPath: (p) => p, contractPath: (_r, p) => p },
+		paths: { resultsDirFor: () => ".results", attachmentPathFor: async (n) => n, roots: () => [], defaultRoot: () => ({ id: "", name: "", reviewLog: "", legacyReviewLog: null }), rootOf: () => null, localPath: (p) => p, contractPath: (_r, p) => p },
 		/* Une modale qui s'ouvre sur un corps détaché : aucun cas n'en ouvre,
 		   mais un appelant qui le ferait doit recevoir la forme du contrat
 		   (`panelEl`, `contentEl`, `close`), pas un TypeError. */

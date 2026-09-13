@@ -105,6 +105,9 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 			return attachmentPathForRacine(c => fs.exists(c), name, sourcePath);
 		},
 		roots() { return carte.hostRoots(); },
+		/* Toujours le premier : `savedFolders` place le dossier par défaut
+		   devant (tâche 1). */
+		defaultRoot() { return carte.hostRoots()[0]; },
 		rootOf(path) {
 			const r = carte.pour(path);
 			if (!r) return null;

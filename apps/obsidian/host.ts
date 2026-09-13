@@ -1161,6 +1161,10 @@ export function createObsidianHost(
 		roots() {
 			return [racine];
 		},
+		/* Une seule racine sous Obsidian : c'est forcément elle. */
+		defaultRoot() {
+			return racine;
+		},
 		rootOf() {
 			return racine;
 		},

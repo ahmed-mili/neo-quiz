@@ -53,7 +53,7 @@ function fauxHote({ reponses = {}, caches = {} } = {}) {
 			math: { ready: async () => {}, render: () => null, flush: () => {} },
 			shell: { openExternal: async () => false, revealInHost: async () => false },
 			platform: { isMobile: false, isMacOS: false, isWindows: true, isDesktopApp: true, uiLanguage: "en" },
-			paths: { resultsDirFor: () => ".results", attachmentPathFor: async (n) => n, roots: () => [], rootOf: () => null, localPath: (p) => p, contractPath: (_r, p) => p },
+			paths: { resultsDirFor: () => ".results", attachmentPathFor: async (n) => n, roots: () => [], defaultRoot: () => ({ id: "", name: "", reviewLog: "", legacyReviewLog: null }), rootOf: () => null, localPath: (p) => p, contractPath: (_r, p) => p },
 			modals: { open: () => ({ panelEl: null, contentEl: null, close: () => {} }) },
 			net: {
 				async fetchJson(req) {

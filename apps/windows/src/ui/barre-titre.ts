@@ -64,6 +64,7 @@ export function monterBarreTitre(root: HTMLElement, deps: {
 	boutonReduire.setAttribute("aria-label", t("app.titlebar.minimize"));
 	boutonReduire.title = t("app.titlebar.minimize");
 	poserIcone(boutonReduire, "minus");
+	boutonReduire.dataset.icone = "minus";
 
 	const boutonAgrandir = document.createElement("button");
 	boutonAgrandir.type = "button";
@@ -75,6 +76,7 @@ export function monterBarreTitre(root: HTMLElement, deps: {
 	boutonFermer.setAttribute("aria-label", t("app.titlebar.close"));
 	boutonFermer.title = t("app.titlebar.close");
 	poserIcone(boutonFermer, "x");
+	boutonFermer.dataset.icone = "x";
 
 	controles.append(boutonReduire, boutonAgrandir, boutonFermer);
 
@@ -84,6 +86,8 @@ export function monterBarreTitre(root: HTMLElement, deps: {
 		boutonAgrandir.setAttribute("aria-label", t(cle));
 		boutonAgrandir.title = t(cle);
 		poserIcone(boutonAgrandir, agrandie ? "copy" : "square");
+		// La taille du glyphe dépend de l'icône (voir `shell.css`, `data-icone`).
+		boutonAgrandir.dataset.icone = agrandie ? "copy" : "square";
 	}
 	poserAgrandirOuRestaurer(false);
 

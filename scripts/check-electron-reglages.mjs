@@ -675,3 +675,40 @@ await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ cheminCliPourL
 		{ verdict: true, admet: true });
 	r.done();
 });
+
+/**
+ * LA GARDE DE LA CLÉ DU FOND D'ÉCRAN (revue finale de la tranche 8). Comme
+ * `folders`, `fond.dossier` nourrit le périmètre au démarrage suivant
+ * (`perimetreInitial`) : sans garde à l'écriture, un rendu compromis obtient
+ * n'importe quel dossier du disque au périmètre à la session suivante.
+ *
+ * `canaux.ts` tire Electron et ne se charge dans aucun script (comme pour
+ * `verifierDossiers`) : la preuve est donc STATIQUE, sur le module réel, et
+ * NOMMÉE par discriminance (retirer la garde du gestionnaire fait rougir
+ * exactement ce cas — vérifié à la main pendant l'écriture de ce contrôle).
+ */
+{
+	const r = makeReporter("Électron — la garde de la clé du fond d'écran");
+	const source = await readFile("apps/windows/electron/canaux.ts", "utf-8");
+	const debut = source.indexOf("ipcMain.handle(CANAUX.reglagesEcrire,");
+	let corps = null;
+	if (debut >= 0) {
+		let niveau = 0;
+		for (let i = source.indexOf("(", debut); i < source.length; i++) {
+			if (source[i] === "(") niveau++;
+			else if (source[i] === ")" && --niveau === 0) { corps = source.slice(debut, i + 1); break; }
+		}
+	}
+	const garde = corps ? corps.indexOf("verifierDossierFond(") : -1;
+	const ecriture = corps ? corps.indexOf(".ecrire(") : -1;
+	r.check("reglagesEcrire garde la clé du fond (verifierDossierFond) AVANT d'écrire",
+		{ gardee: garde >= 0, avantEcriture: garde >= 0 && ecriture > garde }, { gardee: true, avantEcriture: true });
+	r.check("verifierDossierFond rejette un dossier hors périmètre, une image absolue/traversante, accepte null (retrait)",
+		{
+			perimetreVerifie: source.includes("perimetre.contient(dossier)"),
+			imageBornee: /image\.includes\("\/"\)/.test(source) && /image\.includes\("\.\."\)/.test(source),
+			nullAccepte: /valeur === null \|\| valeur === undefined\) return;/.test(source),
+		},
+		{ perimetreVerifie: true, imageBornee: true, nullAccepte: true });
+	r.done();
+}

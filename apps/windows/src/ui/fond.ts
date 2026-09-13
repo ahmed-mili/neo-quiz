@@ -2,12 +2,14 @@
    LE FOND D'ÉCRAN — VU DU RENDU
 
    Le réglage `{ dossier: string; image: string }` (`CLE_REGLAGES_FOND`,
-   `electron/pont.ts`) est écrit par CE module seul, jamais gardé côté
-   principal : un chemin qui n'a jamais transité par le sélecteur natif
-   n'est simplement pas SERVABLE par `app:` (403), il ne donne aucun accès
-   disque supplémentaire — voir l'en-tête de la clé. `perimetreInitial`
-   (`electron/perimetre.ts`) admet le `dossier` persisté au démarrage
-   suivant, exactement comme les dossiers de quiz.
+   `electron/pont.ts`) est écrit par CE module côté rendu, mais GARDÉ côté
+   principal (`canaux.ts`, `verifierDossierFond`) : `perimetreInitial`
+   (`electron/perimetre.ts`) admet `dossier` au périmètre au démarrage
+   suivant, exactement comme les dossiers de quiz — un chemin qui n'a jamais
+   transité par le sélecteur natif obtiendrait donc tout un dossier au
+   périmètre à la session suivante s'il n'était pas gardé à l'écriture. En
+   session courante, `choisirDossierFond` a déjà fait autoriser le dossier
+   par le sélecteur natif : un choix légitime passe toujours la garde.
 
    Le voile sombre de `shell.css` ne bouge jamais : ce module ne pose QUE
    l'image, dans la variable `--nq-fond-image`, que la règle `body` compose

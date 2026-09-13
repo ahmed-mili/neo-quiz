@@ -44,7 +44,7 @@ import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre
 import type { Perimetre } from "./perimetre";
 import { demarrerOllama, erreurCli, estOutilAutorise, lireCache, ollamaInstalle, run } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
-import { CANAUX, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
+import { CANAUX, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
 import type { EtatFenetre, EvenementDisque, RequeteCli, RequeteReseau, ResultatCli } from "./pont";
 import type { Reglages } from "./reglages";
 import { autoriserHote, fetchBorne } from "./reseau";
@@ -207,6 +207,32 @@ async function verifierDossiers(perimetre: Perimetre, valeur: unknown): Promise<
 	}
 }
 
+/** REJETTE la clé du fond d'écran si elle n'est pas de la forme attendue : le
+    `dossier` nourrit le périmètre au prochain démarrage (`perimetreInitial`),
+    donc la garde est ici, à l'ÉCRITURE, exactement comme `verifierDossiers` —
+    sinon un rendu compromis écrirait `{ dossier: "C:/…/Startup", image: "x" }`
+    et obtiendrait ce dossier au périmètre à la session suivante. `null`/
+    `undefined` (retrait du réglage) sont acceptés : ils n'admettent rien.
+    `image` est un NOM de fichier venu de `listerDossier`, jamais un chemin :
+    tout séparateur ou `..` y est refusé. */
+async function verifierDossierFond(perimetre: Perimetre, valeur: unknown): Promise<void> {
+	if (valeur === null || valeur === undefined) return;
+	if (typeof valeur !== "object") {
+		throw new Error("réglage fond refusé : valeur n'est pas un objet : " + String(valeur));
+	}
+	const dossier = (valeur as { dossier?: unknown }).dossier;
+	const image = (valeur as { image?: unknown }).image;
+	if (typeof dossier !== "string" || dossier.trim() === "") {
+		throw new Error("réglage fond refusé : dossier invalide : " + String(dossier));
+	}
+	if (!(await perimetre.contient(dossier))) {
+		throw new Error("réglage fond refusé : dossier hors périmètre : " + dossier);
+	}
+	if (typeof image !== "string" || image.trim() === "" || image.includes("/") || image.includes("\\") || image.includes("..")) {
+		throw new Error("réglage fond refusé : image invalide : " + String(image));
+	}
+}
+
 export function enregistrerCanaux(deps: DependancesCanaux): void {
 	const { perimetre, reglagesOuErreur } = deps;
 	/* L'état du DISQUE vu par ce processus : les racines déclarées, l'index et
@@ -351,6 +377,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 		   (`garde-ia.ts`, éprouvé par `check:electron-reglages`) ; ici ne
 		   restent que la porte NATIVE et l'admission. */
 		if (cle === CLE_REGLAGES_IA) await garderReglagesIa(valeur);
+		/* La clé du FOND D'ÉCRAN est gardée pour la même raison que `folders` :
+		   `perimetreInitial` admet `fond.dossier` au démarrage suivant. */
+		if (cle === CLE_REGLAGES_FOND) await verifierDossierFond(perimetre, valeur);
 		await reglagesOuErreur().ecrire(String(cle), valeur);
 	});
 

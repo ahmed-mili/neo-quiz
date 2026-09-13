@@ -171,13 +171,16 @@ jobs:
           if-no-files-found: error
 
       # La release existe déjà (job `prepare`) : ce step ne fait qu'y
-      # attacher les fichiers, sans redéfinir nom / corps / prerelease /
-      # make_latest.
+      # attacher les fichiers. `make_latest` est RÉPÉTÉ ici parce que
+      # l'action renvoie un PATCH à l'API GitHub dont le défaut documenté
+      # est `true` : omis, une release du greffon redeviendrait « latest »
+      # et electron-updater ne trouverait plus d'installeur.
       - name: Attach plugin to release
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ needs.prepare.outputs.tag }}"
+          make_latest: "false"
           files: |
             release/main.js
             release/manifest.json
@@ -352,6 +355,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ needs.prepare.outputs.tag }}"
+          # Répété comme dans le job `plugin` : le PATCH de l'action ne doit
+          # jamais retirer à l'application son statut « latest ».
+          make_latest: "true"
           files: |
             apps/windows/dist-installer/*.exe
             apps/windows/dist-installer/*.exe.blockmap
@@ -412,6 +418,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ needs.prepare.outputs.tag }}"
+          # Répété comme dans le job `plugin` : le PATCH de l'action ne doit
+          # jamais retirer à l'application son statut « latest ».
+          make_latest: "true"
           files: |
             apps/windows/dist-installer/*.AppImage
             apps/windows/dist-installer/latest-linux.yml

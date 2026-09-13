@@ -239,3 +239,39 @@ jobs:
             apps/windows/dist-installer/*.AppImage
             apps/windows/dist-installer/latest-linux.yml
             apps/windows/dist-installer/neo-quiz.AppImage
+
+  # La page de téléchargement lit `docs/latest.json` (servi par GitHub Pages,
+  # sans limite de requêtes) plutôt que l'API GitHub, qui refuse au-delà de
+  # 60 appels par heure et par adresse IP sans jeton : une promo derrière un
+  # même réseau l'atteignait en quelques minutes et la page perdait ses
+  # versions. Ce job tourne une fois les trois autres finis, quand tous les
+  # fichiers sont attachés, et pousse le JSON sur `main` (Pages se republie).
+  site:
+    needs: [plugin, app-windows, app-linux]
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Write docs/latest.json from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plugin.outputs.tag }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            --jq '{tag_name, published_at, assets: [.assets[] | {name, size, browser_download_url}]}' \
+            > docs/latest.json
+          cat docs/latest.json
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/latest.json
+          git diff --cached --quiet && echo "latest.json inchangé" || git commit -m "site: latest.json pour ${{ needs.plugin.outputs.tag }}"
+          git push origin main

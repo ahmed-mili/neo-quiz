@@ -736,10 +736,19 @@
 
 		var latestChargee = null;
 
-		fetch("https://api.github.com/repos/" + DEPOT + "/releases/latest")
-			.then(function (reponse) {
+		// The file published by release.yml on this site first (`latest.json`,
+		// same shape as the API response, no request limit); the GitHub API
+		// only as a fallback: without a token it refuses past 60 calls per
+		// hour per IP address, which a shared network reaches in minutes.
+		function chargerJson(url) {
+			return fetch(url, { cache: "no-cache" }).then(function (reponse) {
 				if (!reponse.ok) throw new Error("not ok");
 				return reponse.json();
+			});
+		}
+		chargerJson("../latest.json")
+			.catch(function () {
+				return chargerJson("https://api.github.com/repos/" + DEPOT + "/releases/latest");
 			})
 			.then(function (donnees) {
 				latestChargee = donnees;

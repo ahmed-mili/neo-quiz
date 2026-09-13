@@ -737,10 +737,20 @@
 
 		var latestChargee = null;
 
-		fetch("https://api.github.com/repos/" + DEPOT + "/releases/latest")
-			.then(function (reponse) {
+		// D'ABORD le fichier publié par release.yml sur ce site (`latest.json`,
+		// même forme que la réponse de l'API, sans limite de requêtes) ; l'API
+		// GitHub seulement en repli : sans jeton elle refuse au-delà de 60
+		// appels par heure et par adresse IP, et un réseau partagé (une promo
+		// dans un amphi) l'atteint en quelques minutes.
+		function chargerJson(url) {
+			return fetch(url, { cache: "no-cache" }).then(function (reponse) {
 				if (!reponse.ok) throw new Error("reponse non ok");
 				return reponse.json();
+			});
+		}
+		chargerJson("latest.json")
+			.catch(function () {
+				return chargerJson("https://api.github.com/repos/" + DEPOT + "/releases/latest");
 			})
 			.then(function (donnees) {
 				latestChargee = donnees;

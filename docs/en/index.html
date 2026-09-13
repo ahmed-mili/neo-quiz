@@ -60,7 +60,11 @@
 		padding: 20px 0;
 	}
 
+	/* La marque est un lien vers le dépôt GitHub (demande d'Ahmed) : même
+	   couleur que le texte, pas de soulignement, comme un logo de site. */
 	.barre-marque {
+		color: inherit;
+		text-decoration: none;
 		display: flex;
 		align-items: center;
 		gap: 10px;
@@ -448,10 +452,10 @@
 </head>
 <body>
 	<nav class="barre">
-		<div class="barre-marque">
+		<a class="barre-marque" href="https://github.com/ahmed-mili/neo-quiz">
 			<img src="../icon.png" alt="Neo Quiz logo">
 			Neo Quiz
-		</div>
+		</a>
 		<div class="langue" id="langue">
 			<a class="langue-bouton" href="../" id="langue-bouton" aria-haspopup="true">
 				English

@@ -24,7 +24,7 @@
    diverge en silence le jour où `HostFile` gagne un champ.
 ══════════════════════════════════════════════════════════ */
 
-import { Notice, Platform, requestUrl, setIcon, getIconIds, loadMathJax, loadPdfJs, renderMath, finishRenderMath } from "obsidian";
+import { Modal, Notice, Platform, requestUrl, setIcon, getIconIds, loadMathJax, loadPdfJs, renderMath, finishRenderMath } from "obsidian";
 import type { App, DataAdapter, EventRef, TAbstractFile, TFile, View, WorkspaceLeaf } from "obsidian";
 import type { CliTool, Host, HostFile, HostFileEvent, HostModalHandle, HostModalSpec, HostRoot } from "../../src/host/types";
 /* La moitié PURE des jetons de pièces jointes, partagée avec le processus
@@ -38,7 +38,6 @@ import type { FichierJoint } from "../../src/host/jetons";
    seconde copie dans le processus principal de l'application aurait donné deux
    règles pour un même appel du code partagé. Voir `src/host/cli-args.ts`. */
 import { extensionsExecutables, ligneCmd, porteSautDeLigne } from "../../src/host/cli-args";
-import { QbdModal } from "../../src/modal-base";
 import { LOG_PREFIX } from "../../src/branding";
 import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../src/review/paths";
 
@@ -85,14 +84,61 @@ function asTFile(f: TAbstractFile | null | undefined): TFile | null {
 }
 
 /**
+ * Modale animée (entrée + sortie) — reprise de l'ex-`src/modal-base.ts`
+ * (`QbdModal`), supprimé à la tâche 1 du chantier « greffon lecteur » : plus
+ * aucune modale du greffon n'en hérite plus DIRECTEMENT (dashboard, éditeur
+ * et IA sont partis avec lui), seule `HoteModal` ci-dessous en avait encore
+ * besoin. Inlinée ici plutôt que reconstruite ailleurs : c'est le seul
+ * appelant restant, une seconde copie diverge sans un mot.
+ * Obsidian détache le DOM d'une modale DÈS `close()` : aucune transition de
+ * sortie ne peut jouer sans ce correctif — entrée : classe `qbd-anim-modal`
+ * sur le panneau, animée en CSS ; sortie : `close()` joue l'animation PUIS
+ * laisse Obsidian détacher.
+ */
+class QbdModal extends Modal {
+	private qbdClosing = false;
+
+	constructor(app: App) {
+		super(app);
+		// modalEl existe dès le constructeur de Modal ; marqueur commun sur le
+		// panneau (l'entrée est animée en CSS via cette classe).
+		this.modalEl.addClass("qbd-anim-modal");
+	}
+
+	/** Joue l'animation de sortie AVANT de laisser Obsidian détacher le DOM.
+	    Idempotent (Escape ET clic sur le fond peuvent tomber quasi ensemble)
+	    et respectueux de prefers-reduced-motion. */
+	close(): void {
+		if (this.qbdClosing) return;
+		this.qbdClosing = true;
+
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+			super.close();
+			return;
+		}
+
+		this.modalEl.addClass("qbd-closing");
+		this.containerEl.addClass("qbd-closing"); // le fond .modal-bg suit
+		let detached = false;
+		const detach = (): void => {
+			if (detached) return;
+			detached = true;
+			super.close(); // détache le DOM + appelle onClose()
+		};
+		// Fin de l'animation de sortie du panneau, avec un filet de sécurité si
+		// animationend ne se déclenche pas (animation coupée, onglet masqué).
+		this.modalEl.addEventListener("animationend", (e: AnimationEvent) => {
+			if (e.target === this.modalEl) detach();
+		});
+		window.setTimeout(detach, 240);
+	}
+}
+
+/**
  * La modale du contrat, sous Obsidian.
  *
- * `QbdModal` (`src/modal-base.ts`) porte DÉJÀ l'animation d'entrée et de
- * sortie, et la garde d'idempotence qui va avec : l'hôte s'appuie dessus
- * plutôt que de la refaire, sinon les modales du greffon s'ouvriraient
- * sèchement là où elles glissent aujourd'hui. C'est aussi ce qui garantit que
- * les modales passées par le contrat et celles qui héritent encore de
- * `QbdModal` en direct se comportent exactement pareil.
+ * `QbdModal` ci-dessus porte l'animation d'entrée et de sortie, et la garde
+ * d'idempotence qui va avec.
  *
  * La poignée est construite DÈS le constructeur — `modalEl`, `titleEl` et
  * `contentEl` existent dès celui de `Modal` — pour que `open()` puisse la

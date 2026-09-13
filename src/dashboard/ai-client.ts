@@ -11,7 +11,7 @@ import {
 	refreshCliCaches,
 } from "./ai-providers";
 import type { AiSettingsHost } from "./ai-settings-host";
-import type { AiUsage } from "./ai-usage";
+import type { AiUsage } from "./usage-format";
 import { t } from "../i18n";
 
 /* ══════════════════════════════════════════════════════════

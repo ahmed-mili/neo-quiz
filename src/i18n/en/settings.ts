@@ -7,6 +7,8 @@ export const EN_SETTINGS = {
 	"settings.language.auto": "Automatic (follow Obsidian)",
 	"settings.language.en": "English",
 	"settings.language.fr": "Français",
+	"settings.codeHighlighting.name": "Code block highlighting",
+	"settings.codeHighlighting.desc": "Syntax-highlight quiz-blocks code blocks in Source mode.",
 	"settings.ai.mentionFolders.name": "Folders outside the vault",
 	"settings.ai.mentionFolders.desc": "Folders the “@” picker also searches, on top of your vault. Press Enter to add. Desktop only.",
 	"settings.ai.mentionFolders.remove": "Remove this folder",

@@ -8,6 +8,8 @@ export const FR_SETTINGS: Record<keyof typeof EN_SETTINGS, string> = {
 	"settings.language.auto": "Automatique (suivre Obsidian)",
 	"settings.language.en": "English",
 	"settings.language.fr": "Français",
+	"settings.codeHighlighting.name": "Coloration des blocs de code",
+	"settings.codeHighlighting.desc": "Colore la syntaxe des blocs de code quiz-blocks en mode Source.",
 	"settings.ai.mentionFolders.name": "Dossiers hors du coffre",
 	"settings.ai.mentionFolders.desc": "Dossiers que le picker « @ » cherche en plus de votre coffre. Entrée pour ajouter. Ordinateur uniquement.",
 	"settings.ai.mentionFolders.remove": "Retirer ce dossier",

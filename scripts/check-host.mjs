@@ -30,21 +30,14 @@ const EXTENSIONS_TS = [".ts", ".tsx", ".mts", ".cts"];
  * l'en retirer au lieu de le laisser couvrir une régression future.
  */
 const RESTANTS = [
-	// Tableau de bord — tranches 2 et 3.
-	"src/dashboard.ts",
-	"src/dashboard/share.ts",
+	// Tableau de bord — chantier 4 (« greffon lecteur »), tâche 1 : le
+	// greffon a perdu `src/dashboard.ts`, `src/dashboard/share.ts`,
+	// `src/dashboard/ai-usage.ts`, `src/dashboard/usage-modal.ts` et
+	// `src/modal-base.ts` (supprimés), donc leurs importeurs d'Obsidian.
+	// `src/types/dashboard-ctx.ts` reste seul, en attendant sa scission
+	// (tâche 2) entre la part liée à `App`/`ItemView`/`Plugin` (à jeter) et
+	// les types que l'application importe encore.
 	"src/types/dashboard-ctx.ts",
-	/* L'USAGE DU FORFAIT reste au greffon (décision du 2026-09-12, tranche 5,
-	   tâche 6) : `ai-usage.ts` lit le trousseau du CLI Claude et les rollouts
-	   de Codex par `fs` derrière `Platform`, et `usage-modal.ts` est une
-	   `Modal` d'Obsidian. La page « Générer » ne les importe plus — l'écran
-	   d'usage lui arrive par `AiPageDeps.usage`, absent dans l'application. Ce
-	   sont donc les DEUX SEULS fichiers de `src/dashboard/` que la tranche 5
-	   laisse liés, et c'est un choix, pas un reste. */
-	"src/dashboard/ai-usage.ts",
-	"src/dashboard/usage-modal.ts",
-	// Divers du greffon — tranche 4.
-	"src/modal-base.ts",
 ];
 
 function fichiersTs(racine) {
@@ -136,7 +129,10 @@ const IMPORTE_APPS = /(?:from\s*|require\s*\(\s*|(?<![.\w$])import\s*\(\s*)["'][
    `ai-client.ts` consommait `buildChildEnv` d'`apps/obsidian/host.ts` tant
    qu'il lançait ses CLI lui-même (tranche 5, tâche 3). La tâche 4 l'a fait
    passer par `host.process.run` — l'import a disparu, et l'entrée avec lui. */
-const EXCEPTIONS_APPS = new Set(["src/dashboard.ts"]);
+/* `src/dashboard.ts` a disparu à la tâche 1 du chantier « greffon lecteur »
+   (2026-09-13) : c'était la seule exception. Liste vidée, gardée en place
+   pour un retour en arrière — même statut de cliquet que RESTANTS. */
+const EXCEPTIONS_APPS = new Set();
 for (const f of fichiersTs("src")) {
 	if (EXCEPTIONS_APPS.has(f)) continue;
 	if (IMPORTE_APPS.test(codeNu(readFileSync(f, "utf8")))) {

@@ -32,7 +32,7 @@ import type { DetailHandlers } from "../dashboard/detail";
 import type { Hotkey } from "../hotkey-format";
 import type { OllamaCatalogEntry } from "../dashboard/ai-providers";
 import type { AiClient } from "../dashboard/ai-client";
-import type { AiUsageEntry } from "../dashboard/ai-usage";
+import type { AiUsageEntry } from "../dashboard/usage-format";
 import type { AiHandlers } from "../dashboard/ai";
 import type { ModuleOverride, ModuleGroup, ModuleMap } from "../dashboard/quiz-modules";
 import type { ReviewStore } from "../review/review-store";

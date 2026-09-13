@@ -163,9 +163,6 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   identifiants de dossier.
 - `npm run check:rename-match` — l'appariement d'un renommage entre deux hôtes,
   sur preuve et non sur ressemblance.
-- `npm run check:lesson` — la boucle d'apprentissage. **Il doit aller jusqu'au
-  bout** : il MEURT sur une exception au lieu d'échouer proprement, et une mort en
-  route masque en silence tous les groupes suivants (onze cachés, une fois).
 - `npm run check:scanner` — le catalogue. Une clé décalée perdrait l'historique de
   révision.
 - `npm run check:markers` — le markdown non rendu dans les vrais vaults. Il éprouve

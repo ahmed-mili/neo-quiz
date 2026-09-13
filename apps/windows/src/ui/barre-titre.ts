@@ -17,7 +17,7 @@ import { poserIcone } from "../host/ui";
 import { ouvrirMenuApp } from "./menu-app";
 import { CLE_REGLAGES_ZOOM } from "../../electron/pont";
 import type { EtatFenetre } from "../../electron/pont";
-import manifeste from "../../../../src/assets/manifest.json";
+import application from "../../package.json";
 
 /** Table id de menu → nom de commande d'édition (`pont().edition.commande`) :
     les six ids de `menu-app-arbre.ts` correspondent un à un aux six noms du
@@ -176,7 +176,7 @@ export function monterBarreTitre(root: HTMLElement, deps: {
 	boutonMenu.addEventListener("click", () => {
 		if (fermerMenu) { fermerMenu(); fermerMenu = null; return; }
 		fermerMenu = ouvrirMenuApp(boutonMenu, {
-			version: manifeste.version,
+			version: application.version,
 			zoom: () => zoomCourant,
 			executer(id, value) {
 				if (id === "check-updates") {

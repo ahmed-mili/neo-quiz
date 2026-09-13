@@ -544,7 +544,9 @@ pm` — jamais dans un dossier de quiz : refuser le périmètre (qui
   la réécriture « naturelle » en remplacements par CHAÎNE le corromprait.
 - `npm run check:package` — l'EMPAQUETAGE : la configuration résolue
   d'electron-builder, et le paquet local s'il existe. Défauts empêchés côté
-  configuration : une version qui diverge du manifeste, `appId` ou
+  configuration : depuis que l'application a sa propre version
+  (`apps/windows/package.json`, indépendante du greffon, 2026-09-13), un
+  lockfile désynchronisé de cette version, `appId` ou
   `executableName` changés « par cohérence » (le premier est la clé de
   registre par laquelle NSIS retrouve l'installation à remplacer),
   `deleteAppDataOnUninstall` à vrai, `node_modules`/sourcemaps dans l'asar —
@@ -558,7 +560,10 @@ pm` — jamais dans un dossier de quiz : refuser le périmètre (qui
   son sha512 (calculé en flux, `node:crypto`) et sa taille sur disque
   correspondent EXACTEMENT à ceux de `latest.yml`, et que le `.blockmap`
   existe — c'est le seul contrôle qui rougit si l'exe a été remplacé (par sa
-  version signée, ou par erreur) sans repasser par ce script.
+  version signée, ou par erreur) sans repasser par ce script. Il vérifie
+  aussi que `app-update.yml`, embarqué dans le paquet, pointe le fournisseur
+  `github` sur `ahmed-mili/neo-quiz` — sans quoi electron-updater n'aurait
+  aucun flux à lire une fois installé.
 - `npm --prefix apps/windows run typecheck:electron` — le typecheck du PROCESSUS
   PRINCIPAL Electron (`apps/windows/tsconfig.electron.json`), lancé par
   `npm run build` de ce dossier, donc par `npm run check:app`. Il referme un trou

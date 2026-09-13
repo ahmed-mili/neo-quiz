@@ -1,12 +1,20 @@
 name: Release Neo Quiz
 
-# Deux déclencheurs, une seule chaîne :
-#   - un tag `v*` PUBLIE : release GitHub avec le greffon (main.js, styles.css,
-#     manifest.json), l'installeur Windows et l'AppImage ;
-#   - `workflow_dispatch` RÉPÈTE sans publier : mêmes jobs, mêmes builds, mais
-#     les fichiers sont déposés en artefacts de workflow et aucune release
-#     n'est créée. C'est ainsi qu'on éprouve cette chaîne sur un dépôt public
-#     sans laisser une release de test derrière soi.
+# Deux PRODUITS INDÉPENDANTS, deux familles de tags, un seul flux de mise à
+# jour :
+#   - un tag `vX.Y.Z` PUBLIE le GREFFON (main.js, styles.css, manifest.json) —
+#     sa release est marquée `make_latest: false` : BRAT et Obsidian ne
+#     lisent jamais « latest », ils lisent `manifest.json` sur `main` ;
+#   - un tag `app-vX.Y.Z` PUBLIE L'APPLICATION (installeur Windows,
+#     AppImage) — sa release est la release « latest » du dépôt
+#     (`make_latest: true`), parce qu'electron-updater (fournisseur github,
+#     sans `allowPrerelease`) lit `/releases/latest` puis le `latest.yml` de
+#     CETTE release pour savoir s'il existe une mise à jour ;
+#   - `workflow_dispatch` RÉPÈTE sans publier, sur le produit choisi : mêmes
+#     jobs, mêmes builds, mais les fichiers sont déposés en artefacts de
+#     workflow et aucune release n'est créée. C'est ainsi qu'on éprouve cette
+#     chaîne sur un dépôt public sans laisser une release de test derrière
+#     soi.
 # La signature Authenticode de l'installeur Windows (SignPath) est optionnelle,
 # activée par la variable de dépôt `SIGNPATH_ORGANIZATION_ID` : tant qu'elle est
 # absente, `main` reste publiable non signé.
@@ -14,15 +22,29 @@ on:
   push:
     tags:
       - 'v*'
+      - 'app-v*'
   workflow_dispatch:
     inputs:
       version:
-        description: "Version à répéter (sans le v), écrite dans le manifeste le temps du build"
+        description: "Version à répéter (sans le v), écrite dans le fichier de version le temps du build"
         required: true
         default: "0.0.0-repetition"
+      product:
+        description: "Produit à répéter"
+        required: true
+        type: choice
+        options:
+          - app
+          - plugin
+        default: "app"
 
 jobs:
-  plugin:
+  # Résout version / tag / produit une seule fois, et crée la release AVANT
+  # les builds : c'est ainsi que les jobs `plugin` / `app-windows` /
+  # `app-linux` peuvent y attacher leurs fichiers sans se disputer la
+  # création (un Windows et un Linux qui créeraient chacun la release en
+  # feraient deux, en double).
+  prepare:
     runs-on: ubuntu-latest
 
     permissions:
@@ -31,6 +53,72 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      product: ${{ steps.version.outputs.product }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # `app-v*` → app, `v*` → plugin. En répétition, les deux entrées
+      # choisissent directement. Les entrées passent par l'environnement,
+      # jamais interpolées dans le script : interpolées, une valeur saisie
+      # serait exécutée comme du shell.
+      - name: Resolve version, tag and product
+        id: version
+        shell: bash
+        env:
+          VERSION_SAISIE: ${{ github.event.inputs.version }}
+          PRODUIT_SAISI: ${{ github.event.inputs.product }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            produit="$PRODUIT_SAISI"
+            if [ "$produit" = "app" ]; then prefixe="app-v"; else prefixe="v"; fi
+            echo "version=$VERSION_SAISIE" >> "$GITHUB_OUTPUT"
+            echo "tag=$prefixe$VERSION_SAISIE" >> "$GITHUB_OUTPUT"
+            echo "product=$produit" >> "$GITHUB_OUTPUT"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+            case "$tag" in
+              app-v*)
+                echo "product=app" >> "$GITHUB_OUTPUT"
+                echo "version=${tag#app-v}" >> "$GITHUB_OUTPUT"
+                ;;
+              v*)
+                echo "product=plugin" >> "$GITHUB_OUTPUT"
+                echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+                ;;
+              *)
+                echo "Tag inattendu : $tag" >&2
+                exit 1
+                ;;
+            esac
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Sur tag seulement : la release existe avant que les jobs de build y
+      # attachent leurs fichiers. `make_latest` distingue les deux produits :
+      # l'application devient la release « latest » du dépôt, le greffon ne
+      # la touche jamais (voir l'en-tête).
+      - name: Create Release
+        if: github.event_name != 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "${{ steps.version.outputs.tag }}"
+          name: "${{ steps.version.outputs.tag }}"
+          # Pré-version dès que le tag porte un suffixe semver (v2.0.0-beta,
+          # -rc.1, -alpha…) : c'est la définition même de semver, donc une
+          # future v2.1.0 sans suffixe sortira en release normale sans qu'on
+          # ait à repasser ici.
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          make_latest: ${{ steps.version.outputs.product == 'app' }}
+
+  plugin:
+    needs: prepare
+    if: needs.prepare.outputs.product == 'plugin'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -44,36 +132,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Sur tag : la version vient du tag. En répétition : de l'entrée saisie.
-      - name: Resolve version
-        id: version
-        shell: bash
-        # L'entrée passe par l'environnement, jamais interpolée dans le script : interpolée, une valeur saisie serait exécutée comme du shell.
-        env:
-          VERSION_SAISIE: ${{ github.event.inputs.version }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=$VERSION_SAISIE" >> "$GITHUB_OUTPUT"
-            echo "tag=v$VERSION_SAISIE" >> "$GITHUB_OUTPUT"
-          else
-            tag="${GITHUB_REF#refs/tags/}"
-            echo "tag=$tag" >> "$GITHUB_OUTPUT"
-            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
-          fi
-
       # UNE SEULE façon d'écrire la version : le script du dépôt, jamais un
       # `node -e` inline qui divergerait de lui.
       # `set-version.mjs` SORT EN 1 quand le manifeste porte déjà le numéro
       # (« Rien à changer ») : c'est le cas normal d'un tag posé juste après
       # le commit « Version X ». Le mode répétition ne le voyait pas, il change
       # toujours le numéro. D'où le test avant l'appel.
-      - name: Update manifest version
+      - name: Update plugin version
         shell: bash
         env:
-          VERSION_VOULUE: ${{ steps.version.outputs.version }}
+          VERSION_VOULUE: ${{ needs.prepare.outputs.version }}
         run: |
           actuelle=$(node -p "require('./src/assets/manifest.json').version")
-          if [ "$actuelle" != "$VERSION_VOULUE" ]; then node scripts/set-version.mjs "$VERSION_VOULUE"; fi
+          if [ "$actuelle" != "$VERSION_VOULUE" ]; then node scripts/set-version.mjs --plugin "$VERSION_VOULUE"; fi
 
       - name: Type check
         run: npm run check
@@ -99,28 +170,25 @@ jobs:
           path: release/*
           if-no-files-found: error
 
-      - name: Create Release
+      # La release existe déjà (job `prepare`) : ce step ne fait qu'y
+      # attacher les fichiers, sans redéfinir nom / corps / prerelease /
+      # make_latest.
+      - name: Attach plugin to release
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          name: "${{ steps.version.outputs.tag }}"
-          body: "Release ${{ steps.version.outputs.tag }}"
-          # Pré-version dès que le tag porte un suffixe semver (v2.0.0-beta,
-          # -rc.1, -alpha…) : c'est la définition même de semver, donc une
-          # future v2.1.0 sans suffixe sortira en release normale sans qu'on
-          # ait à repasser ici.
-          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
+          tag_name: "${{ needs.prepare.outputs.tag }}"
           files: |
             release/main.js
             release/manifest.json
             release/styles.css
 
-  # L'application, deux paquets, deux runners. `needs: plugin` pour deux
-  # raisons : la release existe déjà quand ils y attachent leurs fichiers, et
-  # un greffon qui ne compile pas n'a pas à produire d'installeur. Un échec
-  # de l'un des deux n'annule ni l'autre ni la release du greffon.
+  # L'application, deux paquets, deux runners. `needs: prepare` : la release
+  # existe déjà quand ils y attachent leurs fichiers. Un échec de l'un des
+  # deux n'annule pas l'autre.
   app-windows:
-    needs: plugin
+    needs: prepare
+    if: needs.prepare.outputs.product == 'app'
     runs-on: windows-latest
     # `actions: read` en plus de `contents: write` : un bloc `permissions`
     # explicite met tout le reste à `none`, et l'action SignPath a besoin de
@@ -141,12 +209,12 @@ jobs:
         run: npm ci
         working-directory: apps/windows
       # Même garde que le job `plugin` : « Rien à changer » sort en 1.
-      - name: Update manifest version
+      - name: Update app version
         shell: bash
         env:
-          VERSION_VOULUE: ${{ needs.plugin.outputs.version }}
+          VERSION_VOULUE: ${{ needs.prepare.outputs.version }}
         run: |
-          actuelle=$(node -p "require('./src/assets/manifest.json').version")
+          actuelle=$(node -p "require('./apps/windows/package.json').version")
           if [ "$actuelle" != "$VERSION_VOULUE" ]; then node scripts/set-version.mjs "$VERSION_VOULUE"; fi
       - name: Build and package (NSIS)
         run: npm run pack:win
@@ -186,7 +254,7 @@ jobs:
           wait-for-completion-timeout-in-seconds: 3600
           output-artifact-directory: apps/windows/signed
           parameters: |
-            version: ${{ toJSON(needs.plugin.outputs.version) }}
+            version: ${{ toJSON(needs.prepare.outputs.version) }}
 
       # Sans le script suivant, `latest.yml` et le blockmap continueraient de
       # décrire l'exe NON signé : electron-updater rejetterait la mise à jour
@@ -265,8 +333,9 @@ jobs:
       # Copie sous un nom FIXE, en plus du fichier versionné : c'est ce nom
       # que la page de téléchargement (docs/index.html) vise en permanence via
       # releases/latest/download/neo-quiz-setup.exe, sans jamais changer de
-      # lien d'une version à l'autre. Ne remplace rien : latest.yml et le
-      # .blockmap continuent de nommer le fichier VERSIONNÉ, seul lu par
+      # lien d'une version à l'autre — et cette release est toujours celle de
+      # l'app (voir « latest » dans l'en-tête). Ne remplace rien : latest.yml
+      # et le .blockmap continuent de nommer le fichier VERSIONNÉ, seul lu par
       # electron-updater.
       - name: Copy installer under a fixed name
         shell: bash
@@ -276,12 +345,13 @@ jobs:
 
       # `latest.yml` et le `.blockmap` sont ce qu'electron-updater lit : la
       # version à comparer, le sha512 à vérifier, et les blocs à ne pas
-      # retélécharger (spec de la mise à jour automatique, §3.1).
+      # retélécharger (spec de la mise à jour automatique, §3.1). La release
+      # existe déjà (job `prepare`) : ce step n'y attache que les fichiers.
       - name: Attach installer to release
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "${{ needs.plugin.outputs.tag }}"
+          tag_name: "${{ needs.prepare.outputs.tag }}"
           files: |
             apps/windows/dist-installer/*.exe
             apps/windows/dist-installer/*.exe.blockmap
@@ -289,7 +359,8 @@ jobs:
             apps/windows/dist-installer/neo-quiz-setup.exe
 
   app-linux:
-    needs: plugin
+    needs: prepare
+    if: needs.prepare.outputs.product == 'app'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -306,12 +377,12 @@ jobs:
         run: npm ci
         working-directory: apps/windows
       # Même garde que le job `plugin` : « Rien à changer » sort en 1.
-      - name: Update manifest version
+      - name: Update app version
         shell: bash
         env:
-          VERSION_VOULUE: ${{ needs.plugin.outputs.version }}
+          VERSION_VOULUE: ${{ needs.prepare.outputs.version }}
         run: |
-          actuelle=$(node -p "require('./src/assets/manifest.json').version")
+          actuelle=$(node -p "require('./apps/windows/package.json').version")
           if [ "$actuelle" != "$VERSION_VOULUE" ]; then node scripts/set-version.mjs "$VERSION_VOULUE"; fi
       - name: Build and package (AppImage)
         run: npm run pack:linux
@@ -340,21 +411,24 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "${{ needs.plugin.outputs.tag }}"
+          tag_name: "${{ needs.prepare.outputs.tag }}"
           files: |
             apps/windows/dist-installer/*.AppImage
             apps/windows/dist-installer/latest-linux.yml
             apps/windows/dist-installer/neo-quiz.AppImage
 
-  # La page de téléchargement lit `docs/latest.json` (servi par GitHub Pages,
-  # sans limite de requêtes) plutôt que l'API GitHub, qui refuse au-delà de
-  # 60 appels par heure et par adresse IP sans jeton : une promo derrière un
-  # même réseau l'atteignait en quelques minutes et la page perdait ses
-  # versions. Ce job tourne une fois les trois autres finis, quand tous les
-  # fichiers sont attachés, et pousse le JSON sur `main` (Pages se republie).
+  # La page de téléchargement lit `docs/latest.json` (app) et
+  # `docs/latest-plugin.json` (greffon), servis par GitHub Pages, sans limite
+  # de requêtes, plutôt que l'API GitHub, qui refuse au-delà de 60 appels par
+  # heure et par adresse IP sans jeton : une promo derrière un même réseau
+  # l'atteignait en quelques minutes et la page perdait ses versions. Ce job
+  # tourne une fois les jobs du produit publié finis, écrit SEULEMENT le
+  # fichier du produit qui vient d'être tagué, et le pousse sur `main` (Pages
+  # se republie). Des jobs SKIPPED (`plugin` sur un tag d'app, ou l'inverse)
+  # sont normaux : un seul produit par tag.
   site:
-    needs: [plugin, app-windows, app-linux]
-    if: github.event_name != 'workflow_dispatch'
+    needs: [prepare, plugin, app-windows, app-linux]
+    if: ${{ !cancelled() && github.event_name != 'workflow_dispatch' && needs.prepare.result == 'success' && needs.plugin.result != 'failure' && needs['app-windows'].result != 'failure' && needs['app-linux'].result != 'failure' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -364,20 +438,23 @@ jobs:
         with:
           ref: main
 
-      - name: Write docs/latest.json from the release
+      - name: Write latest.json from the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plugin.outputs.tag }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          PRODUCT: ${{ needs.prepare.outputs.product }}
         run: |
+          if [ "$PRODUCT" = "app" ]; then fichier="docs/latest.json"; else fichier="docs/latest-plugin.json"; fi
           gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
             --jq '{tag_name, published_at, assets: [.assets[] | {name, size, browser_download_url}]}' \
-            > docs/latest.json
-          cat docs/latest.json
+            > "$fichier"
+          cat "$fichier"
+          echo "FICHIER=$fichier" >> "$GITHUB_ENV"
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/latest.json
-          git diff --cached --quiet && echo "latest.json inchangé" || git commit -m "site: latest.json pour ${{ needs.plugin.outputs.tag }}"
+          git add "$FICHIER"
+          git diff --cached --quiet && echo "$FICHIER inchangé" || git commit -m "site: $FICHIER pour ${{ needs.prepare.outputs.tag }}"
           git push origin main

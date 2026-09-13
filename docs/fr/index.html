@@ -734,7 +734,7 @@
 		function afficherVersion(plateforme, release, extension, suffixe) {
 			var elVersion = document.getElementById("version-" + plateforme);
 			var elTaille = document.getElementById("taille-" + plateforme);
-			var version = String(release.tag_name || "").replace(/^v/, "");
+			var version = String(release.tag_name || "").replace(/^(app-)?v/, "");
 			if (!elVersion || !version) return;
 			elVersion.textContent = "v" + version + (suffixe ? " · " + suffixe : "");
 			if (!extension || !elTaille) return;
@@ -744,11 +744,12 @@
 
 		var latestChargee = null;
 
-		// D'ABORD le fichier publié par release.yml sur ce site (`latest.json`,
-		// même forme que la réponse de l'API, sans limite de requêtes) ; l'API
-		// GitHub seulement en repli : sans jeton elle refuse au-delà de 60
-		// appels par heure et par adresse IP, et un réseau partagé (une promo
-		// dans un amphi) l'atteint en quelques minutes.
+		// D'ABORD le fichier publié par release.yml sur ce site (`latest.json`
+		// pour l'app, `latest-plugin.json` pour Obsidian, même forme que la
+		// réponse de l'API, sans limite de requêtes) ; l'API GitHub seulement
+		// en repli : sans jeton elle refuse au-delà de 60 appels par heure et
+		// par adresse IP, et un réseau partagé (une promo dans un amphi)
+		// l'atteint en quelques minutes.
 		function chargerJson(url) {
 			return fetch(url, { cache: "no-cache" }).then(function (reponse) {
 				if (!reponse.ok) throw new Error("reponse non ok");
@@ -763,8 +764,41 @@
 				latestChargee = donnees;
 				afficherVersion("windows", donnees, ".exe", null);
 				afficherVersion("linux", donnees, ".appimage", null);
+				activerSelecteurVersion("windows", ".exe");
+				activerSelecteurVersion("linux", ".appimage");
+			})
+			.catch(function () {
+				// Textes « … » restent visibles ; on les efface plutôt que de
+				// mentir sur une version qu'on n'a pas pu vérifier.
+				["version-windows", "version-linux"].forEach(function (id) {
+					var el = document.getElementById(id);
+					if (el) el.textContent = "";
+				});
+			});
+
+		// Obsidian lit son propre flux de release, `latest-plugin.json`
+		// (publié avec `make_latest: false`, donc jamais la release
+		// « latest » de GitHub) : le repli parcourt `/releases` et garde la
+		// première qui n'est pas une pré-version et dont le tag commence par
+		// `v` suivi d'un chiffre — excluant les pré-versions et tout tag
+		// `app-v*`, que le même endpoint liste aussi.
+		function estTagPlugin(tagName) {
+			return /^v\d/.test(String(tagName || ""));
+		}
+		chargerJson("../latest-plugin.json")
+			.catch(function () {
+				return chargerJson("https://api.github.com/repos/" + DEPOT + "/releases?per_page=30")
+					.then(function (releases) {
+						var trouvee = (releases || []).find(function (release) {
+							return !release.prerelease && estTagPlugin(release.tag_name);
+						});
+						if (!trouvee) throw new Error("aucune release plugin");
+						return trouvee;
+					});
+			})
+			.then(function (donnees) {
 				var elObsidian = document.getElementById("version-obsidian");
-				var versionObsidian = String(donnees.tag_name || "").replace(/^v/, "");
+				var versionObsidian = String(donnees.tag_name || "").replace(/^(app-)?v/, "");
 				if (elObsidian && versionObsidian) elObsidian.textContent = "v" + versionObsidian;
 				// La taille du plugin : ses trois fichiers (main.js, styles.css,
 				// manifest.json) additionnés, ce que la commande télécharge.
@@ -773,16 +807,10 @@
 					return ["main.js", "styles.css", "manifest.json"].indexOf(String(a.name || "")) !== -1;
 				}).reduce(function (total, a) { return total + (a.size || 0); }, 0);
 				if (elTailleObsidian && octetsPlugin) elTailleObsidian.textContent = formaterTaille(octetsPlugin);
-				activerSelecteurVersion("windows", ".exe");
-				activerSelecteurVersion("linux", ".appimage");
 			})
 			.catch(function () {
-				// Textes « … » restent visibles ; on les efface plutôt que de
-				// mentir sur une version qu'on n'a pas pu vérifier.
-				["version-windows", "version-linux", "version-obsidian"].forEach(function (id) {
-					var el = document.getElementById(id);
-					if (el) el.textContent = "";
-				});
+				var el = document.getElementById("version-obsidian");
+				if (el) el.textContent = "";
 			});
 
 		// Rend la version d'une plateforme cliquable : au clic, un menu liste
@@ -815,7 +843,7 @@
 				releases.slice(0, 10).forEach(function (release) {
 					var actif = trouverActif(release.assets, extension);
 					if (!actif) return;
-					var version = String(release.tag_name || "").replace(/^v/, "");
+					var version = String(release.tag_name || "").replace(/^(app-)?v/, "");
 					if (!version) return;
 					var item = document.createElement("div");
 					item.className = "item";

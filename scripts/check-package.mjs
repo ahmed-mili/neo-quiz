@@ -3,7 +3,8 @@
  * s'il existe.
  *
  * Ce que ce script empêche, et qu'une relecture ne voit pas :
- *   - une version qui diverge du manifeste (deux numéros, l'un jamais suivi) ;
+ *   - une version qui diverge entre le package de l'application et son
+ *     lockfile (deux numéros, l'un jamais suivi) ;
  *   - un `appId` ou un `executableName` changé « par cohérence » : le premier
  *     est la clé de registre par laquelle NSIS retrouve l'installation à
  *     remplacer (le changer fait de chaque mise à jour une seconde
@@ -48,9 +49,11 @@ const r = makeReporter("Empaquetage — configuration résolue");
 
 const { default: configurer } = await import(pathToFileURL(`${appWindows}electron-builder.config.mjs`).href);
 const config = await configurer();
-const manifeste = JSON.parse(await readFile(`${racine}src/assets/manifest.json`, "utf8"));
+const application = JSON.parse(await readFile(`${appWindows}package.json`, "utf8"));
+const lockfile = JSON.parse(await readFile(`${appWindows}package-lock.json`, "utf8"));
 
-r.check("la version est celle du manifeste", config.extraMetadata?.version, manifeste.version);
+r.check("le lockfile suit la version de l'application",
+	[lockfile.version, lockfile.packages?.[""]?.version], [application.version, application.version]);
 r.check("appId est immuable", config.appId, "com.ahmed.neoquiz");
 r.check("executableName est immuable et sûr pour un chemin",
 	[config.executableName, /^[a-z0-9.-]+$/.test(config.executableName ?? "")], ["neo-quiz", true]);
@@ -94,13 +97,22 @@ if (existsSync(asar)) {
 	   côté de l'asar), et le dossier de sortie porte les métadonnées que la
 	   release publie. La version de `latest.yml` DOIT être celle du manifeste :
 	   c'est elle qu'electron-updater compare à `app.getVersion()`. */
-	p.check("app-update.yml est dans le paquet",
-		existsSync(`${appWindows}dist-installer/win-unpacked/resources/app-update.yml`), true);
+	const updatePath = `${appWindows}dist-installer/win-unpacked/resources/app-update.yml`;
+	p.check("app-update.yml est dans le paquet", existsSync(updatePath), true);
+	/* `app-update.yml` est ce qu'electron-updater lit au démarrage installé
+	   pour savoir où chercher une mise à jour : provider github, dépôt fixe —
+	   sans quoi il ne saurait pas qu'il doit lire /releases/latest. */
+	const updateBrut = existsSync(updatePath) ? readFileSync(updatePath, "utf8") : "";
+	p.check("app-update.yml vise les releases GitHub du dépôt",
+		[/^provider:\s*(.+)$/m.exec(updateBrut)?.[1]?.trim(),
+			/^owner:\s*(.+)$/m.exec(updateBrut)?.[1]?.trim(),
+			/^repo:\s*(.+)$/m.exec(updateBrut)?.[1]?.trim()],
+		["github", "ahmed-mili", "neo-quiz"]);
 	const latest = `${appWindows}dist-installer/latest.yml`;
 	p.check("latest.yml existe à côté de l'installeur", existsSync(latest), true);
-	p.check("latest.yml porte la version du manifeste",
+	p.check("latest.yml porte la version de l'application",
 		existsSync(latest) ? /^version:\s*(.+)$/m.exec(readFileSync(latest, "utf8"))?.[1]?.trim() : null,
-		manifeste.version);
+		application.version);
 	/* Le contrôle qui rougit si l'exe a été remplacé (par ex. par sa version
 	   signée) sans repasser par `scripts/update-info-after-signing.mjs` :
 	   `latest.yml` et le blockmap décriraient alors un fichier qui n'existe

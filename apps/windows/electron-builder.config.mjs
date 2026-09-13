@@ -7,14 +7,13 @@
 // rien lui-meme, d'ou `"build"` qui enchaine les deux avant `electron-builder`
 // dans `apps/windows/package.json`.
 //
-// FORMAT JS ET NON YAML (Ruling 23, ronde de correction 1) : la version reelle
-// du produit vit dans UN SEUL fichier, `src/assets/manifest.json` (voir
-// `scripts/set-version.mjs` et CLAUDE.md) — `apps/windows/package.json` porte
-// un `"0.0.0"` statique et jamais bumpe, exactement comme le plugin Obsidian.
-// Un `electron-builder.yml` statique aurait lu ce `0.0.0` et rien ne l'aurait
-// tenu a jour ; `extraMetadata.version` ci-dessous force electron-builder a
-// lire le numero qui compte, sans jamais dupliquer le numero dans un second
-// fichier que rien ne suit.
+// FORMAT JS ET NON YAML (Ruling 23, ronde de correction 1) : depuis le
+// 2026-09-13, l'application a sa propre version, independante du plugin
+// Obsidian (`src/assets/manifest.json`, qui garde la sienne). Elle vit dans
+// `apps/windows/package.json` (voir `scripts/set-version.mjs` et CLAUDE.md) ;
+// electron-builder la lit LUI-MEME depuis ce fichier, sans qu'aucune cle de
+// cette config ait besoin de la lui injecter — c'est pourquoi `extraMetadata`
+// ne porte plus que `author`, jamais `version`.
 //
 // PIEGE VERIFIE : electron-builder n'AUTO-DETECTE que les configs
 // `electron-builder.{yml,yaml,json,json5,toml}` ou le champ `build` de
@@ -25,16 +24,6 @@
 // avec la sortie Vite). Les scripts `pack:win` / `pack:linux` de
 // `package.json` passent donc `--config electron-builder.config.mjs`
 // explicitement ; ne jamais lancer `electron-builder` nu sans ce flag.
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-
-const manifestUrl = new URL("../../src/assets/manifest.json", import.meta.url);
-
-async function lireVersionDuManifeste() {
-	const brut = await readFile(fileURLToPath(manifestUrl), "utf8");
-	return JSON.parse(brut).version;
-}
-
 export default async function () {
 	return {
 		/* IMMUABLE, comme `PLUGIN_ID` : c'est la clé de registre par laquelle
@@ -50,11 +39,7 @@ export default async function () {
 		   2026-09-12. Sous Linux, c'est le nom du binaire dans l'AppImage et
 		   de l'entrée `.desktop`. */
 		executableName: "neo-quiz",
-		// Injecte la version du manifeste sans toucher a package.json : c'est
-		// cette valeur qu'electron-builder utilise pour le nom du fichier
-		// produit et les metadonnees de l'installeur.
 		extraMetadata: {
-			version: await lireVersionDuManifeste(),
 			/* `Publisher` dans la clé de désinstallation (winget y corrèle le
 			   paquet) et `CompanyName` dans les métadonnées de l'exe — exigée
 			   par SignPath comme métadonnée sur l'installeur signé. */
@@ -74,7 +59,14 @@ export default async function () {
 		   venue du rendu. Elle ne PUBLIE rien : les scripts `pack:*` passent
 		   `--publish never`, parce que sous un tag et avec `GH_TOKEN`,
 		   electron-builder créerait lui-même une release brouillon à côté de
-		   celle de `release.yml`. */
+		   celle de `release.yml`. Sans `allowPrerelease`, ce fournisseur lit
+		   `/releases/latest` puis le `latest.yml` de CETTE release : la
+		   release de l'application est donc publiée comme « latest »
+		   (`make_latest: true`), tandis que celles du greffon sont publiées
+		   avec `make_latest: false` — c'est ce qui permet à un seul
+		   fournisseur github de coexister avec deux familles de tags
+		   (`app-vX.Y.Z` et `vX.Y.Z`) sans qu'electron-updater ne confonde
+		   jamais une release de greffon avec une mise à jour de l'app. */
 		publish: { provider: "github", owner: "ahmed-mili", repo: "neo-quiz" },
 		/* Les DEUX sorties et rien d'autre. Le principal est bundlé par esbuild
 		   (`chokidar` compris — raison 2 de l'en-tête de `construire.mjs`), le

@@ -19,6 +19,7 @@ import { currentHost } from "../../../../src/host/current";
 import { currentLang, t } from "../../../../src/i18n";
 import { ajouter } from "../../../../src/dom";
 import manifeste from "../../../../src/assets/manifest.json";
+import application from "../../package.json";
 import { PRODUCT_NAME } from "../../../../src/branding";
 import type { Scanner } from "../../../../src/dashboard/scanner";
 import { MAX_DOSSIERS, addFolder, estVaultObsidian, examDates, obsidianVaults, pickFolder, removeFolder, savedFolders, setExamDate } from "../host/folder";
@@ -302,17 +303,16 @@ export function renderSettings(
 	}
 
 	/* ── À propos ──
-	   LA VERSION VIENT DU MANIFESTE, importé en JSON et inliné par Vite : une
-	   seule source (`src/assets/manifest.json`, cf. CLAUDE.md « Release »),
-	   la même que l'installeur lit pour son numéro. Pas `app.getVersion()`
-	   par le pont : il lit le `package.json` du paquet, qui porte `0.0.0` en
-	   développement — cette ligne dirait alors deux choses selon qu'on est
-	   installé ou non. C'est cette ligne qu'on lit pour prouver qu'une mise à
-	   jour a remplacé l'ancienne version (épreuves de la tranche 6). */
+	   La version vient du package de l'app (`apps/windows/package.json`,
+	   importé en JSON et inliné par Vite), même source que l'installeur.
+	   `app.getVersion()` par le pont dirait aujourd'hui la même chose, mais
+	   on garde l'import direct pour ne pas dépendre du pont pour un texte
+	   statique. Le manifeste du plugin ne fournit ici que le lien vers le
+	   dépôt. */
 	const apropos = ajouter(contenu, "section", "nq-reglages-section");
 	ajouter(apropos, "h3", "nq-reglages-titre", t("settings.about.title"));
 	ajouter(apropos, "p", "nq-reglages-aide",
-		t("settings.about.version", { product: PRODUCT_NAME, version: manifeste.version }));
+		t("settings.about.version", { product: PRODUCT_NAME, version: application.version }));
 	const depot = ajouter(apropos, "a", "nq-reglages-lien", t("settings.about.repo"));
 	depot.href = manifeste.helpUrl;
 	// `_blank` : le principal remet toute ouverture `https?:` au navigateur

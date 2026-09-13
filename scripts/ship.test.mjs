@@ -24,6 +24,7 @@ test("sans rien, la livraison répare", () => {
 		request: "patch",
 		message: undefined,
 		watch: false,
+		target: "app",
 	});
 });
 
@@ -32,6 +33,7 @@ test("un seul mot est le message, pas un niveau", () => {
 		request: "patch",
 		message: "Fix collapse ghost pixels",
 		watch: false,
+		target: "app",
 	});
 });
 
@@ -40,6 +42,7 @@ test("le niveau précède le message", () => {
 		request: "minor",
 		message: "Add ordering questions",
 		watch: false,
+		target: "app",
 	});
 });
 
@@ -48,6 +51,7 @@ test("un numéro écrit en toutes lettres tient lieu de niveau", () => {
 		request: "3.0.0",
 		message: "Sortie de bêta",
 		watch: false,
+		target: "app",
 	});
 });
 
@@ -56,6 +60,7 @@ test("un numéro avec suffixe -beta tient aussi lieu de niveau", () => {
 		request: "2.5.0-beta",
 		message: "Nouvelle bêta",
 		watch: false,
+		target: "app",
 	});
 });
 
@@ -64,6 +69,7 @@ test("un niveau peut venir seul, quand l'arbre est déjà propre", () => {
 		request: "major",
 		message: undefined,
 		watch: false,
+		target: "app",
 	});
 });
 
@@ -72,11 +78,13 @@ test("le drapeau de suivi se glisse où il veut", () => {
 		request: "minor",
 		message: "Add a view",
 		watch: true,
+		target: "app",
 	});
 	assert.deepEqual(readArguments(["Fix a leak", "--watch"]), {
 		request: "patch",
 		message: "Fix a leak",
 		watch: true,
+		target: "app",
 	});
 });
 
@@ -302,8 +310,8 @@ test("versionCommitArgs commite avec le message attendu", () => {
 	]);
 });
 
-test("tagArgs pose l'étiquette vX", () => {
-	assert.deepEqual(tagArgs("2.4.1-beta"), ["tag", "v2.4.1-beta"]);
+test("tagArgs pose l'étiquette applicative par défaut", () => {
+	assert.deepEqual(tagArgs("2.4.1-beta"), ["tag", "app-v2.4.1-beta"]);
 });
 
 test("pushArgs nomme la branche ET l'étiquette dans le même push atomique", () => {
@@ -312,7 +320,7 @@ test("pushArgs nomme la branche ET l'étiquette dans le même push atomique", ()
 		"--atomic",
 		"origin",
 		"main",
-		"v2.4.1-beta",
+		"app-v2.4.1-beta",
 	]);
 });
 
@@ -320,4 +328,21 @@ test("pushArgs ne s'appuie jamais sur --follow-tags", () => {
 	// Une étiquette légère y échapperait en silence (finding source) : la
 	// forme retenue nomme l'étiquette elle-même, pas une option qui la devine.
 	assert.equal(pushArgs("2.4.1-beta").includes("--follow-tags"), false);
+});
+
+for (const args of [["--plugin", "minor", "Fix", "--watch"], ["minor", "Fix", "--watch", "--plugin"]]) {
+	test("le drapeau plugin se glisse où il veut : " + args.join(" "), () => {
+		assert.deepEqual(readArguments(args), { request: "minor", message: "Fix", watch: true, target: "plugin" });
+	});
+}
+
+test("les étiquettes du plugin conservent leur famille vX", () => {
+	assert.deepEqual(tagArgs("2.6.2", "plugin"), ["tag", "v2.6.2"]);
+	assert.deepEqual(pushArgs("2.6.2", "plugin"), ["push", "--atomic", "origin", "main", "v2.6.2"]);
+});
+
+test("les conflits citent le tag et la commande de récupération de la bonne cible", () => {
+	assert.match(describeTagConflict({ local: true, remote: false }, "1.0.0"), /git tag -d app-v1\.0\.0/);
+	assert.match(describeTagConflict({ local: false, remote: true }, "1.0.0"), /app-v1\.0\.0/);
+	assert.match(describeTagConflict({ local: true, remote: false }, "2.6.1", "plugin"), /git tag -d v2\.6\.1/);
 });

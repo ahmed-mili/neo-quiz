@@ -183,8 +183,16 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   groupe vert peut suivre trois groupes rouges. C'est ainsi qu'un défaut est passé.
 - `npm run dev` / `npm run build` — greffon, watch ou production (déploie dans les
   vaults). `npm run app:dev` / `app:build` — l'application Windows.
-- **Release** : bumper `src/assets/manifest.json`, `git tag vX.Y.Z`, pousser le tag →
-  `release.yml` publie. (Pas `npm run release` : il pointe vers un fichier absent.)
+- **Release** : deux produits indépendants, deux commandes `git ship` (alias posé
+  une fois, cf. `scripts/ship.mjs`) :
+  - `git ship [major|minor|patch|X.Y.Z] "Message"` — l'application par défaut,
+    bumpe `apps/windows/package.json` (+ lockfile synchronisé), tag `app-vX.Y.Z`,
+    release GitHub **latest**.
+  - `git ship --plugin [major|minor|patch|X.Y.Z] "Message"` — le greffon,
+    bumpe `src/assets/manifest.json`, tag `vX.Y.Z`, release GitHub `make_latest: false`.
+
+  `release.yml` construit le seul produit désigné par la famille de tag et publie.
+  (Pas `npm run release` : il pointe vers un fichier absent.)
 
 Vérification d'un changement = `npm run check`, plus `check:md` / `check:export` /
 `check:markers` si le rendu ou l'écriture sont touchés, **`check:quiz-io` dès que
@@ -450,7 +458,11 @@ entier aurait décoloré 594 fragments des quiz d'Ahmed. Mesurer avant de tranch
   seconde copie), le second le nom du binaire Linux. `check:package` les fige.
 
 - **`manifest.json` vit dans `src/assets/`, pas à la racine** (inhabituel pour un plugin
-  Obsidian). La version **réelle** est celle de `src/assets/manifest.json`, bumpée par
-  `release.yml` depuis le tag git. La version de `package.json` est statique et ignorée.
+  Obsidian). C'est la version du GREFFON, bumpée par `release.yml` depuis un tag
+  `vX.Y.Z`. La version de l'APPLICATION vit dans `apps/windows/package.json`
+  (+ lockfile synchronisé), bumpée depuis un tag `app-vX.Y.Z` — les deux produits
+  sont indépendants depuis le 2026-09-13 (voir « Release » ci-dessus). Le
+  `package.json` de la racine du dépôt, lui, reste statique et ignoré : il ne
+  porte la version d'aucun des deux produits.
 - Modules visés < ~350 lignes (exceptions assumées : `ui-select`, `ai`, `engine`, `plugin`).
 - Docs de conception (workflow superpowers) : `docs/superpowers/{specs,plans}/`.

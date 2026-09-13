@@ -6,6 +6,7 @@
  *   git ship 3.0.0 "Sortie de bêta"         le numéro exact, quand il le faut
  *   git ship                                l'arbre est déjà propre : bump seul
  *   git ship --watch "Fix a leak"           et reste devant la CI
+ *   git ship --plugin patch                 livre le plugin explicitement
  *
  * L'alias se pose une fois :
  *
@@ -20,8 +21,8 @@
  *      déjà prise, distant qui n'a pas avancé sans nous ;
  *   2. les vérifications (`runChecks`) — rien ne se commite avant qu'elles passent ;
  *   3. le commit du travail, quand il y en a — après confirmation de ce qui est balayé ;
- *   4. la montée de version dans `src/assets/manifest.json` (`set-version.mjs`) ;
- *   5. le commit « Version X » et l'étiquette `vX` ;
+ *   4. la montée de version de la cible choisie (`set-version.mjs`) ;
+ *   5. le commit « Version X » et le tag `app-vX` (plugin : `vX`) ;
  *   6. le push, atomique, de la branche ET de l'étiquette.
  *
  * Le push est la DERNIÈRE étape, et il est atomique. Tout ce qui casse avant
@@ -60,15 +61,20 @@ const BRANCH = "main";
 export function readArguments(args) {
 	const words = [];
 	let watch = false;
+	let target = "app";
 
 	for (const argument of args) {
 		if (argument === "--watch") {
 			watch = true;
 			continue;
 		}
+		if (argument === "--plugin") {
+			target = "plugin";
+			continue;
+		}
 		if (argument.startsWith("-")) {
 			throw new Error(
-				`Drapeau inconnu : « ${argument} ». Seul --watch existe.`
+				`Drapeau inconnu : « ${argument} ». Options : --watch et --plugin.`
 			);
 		}
 		words.push(argument);
@@ -88,7 +94,7 @@ export function readArguments(args) {
 		);
 	}
 
-	return { request, message, watch };
+	return { request, message, watch, target };
 }
 
 /**
@@ -282,12 +288,12 @@ export function versionCommitArgs(version) {
 	return ["commit", "-am", `Version ${version}`];
 }
 
-export function tagArgs(version) {
-	return ["tag", `v${version}`];
+export function tagArgs(version, target = "app") {
+	return ["tag", `${target === "plugin" ? "v" : "app-v"}${version}`];
 }
 
-export function pushArgs(version) {
-	return ["push", "--atomic", "origin", BRANCH, `v${version}`];
+export function pushArgs(version, target = "app") {
+	return ["push", "--atomic", "origin", BRANCH, tagArgs(version, target)[1]];
 }
 
 /*
@@ -300,15 +306,16 @@ export function pushArgs(version) {
  * question posée directement au distant, indépendante de ce que `git fetch`
  * a rapatrié dans les refs locales.
  */
-export function describeTagConflict({ local, remote }, version) {
+export function describeTagConflict({ local, remote }, version, target = "app") {
+	const tag = tagArgs(version, target)[1];
 	if (remote) {
-		return `L'étiquette v${version} existe sur origin : cette version est déjà publiée.`;
+		return `L'étiquette ${tag} existe sur origin : cette version est déjà publiée.`;
 	}
 	if (local) {
 		return (
-			`L'étiquette v${version} existe déjà en LOCAL seulement (probablement ` +
+			`L'étiquette ${tag} existe déjà en LOCAL seulement (probablement ` +
 			"une livraison précédente interrompue avant le push) : " +
-			`\`git tag -d v${version}\` avant de relivrer, ou choisis un autre numéro.`
+			`\`git tag -d ${tag}\` avant de relivrer, ou choisis un autre numéro.`
 		);
 	}
 	return null;
@@ -360,7 +367,7 @@ async function ask(promptText) {
  * vérifications a sa raison d'être ici plutôt qu'au moment du push : passé le
  * premier commit, l'échec laisse un dépôt à démêler à la main.
  */
-function guard(version) {
+function guard(version, target) {
 	const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
 	if (branch !== BRANCH) {
 		throw new Error(
@@ -412,9 +419,10 @@ function guard(version) {
 	// FINDING 3, round 2 (revue) — `git tag --list` ne dit pas si l'étiquette
 	// vient d'origin ou n'a jamais quitté ce poste ; `ls-remote` interroge le
 	// distant directement, sans dépendre de ce que le fetch a rapatrié.
-	const local = git(["tag", "--list", `v${version}`]).trim() !== "";
-	const remote = git(["ls-remote", "--tags", "origin", `v${version}`]).trim() !== "";
-	const conflict = describeTagConflict({ local, remote }, version);
+	const tag = tagArgs(version, target)[1];
+	const local = git(["tag", "--list", tag]).trim() !== "";
+	const remote = git(["ls-remote", "--tags", "origin", tag]).trim() !== "";
+	const conflict = describeTagConflict({ local, remote }, version, target);
 	if (conflict) throw new Error(conflict);
 
 	// Le distant a-t-il avancé sans nous ? Le savoir maintenant coûte un
@@ -431,14 +439,14 @@ function guard(version) {
 }
 
 async function ship(args) {
-	const { request, message, watch } = readArguments(args);
+	const { request, message, watch, target } = readArguments(args);
 
 	const porcelain = git(["status", "--porcelain"]);
 	const dirty = porcelain.trim() !== "";
 	const commitWork = worksToCommit(message, dirty);
 
-	const version = await resolveVersion(request);
-	guard(version);
+	const version = await resolveVersion(request, target);
+	guard(version, target);
 
 	runChecks();
 
@@ -467,14 +475,14 @@ async function ship(args) {
 	}
 
 	console.log(`\nVersion ${version} :`);
-	for (const relativePath of await setVersion(version)) {
+	for (const relativePath of await setVersion(version, target)) {
 		console.log(`  ${relativePath}`);
 	}
 
 	console.log("");
 	run("git", versionCommitArgs(version));
-	run("git", tagArgs(version));
-	run("git", pushArgs(version));
+	run("git", tagArgs(version, target));
+	run("git", pushArgs(version, target));
 
 	const actions = actionsUrl(git(["remote", "get-url", "origin"]).trim());
 	console.log(`\nVersion ${version} livrée.`);

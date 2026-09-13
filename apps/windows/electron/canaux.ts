@@ -44,8 +44,8 @@ import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre
 import type { Perimetre } from "./perimetre";
 import { demarrerOllama, erreurCli, estOutilAutorise, lireCache, ollamaInstalle, run } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
-import { CANAUX, CLE_REGLAGES_IA } from "./pont";
-import type { EvenementDisque, RequeteCli, RequeteReseau, ResultatCli } from "./pont";
+import { CANAUX, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
+import type { EtatFenetre, EvenementDisque, RequeteCli, RequeteReseau, ResultatCli } from "./pont";
 import type { Reglages } from "./reglages";
 import { autoriserHote, fetchBorne } from "./reseau";
 import { extensionRefusee } from "./ressources";
@@ -70,6 +70,20 @@ export interface DependancesCanaux {
 	    différées vidées) ; `main.ts` lance `quitAndInstall` une fois tout
 	    fermé. */
 	fermerPourInstaller(): void;
+	/** La fenêtre sans cadre : ordres et lecture d'état, implémentés par
+	    `main.ts` sur l'instance `BrowserWindow`. Le NOM de `commande` est déjà
+	    jugé par `enregistrerCanaux` (union fermée) avant d'arriver ici. */
+	fenetre: {
+		reduire(): void;
+		agrandirOuRestaurer(): void;
+		fermer(): void;
+		pleinEcran(): void;
+		etat(): EtatFenetre;
+		commande(nom: string): void;
+		zoom(f: number): void;
+		recharger(): void;
+		outilsDev(): void;
+	};
 }
 
 /** L'état du disque tenu par ce processus — voir `enregistrerCanaux`. */
@@ -561,6 +575,28 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 
 	ipcMain.handle(CANAUX.armerFermeture, () => deps.fermeture.armer());
 	ipcMain.handle(CANAUX.fermetureTerminee, () => deps.fermeture.terminee());
+
+	/* ─── LA FENÊTRE SANS CADRE ───
+	   Le rendu dessine la barre ; le principal exécute. Rien ne traverse
+	   qu'un ordre sans argument, ou un nom d'une union fermée, ou un nombre
+	   borné ici : aucun chemin, aucune URL. */
+	ipcMain.handle(CANAUX.fenetreReduire, () => deps.fenetre.reduire());
+	ipcMain.handle(CANAUX.fenetreAgrandir, () => deps.fenetre.agrandirOuRestaurer());
+	ipcMain.handle(CANAUX.fenetreFermer, () => deps.fenetre.fermer());
+	ipcMain.handle(CANAUX.fenetrePleinEcran, () => deps.fenetre.pleinEcran());
+	ipcMain.handle(CANAUX.fenetreEtatLire, () => deps.fenetre.etat());
+	const COMMANDES = new Set(["undo", "redo", "cut", "copy", "paste", "selectAll"]);
+	ipcMain.handle(CANAUX.editionCommande, (_e, nom: unknown) => {
+		if (typeof nom !== "string" || !COMMANDES.has(nom)) throw new Error(`commande d'édition refusée : ${String(nom)}`);
+		deps.fenetre.commande(nom);
+	});
+	ipcMain.handle(CANAUX.affichageZoom, async (_e, facteur: unknown) => {
+		const f = typeof facteur === "number" && Number.isFinite(facteur) ? Math.min(1.5, Math.max(0.8, facteur)) : 1;
+		deps.fenetre.zoom(f);
+		await deps.reglagesOuErreur().ecrire(CLE_REGLAGES_ZOOM, f);
+	});
+	ipcMain.handle(CANAUX.affichageRecharger, () => deps.fenetre.recharger());
+	ipcMain.handle(CANAUX.affichageOutilsDev, () => deps.fenetre.outilsDev());
 
 	/* ─── LA MISE À JOUR ───
 	   Rien de ce qui traverse n'est un chemin ni une URL : le rendu demande,

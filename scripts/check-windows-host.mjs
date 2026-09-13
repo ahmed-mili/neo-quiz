@@ -755,7 +755,23 @@ function installerPont(fichiers = {}, perimetre = null) {
 			async ollamaInstalle() { journal.push(["processus.ollamaInstalle"]); return true; },
 			async demarrerOllama() { journal.push(["processus.demarrerOllama"]); return true; },
 		},
-		fenetre: { async surFermeture() {} },
+		fenetre: {
+			async surFermeture() {},
+			async reduire() {},
+			async agrandirOuRestaurer() {},
+			async fermer() {},
+			async pleinEcran() {},
+			async etat() { return { agrandie: false, focus: true, pleinEcran: false }; },
+			surEtat: () => () => {},
+		},
+		edition: {
+			async commande() {},
+		},
+		affichage: {
+			async zoom() {},
+			async recharger() {},
+			async outilsDev() {},
+		},
 		/* La mise à jour automatique : le rendu ne fait que s'y abonner ; le
 		   contrôle n'a rien à éprouver ici, mais un membre absent ferait
 		   mourir le montage de la coquille avant les cas qui comptent. */

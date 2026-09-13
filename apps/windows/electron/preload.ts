@@ -21,7 +21,7 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import { CANAUX } from "./pont";
-import type { EtatMiseAJour, EvenementDisque, Pont } from "./pont";
+import type { EtatFenetre, EtatMiseAJour, EvenementDisque, Pont } from "./pont";
 
 /* Les rappels de fermeture, et l'écouteur UNIQUE qui les sert. Un écouteur par
    appel à `surFermeture` répondrait autant de fois au principal, qui détruirait
@@ -126,6 +126,26 @@ const pont: Pont = {
 			// ne sache qu'un rappel existe n'attendrait rien.
 			await ipcRenderer.invoke(CANAUX.armerFermeture);
 		},
+		reduire: () => ipcRenderer.invoke(CANAUX.fenetreReduire),
+		agrandirOuRestaurer: () => ipcRenderer.invoke(CANAUX.fenetreAgrandir),
+		fermer: () => ipcRenderer.invoke(CANAUX.fenetreFermer),
+		pleinEcran: () => ipcRenderer.invoke(CANAUX.fenetrePleinEcran),
+		etat: () => ipcRenderer.invoke(CANAUX.fenetreEtatLire),
+		surEtat(rappel) {
+			const ecouteur = (_e: unknown, etat: EtatFenetre): void => rappel(etat);
+			ipcRenderer.on(CANAUX.fenetreEtat, ecouteur);
+			return () => { ipcRenderer.off(CANAUX.fenetreEtat, ecouteur); };
+		},
+	},
+
+	edition: {
+		commande: nom => ipcRenderer.invoke(CANAUX.editionCommande, nom),
+	},
+
+	affichage: {
+		zoom: facteur => ipcRenderer.invoke(CANAUX.affichageZoom, facteur),
+		recharger: () => ipcRenderer.invoke(CANAUX.affichageRecharger),
+		outilsDev: () => ipcRenderer.invoke(CANAUX.affichageOutilsDev),
 	},
 
 	miseAJour: {

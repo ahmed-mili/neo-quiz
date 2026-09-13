@@ -79,6 +79,13 @@ export type ResultatCli =
 	| { ok: true; stdout: string; stderr: string; code: number | null; sortie?: string }
 	| { ok: false; nom: string; message: string };
 
+/** L'état de la fenêtre, poussé par le principal — voir `Pont.fenetre.surEtat`. */
+export interface EtatFenetre {
+	agrandie: boolean;
+	focus: boolean;
+	pleinEcran: boolean;
+}
+
 /** Un vault Obsidian connu de la machine (remplace la commande Rust
     `obsidian_vaults`). */
 export interface VaultConnu {
@@ -411,6 +418,48 @@ export interface Pont {
 		 * rendu.)
 		 */
 		surFermeture(rappel: () => Promise<void>): Promise<void>;
+		/** Ordres SANS ARGUMENT : la barre dessinée par le rendu (tâche 2) ne
+		    fait qu'exécuter, jamais décider. */
+		reduire(): Promise<void>;
+		agrandirOuRestaurer(): Promise<void>;
+		/** LE MÊME chemin que la croix native (`fenetre.close()` côté
+		    principal) : la fermeture attendue reste garantie, armement et
+		    délai de garde compris. */
+		fermer(): Promise<void>;
+		/** Bascule. */
+		pleinEcran(): Promise<void>;
+		etat(): Promise<EtatFenetre>;
+		/**
+		 * L'état est POUSSÉ par le principal (`webContents.send`), jamais
+		 * deviné par le rendu depuis `innerWidth` : `innerWidth` ne distingue
+		 * pas une fenêtre agrandie d'une fenêtre large, et ne dit rien du
+		 * focus. Même patron que `miseAJour.surEtat`.
+		 */
+		surEtat(rappel: (etat: EtatFenetre) => void): () => void;
+	};
+
+	/** Les six commandes d'édition, remplaçant les accélérateurs du menu natif
+	    retiré (`Menu.setApplicationMenu(null)`). Elles passent par
+	    `webContents` du principal parce que `document.execCommand` est
+	    déprécié et que le presse-papiers SANDBOXÉ ne colle pas sans geste
+	    utilisateur : c'est le principal, pas le rendu, qui porte le geste
+	    natif. Le NOM est une union FERMÉE, jugée par le principal
+	    (`canaux.ts`) — un nom hors de la liste est refusé avant d'atteindre
+	    `webContents`. */
+	edition: {
+		commande(nom: "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll"): Promise<void>;
+	};
+
+	/** Le zoom et les deux commandes qu'un menu natif exposait
+	    (`Ctrl+R`, `Ctrl+Alt+I`), retirées avec lui. */
+	affichage: {
+		/** Borné 0.8..1.5 par le principal, et PERSISTÉ sous la clé
+		    `CLE_REGLAGES_ZOOM` : la barre dessinée par le rendu (tâche 2) n'a
+		    donc pas à relire ce réglage elle-même au démarrage suivant, le
+		    principal l'applique déjà (`main.ts`, `did-finish-load`). */
+		zoom(facteur: number): Promise<void>;
+		recharger(): Promise<void>;
+		outilsDev(): Promise<void>;
 	};
 
 	/**
@@ -467,6 +516,18 @@ export const CANAUX = {
 	armerFermeture: "neo:fenetre/armer-fermeture",
 	fermeture: "neo:fenetre/fermeture",
 	fermetureTerminee: "neo:fenetre/fermeture-terminee",
+	fenetreReduire: "neo:fenetre/reduire",
+	fenetreAgrandir: "neo:fenetre/agrandir",
+	fenetreFermer: "neo:fenetre/fermer",
+	fenetrePleinEcran: "neo:fenetre/plein-ecran",
+	fenetreEtatLire: "neo:fenetre/etat-lire",
+	/** POUSSÉ par le principal (`webContents.send`), comme `evenement` et
+	    `miseAJourEtat`. */
+	fenetreEtat: "neo:fenetre/etat",
+	editionCommande: "neo:edition/commande",
+	affichageZoom: "neo:affichage/zoom",
+	affichageRecharger: "neo:affichage/recharger",
+	affichageOutilsDev: "neo:affichage/outils-dev",
 	choisirDossier: "neo:dialogue/choisir-dossier",
 	reglagesLire: "neo:reglages/lire",
 	reglagesEcrire: "neo:reglages/ecrire",
@@ -503,6 +564,12 @@ export const CLE_REGLAGES_IA = "ai";
     applique le changement à l'instant (minuteur rearmé, vérification
     relancée si on rallume l'automatique). */
 export const CLE_REGLAGES_MAJ = "updates";
+
+/** La clé du ZOOM persisté (`neo.reglages`), lue par le principal au chargement
+    de la page et écrite par lui seul (`affichage.zoom` borne puis persiste) :
+    le rendu ne l'écrit jamais directement, pour que la borne 0.8..1.5
+    s'applique aussi à une valeur que la tâche 2 tenterait d'écrire à la main. */
+export const CLE_REGLAGES_ZOOM = "zoom";
 
 declare global {
 	interface Window {

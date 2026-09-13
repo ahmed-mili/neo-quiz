@@ -24,7 +24,7 @@
    RÉPOND par un `invoke`.
 ══════════════════════════════════════════════════════════ */
 
-import { BrowserWindow, app, net, protocol, shell } from "electron";
+import { BrowserWindow, Menu, app, net, protocol, shell } from "electron";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
@@ -32,7 +32,8 @@ import { setLanguage } from "../../../src/i18n";
 import { enregistrerCanaux } from "./canaux";
 import { perimetreInitial } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { CANAUX, CLE_REGLAGES_IA } from "./pont";
+import { CANAUX, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
+import type { EtatFenetre } from "./pont";
 import { creerMiseAJour, lireReglageAuto } from "./mise-a-jour";
 import type { MiseAJour } from "./mise-a-jour";
 import { creerReglages } from "./reglages";
@@ -85,6 +86,18 @@ const FENETRE = { width: 1280, height: 840, minWidth: 900, minHeight: 600 };
 const DELAI_GARDE_FERMETURE_MS = 1500;
 
 /* ─────────── état du processus ─────────── */
+
+/** L'état de la fenêtre tel que le pont le POUSSE au rendu — voir `pousserEtat`
+    dans `creerFenetre`. `{ agrandie: false, focus: false, pleinEcran: false }`
+    quand la fenêtre n'existe pas ou plus. */
+function etatFenetre(): EtatFenetre {
+	if (!fenetre || fenetre.isDestroyed()) return { agrandie: false, focus: false, pleinEcran: false };
+	return {
+		agrandie: fenetre.isMaximized(),
+		focus: fenetre.isFocused(),
+		pleinEcran: fenetre.isFullScreen(),
+	};
+}
 
 let fenetre: BrowserWindow | null = null;
 let reglages: Reglages | null = null;
@@ -175,9 +188,16 @@ async function charger(cible: BrowserWindow): Promise<void> {
 }
 
 function creerFenetre(): void {
+	/* Retire aussi les accélérateurs natifs : le menu d'application du rendu
+	   les remplace, `Ctrl+R`, `F11`, `Ctrl+Alt+I` inclus. */
+	Menu.setApplicationMenu(null);
 	fenetre = new BrowserWindow({
 		...FENETRE,
 		title: PRODUCT_NAME,
+		// Sans cadre natif, la barre est dessinée par le rendu, style Neo
+		// Calendar ; les bords restent redimensionnables sous Windows,
+		// `thickFrame` par défaut.
+		frame: false,
 		/* La fenêtre n'apparaît qu'une fois peinte : sans ça, on voit d'abord un
 		   rectangle blanc, puis le thème sombre — un clignotement à chaque
 		   lancement. */
@@ -198,6 +218,44 @@ function creerFenetre(): void {
 	});
 
 	fenetre.once("ready-to-show", () => fenetre?.show());
+
+	/* L'état de la fenêtre est POUSSÉ au rendu : agrandie ou non (l'icône du
+	   bouton du milieu), focus ou non (les glyphes de la barre s'atténuent),
+	   plein écran. Le rendu ne le devine jamais depuis `innerWidth`. */
+	const pousserEtat = (): void => {
+		if (!fenetre || fenetre.isDestroyed()) return;
+		fenetre.webContents.send(CANAUX.fenetreEtat, etatFenetre());
+	};
+	/* `as const` seul ne suffit pas à TypeScript pour choisir la bonne
+	   surcharge de `on` (l'union de noms ne correspond à aucun overload) :
+	   chaque écouteur prend le même rappel sans argument, l'union n'apporte
+	   rien de plus qu'une boucle plus courte. */
+	fenetre.on("maximize", pousserEtat);
+	fenetre.on("unmaximize", pousserEtat);
+	fenetre.on("focus", pousserEtat);
+	fenetre.on("blur", pousserEtat);
+	fenetre.on("enter-full-screen", pousserEtat);
+	fenetre.on("leave-full-screen", pousserEtat);
+
+	/* Le zoom persisté (réglage `zoom`), appliqué une fois la page chargée :
+	   `did-finish-load` survient après chaque `loadURL`/`loadFile`, y compris
+	   un rechargement (`location.reload()`), donc le facteur survit à une
+	   navigation. Une valeur hors bornes ou absente n'applique rien : le
+	   défaut d'Electron (1) reste en place. */
+	fenetre.webContents.on("did-finish-load", () => {
+		void (async () => {
+			if (!reglages) return;
+			let z: unknown;
+			try {
+				z = await reglages.lire(CLE_REGLAGES_ZOOM);
+			} catch {
+				return;
+			}
+			if (typeof z === "number" && Number.isFinite(z) && z >= 0.8 && z <= 1.5) {
+				fenetre?.webContents.setZoomFactor(z);
+			}
+		})();
+	});
 
 	/* Un quiz PARTAGÉ peut contenir un lien : qu'il ouvre une seconde fenêtre
 	   Electron n'a aucun sens ici, et une fenêtre ouverte par la page hériterait
@@ -475,6 +533,24 @@ if (!app.requestSingleInstanceLock()) {
 			},
 			miseAJour,
 			fermerPourInstaller: () => fenetre?.close(),
+			fenetre: {
+				reduire: () => fenetre?.minimize(),
+				agrandirOuRestaurer: () => {
+					if (!fenetre) return;
+					if (fenetre.isMaximized()) fenetre.unmaximize();
+					else fenetre.maximize();
+				},
+				// LE MÊME chemin que la croix native : la fermeture attendue
+				// (armement, délai de garde) reste garantie.
+				fermer: () => fenetre?.close(),
+				pleinEcran: () => fenetre?.setFullScreen(!fenetre.isFullScreen()),
+				etat: etatFenetre,
+				// Le nom est déjà jugé par `canaux.ts` (union fermée) avant d'arriver ici.
+				commande: nom => fenetre?.webContents[nom as "undo"](),
+				zoom: f => fenetre?.webContents.setZoomFactor(f),
+				recharger: () => fenetre?.webContents.reload(),
+				outilsDev: () => fenetre?.webContents.toggleDevTools(),
+			},
 		});
 		creerFenetre();
 		// APRÈS la fenêtre : une erreur réseau au démarrage ne doit rien

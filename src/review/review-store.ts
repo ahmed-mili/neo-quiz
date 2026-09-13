@@ -218,7 +218,27 @@ export function createReviewStore(deps: ReviewStoreDeps): ReviewStore {
 		const localTo = deps.paths.localPath(to);
 		const lignesSource = applyRenames(journalSource.fichier.lines());
 		const transposees = transposerLignes(lignesSource, localFrom, localTo);
-		if (transposees.length) journalCible.fichier.append(transposees);
+		if (!transposees.length) return;
+		/* L'ALLER-RETOUR (revue finale de la tranche 9) : un module déplacé du
+		   vault vers le défaut puis RAMENÉ. Le journal du vault a gardé ses
+		   lignes d'origine (ajout seul), et les transposées de retour sont
+		   exactement les mêmes : les annexer une seconde fois compterait
+		   chaque réponse deux fois (`streak`, `lapses`, budget du jour). On
+		   lit donc le journal cible et on n'ajoute que ce qu'il n'a pas déjà,
+		   à l'identique (même clé, même instant, même note). Le journal
+		   reste en ajout seul : on filtre ce qu'on ÉCRIT, jamais ce qui est. */
+		if (!journalCible.fichier.loaded()) await journalCible.fichier.load();
+		const deja = new Set(journalCible.fichier.lines().map(empreinte));
+		const neuves = transposees.filter(l => !deja.has(empreinte(l)));
+		if (neuves.length) journalCible.fichier.append(neuves);
+	}
+
+	/** L'identité d'une ligne, pour la déduplication de `moved` : tous ses
+	    champs, dans un ordre fixe. */
+	function empreinte(l: ReviewEvent): string {
+		return l.t === "answer"
+			? `a|${l.q}|${l.at}|${l.grade}`
+			: `r|${l.from}|${l.to}|${l.at}`;
 	}
 
 	/* Les renommages que l'HÔTE sait nommer : fichiers (`onChange`) et

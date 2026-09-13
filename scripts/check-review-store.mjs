@@ -816,6 +816,20 @@ await withSrcModule("src/review/review-store.ts", async ({ createReviewStore }) 
 		r.check("le journal source garde ses lignes telles quelles",
 			fichiers.get("B/.neo-quiz/review-log.jsonl"), historique);
 
+		/* L'ALLER-RETOUR (revue finale de la tranche 9) : ramener le module
+		   dans B ne doit RIEN ajouter au journal de B, qui a gardé la ligne
+		   d'origine — sinon chaque réponse compterait deux fois. Le faux hôte
+		   n'applique pas `append` au fichier lu par `load()` : on rejoue la
+		   ligne transposée dans le journal de A à la main, comme le disque
+		   l'aurait. */
+		fichiers.set("A/.neo-quiz/review-log.jsonl", ecritures[0][1]);
+		const avant = ecritures.length;
+		await store.moved("A/Cours", "B/Cours");
+		clock.runNext();
+		await settle();
+		r.check("ramener le module n'ajoute aucune ligne déjà présente dans le journal cible",
+			ecritures.length, avant);
+
 		store.destroy();
 	});
 	r.done();

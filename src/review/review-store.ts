@@ -235,7 +235,7 @@ export function createReviewStore(deps: ReviewStoreDeps): ReviewStore {
 
 	/** L'identité d'une ligne, pour la déduplication de `moved` : tous ses
 	    champs, dans un ordre fixe. */
-	function empreinte(l: ReviewEvent): string {
+	function empreinte(l: LogLine): string {
 		return l.t === "answer"
 			? `a|${l.q}|${l.at}|${l.grade}`
 			: `r|${l.from}|${l.to}|${l.at}`;

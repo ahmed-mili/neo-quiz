@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Télécharger Neo Quiz</title>
+<link rel="icon" href="icon.png">
+<style>
+	/* Couleurs reprises telles quelles de apps/windows/src/theme/host-vars.css
+	   (le thème sombre de l'application, lui-même relevé sur Obsidian). */
+	:root {
+		--fond: rgb(30, 30, 46);
+		--fond-secondaire: rgb(24, 24, 37);
+		--bordure: rgb(49, 50, 68);
+		--texte: rgb(198, 208, 245);
+		--texte-attenue: rgb(142, 149, 179);
+		--accent: rgb(101, 143, 242);
+		--sur-accent: rgb(30, 30, 46);
+	}
+
+	* { box-sizing: border-box; }
+
+	html, body {
+		margin: 0;
+		min-height: 100%;
+	}
+
+	body {
+		font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui,
+			"Segoe UI", Roboto, "Inter", sans-serif;
+		color: var(--texte);
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 24px 16px;
+		text-align: center;
+		/* Même voile sombre que apps/windows/src/assets/shell.css, sur le même
+		   fond d'écran que l'application. */
+		background:
+			linear-gradient(
+				color-mix(in srgb, var(--fond) 78%, transparent),
+				color-mix(in srgb, var(--fond) 88%, transparent)
+			),
+			var(--fond) url("wallpaper.jpg") center / cover no-repeat fixed;
+	}
+
+	.langue {
+		position: fixed;
+		top: 16px;
+		right: 16px;
+	}
+
+	.langue a {
+		color: var(--texte-attenue);
+		text-decoration: none;
+		font-size: 13px;
+		border: 1px solid var(--bordure);
+		border-radius: 8px;
+		padding: 6px 10px;
+		background: color-mix(in srgb, var(--fond-secondaire) 60%, transparent);
+	}
+
+	.langue a:hover { color: var(--texte); }
+
+	/* La carte en verre : fond semi-transparent + flou de ce qu'il y a derrière. */
+	.carte {
+		width: 100%;
+		max-width: 440px;
+		padding: 40px 32px;
+		border-radius: 20px;
+		border: 1px solid var(--bordure);
+		background: color-mix(in srgb, var(--fond-secondaire) 55%, transparent);
+		backdrop-filter: blur(18px);
+		-webkit-backdrop-filter: blur(18px);
+		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+	}
+
+	.logo {
+		width: 96px;
+		height: 96px;
+		border-radius: 22px;
+		margin-bottom: 20px;
+	}
+
+	h1 {
+		font-size: 28px;
+		margin: 0 0 12px;
+	}
+
+	.accroche {
+		color: var(--texte-attenue);
+		font-size: 15px;
+		line-height: 1.5;
+		margin: 0 0 32px;
+	}
+
+	.bouton {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 10px;
+		width: 100%;
+		padding: 16px 24px;
+		font-size: 17px;
+		font-weight: 600;
+		color: var(--sur-accent);
+		background: var(--accent);
+		border-radius: 12px;
+		text-decoration: none;
+		box-shadow: 0 8px 24px rgba(101, 143, 242, 0.35);
+	}
+
+	.bouton:hover { filter: brightness(1.08); }
+
+	.bouton svg {
+		width: 20px;
+		height: 20px;
+		flex-shrink: 0;
+	}
+
+	.info-version {
+		margin: 14px 0 0;
+		font-size: 13px;
+		color: var(--texte-attenue);
+	}
+
+	.liens-secondaires {
+		margin: 24px 0 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 18px;
+		justify-content: center;
+		font-size: 13px;
+	}
+
+	.liens-secondaires a {
+		color: var(--texte-attenue);
+		text-decoration: underline;
+	}
+
+	.liens-secondaires a:hover { color: var(--texte); }
+
+	.avertissements {
+		max-width: 440px;
+		margin-top: 20px;
+		font-size: 12px;
+		line-height: 1.6;
+		color: var(--texte-attenue);
+	}
+
+	.avertissements p { margin: 6px 0; }
+
+	.code-source {
+		margin-top: 18px;
+	}
+
+	.code-source a {
+		color: var(--texte-attenue);
+		font-size: 13px;
+	}
+</style>
+</head>
+<body>
+	<nav class="langue">
+		<a href="en/">English</a>
+	</nav>
+
+	<main class="carte">
+		<img class="logo" src="icon.png" alt="Logo Neo Quiz">
+		<h1>Neo Quiz</h1>
+		<p class="accroche">Des quiz interactifs dans vos notes, générés par vos propres outils IA. Windows, Linux, et Obsidian.</p>
+
+		<a class="bouton" download
+			href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz-setup.exe">
+			<!-- Icône Lucide « download », tracé inline (pas de CDN, cf. CLAUDE.md du dépôt). -->
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round">
+				<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+				<polyline points="7 10 12 15 17 10"></polyline>
+				<line x1="12" y1="15" x2="12" y2="3"></line>
+			</svg>
+			Télécharger pour Windows
+		</a>
+		<p class="info-version" id="info-version">Windows 10 et 11</p>
+
+		<div class="liens-secondaires">
+			<a href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz.AppImage">Linux (AppImage)</a>
+			<a href="https://github.com/ahmed-mili/neo-quiz#installation">Greffon Obsidian</a>
+		</div>
+	</main>
+
+	<div class="avertissements">
+		<p>Windows peut afficher « Windows a protégé votre ordinateur » : cliquez Informations complémentaires, puis Exécuter quand même. L'application n'est pas encore signée.</p>
+		<p>Les mises à jour suivantes sont automatiques.</p>
+		<p class="code-source"><a href="https://github.com/ahmed-mili/neo-quiz">Code source</a></p>
+	</div>
+
+	<script>
+		// Version et taille réelles de la dernière release, sans jamais coder
+		// un numéro en dur (cf. CLAUDE.md racine, skill source-of-truth).
+		// En cas d'échec (hors ligne, quota API), la ligne reste sur son texte
+		// par défaut plutôt que d'afficher une erreur.
+		fetch("https://api.github.com/repos/ahmed-mili/neo-quiz/releases/latest")
+			.then(function (reponse) {
+				if (!reponse.ok) throw new Error("reponse non ok");
+				return reponse.json();
+			})
+			.then(function (donnees) {
+				var version = String(donnees.tag_name || "").replace(/^v/, "");
+				var actif = (donnees.assets || []).find(function (a) {
+					return a.name === "neo-quiz-setup.exe";
+				});
+				if (!version || !actif) return;
+				var mo = Math.round(actif.size / (1024 * 1024));
+				document.getElementById("info-version").textContent =
+					"Version " + version + " · " + mo + " Mo · Windows 10 et 11";
+			})
+			.catch(function () {
+				// Ligne par défaut déjà en place, rien à faire.
+			});
+	</script>
+</body>
+</html>

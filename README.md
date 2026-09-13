@@ -192,7 +192,7 @@ BRAT will notify you whenever a new version is available and update with one cli
 
 The desktop app reads the same quiz folders and the same review log as the plugin, and generates quizzes with the same local AI tools.
 
-1. Download the latest release from the [releases page](https://github.com/ahmed-mili/neo-quiz/releases): `neo-quiz-setup-<version>.exe` on Windows, `neo-quiz-<version>.AppImage` on Linux.
+1. Go to **[neo-quiz download page](https://ahmed-mili.github.io/neo-quiz/)** and click Download, or grab `neo-quiz-setup-<version>.exe` / `neo-quiz-<version>.AppImage` from the [releases page](https://github.com/ahmed-mili/neo-quiz/releases).
 2. **Windows:** the installer is not code-signed, so SmartScreen shows "Windows protected your PC" on first run. Click **More info**, then **Run anyway**. Pick an install folder; the app is per-user and needs no admin rights.
 3. **Linux:** `chmod +x neo-quiz-<version>.AppImage` and run it. Without FUSE, run it with `--appimage-extract-and-run`.
 

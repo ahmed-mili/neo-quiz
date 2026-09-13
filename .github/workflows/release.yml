@@ -156,6 +156,18 @@ jobs:
             apps/windows/dist-installer/*.exe.blockmap
             apps/windows/dist-installer/latest.yml
           if-no-files-found: error
+      # Copie sous un nom FIXE, en plus du fichier versionné : c'est ce nom
+      # que la page de téléchargement (docs/index.html) vise en permanence via
+      # releases/latest/download/neo-quiz-setup.exe, sans jamais changer de
+      # lien d'une version à l'autre. Ne remplace rien : latest.yml et le
+      # .blockmap continuent de nommer le fichier VERSIONNÉ, seul lu par
+      # electron-updater.
+      - name: Copy installer under a fixed name
+        shell: bash
+        run: |
+          ls apps/windows/dist-installer/neo-quiz-setup-*.exe
+          cp apps/windows/dist-installer/neo-quiz-setup-*.exe apps/windows/dist-installer/neo-quiz-setup.exe
+
       # `latest.yml` et le `.blockmap` sont ce qu'electron-updater lit : la
       # version à comparer, le sha512 à vérifier, et les blocs à ne pas
       # retélécharger (spec de la mise à jour automatique, §3.1).
@@ -168,6 +180,7 @@ jobs:
             apps/windows/dist-installer/*.exe
             apps/windows/dist-installer/*.exe.blockmap
             apps/windows/dist-installer/latest.yml
+            apps/windows/dist-installer/neo-quiz-setup.exe
 
   app-linux:
     needs: plugin
@@ -208,6 +221,15 @@ jobs:
             apps/windows/dist-installer/*.AppImage
             apps/windows/dist-installer/latest-linux.yml
           if-no-files-found: error
+      # Même copie sous nom fixe que pour l'installeur Windows : le lien
+      # permanent de la page de téléchargement vers l'AppImage vise
+      # releases/latest/download/neo-quiz.AppImage, jamais le nom versionné.
+      - name: Copy AppImage under a fixed name
+        shell: bash
+        run: |
+          ls apps/windows/dist-installer/neo-quiz-*.AppImage
+          cp apps/windows/dist-installer/neo-quiz-*.AppImage apps/windows/dist-installer/neo-quiz.AppImage
+
       - name: Attach AppImage to release
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
@@ -216,3 +238,4 @@ jobs:
           files: |
             apps/windows/dist-installer/*.AppImage
             apps/windows/dist-installer/latest-linux.yml
+            apps/windows/dist-installer/neo-quiz.AppImage

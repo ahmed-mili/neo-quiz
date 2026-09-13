@@ -211,12 +211,22 @@ jobs:
           Write-Host "Status : $($sig.Status)"
           Write-Host "Subject du certificat : $($sig.SignerCertificate.Subject)"
 
+          # Le CN seul, tel qu'electron-updater le compare (`subject.get("CN")`)
+          # à `publisherName` : c'est CETTE valeur qu'il faut recopier dans
+          # `win.signtoolOptions.publisherName`, pas le Subject entier.
+          $cn = $sig.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+          Write-Host "CN du certificat (valeur pour publisherName) : $cn"
+
+          # electron-builder écrit `publisherName` en LISTE YAML
+          # (`publisherName:` puis `  - Nom`), jamais sur une ligne : la regex
+          # accepte les deux formes.
           $cheminAppUpdate = "apps/windows/dist-installer/win-unpacked/resources/app-update.yml"
           $publisherName = $null
           if (Test-Path $cheminAppUpdate) {
-            $ligne = Select-String -Path $cheminAppUpdate -Pattern '^publisherName:\s*(.+)$'
-            if ($ligne) { $publisherName = $ligne.Matches[0].Groups[1].Value.Trim() }
+            $m = [regex]::Match((Get-Content $cheminAppUpdate -Raw), '(?ms)^publisherName:\s*(?:-\s*)?(\S[^\r\n]*)')
+            if ($m.Success) { $publisherName = $m.Groups[1].Value.Trim().Trim("'", '"') }
           }
+          Write-Host "publisherName d'app-update.yml : $(if ($publisherName) { $publisherName } else { '(absent)' })"
 
           if ($env:EVENEMENT -ne 'workflow_dispatch') {
             # Certificat SignPath Foundation, approuvé par Windows : la
@@ -225,8 +235,10 @@ jobs:
               Write-Error "Signature invalide : $($sig.Status)"
               exit 1
             }
-            if ($publisherName -and $sig.SignerCertificate.Subject -notlike "*$publisherName*") {
-              Write-Error "publisherName ($publisherName) ne correspond pas au CN du certificat ($($sig.SignerCertificate.Subject))"
+            # Égalité STRICTE : une sous-chaîne qui « ressemble » laisserait
+            # passer un publisherName qu'electron-updater refuserait.
+            if ($publisherName -and $cn -cne $publisherName) {
+              Write-Error "publisherName ($publisherName) ne correspond pas au CN du certificat ($cn)"
               exit 1
             }
           } else {

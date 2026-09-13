@@ -101,10 +101,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.quizzes.renameTitle": "Renommer le quiz",
 	"dashboard.quizzes.renameLabel": "Nom du quiz",
 	"dashboard.quizzes.renameCta": "Renommer",
-	"dashboard.quizzes.renameExists": "« {name} » existe déjà dans ce dossier.",
-	"dashboard.quizzes.renameError": "Impossible de renommer ce quiz",
 	"dashboard.quizzes.deleted": "Quiz supprimé",
-	"dashboard.quizzes.shareSaveError": "Impossible d'enregistrer le fichier partagé",
 	"dashboard.quizzes.deletedPartial": "Quiz supprimé — {count} n'ont pas pu être retirés",
 	"dashboard.quizzes.deleteConfirmTitle": "Supprimer le quiz",
 	"dashboard.quizzes.deleteConfirmBody": "Supprimer « {title} » et ses stats de la note ? Cette action est définitive.",
@@ -117,14 +114,6 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.quizzes.moveConfirmCta": "Déplacer",
 	"dashboard.quizzes.moved": "Module déplacé vers {target}",
 	"dashboard.quizzes.moveExists": "Un dossier de ce nom existe déjà là-bas.",
-	"dashboard.quizzes.fileSaved": "Enregistré : {path}",
-	"dashboard.quizzes.shareTitle": "Partager le dossier",
-	"dashboard.quizzes.shareQuizTitle": "Partager le quiz",
-	"dashboard.quizzes.shareHint": "Aucune app ne peut joindre le fichier automatiquement — choisis-en une, elle s'ouvre avec le fichier prêt à coller.",
-	"dashboard.quizzes.shareSave": "Enregistrer le fichier",
-	"dashboard.quizzes.discordReady": "Fichier copié — dans Discord : choisis une conversation, Ctrl+V puis Entrée.",
-	"dashboard.quizzes.shareCopyHint": "Les fichiers seront copiés dans le presse-papiers pour le partage",
-	"dashboard.quizzes.shareCopiedToast": "Copié — collez-le dans Discord avec Ctrl+V",
 
 	/* ── Modal « Modifier dossier » ── */
 	"dashboard.quizzes.moduleEditTitle": "Modifier dossier",
@@ -183,8 +172,6 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.detail.noBlock": "Aucun bloc quiz-blocks trouvé",
 	"dashboard.detail.loadError": "Impossible de charger les questions",
 	"dashboard.detail.noBlockInNote": "Aucun bloc quiz-blocks trouvé dans cette note",
-	"dashboard.detail.opened": "Quiz ouvert : {name}",
-	"dashboard.detail.openError": "Erreur lors de l'ouverture",
 
 	/* ── Page d'un quiz ── */
 	"dashboard.quiz.loading": "Chargement…",

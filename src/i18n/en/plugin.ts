@@ -1,126 +1,18 @@
 /* Domaine « plugin » — anglais, dictionnaire de RÉFÉRENCE.
    Toute clé ajoutée ici doit l'être aussi dans i18n/fr/plugin.ts (le typage de
    FR_PLUGIN l'impose). Clés préfixées « plugin. » : un domaine ne marche jamais
-   sur les clés d'un autre. */
+   sur les clés d'un autre.
+
+   RÉDUIT à la tâche 2 du chantier « greffon lecteur » (2026-09-13) : le
+   `SettingTab` (types, exemple, commandes, tutoriels IA, raccourcis) est parti
+   à la tâche 1 avec le dashboard et l'éditeur. Ne restent que les clés du
+   PROCESSEUR de bloc (`apps/obsidian/plugin.ts`), le seul importeur qui
+   subsiste — vérifié par `grep -rn '"plugin\.'` sur `src` et `apps`. */
 export const EN_PLUGIN = {
-	/* ── En-tête du SettingTab (présentation du plugin) ── */
+	/* ── En-tête du SettingTab (les deux réglages restants) ── */
 	"plugin.intro": "Create interactive quizzes in Obsidian from quiz-blocks code blocks.",
-	"plugin.types.heading": "Supported question types",
-	"plugin.types.single": "Single choice",
-	"plugin.types.multiple": "Multiple choice",
-	"plugin.types.text": "Text input",
-	"plugin.types.ordering": "Ordering",
-	"plugin.types.matching": "Matching",
-	"plugin.example.heading": "Quick example",
-	"plugin.example.copy": "Copy code",
-	"plugin.example.copyFailed": "Unable to copy the example.",
-	"plugin.notes.heading": "Notes",
-	"plugin.notes.json5": "The code block content must be a valid JSON5 array.",
-	"plugin.notes.features": "Hints, explanations, scoring, navigation, and transitions are supported.",
-	"plugin.notes.rendering": "Interactive rendering happens directly inside the note preview.",
 
-	/* ── Commandes (palette + tableau récapitulatif des réglages) ── */
-	"plugin.commands.heading": "Commands and default hotkeys",
-	"plugin.command.openDashboard.name": "Open the dashboard",
-	"plugin.command.openEditor.name": "Open the quiz of the current note (or my quizzes)",
-	"plugin.command.openEditor.desc": "Opens a new tab with an empty quiz editor",
-	"plugin.command.openFromNote.name": "Open the quiz from the active note",
-	"plugin.command.openFromNote.desc": "Opens the editor and loads the quiz from the active note",
-	"plugin.command.createQuizFromLesson.name": "Create quiz note from this lesson",
-	"plugin.commands.configure": "Configure hotkeys",
-	"plugin.commands.configureNote": "Use the button above to customize the hotkeys in Obsidian's settings.",
-
-	/* ── Génération IA : fournisseur et modèle ── */
-	"plugin.ai.heading": "AI generation",
-	"plugin.ai.intro": "Set up your AI provider to generate quizzes automatically.",
-	"plugin.ai.usageLimits.name": "Show subscription usage",
-	"plugin.ai.usageLimits.desc": "After each generation, read how much of your plan is left from the provider's CLI installed on this computer (Claude Code, Codex). Token counts are always shown; this only adds the plan gauge. Off by default.",
-	"plugin.ai.provider.name": "AI provider",
-	"plugin.ai.provider.desc": "Choose the provider used to generate quizzes",
-	"plugin.ai.provider.none": "None (pick one)",
-	"plugin.ai.model.name": "Model",
-	"plugin.ai.model.descOllama": "Ollama model. The “:cloud” ones run on the cloud (account connected with ollama signin); the others run locally (ollama pull).",
-	"plugin.ai.model.descCodex": "Codex (ChatGPT) model to use for generation.",
-	"plugin.ai.model.descClaude": "Claude model to use (same names as in Claude Code).",
-	"plugin.ai.model.custom": "{model} (custom)",
-
-	/* ── Ollama : serveur et gestionnaire de modèles ── */
-	"plugin.ollama.url.name": "Ollama server URL",
-	"plugin.ollama.url.desc": "Address of the local Ollama server.",
-	"plugin.ollama.models.name": "Models shown in the menu",
-	"plugin.ollama.models.desc": "Drag to reorder. The menu shows a scrollable list; the first {visible} are visible without scrolling (max {max}). Some cloud models require an Ollama Pro/Max subscription (403 error when generating).",
-	"plugin.ollama.models.refresh": "Refresh the list from ollama.com",
-	"plugin.ollama.models.refreshed": "Ollama catalog up to date ({count} models).",
-	"plugin.ollama.models.refreshFailed": "Refresh failed (ollama.com unreachable).",
-	"plugin.ollama.models.scrollSep": "Reachable by scrolling",
-	"plugin.ollama.models.remove": "Remove",
-	"plugin.ollama.models.maxNote": "Maximum {max} models. Remove one to add another.",
-	"plugin.ollama.models.addLabel": "Add:",
-	"plugin.ollama.models.manualPlaceholder": "Other model (e.g. glm-5.3:cloud)",
-	"plugin.ollama.models.addButton": "Add",
-
-	/* ── Tutoriel Claude (Claude Code CLI) ── */
-	"plugin.tutorial.claude.title": "How to set up Claude (subscription account)",
-	"plugin.tutorial.claude.s1.heading": "1. Install Claude Code",
-	"plugin.tutorial.claude.s1.text": "Generation uses the Claude Code CLI: no API key, it runs on your Claude subscription (Pro, Max, Team or Enterprise).",
-	"plugin.tutorial.claude.s1.link": "Install Claude Code",
-	"plugin.tutorial.claude.s2.heading": "2. Connect your account",
-	"plugin.tutorial.claude.s2.text": "Open a terminal, run “claude”, then type /login and sign in with your Claude account.",
-	"plugin.tutorial.claude.s3.heading": "3. That's it",
-	"plugin.tutorial.claude.s3.text": "The plugin detects Claude Code automatically. Pick a model above and generate.",
-	"plugin.tutorial.claude.warning": "Your requests go through your local Claude Code session and count towards your subscription usage. No key is stored in Obsidian.",
-	"plugin.tutorial.claude.docs": "Claude Code documentation",
-
-	/* ── Tutoriel ChatGPT (Codex CLI) ── */
-	"plugin.tutorial.codex.title": "How to set up ChatGPT (Codex CLI)",
-	"plugin.tutorial.codex.s1.heading": "1. Install the Codex CLI — not the Codex app",
-	"plugin.tutorial.codex.s1.text": "Generation uses the Codex CLI, OpenAI's terminal tool. The Codex desktop app is not enough: it does not install the “codex” command the plugin relies on. Official installer — Windows: powershell -ExecutionPolicy ByPass -c \"irm https://chatgpt.com/codex/install.ps1 | iex\" · macOS/Linux: curl -fsSL https://chatgpt.com/codex/install.sh | sh (alternative: npm install -g @openai/codex).",
-	"plugin.tutorial.codex.s1.link": "Official installation guide",
-	"plugin.tutorial.codex.s2.heading": "2. Connect your ChatGPT account",
-	"plugin.tutorial.codex.s2.text": "In a terminal, run “codex login” and sign in with your ChatGPT account. No API key: it runs on your subscription.",
-	"plugin.tutorial.codex.s3.heading": "3. That's it",
-	"plugin.tutorial.codex.s3.text": "The plugin detects the Codex CLI automatically, whichever way you installed it — just switch back to Obsidian once it is done. Pick a model above and generate.",
-	"plugin.tutorial.codex.warning": "Your requests go through your local Codex session and count towards your ChatGPT subscription usage. No key is stored in Obsidian.",
-	"plugin.tutorial.codex.docs": "Codex CLI documentation",
-
-	/* ── Tutoriel Ollama (local + cloud) ── */
-	"plugin.tutorial.ollama.title": "How to set up Ollama (local + cloud)",
-	"plugin.tutorial.ollama.s1.heading": "1. Install Ollama",
-	"plugin.tutorial.ollama.s1.text": "Download and install Ollama for your system.",
-	"plugin.tutorial.ollama.s1.link": "Download Ollama",
-	"plugin.tutorial.ollama.s2a.heading": "2a. Cloud models (recommended without a GPU)",
-	"plugin.tutorial.ollama.s2a.text": "Connect the daemon to your account: ollama signin. The “:cloud” models run on the Ollama cloud, with no download and no API key. The free plan covers the gpt-oss and minimax-m3 models; the bigger ones (glm, kimi, qwen3.5…) require a Pro/Max subscription.",
-	"plugin.tutorial.ollama.s2a.link": "See the cloud models",
-	"plugin.tutorial.ollama.s2b.heading": "2b. Local models (needs a GPU / RAM)",
-	"plugin.tutorial.ollama.s2b.text": "Download a model: ollama pull qwen3.5:9b. It runs on your own machine.",
-	"plugin.tutorial.ollama.s2b.link": "See all models",
-	"plugin.tutorial.ollama.s3.heading": "3. Set it up here",
-	"plugin.tutorial.ollama.s3.text": "Pick a model from the list above. The “:cloud” ones run on the cloud, the others locally. Default server: http://localhost:11434",
-	"plugin.tutorial.ollama.warning": "A single Ollama server (localhost) serves both local and cloud: the “:cloud” suffix tells them apart. Cloud models go through your connected Ollama account; local ones stay on your machine.",
-	"plugin.tutorial.ollama.docs": "Ollama documentation",
-	"plugin.tutorial.ollama.tip1": "💡 No GPU: use a free “:cloud” model (e.g. gpt-oss:120b-cloud).",
-	"plugin.tutorial.ollama.tip2": "💡 Cloud models: no memory limit — even the largest models work.",
-	"plugin.tutorial.ollama.tip3": "💡 “requires a subscription” error: the cloud model you picked is Pro/Max only. Switch to a free gpt-oss or subscribe.",
-
-	/* ── Raccourcis du composer IA ── */
-	"plugin.hotkey.heading": "AI composer hotkeys",
-	"plugin.hotkey.none": "None",
-	"plugin.hotkey.press": "Press a key combination…",
-	"plugin.hotkey.needModifier": "Add a modifier (Ctrl, Alt or Shift)",
-	"plugin.hotkey.reset": "Restore the default",
-	"plugin.hotkey.addFiles.name": "Add files or images",
-	"plugin.hotkey.addFiles.desc": "Opens the composer's file picker (the “+” menu).",
-	"plugin.hotkey.addNotes.name": "Add notes",
-	"plugin.hotkey.addNotes.desc": "Opens the composer's note picker (the “+” menu).",
-
-	/* ── Notices des commandes et erreur de rendu d'un bloc ── */
-	"plugin.notice.noActiveNote": "No active note",
-	"plugin.notice.noQuizBlock": "No quiz-blocks block found in this note",
-	"plugin.notice.quizOpened": "Quiz opened: {name}",
-	"plugin.notice.openError": "Could not open the quiz",
-	"plugin.notice.createQuizFailed": "Could not create the quiz note",
-	"plugin.notice.quizNoteAlreadyExists": "Quiz note already exists, opening it: {name}",
-	"plugin.notice.lessonNameNotLinkable": "Can't reference \"{name}\": a note name containing # or | can't be turned into a reliable link. Rename the note and try again.",
+	/* ── Notices d'erreur de rendu d'un bloc ── */
 	"plugin.block.error": "⚠️ Unable to load the quiz: {error}",
 	"plugin.block.unknownError": "unknown error",
 	/* ── Résolution d'une note Quiz vers sa note Lesson (source) ── */

@@ -44,3 +44,12 @@ export function currentHost(): Host {
 export function hostOrNull(): Host | null {
 	return installed;
 }
+
+/** Un membre OPTIONNEL du contrat, exigé : le greffon lecteur ne fournit
+    ni `process`, ni `net`, ni `modals` ; une page qui les demande est une
+    page que le greffon n'a plus. L'erreur nomme le membre. */
+export function requireHost<K extends "modals" | "net" | "process" | "pdf">(k: K): NonNullable<Host[K]> {
+	const v = currentHost()[k];
+	if (!v) throw new Error(`host.${k} absent sur cet hôte`);
+	return v;
+}

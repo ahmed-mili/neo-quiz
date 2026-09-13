@@ -1,4 +1,4 @@
-import { currentHost } from "../host/current";
+import { currentHost, requireHost } from "../host/current";
 import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { HostModalHandle } from "../host/types";
@@ -43,7 +43,7 @@ export function openCreateFolderModal(
 	quizzes: QuizIndexEntry[],
 	onDone: () => void
 ): void {
-	currentHost().modals.open({
+	requireHost("modals").open({
 		className: "qbd-create-modal",
 		// t() AU RENDU (à l'ouverture du modal), jamais dans une constante de
 		// haut niveau : une chaîne figée au chargement ignorerait un changement
@@ -78,7 +78,7 @@ export function openCreateQuizModal(
 	folder: string,
 	onDone: () => void
 ): void {
-	currentHost().modals.open({
+	requireHost("modals").open({
 		className: "qbd-create-modal",
 		title: t("dashboard.quizzes.createQuizTitle"),
 		onOpen: (m) => {

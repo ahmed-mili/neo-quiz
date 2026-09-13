@@ -30,70 +30,29 @@ export const EN_AI = {
 	"ai.mention.externalRootGone": "Couldn't attach “{name}”: its external folder was removed from settings",
 
 	/* ── Usage IA (ce qu'une génération a coûté) ──
-	   Un compteur absent n'est jamais rendu par un zéro : les clés « …Unavailable »
-	   disent QUI ne publie pas la donnée, ce qui est une information, alors qu'un
-	   « 0 » serait un mensonge. */
+	   RÉDUIT à la tâche 2 du chantier « greffon lecteur » (2026-09-13) :
+	   l'ÉCRAN « Limites d'utilisation » (`dashboard/ai-usage.ts`,
+	   `usage-modal.ts`) est parti à la tâche 1 avec le reste du tableau de
+	   bord — ce n'était plus « l'écran d'usage reste au greffon », il n'y a
+	   plus de greffon-dashboard du tout. Ne restent que les clés que
+	   `dashboard/usage-format.ts` compose encore pour le badge et l'infobulle
+	   de la page « Générer » elle-même, consommées par l'APPLICATION. */
 	"ai.usage.badge": "{tokens} tokens",
 	"ai.usage.title": "Usage",
-	"ai.usage.thisRun": "This generation",
-	"ai.usage.today": "Today",
-	"ai.usage.allTime": "Recorded so far",
-	"ai.usage.input": "Input",
-	"ai.usage.output": "Output",
-	"ai.usage.cached": "of which cached",
-	"ai.usage.cost": "Cost",
-	"ai.usage.duration": "Duration",
-	"ai.usage.generations": "{n} generations",
-	"ai.usage.questions": "{n} questions",
-	"ai.usage.costUnavailable": "Flat-rate plan — no per-request price",
-	"ai.usage.tokensUnavailable": "This CLI does not report token counts",
-	"ai.usage.planOff": "Turn on subscription usage in the settings to see how much of your plan is left.",
-	"ai.usage.planUnavailable": "This provider does not publish plan usage",
-	"ai.usage.windowHours": "{n} h",
-	"ai.usage.windowDays": "{n} d",
-	"ai.usage.windowPlan": "Plan",
-
-	/* ── Écran « Limites d'utilisation » (dashboard/usage-modal.ts) ──
-	   Mêmes intitulés que l'écran d'usage de Claude Code, dont il est la
-	   reproduction : un utilisateur qui connaît l'un lit l'autre sans
-	   traduction mentale. */
-	"ai.usage.planTitle": "Plan usage limits",
 	"ai.usage.sessionCurrent": "Current session",
-	"ai.usage.weeklyTitle": "Weekly limits",
 	"ai.usage.allModels": "All models",
 	// Sans espace avant le %, contrairement au français : c'est la typographie
 	// de chaque langue, pas une incohérence.
 	"ai.usage.usedPercent": "{n}% used",
-	// Fenêtre courte : compte à rebours. Fenêtre longue : moment absolu, seul
-	// à dire QUAND on est débloqué.
-	"ai.usage.resetsIn": "Resets in {duration}",
-	"ai.usage.resetsAt": "Resets {when}",
 	"ai.usage.durationHoursMinutes": "{h} h {m} min",
 	"ai.usage.durationMinutes": "{m} min",
-	"ai.usage.durationSeconds": "{n} s",
 	"ai.usage.durationDays": "{n} d",
-	/* ── Lecture impossible ──
-	   Distinguées de « ce fournisseur ne publie rien » : un échec annoncé comme
-	   une absence de données est une contre-vérité. */
-	"ai.usage.noReading": "No reading available yet",
-	"ai.usage.readRateLimited": "Too many reads in a row — try again in a moment.",
-	"ai.usage.readRateLimitedIn": "Too many reads in a row — try again in {duration}.",
-	"ai.usage.readUnauthenticated": "No Claude Code session to read: sign in with “/login”, then try again.",
-	"ai.usage.readUnavailable": "Couldn't read your plan usage. The figures above are the last known ones.",
-	"ai.usage.lastUpdated": "Last updated: {when}",
-	"ai.usage.loading": "Reading your plan…",
 	"ai.usage.justNow": "just now",
 	"ai.usage.minutesAgo": "{n} min ago",
 	"ai.usage.hoursAgo": "{n} h ago",
-	"ai.usage.refresh": "Refresh",
-	/* Accès à Fable : dépend du forfait depuis le 2026-07-20 (cf. l'en-tête de
-	   la section Fable dans ai-providers.ts). Les deux cas sont dits en propre,
-	   et un forfait qui ne tranche pas n'affiche aucune des deux phrases. */
-	"ai.usage.fableIncluded": "{model} is part of your {plan} plan.",
-	"ai.usage.fableIncludedNote": "It draws from the weekly limits above, and uses them faster than other models. Past its share, keep going with usage credits or switch models.",
-	"ai.usage.fableCredits": "{model} isn't included in your {plan} plan.",
-	"ai.usage.fableCreditsNote": "It runs on pay-as-you-go usage credits, separately from the weekly limits above.",
-	"ai.usage.learnMore": "Learn more about usage limits",
+	"ai.usage.windowHours": "{n} h",
+	"ai.usage.windowDays": "{n} d",
+	"ai.usage.windowPlan": "Plan",
 
 	/* ── Options de génération ── */
 	"ai.options.tooltip": "{count} questions · {type}",

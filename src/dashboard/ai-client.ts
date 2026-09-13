@@ -1,5 +1,5 @@
 import JSON5 from "json5";
-import { currentHost } from "../host/current";
+import { currentHost, requireHost } from "../host/current";
 import { jetonFichier, jetonHome, jetonSortie, nouveauMarqueur } from "../host/jetons";
 import {
 	resolveClaudeModel,
@@ -221,7 +221,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 	}): Promise<SortieCli> {
 		const ac = new AbortController();
 		abortCurrent = () => { aborted = true; try { ac.abort(); } catch (e) { /* déjà avorté */ } };
-		return currentHost().process.run({
+		return requireHost("process").run({
 			tool: spec.tool,
 			args: spec.args,
 			stdin: spec.stdin,
@@ -687,7 +687,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 		let installedModels: string[] = [];
 		let tagModels: Array<{ name: string; capabilities?: string[] }> = [];
 		try {
-			const tagsResp = await courseAbandon(currentHost().net.fetchJson({
+			const tagsResp = await courseAbandon(requireHost("net").fetchJson({
 				url: `${ollamaUrl}/api/tags`, method: "GET", headers: authHeaders, signal: ac.signal,
 			}), ac.signal);
 			// `null` = échec RÉSEAU (cf. le contrat) ; un statut d'erreur, lui,
@@ -760,7 +760,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 			eval_count?: number;
 		};
 		try {
-			const resp = await courseAbandon(currentHost().net.fetchJson({
+			const resp = await courseAbandon(requireHost("net").fetchJson({
 				url: `${ollamaUrl}/api/chat`,
 				method: "POST",
 				signal: ac.signal,

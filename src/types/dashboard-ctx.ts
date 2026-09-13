@@ -1,54 +1,28 @@
 /**
- * Interface du ctx (god-object) du sous-système dashboard (src/dashboard.js,
- * classe QuizDashboardView extends ItemView, méthode onOpen).
+ * Types du sous-système dashboard consommés par LES DEUX hôtes (le contrat
+ * `DashboardShellCtx`/`DashboardPageSettings`/`DashboardViewName`, plus
+ * `AiSettings`, le sous-ensemble des réglages persistés que la page
+ * « Générer » lit).
  *
- * Le littéral `ctx` construit en onOpen (dashboard.js:54-64) est PLUS PETIT
- * que celui de l'éditeur (EditorCtx) : il ne porte que l'état de base + deux
- * helpers, `this.ctx = ctx` (dashboard.js:66), puis 5 sous-modules sont
- * assignés directement sur la VUE — PAS sur ctx (dashboard.js:69-73) :
- *   this.nav = createNavHandlers(ctx)
- *   this.home = createHomeHandlers(ctx)
- *   this.quizzes = createQuizzesHandlers(ctx)
- *   this.detail = createDetailHandlers(ctx)
- *   this.ai = createAiHandlers(ctx)
- * D'où la scission en deux interfaces ci-dessous : `DashboardCtx` (fidèle au
- * littéral ctx réel) et `DashboardView` (l'hôte `this`, qui porte les 5
- * handlers + l'état propre à la vue).
- *
- * Task 8a convertit le cluster RENDU (scanner/stats-store/quiz-card/nav/
- * home/quizzes/detail/effort-canvas) : Scanner/StatsStore sont désormais les
- * vrais types importés depuis scanner.ts/stats-store.ts. `ai` (dashboard/ai.js)
- * et `AiClient` (ai-client.js) restent en placeholder `unknown`-based — hors
- * périmètre 8a (lot IA, tâche suivante).
+ * `DashboardCtx`, `DashboardView` et `DashboardPlugin` — le littéral `ctx` et
+ * l'hôte `this` de l'ex-`QuizDashboardView` (`src/dashboard.ts`), tous deux
+ * typés en `App`/`ItemView`/`Plugin`/`TFile` d'Obsidian — sont partis à la
+ * tâche 2 du chantier « greffon lecteur » (2026-09-13) : le greffon n'a plus
+ * de vue dashboard, et plus aucun fichier de `src/` ni de `apps/` ne les
+ * importait. Ce fichier était le DERNIER de `src/` à importer Obsidian
+ * (`scripts/check-host.mjs`, `RESTANTS`) ; il ne le fait plus.
  */
 
-import type { App, ItemView, Plugin, TFile } from "obsidian";
 import type { Scanner, QuizIndexEntry } from "../dashboard/scanner";
 import type { StatsStore } from "../dashboard/stats-store";
-import type { NavHandlers } from "../dashboard/nav";
-import type { QuizzesHandlers } from "../dashboard/quizzes";
-import type { HomeHandlers } from "../dashboard/home";
-import type { DetailHandlers } from "../dashboard/detail";
 import type { Hotkey } from "../hotkey-format";
 import type { OllamaCatalogEntry } from "../dashboard/ai-providers";
-import type { AiClient } from "../dashboard/ai-client";
 import type { AiUsageEntry } from "../dashboard/usage-format";
-import type { AiHandlers } from "../dashboard/ai";
 import type { ModuleOverride, ModuleGroup, ModuleMap } from "../dashboard/quiz-modules";
 import type { ReviewStore } from "../review/review-store";
 
-export type { Scanner, StatsStore, AiClient, AiHandlers };
-
 /** Vues possibles du dashboard (dashboard.js:23 currentView, navigate, previousView). */
 export type DashboardViewName = "home" | "quizzes" | "detail" | "ai";
-
-/**
- * Client IA (src/dashboard/ai-client.ts, createAiClient(plugin)) : NE FIGURE
- * PAS dans le littéral ctx ni sur la vue — instancié à la demande, en interne,
- * par le sous-module `ai` (dashboard/ai.ts, `const client = createAiClient(
- * ctx.plugin)`). Le VRAI type est désormais importé d'ai-client.ts (Task 8c)
- * et ré-exporté ci-dessus.
- */
 
 /**
  * Réglages IA du plugin (src/plugin.js DEFAULT_SETTINGS, encore .js). Couvre
@@ -114,80 +88,10 @@ export interface AiSettings {
 	quizzesModuleOverrides?: Record<string, ModuleOverride>;
 }
 
-/**
- * Le plugin hôte tel que la VUE dashboard le consomme (QuizDashboardView,
- * src/dashboard.ts) : `Plugin` d'Obsidian + les expandos réels posés par
- * plugin.js —
- *  - `_scanner` / `_statsStore` (plugin.js onload), lus par les getters
- *    `scanner` / `statsStore` de la vue (dashboard.ts, `this.plugin._scanner`) ;
- *  - `settings` (AiSettings) + `saveSettings()`, comme pour le ctx.
- * La forme COMPLÈTE des settings (quizStats, enableCodeHighlighting…) sera
- * étoffée par la conversion de `plugin.js` lui-même (encore `.js`) ; les
- * champs non listés existent au runtime, simplement pas encore déclarés.
- */
-export interface DashboardPlugin extends Plugin {
-	settings: AiSettings;
-	saveSettings(): Promise<void>;
-	_scanner: Scanner;
-	_statsStore: StatsStore;
-	/** Journal de révision par QUESTION (ordonnanceur). Distinct de
-	    `_statsStore`, qui reste la progression par QUIZ pour l'affichage :
-	    deux systèmes, deux questions différentes, à ne pas fusionner. */
-	_reviewStore?: ReviewStore;
-}
-
-/* ════════════════════════════════════════════════════════
-   DashboardView — l'hôte `this` (QuizDashboardView), qui
-   porte les 5 sous-modules + l'état propre à la vue
-   ════════════════════════════════════════════════════════ */
-
-/**
- * `view` / `this` dans QuizDashboardView (dashboard.js:19-171). Porte l'état
- * de navigation, les getters `scanner`/`statsStore` (dashboard.js:39-40) et
- * les 5 sous-modules assignés en onOpen (dashboard.js:69-73) — c'est CETTE
- * interface, pas DashboardCtx, qui porte nav/home/quizzes/detail/ai.
- */
-export interface DashboardView extends ItemView {
-	plugin: DashboardPlugin;
-	/** dashboard.js:23, valeurs réellement utilisées (switch dashboard.js:149-169). */
-	currentView: DashboardViewName;
-	/** Quiz sélectionné pour la vue détail (dashboard.js:24). */
-	selectedQuiz: QuizIndexEntry | null;
-	/** Vue précédente, pour le retour depuis "detail" (dashboard.js:25, 131-134). */
-	previousView: DashboardViewName;
-	/** dashboard.js:26, 50 — conteneur sidebar, assigné en onOpen. */
-	navEl: HTMLElement | null;
-	/** dashboard.js:27, 51 — conteneur contenu, assigné en onOpen (nommé `contentEl_` pour ne pas masquer `ItemView.contentEl`). */
-	contentEl_: HTMLElement | null;
-	/** Getters dashboard.js:39-40, lisent `plugin._scanner`/`plugin._statsStore`. */
-	readonly scanner: Scanner;
-	readonly statsStore: StatsStore;
-	/** ctx sauvegardé sur la vue (dashboard.js:66, `this.ctx = ctx`). */
-	ctx?: DashboardCtx;
-
-	// ── Sous-modules assignés en onOpen (dashboard.js:69-73) — nav/home/
-	//    quizzes/detail typés en Task 8a ; `ai` typé en AiHandlers (Task 8c). ──
-	nav?: NavHandlers;
-	home?: HomeHandlers;
-	quizzes?: QuizzesHandlers;
-	detail?: DetailHandlers;
-	ai?: AiHandlers;
-
-	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void;
-	renderSidebar(): void;
-	renderCurrentView(): void;
-	/** Historique boutons souris — cf. QuizDashboardView (dashboard.ts). */
-	recordNav(): void;
-	goNavBack(): void;
-	goNavForward(): void;
-}
-
 /* ════════════════════════════════════════════════════════
    DashboardShellCtx — ce dont les pages PORTÉES (accueil, « Mes
    quiz ») ont besoin, et RIEN de plus (plan tranche 2.5, tâche 2,
-   décision D3). `DashboardCtx` l'étend en y ajoutant `view`, `app`,
-   `plugin`, `navEl`/`contentEl` et `getActiveFile` — le reste du
-   greffon (IA, dictée, détail) en a encore besoin.
+   décision D3).
    ════════════════════════════════════════════════════════ */
 
 /** Les cinq réglages que les pages accueil / « Mes quiz » lisent, et rien
@@ -204,10 +108,6 @@ export interface DashboardPageSettings {
 
 /**
  * Ce dont les pages Accueil et Mes quiz ont besoin, et RIEN de plus.
- * `DashboardCtx` l'étend en y ajoutant l'IA, la dictée, le détail et le
- * `Plugin` lui-même. Déclarer cette intersection est ce qui empêche une
- * page portée de se remettre à lire `ctx.plugin` sans que personne ne le
- * voie : côté application, ce champ n'existe pas.
  */
 export interface DashboardShellCtx {
 	scanner: Scanner;
@@ -262,9 +162,7 @@ export interface DashboardShellCtx {
 	    ce qui rendait TOUTE carte, et tout ce qui la consomme, irrémédiablement
 	    liée à Obsidian). L'ouverture appartient maintenant à l'hôte : c'est
 	    lui qui importe `ui-select.ts` (le greffon le fait déjà, `dashboard.ts`
-	    reste dans RESTANTS) et compose les items AU CLIC.
-	    L'application ne la fournit pas : les menus et les modals sont la
-	    tranche 2.6, et une carte sans « ⋯ » est un état prévu, pas dégradé. */
+	    reste dans RESTANTS) et compose les items AU CLIC. */
 	openCardMenu?: (quiz: QuizIndexEntry, anchor: HTMLElement, rerender: () => void) => void;
 	/** Même rôle qu'`openCardMenu`, pour le menu « ⋯ » d'une carte de MODULE
 	    (« Mes quiz », tâche 6) : partage, « Modifier dossier », suppression —
@@ -353,38 +251,4 @@ export interface DashboardShellCtx {
 	    écrasement possible, un message moins précis — limite connue, laissée
 	    telle quelle : la corriger serait un membre de contrat de plus. */
 	renameQuiz?: (quiz: QuizIndexEntry, nom: string) => Promise<boolean>;
-}
-
-/* ════════════════════════════════════════════════════════
-   DashboardCtx — le ctx lui-même (dashboard.js:54-64)
-   ════════════════════════════════════════════════════════ */
-
-export interface DashboardCtx extends DashboardShellCtx {
-	/** Référence à la vue hôte — même objet que `this` dans QuizDashboardView (dashboard.js:55). */
-	view: DashboardView;
-	app: App;
-	/**
-	 * `plugin.settings` : `AiSettings` (Task 8c) couvre le sous-ensemble
-	 * « génération IA » (aiProvider, aiModel, aiEffort, aiOllama*, hotkey*…)
-	 * réellement lu par ai.ts et ai-client.ts. La forme COMPLÈTE (quizStats…)
-	 * sera étoffée par la
-	 * conversion de `plugin.js` lui-même (encore `.js`). Les champs non listés
-	 * existent bel et bien au runtime, simplement pas encore déclarés ici.
-	 */
-	/* `_reviewStore` est déclaré ICI en plus de `DashboardPlugin` parce que ce
-	   `plugin` est l'intersection étroite ci-dessus, pas `DashboardPlugin` :
-	   l'accueil lit le puits par `ctx.plugin._reviewStore`. Optionnel à
-	   dessein — la task 7 le fait DÉGRADER plutôt que bloquer le greffon,
-	   donc il peut réellement manquer au runtime. */
-	plugin: Plugin & {
-		settings: AiSettings;
-		saveSettings(): Promise<void>;
-		_reviewStore?: ReviewStore;
-	};
-	/** Même référence DOM que `view.navEl` (dashboard.js:60) — déjà assignée à ce stade (onOpen l'a créée avant de construire ctx, dashboard.js:50). */
-	navEl: HTMLElement;
-	/** Même référence DOM que `view.contentEl_` (dashboard.js:61) — nommé `contentEl` dans le littéral ctx réel. */
-	contentEl: HTMLElement;
-	/** dashboard.js:63, `() => this.app.workspace.getActiveFile()`. */
-	getActiveFile: () => TFile | null;
 }

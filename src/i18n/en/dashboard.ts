@@ -123,10 +123,7 @@ export const EN_DASHBOARD = {
 	"dashboard.quizzes.renameTitle": "Rename quiz",
 	"dashboard.quizzes.renameLabel": "Quiz name",
 	"dashboard.quizzes.renameCta": "Rename",
-	"dashboard.quizzes.renameExists": "“{name}” already exists in this folder.",
-	"dashboard.quizzes.renameError": "Could not rename this quiz",
 	"dashboard.quizzes.deleted": "Quiz deleted",
-	"dashboard.quizzes.shareSaveError": "Could not save the shared file",
 	"dashboard.quizzes.deletedPartial": "Quiz deleted — {count} could not be removed",
 	"dashboard.quizzes.deleteConfirmTitle": "Delete quiz",
 	"dashboard.quizzes.deleteConfirmBody": "Remove “{title}” and its stats from the note ? This cannot be undone.",
@@ -142,14 +139,6 @@ export const EN_DASHBOARD = {
 	"dashboard.quizzes.moveConfirmCta": "Move",
 	"dashboard.quizzes.moved": "Module moved to {target}",
 	"dashboard.quizzes.moveExists": "A folder with this name already exists there.",
-	"dashboard.quizzes.fileSaved": "Saved: {path}",
-	"dashboard.quizzes.shareTitle": "Share folder",
-	"dashboard.quizzes.shareQuizTitle": "Share quiz",
-	"dashboard.quizzes.shareHint": "No app can attach a file automatically — pick one, it opens with the file ready to paste.",
-	"dashboard.quizzes.shareSave": "Save file",
-	"dashboard.quizzes.discordReady": "File copied — in Discord: pick a chat, press Ctrl+V, then Enter.",
-	"dashboard.quizzes.shareCopyHint": "Files will be copied to the clipboard for sharing",
-	"dashboard.quizzes.shareCopiedToast": "Copied — paste it into Discord with Ctrl+V",
 
 	/* ── Modal « Modifier dossier » (calqué StudySmarter, sans le toggle public) ── */
 	"dashboard.quizzes.moduleEditTitle": "Edit folder",
@@ -208,8 +197,6 @@ export const EN_DASHBOARD = {
 	"dashboard.detail.noBlock": "No quiz-blocks block found",
 	"dashboard.detail.loadError": "Couldn't load the questions",
 	"dashboard.detail.noBlockInNote": "No quiz-blocks block found in this note",
-	"dashboard.detail.opened": "Quiz opened: {name}",
-	"dashboard.detail.openError": "Couldn't open the quiz",
 
 	/* ── Page d'un quiz (refonte 2026-07-21) : consultation + édition en
 	   place, sans onglets ni panneau Code. ── */

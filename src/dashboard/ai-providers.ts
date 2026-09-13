@@ -1,4 +1,4 @@
-import { currentHost } from "../host/current";
+import { currentHost, requireHost } from "../host/current";
 import { t, currentLang } from "../i18n";
 import type { Lang } from "../i18n";
 /* PLUS D'IMPORT d'`ai-usage.ts` (tâche 6 de la tranche 5) : ce module lisait
@@ -251,10 +251,10 @@ let refreshEnCours: Promise<boolean> | null = null;
 export function refreshCliCaches(): Promise<boolean> {
 	if (refreshEnCours) return refreshEnCours;
 	refreshEnCours = (async () => {
-		const host = currentHost();
+		const host = requireHost("process");
 		const [codex, claude] = await Promise.all([
-			host.process.lireCache("codex").catch(() => null),
-			host.process.lireCache("claude").catch(() => null),
+			host.lireCache("codex").catch(() => null),
+			host.lireCache("claude").catch(() => null),
 		]);
 		/* Le `mtime` SUFFIT à dire le changement : c'est déjà la clé sur
 		   laquelle `getCodexModels` et `readClaudeCliInfo` décident de
@@ -805,7 +805,7 @@ export async function fetchOllamaCloudCatalog(): Promise<OllamaCatalogEntry[]> {
 	/* Le nom `fetchJson` dit l'usage courant, pas une contrainte : le contrat
 	   rend le corps BRUT (`body`), et c'est du HTML ici — la page de recherche
 	   d'ollama.com, dont on extrait les noms de familles. */
-	const resp = await currentHost().net.fetchJson({ url: "https://ollama.com/search?c=cloud" });
+	const resp = await requireHost("net").fetchJson({ url: "https://ollama.com/search?c=cloud" });
 	if (!resp || resp.status !== 200 || !resp.body) throw new Error("catalog fetch " + (resp && resp.status));
 	const families = [...new Set([...resp.body.matchAll(/x-test-search-response-title>([a-z0-9.\-]+)/gi)].map(m => m[1]))];
 	// Version max du repli par modèle → les familles déjà couvertes gardent leur
@@ -862,7 +862,7 @@ export async function checkClaudeCode(force?: boolean): Promise<ClaudeCodeStatus
 	   en 10 s (`timeout`), ou l'hôte ne sait pas encore lancer de CLI
 	   (`indisponible`, l'application jusqu'à la tâche 7). Un code de sortie
 	   non nul aussi — l'ancien `exec` le rendait dans `err`. */
-	const result = await currentHost().process
+	const result = await requireHost("process")
 		.run({ tool: "claude", args: ["--version"], stdin: "", timeoutMs: 10000 })
 		.then((res): ClaudeCodeStatus => res.code === 0
 			? { ok: true, version: (res.stdout || "").trim().split(/\s+/)[0] || "" }
@@ -885,7 +885,7 @@ export async function checkCodex(force?: boolean): Promise<CodexStatus> {
 		return codexCache.result;
 	}
 	// Même règle que `checkClaudeCode` : tout rejet vaut « pas installé ».
-	const result = await currentHost().process
+	const result = await requireHost("process")
 		.run({ tool: "codex", args: ["--version"], stdin: "", timeoutMs: 10000 })
 		.then((res): CodexStatus => {
 			if (res.code !== 0) return { ok: false, reason: "not-installed" };
@@ -933,8 +933,8 @@ async function checkOllamaLive(base: string): Promise<OllamaStatus> {
 	   la liste d'hôtes (`apps/windows/electron/reseau.ts`). `null` (échec
 	   réseau) et un statut non-2xx valent tous deux « hors ligne », comme
 	   l'ancien `catch` et l'ancien `!resp.ok`. */
-	const host = currentHost();
-	const resp = await host.net.fetchJson({ url: base + "/api/tags", method: "GET" });
+	const host = requireHost("net");
+	const resp = await host.fetchJson({ url: base + "/api/tags", method: "GET" });
 	if (!resp || resp.status < 200 || resp.status >= 300) return { ok: false, reason: "offline" };
 	const data = corpsJson(resp.body) as { models?: Array<{ name: string; size?: number; capabilities?: string[] }> } | null;
 	/* UN 200 QUI N'EST PAS DU JSON N'EST PAS UN SERVEUR OLLAMA : un portail
@@ -953,7 +953,7 @@ async function checkOllamaLive(base: string): Promise<OllamaStatus> {
 	}));
 	// Version du serveur = version d'Ollama installée (GET /api/version →
 	// { "version": "0.31.2" }). Best-effort : undefined si l'endpoint échoue.
-	const vr = await host.net.fetchJson({ url: base + "/api/version", method: "GET" });
+	const vr = await host.fetchJson({ url: base + "/api/version", method: "GET" });
 	const version = vr && vr.status >= 200 && vr.status < 300
 		? (corpsJson(vr.body) as { version?: string } | null)?.version
 		: undefined;
@@ -977,7 +977,7 @@ export async function checkOllamaInstalled(force?: boolean): Promise<OllamaInsta
 	   emplacements d'installation officiels) : elle demande le système de
 	   fichiers et le nom de l'OS, que le code partagé n'a pas. Un rejet vaut
 	   « pas installé » — jamais une exception remontée dans la page. */
-	const installed = await currentHost().process.ollamaInstalle().catch(() => false);
+	const installed = await requireHost("process").ollamaInstalle().catch(() => false);
 	const result: OllamaInstalledStatus = { installed };
 	ollamaInstalledCache = { at: Date.now(), result };
 	return result;
@@ -991,5 +991,5 @@ export async function checkOllamaInstalled(force?: boolean): Promise<OllamaInsta
    l'IPC) : le booléen dit seulement que quelque chose a été lancé, pas que le
    serveur répond — c'est le poll de l'appelant qui le constate. */
 export async function startOllamaApp(): Promise<boolean> {
-	return currentHost().process.demarrerOllama().catch(() => false);
+	return requireHost("process").demarrerOllama().catch(() => false);
 }

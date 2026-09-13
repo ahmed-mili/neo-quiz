@@ -18,57 +18,26 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.mention.truncated": "Trop de fichiers dans {roots} — la recherche peut être incomplète",
 	"ai.mention.externalRootGone": "Impossible d'attacher « {name} » : son dossier hors coffre a été retiré des réglages",
 
-	/* ── Usage IA (ce qu'une génération a coûté) ── */
+	/* ── Usage IA (ce qu'une génération a coûté) ──
+	   RÉDUIT à la tâche 2 du chantier « greffon lecteur » (2026-09-13) :
+	   l'écran « Limites d'utilisation » est parti à la tâche 1 avec le reste
+	   du tableau de bord. Ne restent que les clés du badge et de l'infobulle
+	   de la page « Générer » (`dashboard/usage-format.ts`), consommées par
+	   l'APPLICATION. */
 	"ai.usage.badge": "{tokens} tokens",
 	"ai.usage.title": "Usage",
-	"ai.usage.thisRun": "Cette génération",
-	"ai.usage.today": "Aujourd'hui",
-	"ai.usage.allTime": "Enregistré à ce jour",
-	"ai.usage.input": "Entrée",
-	"ai.usage.output": "Sortie",
-	"ai.usage.cached": "dont en cache",
-	"ai.usage.cost": "Coût",
-	"ai.usage.duration": "Durée",
-	"ai.usage.generations": "{n} générations",
-	"ai.usage.questions": "{n} questions",
-	"ai.usage.costUnavailable": "Forfait — aucun prix par requête",
-	"ai.usage.tokensUnavailable": "Ce CLI ne publie pas le nombre de tokens",
-	"ai.usage.planOff": "Activez l'usage de l'abonnement dans les réglages pour voir ce qu'il vous reste.",
-	"ai.usage.planUnavailable": "Ce fournisseur ne publie pas l'usage du forfait",
-	"ai.usage.windowHours": "{n} h",
-	"ai.usage.windowDays": "{n} j",
-	"ai.usage.windowPlan": "Forfait",
-
-	/* ── Écran « Limites d'utilisation » (dashboard/usage-modal.ts) ──
-	   Libellés repris MOT POUR MOT de l'écran d'usage de Claude Code en
-	   français, dont cet écran est la reproduction. */
-	"ai.usage.planTitle": "Limites d'utilisation du forfait",
 	"ai.usage.sessionCurrent": "Session actuelle",
-	"ai.usage.weeklyTitle": "Limites hebdomadaires",
 	"ai.usage.allModels": "Tous les modèles",
 	"ai.usage.usedPercent": "{n} % utilisés",
-	"ai.usage.resetsIn": "Réinitialisation dans {duration}",
-	"ai.usage.resetsAt": "Réinitialisation {when}",
 	"ai.usage.durationHoursMinutes": "{h} h {m} min",
 	"ai.usage.durationMinutes": "{m} min",
-	"ai.usage.durationSeconds": "{n} s",
 	"ai.usage.durationDays": "{n} j",
-	"ai.usage.noReading": "Aucune lecture disponible pour l'instant",
-	"ai.usage.readRateLimited": "Trop de lectures d'affilée — réessayez dans un instant.",
-	"ai.usage.readRateLimitedIn": "Trop de lectures d'affilée — réessayez dans {duration}.",
-	"ai.usage.readUnauthenticated": "Aucune session Claude Code à lire : connectez-vous avec « /login », puis réessayez.",
-	"ai.usage.readUnavailable": "Lecture de l'usage impossible. Les chiffres ci-dessus sont les derniers connus.",
-	"ai.usage.lastUpdated": "Dernière mise à jour : {when}",
-	"ai.usage.loading": "Lecture du forfait…",
 	"ai.usage.justNow": "à l'instant",
 	"ai.usage.minutesAgo": "il y a {n} min",
 	"ai.usage.hoursAgo": "il y a {n} h",
-	"ai.usage.refresh": "Actualiser",
-	"ai.usage.fableIncluded": "{model} fait partie de votre forfait {plan}.",
-	"ai.usage.fableIncludedNote": "Il puise dans les limites hebdomadaires ci-dessus, et les consomme plus vite que les autres modèles. Au-delà de sa part, continuez avec des crédits d'utilisation ou changez de modèle.",
-	"ai.usage.fableCredits": "{model} n'est pas inclus dans votre forfait {plan}.",
-	"ai.usage.fableCreditsNote": "Il fonctionne avec des crédits d'utilisation à la consommation, indépendamment des limites hebdomadaires ci-dessus.",
-	"ai.usage.learnMore": "En savoir plus sur les limites d'utilisation",
+	"ai.usage.windowHours": "{n} h",
+	"ai.usage.windowDays": "{n} j",
+	"ai.usage.windowPlan": "Forfait",
 
 	/* ── Options de génération ── */
 	"ai.options.tooltip": "{count} questions · {type}",

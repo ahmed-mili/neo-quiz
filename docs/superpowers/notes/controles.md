@@ -71,7 +71,11 @@ réponse étant toujours non.
   celui de l'application n'a PAS, ce qu'une assertion STATIQUE garde
   (`index.ts` importe MathLive, donc ne se charge pas ici) : sans cette absence,
   la page « Générer » accepterait un PDF dans la fenêtre et en joindrait le
-  texte vide au lieu de le refuser (`ai.error.pdfUnsupportedInApp`). Une
+  texte vide au lieu de le refuser (`ai.error.pdfUnsupportedInApp`). Depuis la
+  tâche 2 du chantier « greffon lecteur » (2026-09-13), `check:obsidian-host`
+  ne couvre plus `pdf` : son seul consommateur (la page « Générer ») est parti
+  avec le tableau de bord, et le greffon lecteur ne fournit plus ce membre
+  optionnel. Une
   méthode d'hôte qui rend `null` en silence rendrait les images, le bouton ressource ou
   la sauvegarde inertes sans un mot. Chaque cas neuf doit être éprouvé par DISCRIMINANCE
   (casser la règle, voir rougir, restaurer) : un cas qui passe au vert quoi qu'on fasse

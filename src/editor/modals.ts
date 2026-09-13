@@ -1,5 +1,5 @@
 import { ajouter } from "../dom";
-import { currentHost } from "../host/current";
+import { currentHost, requireHost } from "../host/current";
 import { Q_TYPES, _setIcon } from "./utils";
 import type { QuestionTypeKey } from "./utils";
 import { t } from "../i18n";
@@ -65,7 +65,7 @@ export function openConfirmModal(
 	callback: (confirmed: boolean) => void,
 ): void {
 	let confirmed = false;
-	currentHost().modals.open({
+	requireHost("modals").open({
 		onOpen: (m) => {
 			const c = m.contentEl;
 			c.classList.add("qb-confirm-modal");
@@ -99,7 +99,7 @@ export function openConfirmModal(
    TYPE PICKER MODAL
    ════════════════════════════════════════════════════════ */
 export function openTypePickerModal(onPick: (key: QuestionTypeKey) => void): void {
-	currentHost().modals.open({
+	requireHost("modals").open({
 		onOpen: (m) => {
 			const c = m.contentEl;
 			c.classList.add("qb-type-modal");

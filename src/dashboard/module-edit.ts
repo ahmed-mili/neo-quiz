@@ -1,4 +1,4 @@
-import { currentHost } from "../host/current";
+import { currentHost, requireHost } from "../host/current";
 import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { DashboardShellCtx } from "../types/dashboard-ctx";
@@ -81,7 +81,7 @@ export function openModuleEditModal(
 		onSaved();
 	};
 
-	currentHost().modals.open({
+	requireHost("modals").open({
 		className: "qbd-medit-modal",
 		// t() AU RENDU (à l'ouverture), jamais dans une constante de haut
 		// niveau : une chaîne figée au chargement ignorerait un changement de
@@ -244,7 +244,7 @@ export function openNewFolderModal(
 ): void {
 	let name = "";
 
-	currentHost().modals.open({
+	requireHost("modals").open({
 		className: "qbd-medit-modal",
 		title: t("dashboard.quizzes.newFolderTitle"),
 		onOpen: (m) => {

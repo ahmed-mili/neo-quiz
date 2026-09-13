@@ -657,9 +657,12 @@ export interface Host {
 	shell: HostShell;
 	platform: HostPlatform;
 	paths: HostPaths;
-	modals: HostModals;
-	net: HostNet;
-	process: HostProcess;
+	/** Un membre OPTIONNEL du contrat, exigé : le greffon lecteur ne fournit
+	    ni `process`, ni `net`, ni `modals` ; une page qui les demande est une
+	    page que le greffon n'a plus. L'erreur nomme le membre. */
+	modals?: HostModals;
+	net?: HostNet;
+	process?: HostProcess;
 	/** Absent quand l'hôte n'a pas de moteur PDF — voir `HostPdf`. */
 	pdf?: HostPdf;
 }

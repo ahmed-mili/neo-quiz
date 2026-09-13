@@ -1,4 +1,4 @@
-import { currentHost } from "../host/current";
+import { currentHost, requireHost } from "../host/current";
 import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { DashboardShellCtx } from "../types/dashboard-ctx";
@@ -71,7 +71,7 @@ interface ConfirmSpec {
  * pas avoir chacune leur habillage.
  */
 function openConfirm(spec: ConfirmSpec, onConfirm: () => void): void {
-	currentHost().modals.open({
+	requireHost("modals").open({
 		title: spec.title,
 		onOpen: (m) => {
 			const c = m.contentEl;
@@ -113,7 +113,7 @@ function openRenameQuizModal(
 	onDone: () => void,
 ): void {
 	let name = quiz.basename;
-	currentHost().modals.open({
+	requireHost("modals").open({
 		className: "qbd-medit-modal",
 		// t() AU RENDU (à l'ouverture), jamais dans une constante de haut niveau.
 		title: t("dashboard.quizzes.renameTitle"),

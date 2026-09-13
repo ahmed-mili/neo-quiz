@@ -30,14 +30,12 @@ const EXTENSIONS_TS = [".ts", ".tsx", ".mts", ".cts"];
  * l'en retirer au lieu de le laisser couvrir une régression future.
  */
 const RESTANTS = [
-	// Tableau de bord — chantier 4 (« greffon lecteur »), tâche 1 : le
-	// greffon a perdu `src/dashboard.ts`, `src/dashboard/share.ts`,
-	// `src/dashboard/ai-usage.ts`, `src/dashboard/usage-modal.ts` et
-	// `src/modal-base.ts` (supprimés), donc leurs importeurs d'Obsidian.
-	// `src/types/dashboard-ctx.ts` reste seul, en attendant sa scission
-	// (tâche 2) entre la part liée à `App`/`ItemView`/`Plugin` (à jeter) et
-	// les types que l'application importe encore.
-	"src/types/dashboard-ctx.ts",
+	// Vide depuis la tâche 2 du chantier « greffon lecteur » (2026-09-13) :
+	// `src/types/dashboard-ctx.ts`, dernier fichier de `src/` à importer
+	// Obsidian, a perdu `DashboardCtx`/`DashboardView`/`DashboardPlugin` (le
+	// littéral `ctx` et l'hôte `this` de l'ex-vue dashboard) — plus rien
+	// sous `src/` ne dépend d'Obsidian. Le tableau reste en place, vide,
+	// même statut de cliquet qu'`EXCEPTIONS_APPS` juste plus bas.
 ];
 
 function fichiersTs(racine) {

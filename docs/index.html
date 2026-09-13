@@ -251,10 +251,22 @@
 		align-items: center;
 		justify-content: center;
 		white-space: nowrap;
-		border: 1px solid var(--bordure);
+		border: 1px solid transparent;
 		border-radius: 8px;
 		padding: 4px 10px;
-		background: color-mix(in srgb, var(--fond) 45%, transparent);
+		transition: border-color 100ms ease, background-color 100ms ease;
+	}
+
+	/* Le cadre n'apparaît qu'au SURVOL, et sur la ligne entière (version et
+	   taille) : c'est l'invitation à choisir une release. Seules les cartes
+	   qui ont une version sélectionnable le montrent (pas Obsidian). */
+	.carte-meta:has(.selectionnable):hover,
+	.carte-meta:has(.selectionnable:focus-visible) {
+		border-color: var(--bordure);
+		background: color-mix(in srgb, var(--fond) 60%, transparent);
+	}
+	.carte-meta:has(.selectionnable):hover .carte-version {
+		color: var(--texte);
 	}
 
 	.carte-version {

@@ -542,6 +542,23 @@ pm` — jamais dans un dossier de quiz : refuser le périmètre (qui
   hexadécimal (qui composerait une expression régulière depuis une chaîne
   étrangère) et le fait qu'un chemin contenant `$&` ou `$1` est posé tel quel —
   la réécriture « naturelle » en remplacements par CHAÎNE le corromprait.
+- `npm run check:package` — l'EMPAQUETAGE : la configuration résolue
+  d'electron-builder, et le paquet local s'il existe. Défauts empêchés côté
+  configuration : une version qui diverge du manifeste, `appId` ou
+  `executableName` changés « par cohérence » (le premier est la clé de
+  registre par laquelle NSIS retrouve l'installation à remplacer),
+  `deleteAppDataOnUninstall` à vrai, `node_modules`/sourcemaps dans l'asar —
+  et, depuis la préparation de la signature SignPath, `extraMetadata.author.name`
+  (`Publisher` de la désinstallation, lu par winget) et
+  `signtoolOptions.publisherName` figé à `null` tant que le CN du certificat
+  n'est pas connu (une valeur fausse fait refuser chaque mise à jour). Côté
+  paquet : depuis que le pipeline recalcule `latest.yml` et le blockmap après
+  signature (`scripts/update-info-after-signing.mjs`), le script vérifie en
+  plus que l'exe nommé par `latest.yml` existe dans `dist-installer/` et que
+  son sha512 (calculé en flux, `node:crypto`) et sa taille sur disque
+  correspondent EXACTEMENT à ceux de `latest.yml`, et que le `.blockmap`
+  existe — c'est le seul contrôle qui rougit si l'exe a été remplacé (par sa
+  version signée, ou par erreur) sans repasser par ce script.
 - `npm --prefix apps/windows run typecheck:electron` — le typecheck du PROCESSUS
   PRINCIPAL Electron (`apps/windows/tsconfig.electron.json`), lancé par
   `npm run build` de ce dossier, donc par `npm run check:app`. Il referme un trou

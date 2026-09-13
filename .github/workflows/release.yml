@@ -7,6 +7,9 @@ name: Release Neo Quiz
 #     les fichiers sont déposés en artefacts de workflow et aucune release
 #     n'est créée. C'est ainsi qu'on éprouve cette chaîne sur un dépôt public
 #     sans laisser une release de test derrière soi.
+# La signature Authenticode de l'installeur Windows (SignPath) est optionnelle,
+# activée par la variable de dépôt `SIGNPATH_ORGANIZATION_ID` : tant qu'elle est
+# absente, `main` reste publiable non signé.
 on:
   push:
     tags:
@@ -119,8 +122,12 @@ jobs:
   app-windows:
     needs: plugin
     runs-on: windows-latest
+    # `actions: read` en plus de `contents: write` : un bloc `permissions`
+    # explicite met tout le reste à `none`, et l'action SignPath a besoin de
+    # lire l'artefact de workflow qu'elle signe (`github-artifact-id`).
     permissions:
       contents: write
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -144,6 +151,93 @@ jobs:
       - name: Build and package (NSIS)
         run: npm run pack:win
         working-directory: apps/windows
+
+      # Les étapes SignPath ci-dessous sont sautées tant que
+      # `vars.SIGNPATH_ORGANIZATION_ID` n'est pas posée : `main` reste
+      # publiable non signé pendant que la demande de certificat est en cours.
+      - name: Upload unsigned installer for SignPath
+        id: unsigned
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: neo-quiz-windows-unsigned
+          # L'action SignPath ne signe qu'un artefact de WORKFLOW (c'est ainsi
+          # qu'elle prouve que GitHub a construit le fichier), et l'exe SEUL :
+          # la config d'artefact (.signpath/artifact-configurations/initial.xml)
+          # n'attend que lui.
+          path: apps/windows/dist-installer/neo-quiz-setup-*.exe
+          if-no-files-found: error
+
+      - name: Submit signing request
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          # En répétition (workflow_dispatch) : le certificat de test,
+          # auto-signé, n'engage pas la réputation du dépôt. Sur un tag : le
+          # certificat SignPath Foundation, dont chaque demande exige
+          # l'approbation manuelle d'Ahmed dans le portail SignPath — d'où le
+          # délai d'attente d'une heure ci-dessous.
+          signing-policy-slug: ${{ github.event_name == 'workflow_dispatch' && 'test-signing' || 'release-signing' }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: apps/windows/signed
+          parameters: |
+            version: ${{ toJSON(needs.plugin.outputs.version) }}
+
+      # Sans le script suivant, `latest.yml` et le blockmap continueraient de
+      # décrire l'exe NON signé : electron-updater rejetterait la mise à jour
+      # chez chaque utilisateur (sha512 mismatch).
+      - name: Replace the installer with the signed one
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: bash
+        run: |
+          ls apps/windows/signed/
+          cp apps/windows/signed/neo-quiz-setup-*.exe apps/windows/dist-installer/
+          node scripts/update-info-after-signing.mjs
+
+      - name: Verify the signature
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: pwsh
+        env:
+          EVENEMENT: ${{ github.event_name }}
+        run: |
+          $nomExe = (Select-String -Path apps/windows/dist-installer/latest.yml -Pattern '^path:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
+          $cheminExe = "apps/windows/dist-installer/$nomExe"
+          $sig = Get-AuthenticodeSignature -LiteralPath $cheminExe
+          Write-Host "Status : $($sig.Status)"
+          Write-Host "Subject du certificat : $($sig.SignerCertificate.Subject)"
+
+          $cheminAppUpdate = "apps/windows/dist-installer/win-unpacked/resources/app-update.yml"
+          $publisherName = $null
+          if (Test-Path $cheminAppUpdate) {
+            $ligne = Select-String -Path $cheminAppUpdate -Pattern '^publisherName:\s*(.+)$'
+            if ($ligne) { $publisherName = $ligne.Matches[0].Groups[1].Value.Trim() }
+          }
+
+          if ($env:EVENEMENT -ne 'workflow_dispatch') {
+            # Certificat SignPath Foundation, approuvé par Windows : la
+            # signature doit être valide.
+            if ($sig.Status -ne 'Valid') {
+              Write-Error "Signature invalide : $($sig.Status)"
+              exit 1
+            }
+            if ($publisherName -and $sig.SignerCertificate.Subject -notlike "*$publisherName*") {
+              Write-Error "publisherName ($publisherName) ne correspond pas au CN du certificat ($($sig.SignerCertificate.Subject))"
+              exit 1
+            }
+          } else {
+            # Certificat de test (répétition), non approuvé par Windows :
+            # on affiche seulement, sans exiger 'Valid'.
+            Write-Host "Répétition (workflow_dispatch) : signature affichée sans être exigée valide."
+          }
+
+      # Déplacé après les étapes SignPath : ce contrôle doit voir le
+      # latest.yml et le blockmap RECALCULÉS après signature, pas ceux
+      # d'electron-builder sur l'exe non signé.
       - name: Package config and contents
         run: npm run check:package
       - name: Upload installer (répétition)

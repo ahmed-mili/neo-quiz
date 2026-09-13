@@ -55,6 +55,10 @@ export default async function () {
 		// produit et les metadonnees de l'installeur.
 		extraMetadata: {
 			version: await lireVersionDuManifeste(),
+			/* `Publisher` dans la clé de désinstallation (winget y corrèle le
+			   paquet) et `CompanyName` dans les métadonnées de l'exe — exigée
+			   par SignPath comme métadonnée sur l'installeur signé. */
+			author: { name: "Ahmed Mili" },
 		},
 		directories: {
 			// `output` evite que l'installeur atterrisse dans `dist/`, deja pris
@@ -86,6 +90,14 @@ export default async function () {
 			icon: "icons/icon.ico",
 			// Sans espace : un nom qu'on `curl` sans guillemets depuis la release.
 			artifactName: "neo-quiz-setup-${version}.${ext}",
+			/* `signtoolOptions.publisherName` (lu par electron-updater dans
+			   `resources/app-update.yml`, clé `publisherName`) sera posé ici une
+			   fois le CN du certificat connu — lu dans le journal CI de l'étape
+			   « Verify the signature » sur le premier exe signé par
+			   `release-signing` (voir release.yml). Tant qu'elle est absente,
+			   `scripts/check-package.mjs` l'attend à `null` (`PUBLISHER_ATTENDU`) :
+			   une valeur qui ne correspond pas EXACTEMENT au CN du certificat fait
+			   refuser CHAQUE mise à jour par electron-updater, silencieusement. */
 		},
 		linux: {
 			target: "AppImage",

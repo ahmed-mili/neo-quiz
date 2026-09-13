@@ -1,0 +1,25 @@
+<!--
+  Copie versionnée de la configuration d'artefact collée dans le portail
+  SignPath (Project → Artifact configuration). Le portail fait foi ; garder
+  les deux en phase quand l'un change.
+
+  - GitHub emballe l'artefact de workflow en ZIP (`actions/upload-artifact`) :
+    d'où la racine `<zip-file>`, même si on n'y met qu'un seul exécutable.
+  - On ne signe QUE l'installeur NSIS (`neo-quiz-setup-${version}.exe`).
+    L'exe de l'application et le désinstalleur, tous deux à l'intérieur du
+    NSIS, restent NON signés : SmartScreen ne juge que le fichier
+    effectivement téléchargé par l'utilisateur, et SignPath ne propose pas de
+    deep-signing du contenu d'un installeur NSIS (contrairement à un MSI).
+  - `${version}` est un paramètre requis, fourni par le workflow via
+    `parameters: | version: ...` de l'action `submit-signing-request`.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="neo-quiz-setup-${version}.exe" product-name="Neo Quiz" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

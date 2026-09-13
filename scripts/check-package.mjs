@@ -17,11 +17,29 @@
  *
  *     npm run check:package
  */
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readFile } from "node:fs/promises";
 import { makeReporter } from "./lib/load-src.mjs";
+
+/* `signtoolOptions.publisherName` n'est pas encore posé : le CN du
+   certificat ne se lit que dans le journal CI, sur le premier exe signé par
+   `release-signing`. Cette constante changera dans le MÊME commit que
+   `electron-builder.config.mjs` quand ce CN sera connu — une valeur qui ne
+   correspond pas EXACTEMENT au certificat fait refuser chaque mise à jour. */
+const PUBLISHER_ATTENDU = null;
+
+function sha512Base64(chemin) {
+	return new Promise((resolve, reject) => {
+		const hash = createHash("sha512");
+		createReadStream(chemin)
+			.on("data", (bloc) => hash.update(bloc))
+			.on("error", reject)
+			.on("end", () => resolve(hash.digest("base64")));
+	});
+}
 
 const racine = fileURLToPath(new URL("..", import.meta.url));
 const appWindows = `${racine}apps/windows/`;
@@ -46,6 +64,9 @@ r.check("files exclut node_modules et les sourcemaps",
 	[config.files.includes("!node_modules/**"), config.files.includes("!dist-electron/**/*.map")],
 	[true, true]);
 r.check("la désinstallation garde les données", config.nsis?.deleteAppDataOnUninstall, false);
+r.check("author.name est celui attendu par winget et SignPath", config.extraMetadata?.author?.name, "Ahmed Mili");
+r.check("publisherName n'est posé qu'une fois le CN du certificat connu",
+	config.win?.signtoolOptions?.publisherName ?? null, PUBLISHER_ATTENDU);
 /* LA CLÉ `publish` : c'est elle qui fait générer `latest*.yml` et embarquer
    `app-update.yml` — sans elle, electron-updater n'a aucun flux à lire et
    se tait. Le dépôt est FIXE : un rendu ne choisit jamais d'où vient une
@@ -80,6 +101,25 @@ if (existsSync(asar)) {
 	p.check("latest.yml porte la version du manifeste",
 		existsSync(latest) ? /^version:\s*(.+)$/m.exec(readFileSync(latest, "utf8"))?.[1]?.trim() : null,
 		manifeste.version);
+	/* Le contrôle qui rougit si l'exe a été remplacé (par ex. par sa version
+	   signée) sans repasser par `scripts/update-info-after-signing.mjs` :
+	   `latest.yml` et le blockmap décriraient alors un fichier qui n'existe
+	   plus, et electron-updater rejetterait la mise à jour chez chaque
+	   utilisateur. */
+	const latestBrut = existsSync(latest) ? readFileSync(latest, "utf8") : "";
+	const nomExe = /^path:\s*(.+)$/m.exec(latestBrut)?.[1]?.trim();
+	const cheminExe = nomExe ? `${appWindows}dist-installer/${nomExe}` : null;
+	p.check("latest.yml nomme un exe présent dans dist-installer",
+		cheminExe ? existsSync(cheminExe) : false, true);
+	if (cheminExe && existsSync(cheminExe)) {
+		const attenduSha512 = /^\s*sha512:\s*(.+)$/m.exec(latestBrut)?.[1]?.trim();
+		const attenduTaille = /^\s*size:\s*(.+)$/m.exec(latestBrut)?.[1]?.trim();
+		const obtenuSha512 = await sha512Base64(cheminExe);
+		const obtenuTaille = String((await readFile(cheminExe)).length);
+		p.check("le sha512 de l'exe correspond à latest.yml", obtenuSha512, attenduSha512);
+		p.check("la taille de l'exe correspond à latest.yml", obtenuTaille, attenduTaille);
+		p.check("le blockmap de l'exe existe", existsSync(`${cheminExe}.blockmap`), true);
+	}
 	p.done();
 } else {
 	console.log("Empaquetage — contenu de app.asar : aucun paquet local (npm run pack:win), groupe sauté");

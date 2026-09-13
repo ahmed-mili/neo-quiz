@@ -116,6 +116,9 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   `win-unpacked/` existe, le contenu de l'asar. `appId` est la clé par laquelle
   NSIS retrouve l'installation à remplacer ; `executableName` dérivé de
   `@neo-quiz/windows` a fait échouer chaque run CI Linux jusqu'au 2026-09-12.
+  Il compare aussi le sha512 (calculé sur le fichier) et la taille de l'exe
+  nommé par `latest.yml` aux valeurs qu'il y porte : c'est ce qui rougit
+  quand l'exe signé n'a pas repassé par `scripts/update-info-after-signing.mjs`.
 - `npm run check:updater` — le noyau pur de la mise à jour automatique
   (`apps/windows/electron/mise-a-jour-etat.ts`) : une erreur après « prête »
   ne retire pas le paquet téléchargé, couper le réglage oublie une

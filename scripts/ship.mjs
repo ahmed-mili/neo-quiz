@@ -131,6 +131,13 @@ export function resolveCommand(command, platform = process.platform) {
 	return platform === "win32" && command === "npm" ? "npm.cmd" : command;
 }
 
+/* Depuis Node 20.12 (CVE-2024-27980), lancer un `.cmd` SANS shell rejette
+   `EINVAL` : `npm.cmd` doit passer par `cmd.exe`. Les arguments viennent tous
+   de ce fichier (jamais de l'utilisateur), donc le shell n'ouvre rien. */
+export function spawnOptions(command) {
+	return { cwd: repositoryRoot, stdio: "inherit", shell: /\.cmd$/i.test(command) };
+}
+
 /*
  * Les coffres Obsidian d'Ahmed contre lesquels `check:markers` et
  * `audit-vaults.mjs` font leur aller-retour (mêmes chemins que le script
@@ -318,7 +325,7 @@ function git(args, options = {}) {
 /** Les mêmes commandes, mais leur sortie va à l'écran : on suit ce qui se passe. */
 function run(command, args) {
 	console.log(`  ${command} ${args.join(" ")}`);
-	execFileSync(resolveCommand(command), args, { cwd: repositoryRoot, stdio: "inherit" });
+	execFileSync(resolveCommand(command), args, spawnOptions(resolveCommand(command)));
 }
 
 function runChecks() {
@@ -327,7 +334,7 @@ function runChecks() {
 	console.log("Vérifications avant livraison :");
 	for (const check of checks) {
 		console.log(`\n— ${check.label}`);
-		execFileSync(check.command, check.args, { cwd: repositoryRoot, stdio: "inherit" });
+		execFileSync(check.command, check.args, spawnOptions(check.command));
 	}
 	if (skippedVaults) {
 		console.log(

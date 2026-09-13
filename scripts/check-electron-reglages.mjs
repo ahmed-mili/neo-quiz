@@ -222,6 +222,35 @@ await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetr
 			});
 		});
 
+		await cas(r, "le dossier du fond d'écran persisté est admis au démarrage, comme les dossiers de quiz", async () => {
+			const donnees = join(dir, "userData-fond");
+			const dossierFond = join(dir, "fond");
+			await mkdir(dossierFond, { recursive: true });
+			await mkdir(donnees, { recursive: true });
+			await writeFile(join(donnees, "settings.json"), JSON.stringify({ fond: { dossier: dossierFond, image: "a.jpg" } }), "utf-8");
+			await withSrcModule("apps/windows/electron/reglages.ts", async ({ creerReglages }) => {
+				const p = await perimetreInitial({ dossierDonnees: donnees, reglages: creerReglages(join(donnees, "settings.json")) });
+				r.check("le dossier du fond d'écran persisté est admis au démarrage, comme les dossiers de quiz",
+					await aRejete(() => p.borner(join(dossierFond, "a.jpg"))), false);
+			});
+		});
+
+		await cas(r, "discriminance : un fond avec un dossier non-chaîne ou vide n'admet rien", async () => {
+			/* `p.racines()` plutôt qu'un `borner` sur un chemin quelconque : un
+			   `dossier` vide résolu à la légère (`"" || "."`) admettrait le
+			   dossier COURANT sans qu'aucun chemin de ce test ne tombe dedans,
+			   laissant le bug passer inaperçu — c'est arrivé une fois, ici même.
+			   `racines()` doit rester VIDE, un fait que seul le vrai bug ferait mentir. */
+			const donnees = join(dir, "userData-fond-invalide");
+			await mkdir(donnees, { recursive: true });
+			await writeFile(join(donnees, "settings.json"), JSON.stringify({ fond: { dossier: "", image: "a.jpg" } }), "utf-8");
+			await withSrcModule("apps/windows/electron/reglages.ts", async ({ creerReglages }) => {
+				const p = await perimetreInitial({ dossierDonnees: donnees, reglages: creerReglages(join(donnees, "settings.json")) });
+				r.check("discriminance : un fond avec un dossier non-chaîne ou vide n'admet rien",
+					p.racines(), []);
+			});
+		});
+
 		const racine = join(dir, "vault");
 		const ailleurs = join(dir, "ailleurs");
 		await mkdir(join(racine, "Cours"), { recursive: true });

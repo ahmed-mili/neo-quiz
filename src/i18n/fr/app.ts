@@ -55,4 +55,13 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.settings.general": "Général",
 	"app.reprise.label": "Rouvrir là où on s'était arrêté",
 	"app.reprise.hint": "Au lancement, Neo Quiz rouvre le dernier quiz et la dernière question consultés.",
+
+	/* ── Fond d'écran (application seulement) ── */
+	"app.settings.wallpaper": "Fond d'écran",
+	"app.fond.none": "Aucun dossier choisi : le fond embarqué est utilisé.",
+	"app.fond.choose": "Choisir un dossier",
+	"app.fond.remove": "Retirer",
+	"app.fond.next": "Fond suivant",
+	"app.fond.disparue": "L'image du fond a disparu ; la première du dossier est utilisée.",
+	"app.fond.dossierVide": "Aucune image dans ce dossier ; le fond embarqué est utilisé.",
 };

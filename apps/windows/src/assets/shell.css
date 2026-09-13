@@ -86,7 +86,7 @@ body {
 			color-mix(in srgb, var(--background-primary) 78%, transparent),
 			color-mix(in srgb, var(--background-primary) 88%, transparent)
 		),
-		var(--background-primary) url("/wallpaper.jpg") center / cover no-repeat fixed;
+		var(--background-primary) var(--nq-fond-image, url("/wallpaper.jpg")) center / cover no-repeat fixed;
 }
 
 #neo-quiz-root {
@@ -402,6 +402,11 @@ body {
 	gap: 6px;
 	margin-top: 6px;
 }
+
+/* ── Le fond d'écran (Réglages) ── */
+.nq-fond-grille { display: grid; grid-template-columns: repeat(auto-fill, 96px); gap: 8px; }
+.nq-fond-vignette { width: 96px; height: 60px; border: 2px solid transparent; border-radius: 6px; background: center / cover no-repeat; cursor: pointer; }
+.nq-fond-vignette[data-active] { border-color: var(--text-accent); }
 
 /* ── La mise à jour automatique (rail + « À propos ») ── */
 .nq-maj-bouton { color: var(--text-accent); }

@@ -29,6 +29,7 @@ import { CLE_REGLAGES_IA } from "../electron/pont";
 import { openQuizPage } from "./ui/quiz-page";
 import { renderSettings } from "./ui/settings";
 import { monterBarreTitre } from "./ui/barre-titre";
+import { appliquerFond, fondSuivant } from "./ui/fond";
 
 /*
  * Démarrage de l'application.
@@ -325,13 +326,15 @@ async function demarrer(): Promise<void> {
 	document.title = t("app.window.title");
 	/* Montée UNE FOIS, avant le premier écran : elle survit à tous les
 	   changements d'écran qui suivent (coquille, réglages, écran vide), qui
-	   eux se démontent et se remontent par `demonterCourant`.
-	   `fondSuivant` : no-op pour l'instant, branché par le fond d'écran
-	   (tâche 4 de cette tranche). */
+	   eux se démontent et se remontent par `demonterCourant`. */
 	monterBarreTitre(document.body, {
 		ouvrirReglages: () => ouvrirReglagesCourant(),
-		fondSuivant: () => {},
+		fondSuivant: () => { void fondSuivant(); },
 	});
+	/* Le dossier du fond est DÉJÀ admis au périmètre par le principal
+	   (`perimetreInitial`, avant l'ouverture de la fenêtre) : le rendu n'a
+	   qu'à poser l'image, sans attendre les dossiers de quiz ci-dessous. */
+	await appliquerFond();
 	try {
 		const dossiers = await savedFolders();
 		if (!dossiers.length) return void mountSansDossier(root);

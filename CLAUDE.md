@@ -129,6 +129,10 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   antérieure ou trafiquée (vue inconnue, quiz manquant sur `detail`, question
   négative ou non entière) retombe sur `null` plutôt que de faire planter le
   démarrage.
+- `npm run check:fond` — le noyau pur du fond d'écran
+  (`apps/windows/src/ui/fond-pur.ts`) : quelles extensions comptent comme une
+  image de fond, et l'ordre trié cyclique de « l'image suivante » — avec son
+  repli sur la première quand la courante a disparu du disque.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` avant `$…$`).
 - `npm run check:ai-providers` — les FOURNISSEURS IA : le catalogue cloud vient
   de `net.fetchJson` (jamais codé en dur), un `/api/tags` qui répond 200 SANS

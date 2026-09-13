@@ -77,4 +77,13 @@ export const EN_APP = {
 	"app.settings.general": "General",
 	"app.reprise.label": "Reopen where you left off",
 	"app.reprise.hint": "At launch, Neo Quiz opens the last quiz and question you were on.",
+
+	/* ── Fond d'écran (application seulement) ── */
+	"app.settings.wallpaper": "Wallpaper",
+	"app.fond.none": "No folder chosen: the built-in wallpaper is used.",
+	"app.fond.choose": "Choose a folder",
+	"app.fond.remove": "Remove",
+	"app.fond.next": "Next wallpaper",
+	"app.fond.disparue": "The wallpaper image is gone; the first image of the folder is used.",
+	"app.fond.dossierVide": "No image in that folder; the built-in wallpaper is used.",
 } as const;

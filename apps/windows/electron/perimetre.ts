@@ -39,6 +39,7 @@ import * as path from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
 import { contratDepuisAbsolu } from "./index-fichiers";
 import { normaliser } from "./parcours";
+import { CLE_REGLAGES_FOND } from "./pont";
 import type { Reglages } from "./reglages";
 
 export interface Perimetre {
@@ -180,6 +181,19 @@ export async function perimetreInitial(options: {
 			return perimetre;
 		}
 		for (const chemin of cheminsDeDossiers(valeur)) await perimetre.autoriser(chemin);
+	}
+	/* Le dossier du fond d'écran (tâche 4 de la tranche 8), ADMIS de la MÊME
+	   façon que les dossiers de quiz : sans quoi, au lancement suivant, le
+	   protocole `app:` (`ressources.ts`) rejetterait 403 chaque image du
+	   dossier choisi lors d'une session antérieure — le fond disparaîtrait
+	   au premier redémarrage. Un `dossier` non-chaîne ou vide n'admet rien :
+	   c'est le cas que `check:electron-reglages` éprouve par discriminance. */
+	try {
+		const fond = await options.reglages.lire(CLE_REGLAGES_FOND);
+		const dossier = fond && typeof fond === "object" ? (fond as { dossier?: unknown }).dossier : undefined;
+		if (typeof dossier === "string" && dossier.trim() !== "") await perimetre.autoriser(dossier);
+	} catch (e) {
+		console.warn(LOG_PREFIX, "réglage du fond illisible au démarrage:", e);
 	}
 	return perimetre;
 }

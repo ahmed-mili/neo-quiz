@@ -27,6 +27,7 @@ import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host"
 import { poserLogoObsidian } from "./marques";
 import { monterEtatApropos } from "./mise-a-jour";
 import { chargerReprise, reglerReprise } from "./reprise";
+import { monterReglagesFond } from "./fond";
 
 export function renderSettings(
 	root: HTMLElement,
@@ -182,6 +183,11 @@ export function renderSettings(
 	repriseCase.addEventListener("change", () => { void reglerReprise(repriseCase.checked); });
 	void chargerReprise().then(r => { repriseCase.checked = r.actif; });
 
+	/* ── Fond d'écran ── */
+	const fond = ajouter(contenu, "section", "nq-reglages-section");
+	ajouter(fond, "h3", "nq-reglages-titre", t("app.settings.wallpaper"));
+	const demonterFond = monterReglagesFond(fond);
+
 	/* ── Les outils IA ──
 	   Le dossier est une donnée persistée, donc sa valeur n'est jamais
 	   traduite. La perte de focus évite de soumettre un chemin incomplet à la
@@ -278,5 +284,5 @@ export function renderSettings(
 	/* Le démontage désabonne désormais la mise à jour. Il est rendu quand
 	   même parce que TOUT écran en rend un — `main.ts` appelle
 	   `demonterCourant` sans savoir de quel écran il s'agit. */
-	return () => { demonterMaj(); root.replaceChildren(); };
+	return () => { demonterMaj(); demonterFond(); root.replaceChildren(); };
 }

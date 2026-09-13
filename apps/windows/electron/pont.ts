@@ -580,6 +580,16 @@ export const CLE_REGLAGES_ZOOM = "zoom";
 export const CLE_REGLAGES_REPRISE = "reprise";
 export const CLE_DERNIERE_VUE = "derniereVue";
 
+/** La clé du fond d'écran (`neo.reglages`) : `{ dossier: string; image: string
+    }`, ou absente (fond embarqué). Écrite par le RENDU SEUL — ni chemin
+    résolu ni URL, un chemin ABSOLU déjà admis au périmètre (par le
+    sélecteur natif à l'écriture, et par `perimetreInitial` au démarrage
+    suivant, exactement comme `CLE_DOSSIERS` : voir `electron/perimetre.ts`).
+    Pas de garde à l'écriture comme pour `folders` ou `ai` : un chemin qui
+    n'a jamais transité par le sélecteur n'est simplement pas SERVABLE par
+    `app:` (403), il ne donne aucun accès disque supplémentaire au rendu. */
+export const CLE_REGLAGES_FOND = "fond";
+
 declare global {
 	interface Window {
 		/** Posé par le préchargement (`contextBridge.exposeInMainWorld`). Le

@@ -50,4 +50,9 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.menu.fullscreen": "Plein écran",
 	"app.menu.devtools": "Outils de développement",
 	"app.menu.nextWallpaper": "Fond suivant",
+
+	/* ── Réglages « Général » (application seulement) ── */
+	"app.settings.general": "Général",
+	"app.reprise.label": "Rouvrir là où on s'était arrêté",
+	"app.reprise.hint": "Au lancement, Neo Quiz rouvre le dernier quiz et la dernière question consultés.",
 };

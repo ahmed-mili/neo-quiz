@@ -571,6 +571,15 @@ export const CLE_REGLAGES_MAJ = "updates";
     s'applique aussi à une valeur que la tâche 2 tenterait d'écrire à la main. */
 export const CLE_REGLAGES_ZOOM = "zoom";
 
+/** La clé de l'interrupteur « rouvrir là où on s'était arrêté » (`neo.
+    reglages`), et la clé de la dernière vue elle-même (`DerniereVue`,
+    `apps/windows/src/ui/reprise.ts`). Écrites par le RENDU SEUL, jamais
+    gardées : ni chemin résolu ni URL, un chemin du contrat (`quiz`) que le
+    scanner valide avant tout usage (`Scanner.getQuiz`) — un chemin qui ne
+    désigne plus rien renvoie simplement à l'accueil. */
+export const CLE_REGLAGES_REPRISE = "reprise";
+export const CLE_DERNIERE_VUE = "derniereVue";
+
 declare global {
 	interface Window {
 		/** Posé par le préchargement (`contextBridge.exposeInMainWorld`). Le

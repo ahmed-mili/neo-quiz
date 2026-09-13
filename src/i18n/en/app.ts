@@ -72,4 +72,9 @@ export const EN_APP = {
 	"app.menu.fullscreen": "Toggle full screen",
 	"app.menu.devtools": "Show developer tools",
 	"app.menu.nextWallpaper": "Next wallpaper",
+
+	/* ── Réglages « Général » (application seulement) ── */
+	"app.settings.general": "General",
+	"app.reprise.label": "Reopen where you left off",
+	"app.reprise.hint": "At launch, Neo Quiz opens the last quiz and question you were on.",
 } as const;

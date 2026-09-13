@@ -48,6 +48,8 @@ import type { ReviewStore } from "../../../../src/review/review-store";
 import type { ModuleOverride } from "../../../../src/dashboard/quiz-modules";
 import { ecrireReglage, lireReglage } from "../host/folder";
 import { monterBoutonRail } from "./mise-a-jour";
+import { noterVue } from "./reprise";
+import type { DerniereVue } from "./reprise";
 
 /* ══════════════════════════════════════════════════════════
    LES RÉGLAGES DES PAGES « ACCUEIL » / « MES QUIZ »
@@ -126,6 +128,46 @@ let vueCourante: DashboardViewName = "home";
  */
 let quizSelectionne: QuizIndexEntry | null = null;
 let vuePrecedente: DashboardViewName = "home";
+
+/**
+ * La question à ouvrir au TOUT PREMIER rendu de la page « detail », posée
+ * par `reprendre()` au démarrage (reprise de session) et consommée par le
+ * prochain `peindre()` — même patron que `editionEnAttente`, un état posé
+ * une fois et remis à `undefined` aussitôt lu, pour qu'un aller-retour
+ * ultérieur sur ce quiz reparte de la question courante et non de celle
+ * de la session précédente.
+ */
+let questionInitiale: number | undefined;
+
+/**
+ * Pose l'état de la coquille AVANT le tout premier `monterDashboard`, pour
+ * reprendre la session précédente : appelée par `main.ts`, juste après avoir
+ * chargé le réglage (`chargerReprise`) et juste avant de monter. Fonction de
+ * MODULE et non de `monterDashboard` : `ctx.canOpen` n'existe qu'une fois la
+ * coquille montée, et la reprise doit poser son état AVANT ce montage. Sa
+ * seule garde ici est celle qu'`ctx.canOpen` vaut de toute façon dans cette
+ * application — `() => true`, toutes les vues sont ouvertes (voir `ctx`
+ * ci-dessous) : les deux ne peuvent pas diverger tant que ce reste vrai.
+ *
+ * `"detail"` exige que le quiz existe ENCORE dans le catalogue : une note
+ * supprimée entre deux lancements n'est pas une erreur, elle ramène
+ * silencieusement à l'accueil (pas de Notice, voir le brief). Rend `false`
+ * dans ce seul cas — l'appelant laisse alors la coquille démarrer sur son
+ * défaut ("home").
+ */
+export function reprendre(vue: DerniereVue, scanner: Scanner): boolean {
+	if (vue.vue === "detail") {
+		const quiz = vue.quiz ? scanner.getQuiz(vue.quiz) : undefined;
+		if (!quiz) return false;
+		quizSelectionne = quiz;
+		vuePrecedente = "quizzes";
+		vueCourante = "detail";
+		questionInitiale = vue.question;
+		return true;
+	}
+	vueCourante = vue.vue;
+	return true;
+}
 
 export interface MonterDashboardDeps {
 	scanner: Scanner;
@@ -301,6 +343,11 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 				   sous Obsidian (`dashboard.ts`, `case "detail"`) : lue au clic,
 				   elle aurait pu être écrasée entre-temps. */
 				const cible = vuePrecedente;
+				// Consommée ici : le prochain rendu de CE quiz (frappe, retour
+				// arrière) repart de la question courante, pas de la question
+				// de la session précédente.
+				const initial = questionInitiale;
+				questionInitiale = undefined;
 				detail.render(contentEl, quiz, {
 					startEditing: edit,
 					onBack: () => {
@@ -312,6 +359,8 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 						if (cible === "quizzes") quizzes.openFolderOfQuiz(quiz.path);
 					},
 					isStale: () => vueCourante !== "detail",
+					initialQuestion: initial,
+					onQuestionChange: (i) => noterVue({ vue: "detail", quiz: quiz.path, question: i }),
 				});
 				break;
 			}
@@ -353,6 +402,9 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 			// Aucun bouton du rail ne porte "detail" : `setActive` éteint donc
 			// la carte active, comme sous Obsidian.
 			nav.setActive("detail");
+			// Notée SANS la question : `onQuestionChange` la précisera au premier
+			// changement — ouvrir un quiz reprend d'abord sa question courante.
+			noterVue({ vue: "detail", quiz: data.quiz.path });
 			peindre();
 			return;
 		}
@@ -363,6 +415,7 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 		if (vue === "quizzes") quizzes.resetDrilldown();
 		vueCourante = vue;
 		nav.setActive(vue);
+		noterVue({ vue });
 		peindre();
 	}
 

@@ -73,6 +73,13 @@ export interface QuizPageSpec {
 	    question est vierge, la relire n'apprendrait rien. Ne vaut qu'à la
 	    PREMIÈRE ouverture de cette clé — ensuite l'utilisateur décide. */
 	startEditing?: boolean;
+	/** La question à afficher AU PREMIER RENDU de cette clé (bornée). Pour
+	    l'hôte qui rouvre là où on s'était arrêté ; le greffon ne la passe
+	    pas. Ne vaut qu'à la première ouverture de la clé, comme `startEditing`. */
+	initialQuestion?: number;
+	/** Appelée à chaque changement de question courante, par `goToQuestion`
+	    et nulle part ailleurs — c'est le seul endroit où `activeIdx` bouge. */
+	onQuestionChange?(index: number): void;
 }
 
 /** Dépendances d'une page « quiz », indépendantes du dashboard — et de
@@ -115,7 +122,7 @@ export interface QuizPageHandlers {
     membre de plus sur le ctx aurait forcé la fenêtre à fabriquer une fausse
     vue. C'est le même découpage que `QuizPageSpec.onBack`/`isStale`, dont
     ces champs sont la projection exacte. */
-export type DetailHostSpec = Pick<QuizPageSpec, "onBack" | "isStale" | "startEditing">;
+export type DetailHostSpec = Pick<QuizPageSpec, "onBack" | "isStale" | "startEditing" | "initialQuestion" | "onQuestionChange">;
 
 export interface DetailHandlers {
 	render(container: HTMLElement, quiz: QuizIndexEntry, host: DetailHostSpec): void;
@@ -154,6 +161,8 @@ export function createDetailHandlers(ctx: DashboardShellCtx): DetailHandlers {
 				},
 				isStale: host.isStale,
 				startEditing: host.startEditing,
+				initialQuestion: host.initialQuestion,
+				onQuestionChange: host.onQuestionChange,
 			});
 		},
 		dispose: () => page.dispose(),
@@ -250,6 +259,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			currentPath = spec.key;
 			draft = null;
 			activeIdx = 0;
+			if (typeof spec.initialQuestion === "number") activeIdx = Math.max(0, Math.floor(spec.initialQuestion));
 			editing = false;
 		} else if (draft && draftIsStale(draft)) {
 			/* La note a changé DEHORS (éditeur markdown, synchro) pendant que la
@@ -490,6 +500,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		const dir: 1 | -1 = clamped > activeIdx ? 1 : -1;
 		const hops = Math.abs(clamped - activeIdx);
 		activeIdx = clamped;
+		spec.onQuestionChange?.(activeIdx);
 		const q = draft.questions[activeIdx];
 		slideTo(slideHost, (slide) => fillSlide(slide, q, activeIdx, listCol, panel, nav, spec), dir, hops);
 		paintList(listCol, panel, nav, spec);

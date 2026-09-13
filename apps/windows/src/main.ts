@@ -20,7 +20,8 @@ import type { StatsStore } from "../../../src/dashboard/stats-store";
 import { creerJournalApp } from "./review/store";
 import { creerStatsApp } from "./review/stats";
 import { createRenameDetector } from "../../../src/review/rename-match";
-import { chargerReglagesPages, monterDashboard } from "./ui/dashboard-shell";
+import { chargerReglagesPages, monterDashboard, reprendre } from "./ui/dashboard-shell";
+import { chargerReprise } from "./ui/reprise";
 import { aiSettingsDefaults } from "../../../src/dashboard/ai-settings-host";
 import type { AiSettingsHost } from "../../../src/dashboard/ai-settings-host";
 import type { AiSettings } from "../../../src/types/dashboard-ctx";
@@ -438,6 +439,12 @@ async function demarrer(): Promise<void> {
 			now: () => Date.now(),
 		});
 		scanner.onChange(quizzes => detecteur.observer(quizzes));
+		/* ROUVRIR LÀ OÙ ON S'ÉTAIT ARRÊTÉ : posé sur la coquille AVANT son
+		   premier montage — `reprendre` échoue silencieusement (quiz supprimé
+		   entre deux lancements) et laisse alors la coquille sur son défaut
+		   ("home"), sans Notice : une note disparue n'est pas une erreur. */
+		const reprise = await chargerReprise();
+		if (reprise.actif && reprise.vue) reprendre(reprise.vue, scanner);
 		mount(root, scanner, store, stats);
 	} catch (e) {
 		root.textContent = t("app.error.startup", { error: e instanceof Error ? e.message : String(e) });

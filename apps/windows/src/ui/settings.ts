@@ -26,6 +26,7 @@ import { cleModule, libelleModule } from "../review/catalogue";
 import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host";
 import { poserLogoObsidian } from "./marques";
 import { monterEtatApropos } from "./mise-a-jour";
+import { chargerReprise, reglerReprise } from "./reprise";
 
 export function renderSettings(
 	root: HTMLElement,
@@ -163,6 +164,23 @@ export function renderSettings(
 			})();
 		});
 	}
+
+	/* ── Général ──
+	   L'interrupteur « rouvrir là où on s'était arrêté » : même patron que
+	   l'automatique des mises à jour (`nq-maj-auto`, `mise-a-jour.ts`). Décoché
+	   par défaut à l'affichage, le temps de la lecture (`chargerReprise`) —
+	   corrigé dès qu'elle répond, sans clignoter puisque le réglage par défaut
+	   est `true` et que la lecture est quasi instantanée (réglages déjà en
+	   mémoire côté principal). */
+	const general = ajouter(contenu, "section", "nq-reglages-section");
+	ajouter(general, "h3", "nq-reglages-titre", t("app.settings.general"));
+	const repriseLigne = ajouter(general, "label", "nq-maj-auto");
+	const repriseCase = ajouter(repriseLigne, "input");
+	repriseCase.type = "checkbox";
+	ajouter(repriseLigne, "span", undefined, t("app.reprise.label"));
+	ajouter(general, "p", "nq-reglages-aide", t("app.reprise.hint"));
+	repriseCase.addEventListener("change", () => { void reglerReprise(repriseCase.checked); });
+	void chargerReprise().then(r => { repriseCase.checked = r.actif; });
 
 	/* ── Les outils IA ──
 	   Le dossier est une donnée persistée, donc sa valeur n'est jamais

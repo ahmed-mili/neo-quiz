@@ -124,6 +124,11 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
 - `npm run check:menu-app` — l'arbre pur du menu d'application (identifiants
   uniques, paliers d'échelle bornés comme le principal, coche sur le zoom
   courant).
+- `npm run check:reprise` — le noyau pur de « rouvrir là où on s'était arrêté »
+  (`apps/windows/src/ui/reprise.ts`, `lireDerniereVue`) : une valeur brute
+  antérieure ou trafiquée (vue inconnue, quiz manquant sur `detail`, question
+  négative ou non entière) retombe sur `null` plutôt que de faire planter le
+  démarrage.
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` avant `$…$`).
 - `npm run check:ai-providers` — les FOURNISSEURS IA : le catalogue cloud vient
   de `net.fetchJson` (jamais codé en dur), un `/api/tags` qui répond 200 SANS

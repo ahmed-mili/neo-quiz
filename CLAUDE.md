@@ -121,6 +121,9 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   ne retire pas le paquet téléchargé, couper le réglage oublie une
   vérification en cours mais garde « prête ». Le câblage electron-updater
   (`mise-a-jour.ts`) ne s'éprouve qu'installé, sur deux releases.
+- `npm run check:menu-app` — l'arbre pur du menu d'application (identifiants
+  uniques, paliers d'échelle bornés comme le principal, coche sur le zoom
+  courant).
 - `npm run check:math-render` — la segmentation LaTeX partagée (`$$…$$` avant `$…$`).
 - `npm run check:ai-providers` — les FOURNISSEURS IA : le catalogue cloud vient
   de `net.fetchJson` (jamais codé en dur), un `/api/tags` qui répond 200 SANS

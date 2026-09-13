@@ -27,6 +27,7 @@ import type { AiSettings } from "../../../src/types/dashboard-ctx";
 import { CLE_REGLAGES_IA } from "../electron/pont";
 import { openQuizPage } from "./ui/quiz-page";
 import { renderSettings } from "./ui/settings";
+import { monterBarreTitre } from "./ui/barre-titre";
 
 /*
  * Démarrage de l'application.
@@ -55,6 +56,17 @@ import { renderSettings } from "./ui/settings";
  * (`onCloseRequested`, plus bas).
  */
 let demonterCourant: (() => void | Promise<void>) | null = null;
+
+/**
+ * L'entrée « Réglages… » du menu d'application (et `Ctrl+,`) : ce que fait
+ * exactement ce bouton dépend de l'écran affiché — ouvrir la page Réglages
+ * une fois la coquille montée, ou le sélecteur de dossier tant qu'aucun
+ * dossier n'est ouvert. La barre est montée UNE FOIS, avant le premier écran
+ * (voir `demarrer`) : elle ne peut donc pas fermer directement sur `root` /
+ * `scanner` / `store` / `stats`, qui n'existent pas encore à son montage.
+ * `mount` et `mountSansDossier` réaffectent cette variable à chaque montage.
+ */
+let ouvrirReglagesCourant: () => void = () => {};
 
 /* ═══ LES RÉGLAGES IA — l'`AiSettingsHost` de l'application ═══
 
@@ -111,6 +123,7 @@ function demonter(): Promise<void> | void {
 export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore, stats: StatsStore): void {
 	void demonter();
 	root.textContent = "";
+	ouvrirReglagesCourant = () => ouvrirReglages(root, scanner, store, stats);
 	demonterCourant = monterDashboard(root, {
 		scanner,
 		statsStore: stats,
@@ -220,6 +233,11 @@ async function choisirDossier(chemin: string): Promise<void> {
 function mountSansDossier(root: HTMLElement): void {
 	void demonter();
 	root.textContent = "";
+	// Tant qu'aucun dossier n'est ouvert, « Réglages… » propose le même
+	// sélecteur natif que le bouton de cet écran — il n'y a rien d'autre à
+	// régler avant qu'un dossier existe. L'annulation n'est pas une erreur
+	// (voir `changerDossier`).
+	ouvrirReglagesCourant = () => { void changerDossier(); };
 
 	const ecran = ajouter(root, "div", "nq-accueil");
 
@@ -304,6 +322,15 @@ async function demarrer(): Promise<void> {
 	// « auto » : la langue de l'hôte, sinon celle du navigateur.
 	setLanguage("auto");
 	document.title = t("app.window.title");
+	/* Montée UNE FOIS, avant le premier écran : elle survit à tous les
+	   changements d'écran qui suivent (coquille, réglages, écran vide), qui
+	   eux se démontent et se remontent par `demonterCourant`.
+	   `fondSuivant` : no-op pour l'instant, branché par le fond d'écran
+	   (tâche 4 de cette tranche). */
+	monterBarreTitre(document.body, {
+		ouvrirReglages: () => ouvrirReglagesCourant(),
+		fondSuivant: () => {},
+	});
 	try {
 		const dossiers = await savedFolders();
 		if (!dossiers.length) return void mountSansDossier(root);

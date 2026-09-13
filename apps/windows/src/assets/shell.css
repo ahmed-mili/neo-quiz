@@ -470,3 +470,43 @@ body {
 .nq-reglages-chemin-cli:focus {
 	border-color: var(--interactive-accent);
 }
+
+/* ── LA BARRE DE TITRE (style Neo Calendar) ──
+   88px : la largeur RÉELLE du rail du tableau de bord (`.qbd-sidebar`,
+   `src/assets/css/dashboard/dashboard-base.css`) — la teinte gauche du
+   dégradé s'aligne dessus. Sur la page Réglages et l'écran sans dossier, il
+   n'y a pas de rail : la teinte gauche reste fixe (Neo Calendar resserre sa
+   bande latérale repliée ; ici on la garde fixe, plus simple). */
+:root { --nq-barre-hauteur: 45px; --nq-rail-largeur: 88px; }
+.nq-barre {
+	position: fixed; top: 0; left: 0; right: 0; height: var(--nq-barre-hauteur);
+	display: flex; align-items: center; z-index: 5;
+	/* Deux teintes : celle du rail à gauche, celle de la coquille ailleurs. */
+	background: linear-gradient(to right,
+		color-mix(in srgb, var(--background-secondary) 54%, transparent) 0 var(--nq-rail-largeur),
+		color-mix(in srgb, var(--background-primary) 40%, transparent) var(--nq-rail-largeur) 100%);
+	-webkit-app-region: drag;
+}
+.nq-barre button { -webkit-app-region: no-drag; }
+.nq-barre-gauche { display: flex; align-items: center; flex: none; width: var(--nq-rail-largeur); height: 100%; padding-left: 10px; box-sizing: border-box; border-right: 1px solid var(--background-modifier-border); }
+.nq-barre-glisse { flex: 1 1 auto; align-self: stretch; }
+.nq-barre-controles { display: flex; align-items: center; gap: 15.5px; padding-right: 24px; }
+.nq-barre-menu, .nq-barre-controle { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.nq-barre-menu:hover, .nq-barre-menu[data-open], .nq-barre-controle:hover { background: color-mix(in srgb, var(--text-normal) 10%, transparent); color: var(--text-normal); }
+.nq-barre-menu svg, .nq-barre-controle svg { width: 16px; height: 16px; }
+.nq-barre[data-focused="false"] .nq-barre-menu svg, .nq-barre[data-focused="false"] .nq-barre-controle svg { opacity: 0.3; }
+#neo-quiz-root { padding-top: var(--nq-barre-hauteur); box-sizing: border-box; }
+
+/* ── LE MENU D'APPLICATION ── */
+.nq-menu-couche { position: fixed; inset: 0; z-index: 10002; }
+.nq-menu-panneau { position: fixed; min-width: 143px; padding: 12px 0; border: 1px solid var(--background-modifier-border); border-radius: 8px; background: var(--background-primary); color: var(--text-normal); box-shadow: 0 18px 36px -8px rgba(0,0,0,.45), 0 3px 8px -2px rgba(0,0,0,.24); display: flex; flex-direction: column; }
+.nq-menu-ligne { display: flex; align-items: center; width: 100%; height: 28px; padding: 0 10px 0 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; white-space: nowrap; cursor: pointer; }
+.nq-menu-coche { display: flex; align-items: center; justify-content: center; width: 28px; height: 100%; color: var(--text-muted); }
+.nq-menu-coche svg { width: 14px; height: 14px; }
+.nq-menu-libelle { flex: 1 1 auto; }
+.nq-menu-raccourci { flex: none; margin-left: 24px; color: var(--text-faint); font-size: 12px; }
+.nq-menu-chevron { display: flex; flex: none; margin-left: 24px; color: var(--text-muted); }
+.nq-menu-chevron svg { width: 14px; height: 14px; }
+.nq-menu-ligne:hover, .nq-menu-ligne:focus, .nq-menu-ligne[aria-expanded="true"] { background: var(--background-modifier-hover); outline: none; }
+.nq-menu-separateur { height: 1px; margin: 6px 0; background: var(--background-modifier-border); }
+.nq-menu-version { display: flex; align-items: center; height: 28px; padding: 0 10px 0 28px; color: var(--text-faint); font-size: 13px; cursor: default; }

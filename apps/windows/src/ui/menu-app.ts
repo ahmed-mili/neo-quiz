@@ -1,0 +1,206 @@
+/* ══════════════════════════════════════════════════════════
+   LE MENU D'APPLICATION — la cascade
+
+   Portale un empilement de panneaux `position: fixed` au `body`, un par
+   niveau ouvert (premier sous l'ancre, chaque sous-menu à droite de sa
+   ligne). L'arbre vient de `menu-app-arbre.ts` (pur) ; ce module ne fait que
+   le poser à l'écran et router le clic/clavier vers `deps.executer`.
+
+   Même geste que `ui-select.ts` (portail au `body`, fermeture clic-dehors /
+   Échap) mais un fichier séparé : `ui-select.ts` est du code PARTAGÉ, une
+   cascade à plusieurs niveaux avec navigation clavier au clavier lui est
+   étrangère, et le dupliquer ici évite d'alourdir un module que le greffon
+   charge aussi.
+══════════════════════════════════════════════════════════ */
+import { ajouter } from "../../../../src/dom";
+import { buildMenu } from "./menu-app-arbre";
+import type { EntreeMenu } from "./menu-app-arbre";
+import { poserIcone } from "../host/ui";
+
+export interface ActionsMenu {
+	version: string;
+	zoom(): number;
+	executer(id: string, value?: number): void;
+}
+
+/** Un niveau ouvert de la cascade : le panneau posé à l'écran et l'index de
+    la ligne active au clavier (-1 : rien de survolé/focalisé). */
+interface Panneau {
+	entrees: EntreeMenu[];
+	el: HTMLElement;
+	lignes: HTMLButtonElement[];
+	actif: number;
+}
+
+/**
+ * Ouvre le menu d'application ancré sous `ancre`. Rend la fonction de
+ * fermeture ; `ancre` porte `data-open` tant que le menu est ouvert (la
+ * barre s'en sert pour teinter le chevron).
+ */
+export function ouvrirMenuApp(ancre: HTMLElement, deps: ActionsMenu): () => void {
+	const arbre = buildMenu({ version: deps.version, zoom: deps.zoom() });
+
+	const couche = document.createElement("div");
+	couche.className = "nq-menu-couche";
+	document.body.appendChild(couche);
+	ancre.setAttribute("data-open", "");
+
+	const panneaux: Panneau[] = [];
+
+	function fermer(): void {
+		document.removeEventListener("keydown", surClavier, true);
+		window.removeEventListener("blur", fermer);
+		ancre.removeAttribute("data-open");
+		couche.remove();
+	}
+
+	/** Retire tous les panneaux à partir du niveau `depuis` (inclus). */
+	function fermerDepuis(depuis: number): void {
+		while (panneaux.length > depuis) {
+			panneaux.pop()!.el.remove();
+		}
+	}
+
+	/** Positionne un panneau déjà construit, rabattu dans la fenêtre s'il
+	    déborde à droite ou en bas. */
+	function positionner(el: HTMLElement, left: number, top: number): void {
+		// Posé hors écran d'abord pour lire sa taille réelle, puis rabattu.
+		el.style.left = "-9999px";
+		el.style.top = "-9999px";
+		couche.appendChild(el);
+		const { offsetWidth: largeur, offsetHeight: hauteur } = el;
+		const l = Math.max(4, Math.min(left, window.innerWidth - largeur - 4));
+		const h = Math.max(4, Math.min(top, window.innerHeight - hauteur - 4));
+		el.style.left = `${l}px`;
+		el.style.top = `${h}px`;
+	}
+
+	/** Construit et pose le panneau du niveau `niveau` pour `entrees`, à la
+	    position donnée. Ferme d'abord tout niveau plus profond. */
+	function ouvrirNiveau(niveau: number, entrees: EntreeMenu[], left: number, top: number): void {
+		fermerDepuis(niveau);
+
+		const panneau = document.createElement("div");
+		panneau.className = "nq-menu-panneau";
+		const lignes: HTMLButtonElement[] = [];
+
+		for (const entree of entrees) {
+			if (entree.kind === "separator") {
+				ajouter(panneau, "div", "nq-menu-separateur");
+				continue;
+			}
+			if (entree.kind === "version") {
+				ajouter(panneau, "div", "nq-menu-version", entree.label);
+				continue;
+			}
+
+			const ligne = document.createElement("button");
+			ligne.type = "button";
+			ligne.className = "nq-menu-ligne";
+
+			const coche = ajouter(ligne, "span", "nq-menu-coche");
+			if (entree.kind === "check" && entree.checked) poserIcone(coche, "check");
+
+			ajouter(ligne, "span", "nq-menu-libelle", entree.label);
+
+			if (entree.kind === "action" || entree.kind === "check") {
+				const raccourci = "shortcut" in entree ? entree.shortcut : undefined;
+				if (raccourci) ajouter(ligne, "span", "nq-menu-raccourci", raccourci);
+			}
+
+			if (entree.kind === "submenu") {
+				ligne.setAttribute("aria-expanded", "false");
+				const chevron = ajouter(ligne, "span", "nq-menu-chevron");
+				poserIcone(chevron, "chevron-right");
+			}
+
+			if (entree.kind === "action" && entree.disabled) ligne.disabled = true;
+
+			ligne.addEventListener("click", () => activer(entree, ligne));
+			ligne.addEventListener("mouseenter", () => {
+				panneau_focaliser(lignes.indexOf(ligne));
+				if (entree.kind === "submenu") ouvrirSousMenu(niveau, entree, ligne);
+				else fermerDepuis(niveau + 1);
+			});
+
+			panneau.appendChild(ligne);
+			lignes.push(ligne);
+		}
+
+		positionner(panneau, left, top);
+		panneaux[niveau] = { entrees, el: panneau, lignes, actif: -1 };
+	}
+
+	function panneau_focaliser(index: number): void {
+		const p = panneaux[panneaux.length - 1];
+		if (!p) return;
+		p.actif = index;
+		for (const [i, l] of p.lignes.entries()) {
+			if (i === index) l.focus();
+		}
+	}
+
+	function ouvrirSousMenu(niveauParent: number, entree: EntreeMenu & { kind: "submenu" }, ligneEl: HTMLElement): void {
+		panneaux[niveauParent].lignes.forEach(l => l.removeAttribute("aria-expanded"));
+		ligneEl.setAttribute("aria-expanded", "true");
+		const rect = ligneEl.getBoundingClientRect();
+		ouvrirNiveau(niveauParent + 1, entree.items, rect.right - 4, rect.top - 12);
+	}
+
+	function activer(entree: EntreeMenu, ligneEl: HTMLElement): void {
+		if (entree.kind === "submenu") {
+			ouvrirSousMenu(panneaux.length - 1, entree, ligneEl);
+			return;
+		}
+		if (entree.kind === "action" && entree.disabled) return;
+		if (entree.kind === "action") {
+			deps.executer(entree.id);
+			fermer();
+		} else if (entree.kind === "check") {
+			deps.executer(entree.id, entree.value);
+			fermer();
+		}
+	}
+
+	function surClavier(e: KeyboardEvent): void {
+		if (e.key === "Escape") { e.preventDefault(); fermer(); return; }
+		const p = panneaux[panneaux.length - 1];
+		if (!p) return;
+		if (e.key === "ArrowDown") {
+			e.preventDefault();
+			panneau_focaliser((p.actif + 1 + p.lignes.length) % p.lignes.length);
+		} else if (e.key === "ArrowUp") {
+			e.preventDefault();
+			panneau_focaliser((p.actif - 1 + p.lignes.length) % p.lignes.length);
+		} else if (e.key === "ArrowRight") {
+			const entree = p.entrees.filter(x => x.kind !== "separator" && x.kind !== "version")[p.actif];
+			if (entree && entree.kind === "submenu") {
+				e.preventDefault();
+				ouvrirSousMenu(panneaux.length - 1, entree, p.lignes[p.actif]);
+				panneau_focaliser(0);
+			}
+		} else if (e.key === "ArrowLeft") {
+			if (panneaux.length > 1) {
+				e.preventDefault();
+				fermerDepuis(panneaux.length - 1);
+			}
+		} else if (e.key === "Enter") {
+			if (p.actif >= 0) {
+				e.preventDefault();
+				const entree = p.entrees.filter(x => x.kind !== "separator" && x.kind !== "version")[p.actif];
+				if (entree) activer(entree, p.lignes[p.actif]);
+			}
+		}
+	}
+
+	couche.addEventListener("mousedown", (e) => {
+		if (e.target === couche) fermer();
+	});
+	document.addEventListener("keydown", surClavier, true);
+	window.addEventListener("blur", fermer);
+
+	const rectAncre = ancre.getBoundingClientRect();
+	ouvrirNiveau(0, arbre, rectAncre.left, rectAncre.bottom + 4);
+
+	return fermer;
+}

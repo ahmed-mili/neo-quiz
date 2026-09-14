@@ -1,0 +1,68 @@
+.nqi-legal {
+	position: absolute;
+	left: 58px;
+	top: 412px;
+	width: 760px;
+}
+
+.nqi-legal-copy {
+	margin: 0;
+	font-size: 13.5px;
+	line-height: 1.48;
+	font-weight: 420;
+	letter-spacing: -.06px;
+	color: rgba(165, 183, 214, .80);
+}
+
+.nqi-legal-link {
+	color: #7ea8ff;
+	font-weight: 500;
+}
+
+.nqi-feedback {
+	position: absolute;
+	left: 50px;
+	bottom: 43px;
+	display: inline-flex;
+	align-items: center;
+	gap: 11px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: #7fb0ff;
+	font-size: 13.5px;
+	font-weight: 520;
+	cursor: pointer;
+}
+
+.nqi-feedback:hover { text-decoration: underline; }
+
+.nqi-feedback-icon {
+	position: relative;
+	width: 18px;
+	height: 15px;
+	border: 1.5px solid currentColor;
+	border-radius: 3px;
+}
+
+.nqi-feedback-icon::before {
+	content: "";
+	position: absolute;
+	left: 2px;
+	bottom: -5px;
+	width: 6px;
+	height: 6px;
+	border-left: 1.5px solid currentColor;
+	transform: skew(-25deg);
+}
+
+.nqi-feedback-icon::after {
+	content: "!";
+	position: absolute;
+	inset: -3px 0 0;
+	display: grid;
+	place-items: center;
+	font-size: 10px;
+	font-weight: 800;
+	line-height: 1;
+}

@@ -19,11 +19,14 @@ const sortie = join(windows, "dist-bootstrapper");
 await rm(sortie, { recursive: true, force: true });
 await mkdir(sortie, { recursive: true });
 
-/* Principal + préchargement restent CommonJS pour la même raison que
-   `electron/construire.mjs` : un préchargement sandboxé ne charge pas un
-   module ES, alors que le package Windows est `type: module`. */
+/* Le point d'entrée `main-ui.ts` enveloppe le principal historique sans le
+   recopier : on conserve ainsi la logique d'installation existante tout en
+   ajoutant les commandes propres à la fenêtre de référence. */
 await build({
-	entryPoints: [join(ici, "main.ts"), join(ici, "preload.ts")],
+	entryPoints: {
+		main: join(ici, "main-ui.ts"),
+		preload: join(ici, "preload.ts"),
+	},
 	outdir: sortie,
 	outExtension: { ".js": ".cjs" },
 	bundle: true,
@@ -34,11 +37,11 @@ await build({
 	logLevel: "info",
 });
 
-/* Le rendu est un paquet navigateur distinct : aucun builtin Node ne doit
-   pouvoir être résolu ici. Cette séparation rend une importation accidentelle
-   de `node:fs` bruyante au build au lieu de l'externaliser silencieusement. */
+/* Le rendu de référence reste un paquet navigateur distinct : aucun builtin
+   Node ne doit pouvoir être résolu ici, et l'ancien rendu reste disponible
+   dans le dépôt pour faciliter une comparaison visuelle pendant la revue. */
 await build({
-	entryPoints: [join(ici, "renderer.ts")],
+	entryPoints: [join(ici, "renderer-reference.ts")],
 	outfile: join(sortie, "renderer.js"),
 	bundle: true,
 	platform: "browser",
@@ -50,5 +53,6 @@ await build({
 await Promise.all([
 	copyFile(join(ici, "index.html"), join(sortie, "index.html")),
 	copyFile(join(ici, "style.css"), join(sortie, "style.css")),
+	copyFile(join(ici, "style-details.css"), join(sortie, "style-details.css")),
 	copyFile(join(windows, "icons", "icon.png"), join(sortie, "icon.png")),
 ]);

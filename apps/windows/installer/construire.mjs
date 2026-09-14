@@ -37,11 +37,11 @@ await build({
 	logLevel: "info",
 });
 
-/* Le rendu est un paquet navigateur distinct : aucun builtin Node ne doit
-   pouvoir être résolu ici. Cette séparation rend une importation accidentelle
-   de `node:fs` bruyante au build au lieu de l'externaliser silencieusement. */
+/* Le rendu de référence reste un paquet navigateur distinct : aucun builtin
+   Node ne doit pouvoir être résolu ici, et l'ancien rendu reste disponible
+   dans le dépôt pour faciliter une comparaison visuelle pendant la revue. */
 await build({
-	entryPoints: [join(ici, "renderer.ts")],
+	entryPoints: [join(ici, "renderer-reference.ts")],
 	outfile: join(sortie, "renderer.js"),
 	bundle: true,
 	platform: "browser",

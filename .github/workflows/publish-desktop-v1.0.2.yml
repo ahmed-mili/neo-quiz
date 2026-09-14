@@ -1,0 +1,134 @@
+name: Publier desktop-v1.0.2
+
+# Ce workflow temporaire réutilise la répétition du workflow de release pour
+# construire les paquets avec la chaîne réelle du dépôt. Il ne réplique donc
+# ni le packaging Windows/Linux ni les contrôles de paquet ; il ne fait que
+# transformer les artefacts validés en release publique, puis rafraîchir le
+# manifeste lu par la page de téléchargement.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-desktop-v1.0.2.yml'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+
+    env:
+      TAG: desktop-v1.0.2
+      VERSION: 1.0.2
+      SOURCE_SHA: f69ffc6b31e880b1be7044f449712637341bbbd5
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Lancer la chaîne de build réelle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release.yml \
+            -R "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f version="$VERSION" \
+            -f product=app
+
+          run_id=""
+          for tentative in $(seq 1 30); do
+            run_id=$(gh run list \
+              -R "$GITHUB_REPOSITORY" \
+              --workflow release.yml \
+              --event workflow_dispatch \
+              --branch main \
+              --limit 20 \
+              --json databaseId,headSha \
+              --jq ".[] | select(.headSha == \"$GITHUB_SHA\") | .databaseId" \
+              | head -n 1)
+            if [ -n "$run_id" ]; then break; fi
+            sleep 2
+          done
+          test -n "$run_id"
+          echo "RUN_ID=$run_id" >> "$GITHUB_ENV"
+          gh run watch "$run_id" -R "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Télécharger les paquets validés
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf .publish
+          mkdir -p .publish/windows .publish/linux
+          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n neo-quiz-windows-setup -D .publish/windows
+          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n neo-quiz-linux-appimage -D .publish/linux
+          find .publish -type f -maxdepth 5 -print
+
+      - name: Vérifier le contenu avant publication
+        shell: bash
+        run: |
+          bootstrap=$(find .publish/windows -type f -name 'Install-NeoQuiz.exe' -print -quit)
+          moteur=$(find .publish/windows -type f -name 'neo-quiz-setup-*.exe' -print -quit)
+          blockmap=$(find .publish/windows -type f -name 'neo-quiz-setup-*.exe.blockmap' -print -quit)
+          latest=$(find .publish/windows -type f -name 'latest.yml' -print -quit)
+          appimage=$(find .publish/linux -type f -name 'neo-quiz-*.AppImage' -print -quit)
+          latest_linux=$(find .publish/linux -type f -name 'latest-linux.yml' -print -quit)
+
+          test -f "$bootstrap"
+          test -f "$moteur"
+          test -f "$blockmap"
+          test -f "$latest"
+          test -f "$appimage"
+          test -f "$latest_linux"
+          case "$(basename "$moteur")" in *"$VERSION"*) ;; *) exit 1 ;; esac
+          case "$(basename "$appimage")" in *"$VERSION"*) ;; *) exit 1 ;; esac
+
+          cp "$appimage" .publish/neo-quiz.AppImage
+          echo "BOOTSTRAP=$bootstrap" >> "$GITHUB_ENV"
+          echo "MOTEUR=$moteur" >> "$GITHUB_ENV"
+          echo "BLOCKMAP=$blockmap" >> "$GITHUB_ENV"
+          echo "LATEST=$latest" >> "$GITHUB_ENV"
+          echo "APPIMAGE=$appimage" >> "$GITHUB_ENV"
+          echo "LATEST_LINUX=$latest_linux" >> "$GITHUB_ENV"
+
+      - name: Créer et remplir la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "La release $TAG existe déjà" >&2
+            exit 1
+          fi
+          gh release create "$TAG" \
+            -R "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" \
+            --title "$TAG" \
+            --latest
+          gh release upload "$TAG" \
+            "$MOTEUR" \
+            "$BLOCKMAP" \
+            "$LATEST" \
+            "$BOOTSTRAP" \
+            "$APPIMAGE" \
+            "$LATEST_LINUX" \
+            .publish/neo-quiz.AppImage \
+            -R "$GITHUB_REPOSITORY"
+
+      - name: Rafraîchir le manifeste de téléchargement
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            --jq '{tag_name, published_at, assets: [.assets[] | {name, size, browser_download_url}]}' \
+            > docs/latest.json
+          cat docs/latest.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/latest.json
+          git diff --cached --quiet || git commit -m "site: docs/latest.json pour $TAG"
+          git push origin main

@@ -108,10 +108,10 @@ jobs:
           path: apps/windows/dist-installer/*.AppImage
           if-no-files-found: error
 
-  # Le paquet Windows, symétrique. Il attrape ce que Linux ne voit pas : NSIS,
-  # `rcedit` sur l'exécutable, les chemins Windows. Dépôt public, minutes
-  # gratuites. `check:package` y lit AUSSI l'asar de `win-unpacked/`, que seul
-  # `pack:win` produit.
+  # Le paquet Windows construit DEUX exécutables : le NSIS reste le moteur
+  # silencieux et le portable Electron devient la seule interface visible.
+  # Les garder comme deux artefacts distincts permet d'éprouver le bootstrapper
+  # avant de remplacer le lien public et la chaîne SignPath de la release.
   app-windows-package:
     runs-on: windows-latest
 
@@ -139,9 +139,20 @@ jobs:
       - name: Package config and contents
         run: npm run check:package
 
-      - name: Upload installer
+      - name: Build bootstrapper (portable Electron)
+        run: npm run pack:installer
+        working-directory: apps/windows
+
+      - name: Upload NSIS engine
         uses: actions/upload-artifact@v4
         with:
           name: neo-quiz-windows-setup
           path: apps/windows/dist-installer/*.exe
+          if-no-files-found: error
+
+      - name: Upload installer bootstrapper
+        uses: actions/upload-artifact@v4
+        with:
+          name: neo-quiz-windows-installer
+          path: apps/windows/dist-installer-bootstrapper/neo-quiz-installer.exe
           if-no-files-found: error

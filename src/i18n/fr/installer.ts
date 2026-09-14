@@ -1,0 +1,31 @@
+/* Domaine « installer » : le bootstrapper Windows est un produit séparé de
+   l'application, mais il réutilise le même moteur i18n pour qu'aucun libellé
+   visible n'ait une seconde source. */
+export const FR_INSTALLER = {
+	"installer.windowTitle": "Installer Neo Quiz",
+	"installer.logoAlt": "Neo Quiz",
+	"installer.title": "Installer Neo Quiz",
+	"installer.hero": "Transformez vos cours en séances de révision qui restent en mémoire.",
+	"installer.version": "Version {version}",
+	"installer.preparing": "Préparation de l'installation…",
+	"installer.location.label": "Emplacement",
+	"installer.location.change": "Modifier",
+	"installer.location.choose": "Choisir où installer Neo Quiz",
+	"installer.downloadSize": "Téléchargement",
+	"installer.availableSpace": "Espace disponible",
+	"installer.install": "Installer",
+	"installer.cancel": "Annuler",
+	"installer.close": "Fermer",
+	"installer.retry": "Réessayer",
+	"installer.status.elevation": "En attente de l'autorisation Windows…",
+	"installer.status.downloading": "Téléchargement… {percent} %",
+	"installer.status.verifying": "Vérification du téléchargement…",
+	"installer.status.installing": "Installation de Neo Quiz…",
+	"installer.error.release": "La version actuelle de Neo Quiz n'a pas pu être préparée.",
+	"installer.error.network": "Le téléchargement n'a pas pu aboutir. Vérifiez votre connexion puis réessayez.",
+	"installer.error.elevation": "L'autorisation administrateur est nécessaire pour installer Neo Quiz.",
+	"installer.error.integrity": "Le fichier téléchargé a échoué à la vérification d'intégrité. Rien n'a été installé.",
+	"installer.error.installation": "Neo Quiz n'a pas pu être installé.",
+	"installer.error.launch": "Neo Quiz est installé, mais n'a pas pu être lancé.",
+	"installer.error.generic": "L'installation n'a pas pu continuer.",
+};

@@ -1,0 +1,31 @@
+/* Domaine « installer » : le bootstrapper Windows est un produit séparé de
+   l'application, mais il réutilise le même moteur i18n pour qu'aucun libellé
+   visible n'ait une seconde source. */
+export const EN_INSTALLER = {
+	"installer.windowTitle": "Install Neo Quiz",
+	"installer.logoAlt": "Neo Quiz",
+	"installer.title": "Install Neo Quiz",
+	"installer.hero": "Turn your courses into revision sessions that stay with you.",
+	"installer.version": "Version {version}",
+	"installer.preparing": "Preparing the installation…",
+	"installer.location.label": "Location",
+	"installer.location.change": "Change",
+	"installer.location.choose": "Choose where to install Neo Quiz",
+	"installer.downloadSize": "Download",
+	"installer.availableSpace": "Available space",
+	"installer.install": "Install",
+	"installer.cancel": "Cancel",
+	"installer.close": "Close",
+	"installer.retry": "Try again",
+	"installer.status.elevation": "Waiting for Windows authorization…",
+	"installer.status.downloading": "Downloading… {percent}%",
+	"installer.status.verifying": "Verifying the download…",
+	"installer.status.installing": "Installing Neo Quiz…",
+	"installer.error.release": "The current Neo Quiz version could not be prepared.",
+	"installer.error.network": "The download could not be completed. Check your connection and try again.",
+	"installer.error.elevation": "Administrator authorization is required to install Neo Quiz.",
+	"installer.error.integrity": "The downloaded file failed the integrity check. Nothing was installed.",
+	"installer.error.installation": "Neo Quiz could not be installed.",
+	"installer.error.launch": "Neo Quiz is installed, but it could not be started.",
+	"installer.error.generic": "The installation could not continue.",
+} as const;

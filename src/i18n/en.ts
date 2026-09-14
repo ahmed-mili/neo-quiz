@@ -6,6 +6,7 @@ import { EN_ENGINE } from "./en/engine";
 import { EN_PLUGIN } from "./en/plugin";
 import { EN_APP } from "./en/app";
 import { EN_REVIEW } from "./en/review";
+import { EN_INSTALLER } from "./en/installer";
 
 /* ══════════════════════════════════════════════════════════
    Dictionnaire ANGLAIS = référence du plugin.
@@ -22,4 +23,5 @@ export const EN = {
 	...EN_PLUGIN,
 	...EN_APP,
 	...EN_REVIEW,
+	...EN_INSTALLER,
 } as const;

@@ -6,6 +6,7 @@ import {
 	CANAUX_INSTALLATEUR,
 	type ChoixDossierInstallateur,
 	type EtatInstallateur,
+	type InfosDisqueInstallateur,
 	type InfosInitialesInstallateur,
 	type PontInstallateur,
 } from "./protocole";
@@ -14,8 +15,12 @@ const pont: PontInstallateur = {
 	initialiser: () => ipcRenderer.invoke(CANAUX_INSTALLATEUR.initialiser) as Promise<InfosInitialesInstallateur>,
 	choisirDossier: (courant: string) =>
 		ipcRenderer.invoke(CANAUX_INSTALLATEUR.choisirDossier, courant) as Promise<ChoixDossierInstallateur | null>,
+	espaceDisque: (dossier: string) =>
+		ipcRenderer.invoke(CANAUX_INSTALLATEUR.espaceDisque, dossier) as Promise<InfosDisqueInstallateur>,
 	installer: (dossier: string) => ipcRenderer.invoke(CANAUX_INSTALLATEUR.installer, dossier) as Promise<void>,
 	annuler: () => ipcRenderer.invoke(CANAUX_INSTALLATEUR.annuler) as Promise<void>,
+	reduire: () => ipcRenderer.send(CANAUX_INSTALLATEUR.reduire),
+	commentaires: () => ipcRenderer.send(CANAUX_INSTALLATEUR.commentaires),
 	fermer: () => ipcRenderer.send(CANAUX_INSTALLATEUR.fermer),
 	surEtat(rappel: (etat: EtatInstallateur) => void) {
 		ipcRenderer.on(CANAUX_INSTALLATEUR.etat, (_event, etat: EtatInstallateur) => rappel(etat));

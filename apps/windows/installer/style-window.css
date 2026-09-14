@@ -4,6 +4,11 @@
    scène de fond. */
 #app {
 	padding: 0;
+	/* Fond PLAT : le halo radial du décor culminait pile sous la barre de
+	   titre et la dessinait en bande plus claire, comme un chrome posé sur la
+	   fenêtre. Chez la référence (Google Play Games), la barre n'est pas une
+	   surface : l'illustration passe dessous. */
+	background: linear-gradient(145deg, #07111f 0%, #07101d 58%, #060e1a 100%);
 }
 
 /* Le cadre intérieur doublait visuellement le contour natif de la fenêtre
@@ -13,9 +18,22 @@
 }
 
 .nqi-titlebar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 2;
 	height: 48px;
-	flex-basis: 48px;
 	padding-left: 22px;
+}
+
+/* La coquille prend toute la fenêtre et son décor remonte sous la barre. */
+.nqi-shell {
+	position: absolute;
+	inset: 0;
+}
+.nqi-panel {
+	top: 48px;
 }
 
 .nqi-titlebar-brand {
@@ -40,16 +58,10 @@
 	height: 48px;
 }
 
-.nqi-minimize-glyph {
-	width: 12px;
-	height: 1.25px;
-	transform: translate(-50%, 4px);
-}
-
-.nqi-close-glyph::before,
-.nqi-close-glyph::after {
-	width: 1.25px;
-	height: 14px;
+.nqi-window-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 }
 
 /* La fenêtre est désormais nettement moins large : pousser le décor vers la
@@ -60,6 +72,9 @@
 
 .nqi-scene {
 	right: -190px;
+	/* +48 px : le hero commence désormais sous la barre, les anneaux gardent
+	   leur place par rapport au titre. Le halo, lui, monte : c'est voulu. */
+	top: 10px;
 }
 
 .nqi-legal {
@@ -80,4 +95,58 @@
 	margin-right: 9px;
 	vertical-align: -5px;
 	filter: none;
+}
+
+/* Le bouton principal se dimensionne par son contenu, comme chez la référence
+   (~140 × 44 px) : plus de largeur fixe, plus de dégradé ni d'ombre qui le
+   faisaient flotter au double de sa taille. */
+.nqi-actions {
+	text-align: right;
+}
+.nqi-primary {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	width: auto;
+	height: 44px;
+	padding: 0 24px 0 20px;
+	background: #4f61f2;
+	box-shadow: none;
+	font-size: 15px;
+}
+.nqi-primary-shield {
+	width: 18px;
+	height: 18px;
+	margin-right: 0;
+	vertical-align: 0;
+}
+
+/* Emplacement : le libellé et l'espace disque sur UNE ligne, le chemin seul
+   dessous, comme la référence. */
+.nqi-location {
+	height: auto;
+	padding: 20px 28px 22px;
+}
+.nqi-location-head {
+	display: flex;
+	align-items: baseline;
+	gap: 16px;
+}
+.nqi-location-space {
+	margin-top: 0;
+}
+.nqi-path {
+	margin-top: 10px;
+	font-size: 15.5px;
+}
+.nqi-legal {
+	top: 380px;
+}
+
+.nqi-feedback-icon {
+	display: inline-flex;
+}
+.nqi-feedback-icon svg {
+	width: 18px;
+	height: 18px;
 }

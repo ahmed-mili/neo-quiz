@@ -1,4 +1,8 @@
 import { currentLang, setLanguage, t } from "../../../src/i18n";
+/* Les MÊMES icônes que l'application : ses glyphes de fenêtre et Lucide via
+   `poserIcone`, pour que l'installeur ne dessine rien que l'app ne dessine. */
+import { poserIcone } from "../src/host/ui";
+import { poserGlyphe } from "../src/ui/glyphes-fenetre";
 import type {
 	CodeErreurInstallateur,
 	EtatInstallateur,
@@ -72,7 +76,7 @@ function rendreBarreTitre(parent: HTMLElement): void {
 	reduire.title = t("installer.minimize");
 	reduire.setAttribute("aria-label", t("installer.minimize"));
 	reduire.addEventListener("click", () => window.neoInstaller.reduire());
-	ajouter(reduire, "span", "nqi-minimize-glyph").setAttribute("aria-hidden", "true");
+	poserGlyphe(reduire, "minimize");
 
 	const fermer = ajouter(controles, "button", "nqi-window-button nqi-close");
 	fermer.type = "button";
@@ -80,7 +84,7 @@ function rendreBarreTitre(parent: HTMLElement): void {
 	fermer.setAttribute("aria-label", t("installer.close"));
 	fermer.disabled = etat.phase === "elevation" || etat.phase === "installation" || etat.phase === "verification";
 	fermer.addEventListener("click", () => window.neoInstaller.fermer());
-	ajouter(fermer, "span", "nqi-close-glyph").setAttribute("aria-hidden", "true");
+	poserGlyphe(fermer, "close");
 }
 
 function rendreHero(parent: HTMLElement): void {
@@ -169,9 +173,8 @@ function rendreLegal(parent: HTMLElement): void {
 function rendreEmplacement(parent: HTMLElement): void {
 	if (!infos) return;
 	const emplacement = ajouter(parent, "section", "nqi-location");
-	ajouter(emplacement, "div", "nqi-location-label", t("installer.location.label"));
-	const chemin = ajouter(emplacement, "div", "nqi-path", infos.dossier);
-	chemin.title = infos.dossier;
+	const entete = ajouter(emplacement, "div", "nqi-location-head");
+	ajouter(entete, "div", "nqi-location-label", t("installer.location.label"));
 	const detail = disque
 		? t("installer.location.space", {
 			available: formatOctets(disque.espaceDisponible),
@@ -182,7 +185,9 @@ function rendreEmplacement(parent: HTMLElement): void {
 			available: formatOctets(infos.espaceDisponible),
 			download: formatOctets(infos.tailleTelechargement),
 		});
-	ajouter(emplacement, "div", "nqi-location-space", detail);
+	ajouter(entete, "div", "nqi-location-space", detail);
+	const chemin = ajouter(emplacement, "div", "nqi-path", infos.dossier);
+	chemin.title = infos.dossier;
 }
 
 function rendreErreurElevation(parent: HTMLElement): void {
@@ -203,30 +208,6 @@ function rendreErreurElevation(parent: HTMLElement): void {
 	annuler.addEventListener("click", () => window.neoInstaller.fermer());
 }
 
-function rendreIconeCommentaires(parent: HTMLElement): void {
-	const espaceSvg = "http://www.w3.org/2000/svg";
-	const icone = document.createElementNS(espaceSvg, "svg");
-	icone.setAttribute("width", "18");
-	icone.setAttribute("height", "18");
-	icone.setAttribute("viewBox", "0 0 24 24");
-	icone.setAttribute("fill", "none");
-	icone.setAttribute("stroke", "currentColor");
-	icone.setAttribute("stroke-width", "2");
-	icone.setAttribute("stroke-linecap", "round");
-	icone.setAttribute("stroke-linejoin", "round");
-	icone.setAttribute("aria-hidden", "true");
-	for (const donnees of [
-		"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z",
-		"M12 15h.01",
-		"M12 7v4",
-	]) {
-		const chemin = document.createElementNS(espaceSvg, "path");
-		chemin.setAttribute("d", donnees);
-		icone.appendChild(chemin);
-	}
-	parent.appendChild(icone);
-}
-
 function rendre(): void {
 	document.documentElement.lang = currentLang();
 	document.title = t("installer.windowTitle");
@@ -244,7 +225,8 @@ function rendre(): void {
 
 	const commentaires = ajouter(panneau, "button", "nqi-feedback");
 	commentaires.type = "button";
-	rendreIconeCommentaires(commentaires);
+	const iconeCommentaires = ajouter(commentaires, "span", "nqi-feedback-icon");
+	poserIcone(iconeCommentaires, "message-square-warning");
 	ajouter(commentaires, "span", undefined, t("installer.feedback"));
 	commentaires.addEventListener("click", () => window.neoInstaller.commentaires());
 

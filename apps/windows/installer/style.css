@@ -15,6 +15,8 @@ button { font: inherit; color: inherit; }
 	display: flex;
 	flex-direction: column;
 	padding: 16px;
+	-webkit-user-select: none;
+	user-select: none;
 	background:
 		radial-gradient(ellipse at 57% -9%, rgba(35, 79, 188, .42), transparent 53%),
 		radial-gradient(ellipse at 99% 52%, rgba(24, 69, 164, .19), transparent 39%),
@@ -281,6 +283,9 @@ button { font: inherit; color: inherit; }
 	font-weight: 440;
 	letter-spacing: -.08px;
 	color: rgba(247, 249, 255, .96);
+	-webkit-user-select: text;
+	user-select: text;
+	cursor: text;
 }
 
 .nqi-actions {
@@ -310,18 +315,15 @@ button { font: inherit; color: inherit; }
 	font-size: 17px;
 	transition: transform .12s ease, filter .12s ease;
 }
-.nqi-primary::before {
-	content: "";
-	display: inline-block;
-	width: 21px;
-	height: 23px;
-	margin-right: 12px;
+.nqi-primary-shield {
+	width: 24px;
+	height: 24px;
+	margin-right: 10px;
 	vertical-align: -6px;
-	clip-path: polygon(50% 0, 88% 13%, 88% 53%, 75% 75%, 50% 100%, 25% 75%, 12% 53%, 12% 13%);
-	background: conic-gradient(from 0deg, #63b4ff 0 25%, #ffd94f 0 50%, #5aa8ff 0 75%, #ffe05e 0 100%);
-	filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .22));
+	object-fit: contain;
+	filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .20));
+	pointer-events: none;
 }
-.nqi-primary-plain::before { display: none; }
 .nqi-primary:hover { filter: brightness(1.07); }
 .nqi-primary:active { transform: translateY(1px); }
 

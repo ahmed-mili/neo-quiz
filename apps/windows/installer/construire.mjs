@@ -54,5 +54,6 @@ await Promise.all([
 	copyFile(join(ici, "index.html"), join(sortie, "index.html")),
 	copyFile(join(ici, "style.css"), join(sortie, "style.css")),
 	copyFile(join(ici, "style-details.css"), join(sortie, "style-details.css")),
+	copyFile(join(ici, "uac-shield.png"), join(sortie, "uac-shield.png")),
 	copyFile(join(windows, "icons", "icon.png"), join(sortie, "icon.png")),
 ]);

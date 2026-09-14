@@ -38,4 +38,6 @@ export const EN_INSTALLER = {
 	"installer.error.installation": "Neo Quiz could not be installed.",
 	"installer.error.launch": "Neo Quiz is installed, but it could not be started.",
 	"installer.error.generic": "The installation could not continue.",
+	"installer.elevationDialog.title": "Unable to install",
+	"installer.elevationDialog.body": "Neo Quiz requires administrator privileges to install. Click Cancel, then restart the installer.",
 } as const;

@@ -25,13 +25,21 @@ function ajouter<K extends keyof HTMLElementTagNameMap>(
 
 function formatOctets(octets: number): string {
 	const langue = currentLang() === "fr" ? "fr-FR" : "en-US";
-	const giga = octets >= 1_000_000_000;
+	let diviseur = 1_000_000;
+	let unite = "megabyte";
+	if (octets >= 1_000_000_000_000) {
+		diviseur = 1_000_000_000_000;
+		unite = "terabyte";
+	} else if (octets >= 1_000_000_000) {
+		diviseur = 1_000_000_000;
+		unite = "gigabyte";
+	}
 	return new Intl.NumberFormat(langue, {
 		style: "unit",
-		unit: giga ? "gigabyte" : "megabyte",
+		unit: unite,
 		unitDisplay: "short",
 		maximumFractionDigits: 1,
-	}).format(octets / (giga ? 1_000_000_000 : 1_000_000));
+	}).format(octets / diviseur);
 }
 
 function libelleErreur(code: CodeErreurInstallateur): string {
@@ -53,7 +61,16 @@ function rendreBarreTitre(parent: HTMLElement): void {
 	icone.src = "./icon.png";
 	icone.alt = t("installer.logoAlt");
 	ajouter(marque, "span", "nqi-titlebar-text", t("installer.windowTitle"));
-	const fermer = ajouter(barre, "button", "nqi-close");
+
+	const controles = ajouter(barre, "div", "nqi-window-controls");
+	const reduire = ajouter(controles, "button", "nqi-window-button nqi-minimize");
+	reduire.type = "button";
+	reduire.title = t("installer.minimize");
+	reduire.setAttribute("aria-label", t("installer.minimize"));
+	reduire.addEventListener("click", () => window.neoInstaller.reduire());
+	ajouter(reduire, "span", "nqi-minimize-glyph").setAttribute("aria-hidden", "true");
+
+	const fermer = ajouter(controles, "button", "nqi-window-button nqi-close");
 	fermer.type = "button";
 	fermer.title = t("installer.close");
 	fermer.setAttribute("aria-label", t("installer.close"));
@@ -62,25 +79,10 @@ function rendreBarreTitre(parent: HTMLElement): void {
 	ajouter(fermer, "span", "nqi-close-glyph").setAttribute("aria-hidden", "true");
 }
 
-function rendreHero(parent: HTMLElement): void {
-	const hero = ajouter(parent, "section", "nqi-hero");
-	ajouter(hero, "div", "nqi-glow").setAttribute("aria-hidden", "true");
-	const scene = ajouter(hero, "div", "nqi-scene");
-	const carteArriere = ajouter(scene, "div", "nqi-card nqi-card-back");
-	carteArriere.setAttribute("aria-hidden", "true");
-	const carteAvant = ajouter(scene, "div", "nqi-card nqi-card-front");
-	carteAvant.setAttribute("aria-hidden", "true");
-	for (let i = 0; i < 4; i++) ajouter(carteAvant, "span", "nqi-card-line");
-	const logo = ajouter(scene, "img", "nqi-hero-icon");
-	logo.src = "./icon.png";
-	logo.alt = t("installer.logoAlt");
-	ajouter(hero, "p", "nqi-hero-copy", t("installer.hero"));
-}
-
-function rendreMetrique(parent: HTMLElement, libelle: string, valeur: string): void {
-	const bloc = ajouter(parent, "div", "nqi-metric");
-	ajouter(bloc, "span", "nqi-metric-label", libelle);
-	ajouter(bloc, "strong", "nqi-metric-value", valeur);
+function rendreArt(parent: HTMLElement): void {
+	const art = ajouter(parent, "div", "nqi-art");
+	art.setAttribute("aria-hidden", "true");
+	for (let i = 0; i < 5; i++) ajouter(art, "span", `nqi-orbit nqi-orbit-${i + 1}`);
 }
 
 function rendreProgression(parent: HTMLElement, pourcent: number | null): void {
@@ -89,16 +91,27 @@ function rendreProgression(parent: HTMLElement, pourcent: number | null): void {
 	if (pourcent !== null) barre.style.width = `${Math.max(0, Math.min(100, pourcent))}%`;
 }
 
+function rendreBoutonInstaller(parent: HTMLElement): void {
+	const bouton = ajouter(parent, "button", "nqi-primary");
+	bouton.type = "button";
+	const bouclier = ajouter(bouton, "span", "nqi-shield");
+	bouclier.setAttribute("aria-hidden", "true");
+	ajouter(bouton, "span", "nqi-primary-label", t("installer.install"));
+	bouton.addEventListener("click", lancerInstallation);
+}
+
 function rendreAction(parent: HTMLElement): void {
 	if (chargement) {
-		ajouter(parent, "p", "nqi-status", t("installer.preparing"));
-		rendreProgression(parent, null);
+		const bloc = ajouter(parent, "div", "nqi-action-stack");
+		ajouter(bloc, "p", "nqi-status", t("installer.preparing"));
+		rendreProgression(bloc, null);
 		return;
 	}
 
 	if (etat.phase === "erreur") {
-		ajouter(parent, "p", "nqi-error", libelleErreur(etat.code));
-		const bouton = ajouter(parent, "button", "nqi-primary", t("installer.retry"));
+		const bloc = ajouter(parent, "div", "nqi-action-stack");
+		ajouter(bloc, "p", "nqi-error", libelleErreur(etat.code));
+		const bouton = ajouter(bloc, "button", "nqi-secondary", t("installer.retry"));
 		bouton.type = "button";
 		bouton.addEventListener("click", () => {
 			if (infos) lancerInstallation();
@@ -109,9 +122,7 @@ function rendreAction(parent: HTMLElement): void {
 
 	if (!infos) return;
 	if (etat.phase === "pret" || etat.phase === "annule") {
-		const bouton = ajouter(parent, "button", "nqi-primary", t("installer.install"));
-		bouton.type = "button";
-		bouton.addEventListener("click", lancerInstallation);
+		rendreBoutonInstaller(parent);
 		return;
 	}
 
@@ -135,13 +146,25 @@ function rendreAction(parent: HTMLElement): void {
 		default:
 			statut = t("installer.preparing");
 	}
-	ajouter(parent, "p", "nqi-status", statut);
-	rendreProgression(parent, pourcent);
+	const bloc = ajouter(parent, "div", "nqi-action-stack");
+	ajouter(bloc, "p", "nqi-status", statut);
+	rendreProgression(bloc, pourcent);
 	if (etat.phase === "telechargement") {
-		const annuler = ajouter(parent, "button", "nqi-secondary", t("installer.cancel"));
+		const annuler = ajouter(bloc, "button", "nqi-secondary", t("installer.cancel"));
 		annuler.type = "button";
 		annuler.addEventListener("click", () => { void window.neoInstaller.annuler(); });
 	}
+}
+
+function rendreLegal(parent: HTMLElement): void {
+	const legal = ajouter(parent, "div", "nqi-legal");
+	const ligne = ajouter(legal, "p", "nqi-legal-copy");
+	ligne.appendChild(document.createTextNode(t("installer.legal.beforeTerms")));
+	ajouter(ligne, "span", "nqi-legal-link", t("installer.legal.terms"));
+	ligne.appendChild(document.createTextNode(t("installer.legal.between")));
+	ajouter(ligne, "span", "nqi-legal-link", t("installer.legal.privacy"));
+	ligne.appendChild(document.createTextNode(t("installer.legal.afterPrivacy")));
+	ajouter(legal, "p", "nqi-legal-copy", t("installer.legal.components"));
 }
 
 function rendre(): void {
@@ -150,45 +173,38 @@ function rendre(): void {
 	const root = document.getElementById("app");
 	if (!root) return;
 	root.replaceChildren();
-	rendreBarreTitre(root);
 
-	const contenu = ajouter(root, "main", "nqi-shell");
-	rendreHero(contenu);
-	const panneau = ajouter(contenu, "section", "nqi-panel");
-	ajouter(panneau, "h1", "nqi-title", t("installer.title"));
-	if (infos) ajouter(panneau, "p", "nqi-version", t("installer.version", { version: infos.version }));
+	const cadre = ajouter(root, "div", "nqi-frame");
+	rendreBarreTitre(cadre);
+	const contenu = ajouter(cadre, "main", "nqi-shell");
+	rendreArt(contenu);
+
+	const intro = ajouter(contenu, "section", "nqi-intro");
+	ajouter(intro, "h1", "nqi-title", t("installer.title"));
+	ajouter(intro, "p", "nqi-hero-copy", t("installer.hero"));
 
 	if (infos) {
-		const emplacement = ajouter(panneau, "div", "nqi-location");
-		const ligne = ajouter(emplacement, "div", "nqi-location-head");
-		ajouter(ligne, "span", "nqi-location-label", t("installer.location.label"));
-		const modifier = ajouter(ligne, "button", "nqi-link", t("installer.location.change"));
-		modifier.type = "button";
-		modifier.disabled = etat.phase !== "pret" && etat.phase !== "annule" && etat.phase !== "erreur";
-		modifier.addEventListener("click", () => { void choisirDossier(); });
+		const emplacement = ajouter(contenu, "section", "nqi-location");
+		ajouter(emplacement, "div", "nqi-location-label", t("installer.location.label"));
+		ajouter(emplacement, "div", "nqi-location-space", t("installer.location.space", {
+			available: formatOctets(infos.espaceDisponible),
+			total: formatOctets(infos.espaceTotal),
+			required: formatOctets(infos.tailleTelechargement),
+		}));
 		const chemin = ajouter(emplacement, "div", "nqi-path", infos.dossier);
 		chemin.title = infos.dossier;
-
-		const metriques = ajouter(panneau, "div", "nqi-metrics");
-		rendreMetrique(metriques, t("installer.downloadSize"), formatOctets(infos.tailleTelechargement));
-		rendreMetrique(metriques, t("installer.availableSpace"), formatOctets(infos.espaceDisponible));
 	}
 
-	const actions = ajouter(panneau, "div", "nqi-actions");
+	rendreLegal(contenu);
+	const pied = ajouter(contenu, "footer", "nqi-footer");
+	const commentaires = ajouter(pied, "button", "nqi-feedback");
+	commentaires.type = "button";
+	ajouter(commentaires, "span", "nqi-feedback-icon").setAttribute("aria-hidden", "true");
+	ajouter(commentaires, "span", undefined, t("installer.feedback"));
+	commentaires.addEventListener("click", () => window.neoInstaller.commentaires());
+
+	const actions = ajouter(pied, "div", "nqi-actions");
 	rendreAction(actions);
-}
-
-async function choisirDossier(): Promise<void> {
-	if (!infos) return;
-	try {
-		const choix = await window.neoInstaller.choisirDossier(infos.dossier);
-		if (!choix) return;
-		infos = { ...infos, dossier: choix.dossier, espaceDisponible: choix.espaceDisponible };
-		rendre();
-	} catch {
-		etat = { phase: "erreur", code: "generic" };
-		rendre();
-	}
 }
 
 function lancerInstallation(): void {

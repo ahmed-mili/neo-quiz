@@ -98,6 +98,17 @@ function rendreProgression(parent: HTMLElement, pourcent: number | null): void {
 	if (pourcent !== null) barre.style.width = `${Math.max(0, Math.min(100, pourcent))}%`;
 }
 
+function rendreBoutonInstallation(parent: HTMLElement): void {
+	const bouton = ajouter(parent, "button", "nqi-primary");
+	bouton.type = "button";
+	const bouclier = ajouter(bouton, "img", "nqi-primary-shield");
+	bouclier.src = "./uac-shield.png";
+	bouclier.alt = "";
+	bouclier.setAttribute("aria-hidden", "true");
+	ajouter(bouton, "span", undefined, t("installer.install"));
+	bouton.addEventListener("click", lancerInstallation);
+}
+
 function rendreAction(parent: HTMLElement): void {
 	if (chargement) {
 		ajouter(parent, "p", "nqi-status", t("installer.preparing"));
@@ -110,7 +121,7 @@ function rendreAction(parent: HTMLElement): void {
 		   concurrentes pour le même état. */
 		if (etat.code === "elevation") return;
 		ajouter(parent, "p", "nqi-error", libelleErreur(etat.code));
-		const bouton = ajouter(parent, "button", "nqi-primary nqi-primary-plain", t("installer.retry"));
+		const bouton = ajouter(parent, "button", "nqi-primary", t("installer.retry"));
 		bouton.type = "button";
 		bouton.addEventListener("click", () => {
 			if (infos) lancerInstallation();
@@ -120,9 +131,7 @@ function rendreAction(parent: HTMLElement): void {
 	}
 	if (!infos) return;
 	if (etat.phase === "pret" || etat.phase === "annule") {
-		const bouton = ajouter(parent, "button", "nqi-primary", t("installer.install"));
-		bouton.type = "button";
-		bouton.addEventListener("click", lancerInstallation);
+		rendreBoutonInstallation(parent);
 		return;
 	}
 

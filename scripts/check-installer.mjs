@@ -68,12 +68,12 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argume
 
 	/* Le site ne doit jamais retomber sur le NSIS visible. Le lien statique
 	   mène à la release tant que le premier bootstrapper n'est pas encore
-	   publié ; dès que `latest.json` porte `neo-quiz-installer.exe`, le JS le
+	   publié ; dès que `latest.json` porte `Install-NeoQuiz.exe`, le JS le
 	   remplace par l'asset exact. Ce repli évite un 404 pendant la transition. */
 	r.check("publication : release construit le bootstrapper",
 		workflow.includes("npm run pack:installer"), true);
 	r.check("publication : release attache le bootstrapper",
-		workflow.includes("apps/windows/dist-installer-bootstrapper/neo-quiz-installer.exe"), true);
+		workflow.includes("apps/windows/dist-installer-bootstrapper/Install-NeoQuiz.exe"), true);
 	r.check("publication : l'alias NSIS public a disparu",
 		workflow.includes("neo-quiz-setup.exe\n"), false);
 
@@ -81,7 +81,7 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argume
 		r.check(`site ${langue} : Windows ne pointe plus sur l'ancien NSIS`,
 			site.includes("releases/latest/download/neo-quiz-setup.exe"), false);
 		r.check(`site ${langue} : Windows cible le bootstrapper exact`,
-			site.includes('trouverActif(donnees.assets, "neo-quiz-installer.exe")'), true);
+			site.includes('trouverActif(donnees.assets, "Install-NeoQuiz.exe")'), true);
 		r.check(`site ${langue} : Windows n'offre pas un faux choix de versions`,
 			site.includes('activerSelecteurVersion("windows"'), false);
 	}

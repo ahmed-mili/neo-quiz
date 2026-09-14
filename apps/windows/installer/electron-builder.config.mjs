@@ -21,7 +21,7 @@ export default async function () {
 		win: {
 			target: "portable",
 			icon: "icons/icon.ico",
-			artifactName: "neo-quiz-installer.exe",
+			artifactName: "Install-NeoQuiz.exe",
 			/* L'exe Electron EXTRAIT ne doit pas demander l'admin de lui-même :
 			   seul `Start-Process -Verb RunAs`, après le clic, fait l'élévation. */
 			requestedExecutionLevel: "asInvoker",

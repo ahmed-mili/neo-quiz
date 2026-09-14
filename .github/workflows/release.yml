@@ -343,10 +343,10 @@ jobs:
             apps/windows/dist-installer/*.exe
             apps/windows/dist-installer/*.exe.blockmap
             apps/windows/dist-installer/latest.yml
-            apps/windows/dist-installer-bootstrapper/neo-quiz-installer.exe
+            apps/windows/dist-installer-bootstrapper/Install-NeoQuiz.exe
           if-no-files-found: error
 
-      # `neo-quiz-installer.exe` est désormais l'entrée PUBLIQUE stable. Le
+      # `Install-NeoQuiz.exe` est désormais l'entrée PUBLIQUE stable. Le
       # NSIS n'a plus d'alias fixe : seul son nom VERSIONNÉ est attaché, car le
       # bootstrapper le résout avec le tag et electron-updater le lit dans
       # `latest.yml`. Cela empêche le site de contourner le bootstrapper.
@@ -362,7 +362,7 @@ jobs:
             apps/windows/dist-installer/*.exe
             apps/windows/dist-installer/*.exe.blockmap
             apps/windows/dist-installer/latest.yml
-            apps/windows/dist-installer-bootstrapper/neo-quiz-installer.exe
+            apps/windows/dist-installer-bootstrapper/Install-NeoQuiz.exe
 
   app-linux:
     needs: prepare

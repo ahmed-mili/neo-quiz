@@ -758,8 +758,8 @@
 			})
 			.then(function (donnees) {
 				latestChargee = donnees;
-				var actifWindows = trouverActif(donnees.assets, "neo-quiz-installer.exe");
-				afficherVersion("windows", donnees, "neo-quiz-installer.exe", null);
+				var actifWindows = trouverActif(donnees.assets, "Install-NeoQuiz.exe");
+				afficherVersion("windows", donnees, "Install-NeoQuiz.exe", null);
 				var carteWindows = document.getElementById("carte-windows");
 				if (actifWindows && carteWindows) carteWindows.setAttribute("href", actifWindows.browser_download_url);
 				afficherVersion("linux", donnees, ".appimage", null);

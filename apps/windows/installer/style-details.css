@@ -1,22 +1,16 @@
-.nqi-metrics {
-	display: flex;
-	flex-direction: row-reverse;
-	gap: 18px;
-}
-
 .nqi-legal {
 	position: absolute;
 	left: 58px;
-	top: 378px;
-	width: 650px;
+	top: 412px;
+	width: 760px;
 }
 
 .nqi-legal-copy {
 	margin: 0;
-	font-size: 12.5px;
-	line-height: 1.5;
+	font-size: 13.5px;
+	line-height: 1.48;
 	font-weight: 420;
-	letter-spacing: -.05px;
+	letter-spacing: -.06px;
 	color: rgba(165, 183, 214, .80);
 }
 
@@ -27,15 +21,21 @@
 
 .nqi-feedback {
 	position: absolute;
-	left: 58px;
+	left: 50px;
 	bottom: 43px;
 	display: inline-flex;
 	align-items: center;
 	gap: 11px;
+	padding: 0;
+	border: 0;
+	background: transparent;
 	color: #7fb0ff;
 	font-size: 13.5px;
 	font-weight: 520;
+	cursor: pointer;
 }
+
+.nqi-feedback:hover { text-decoration: underline; }
 
 .nqi-feedback-icon {
 	position: relative;

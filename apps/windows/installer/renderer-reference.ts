@@ -105,6 +105,10 @@ function rendreAction(parent: HTMLElement): void {
 		return;
 	}
 	if (etat.phase === "erreur") {
+		/* Le refus UAC a son propre dialogue bloquant : afficher en plus le
+		   bouton de nouvelle tentative derrière lui créerait deux actions
+		   concurrentes pour le même état. */
+		if (etat.code === "elevation") return;
 		ajouter(parent, "p", "nqi-error", libelleErreur(etat.code));
 		const bouton = ajouter(parent, "button", "nqi-primary nqi-primary-plain", t("installer.retry"));
 		bouton.type = "button";
@@ -173,6 +177,24 @@ function rendreEmplacement(parent: HTMLElement): void {
 	chemin.title = infos.dossier;
 }
 
+function rendreErreurElevation(parent: HTMLElement): void {
+	if (etat.phase !== "erreur" || etat.code !== "elevation") return;
+	const voile = ajouter(parent, "div", "nqi-elevation-overlay");
+	const dialogue = ajouter(voile, "section", "nqi-elevation-dialog");
+	dialogue.setAttribute("role", "alertdialog");
+	dialogue.setAttribute("aria-modal", "true");
+	const titre = ajouter(dialogue, "h2", "nqi-elevation-title", t("installer.elevationDialog.title"));
+	titre.id = "nqi-elevation-title";
+	dialogue.setAttribute("aria-labelledby", titre.id);
+	const message = ajouter(dialogue, "p", "nqi-elevation-copy", t("installer.elevationDialog.body"));
+	message.id = "nqi-elevation-copy";
+	dialogue.setAttribute("aria-describedby", message.id);
+	const annuler = ajouter(dialogue, "button", "nqi-elevation-cancel", t("installer.cancel"));
+	annuler.type = "button";
+	annuler.autofocus = true;
+	annuler.addEventListener("click", () => window.neoInstaller.fermer());
+}
+
 function rendre(): void {
 	document.documentElement.lang = currentLang();
 	document.title = t("installer.windowTitle");
@@ -196,6 +218,7 @@ function rendre(): void {
 
 	const actions = ajouter(panneau, "div", "nqi-actions");
 	rendreAction(actions);
+	rendreErreurElevation(root);
 }
 
 function lancerInstallation(): void {

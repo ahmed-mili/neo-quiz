@@ -87,12 +87,11 @@ function rendreBarreTitre(parent: HTMLElement): void {
 	poserGlyphe(fermer, "close");
 }
 
+/* Le décor est une IMAGE (`fond.png`, posée par le CSS de `.nqi-hero`), plus
+   les anneaux dessinés en CSS : ils restent dans `style.css` pour comparaison,
+   mais ne sont plus montés. */
 function rendreHero(parent: HTMLElement): void {
-	const hero = ajouter(parent, "section", "nqi-hero");
-	ajouter(hero, "div", "nqi-glow").setAttribute("aria-hidden", "true");
-	const scene = ajouter(hero, "div", "nqi-scene");
-	ajouter(scene, "div", "nqi-card nqi-card-back").setAttribute("aria-hidden", "true");
-	ajouter(scene, "div", "nqi-card nqi-card-front").setAttribute("aria-hidden", "true");
+	ajouter(parent, "section", "nqi-hero").setAttribute("aria-hidden", "true");
 }
 
 function rendreProgression(parent: HTMLElement, pourcent: number | null): void {

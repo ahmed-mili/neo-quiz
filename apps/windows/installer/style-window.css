@@ -90,17 +90,10 @@
 .nqi-close:hover:not(:disabled) { background: transparent; }
 .nqi-window-button:focus-visible { outline: 1px solid rgba(198, 208, 245, .5); outline-offset: -1px; }
 
-/* La fenêtre est désormais nettement moins large : pousser le décor vers la
-   droite évite qu'il ne passe sous le titre tout en conservant sa présence. */
-.nqi-glow {
-	right: -150px;
-}
-
-.nqi-scene {
-	right: -190px;
-	/* +48 px : le hero commence désormais sous la barre, les anneaux gardent
-	   leur place par rapport au titre. Le halo, lui, monte : c'est voulu. */
-	top: 10px;
+/* Le décor : l'image fournie (1402 × 1122), calée à droite et couvrant la
+   fenêtre, sous la barre de titre translucide. */
+.nqi-hero {
+	background: url("./fond.png") right center / cover no-repeat;
 }
 
 .nqi-legal {

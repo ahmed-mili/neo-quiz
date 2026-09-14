@@ -3,11 +3,11 @@
    que la densité de la barre et le gabarit puissent évoluer sans retoucher la
    scène de fond. */
 /* Fenêtre transparente (`transparent: true`, `main.ts`) : le fond vit sur
-   `#app`, qui porte l'arrondi des coins, et rien d'autre ne peint. */
+   `#app`, qui porte l'arrondi des coins (10 px, un peu plus franc que les 8 px de DWM, demandé), et rien d'autre ne peint. */
 :root, body { background: transparent; }
 #app {
 	padding: 0;
-	border-radius: 8px;
+	border-radius: 10px;
 	overflow: hidden;
 	/* Le liseré d'un pixel que DWM dessinait, mais discret et de notre
 	   couleur : sans lui, le coin anti-aliasé se fond dans un fond sombre. */
@@ -114,14 +114,15 @@
 	line-height: 1.45;
 }
 
-/* Le PNG fourni contient déjà son relief. Ajouter un second halo CSS le
-   brouillait précisément à la petite taille où il est utilisé. */
+/* Le bouclier sur le bouton clair : rien de visible en soi, juste une ombre
+   d'un pixel sous ses bords et un peu plus de saturation, pour qu'il se
+   détache du bleu sans qu'aucun effet ne se remarque. */
 .nqi-primary-shield {
 	width: 22px;
 	height: 22px;
 	margin-right: 9px;
 	vertical-align: -5px;
-	filter: none;
+	filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .30)) saturate(1.12) contrast(1.04);
 }
 
 /* Le bouton principal se dimensionne par son contenu, comme chez la référence
@@ -137,13 +138,41 @@
 	width: auto;
 	height: 44px;
 	padding: 0 24px 0 20px;
-	background: #4f61f2;
+	/* Comme la référence : un bouton CLAIR, dans le bleu lumineux des traits
+	   du décor, et le texte sombre par-dessus. */
+	background: #5b9dff;
+	color: #061224;
 	box-shadow: none;
+	/* La police d'interface de Windows 11 dans sa coupe texte : plus nette
+	   à 15 px que « Segoe UI » classique. */
+	font-family: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
 	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: .1px;
+	transform-origin: center;
+	transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+/* Survol et pression repris de l'application (`button-press.css`,
+   `action-buttons.css`) : le bouton se soulève avec un halo de sa couleur,
+   puis s'enfonce à la pression. */
+.nqi-primary:hover:not(:disabled),
+.nqi-primary:focus-visible {
+	transform: translate3d(0, -2px, 0) scale(1.015);
+	/* Halo contenu : à pleine force il délavait le bouton en bleu pâle. */
+	filter: brightness(1.03);
+	box-shadow:
+		0 0 0 1px rgba(91, 157, 255, .22),
+		0 6px 18px rgba(30, 90, 220, .30);
+}
+.nqi-primary:active:not(:disabled) {
+	transform: translate3d(0, 1px, 0) scale(.965);
+	filter: brightness(.98) saturate(1.08);
+	box-shadow:
+		inset 0 4px 14px rgba(0, 0, 0, .18),
+		0 2px 6px rgba(0, 0, 0, .10);
+	transition-duration: 90ms;
 }
 .nqi-primary-shield {
-	width: 18px;
-	height: 18px;
 	margin-right: 0;
 	vertical-align: 0;
 }

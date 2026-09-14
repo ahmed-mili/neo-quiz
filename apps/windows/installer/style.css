@@ -8,7 +8,7 @@
 * { box-sizing: border-box; }
 html, body, #app { width: 100%; height: 100%; margin: 0; }
 body { overflow: hidden; background: #07101f; }
-button { font: inherit; }
+button { font: inherit; color: inherit; }
 
 #app {
 	position: relative;
@@ -16,8 +16,8 @@ button { font: inherit; }
 	flex-direction: column;
 	padding: 16px;
 	background:
-		radial-gradient(ellipse at 58% -10%, rgba(39, 83, 194, .40), transparent 52%),
-		radial-gradient(ellipse at 98% 52%, rgba(25, 69, 160, .18), transparent 37%),
+		radial-gradient(ellipse at 57% -9%, rgba(35, 79, 188, .42), transparent 53%),
+		radial-gradient(ellipse at 99% 52%, rgba(24, 69, 164, .19), transparent 39%),
 		linear-gradient(145deg, #07111f 0%, #07101d 58%, #060e1a 100%);
 }
 
@@ -27,7 +27,7 @@ button { font: inherit; }
 	inset: 16px;
 	z-index: 0;
 	pointer-events: none;
-	border: 1px solid rgba(121, 151, 207, .33);
+	border: 1px solid rgba(121, 151, 207, .34);
 	border-radius: 14px;
 	box-shadow:
 		inset 0 0 0 1px rgba(13, 26, 49, .62),
@@ -41,8 +41,8 @@ button { font: inherit; }
 }
 
 .nqi-titlebar {
-	height: 52px;
-	flex: 0 0 52px;
+	height: 54px;
+	flex: 0 0 54px;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -54,9 +54,9 @@ button { font: inherit; }
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	font-size: 15px;
+	font-size: 16px;
 	font-weight: 650;
-	letter-spacing: -.15px;
+	letter-spacing: -.18px;
 	color: rgba(243, 247, 255, .92);
 }
 
@@ -67,18 +67,38 @@ button { font: inherit; }
 	filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .32));
 }
 
-.nqi-close {
+.nqi-window-controls {
+	height: 54px;
+	display: flex;
+	align-items: stretch;
+	-webkit-app-region: no-drag;
+}
+
+.nqi-window-button {
 	position: relative;
 	width: 56px;
-	height: 52px;
+	height: 54px;
 	border: 0;
+	padding: 0;
 	background: transparent;
 	color: #dce5f7;
 	cursor: pointer;
-	-webkit-app-region: no-drag;
 }
+.nqi-window-button:hover:not(:disabled) { background: rgba(255, 255, 255, .06); }
 .nqi-close:hover:not(:disabled) { background: rgba(196, 48, 67, .84); }
-.nqi-close:disabled { opacity: .35; cursor: default; }
+.nqi-window-button:disabled { opacity: .35; cursor: default; }
+
+.nqi-minimize-glyph {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 16px;
+	height: 1.5px;
+	border-radius: 2px;
+	background: currentColor;
+	transform: translate(-50%, 5px);
+}
+
 .nqi-close-glyph::before,
 .nqi-close-glyph::after {
 	content: "";
@@ -109,23 +129,23 @@ button { font: inherit; }
 
 .nqi-glow {
 	position: absolute;
-	right: -64px;
-	top: 2px;
-	width: 520px;
-	height: 430px;
+	right: -62px;
+	top: -2px;
+	width: 535px;
+	height: 455px;
 	border-radius: 50%;
 	background:
-		radial-gradient(circle at 48% 42%, rgba(42, 104, 255, .23), transparent 33%),
-		radial-gradient(circle at 66% 62%, rgba(29, 76, 211, .17), transparent 42%);
-	filter: blur(13px);
+		radial-gradient(circle at 47% 41%, rgba(45, 111, 255, .26), transparent 31%),
+		radial-gradient(circle at 68% 62%, rgba(27, 76, 214, .19), transparent 43%);
+	filter: blur(12px);
 }
 
 .nqi-scene {
 	position: absolute;
-	right: -86px;
-	top: -42px;
-	width: 560px;
-	height: 495px;
+	right: -87px;
+	top: -38px;
+	width: 568px;
+	height: 510px;
 }
 
 .nqi-scene::before,
@@ -137,27 +157,27 @@ button { font: inherit; }
 	border-radius: 50%;
 	background: transparent;
 	box-shadow:
-		0 0 6px rgba(38, 108, 255, .46),
-		inset -1px 0 6px rgba(38, 108, 255, .22);
+		0 0 7px rgba(38, 108, 255, .50),
+		inset -1px 0 7px rgba(38, 108, 255, .23);
 }
 
 .nqi-scene::before {
-	width: 540px;
-	height: 180px;
-	left: 15px;
-	top: 72px;
-	border: 2px solid rgba(51, 118, 255, .82);
+	width: 548px;
+	height: 184px;
+	left: 14px;
+	top: 71px;
+	border: 2px solid rgba(59, 130, 255, .88);
 	border-left-color: transparent;
-	border-bottom-color: rgba(28, 70, 182, .42);
+	border-bottom-color: rgba(29, 73, 188, .42);
 	transform: rotate(-10deg);
 }
 
 .nqi-scene::after {
-	width: 470px;
-	height: 280px;
+	width: 474px;
+	height: 286px;
 	left: 118px;
-	top: 92px;
-	border: 2px solid rgba(44, 102, 246, .72);
+	top: 94px;
+	border: 2px solid rgba(47, 108, 252, .76);
 	border-left-color: transparent;
 	border-bottom-color: rgba(24, 63, 167, .34);
 	transform: rotate(20deg);
@@ -169,44 +189,42 @@ button { font: inherit; }
 	pointer-events: none;
 }
 .nqi-card-back {
-	width: 430px;
-	height: 320px;
-	left: 166px;
-	top: 112px;
+	width: 438px;
+	height: 326px;
+	left: 168px;
+	top: 116px;
 	border-width: 2px;
-	border-color: rgba(38, 96, 235, .64) rgba(31, 78, 202, .56) rgba(21, 55, 145, .30) transparent;
+	border-color: rgba(41, 102, 245, .69) rgba(31, 78, 202, .58) rgba(21, 55, 145, .30) transparent;
 	transform: rotate(30deg);
 }
 .nqi-card-front {
-	width: 350px;
-	height: 390px;
-	left: 236px;
-	top: 116px;
+	width: 356px;
+	height: 398px;
+	left: 240px;
+	top: 121px;
 	border-width: 2px;
-	border-color: rgba(37, 94, 230, .58) rgba(28, 72, 190, .50) rgba(18, 49, 132, .28) transparent;
+	border-color: rgba(41, 100, 240, .62) rgba(28, 72, 190, .52) rgba(18, 49, 132, .28) transparent;
 	transform: rotate(43deg);
 }
-.nqi-card-line,
-.nqi-hero-icon { display: none; }
 
 .nqi-hero-copy {
 	position: absolute;
 	left: 58px;
-	top: 124px;
-	width: 430px;
+	top: 146px;
+	width: 445px;
 	margin: 0;
 	text-align: left;
-	font-size: 17px;
+	font-size: 18px;
 	line-height: 1.38;
 	font-weight: 430;
-	letter-spacing: -.16px;
+	letter-spacing: -.17px;
 	color: rgba(188, 202, 229, .82);
 }
 
 .nqi-panel {
 	position: absolute;
 	inset: 0;
-	padding: 66px 58px 28px;
+	padding: 90px 58px 30px;
 }
 
 .nqi-title {
@@ -220,26 +238,20 @@ button { font: inherit; }
 	text-shadow: 0 4px 18px rgba(0, 0, 0, .24);
 }
 
-.nqi-version { display: none; }
-
 .nqi-location {
 	position: absolute;
 	left: 58px;
 	right: 58px;
-	top: 234px;
-	height: 120px;
-	padding: 21px 28px;
-	border: 1px solid rgba(109, 131, 174, .23);
+	top: 254px;
+	height: 128px;
+	padding: 23px 28px 20px;
+	border: 1px solid rgba(109, 131, 174, .24);
 	border-radius: 15px;
-	background: linear-gradient(105deg, rgba(14, 24, 40, .90), rgba(17, 28, 48, .85) 58%, rgba(21, 36, 67, .76));
+	background: linear-gradient(105deg, rgba(14, 24, 40, .91), rgba(17, 28, 48, .86) 58%, rgba(21, 36, 67, .77));
 	box-shadow:
 		0 17px 42px rgba(0, 0, 0, .23),
-		inset 0 1px 0 rgba(255, 255, 255, .015);
+		inset 0 1px 0 rgba(255, 255, 255, .018);
 	backdrop-filter: blur(16px);
-}
-
-.nqi-location-head {
-	display: block;
 }
 
 .nqi-location-label {
@@ -250,49 +262,31 @@ button { font: inherit; }
 	color: rgba(245, 248, 255, .94);
 }
 
-/* Le chemin est volontairement fixe : l'installation machine a un dossier
-   système déterministe et le mockup demandé ne propose plus de faux choix. */
-.nqi-link { display: none; }
+.nqi-location-space {
+	margin-top: 11px;
+	font-size: 13.5px;
+	line-height: 1.25;
+	font-weight: 430;
+	letter-spacing: -.05px;
+	color: rgba(166, 184, 216, .76);
+}
 
 .nqi-path {
-	margin-top: 45px;
+	margin-top: 12px;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
-	font-size: 16px;
-	line-height: 1.25;
+	font-size: 16.5px;
+	line-height: 1.2;
 	font-weight: 440;
-	color: rgba(247, 249, 255, .95);
+	letter-spacing: -.08px;
+	color: rgba(247, 249, 255, .96);
 }
-
-.nqi-metrics {
-	position: absolute;
-	left: 86px;
-	top: 274px;
-	display: block;
-	margin: 0;
-	pointer-events: none;
-}
-.nqi-metric {
-	padding: 0;
-	border: 0;
-	background: transparent;
-}
-.nqi-metric:first-child { display: none; }
-.nqi-metric-label,
-.nqi-metric-value {
-	display: inline;
-	font-size: 13px;
-	line-height: 1.3;
-	font-weight: 430;
-	color: rgba(166, 184, 216, .74);
-}
-.nqi-metric-label::after { content: " · "; }
 
 .nqi-actions {
 	position: absolute;
-	right: 58px;
-	bottom: 28px;
+	right: 46px;
+	bottom: 39px;
 	width: 214px;
 	padding: 0;
 }
@@ -306,13 +300,13 @@ button { font: inherit; }
 }
 
 .nqi-primary {
-	height: 52px;
+	height: 55px;
 	border: 0;
 	background: linear-gradient(180deg, #6177ff 0%, #4f61f2 100%);
 	color: #fff;
 	box-shadow:
-		0 10px 25px rgba(44, 73, 233, .33),
-		inset 0 1px 0 rgba(255, 255, 255, .17);
+		0 10px 25px rgba(44, 73, 233, .34),
+		inset 0 1px 0 rgba(255, 255, 255, .18);
 	font-size: 17px;
 	transition: transform .12s ease, filter .12s ease;
 }
@@ -324,9 +318,10 @@ button { font: inherit; }
 	margin-right: 12px;
 	vertical-align: -6px;
 	clip-path: polygon(50% 0, 88% 13%, 88% 53%, 75% 75%, 50% 100%, 25% 75%, 12% 53%, 12% 13%);
-	background: conic-gradient(from 0deg, #66b7ff 0 25%, #ffd94f 0 50%, #5ba8ff 0 75%, #ffe05e 0 100%);
+	background: conic-gradient(from 0deg, #63b4ff 0 25%, #ffd94f 0 50%, #5aa8ff 0 75%, #ffe05e 0 100%);
 	filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .22));
 }
+.nqi-primary-plain::before { display: none; }
 .nqi-primary:hover { filter: brightness(1.07); }
 .nqi-primary:active { transform: translateY(1px); }
 

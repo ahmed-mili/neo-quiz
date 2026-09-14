@@ -31,8 +31,9 @@ export interface PaquetInstallable {
 }
 
 /** Ne retient que le NSIS VERSIONNÉ de la dernière release applicative.
-    Le nom fixe `neo-quiz-setup.exe` sert au site, jamais à identifier la
-    version que le bootstrapper est sur le point d'installer. */
+    Un ancien alias `neo-quiz-setup.exe` peut subsister dans une release
+    historique : il n'est jamais une source de version et le site ne le
+    distribue plus comme point d'entrée. */
 export function resoudrePaquet(release: ReleaseGithub): PaquetInstallable | null {
 	if (release.draft || release.prerelease) return null;
 	const m = /^desktop-v(.+)$/.exec(release.tag_name);

@@ -204,6 +204,30 @@ function rendreErreurElevation(parent: HTMLElement): void {
 	annuler.addEventListener("click", () => window.neoInstaller.fermer());
 }
 
+function rendreIconeCommentaires(parent: HTMLElement): void {
+	const espaceSvg = "http://www.w3.org/2000/svg";
+	const icone = document.createElementNS(espaceSvg, "svg");
+	icone.setAttribute("width", "18");
+	icone.setAttribute("height", "18");
+	icone.setAttribute("viewBox", "0 0 24 24");
+	icone.setAttribute("fill", "none");
+	icone.setAttribute("stroke", "currentColor");
+	icone.setAttribute("stroke-width", "2");
+	icone.setAttribute("stroke-linecap", "round");
+	icone.setAttribute("stroke-linejoin", "round");
+	icone.setAttribute("aria-hidden", "true");
+	for (const donnees of [
+		"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z",
+		"M12 15h.01",
+		"M12 7v4",
+	]) {
+		const chemin = document.createElementNS(espaceSvg, "path");
+		chemin.setAttribute("d", donnees);
+		icone.appendChild(chemin);
+	}
+	parent.appendChild(icone);
+}
+
 function rendre(): void {
 	document.documentElement.lang = currentLang();
 	document.title = t("installer.windowTitle");
@@ -221,7 +245,7 @@ function rendre(): void {
 
 	const commentaires = ajouter(panneau, "button", "nqi-feedback");
 	commentaires.type = "button";
-	ajouter(commentaires, "span", "nqi-feedback-icon").setAttribute("aria-hidden", "true");
+	rendreIconeCommentaires(commentaires);
 	ajouter(commentaires, "span", undefined, t("installer.feedback"));
 	commentaires.addEventListener("click", () => window.neoInstaller.commentaires());
 

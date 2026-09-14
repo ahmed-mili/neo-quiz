@@ -144,6 +144,17 @@ function rendreAction(parent: HTMLElement): void {
 	}
 }
 
+function rendreLegal(parent: HTMLElement): void {
+	const legal = ajouter(parent, "div", "nqi-legal");
+	const ligne = ajouter(legal, "p", "nqi-legal-copy");
+	ligne.appendChild(document.createTextNode(t("installer.legal.beforeTerms")));
+	ajouter(ligne, "span", "nqi-legal-link", t("installer.legal.terms"));
+	ligne.appendChild(document.createTextNode(t("installer.legal.between")));
+	ajouter(ligne, "span", "nqi-legal-link", t("installer.legal.privacy"));
+	ligne.appendChild(document.createTextNode(t("installer.legal.afterPrivacy")));
+	ajouter(legal, "p", "nqi-legal-copy", t("installer.legal.components"));
+}
+
 function rendre(): void {
 	document.documentElement.lang = currentLang();
 	document.title = t("installer.windowTitle");
@@ -162,10 +173,6 @@ function rendre(): void {
 		const emplacement = ajouter(panneau, "div", "nqi-location");
 		const ligne = ajouter(emplacement, "div", "nqi-location-head");
 		ajouter(ligne, "span", "nqi-location-label", t("installer.location.label"));
-		const modifier = ajouter(ligne, "button", "nqi-link", t("installer.location.change"));
-		modifier.type = "button";
-		modifier.disabled = etat.phase !== "pret" && etat.phase !== "annule" && etat.phase !== "erreur";
-		modifier.addEventListener("click", () => { void choisirDossier(); });
 		const chemin = ajouter(emplacement, "div", "nqi-path", infos.dossier);
 		chemin.title = infos.dossier;
 
@@ -174,21 +181,13 @@ function rendre(): void {
 		rendreMetrique(metriques, t("installer.availableSpace"), formatOctets(infos.espaceDisponible));
 	}
 
+	rendreLegal(panneau);
+	const commentaires = ajouter(panneau, "div", "nqi-feedback");
+	ajouter(commentaires, "span", "nqi-feedback-icon").setAttribute("aria-hidden", "true");
+	ajouter(commentaires, "span", undefined, t("installer.feedback"));
+
 	const actions = ajouter(panneau, "div", "nqi-actions");
 	rendreAction(actions);
-}
-
-async function choisirDossier(): Promise<void> {
-	if (!infos) return;
-	try {
-		const choix = await window.neoInstaller.choisirDossier(infos.dossier);
-		if (!choix) return;
-		infos = { ...infos, dossier: choix.dossier, espaceDisponible: choix.espaceDisponible };
-		rendre();
-	} catch {
-		etat = { phase: "erreur", code: "generic" };
-		rendre();
-	}
 }
 
 function lancerInstallation(): void {

@@ -35,7 +35,7 @@ import { enregistrerCanaux } from "./canaux";
 import { cheminDossierDefaut } from "./dossier-defaut";
 import { perimetreInitial } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { CANAUX, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
+import { CANAUX, CLE_REGLAGES_IA, CLE_REGLAGES_LANGUE, CLE_REGLAGES_ZOOM } from "./pont";
 import type { EtatFenetre } from "./pont";
 import { creerMiseAJour, lireReglageAuto } from "./mise-a-jour";
 import type { MiseAJour } from "./mise-a-jour";
@@ -506,10 +506,17 @@ if (!app.requestSingleInstanceLock()) {
 		   la fenêtre : `app.getLocale()` est la locale de Chromium, celle que le
 		   rendu lit par `navigator.language` (`src/host/platform.ts`). Le mode
 		   « auto » de `src/i18n.ts` n'a ni hôte ni `navigator` ici — la langue
-		   est posée EXPLICITEMENT. */
-		setLanguage(/^fr\b/i.test(app.getLocale()) ? "fr" : "en");
+		   est posée EXPLICITEMENT — sauf si le réglage `language` en décide
+		   autrement (page Réglages, ou le bootstrapper d'après la page du site
+		   d'où l'exe a été téléchargé) : le principal suit le même réglage que
+		   le rendu, sinon un dialogue natif parlerait une autre langue que la
+		   fenêtre. Une valeur inconnue vaut « auto ». */
 		const donnees = app.getPath("userData");
 		reglages = creerReglages(path.join(donnees, "settings.json"));
+		const langueReglee = await reglages.lire(CLE_REGLAGES_LANGUE);
+		setLanguage(langueReglee === "fr" || langueReglee === "en"
+			? langueReglee
+			: /^fr\b/i.test(app.getLocale()) ? "fr" : "en");
 		/* Le dossier de quiz PAR DÉFAUT (tranche 9) : créé AVANT le périmètre,
 		   pour qu'il existe déjà quand `perimetreInitial` l'autorise — sans quoi
 		   la première ouverture d'un fichier dedans (« Nouveau quiz ») tomberait

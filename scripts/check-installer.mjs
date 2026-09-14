@@ -20,7 +20,7 @@ const workflow = readFileSync(resolve(racine, ".github/workflows/release.yml"), 
 const siteEn = readFileSync(resolve(racine, "docs/index.html"), "utf8");
 const siteFr = readFileSync(resolve(racine, "docs/fr/index.html"), "utf8");
 
-await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argumentsNsis }) => {
+await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argumentsNsis, langueDepuisNom, langueDepuisZone }) => {
 	const r = makeReporter("Installateur — bootstrapper");
 	/* Un PNG peut avoir un en-tête valide tout en affichant des pixels abîmés.
 	   Décompresser les IDAT vérifie aussi leur somme de contrôle zlib. */
@@ -100,11 +100,43 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argume
 	r.check("publication : l'alias NSIS public a disparu",
 		workflow.includes("neo-quiz-setup.exe\n"), false);
 
+	r.check("publication : release attache aussi le bootstrapper français",
+		workflow.includes("apps/windows/dist-installer-bootstrapper/Install-NeoQuiz-fr.exe"), true);
+	r.check("publication : le nom français est une copie du même exe",
+		workflow.includes("cp Install-NeoQuiz.exe Install-NeoQuiz-fr.exe"), true);
+
+	/* La langue voyage AVEC le fichier : par son nom d'abord, par le flux
+	   `Zone.Identifier` du navigateur ensuite. Un nom sans rapport ou un
+	   référent d'un autre site ne valent JAMAIS « en » par défaut : c'est
+	   l'appelant qui retombe sur la locale, et lui seul. */
+	r.check("langue : le nom anglais", langueDepuisNom("Install-NeoQuiz.exe"), "en");
+	r.check("langue : le nom français", langueDepuisNom("Install-NeoQuiz-fr.exe"), "fr");
+	r.check("langue : la casse du nom est indifférente", langueDepuisNom("install-neoquiz-FR.exe"), "fr");
+	r.check("langue : le suffixe du navigateur « (1) » est ignoré", langueDepuisNom("Install-NeoQuiz-fr (2).exe"), "fr");
+	r.check("langue : un code inconnu ne vaut rien", langueDepuisNom("Install-NeoQuiz-xx.exe"), null);
+	r.check("langue : un autre nom ne vaut rien", langueDepuisNom("neo-quiz-setup-1.0.2.exe"), null);
+	r.check("langue : référent de la page française",
+		langueDepuisZone("[ZoneTransfer]\r\nZoneId=3\r\nReferrerUrl=https://ahmed-mili.github.io/neo-quiz/fr/\r\nHostUrl=https://objects.githubusercontent.com/x\r\n"), "fr");
+	r.check("langue : référent de la racine du site",
+		langueDepuisZone("[ZoneTransfer]\nZoneId=3\nReferrerUrl=https://ahmed-mili.github.io/neo-quiz/\n"), "en");
+	r.check("langue : référent de la page anglaise explicite",
+		langueDepuisZone("[ZoneTransfer]\nReferrerUrl=https://ahmed-mili.github.io/neo-quiz/en/\n"), "en");
+	r.check("langue : référent d'un autre site ne vaut rien",
+		langueDepuisZone("[ZoneTransfer]\nZoneId=3\nReferrerUrl=https://github.com/ahmed-mili/neo-quiz/releases\n"), null);
+	r.check("langue : le même chemin sur un autre hôte ne vaut rien",
+		langueDepuisZone("[ZoneTransfer]\nReferrerUrl=https://exemple.test/neo-quiz/fr/\n"), null);
+	r.check("langue : flux sans URL ne vaut rien", langueDepuisZone("[ZoneTransfer]\nZoneId=3\n"), null);
+	r.check("langue : HostUrl seul suffit",
+		langueDepuisZone("[ZoneTransfer]\nHostUrl=https://ahmed-mili.github.io/neo-quiz/fr/index.html\n"), "fr");
+
 	for (const [langue, site] of [["EN", siteEn], ["FR", siteFr]]) {
 		r.check(`site ${langue} : Windows ne pointe plus sur l'ancien NSIS`,
 			site.includes("releases/latest/download/neo-quiz-setup.exe"), false);
 		r.check(`site ${langue} : Windows cible le bootstrapper exact`,
 			site.includes('trouverActif(donnees.assets, "Install-NeoQuiz.exe")'), true);
+		// La page française distribue le nom FRANÇAIS ; l'anglaise ne doit pas.
+		r.check(`site ${langue} : le nom français ${langue === "FR" ? "est" : "n'est pas"} distribué`,
+			site.includes('trouverActif(donnees.assets, "Install-NeoQuiz-fr.exe")'), langue === "FR");
 		r.check(`site ${langue} : Windows n'offre pas un faux choix de versions`,
 			site.includes('activerSelecteurVersion("windows"'), false);
 	}

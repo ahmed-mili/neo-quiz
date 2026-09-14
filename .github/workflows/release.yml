@@ -231,6 +231,17 @@ jobs:
         run: npm run pack:installer
         working-directory: apps/windows
 
+      # Le MÊME bootstrapper sous un second nom : `Install-NeoQuiz-fr.exe`,
+      # que la page française du site distribue. L'installeur lit la langue
+      # dans son propre nom de fichier (`installer/noyau.ts`,
+      # `langueDepuisNom`) et la transmet à l'application — un exe téléchargé
+      # ne sait pas autrement de quelle page il vient. (Le bootstrapper ne
+      # passe pas par SignPath : seul le NSIS versionné y est signé.)
+      - name: Duplicate the bootstrapper under its French name
+        shell: bash
+        run: cp Install-NeoQuiz.exe Install-NeoQuiz-fr.exe
+        working-directory: apps/windows/dist-installer-bootstrapper
+
       # Les étapes SignPath ci-dessous sont sautées tant que
       # `vars.SIGNPATH_ORGANIZATION_ID` n'est pas posée : `main` reste
       # publiable non signé pendant que la demande de certificat est en cours.
@@ -344,6 +355,7 @@ jobs:
             apps/windows/dist-installer/*.exe.blockmap
             apps/windows/dist-installer/latest.yml
             apps/windows/dist-installer-bootstrapper/Install-NeoQuiz.exe
+            apps/windows/dist-installer-bootstrapper/Install-NeoQuiz-fr.exe
           if-no-files-found: error
 
       # `Install-NeoQuiz.exe` est désormais l'entrée PUBLIQUE stable. Le
@@ -363,6 +375,7 @@ jobs:
             apps/windows/dist-installer/*.exe.blockmap
             apps/windows/dist-installer/latest.yml
             apps/windows/dist-installer-bootstrapper/Install-NeoQuiz.exe
+            apps/windows/dist-installer-bootstrapper/Install-NeoQuiz-fr.exe
 
   app-linux:
     needs: prepare

@@ -758,8 +758,14 @@
 			})
 			.then(function (donnees) {
 				latestChargee = donnees;
-				var actifWindows = trouverActif(donnees.assets, "Install-NeoQuiz.exe");
-				afficherVersion("windows", donnees, "Install-NeoQuiz.exe", null);
+				// Le bootstrapper FRANÇAIS : mêmes octets que `Install-NeoQuiz.exe`,
+				// attaché sous ce second nom par release.yml pour que l'installeur
+				// (et l'application qu'il installe) démarrent en français — le
+				// fichier ne sait pas d'où il vient autrement. Repli sur le nom
+				// anglais tant qu'une release ne porte pas encore le second.
+				var actifWindows = trouverActif(donnees.assets, "Install-NeoQuiz-fr.exe")
+					|| trouverActif(donnees.assets, "Install-NeoQuiz.exe");
+				afficherVersion("windows", donnees, "Install-NeoQuiz-fr.exe", null);
 				var carteWindows = document.getElementById("carte-windows");
 				if (actifWindows && carteWindows) carteWindows.setAttribute("href", actifWindows.browser_download_url);
 				afficherVersion("linux", donnees, ".appimage", null);

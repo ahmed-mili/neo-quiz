@@ -4,6 +4,7 @@ import "./assets/toast.css";
 import "./assets/shell.css";
 import "./assets/modal.css";
 import { setLanguage, t } from "../../../src/i18n";
+import { chargerLangue } from "./ui/langue";
 import { LOG_PREFIX } from "../../../src/branding";
 import { createScanner } from "../../../src/dashboard/scanner";
 import type { QuizIndexEntry, Scanner } from "../../../src/dashboard/scanner";
@@ -192,8 +193,11 @@ async function ouvrirQuiz(root: HTMLElement, scanner: Scanner, store: ReviewStor
 async function demarrer(): Promise<void> {
 	const root = document.getElementById("neo-quiz-root");
 	if (!root) throw new Error("#neo-quiz-root introuvable");
-	// « auto » : la langue de l'hôte, sinon celle du navigateur.
-	setLanguage("auto");
+	/* Le réglage `language` : « auto » (la langue de l'hôte, sinon celle du
+	   navigateur), ou la langue choisie — dans la page Réglages, ou par le
+	   bootstrapper d'installation d'après la page du site d'où l'exe a été
+	   téléchargé. Lu AVANT le premier `t()`. */
+	setLanguage(await chargerLangue());
 	document.title = t("app.window.title");
 	/* Montée UNE FOIS, avant le premier écran : elle survit à tous les
 	   changements d'écran qui suivent (coquille, réglages), qui eux se

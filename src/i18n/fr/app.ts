@@ -60,6 +60,8 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.settings.general": "Général",
 	"app.reprise.label": "Rouvrir là où on s'était arrêté",
 	"app.reprise.hint": "Au lancement, Neo Quiz rouvre le dernier quiz et la dernière question consultés.",
+	"app.settings.languageAuto": "Automatique (suivre Windows)",
+	"app.settings.languageHint": "Langue de l'interface. L'installeur la règle sur la langue de la page de téléchargement ; changez-la ici à tout moment. Les quiz générés suivent toujours la langue de votre demande.",
 
 	/* ── Fond d'écran (application seulement) ── */
 	"app.settings.wallpaper": "Fond d'écran",

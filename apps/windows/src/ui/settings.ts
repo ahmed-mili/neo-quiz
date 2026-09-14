@@ -28,6 +28,8 @@ import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host"
 import { poserLogoObsidian } from "./marques";
 import { monterEtatApropos } from "./mise-a-jour";
 import { chargerReprise, reglerReprise } from "./reprise";
+import { chargerLangue, lireLangue, reglerLangue } from "./langue";
+import { createSelect } from "../../../../src/dashboard/ui-select";
 import { monterReglagesFond } from "./fond";
 
 export function renderSettings(
@@ -227,6 +229,28 @@ export function renderSettings(
 	ajouter(general, "p", "nq-reglages-aide", t("app.reprise.hint"));
 	repriseCase.addEventListener("change", () => { void reglerReprise(repriseCase.checked); });
 	void chargerReprise().then(r => { repriseCase.checked = r.actif; });
+
+	/* La langue : le SEUL dropdown autorisé (`ui-select.ts`), avec les libellés
+	   du greffon (`settings.language.*`) — mêmes trois valeurs. Au changement,
+	   le réglage est écrit puis la page RECHARGÉE : tout est rendu par `t()`
+	   au rendu, mais la barre de titre et le menu sont montés une fois pour
+	   toutes, et un rechargement est plus sûr qu'une liste de choses à
+	   redessiner qui s'allongerait en silence. */
+	const langueLigne = ajouter(general, "div", "nq-reglages-langue");
+	ajouter(langueLigne, "span", "nq-reglages-nom", t("settings.language.name"));
+	const langueSelect = createSelect(langueLigne, {
+		value: "auto",
+		options: [
+			{ value: "auto", label: t("app.settings.languageAuto") },
+			{ value: "en", label: t("settings.language.en") },
+			{ value: "fr", label: t("settings.language.fr") },
+		],
+		onChange: valeur => {
+			void reglerLangue(lireLangue(valeur)).then(() => window.location.reload());
+		},
+	});
+	void chargerLangue().then(l => langueSelect.setValue(l));
+	ajouter(general, "p", "nq-reglages-aide", t("app.settings.languageHint"));
 
 	/* ── Fond d'écran ── */
 	const fond = ajouter(contenu, "section", "nq-reglages-section");

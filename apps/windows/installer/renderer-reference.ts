@@ -268,7 +268,12 @@ async function initialiser(): Promise<void> {
 	}
 }
 
-setLanguage("auto");
+/* La langue vient du PRINCIPAL par l'URL (`main.ts`, `loadFile` avec
+   `query.lang`) : nom du fichier téléchargé, référent du navigateur, ou
+   locale système — jamais `navigator.language` seul, qui ignorerait la page
+   du site d'où l'exe vient. « auto » seulement si l'URL n'en dit rien. */
+const langueUrl = new URLSearchParams(window.location.search).get("lang");
+setLanguage(langueUrl === "fr" || langueUrl === "en" ? langueUrl : "auto");
 window.neoInstaller.surEtat(nouvelEtat => {
 	etat = nouvelEtat.phase === "annule" ? { phase: "pret" } : nouvelEtat;
 	rendre();

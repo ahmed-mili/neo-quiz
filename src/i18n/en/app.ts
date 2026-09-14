@@ -85,6 +85,8 @@ export const EN_APP = {
 	"app.settings.general": "General",
 	"app.reprise.label": "Reopen where you left off",
 	"app.reprise.hint": "At launch, Neo Quiz opens the last quiz and question you were on.",
+	"app.settings.languageAuto": "Automatic (follow Windows)",
+	"app.settings.languageHint": "Interface language. The installer sets it to the language of the download page; change it here at any time. Generated quizzes always follow the language of your prompt.",
 
 	/* ── Fond d'écran (application seulement) ── */
 	"app.settings.wallpaper": "Wallpaper",

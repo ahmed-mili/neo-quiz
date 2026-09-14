@@ -70,3 +70,57 @@ export function resoudrePaquet(release: ReleaseGithub): PaquetInstallable | null
 export function argumentsNsis(dossier: string): string[] {
 	return ["/allusers", "/S", `/D=${dossier}`];
 }
+
+/* ─────────── la langue de l'installeur ───────────
+   L'exe téléchargé ne sait pas de quelle page du site il vient. La langue
+   voyage donc AVEC le fichier, par deux canaux, du plus sûr au moins sûr :
+
+   1. Le NOM du fichier : la release attache le même bootstrapper deux fois,
+      `Install-NeoQuiz.exe` (anglais) et `Install-NeoQuiz-fr.exe`, et la page
+      française du site pointe sur le second.
+   2. Le flux `Zone.Identifier` (« Mark of the Web ») que Chrome, Edge et
+      Firefox posent sur tout téléchargement : il porte `ReferrerUrl` et
+      `HostUrl`, donc `/fr/` quand le clic vient de la page française. Il
+      couvre un fichier renommé par l'utilisateur ou par le navigateur
+      (« Install-NeoQuiz (1).exe »), et le nom anglais servi par GitHub à qui
+      a cliqué depuis la page française avant que la release porte le second.
+
+   Ni l'un ni l'autre : `null`, et l'appelant retombe sur la locale système. */
+
+export type LangueInstallateur = "en" | "fr";
+
+const LANGUES: readonly LangueInstallateur[] = ["en", "fr"];
+
+/** `Install-NeoQuiz-fr.exe`, `Install-NeoQuiz-fr (1).exe` → « fr » ;
+    `Install-NeoQuiz.exe` → « en » ; un nom sans rapport → `null`. */
+export function langueDepuisNom(nom: string): LangueInstallateur | null {
+	const m = /^Install-NeoQuiz(?:-([a-z]{2}))?(?: \(\d+\))?\.exe$/i.exec(nom.trim());
+	if (!m) return null;
+	if (!m[1]) return "en";
+	const code = m[1].toLowerCase();
+	return (LANGUES as readonly string[]).includes(code) ? code as LangueInstallateur : null;
+}
+
+/** Lit `ReferrerUrl` puis `HostUrl` d'un flux `Zone.Identifier` (format
+    INI) et en tire la langue du site : `/fr/` → « fr », la racine ou `/en/`
+    → « en ». Un flux d'un autre site, ou sans URL, → `null` (jamais « en »
+    par défaut : ce n'est pas une preuve). */
+export function langueDepuisZone(zone: string): LangueInstallateur | null {
+	for (const cle of ["ReferrerUrl", "HostUrl"]) {
+		const m = new RegExp(`^${cle}=(.+)$`, "mi").exec(zone);
+		if (!m) continue;
+		let url: URL;
+		try {
+			url = new URL(m[1].trim());
+		} catch {
+			continue;
+		}
+		if (url.hostname !== "ahmed-mili.github.io") continue;
+		const segments = url.pathname.split("/").filter(Boolean);
+		if (segments[0] !== "neo-quiz") continue;
+		const code = segments[1]?.toLowerCase();
+		if (code && (LANGUES as readonly string[]).includes(code)) return code as LangueInstallateur;
+		return "en";
+	}
+	return null;
+}

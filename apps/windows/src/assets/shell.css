@@ -239,6 +239,8 @@ body {
 .nq-maj-bouton { color: var(--text-accent); }
 .nq-maj-bloc { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .nq-maj-auto { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.nq-reglages-langue { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 12.5px; }
+.nq-reglages-langue .qbd-select { min-width: 220px; }
 .nq-maj-installer, .nq-maj-verifier { align-self: flex-start; }
 
 /* ── Les dates d'examen (tâche 10) ──

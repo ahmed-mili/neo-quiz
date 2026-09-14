@@ -9,14 +9,14 @@
 ══════════════════════════════════════════════════════════ */
 
 import { randomBytes, randomUUID } from "node:crypto";
-import { access, statfs } from "node:fs/promises";
+import { access, mkdir, readFile, rename, statfs, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { setLanguage, t } from "../../../src/i18n";
 import { PRODUCT_NAME } from "../../../src/branding";
-import { resoudrePaquet, type PaquetInstallable, type ReleaseGithub } from "./noyau";
+import { langueDepuisNom, langueDepuisZone, resoudrePaquet, type LangueInstallateur, type PaquetInstallable, type ReleaseGithub } from "./noyau";
 import {
 	CANAUX_INSTALLATEUR,
 	type ChargeTravailleur,
@@ -37,6 +37,11 @@ let serveurTube: Server | null = null;
 let installationActive = false;
 let installationCritique = false;
 let fermetureAutorisee = false;
+/** La langue retenue, et si elle vient du SITE (nom du fichier ou référent)
+    plutôt que de la locale système : seule la première mérite d'être écrite
+    dans les réglages de l'application — un choix, pas une déduction. */
+let langue: LangueInstallateur = "en";
+let langueDuSite = false;
 
 function argumentsTravailleur(): { tube: string; charge: string } | null {
 	const index = process.argv.indexOf(DRAPEAU_TRAVAILLEUR);
@@ -171,6 +176,7 @@ async function traiterMessage(message: MessageTravailleur): Promise<void> {
 				envoyerEtat({ phase: "erreur", code: "installation" });
 				return;
 			}
+			await ecrireLangueApplication();
 			const erreur = await shell.openPath(message.executable);
 			if (erreur) {
 				nettoyerSession();
@@ -228,6 +234,70 @@ async function ecouterTravailleur(nomTube: string, secret: string): Promise<void
 			resolvePromise();
 		});
 	});
+}
+
+/** La langue de l'installeur, dans l'ordre du noyau : nom du fichier
+    téléchargé, flux `Zone.Identifier` du navigateur, locale système. */
+async function detecterLangue(): Promise<void> {
+	const executable = executablePortable();
+	const parNom = executable ? langueDepuisNom(parse(executable).base) : null;
+	if (parNom && parNom !== "en") {
+		langue = parNom; langueDuSite = true;
+		return;
+	}
+	/* Le nom par défaut (`Install-NeoQuiz.exe`) est aussi celui que GitHub
+	   sert à qui n'est pas passé par le site : le référent tranche. */
+	if (executable) {
+		try {
+			const zone = await readFile(`${executable}:Zone.Identifier`, "utf8");
+			const parZone = langueDepuisZone(zone);
+			if (parZone) {
+				langue = parZone; langueDuSite = true;
+				return;
+			}
+		} catch {
+			// pas de flux : fichier copié, ou navigateur qui n'en pose pas
+		}
+	}
+	if (parNom) {
+		langue = parNom; langueDuSite = true;
+		return;
+	}
+	langue = /^fr\b/i.test(app.getLocale().replace(/_/g, "-")) ? "fr" : "en";
+}
+
+/** Écrit la langue du site dans les réglages de l'APPLICATION, pour qu'elle
+    démarre dans la langue où l'utilisateur l'a téléchargée. Même fichier que
+    `electron/main.ts` (`%APPDATA%\Neo Quiz\settings.json`, clé `language`),
+    et JAMAIS par-dessus un choix : si la clé existe déjà, on ne touche à
+    rien. Écriture atomique comme `reglages.ts`, sans en importer le module
+    (il tirerait la file d'écriture de l'app dans le bootstrapper). */
+async function ecrireLangueApplication(): Promise<void> {
+	if (!langueDuSite) return;
+	const dossier = join(app.getPath("appData"), PRODUCT_NAME);
+	const fichier = join(dossier, "settings.json");
+	let contenu: Record<string, unknown> = {};
+	try {
+		const brut: unknown = JSON.parse(await readFile(fichier, "utf8"));
+		if (brut && typeof brut === "object" && !Array.isArray(brut)) contenu = brut as Record<string, unknown>;
+		if ("language" in contenu) return;
+	} catch {
+		// absent, ou illisible : un fichier illisible n'est pas écrasé non plus
+		try {
+			await access(fichier);
+			return;
+		} catch {
+			// vraiment absent
+		}
+	}
+	try {
+		await mkdir(dossier, { recursive: true });
+		const temporaire = `${fichier}.${process.pid}.tmp`;
+		await writeFile(temporaire, JSON.stringify({ ...contenu, language: langue }, null, 2), "utf8");
+		await rename(temporaire, fichier);
+	} catch {
+		// la langue de l'app n'est pas une raison d'échouer l'installation
+	}
 }
 
 function executablePortable(): string | null {
@@ -365,7 +435,10 @@ function creerFenetre(): void {
 		},
 	});
 	fenetre.setMenuBarVisibility(false);
-	void fenetre.loadFile(join(__dirname, "index.html"));
+	/* La langue passe au rendu par l'URL : lue SYNCHRONEMENT avant le premier
+	   rendu, là où un canal IPC arriverait après la première peinture — et le
+	   rendu a sa propre instance d'i18n, `setLanguage` d'ici ne l'atteint pas. */
+	void fenetre.loadFile(join(__dirname, "index.html"), { query: { lang: langue } });
 	fenetre.once("ready-to-show", () => fenetre?.show());
 	fenetre.on("close", evenement => {
 		if (installationActive && !fermetureAutorisee) evenement.preventDefault();
@@ -390,8 +463,9 @@ if (travailleur) {
 			fenetre.show();
 			fenetre.focus();
 		});
-		void app.whenReady().then(() => {
-			setLanguage(/^fr\b/i.test(app.getLocale().replace(/_/g, "-")) ? "fr" : "en");
+		void app.whenReady().then(async () => {
+			await detecterLangue();
+			setLanguage(langue);
 			installerCanaux();
 			creerFenetre();
 		});

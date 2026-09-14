@@ -586,6 +586,16 @@ export const CLE_REGLAGES_ZOOM = "zoom";
 export const CLE_REGLAGES_REPRISE = "reprise";
 export const CLE_DERNIERE_VUE = "derniereVue";
 
+/** La clé de la LANGUE de l'interface (`neo.reglages`) : « auto » (la langue
+    du système), « en » ou « fr » — les mêmes valeurs que le réglage
+    `language` du greffon. Écrite par le rendu (page Réglages) ET par le
+    BOOTSTRAPPER d'installation (`installer/main.ts`), qui y pose la langue
+    du site d'où l'exe a été téléchargé, une seule fois, jamais par-dessus
+    un choix. Le nom de la clé et le chemin du fichier sont donc un CONTRAT
+    entre les deux produits. Lue par le rendu ET par le principal (ses
+    dialogues natifs). */
+export const CLE_REGLAGES_LANGUE = "language";
+
 /** La clé du fond d'écran (`neo.reglages`) : `{ dossier: string; image: string
     }`, ou absente (fond embarqué). Écrite par le RENDU SEUL — ni chemin
     résolu ni URL, un chemin ABSOLU déjà admis au périmètre (par le

@@ -15,6 +15,8 @@ export const CANAUX_INSTALLATEUR = {
 	choisirDossier: "neo-installer:choisir-dossier",
 	installer: "neo-installer:installer",
 	annuler: "neo-installer:annuler",
+	reduire: "neo-installer:reduire",
+	commentaires: "neo-installer:commentaires",
 	fermer: "neo-installer:fermer",
 	etat: "neo-installer:etat",
 } as const;
@@ -33,6 +35,7 @@ export interface InfosInitialesInstallateur {
 	tailleTelechargement: number;
 	dossier: string;
 	espaceDisponible: number;
+	espaceTotal: number;
 }
 
 export interface ChoixDossierInstallateur {
@@ -54,6 +57,8 @@ export interface PontInstallateur {
 	choisirDossier(courant: string): Promise<ChoixDossierInstallateur | null>;
 	installer(dossier: string): Promise<void>;
 	annuler(): Promise<void>;
+	reduire(): void;
+	commentaires(): void;
 	fermer(): void;
 	surEtat(rappel: (etat: EtatInstallateur) => void): void;
 }

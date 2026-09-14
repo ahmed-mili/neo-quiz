@@ -223,6 +223,14 @@ jobs:
         run: npm run pack:win
         working-directory: apps/windows
 
+      # Le bootstrapper est le SEUL exécutable que le site remet directement
+      # à l'utilisateur. Le NSIS versionné reste publié, mais comme moteur
+      # silencieux téléchargé par le bootstrapper et comme paquet de mise à
+      # jour lu par electron-updater.
+      - name: Build bootstrapper (portable Electron)
+        run: npm run pack:installer
+        working-directory: apps/windows
+
       # Les étapes SignPath ci-dessous sont sautées tant que
       # `vars.SIGNPATH_ORGANIZATION_ID` n'est pas posée : `main` reste
       # publiable non signé pendant que la demande de certificat est en cours.
@@ -235,7 +243,9 @@ jobs:
           # L'action SignPath ne signe qu'un artefact de WORKFLOW (c'est ainsi
           # qu'elle prouve que GitHub a construit le fichier), et l'exe SEUL :
           # la config d'artefact (.signpath/artifact-configurations/initial.xml)
-          # n'attend que lui.
+          # n'attend que lui. Le bootstrapper demandera une extension séparée
+          # de cette configuration dans le portail SignPath avant de pouvoir
+          # être signé par le même certificat.
           path: apps/windows/dist-installer/neo-quiz-setup-*.exe
           if-no-files-found: error
 
@@ -323,7 +333,8 @@ jobs:
       # d'electron-builder sur l'exe non signé.
       - name: Package config and contents
         run: npm run check:package
-      - name: Upload installer (répétition)
+
+      - name: Upload Windows package (répétition)
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
@@ -332,25 +343,14 @@ jobs:
             apps/windows/dist-installer/*.exe
             apps/windows/dist-installer/*.exe.blockmap
             apps/windows/dist-installer/latest.yml
+            apps/windows/dist-installer-bootstrapper/neo-quiz-installer.exe
           if-no-files-found: error
-      # Copie sous un nom FIXE, en plus du fichier versionné : c'est ce nom
-      # que la page de téléchargement (docs/index.html) vise en permanence via
-      # releases/latest/download/neo-quiz-setup.exe, sans jamais changer de
-      # lien d'une version à l'autre — et cette release est toujours celle de
-      # l'app (voir « latest » dans l'en-tête). Ne remplace rien : latest.yml
-      # et le .blockmap continuent de nommer le fichier VERSIONNÉ, seul lu par
-      # electron-updater.
-      - name: Copy installer under a fixed name
-        shell: bash
-        run: |
-          ls apps/windows/dist-installer/neo-quiz-setup-*.exe
-          cp apps/windows/dist-installer/neo-quiz-setup-*.exe apps/windows/dist-installer/neo-quiz-setup.exe
 
-      # `latest.yml` et le `.blockmap` sont ce qu'electron-updater lit : la
-      # version à comparer, le sha512 à vérifier, et les blocs à ne pas
-      # retélécharger (spec de la mise à jour automatique, §3.1). La release
-      # existe déjà (job `prepare`) : ce step n'y attache que les fichiers.
-      - name: Attach installer to release
+      # `neo-quiz-installer.exe` est désormais l'entrée PUBLIQUE stable. Le
+      # NSIS n'a plus d'alias fixe : seul son nom VERSIONNÉ est attaché, car le
+      # bootstrapper le résout avec le tag et electron-updater le lit dans
+      # `latest.yml`. Cela empêche le site de contourner le bootstrapper.
+      - name: Attach Windows package to release
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
@@ -362,7 +362,7 @@ jobs:
             apps/windows/dist-installer/*.exe
             apps/windows/dist-installer/*.exe.blockmap
             apps/windows/dist-installer/latest.yml
-            apps/windows/dist-installer/neo-quiz-setup.exe
+            apps/windows/dist-installer-bootstrapper/neo-quiz-installer.exe
 
   app-linux:
     needs: prepare

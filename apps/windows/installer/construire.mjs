@@ -19,11 +19,14 @@ const sortie = join(windows, "dist-bootstrapper");
 await rm(sortie, { recursive: true, force: true });
 await mkdir(sortie, { recursive: true });
 
-/* Principal + préchargement restent CommonJS pour la même raison que
-   `electron/construire.mjs` : un préchargement sandboxé ne charge pas un
-   module ES, alors que le package Windows est `type: module`. */
+/* Le point d'entrée `main-ui.ts` enveloppe le principal historique sans le
+   recopier : on conserve ainsi la logique d'installation existante tout en
+   ajoutant les commandes propres à la fenêtre de référence. */
 await build({
-	entryPoints: [join(ici, "main.ts"), join(ici, "preload.ts")],
+	entryPoints: {
+		main: join(ici, "main-ui.ts"),
+		preload: join(ici, "preload.ts"),
+	},
 	outdir: sortie,
 	outExtension: { ".js": ".cjs" },
 	bundle: true,

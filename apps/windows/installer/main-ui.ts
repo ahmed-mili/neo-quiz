@@ -5,8 +5,8 @@ import { CANAUX_INSTALLATEUR, type InfosDisqueInstallateur } from "./protocole";
 import "./main";
 
 const URL_COMMENTAIRES = "https://github.com/ahmed-mili/neo-quiz/issues/new";
-const LARGEUR_FENETRE = 920;
-const HAUTEUR_FENETRE = 684;
+const LARGEUR_FENETRE = 720;
+const HAUTEUR_FENETRE = 640;
 
 /* Le processus principal historique garde toute la logique sensible
    d'installation. Cette couche n'ajoute que les besoins de présentation du
@@ -50,9 +50,9 @@ ipcMain.on(CANAUX_INSTALLATEUR.commentaires, () => {
 });
 
 void app.whenReady().then(() => {
-	/* La référence fournie correspond à ce rapport largeur/hauteur. Le principal
-	   historique reste inchangé ; on recale uniquement la fenêtre visible après
-	   sa création afin que les coordonnées CSS gardent la même géométrie. */
+	/* Le gabarit précédent dominait nettement la fenêtre de référence. Ce léger
+	   surplus horizontal conserve l'identité Neo Quiz sans retrouver les 920 px
+	   qui donnaient au bootstrapper l'allure d'une fenêtre d'application. */
 	const fenetre = BrowserWindow.getAllWindows()[0];
 	if (!fenetre || fenetre.isDestroyed()) return;
 	fenetre.setMaximumSize(LARGEUR_FENETRE, HAUTEUR_FENETRE);

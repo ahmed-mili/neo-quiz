@@ -67,5 +67,5 @@ export function resoudrePaquet(release: ReleaseGithub): PaquetInstallable | null
     l'ancienne page NSIS. `/D=` est spécial chez NSIS : electron-builder
     26.0.19 le lit comme TOUT ce qui suit, donc il doit rester le dernier. */
 export function argumentsNsis(dossier: string): string[] {
-	return ["/allusers", `/D=${dossier}`, "/S"];
+	return ["/allusers", "/S", `/D=${dossier}`];
 }

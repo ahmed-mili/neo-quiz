@@ -8,6 +8,8 @@ release/
 apps/windows/dist/
 apps/windows/dist-electron/
 apps/windows/dist-installer/
+apps/windows/dist-bootstrapper/
+apps/windows/dist-installer-bootstrapper/
 apps/windows/node_modules/
 
 # Le code Tauri est retiré du dépôt (tâche 7, migration Electron), mais son

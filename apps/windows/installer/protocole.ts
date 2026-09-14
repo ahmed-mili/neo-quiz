@@ -13,8 +13,11 @@ import type { PaquetInstallable } from "./noyau";
 export const CANAUX_INSTALLATEUR = {
 	initialiser: "neo-installer:initialiser",
 	choisirDossier: "neo-installer:choisir-dossier",
+	espaceDisque: "neo-installer:espace-disque",
 	installer: "neo-installer:installer",
 	annuler: "neo-installer:annuler",
+	reduire: "neo-installer:reduire",
+	commentaires: "neo-installer:commentaires",
 	fermer: "neo-installer:fermer",
 	etat: "neo-installer:etat",
 } as const;
@@ -40,6 +43,11 @@ export interface ChoixDossierInstallateur {
 	espaceDisponible: number;
 }
 
+export interface InfosDisqueInstallateur {
+	espaceDisponible: number;
+	espaceTotal: number;
+}
+
 export type EtatInstallateur =
 	| { phase: "pret" }
 	| { phase: "elevation" }
@@ -52,8 +60,11 @@ export type EtatInstallateur =
 export interface PontInstallateur {
 	initialiser(): Promise<InfosInitialesInstallateur>;
 	choisirDossier(courant: string): Promise<ChoixDossierInstallateur | null>;
+	espaceDisque(dossier: string): Promise<InfosDisqueInstallateur>;
 	installer(dossier: string): Promise<void>;
 	annuler(): Promise<void>;
+	reduire(): void;
+	commentaires(): void;
 	fermer(): void;
 	surEtat(rappel: (etat: EtatInstallateur) => void): void;
 }

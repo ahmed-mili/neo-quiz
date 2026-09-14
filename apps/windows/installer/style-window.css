@@ -2,8 +2,16 @@
    comme l'application complète. Ces surcharges restent séparées du décor afin
    que la densité de la barre et le gabarit puissent évoluer sans retoucher la
    scène de fond. */
+/* Fenêtre transparente (`transparent: true`, `main.ts`) : le fond vit sur
+   `#app`, qui porte l'arrondi des coins, et rien d'autre ne peint. */
+:root, body { background: transparent; }
 #app {
 	padding: 0;
+	border-radius: 8px;
+	overflow: hidden;
+	/* Le liseré d'un pixel que DWM dessinait, mais discret et de notre
+	   couleur : sans lui, le coin anti-aliasé se fond dans un fond sombre. */
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
 	/* Fond PLAT : le halo radial du décor culminait pile sous la barre de
 	   titre et la dessinait en bande plus claire, comme un chrome posé sur la
 	   fenêtre. Chez la référence (Google Play Games), la barre n'est pas une
@@ -27,7 +35,7 @@
 	padding-left: 22px;
 	/* Comme la référence : une bande PLUS SOMBRE que le reste, mais
 	   translucide, pour que le halo du décor reste visible à travers. */
-	background: rgba(2, 6, 14, .58);
+	background: rgba(2, 6, 14, .74);
 }
 
 /* La coquille prend toute la fenêtre et son décor remonte sous la barre. */
@@ -145,6 +153,12 @@
 .nqi-location {
 	height: auto;
 	padding: 20px 28px 22px;
+	/* Comme la référence : un aplat presque opaque, sans contour, sans flou ni
+	   ombre ; le décor n'y transparaît qu'à peine. */
+	border: 0;
+	background: rgba(26, 34, 56, .90);
+	box-shadow: none;
+	backdrop-filter: none;
 }
 .nqi-location-head {
 	display: flex;

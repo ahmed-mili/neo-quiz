@@ -344,9 +344,17 @@ function creerFenetre(): void {
 		maxWidth: 920,
 		maxHeight: 640,
 		frame: false,
+		/* Sans `thickFrame`, Windows 11 ne dessine plus son contour DWM d'un
+		   pixel clair autour de la fenêtre (visible sur fond noir). La fenêtre
+		   n'est pas redimensionnable : la bordure de saisie ne manque à rien. */
+		thickFrame: false,
+		/* Sans `thickFrame`, Windows 11 n'arrondit plus les coins non plus :
+		   la fenêtre devient TRANSPARENTE et c'est le CSS de `#app` qui porte
+		   l'arrondi (`style-window.css`). Pas de `backgroundColor` : il
+		   peindrait un rectangle opaque sous les coins. */
+		transparent: true,
 		resizable: false,
 		show: false,
-		backgroundColor: "#111318",
 		icon: join(__dirname, "icon.png"),
 		title: t("installer.windowTitle"),
 		webPreferences: {

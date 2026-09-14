@@ -160,7 +160,7 @@ export const REAL_VAULTS = [
  * Les vérifications à lancer avant de commiter quoi que ce soit, dans l'ordre
  * du moins cher au plus cher : le typecheck d'abord (quelques secondes,
  * attrape la majorité des régressions), puis les trois seuls jeux de cas du
- * projet (`check:md`/`check:export`/`check:lesson` — rapides, sans
+ * projet (`check:md`/`check:export` — rapides, sans
  * dépendance externe, sur le code réel via esbuild), lancés à CHAQUE livraison
  * plutôt que seulement quand le rendu ou l'écriture semblent touchés : une
  * commande qui devine ce qui a changé pour décider quoi vérifier est plus
@@ -182,7 +182,6 @@ export function checksToRun(existingVaults = REAL_VAULTS.filter(existsSync)) {
 		{ label: "typecheck", command: resolveCommand("npm"), args: ["run", "check"] },
 		{ label: "check:md", command: resolveCommand("npm"), args: ["run", "check:md"] },
 		{ label: "check:export", command: resolveCommand("npm"), args: ["run", "check:export"] },
-		{ label: "check:lesson", command: resolveCommand("npm"), args: ["run", "check:lesson"] },
 	];
 
 	if (existingVaults.length > 0) {

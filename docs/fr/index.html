@@ -299,7 +299,6 @@
 		border-left: 1px solid var(--bordure);
 	}
 
-
 	/* Une tuile « à venir » : même carte, sans survol ni clic, un peu
 	   atténuée pour dire qu'elle n'est pas encore un téléchargement. */
 	.carte-bientot {
@@ -311,9 +310,8 @@
 		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
 		border-color: var(--bordure);
 	}
+
 	/* ===== Carte Obsidian : bloc de commande intégré ===== */
-
-
 	.carte-code {
 		width: 100%;
 		margin-top: 12px;
@@ -457,7 +455,6 @@
 	}
 
 	/* ===== Avertissements ===== */
-
 	.avertissements {
 		max-width: 480px;
 		margin-top: 32px;
@@ -469,7 +466,6 @@
 	.avertissements p { margin: 6px 0; }
 
 	/* ===== Pied de page ===== */
-
 	/* Une seule ligne discrète, pas de colonnes : Neo Quiz n'a rien d'autre
 	   à mettre dans un pied de page. */
 	.pied {
@@ -494,7 +490,6 @@
 	.pied a:hover { color: var(--texte); }
 
 	/* ===== Repli mobile ===== */
-
 	@media (max-width: 500px) {
 		.barre {
 			flex-direction: column;
@@ -591,10 +586,10 @@
 		<p class="accroche">Des quiz interactifs dans vos notes, générés par vos propres outils IA.</p>
 
 		<div class="cartes" id="cartes">
-			<!-- Windows -->
+			<!-- Windows : le lien statique mène à la release tant que la première
+			     release portant le bootstrapper Electron n'est pas publiée. -->
 			<a class="carte" id="carte-windows"
-				href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz-setup.exe"
-				data-releases-ext=".exe">
+				href="https://github.com/ahmed-mili/neo-quiz/releases/latest">
 				<span class="carte-icone">
 					<!-- Logo Windows (quatre carreaux), couleur de marque officielle
 					     #0078D4. Absent de Simple Icons (Microsoft n'y figure pas) :
@@ -608,7 +603,6 @@
 					<span class="carte-version" id="version-windows">…</span>
 					<span class="carte-taille" id="taille-windows"></span>
 				</span>
-				<div class="menu-versions" id="menu-windows" hidden></div>
 			</a>
 
 			<!-- Android : à venir. Pas de lien tant qu'il n'y a rien à télécharger. -->
@@ -658,7 +652,6 @@
 				<span class="carte-meta" id="meta-obsidian">
 					<span class="carte-version">Bientôt</span>
 				</span>
-
 			</div>
 		</div>
 
@@ -707,15 +700,19 @@
 	<script>
 		// Version et taille réelles de la dernière release, sans jamais coder
 		// un numéro en dur (cf. CLAUDE.md racine, skill source-of-truth).
-		// En cas d'échec (hors ligne, quota API), les cartes restent de simples
-		// liens vers /releases/latest et aucune version ne s'affiche.
+		// En cas d'échec (hors ligne, quota API), les cartes gardent leur lien
+		// statique de repli et aucune version non vérifiée n'est inventée.
 		var DEPOT = "ahmed-mili/neo-quiz";
 
-		// Trouve, dans la liste des assets d'une release, celui dont le nom se
-		// termine par l'extension demandée (insensible à la casse).
-		function trouverActif(assets, extension) {
+		// Une cible peut être un nom d'asset exact (bootstrapper Windows) ou
+		// une extension (AppImage Linux). Le nom exact est indispensable dès
+		// qu'une release Windows contient le bootstrapper ET le moteur NSIS.
+		function trouverActif(assets, cible) {
+			var cherchee = String(cible || "").toLowerCase();
+			var parExtension = cherchee.startsWith(".");
 			return (assets || []).find(function (a) {
-				return String(a.name || "").toLowerCase().endsWith(extension);
+				var nom = String(a.name || "").toLowerCase();
+				return parExtension ? nom.endsWith(cherchee) : nom === cherchee;
 			});
 		}
 
@@ -727,17 +724,17 @@
 
 		// Remplit la version (et sa taille, sur sa propre ligne) affichées
 		// sous le nom d'une plateforme, à partir d'une release donnée.
-		// `extension` vaut null pour Obsidian (pas d'asset dédié : seul le
-		// numéro de version compte). `suffixe` ("dernière" / "bêta") signale
-		// qu'on ne regarde plus la dernière release stable.
-		function afficherVersion(plateforme, release, extension, suffixe) {
+		// `cible` vaut null pour Obsidian (pas d'asset dédié : seul le numéro
+		// de version compte). `suffixe` ("dernière" / "bêta") signale qu'on
+		// ne regarde plus la dernière release stable.
+		function afficherVersion(plateforme, release, cible, suffixe) {
 			var elVersion = document.getElementById("version-" + plateforme);
 			var elTaille = document.getElementById("taille-" + plateforme);
 			var version = String(release.tag_name || "").replace(/^(desktop-)?v/, "");
 			if (!elVersion || !version) return;
 			elVersion.textContent = "v" + version + (suffixe ? " · " + suffixe : "");
-			if (!extension || !elTaille) return;
-			var actif = trouverActif(release.assets, extension);
+			if (!cible || !elTaille) return;
+			var actif = trouverActif(release.assets, cible);
 			elTaille.textContent = actif ? formaterTaille(actif.size) : "";
 		}
 
@@ -761,9 +758,11 @@
 			})
 			.then(function (donnees) {
 				latestChargee = donnees;
-				afficherVersion("windows", donnees, ".exe", null);
+				var actifWindows = trouverActif(donnees.assets, "neo-quiz-installer.exe");
+				afficherVersion("windows", donnees, "neo-quiz-installer.exe", null);
+				var carteWindows = document.getElementById("carte-windows");
+				if (actifWindows && carteWindows) carteWindows.setAttribute("href", actifWindows.browser_download_url);
 				afficherVersion("linux", donnees, ".appimage", null);
-				activerSelecteurVersion("windows", ".exe");
 				activerSelecteurVersion("linux", ".appimage");
 			})
 			.catch(function () {
@@ -817,7 +816,9 @@
 		// TÉLÉCHARGE RIEN : ça met seulement à jour la version/taille
 		// affichées et le href de la tuile, qui pointe désormais sur l'asset
 		// de cette release. Seul le clic sur la tuile (hors zone de version)
-		// télécharge.
+		// télécharge. Windows n'utilise volontairement PAS ce sélecteur : tout
+		// bootstrapper installe la release courante, donc proposer une ancienne
+		// version Windows serait un choix mensonger.
 		function activerSelecteurVersion(plateforme, extension) {
 			// Le CADRE entier (version et taille) est le bouton : le clic marche
 			// partout dedans, et le survol éclaire les deux textes.
@@ -982,7 +983,7 @@
 		})();
 
 		// La carte Obsidian ouvre la modale (deux boutons BRAT). Fermeture :
-		// la croix, le fond, Échap. Sans JS, la carte est un lien vers le guide.
+		// la croix, le fond, Échap. Sans JS la carte reste un lien vers le guide.
 		var carteObsidian = document.getElementById("carte-obsidian");
 		var modaleObsidian = document.getElementById("modale-obsidian");
 		if (carteObsidian && modaleObsidian) {

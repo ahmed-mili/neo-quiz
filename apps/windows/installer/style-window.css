@@ -25,6 +25,9 @@
 	z-index: 2;
 	height: 48px;
 	padding-left: 22px;
+	/* Comme la référence : une bande PLUS SOMBRE que le reste, mais
+	   translucide, pour que le halo du décor reste visible à travers. */
+	background: rgba(2, 6, 14, .58);
 }
 
 /* La coquille prend toute la fenêtre et son décor remonte sous la barre. */
@@ -34,6 +37,17 @@
 }
 .nqi-panel {
 	top: 48px;
+	padding-top: 42px;
+}
+
+/* Le titre comme chez la référence : un simple texte en graisse normale,
+   26 px, sans ombre ni resserrement, posé juste sous la barre. */
+.nqi-title {
+	font-size: 26px;
+	line-height: 1.2;
+	font-weight: 400;
+	letter-spacing: 0;
+	text-shadow: none;
 }
 
 .nqi-titlebar-brand {
@@ -49,20 +63,32 @@
 	filter: none;
 }
 
+/* Les contrôles et leur survol comme dans l'APPLICATION (`shell.css`,
+   `.nq-barre-controle`) : boutons de 24 px espacés de 15.5 px, pas de
+   surface au survol — le glyphe passe seulement du gris au blanc, jamais de
+   fond rouge sous la croix. Couleurs de `host-vars.css` (text-muted,
+   text-normal), recopiées : l'installeur ne charge pas le thème. */
 .nqi-window-controls {
 	height: 48px;
-}
-
-.nqi-window-button {
-	width: 44px;
-	height: 48px;
+	align-items: center;
+	gap: 15.5px;
+	padding-right: 24px;
 }
 
 .nqi-window-button {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 6px;
+	color: rgb(142, 149, 179);
+	transition: color 100ms ease;
 }
+.nqi-window-button:hover:not(:disabled),
+.nqi-window-button:focus-visible { color: rgb(198, 208, 245); background: transparent; }
+.nqi-close:hover:not(:disabled) { background: transparent; }
+.nqi-window-button:focus-visible { outline: 1px solid rgba(198, 208, 245, .5); outline-offset: -1px; }
 
 /* La fenêtre est désormais nettement moins large : pousser le décor vers la
    droite évite qu'il ne passe sous le titre tout en conservant sa présence. */

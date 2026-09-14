@@ -1,0 +1,67 @@
+name: Publier le bootstrapper corrigé
+
+# Ce workflow temporaire republie exactement le bootstrapper Windows qui a
+# passé la CI de la PR fusionnée. Il évite de créer une fausse version de
+# l'application alors que seul le bootstrapper a changé.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-bootstrapper-current.yml'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Download validated bootstrapper
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf .publish-bootstrapper
+          mkdir .publish-bootstrapper
+          gh run download 34885545000 \
+            -R "$GITHUB_REPOSITORY" \
+            -n neo-quiz-windows-installer \
+            -D .publish-bootstrapper
+          test -f .publish-bootstrapper/Install-NeoQuiz.exe
+          ls -lh .publish-bootstrapper/Install-NeoQuiz.exe
+
+      - name: Replace public bootstrapper asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload desktop-v1.0.1 \
+            .publish-bootstrapper/Install-NeoQuiz.exe \
+            --clobber \
+            -R "$GITHUB_REPOSITORY"
+
+      - name: Refresh the download manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/desktop-v1.0.1" \
+            --jq '{tag_name, published_at, assets: [.assets[] | {name, size, browser_download_url}]}' \
+            > docs/latest.json
+          cat docs/latest.json
+
+      - name: Publish the refreshed manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/latest.json
+          if git diff --cached --quiet; then
+            echo "docs/latest.json inchangé"
+          else
+            git commit -m "site: republier le bootstrapper avec l’icône Lucide"
+            git push origin main
+          fi

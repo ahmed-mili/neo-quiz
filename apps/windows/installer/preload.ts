@@ -16,8 +16,6 @@ const pont: PontInstallateur = {
 		ipcRenderer.invoke(CANAUX_INSTALLATEUR.choisirDossier, courant) as Promise<ChoixDossierInstallateur | null>,
 	installer: (dossier: string) => ipcRenderer.invoke(CANAUX_INSTALLATEUR.installer, dossier) as Promise<void>,
 	annuler: () => ipcRenderer.invoke(CANAUX_INSTALLATEUR.annuler) as Promise<void>,
-	reduire: () => ipcRenderer.send(CANAUX_INSTALLATEUR.reduire),
-	commentaires: () => ipcRenderer.send(CANAUX_INSTALLATEUR.commentaires),
 	fermer: () => ipcRenderer.send(CANAUX_INSTALLATEUR.fermer),
 	surEtat(rappel: (etat: EtatInstallateur) => void) {
 		ipcRenderer.on(CANAUX_INSTALLATEUR.etat, (_event, etat: EtatInstallateur) => rappel(etat));

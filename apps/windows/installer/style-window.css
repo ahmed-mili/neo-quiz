@@ -1,0 +1,83 @@
+/* Le bootstrapper doit lire comme une petite fenêtre d'installation et non
+   comme l'application complète. Ces surcharges restent séparées du décor afin
+   que la densité de la barre et le gabarit puissent évoluer sans retoucher la
+   scène de fond. */
+#app {
+	padding: 0;
+}
+
+/* Le cadre intérieur doublait visuellement le contour natif de la fenêtre
+   frameless. Le supprimer laisse Windows porter seul la limite extérieure. */
+#app::before {
+	display: none;
+}
+
+.nqi-titlebar {
+	height: 48px;
+	flex-basis: 48px;
+	padding-left: 22px;
+}
+
+.nqi-titlebar-brand {
+	gap: 8px;
+	font-size: 14px;
+	font-weight: 560;
+	letter-spacing: -.08px;
+}
+
+.nqi-titlebar-icon {
+	width: 26px;
+	height: 26px;
+	filter: none;
+}
+
+.nqi-window-controls {
+	height: 48px;
+}
+
+.nqi-window-button {
+	width: 44px;
+	height: 48px;
+}
+
+.nqi-minimize-glyph {
+	width: 12px;
+	height: 1.25px;
+	transform: translate(-50%, 4px);
+}
+
+.nqi-close-glyph::before,
+.nqi-close-glyph::after {
+	width: 1.25px;
+	height: 14px;
+}
+
+/* La fenêtre est désormais nettement moins large : pousser le décor vers la
+   droite évite qu'il ne passe sous le titre tout en conservant sa présence. */
+.nqi-glow {
+	right: -150px;
+}
+
+.nqi-scene {
+	right: -190px;
+}
+
+.nqi-legal {
+	right: 58px;
+	width: auto;
+}
+
+.nqi-legal-copy {
+	font-size: 12.75px;
+	line-height: 1.45;
+}
+
+/* Le PNG fourni contient déjà son relief. Ajouter un second halo CSS le
+   brouillait précisément à la petite taille où il est utilisé. */
+.nqi-primary-shield {
+	width: 22px;
+	height: 22px;
+	margin-right: 9px;
+	vertical-align: -5px;
+	filter: none;
+}

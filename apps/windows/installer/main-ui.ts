@@ -1,10 +1,12 @@
 import { access, statfs } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { CANAUX_INSTALLATEUR, type InfosDisqueInstallateur } from "./protocole";
 import "./main";
 
 const URL_COMMENTAIRES = "https://github.com/ahmed-mili/neo-quiz/issues/new";
+const LARGEUR_FENETRE = 920;
+const HAUTEUR_FENETRE = 684;
 
 /* Le processus principal historique garde toute la logique sensible
    d'installation. Cette couche n'ajoute que les besoins de présentation du
@@ -45,4 +47,16 @@ ipcMain.on(CANAUX_INSTALLATEUR.reduire, event => {
 
 ipcMain.on(CANAUX_INSTALLATEUR.commentaires, () => {
 	void shell.openExternal(URL_COMMENTAIRES);
+});
+
+void app.whenReady().then(() => {
+	/* La référence fournie correspond à ce rapport largeur/hauteur. Le principal
+	   historique reste inchangé ; on recale uniquement la fenêtre visible après
+	   sa création afin que les coordonnées CSS gardent la même géométrie. */
+	const fenetre = BrowserWindow.getAllWindows()[0];
+	if (!fenetre || fenetre.isDestroyed()) return;
+	fenetre.setMaximumSize(LARGEUR_FENETRE, HAUTEUR_FENETRE);
+	fenetre.setMinimumSize(LARGEUR_FENETRE, HAUTEUR_FENETRE);
+	fenetre.setSize(LARGEUR_FENETRE, HAUTEUR_FENETRE);
+	fenetre.center();
 });

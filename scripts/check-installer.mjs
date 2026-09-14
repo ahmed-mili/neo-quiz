@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 /**
@@ -21,6 +22,28 @@ const siteFr = readFileSync(resolve(racine, "docs/fr/index.html"), "utf8");
 
 await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argumentsNsis }) => {
 	const r = makeReporter("Installateur — bootstrapper");
+	/* Un PNG peut avoir un en-tête valide tout en affichant des pixels abîmés.
+	   Décompresser les IDAT vérifie aussi leur somme de contrôle zlib. */
+	let erreurBouclier = null;
+	try {
+		const png = readFileSync(resolve(racine, "apps/windows/installer/uac-shield.png"));
+		if (png.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") throw new Error("signature PNG invalide");
+		const blocs = [];
+		for (let position = 8; position < png.length;) {
+			if (position + 12 > png.length) throw new Error("bloc PNG tronqué");
+			const taille = png.readUInt32BE(position);
+			const fin = position + 12 + taille;
+			if (fin > png.length) throw new Error("données PNG tronquées");
+			if (png.toString("ascii", position + 4, position + 8) === "IDAT") {
+				blocs.push(png.subarray(position + 8, fin - 4));
+			}
+			position = fin;
+		}
+		if (!inflateSync(Buffer.concat(blocs)).length) throw new Error("pixels PNG absents");
+	} catch (erreur) {
+		erreurBouclier = erreur.message;
+	}
+	r.check("bouclier : les pixels du PNG se décompressent sans corruption", erreurBouclier, null);
 	const version = "1.2.3";
 	const nom = `neo-quiz-setup-${version}.exe`;
 	const sha = "a".repeat(64);

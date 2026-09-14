@@ -89,7 +89,6 @@ function rendreHero(parent: HTMLElement): void {
 	const scene = ajouter(hero, "div", "nqi-scene");
 	ajouter(scene, "div", "nqi-card nqi-card-back").setAttribute("aria-hidden", "true");
 	ajouter(scene, "div", "nqi-card nqi-card-front").setAttribute("aria-hidden", "true");
-	ajouter(hero, "p", "nqi-hero-copy", t("installer.hero"));
 }
 
 function rendreProgression(parent: HTMLElement, pourcent: number | null): void {
@@ -164,13 +163,15 @@ function rendreLegal(parent: HTMLElement): void {
 	ligne.appendChild(document.createTextNode(t("installer.legal.between")));
 	ajouter(ligne, "span", "nqi-legal-link", t("installer.legal.privacy"));
 	ligne.appendChild(document.createTextNode(t("installer.legal.afterPrivacy")));
-	ajouter(legal, "p", "nqi-legal-copy", t("installer.legal.components"));
+	ligne.appendChild(document.createTextNode(t("installer.legal.components")));
 }
 
 function rendreEmplacement(parent: HTMLElement): void {
 	if (!infos) return;
 	const emplacement = ajouter(parent, "section", "nqi-location");
 	ajouter(emplacement, "div", "nqi-location-label", t("installer.location.label"));
+	const chemin = ajouter(emplacement, "div", "nqi-path", infos.dossier);
+	chemin.title = infos.dossier;
 	const detail = disque
 		? t("installer.location.space", {
 			available: formatOctets(disque.espaceDisponible),
@@ -182,8 +183,6 @@ function rendreEmplacement(parent: HTMLElement): void {
 			download: formatOctets(infos.tailleTelechargement),
 		});
 	ajouter(emplacement, "div", "nqi-location-space", detail);
-	const chemin = ajouter(emplacement, "div", "nqi-path", infos.dossier);
-	chemin.title = infos.dossier;
 }
 
 function rendreErreurElevation(parent: HTMLElement): void {

@@ -2,7 +2,7 @@
    l'application, mais il réutilise le même moteur i18n pour qu'aucun libellé
    visible n'ait une seconde source. */
 export const EN_INSTALLER = {
-	"installer.windowTitle": "Install Neo Quiz",
+	"installer.windowTitle": "Neo Quiz",
 	"installer.logoAlt": "Neo Quiz",
 	"installer.title": "Install Neo Quiz",
 	"installer.hero": "Turn your courses into revision sessions that stay with you.",
@@ -22,11 +22,11 @@ export const EN_INSTALLER = {
 	"installer.feedback": "Send feedback",
 	"installer.retry": "Try again",
 	"installer.legal.beforeTerms": "By installing Neo Quiz on this PC, you accept the ",
-	"installer.legal.terms": "Terms of use",
-	"installer.legal.between": " and acknowledge that your information will be handled according to our ",
-	"installer.legal.privacy": "Privacy policy",
-	"installer.legal.afterPrivacy": ".",
-	"installer.legal.components": "Neo Quiz will be installed with the components required on your device.",
+	"installer.legal.terms": "Neo Quiz Terms of Use",
+	"installer.legal.between": " and acknowledge its ",
+	"installer.legal.privacy": "Privacy Policy",
+	"installer.legal.afterPrivacy": ". ",
+	"installer.legal.components": "The installation includes the components required to run the application and may add shortcuts to your desktop and Start menu.",
 	"installer.status.elevation": "Waiting for Windows authorization…",
 	"installer.status.downloading": "Downloading… {percent}%",
 	"installer.status.verifying": "Verifying the download…",

@@ -40,6 +40,12 @@ jobs:
       - name: App theme completeness
         run: npm run check:theme
 
+      # Le bootstrapper lance l'installeur NSIS en silence : l'ordre des
+      # arguments et la sélection du paquet ne peuvent donc pas être relus à
+      # l'écran. Ce contrôle charge le noyau réellement appelé par l'installeur.
+      - name: Installer bootstrapper invariants
+        run: npm run check:installer
+
       # Mêmes étapes que release.yml, sans publication : une casse de build
       # (loader manquant, import cassé) se voit au push, pas au moment du tag.
       - name: Build

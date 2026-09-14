@@ -37,37 +37,6 @@
 
 .nqi-feedback:hover { text-decoration: underline; }
 
-.nqi-feedback-icon {
-	position: relative;
-	width: 18px;
-	height: 15px;
-	border: 1.5px solid currentColor;
-	border-radius: 3px;
-}
-
-.nqi-feedback-icon::before {
-	content: "";
-	position: absolute;
-	left: 2px;
-	bottom: -5px;
-	width: 6px;
-	height: 6px;
-	border-left: 1.5px solid currentColor;
-	transform: skew(-25deg);
-}
-
-.nqi-feedback-icon::after {
-	content: "";
-	position: absolute;
-	left: 8px;
-	top: 3px;
-	width: 1.5px;
-	height: 6px;
-	border-radius: 2px;
-	background: currentColor;
-	box-shadow: 0 7px 0 -0.3px currentColor;
-}
-
 .nqi-elevation-overlay {
 	position: absolute;
 	inset: 0;

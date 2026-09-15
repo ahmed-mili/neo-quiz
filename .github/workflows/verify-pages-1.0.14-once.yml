@@ -1,0 +1,41 @@
+name: Verify Pages 1.0.14 once
+on:
+  push:
+    paths:
+      - '.github/workflows/verify-pages-1.0.14-once.yml'
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Verify live Pages content
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for n in $(seq 1 60); do
+            body=$(curl -fsSL "https://ahmed-mili.github.io/neo-quiz/latest.json?verify-1014=${GITHUB_RUN_ID}-${n}" || true)
+            if printf '%s' "$body" | grep -F '"tag_name":"desktop-v1.0.14"' >/dev/null \
+              && printf '%s' "$body" | grep -F '"name":"Install-NeoQuiz.exe"' >/dev/null \
+              && printf '%s' "$body" | grep -F '"name":"Install-NeoQuiz-fr.exe"' >/dev/null; then
+              echo "PAGES_1_0_14_OK"
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" = 1
+      - name: Remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/verify-pages-1.0.14-once.yml
+          git commit -m "chore: remove Pages 1.0.14 verifier"
+          git push origin main

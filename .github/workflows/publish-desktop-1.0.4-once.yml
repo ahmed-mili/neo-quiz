@@ -1,0 +1,52 @@
+name: Publier desktop 1.0.4 une fois
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-desktop-1.0.4-once.yml'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      # Le script du dépôt est l'unique source de vérité pour synchroniser le
+      # package et son lockfile ; les écrire à la main risquerait de les séparer.
+      - name: Monter la version à 1.0.4
+        run: node scripts/set-version.mjs 1.0.4
+
+      - name: Vérifier les invariants de publication
+        run: npm run check:installer
+
+      - name: Enregistrer la version
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps/windows/package.json apps/windows/package-lock.json
+          git commit -m "Version 1.0.4"
+          git push origin main
+
+      # workflow_dispatch est volontaire : les événements issus du GITHUB_TOKEN
+      # ne relancent pas les autres workflows, alors que dispatch est l'exception
+      # prévue par GitHub et réutilise intégralement release.yml.
+      - name: Déclencher la publication 1.0.4
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release.yml --ref main -f version=1.0.4 -f product=app -f publish=true

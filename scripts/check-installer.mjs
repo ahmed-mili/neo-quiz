@@ -153,19 +153,20 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argume
 		[blocProgression.includes("rendreLegal("), renduInstallateur.includes("rendreLegal(panneau);")],
 		[false, true]);
 
-	r.check("fin installation : fenêtre de lancement séparée et centrée, jamais un modal",
+	r.check("fin installation : spinner dans l'installeur jusqu'à ce que l'app soit prête",
 		[
-			principalInstallateur.includes("let fenetreDemarrage: BrowserWindow | null = null;"),
-			principalInstallateur.includes("const attente = new BrowserWindow({"),
-			principalInstallateur.includes("attente.center();"),
-			principalInstallateur.includes('query: { lang: langue, mode: "launch" }'),
-			principalInstallateur.includes("if (attenteVisible && fenetre && !fenetre.isDestroyed()) fenetre.hide();"),
-			renduInstallateur.includes('modeAffichage === "launch"'),
-			renduInstallateur.includes('const carte = ajouter(etape, "section", "nqi-launch-card")'),
+			principalInstallateur.includes('envoyerEtat({ phase: "demarrage" });'),
 			protocoleInstallateur.includes('phase: "demarrage"'),
-			styleInstallateur.includes("cette page EST la fenêtre indépendante de lancement"),
+			renduInstallateur.includes('if (etat.phase === "demarrage")'),
+			renduInstallateur.includes('rendreDemarrage(contenu);'),
+			renduInstallateur.includes('installer.status.launching'),
+			styleInstallateur.includes(".nqi-launching-stage"),
+			renduInstallateur.includes('fermer.disabled = etat.phase === "demarrage";'),
+			principalInstallateur.includes("let fenetreDemarrage: BrowserWindow | null = null;"),
+			principalInstallateur.includes('mode: "launch"'),
+			renduInstallateur.includes('modeAffichage === "launch"'),
 		],
-		[true, true, true, true, true, true, false, false, true]);
+		[true, true, true, true, true, true, true, false, false, false]);
 
 	r.check("fin installation : la vraie app devient visible seulement quand elle est prête",
 		[

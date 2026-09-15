@@ -97,6 +97,10 @@ function rendreBarreTitre(parent: HTMLElement): void {
 	fermer.type = "button";
 	fermer.title = t("installer.close");
 	fermer.setAttribute("aria-label", t("installer.close"));
+	/* Une fois installé, l'app est déjà en train de démarrer : fermer à cet
+	   instant créerait un faux bouton d'annulation alors qu'il n'y a plus rien
+	   à annuler. La réduction reste disponible. */
+	fermer.disabled = etat.phase === "demarrage";
 	fermer.addEventListener("click", () => {
 		if (phaseInstallationActive()) ouvrirConfirmationAnnulation();
 		else window.neoInstaller.fermer();
@@ -319,16 +323,13 @@ function rendreEtapeProgression(parent: HTMLElement): void {
 }
 
 function rendreDemarrage(parent: HTMLElement): void {
-	const etape = ajouter(parent, "main", "nqi-launch-stage");
+	const etape = ajouter(parent, "section", "nqi-launching-stage");
 	etape.setAttribute("role", "status");
-	etape.setAttribute("aria-label", t("installer.windowTitle"));
-	/* Pas de « carte dans une fenêtre » : cette page EST la petite fenêtre. */
-	const marque = ajouter(etape, "div", "nqi-launch-brand");
-	const icone = ajouter(marque, "img", "nqi-launch-icon");
-	icone.src = "./icon.png";
-	icone.alt = "";
-	icone.setAttribute("aria-hidden", "true");
-	ajouter(marque, "strong", "nqi-launch-name", t("installer.windowTitle"));
+	etape.setAttribute("aria-live", "polite");
+	etape.setAttribute("aria-label", t("installer.status.launching"));
+	const anneau = ajouter(etape, "div", "nqi-loading-spinner");
+	anneau.setAttribute("aria-hidden", "true");
+	ajouter(etape, "p", "nqi-launching-status", t("installer.status.launching"));
 }
 
 function rendre(): void {
@@ -344,6 +345,11 @@ function rendre(): void {
 
 	if (chargement) {
 		rendreChargement(contenu);
+		return;
+	}
+
+	if (etat.phase === "demarrage") {
+		rendreDemarrage(contenu);
 		return;
 	}
 
@@ -429,36 +435,23 @@ function mesurerDebit(nouvelEtat: EtatInstallateur): void {
    `query.lang`) : nom du fichier téléchargé, référent du navigateur, ou
    locale système — jamais `navigator.language` seul, qui ignorerait la page
    du site d'où l'exe vient. « auto » seulement si l'URL n'en dit rien. */
-const parametresUrl = new URLSearchParams(window.location.search);
-const langueUrl = parametresUrl.get("lang");
-const modeAffichage = parametresUrl.get("mode");
+const langueUrl = new URLSearchParams(window.location.search).get("lang");
 setLanguage(langueUrl === "fr" || langueUrl === "en" ? langueUrl : "auto");
-
-if (modeAffichage === "launch") {
-	document.documentElement.lang = currentLang();
-	document.title = t("installer.windowTitle");
-	const root = document.getElementById("app");
-	if (root) {
-		root.replaceChildren();
-		rendreDemarrage(root);
-	}
-} else {
-	window.neoInstaller.surEtat(nouvelEtat => {
-		mesurerDebit(nouvelEtat);
-		if (nouvelEtat.phase === "annule") {
-			confirmationAnnulation = false;
-			annulationDemandee = false;
-			etat = { phase: "pret" };
-			rendre();
-			window.neoInstaller.fermer();
-			return;
-		}
-		if (nouvelEtat.phase === "erreur") {
-			confirmationAnnulation = false;
-			annulationDemandee = false;
-		}
-		etat = nouvelEtat;
+window.neoInstaller.surEtat(nouvelEtat => {
+	mesurerDebit(nouvelEtat);
+	if (nouvelEtat.phase === "annule") {
+		confirmationAnnulation = false;
+		annulationDemandee = false;
+		etat = { phase: "pret" };
 		rendre();
-	});
-	void initialiser();
-}
+		window.neoInstaller.fermer();
+		return;
+	}
+	if (nouvelEtat.phase === "erreur") {
+		confirmationAnnulation = false;
+		annulationDemandee = false;
+	}
+	etat = nouvelEtat;
+	rendre();
+});
+void initialiser();

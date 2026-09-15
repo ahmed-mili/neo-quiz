@@ -31,7 +31,6 @@ const API_RELEASE = "https://api.github.com/repos/ahmed-mili/neo-quiz/releases/l
 const USER_AGENT = "Neo-Quiz-Installer";
 
 let fenetre: BrowserWindow | null = null;
-let fenetreDemarrage: BrowserWindow | null = null;
 let paquetCourant: PaquetInstallable | null = null;
 let socketTravailleur: Socket | null = null;
 let serveurTube: Server | null = null;
@@ -182,28 +181,21 @@ async function traiterMessage(message: MessageTravailleur): Promise<void> {
 				envoyerEtat({ phase: "erreur", code: "installation" });
 				return;
 			}
-			/* La grande fenêtre d'installation disparaît au profit d'une petite
-			   fenêtre INDÉPENDANTE. Elle reste jusqu'à ce que la vraie fenêtre de
-			   Neo Quiz soit visible — visibilité qui signifie désormais « rendu
-			   initialisé », pas simplement `ready-to-show`. */
-			const attenteVisible = await afficherFenetreDemarrage();
-			if (attenteVisible && fenetre && !fenetre.isDestroyed()) fenetre.hide();
+			/* L'installation est finie mais le bootstrapper RESTE à l'écran : le
+			   rendu remplace la progression par un spinner pendant que Neo Quiz
+			   s'initialise caché. Il ne disparaît qu'une fois la vraie fenêtre de
+			   l'application devenue visible, donc réellement prête. */
+			envoyerEtat({ phase: "demarrage" });
 			await ecrireLangueApplication();
 			const lancee = await lancerApplicationEtAttendre(message.executable);
 			if (!lancee) {
-				fermerFenetreDemarrage();
 				nettoyerSession();
-				if (fenetre && !fenetre.isDestroyed()) {
-					fenetre.show();
-					fenetre.focus();
-				}
 				envoyerEtat({ phase: "erreur", code: "launch" });
 				return;
 			}
-			fermerFenetreDemarrage();
-			if (fenetre && !fenetre.isDestroyed()) fenetre.hide();
 			nettoyerSession();
 			fermetureAutorisee = true;
+			fenetre?.close();
 			app.quit();
 			return;
 		}
@@ -320,59 +312,6 @@ async function ecrireLangueApplication(): Promise<void> {
 	} catch {
 		// la langue de l'app n'est pas une raison d'échouer l'installation
 	}
-}
-
-function fermerFenetreDemarrage(): void {
-	const attente = fenetreDemarrage;
-	fenetreDemarrage = null;
-	if (attente && !attente.isDestroyed()) attente.destroy();
-}
-
-/** Fenêtre TOP-LEVEL dédiée à la transition finale. Elle n'a ni `parent` ni
-    `modal: true` : ce n'est pas un dialogue dans l'installateur, mais une
-    vraie petite fenêtre centrée sur l'écran qui reste visible pendant que
-    l'application initialise ses réglages, ses dossiers et son scanner. */
-async function afficherFenetreDemarrage(): Promise<boolean> {
-	if (fenetreDemarrage && !fenetreDemarrage.isDestroyed()) {
-		fenetreDemarrage.center();
-		fenetreDemarrage.show();
-		fenetreDemarrage.focus();
-		return true;
-	}
-	const attente = new BrowserWindow({
-		width: 500,
-		height: 300,
-		frame: false,
-		resizable: false,
-		minimizable: false,
-		maximizable: false,
-		fullscreenable: false,
-		closable: false,
-		show: false,
-		backgroundColor: "#202124",
-		icon: join(__dirname, "icon.png"),
-		title: PRODUCT_NAME,
-		webPreferences: {
-			contextIsolation: true,
-			nodeIntegration: false,
-			sandbox: true,
-		},
-	});
-	fenetreDemarrage = attente;
-	attente.on("closed", () => {
-		if (fenetreDemarrage === attente) fenetreDemarrage = null;
-	});
-	try {
-		await attente.loadFile(join(__dirname, "index.html"), { query: { lang: langue, mode: "launch" } });
-	} catch {
-		fermerFenetreDemarrage();
-		return false;
-	}
-	if (attente.isDestroyed()) return false;
-	attente.center();
-	attente.show();
-	attente.focus();
-	return true;
 }
 
 /** L'application garde maintenant sa vraie fenêtre CACHÉE jusqu'au signal

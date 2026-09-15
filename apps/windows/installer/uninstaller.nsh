@@ -16,6 +16,12 @@
     Var NeoQuizDialogueProgression
     Var NeoQuizBarreProgression
     Var NeoQuizTexteProgression
+    Var NeoQuizPisteProgression
+    Var NeoQuizRemplissageProgression
+    Var NeoQuizBarreX
+    Var NeoQuizBarreY
+    Var NeoQuizBarreLargeur
+    Var NeoQuizBarreHauteur
 
     Function un.NeoQuizAfficherDesinstallationCompacte
         SendMessage $HWNDPARENT ${WM_SETTEXT} 0 "STR:${PRODUCT_NAME}"
@@ -54,6 +60,10 @@
         ${EndIf}
         GetDlgItem $NeoQuizBarreProgression $NeoQuizDialogueProgression 1004
         GetDlgItem $NeoQuizTexteProgression $NeoQuizDialogueProgression 1006
+        /* La barre système reste vivante pour que PBM_GETPOS reflète la vraie
+           suppression, mais elle ne doit jamais être peinte : son relief, sa
+           hauteur et ses couleurs changent selon le thème Windows. */
+        ShowWindow $NeoQuizBarreProgression ${SW_HIDE}
         GetDlgItem $0 $NeoQuizDialogueProgression 1027
         ShowWindow $0 ${SW_HIDE}
         GetDlgItem $0 $NeoQuizDialogueProgression 1016
@@ -85,15 +95,30 @@
         IntOp $R4 $R4 / 96
         System::Call 'user32::MoveWindow(p$NeoQuizDialogueProgression,i0,i0,i$R3,i$R4,i1)'
 
-        IntOp $R3 26 * $R0
-        IntOp $R3 $R3 / 96
-        IntOp $R4 28 * $R0
-        IntOp $R4 $R4 / 96
-        IntOp $R5 230 * $R0
-        IntOp $R5 $R5 / 96
-        IntOp $R6 12 * $R0
-        IntOp $R6 $R6 / 96
-        System::Call 'user32::MoveWindow(p$NeoQuizBarreProgression,i$R3,i$R4,i$R5,i$R6,i1)'
+        /* Barre linéaire plate, fidèle à la référence Google Play Games :
+           même centre que l'ancienne barre, mais seulement 4 px de haut, une
+           piste gris clair et un remplissage Google blue. Aucun relief natif. */
+        IntOp $NeoQuizBarreX 26 * $R0
+        IntOp $NeoQuizBarreX $NeoQuizBarreX / 96
+        IntOp $NeoQuizBarreY 32 * $R0
+        IntOp $NeoQuizBarreY $NeoQuizBarreY / 96
+        IntOp $NeoQuizBarreLargeur 230 * $R0
+        IntOp $NeoQuizBarreLargeur $NeoQuizBarreLargeur / 96
+        IntOp $NeoQuizBarreHauteur 4 * $R0
+        IntOp $NeoQuizBarreHauteur $NeoQuizBarreHauteur / 96
+        ${If} $NeoQuizBarreHauteur < 2
+            StrCpy $NeoQuizBarreHauteur 2
+        ${EndIf}
+
+        System::Call 'user32::CreateWindowExW(i0,w "STATIC",w "",i0x50000000,i$NeoQuizBarreX,i$NeoQuizBarreY,i$NeoQuizBarreLargeur,i$NeoQuizBarreHauteur,p$NeoQuizDialogueProgression,p0,p0,p0)p.R3'
+        StrCpy $NeoQuizPisteProgression $R3
+        SetCtlColors $NeoQuizPisteProgression 000000 DADCE0
+
+        /* Largeur initiale minimale : la première lecture PBM_GETPOS ci-dessous
+           la masque réellement si la progression vaut encore 0 %. */
+        System::Call 'user32::CreateWindowExW(i0,w "STATIC",w "",i0x50000000,i$NeoQuizBarreX,i$NeoQuizBarreY,i1,i$NeoQuizBarreHauteur,p$NeoQuizDialogueProgression,p0,p0,p0)p.R3'
+        StrCpy $NeoQuizRemplissageProgression $R3
+        SetCtlColors $NeoQuizRemplissageProgression 000000 1A73E8
 
         IntOp $R3 262 * $R0
         IntOp $R3 $R3 / 96
@@ -131,6 +156,16 @@
             StrCpy $R2 0
         ${ElseIf} $R2 > 100
             StrCpy $R2 100
+        ${EndIf}
+        ${If} $NeoQuizRemplissageProgression != 0
+            IntOp $R3 $NeoQuizBarreLargeur * $R2
+            IntOp $R3 $R3 / 100
+            ${If} $R3 <= 0
+                ShowWindow $NeoQuizRemplissageProgression ${SW_HIDE}
+            ${Else}
+                System::Call 'user32::MoveWindow(p$NeoQuizRemplissageProgression,i$NeoQuizBarreX,i$NeoQuizBarreY,i$R3,i$NeoQuizBarreHauteur,i1)'
+                ShowWindow $NeoQuizRemplissageProgression ${SW_SHOW}
+            ${EndIf}
         ${EndIf}
         SendMessage $NeoQuizTexteProgression ${WM_SETTEXT} 0 "STR:$R2%"
     FunctionEnd

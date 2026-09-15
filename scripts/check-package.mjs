@@ -68,16 +68,20 @@ r.check("files exclut node_modules et les sourcemaps",
 	[config.files.includes("!node_modules/**"), config.files.includes("!dist-electron/**/*.map")],
 	[true, true]);
 r.check("la désinstallation garde les données", config.nsis?.deleteAppDataOnUninstall, false);
-r.check("désinstallation : petite fenêtre directe avec progression et pourcentage",
+r.check("désinstallation : barre plate fidèle avec progression et pourcentage",
 	[
 		config.nsis?.oneClick,
 		config.nsis?.perMachine,
 		uninstallerNsis.includes("removeDefaultUninstallWelcomePage"),
 		uninstallerNsis.includes("MUI_PAGE_CUSTOMFUNCTION_SHOW un.NeoQuizAfficherDesinstallationCompacte"),
 		uninstallerNsis.includes("PBM_GETPOS"),
+		uninstallerNsis.includes("ShowWindow $NeoQuizBarreProgression ${SW_HIDE}"),
+		uninstallerNsis.includes("SetCtlColors $NeoQuizPisteProgression 000000 DADCE0"),
+		uninstallerNsis.includes("SetCtlColors $NeoQuizRemplissageProgression 000000 1A73E8"),
+		uninstallerNsis.includes("IntOp $R3 $NeoQuizBarreLargeur * $R2"),
 		uninstallerNsis.includes('"STR:$R2%"'),
 	],
-	[false, true, true, true, true, true]);
+	[false, true, true, true, true, true, true, true, true, true]);
 r.check("author.name est celui attendu par winget et SignPath", config.extraMetadata?.author?.name, "Ahmed Mili");
 r.check("publisherName n'est posé qu'une fois le CN du certificat connu",
 	config.win?.signtoolOptions?.publisherName ?? null, PUBLISHER_ATTENDU);

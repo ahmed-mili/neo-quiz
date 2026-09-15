@@ -1,5 +1,7 @@
 name: Repair desktop v1.0.4
 
+# Second push: the workflow now already exists on the default branch, so this
+# change intentionally triggers the one-shot repair job below.
 on:
   push:
     branches:

@@ -22,7 +22,7 @@ jobs:
         run: |
           ok=false
           for i in {1..60}; do
-            body=$(curl --fail --silent --show-error --no-cache "https://ahmed-mili.github.io/neo-quiz/latest.json?nocache=$(date +%s%N)" || true)
+            body=$(curl --fail --silent --show-error -H 'Cache-Control: no-cache' "https://ahmed-mili.github.io/neo-quiz/latest.json?nocache=$(date +%s%N)" || true)
             if printf '%s' "$body" | grep -q '"tag_name":"desktop-v1.0.15"' \
               && printf '%s' "$body" | grep -q '"name":"Install-NeoQuiz.exe"' \
               && printf '%s' "$body" | grep -q '"name":"Install-NeoQuiz-fr.exe"'; then

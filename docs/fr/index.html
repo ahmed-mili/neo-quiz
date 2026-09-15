@@ -793,24 +793,12 @@
 
 		// Obsidian lit son propre flux de release, `latest-plugin.json`
 		// (publié avec `make_latest: false`, donc jamais la release
-		// « latest » de GitHub) : le repli parcourt `/releases` et garde la
-		// première qui n'est pas une pré-version et dont le tag commence par
-		// `v` suivi d'un chiffre — excluant les pré-versions et tout tag
-		// `desktop-v*`, que le même endpoint liste aussi.
-		function estTagPlugin(tagName) {
-			return /^v\d/.test(String(tagName || ""));
-		}
+		// « latest » de GitHub). Pas de repli vers l'API, à dessein : tant
+		// qu'aucune release du greffon n'existe le fichier est absent, et le
+		// repli consommait à CHAQUE visite une des 60 requêtes API par heure
+		// du visiteur, pour ne rien trouver. La carte reste vide jusqu'à la
+		// première release du greffon, qui écrit le fichier.
 		chargerJson("../latest-plugin.json")
-			.catch(function () {
-				return chargerJson("https://api.github.com/repos/" + DEPOT + "/releases?per_page=30")
-					.then(function (releases) {
-						var trouvee = (releases || []).find(function (release) {
-							return !release.prerelease && estTagPlugin(release.tag_name);
-						});
-						if (!trouvee) throw new Error("aucune release plugin");
-						return trouvee;
-					});
-			})
 			.then(function (donnees) {
 				var elObsidian = document.getElementById("version-obsidian");
 				var versionObsidian = String(donnees.tag_name || "").replace(/^(desktop-)?v/, "");

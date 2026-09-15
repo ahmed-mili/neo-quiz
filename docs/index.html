@@ -810,24 +810,12 @@
 
 		// Obsidian reads its own release stream, `latest-plugin.json`
 		// (published with `make_latest: false`, so it never shows up as the
-		// GitHub "latest" release): the fallback walks `/releases` and keeps
-		// the first one that is not a pre-version and whose tag starts with
-		// `v` followed by a digit — excluding both pre-versions and any
-		// `desktop-v*` tag, which the same endpoint also lists.
-		function estTagPlugin(tagName) {
-			return /^v\d/.test(String(tagName || ""));
-		}
+		// GitHub "latest" release). No API fallback here, on purpose: while
+		// no plugin release exists the file is absent, and a fallback burned
+		// one of the visitor's 60 unauthenticated API requests per hour on
+		// EVERY visit, to find nothing. The card simply stays empty until the
+		// first plugin release writes the file.
 		chargerJson("latest-plugin.json")
-			.catch(function () {
-				return chargerJson("https://api.github.com/repos/" + DEPOT + "/releases?per_page=30")
-					.then(function (releases) {
-						var trouvee = (releases || []).find(function (release) {
-							return !release.prerelease && estTagPlugin(release.tag_name);
-						});
-						if (!trouvee) throw new Error("no plugin release");
-						return trouvee;
-					});
-			})
 			.then(function (donnees) {
 				var elObsidian = document.getElementById("version-obsidian");
 				var versionObsidian = String(donnees.tag_name || "").replace(/^(desktop-)?v/, "");

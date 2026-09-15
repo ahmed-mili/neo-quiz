@@ -130,7 +130,7 @@
 
         System::Call 'user32::CreateWindowExW(i0,w "STATIC",w "",i0x50000000,i$NeoQuizBarreX,i$NeoQuizBarreY,i1,i$NeoQuizBarreHauteur,p$NeoQuizDialogueProgression,p0,p0,p0)p.R7'
         StrCpy $NeoQuizRemplissageProgression $R7
-        SetCtlColors $NeoQuizRemplissageProgression 000000 00B83F
+        SetCtlColors $NeoQuizRemplissageProgression 000000 FF00FF
 
         ${NSD_CreateTimer} un.NeoQuizRafraichirDesinstallation 35
         Call un.NeoQuizRafraichirDesinstallation

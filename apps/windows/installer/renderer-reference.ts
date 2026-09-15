@@ -10,13 +10,15 @@ import type {
 	InfosInitialesInstallateur,
 } from "./protocole";
 
-/* Cette vue suit la maquette d'installation, mais reste reconstruite depuis
-   l'état pour qu'un refus UAC ou une nouvelle tentative ne laisse aucun état
-   visuel périmé. */
+/* La page PRÊTE reste celle déjà validée à l'écran. Les autres phases ont leur
+   propre composition : on ne déplace donc aucun élément de l'étape 2 pour
+   obtenir les étapes 1, 3, 4 et 5. */
 let infos: InfosInitialesInstallateur | null = null;
 let disque: InfosDisqueInstallateur | null = null;
 let etat: EtatInstallateur = { phase: "pret" };
 let chargement = true;
+let echantillonTelechargement: { recus: number; instant: number } | null = null;
+let debitTelechargement: number | null = null;
 
 function ajouter<K extends keyof HTMLElementTagNameMap>(
 	parent: HTMLElement,
@@ -50,6 +52,12 @@ function formatOctets(octets: number): string {
 	}).format(octets / diviseur);
 }
 
+function formatPourcent(pourcent: number): string {
+	return new Intl.NumberFormat(currentLang() === "fr" ? "fr-FR" : "en-US", {
+		maximumFractionDigits: 1,
+	}).format(Math.max(0, Math.min(100, pourcent)));
+}
+
 function libelleErreur(code: CodeErreurInstallateur): string {
 	switch (code) {
 		case "release": return t("installer.error.release");
@@ -60,6 +68,11 @@ function libelleErreur(code: CodeErreurInstallateur): string {
 		case "launch": return t("installer.error.launch");
 		default: return t("installer.error.generic");
 	}
+}
+
+function phaseVerrouilleFermeture(): boolean {
+	return etat.phase === "elevation" || etat.phase === "telechargement" ||
+		etat.phase === "verification" || etat.phase === "installation" || etat.phase === "demarrage";
 }
 
 function rendreBarreTitre(parent: HTMLElement): void {
@@ -82,7 +95,7 @@ function rendreBarreTitre(parent: HTMLElement): void {
 	fermer.type = "button";
 	fermer.title = t("installer.close");
 	fermer.setAttribute("aria-label", t("installer.close"));
-	fermer.disabled = etat.phase === "elevation" || etat.phase === "installation" || etat.phase === "verification";
+	fermer.disabled = phaseVerrouilleFermeture();
 	fermer.addEventListener("click", () => window.neoInstaller.fermer());
 	poserGlyphe(fermer, "close");
 }
@@ -94,8 +107,8 @@ function rendreHero(parent: HTMLElement): void {
 	ajouter(parent, "section", "nqi-hero").setAttribute("aria-hidden", "true");
 }
 
-function rendreProgression(parent: HTMLElement, pourcent: number | null): void {
-	const piste = ajouter(parent, "div", `nqi-progress${pourcent === null ? " is-indeterminate" : ""}`);
+function rendreProgression(parent: HTMLElement, pourcent: number | null, classe = ""): void {
+	const piste = ajouter(parent, "div", `nqi-progress${pourcent === null ? " is-indeterminate" : ""}${classe ? ` ${classe}` : ""}`);
 	const barre = ajouter(piste, "div", "nqi-progress-bar");
 	if (pourcent !== null) barre.style.width = `${Math.max(0, Math.min(100, pourcent))}%`;
 }
@@ -112,11 +125,6 @@ function rendreBoutonInstallation(parent: HTMLElement): void {
 }
 
 function rendreAction(parent: HTMLElement): void {
-	if (chargement) {
-		ajouter(parent, "p", "nqi-status", t("installer.preparing"));
-		rendreProgression(parent, null);
-		return;
-	}
 	if (etat.phase === "erreur") {
 		/* Le refus UAC a son propre dialogue bloquant : afficher en plus le
 		   bouton de nouvelle tentative derrière lui créerait deux actions
@@ -136,30 +144,14 @@ function rendreAction(parent: HTMLElement): void {
 		rendreBoutonInstallation(parent);
 		return;
 	}
-
-	let statut: string;
-	let pourcent: number | null = null;
-	switch (etat.phase) {
-		case "elevation": statut = t("installer.status.elevation"); break;
-		case "telechargement":
-			pourcent = etat.total > 0 ? Math.round((etat.recus / etat.total) * 100) : 0;
-			statut = t("installer.status.downloading", { percent: pourcent });
-			break;
-		case "verification": statut = t("installer.status.verifying"); break;
-		case "installation": statut = t("installer.status.installing"); break;
-		default: statut = t("installer.preparing");
-	}
-	ajouter(parent, "p", "nqi-status", statut);
-	rendreProgression(parent, pourcent);
-	if (etat.phase === "telechargement") {
-		const annuler = ajouter(parent, "button", "nqi-secondary", t("installer.cancel"));
-		annuler.type = "button";
-		annuler.addEventListener("click", () => { void window.neoInstaller.annuler(); });
+	if (etat.phase === "elevation") {
+		ajouter(parent, "p", "nqi-status", t("installer.status.elevation"));
+		rendreProgression(parent, null);
 	}
 }
 
-function rendreLegal(parent: HTMLElement): void {
-	const legal = ajouter(parent, "div", "nqi-legal");
+function rendreLegal(parent: HTMLElement, classe = ""): void {
+	const legal = ajouter(parent, "div", `nqi-legal${classe ? ` ${classe}` : ""}`);
 	const ligne = ajouter(legal, "p", "nqi-legal-copy");
 	ligne.appendChild(document.createTextNode(t("installer.legal.beforeTerms")));
 	ajouter(ligne, "span", "nqi-legal-link", t("installer.legal.terms"));
@@ -167,6 +159,15 @@ function rendreLegal(parent: HTMLElement): void {
 	ajouter(ligne, "span", "nqi-legal-link", t("installer.legal.privacy"));
 	ligne.appendChild(document.createTextNode(t("installer.legal.afterPrivacy")));
 	ligne.appendChild(document.createTextNode(t("installer.legal.components")));
+}
+
+function rendreCommentaires(parent: HTMLElement, classe = ""): void {
+	const commentaires = ajouter(parent, "button", `nqi-feedback${classe ? ` ${classe}` : ""}`);
+	commentaires.type = "button";
+	const iconeCommentaires = ajouter(commentaires, "span", "nqi-feedback-icon");
+	poserIcone(iconeCommentaires, "message-square-warning");
+	ajouter(commentaires, "span", undefined, t("installer.feedback"));
+	commentaires.addEventListener("click", () => window.neoInstaller.commentaires());
 }
 
 function rendreEmplacement(parent: HTMLElement): void {
@@ -207,28 +208,111 @@ function rendreErreurElevation(parent: HTMLElement): void {
 	annuler.addEventListener("click", () => window.neoInstaller.fermer());
 }
 
+function rendreChargement(parent: HTMLElement): void {
+	const etape = ajouter(parent, "section", "nqi-loading-stage");
+	etape.setAttribute("role", "status");
+	etape.setAttribute("aria-label", t("installer.preparing"));
+	const anneau = ajouter(etape, "div", "nqi-loading-spinner");
+	anneau.setAttribute("aria-hidden", "true");
+}
+
+function detailTelechargement(recus: number, total: number): string {
+	const restant = Math.max(0, total - recus);
+	if (debitTelechargement && debitTelechargement > 0 && restant > 0) {
+		return t("installer.status.downloadDetail", {
+			downloaded: formatOctets(recus),
+			total: formatOctets(total),
+			seconds: Math.max(1, Math.ceil(restant / debitTelechargement)),
+		});
+	}
+	return t("installer.status.downloadDetailNoTime", {
+		downloaded: formatOctets(recus),
+		total: formatOctets(total),
+	});
+}
+
+function rendreEtapeProgression(parent: HTMLElement): void {
+	const etape = ajouter(parent, "section", "nqi-progress-stage");
+	ajouter(etape, "h1", "nqi-progress-title", t("installer.title"));
+
+	let pourcent = 0;
+	let statut = t("installer.status.verifying");
+	let detail: string | null = null;
+	if (etat.phase === "telechargement") {
+		pourcent = etat.total > 0 ? (etat.recus / etat.total) * 100 : 0;
+		statut = t("installer.status.downloading", { percent: formatPourcent(pourcent) });
+		detail = detailTelechargement(etat.recus, etat.total);
+	} else if (etat.phase === "verification") {
+		pourcent = 100;
+		statut = t("installer.status.verifying");
+	} else if (etat.phase === "installation") {
+		pourcent = etat.pourcent;
+		statut = t("installer.status.installingProgress", { percent: formatPourcent(pourcent) });
+	}
+
+	const bloc = ajouter(etape, "div", "nqi-progress-block");
+	rendreProgression(bloc, pourcent, "nqi-progress-wide");
+	ajouter(bloc, "p", "nqi-progress-status", statut);
+	if (detail) ajouter(bloc, "p", "nqi-progress-detail", detail);
+
+	rendreCommentaires(etape, "nqi-progress-feedback");
+	rendreLegal(etape, "nqi-progress-legal");
+
+	const actions = ajouter(etape, "div", "nqi-progress-actions");
+	const annuler = ajouter(actions, "button", "nqi-progress-cancel", t("installer.cancel"));
+	annuler.type = "button";
+	annuler.disabled = etat.phase !== "telechargement";
+	if (!annuler.disabled) annuler.addEventListener("click", () => { void window.neoInstaller.annuler(); });
+	const installer = ajouter(actions, "button", "nqi-progress-install", t("installer.install"));
+	installer.type = "button";
+	installer.disabled = true;
+}
+
+function rendreDemarrage(parent: HTMLElement): void {
+	const etape = ajouter(parent, "main", "nqi-launch-stage");
+	etape.setAttribute("role", "status");
+	etape.setAttribute("aria-label", t("installer.windowTitle"));
+	const carte = ajouter(etape, "section", "nqi-launch-card");
+	const marque = ajouter(carte, "div", "nqi-launch-brand");
+	const icone = ajouter(marque, "img", "nqi-launch-icon");
+	icone.src = "./icon.png";
+	icone.alt = "";
+	icone.setAttribute("aria-hidden", "true");
+	ajouter(marque, "strong", "nqi-launch-name", t("installer.windowTitle"));
+}
+
 function rendre(): void {
 	document.documentElement.lang = currentLang();
 	document.title = t("installer.windowTitle");
 	const root = document.getElementById("app");
 	if (!root) return;
 	root.replaceChildren();
-	rendreBarreTitre(root);
 
+	if (etat.phase === "demarrage") {
+		rendreDemarrage(root);
+		return;
+	}
+
+	rendreBarreTitre(root);
 	const contenu = ajouter(root, "main", "nqi-shell");
 	rendreHero(contenu);
+
+	if (chargement) {
+		rendreChargement(contenu);
+		return;
+	}
+
+	if (etat.phase === "telechargement" || etat.phase === "verification" || etat.phase === "installation") {
+		rendreEtapeProgression(contenu);
+		return;
+	}
+
+	/* Étape 2 : DOM volontairement inchangé par rapport à la version validée. */
 	const panneau = ajouter(contenu, "section", "nqi-panel");
 	ajouter(panneau, "h1", "nqi-title", t("installer.title"));
 	rendreEmplacement(panneau);
 	rendreLegal(panneau);
-
-	const commentaires = ajouter(panneau, "button", "nqi-feedback");
-	commentaires.type = "button";
-	const iconeCommentaires = ajouter(commentaires, "span", "nqi-feedback-icon");
-	poserIcone(iconeCommentaires, "message-square-warning");
-	ajouter(commentaires, "span", undefined, t("installer.feedback"));
-	commentaires.addEventListener("click", () => window.neoInstaller.commentaires());
-
+	rendreCommentaires(panneau);
 	const actions = ajouter(panneau, "div", "nqi-actions");
 	rendreAction(actions);
 	rendreErreurElevation(root);
@@ -249,6 +333,8 @@ async function initialiser(): Promise<void> {
 	etat = { phase: "pret" };
 	infos = null;
 	disque = null;
+	echantillonTelechargement = null;
+	debitTelechargement = null;
 	rendre();
 	try {
 		infos = await window.neoInstaller.initialiser();
@@ -268,6 +354,27 @@ async function initialiser(): Promise<void> {
 	}
 }
 
+function mesurerDebit(nouvelEtat: EtatInstallateur): void {
+	if (nouvelEtat.phase !== "telechargement") {
+		echantillonTelechargement = null;
+		debitTelechargement = null;
+		return;
+	}
+	const maintenant = performance.now();
+	const precedent = echantillonTelechargement;
+	if (precedent && nouvelEtat.recus >= precedent.recus) {
+		const duree = maintenant - precedent.instant;
+		const octets = nouvelEtat.recus - precedent.recus;
+		if (duree > 0 && octets > 0) {
+			const instantane = (octets * 1000) / duree;
+			debitTelechargement = debitTelechargement === null
+				? instantane
+				: debitTelechargement * 0.72 + instantane * 0.28;
+		}
+	}
+	echantillonTelechargement = { recus: nouvelEtat.recus, instant: maintenant };
+}
+
 /* La langue vient du PRINCIPAL par l'URL (`main.ts`, `loadFile` avec
    `query.lang`) : nom du fichier téléchargé, référent du navigateur, ou
    locale système — jamais `navigator.language` seul, qui ignorerait la page
@@ -275,6 +382,7 @@ async function initialiser(): Promise<void> {
 const langueUrl = new URLSearchParams(window.location.search).get("lang");
 setLanguage(langueUrl === "fr" || langueUrl === "en" ? langueUrl : "auto");
 window.neoInstaller.surEtat(nouvelEtat => {
+	mesurerDebit(nouvelEtat);
 	etat = nouvelEtat.phase === "annule" ? { phase: "pret" } : nouvelEtat;
 	rendre();
 });

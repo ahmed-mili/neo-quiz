@@ -100,3 +100,210 @@
 	background: linear-gradient(180deg, rgba(27, 47, 82, .9), rgba(17, 31, 56, .94));
 	outline: none;
 }
+
+/* Étape 1 : la référence ne montre aucun formulaire pendant que les données
+   de release arrivent. Le décor reste visible et le seul signal d'activité est
+   donc un anneau au centre ; rien de l'étape 2 n'est monté puis masqué. */
+.nqi-loading-stage {
+	position: absolute;
+	inset: 48px 0 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.nqi-loading-spinner {
+	width: 32px;
+	height: 32px;
+	border: 3px solid rgba(126, 168, 255, .18);
+	border-top-color: #5b9dff;
+	border-right-color: rgba(91, 157, 255, .62);
+	border-radius: 50%;
+	box-shadow: 0 0 18px rgba(48, 105, 225, .22);
+	animation: nqi-spinner .78s linear infinite;
+}
+
+@keyframes nqi-spinner {
+	to { transform: rotate(360deg); }
+}
+
+/* Étapes 3 et 4 : contrairement à l'écran prêt, la barre devient l'axe de la
+   page et traverse presque toute la largeur, comme dans la référence. Le décor
+   reste derrière : on change l'état de l'installeur, pas son identité. */
+.nqi-progress-stage {
+	position: absolute;
+	inset: 48px 0 0;
+	z-index: 1;
+}
+
+.nqi-progress-title {
+	position: absolute;
+	left: 48px;
+	top: 38px;
+	margin: 0;
+	font-size: 26px;
+	line-height: 1.2;
+	font-weight: 400;
+	letter-spacing: 0;
+	color: #f7f9ff;
+}
+
+.nqi-progress-block {
+	position: absolute;
+	left: 16px;
+	right: 16px;
+	top: 320px;
+}
+
+.nqi-progress-wide {
+	height: 5px;
+	border-radius: 0;
+	background: rgba(255, 255, 255, .105);
+}
+
+.nqi-progress-wide .nqi-progress-bar {
+	border-radius: 0;
+	background: #5b9dff;
+	transition: width .12s linear;
+}
+
+.nqi-progress-status {
+	margin: 16px 0 0;
+	text-align: center;
+	font-size: 13px;
+	line-height: 1.3;
+	font-weight: 600;
+	letter-spacing: -.02px;
+	color: rgba(245, 248, 255, .91);
+}
+
+.nqi-progress-detail {
+	margin: 7px 0 0;
+	text-align: center;
+	font-size: 11.5px;
+	line-height: 1.3;
+	font-weight: 430;
+	color: rgba(166, 184, 216, .78);
+}
+
+.nqi-progress-stage .nqi-progress-legal {
+	left: 24px;
+	right: 24px;
+	top: auto;
+	bottom: 80px;
+	width: auto;
+}
+
+.nqi-progress-stage .nqi-progress-legal .nqi-legal-copy {
+	font-size: 9.5px;
+	line-height: 1.35;
+	color: rgba(154, 169, 196, .72);
+}
+
+.nqi-progress-stage .nqi-progress-feedback {
+	left: 24px;
+	bottom: 31px;
+	font-size: 11.5px;
+	gap: 8px;
+}
+
+.nqi-progress-stage .nqi-progress-feedback svg {
+	width: 15px;
+	height: 15px;
+}
+
+.nqi-progress-actions {
+	position: absolute;
+	right: 24px;
+	bottom: 26px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.nqi-progress-cancel,
+.nqi-progress-install {
+	height: 38px;
+	padding: 0 21px;
+	border-radius: 999px;
+	font-family: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.nqi-progress-cancel {
+	border: 1px solid rgba(126, 168, 255, .50);
+	background: rgba(7, 15, 29, .62);
+	color: #7fb0ff;
+	cursor: pointer;
+}
+
+.nqi-progress-cancel:hover:not(:disabled),
+.nqi-progress-cancel:focus-visible:not(:disabled) {
+	border-color: rgba(126, 168, 255, .88);
+	background: rgba(18, 33, 60, .76);
+	outline: none;
+}
+
+.nqi-progress-cancel:disabled {
+	opacity: .42;
+	cursor: default;
+}
+
+.nqi-progress-install {
+	min-width: 86px;
+	border: 0;
+	background: rgba(255, 255, 255, .15);
+	color: rgba(238, 243, 253, .43);
+	cursor: default;
+}
+
+/* Étape 5 : un écran de transition, pas une nouvelle page de l'assistant. Il
+   masque donc le décor et la barre de titre, et ne disparaît que quand la vraie
+   fenêtre de Neo Quiz est devenue visible. */
+.nqi-launch-stage {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 64px;
+	background: #111318;
+}
+
+.nqi-launch-card {
+	width: min(480px, 100%);
+	height: 252px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 9px;
+	background: #020304;
+	box-shadow: 0 24px 70px rgba(0, 0, 0, .38);
+}
+
+.nqi-launch-brand {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	color: #f7f9ff;
+}
+
+.nqi-launch-icon {
+	width: 42px;
+	height: 42px;
+	object-fit: contain;
+}
+
+.nqi-launch-name {
+	font-family: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+	font-size: 21px;
+	line-height: 1;
+	font-weight: 600;
+	letter-spacing: -.3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.nqi-loading-spinner { animation-duration: 1.8s; }
+}

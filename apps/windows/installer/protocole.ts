@@ -53,7 +53,8 @@ export type EtatInstallateur =
 	| { phase: "elevation" }
 	| { phase: "telechargement"; recus: number; total: number }
 	| { phase: "verification" }
-	| { phase: "installation" }
+	| { phase: "installation"; pourcent: number }
+	| { phase: "demarrage" }
 	| { phase: "annule" }
 	| { phase: "erreur"; code: CodeErreurInstallateur };
 
@@ -79,7 +80,7 @@ export type MessageTravailleur =
 	| { type: "auth"; secret: string }
 	| { type: "telechargement"; recus: number; total: number }
 	| { type: "verification" }
-	| { type: "installation" }
+	| { type: "installation"; pourcent: number }
 	| { type: "termine"; executable: string }
 	| { type: "annule" }
 	| { type: "erreur"; code: CodeErreurInstallateur };

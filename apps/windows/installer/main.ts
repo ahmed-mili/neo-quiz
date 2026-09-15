@@ -13,7 +13,7 @@ import { access, mkdir, readFile, rename, statfs, writeFile } from "node:fs/prom
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { setLanguage, t } from "../../../src/i18n";
 import { PRODUCT_NAME } from "../../../src/branding";
 import { langueDepuisNom, langueDepuisZone, resoudrePaquet, type LangueInstallateur, type PaquetInstallable, type ReleaseGithub } from "./noyau";
@@ -73,7 +73,9 @@ function decoderMessage(ligne: string): MessageTravailleur | null {
 				return typeof v.recus === "number" && typeof v.total === "number"
 					? { type: "telechargement", recus: v.recus, total: v.total } : null;
 			case "verification": return { type: "verification" };
-			case "installation": return { type: "installation" };
+			case "installation":
+				return typeof v.pourcent === "number" && Number.isFinite(v.pourcent)
+					? { type: "installation", pourcent: v.pourcent } : null;
 			case "termine": return typeof v.executable === "string" ? { type: "termine", executable: v.executable } : null;
 			case "annule": return { type: "annule" };
 			case "erreur": return { type: "erreur", code: codeErreur(v.code) };
@@ -160,7 +162,7 @@ async function traiterMessage(message: MessageTravailleur): Promise<void> {
 			return;
 		case "installation":
 			installationCritique = true;
-			envoyerEtat({ phase: "installation" });
+			envoyerEtat({ phase: "installation", pourcent: message.pourcent });
 			return;
 		case "annule":
 			nettoyerSession();
@@ -176,13 +178,15 @@ async function traiterMessage(message: MessageTravailleur): Promise<void> {
 				envoyerEtat({ phase: "erreur", code: "installation" });
 				return;
 			}
+			envoyerEtat({ phase: "demarrage" });
 			await ecrireLangueApplication();
-			const erreur = await shell.openPath(message.executable);
-			if (erreur) {
+			const lancee = await lancerApplicationEtAttendre(message.executable);
+			if (!lancee) {
 				nettoyerSession();
 				envoyerEtat({ phase: "erreur", code: "launch" });
 				return;
 			}
+			if (fenetre && !fenetre.isDestroyed()) fenetre.hide();
 			nettoyerSession();
 			fermetureAutorisee = true;
 			app.quit();
@@ -298,6 +302,59 @@ async function ecrireLangueApplication(): Promise<void> {
 	} catch {
 		// la langue de l'app n'est pas une raison d'échouer l'installation
 	}
+}
+
+/** La fenêtre de l'application est créée avec `show: false` et n'est montrée
+    qu'à `ready-to-show`. Attendre une fenêtre Win32 VISIBLE revient donc à
+    attendre l'initialisation que l'application juge elle-même suffisante pour
+    apparaître, sans ajouter un second protocole dans le rendu. */
+async function attendreFenetreApplication(pid: number): Promise<boolean> {
+	const script = [
+		"$ErrorActionPreference='Stop'",
+		"Add-Type -Namespace NeoQuiz -Name Native -MemberDefinition '[System.Runtime.InteropServices.DllImport(\"user32.dll\")] public static extern bool IsWindowVisible(System.IntPtr hWnd);'",
+		"$p=[System.Diagnostics.Process]::GetProcessById([int]$env:NQ_APP_PID)",
+		"$limite=[DateTime]::UtcNow.AddSeconds(30)",
+		"while([DateTime]::UtcNow -lt $limite){$p.Refresh();if($p.HasExited){exit 3};$h=$p.MainWindowHandle;if($h -ne [IntPtr]::Zero -and [NeoQuiz.Native]::IsWindowVisible($h)){exit 0};Start-Sleep -Milliseconds 100}",
+		"exit 2",
+	].join("; ");
+	return await new Promise<boolean>(resolvePromise => {
+		const veille = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script], {
+			windowsHide: true,
+			stdio: "ignore",
+			env: { ...process.env, NQ_APP_PID: String(pid) },
+		});
+		veille.once("error", () => resolvePromise(false));
+		veille.once("exit", code => resolvePromise(code === 0));
+	});
+}
+
+/** Lance depuis le processus NON ÉLEVÉ, puis garde le bootstrapper à l'écran
+    tant que Neo Quiz n'a pas rendu sa vraie fenêtre visible. Ce geste remplace
+    `shell.openPath` précisément parce qu'il faut suivre le PID lancé. */
+async function lancerApplicationEtAttendre(executable: string): Promise<boolean> {
+	return await new Promise<boolean>(resolvePromise => {
+		const enfant = spawn(executable, [], {
+			detached: true,
+			windowsHide: false,
+			stdio: "ignore",
+		});
+		let resolu = false;
+		const terminer = (ok: boolean): void => {
+			if (resolu) return;
+			resolu = true;
+			resolvePromise(ok);
+		};
+		enfant.once("error", () => terminer(false));
+		enfant.once("spawn", () => {
+			const pid = enfant.pid;
+			if (!pid) {
+				terminer(false);
+				return;
+			}
+			enfant.unref();
+			void attendreFenetreApplication(pid).then(terminer);
+		});
+	});
 }
 
 function executablePortable(): string | null {

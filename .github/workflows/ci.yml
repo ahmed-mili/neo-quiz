@@ -156,28 +156,3 @@ jobs:
           name: neo-quiz-windows-installer
           path: apps/windows/dist-installer-bootstrapper/Install-NeoQuiz.exe
           if-no-files-found: error
-
-  # BEGIN TEMP REPAIR V1.0.4
-  repair-v1-0-4:
-    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[repair-v1.0.4]')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@v7
-        with:
-          ref: main
-          fetch-depth: 0
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 20
-      - name: Repair, rebuild and verify desktop 1.0.4
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          sed -i '/^npm test$/d' scripts/repair-v1.0.4.sh
-          bash scripts/repair-v1.0.4.sh
-  # END TEMP REPAIR V1.0.4

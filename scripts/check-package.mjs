@@ -68,21 +68,26 @@ r.check("files exclut node_modules et les sourcemaps",
 	[config.files.includes("!node_modules/**"), config.files.includes("!dist-electron/**/*.map")],
 	[true, true]);
 r.check("la désinstallation garde les données", config.nsis?.deleteAppDataOnUninstall, false);
-r.check("désinstallation : fenêtre d'attente avec spinner, sans barre de progression",
+r.check("désinstallation : fenêtre Neo Quiz stylisée avec vrai spinner à huit points",
 	[
 		config.nsis?.oneClick,
 		config.nsis?.perMachine,
 		uninstallerNsis.includes("removeDefaultUninstallWelcomePage"),
-		uninstallerNsis.includes("MUI_PAGE_CUSTOMFUNCTION_SHOW un.NeoQuizAfficherDesinstallationCompacte"),
-		uninstallerNsis.includes("Désinstallation en cours..."),
+		uninstallerNsis.includes("MUI_PAGE_CUSTOMFUNCTION_SHOW un.NeoQuizAfficherDesinstallationStylisee"),
+		uninstallerNsis.includes("0xFF3BFFFF"),
+		uninstallerNsis.includes("SetCtlColors $NeoQuizBarreTitre F7F9FF 02060E"),
+		uninstallerNsis.includes("SetCtlColors $NeoQuizDialogueProgression F7F9FF 07101D"),
+		uninstallerNsis.includes("shell32::ExtractIconExW"),
+		uninstallerNsis.includes("NeoQuizPoint7"),
 		uninstallerNsis.includes("${NSD_CreateTimer} un.NeoQuizAnimerSpinner 90"),
-		uninstallerNsis.includes("SetCtlColors $NeoQuizDialogueProgression FFFFFF 202124"),
+		uninstallerNsis.includes("Désinstallation en cours..."),
+		uninstallerNsis.includes("Uninstalling Neo Quiz..."),
+		uninstallerNsis.includes("5B9DFF"),
 		uninstallerNsis.includes('"◐"'),
 		uninstallerNsis.includes("PBM_GETPOS"),
-		uninstallerNsis.includes("NeoQuizBarreProgression"),
 		uninstallerNsis.includes('"STR:$R2%"'),
 	],
-	[false, true, true, true, true, true, true, true, false, false, false]);
+	[false, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false]);
 r.check("author.name est celui attendu par winget et SignPath", config.extraMetadata?.author?.name, "Ahmed Mili");
 r.check("publisherName n'est posé qu'une fois le CN du certificat connu",
 	config.win?.signtoolOptions?.publisherName ?? null, PUBLISHER_ATTENDU);

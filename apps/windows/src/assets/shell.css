@@ -306,13 +306,23 @@ body {
 }
 
 /* ── LA BARRE DE TITRE (style Neo Calendar) ──
-   Elle laisse encore deviner légèrement le fond, mais avec une opacité élevée
-   pour que le wallpaper ne traverse plus visuellement les contrôles. */
+   88px : la largeur RÉELLE du rail du tableau de bord (`.qbd-sidebar`,
+   `src/assets/css/dashboard/dashboard-base.css`) — la teinte gauche du
+   dégradé s'aligne dessus. Sur la page Réglages et l'écran sans dossier, il
+   n'y a pas de rail : la teinte gauche reste fixe (Neo Calendar resserre sa
+   bande latérale repliée ; ici on la garde fixe, plus simple). */
 :root { --nq-barre-hauteur: 45px; }
 .nq-barre {
 	position: fixed; top: 0; left: 0; right: 0; height: var(--nq-barre-hauteur);
 	display: flex; align-items: center; z-index: 5;
-	background: color-mix(in srgb, var(--background-primary) 88%, transparent);
+	/* ENTIÈREMENT TRANSPARENTE, comme Neo Calendar sur la capture d'Ahmed
+	   (2026-09-13) : le fond d'écran passe derrière sans voile ni bande. Une
+	   teinte de verre ou une bande à gauche se voyait comme une barre posée
+	   sur la page, pas comme la page elle-même. Le 2026-09-15 (9bb84b4), un
+	   voile à 88 % a été posé ICI par erreur : la demande d'Ahmed visait la
+	   bande de titre de l'INSTALLEUR (`installer/style-window.css`), pas
+	   celle de l'application. Rétabli le soir même. */
+	background: transparent;
 	-webkit-app-region: drag;
 }
 .nq-barre button { -webkit-app-region: no-drag; }

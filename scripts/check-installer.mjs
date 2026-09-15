@@ -276,6 +276,17 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 		["docs/terms.html", "docs/privacy.html", "docs/fr/terms.html", "docs/fr/privacy.html"]
 			.map(f => existsSync(resolve(racine, f))),
 		[true, true, true, true]);
+	/* Le bouton de langue porte la langue COURANTE de la page (« Français »
+	   sur une page française), comme la page de téléchargement, jamais la
+	   langue cible : Ahmed l'a repris le 2026-09-15 sur ces pages mêmes. */
+	r.check("légal : le bouton de langue affiche la langue de la page, pas la cible",
+		[["docs/terms.html", "English"], ["docs/privacy.html", "English"],
+			["docs/fr/terms.html", "Français"], ["docs/fr/privacy.html", "Français"]]
+			.map(([f, langue]) => {
+				const m = /<a class="langue-bouton"[^>]*>\s*([^<\s][^<]*?)\s*</.exec(readFileSync(resolve(racine, f), "utf8"));
+				return m ? m[1] : null;
+			}),
+		["English", "English", "Français", "Français"]);
 	r.check("légal : les liens de l'installeur sont cliquables et passent par le canal nommé",
 		[
 			renduInstallateur.includes('lienLegal(ligne, "terms", t("installer.legal.terms"));'),

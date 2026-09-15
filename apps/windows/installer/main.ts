@@ -373,8 +373,13 @@ function executablePortable(): string | null {
 }
 
 async function lancerTravailleurEleve(nomTube: string, charge: string): Promise<number> {
-	const executable = executablePortable();
-	if (!executable) return -1;
+	/* Le conteneur portable a déjà extrait Electron pour afficher l'UI.
+	   Relancer PORTABLE_EXECUTABLE_FILE après l'UAC referait cette extraction
+	   (~100 Mo dans les versions actuelles) avant le premier octet téléchargé.
+	   Le binaire déjà extrait contient exactement la même app packagée et reste
+	   vivant tant que cette fenêtre l'est : il peut donc servir de travailleur. */
+	const executable = process.execPath;
+	if (!isAbsolute(executable)) return -1;
 	const script = [
 		"$ErrorActionPreference='Stop'",
 		"$a=@('--neo-quiz-installer-worker',$env:NQ_INSTALLER_PIPE,$env:NQ_INSTALLER_PAYLOAD)",

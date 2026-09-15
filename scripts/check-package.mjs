@@ -44,6 +44,7 @@ function sha512Base64(chemin) {
 
 const racine = fileURLToPath(new URL("..", import.meta.url));
 const appWindows = `${racine}apps/windows/`;
+const uninstallerNsis = readFileSync(`${appWindows}installer/uninstaller.nsh`, "utf8");
 
 const r = makeReporter("Empaquetage — configuration résolue");
 
@@ -67,6 +68,16 @@ r.check("files exclut node_modules et les sourcemaps",
 	[config.files.includes("!node_modules/**"), config.files.includes("!dist-electron/**/*.map")],
 	[true, true]);
 r.check("la désinstallation garde les données", config.nsis?.deleteAppDataOnUninstall, false);
+r.check("désinstallation : petite fenêtre directe avec progression et pourcentage",
+	[
+		config.nsis?.oneClick,
+		config.nsis?.perMachine,
+		uninstallerNsis.includes("removeDefaultUninstallWelcomePage"),
+		uninstallerNsis.includes("MUI_PAGE_CUSTOMFUNCTION_SHOW un.NeoQuizAfficherDesinstallationCompacte"),
+		uninstallerNsis.includes("PBM_GETPOS"),
+		uninstallerNsis.includes('"STR:$R2%"'),
+	],
+	[false, true, true, true, true, true]);
 r.check("author.name est celui attendu par winget et SignPath", config.extraMetadata?.author?.name, "Ahmed Mili");
 r.check("publisherName n'est posé qu'une fois le CN du certificat connu",
 	config.win?.signtoolOptions?.publisherName ?? null, PUBLISHER_ATTENDU);

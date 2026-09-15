@@ -22,6 +22,7 @@ const siteFr = readFileSync(resolve(racine, "docs/fr/index.html"), "utf8");
 const renduInstallateur = readFileSync(resolve(racine, "apps/windows/installer/renderer-reference.ts"), "utf8");
 const principalInstallateur = readFileSync(resolve(racine, "apps/windows/installer/main.ts"), "utf8");
 const travailleurInstallateur = readFileSync(resolve(racine, "apps/windows/installer/worker.ts"), "utf8");
+const configBootstrapper = readFileSync(resolve(racine, "apps/windows/installer/electron-builder.config.mjs"), "utf8");
 
 await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argumentsNsis, langueDepuisNom, langueDepuisZone }) => {
 	const r = makeReporter("Installateur — bootstrapper");
@@ -135,6 +136,14 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argume
 			travailleurInstallateur.includes('if (commande.type === "annuler") annulation.abort();'),
 		],
 		[true, true, true, true, true, true]);
+
+	r.check("démarrage : le bootstrapper évite les deux extractions coûteuses",
+		[
+			configBootstrapper.includes('compression: "store"'),
+			principalInstallateur.includes('const executable = process.execPath;'),
+			principalInstallateur.includes('const executable = executablePortable();\n\tif (!executable) return -1;'),
+		],
+		[true, true, false]);
 
 	/* La langue voyage AVEC le fichier : par son nom d'abord, par le flux
 	   `Zone.Identifier` du navigateur ensuite. Un nom sans rapport ou un

@@ -8,6 +8,10 @@ export default async function () {
 		appId: "com.ahmed.neoquiz.installer",
 		productName: "Neo Quiz Installer",
 		executableName: "neo-quiz-installer",
+		/* Le portable s'auto-extrait à chaque lancement. `store` évite la
+		   décompression LZMA coûteuse : l'exe est plus gros, mais la première
+		   fenêtre peut apparaître plus vite. */
+		compression: "store",
 		extraMetadata: {
 			main: "dist-bootstrapper/main.cjs",
 			author: { name: "Ahmed Mili" },

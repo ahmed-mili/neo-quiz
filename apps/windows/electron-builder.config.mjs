@@ -102,7 +102,11 @@ export default async function () {
 			desktop: { entry: { Name: "Neo Quiz", StartupWMClass: "neo-quiz" } },
 		},
 		nsis: {
+			/* Le bootstrapper installe toujours dans Program Files avec /allusers.
+			   L'expliciter ici évite au désinstalleur une page de choix de portée :
+			   il arrive directement sur sa petite fenêtre de progression. */
 			oneClick: false,
+			perMachine: true,
 			allowToChangeInstallationDirectory: true,
 			/* L'installation garde le wizard NSIS parce que le bootstrapper le
 			   lance en silence ; seul le désinstalleur visible doit être compact. */

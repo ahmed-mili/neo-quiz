@@ -31,6 +31,12 @@ jobs:
       - name: Monter la version à 1.0.4
         run: node scripts/set-version.mjs 1.0.4
 
+      # check:installer charge le code TypeScript réel via scripts/lib/load-src.mjs,
+      # qui importe esbuild. Le contrôle doit donc tourner après l'installation
+      # des dépendances du dépôt, exactement comme dans la CI normale.
+      - name: Installer les dépendances
+        run: npm ci
+
       - name: Vérifier les invariants de publication
         run: npm run check:installer
 

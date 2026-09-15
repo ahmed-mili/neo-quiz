@@ -1,7 +1,5 @@
 name: Repair desktop v1.0.4
 
-# Second push: the workflow now already exists on the default branch, so this
-# change intentionally triggers the one-shot repair job below.
 on:
   push:
     branches:
@@ -46,32 +44,34 @@ jobs:
           python <<'PY'
           from pathlib import Path
 
+          def expr(body: str) -> str:
+              return "$" + "{{ " + body + " }}"
+
           workflow_path = Path('.github/workflows/release.yml')
           workflow = workflow_path.read_text(encoding='utf-8')
 
-          old = "make_latest: ${{ steps.version.outputs.product == 'app' }}"
-          if workflow.count(old) != 1:
-              raise SystemExit(f"attendu 1 ancien make_latest prepare, obtenu {workflow.count(old)}")
-          workflow = workflow.replace(old, 'make_latest: "false"', 1)
+          old_prepare_latest = "make_latest: " + expr("steps.version.outputs.product == 'app'")
+          if workflow.count(old_prepare_latest) != 1:
+              raise SystemExit(f"attendu 1 ancien make_latest prepare, obtenu {workflow.count(old_prepare_latest)}")
+          workflow = workflow.replace(old_prepare_latest, 'make_latest: "false"', 1)
 
           if workflow.count('make_latest: "true"') != 2:
-              raise SystemExit(f"attendu 2 promotions prématurées des jobs assets, obtenu {workflow.count('make_latest: \"true\"')}")
+              raise SystemExit(f"attendu 2 promotions prématurées des jobs assets, obtenu {workflow.count('make_latest: ' + chr(34) + 'true' + chr(34))}")
           workflow = workflow.replace('make_latest: "true"', 'make_latest: "false"')
 
-          old_comment = '''  # Résout version / tag / produit une seule fois, et crée la release AVANT
+          old_prepare_comment = '''  # Résout version / tag / produit une seule fois, et crée la release AVANT
   # les builds : c'est ainsi que les jobs `plugin` / `app-windows` /
   # `app-linux` peuvent y attacher leurs fichiers sans se disputer la
   # création (un Windows et un Linux qui créeraient chacun la release en
   # feraient deux, en double).'''
-          new_comment = '''  # Résout version / tag / produit une seule fois et crée la release AVANT
+          new_prepare_comment = '''  # Résout version / tag / produit une seule fois et crée la release AVANT
   # les builds, mais JAMAIS comme `latest`. Les jobs peuvent ainsi y attacher
-  # leurs fichiers sans se disputer la création, tandis que l'ancienne app
-  # reste servie jusqu'à ce que Windows + Linux aient fini et que les assets
-  # indispensables aient été vérifiés. La promotion `latest` se fait dans
-  # le job `site`, une seule fois la release complète.'''
-          if old_comment not in workflow:
+  # leurs fichiers sans exposer une version incomplète au bootstrapper.
+  # Le job `site` promeut l'application uniquement après succès Windows + Linux
+  # et validation des assets indispensables.'''
+          if old_prepare_comment not in workflow:
               raise SystemExit('commentaire prepare attendu introuvable')
-          workflow = workflow.replace(old_comment, new_comment, 1)
+          workflow = workflow.replace(old_prepare_comment, new_prepare_comment, 1)
 
           old_create_comment = '''      # Sur tag, ou sur dispatch explicitement publiant, la release existe avant
       # que les jobs de build y attachent leurs fichiers. `make_latest`
@@ -79,9 +79,8 @@ jobs:
       # « latest » du dépôt, le greffon ne la touche jamais.'''
           new_create_comment = '''      # Sur tag, ou sur dispatch explicitement publiant, la release existe avant
       # que les jobs de build y attachent leurs fichiers, mais reste NON latest.
-      # C'est essentiel : `/releases/latest` est consommé par le bootstrapper,
-      # donc il ne doit jamais voir une release dont le NSIS ou les bootstrappers
-      # ne sont pas encore attachés.'''
+      # `/releases/latest` est consommé par le bootstrapper : il ne doit jamais
+      # pointer vers une release dont le NSIS n'est pas encore prêt.'''
           if old_create_comment not in workflow:
               raise SystemExit('commentaire Create Release attendu introuvable')
           workflow = workflow.replace(old_create_comment, new_create_comment, 1)
@@ -97,18 +96,19 @@ jobs:
               raise SystemExit(f"attendu 2 commentaires d'attachement, obtenu {workflow.count(old_attach_comment)}")
           workflow = workflow.replace(old_attach_comment, new_attach_comment)
 
-          site_anchor = '''      - name: Write latest.json from the release
-        env:
-          GH_TOKEN: ${{ github.token }}'''
+          token_expr = expr('github.token')
+          tag_expr = expr('needs.prepare.outputs.tag')
+          version_expr = expr('needs.prepare.outputs.version')
+          site_anchor = "      - name: Write latest.json from the release\n        env:\n          GH_TOKEN: " + token_expr
           if workflow.count(site_anchor) != 1:
               raise SystemExit(f"ancre site attendue une fois, obtenue {workflow.count(site_anchor)}")
 
           promotion_step = '''      - name: Verify app release assets and promote latest
         if: needs.prepare.outputs.product == 'app'
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.prepare.outputs.tag }}
-          VERSION: ${{ needs.prepare.outputs.version }}
+          GH_TOKEN: __TOKEN__
+          TAG: __TAG__
+          VERSION: __VERSION__
         shell: bash
         run: |
           set -euo pipefail
@@ -151,7 +151,7 @@ jobs:
           fi
           echo "Release ${TAG} promue latest après validation de tous les assets."
 
-'''
+'''.replace('__TOKEN__', token_expr).replace('__TAG__', tag_expr).replace('__VERSION__', version_expr)
           workflow = workflow.replace(site_anchor, promotion_step + site_anchor, 1)
           workflow_path.write_text(workflow, encoding='utf-8')
 
@@ -172,7 +172,7 @@ jobs:
 \t\t? workflow.slice(debutPromotion, debutLatestJson)
 \t\t: "";
 \tr.check("publication : la release est créée sans devenir latest avant les assets",
-\t\tworkflow.includes("make_latest: ${{ steps.version.outputs.product == 'app' }}"), false);
+\t\tworkflow.includes("__OLD_DYNAMIC__"), false);
 \tr.check("publication : les jobs d'assets ne rendent jamais la release latest",
 \t\tworkflow.includes('make_latest: "true"'), false);
 \tr.check("publication : la promotion finale exige les deux bootstrappers, le NSIS et son sha256",
@@ -188,6 +188,7 @@ jobs:
 \t\ttrue);
 
 \t/* La langue voyage AVEC le fichier : par son nom d'abord, par le flux'''
+          added = added.replace('__OLD_DYNAMIC__', old_prepare_latest)
           check = check.replace(anchor, added, 1)
           check_path.write_text(check, encoding='utf-8')
           PY
@@ -225,7 +226,6 @@ jobs:
             echo "::error::L'assertion nommée attendue n'est pas celle qui a échoué."
             exit 1
           fi
-
           cp /tmp/release.yml.good .github/workflows/release.yml
           npm run check:installer
 
@@ -241,7 +241,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/release.yml scripts/check-installer.mjs docs/latest.json
-          git diff --cached --exit-code && { echo "::error::Aucune correction à committer."; exit 1; } || true
+          git diff --cached --quiet && { echo "::error::Aucune correction à committer."; exit 1; }
           git commit -m "fix(release): promote desktop only after assets"
           git push origin main
 
@@ -361,10 +361,8 @@ jobs:
             echo "::error::Le NSIS final n'a pas de sha256 exploitable."
             exit 1
           }
-
           latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
           [ "$latest" = "desktop-v1.0.4" ] || { echo "::error::Latest GitHub est ${latest}, pas desktop-v1.0.4."; exit 1; }
-
           main_latest=$(gh api "repos/${GITHUB_REPOSITORY}/contents/docs/latest.json?ref=main" --jq '.content' | base64 -d)
           printf '%s' "$main_latest" | grep -F '"tag_name":"desktop-v1.0.4"' >/dev/null || {
             echo "::error::docs/latest.json sur main n'est pas encore en 1.0.4."

@@ -1,5 +1,6 @@
 name: Installer 1.0.5 implementation
 
+# Temporary one-shot orchestrator. Remove after desktop-v1.0.5 is verified.
 on:
   push:
     branches:

@@ -68,26 +68,28 @@ r.check("files exclut node_modules et les sourcemaps",
 	[config.files.includes("!node_modules/**"), config.files.includes("!dist-electron/**/*.map")],
 	[true, true]);
 r.check("la désinstallation garde les données", config.nsis?.deleteAppDataOnUninstall, false);
-r.check("désinstallation : petite fenêtre Neo Quiz stylisée avec progression réelle",
+r.check("désinstallation : fenêtre native minimale avec seulement la progression réelle",
 	[
 		config.nsis?.oneClick,
 		config.nsis?.perMachine,
 		uninstallerNsis.includes("removeDefaultUninstallWelcomePage"),
-		uninstallerNsis.includes("MUI_PAGE_CUSTOMFUNCTION_SHOW un.NeoQuizAfficherDesinstallationStylisee"),
-		uninstallerNsis.includes("SetCtlColors $NeoQuizDialogueProgression F7F9FF 07101D"),
-		uninstallerNsis.includes("SetCtlColors $NeoQuizBarreTitre F7F9FF 02060E"),
-		uninstallerNsis.includes("SetCtlColors $NeoQuizPisteProgression 000000 1D2A42"),
-		uninstallerNsis.includes("SetCtlColors $NeoQuizRemplissageProgression 000000 5B9DFF"),
+		uninstallerNsis.includes("MUI_PAGE_CUSTOMFUNCTION_SHOW un.NeoQuizAfficherDesinstallationSimple"),
+		uninstallerNsis.includes('SendMessage $HWNDPARENT ${WM_SETTEXT} 0 "STR:Neo Quiz"'),
+		uninstallerNsis.includes("SetCtlColors $NeoQuizFond 000000 F6F6F6"),
+		uninstallerNsis.includes("SetCtlColors $NeoQuizCadreProgression 000000 BFC1C4"),
+		uninstallerNsis.includes("SetCtlColors $NeoQuizPisteProgression 000000 E5E5E5"),
+		uninstallerNsis.includes("SetCtlColors $NeoQuizRemplissageProgression 000000 00B83F"),
 		uninstallerNsis.includes("PBM_GETPOS"),
 		uninstallerNsis.includes("NeoQuizRemplissageProgression"),
+		uninstallerNsis.includes("IntOp $R1 330 * $R0"),
+		uninstallerNsis.includes("IntOp $R2 116 * $R0"),
 		uninstallerNsis.includes("Désinstallation en cours..."),
-		uninstallerNsis.includes("Uninstalling Neo Quiz..."),
+		uninstallerNsis.includes("NeoQuizBarreTitre"),
 		uninstallerNsis.includes("CreateRoundRectRgn"),
-		uninstallerNsis.includes("NeoQuizPoint7"),
 		uninstallerNsis.includes("NeoQuizAnimerSpinner"),
 		uninstallerNsis.includes('"STR:$R2%"'),
 	],
-	[false, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false]);
+	[false, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false]);
 r.check("author.name est celui attendu par winget et SignPath", config.extraMetadata?.author?.name, "Ahmed Mili");
 r.check("publisherName n'est posé qu'une fois le CN du certificat connu",
 	config.win?.signtoolOptions?.publisherName ?? null, PUBLISHER_ATTENDU);

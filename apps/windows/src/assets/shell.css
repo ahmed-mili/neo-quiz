@@ -306,9 +306,8 @@ body {
 }
 
 /* ── LA BARRE DE TITRE (style Neo Calendar) ──
-   Elle laisse encore légèrement deviner le fond pour conserver l'effet verre,
-   mais elle est maintenant suffisamment opaque pour que le wallpaper ne
-   traverse plus visuellement les contrôles et le logo. */
+   Elle laisse encore deviner légèrement le fond, mais avec une opacité élevée
+   pour que le wallpaper ne traverse plus visuellement les contrôles. */
 :root { --nq-barre-hauteur: 45px; }
 .nq-barre {
 	position: fixed; top: 0; left: 0; right: 0; height: var(--nq-barre-hauteur);
@@ -332,69 +331,21 @@ body {
 .nq-barre-controle { transition: color 100ms ease; }
 /* Les glyphes portent leur taille (attributs `width`/`height`, reprise de
    Neo Calendar : 16, 20, 24) ; seul « restaurer », icône Lucide, est fixé ici
-   car son SVG est créé par `poserGlyphe`. */
-.nq-barre-controle svg[data-lucide="copy"] { width: 14px; height: 14px; }
-.nq-barre-marque {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--text-normal);
-	white-space: nowrap;
-}
-.nq-barre-logo { width: 24px; height: 24px; object-fit: contain; }
+   à 16 px comme `.nc-desktop-window-control > svg` chez la référence. */
+.nq-barre-controle svg.svg-icon { width: 16px; height: 16px; }
+.nq-barre[data-focused="false"] .nq-barre-menu svg, .nq-barre[data-focused="false"] .nq-barre-controle svg { opacity: 0.3; }
+#neo-quiz-root { padding-top: var(--nq-barre-hauteur); box-sizing: border-box; }
 
-.nq-menu-app {
-	position: fixed;
-	top: calc(var(--nq-barre-hauteur) - 2px);
-	left: 7px;
-	z-index: 1000;
-	width: 260px;
-	padding: 6px;
-	border-radius: 9px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-secondary);
-	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
-}
-.nq-menu-app-ligne {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-height: 30px;
-	padding: 4px 8px;
-	border: none;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--text-normal);
-	font: inherit;
-	font-size: 12.5px;
-	text-align: left;
-	width: 100%;
-}
-.nq-menu-app-ligne[data-action] { cursor: pointer; }
-.nq-menu-app-ligne[data-action]:hover,
-.nq-menu-app-ligne[data-action]:focus-visible {
-	background: var(--background-modifier-hover);
-	outline: none;
-}
-.nq-menu-app-ligne[disabled] { color: var(--text-faint); }
-.nq-menu-app-label { flex: 1; min-width: 0; }
-.nq-menu-app-raccourci { margin-left: auto; color: var(--text-muted); font-size: 11.5px; }
-.nq-menu-app-coche { width: 16px; height: 16px; display: grid; place-items: center; color: var(--text-accent); }
-.nq-menu-app-sous-menu { position: relative; }
-.nq-menu-app-sous-menu > .nq-menu-app {
-	top: -6px;
-	left: calc(100% + 5px);
-}
-.nq-menu-app-separateur {
-	height: 1px;
-	margin: 5px 3px;
-	background: var(--background-modifier-border);
-}
-
-/* La barre de titre occupe réellement 45 px au-dessus du contenu. Sans ce
-   décalage, le premier titre du tableau de bord monte derrière la zone de
-   déplacement de la fenêtre et devient pénible à cliquer/sélectionner. */
-body { padding-top: var(--nq-barre-hauteur); }
-#neo-quiz-root { height: calc(100% - var(--nq-barre-hauteur)); }
+/* ── LE MENU D'APPLICATION ── */
+.nq-menu-couche { position: fixed; inset: 0; z-index: 10002; }
+.nq-menu-panneau { position: fixed; min-width: 143px; padding: 12px 0; border: 1px solid var(--background-modifier-border); border-radius: 8px; background: var(--background-primary); color: var(--text-normal); box-shadow: 0 18px 36px -8px rgba(0,0,0,.45), 0 3px 8px -2px rgba(0,0,0,.24); display: flex; flex-direction: column; }
+.nq-menu-ligne { display: flex; align-items: center; width: 100%; height: 28px; padding: 0 10px 0 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; white-space: nowrap; cursor: pointer; }
+.nq-menu-coche { display: flex; align-items: center; justify-content: center; width: 28px; height: 100%; color: var(--text-muted); }
+.nq-menu-coche svg { width: 14px; height: 14px; }
+.nq-menu-libelle { flex: 1 1 auto; }
+.nq-menu-raccourci { flex: none; margin-left: 24px; color: var(--text-faint); font-size: 12px; }
+.nq-menu-chevron { display: flex; flex: none; margin-left: 24px; color: var(--text-muted); }
+.nq-menu-chevron svg { width: 14px; height: 14px; }
+.nq-menu-ligne:hover, .nq-menu-ligne:focus, .nq-menu-ligne[aria-expanded="true"] { background: var(--background-modifier-hover); outline: none; }
+.nq-menu-separateur { height: 1px; margin: 6px 0; background: var(--background-modifier-border); }
+.nq-menu-version { display: flex; align-items: center; height: 28px; padding: 0 10px 0 28px; color: var(--text-faint); font-size: 13px; cursor: default; }

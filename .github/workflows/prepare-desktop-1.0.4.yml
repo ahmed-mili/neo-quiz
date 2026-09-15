@@ -45,8 +45,8 @@ jobs:
                   raise SystemExit(f'{nom}: 1 occurrence attendue, {compte} trouvée(s)')
               texte = texte.replace(ancien, nouveau, 1)
 
-          # Le mode répétition doit rester le défaut ; « publish » rend la même
-          # chaîne capable de publier sans recopier la logique de build ailleurs.
+          # Le mode répétition reste le défaut ; l'option publish réutilise la
+          # même chaîne de build pour une vraie publication, sans la recopier.
           remplace_unique(
               '        default: "app"\n\njobs:\n',
               '        default: "app"\n      publish:\n        description: "Publier réellement la release demandée"\n        required: true\n        type: boolean\n        default: false\n\njobs:\n',
@@ -92,69 +92,70 @@ jobs:
           cible = '          target_commitish: $' + '{{ github.sha }}'
           if cible not in lignes[index_release:index_release + 20]:
               lignes.insert(index_nom + 1, cible)
-          texte = '\n'.join(lignes) + '\n'
-          chemin.write_text(texte, encoding='utf-8')
+          chemin.write_text('\n'.join(lignes) + '\n', encoding='utf-8')
 
-          # Une hausse de version sur main suffit désormais : ce petit workflow
-          # réutilise release.yml par workflow_dispatch au lieu de dupliquer le build.
+          # Une hausse de version sur main suffit ensuite : ce workflow ne fait
+          # que déclencher release.yml, qui reste l'unique chaîne de publication.
           expr_token = '$' + '{{ github.token }}'
           expr_version = '$' + '{{ steps.version.outputs.version }}'
           expr_tag = '$' + '{{ steps.version.outputs.tag }}'
-          auto = f'''name: Publication desktop automatique
-
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'apps/windows/package.json'
-
-permissions:
-  contents: read
-  actions: write
-
-jobs:
-  publier:
-    if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Résoudre la version
-        id: version
-        shell: bash
-        run: |
-          version=$(node -p "require('./apps/windows/package.json').version")
-          if ! [[ "$version" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Version desktop invalide : $version" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=desktop-v$version" >> "$GITHUB_OUTPUT"
-
-      - name: Vérifier que cette version n'est pas déjà publiée
-        id: decision
-        env:
-          GH_TOKEN: {expr_token}
-          TAG: {expr_tag}
-        shell: bash
-        run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "La release $TAG existe déjà : aucune republication."
-            echo "publier=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "publier=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Publier avec la chaîne de release existante
-        if: steps.decision.outputs.publier == 'true'
-        env:
-          GH_TOKEN: {expr_token}
-          VERSION: {expr_version}
-        run: gh workflow run release.yml --ref main -f version="$VERSION" -f product=app -f publish=true
-'''
-          Path('.github/workflows/auto-release-desktop.yml').write_text(auto, encoding='utf-8')
+          auto_lignes = [
+              'name: Publication desktop automatique',
+              '',
+              'on:',
+              '  push:',
+              '    branches:',
+              '      - main',
+              '    paths:',
+              "      - 'apps/windows/package.json'",
+              '',
+              'permissions:',
+              '  contents: read',
+              '  actions: write',
+              '',
+              'jobs:',
+              '  publier:',
+              "    if: github.actor != 'github-actions[bot]'",
+              '    runs-on: ubuntu-latest',
+              '    steps:',
+              '      - name: Checkout',
+              '        uses: actions/checkout@v7',
+              '',
+              '      - name: Résoudre la version',
+              '        id: version',
+              '        shell: bash',
+              '        run: |',
+              '          version=$(node -p "require(\'./apps/windows/package.json\').version")',
+              '          if ! [[ "$version" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then',
+              '            echo "Version desktop invalide : $version" >&2',
+              '            exit 1',
+              '          fi',
+              '          echo "version=$version" >> "$GITHUB_OUTPUT"',
+              '          echo "tag=desktop-v$version" >> "$GITHUB_OUTPUT"',
+              '',
+              "      - name: Vérifier que cette version n'est pas déjà publiée",
+              '        id: decision',
+              '        env:',
+              f'          GH_TOKEN: {expr_token}',
+              f'          TAG: {expr_tag}',
+              '        shell: bash',
+              '        run: |',
+              '          if gh release view "$TAG" >/dev/null 2>&1; then',
+              '            echo "La release $TAG existe déjà : aucune republication."',
+              '            echo "publier=false" >> "$GITHUB_OUTPUT"',
+              '          else',
+              '            echo "publier=true" >> "$GITHUB_OUTPUT"',
+              '          fi',
+              '',
+              '      - name: Publier avec la chaîne de release existante',
+              "        if: steps.decision.outputs.publier == 'true'",
+              '        env:',
+              f'          GH_TOKEN: {expr_token}',
+              f'          VERSION: {expr_version}',
+              '        run: gh workflow run release.yml --ref main -f version="$VERSION" -f product=app -f publish=true',
+              '',
+          ]
+          Path('.github/workflows/auto-release-desktop.yml').write_text('\n'.join(auto_lignes), encoding='utf-8')
           PY
 
       - name: Installer les dépendances racine

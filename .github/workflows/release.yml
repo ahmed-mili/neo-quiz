@@ -6,8 +6,8 @@ name: Release Neo Quiz
 #     sa release est marquée `make_latest: false` : BRAT et Obsidian ne
 #     lisent jamais « latest », ils lisent `manifest.json` sur `main` ;
 #   - un tag `desktop-vX.Y.Z` PUBLIE L'APPLICATION (installeur Windows,
-#     AppImage) — sa release est la release « latest » du dépôt
-#     (`make_latest: true`), parce qu'electron-updater (fournisseur github,
+#     AppImage) — sa release n'est promue « latest » qu'APRÈS validation des
+#     assets Windows + Linux, parce qu'electron-updater (fournisseur github,
 #     sans `allowPrerelease`) lit `/releases/latest` puis le `latest.yml` de
 #     CETTE release pour savoir s'il existe une mise à jour ;
 #   - `workflow_dispatch` RÉPÈTE par défaut sans publier, sur le produit choisi ;
@@ -42,11 +42,11 @@ on:
         default: false
 
 jobs:
-  # Résout version / tag / produit une seule fois, et crée la release AVANT
-  # les builds : c'est ainsi que les jobs `plugin` / `app-windows` /
-  # `app-linux` peuvent y attacher leurs fichiers sans se disputer la
-  # création (un Windows et un Linux qui créeraient chacun la release en
-  # feraient deux, en double).
+  # Résout version / tag / produit une seule fois et crée la release AVANT les
+  # builds, mais JAMAIS comme `latest`. Les jobs peuvent ainsi y attacher leurs
+  # fichiers sans exposer au bootstrapper une release encore incomplète.
+  # Le job `site` ne promeut l'application qu'après succès Windows + Linux et
+  # validation des assets indispensables.
   prepare:
     runs-on: ubuntu-latest
 
@@ -98,10 +98,9 @@ jobs:
             echo "tag=$tag" >> "$GITHUB_OUTPUT"
           fi
 
-      # Sur tag, ou sur dispatch explicitement publiant, la release existe avant
-      # que les jobs de build y attachent leurs fichiers. `make_latest`
-      # distingue les deux produits : l'application devient la release
-      # « latest » du dépôt, le greffon ne la touche jamais.
+      # La release existe avant les builds pour recevoir leurs assets, mais
+      # reste NON latest. `/releases/latest` est consommé par le bootstrapper :
+      # il ne doit jamais pointer vers une release dont le NSIS manque encore.
       - name: Create Release
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
         uses: softprops/action-gh-release@v2
@@ -114,7 +113,7 @@ jobs:
           # future v2.1.0 sans suffixe sortira en release normale sans qu'on
           # ait à repasser ici.
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
-          make_latest: ${{ steps.version.outputs.product == 'app' }}
+          make_latest: "false"
 
   plugin:
     needs: prepare
@@ -174,7 +173,7 @@ jobs:
           path: release/*
           if-no-files-found: error
 
-      # La release existe déjà (job `prepare`) : ce step ne fait qu'y
+      # La release existe déjà (job `prepare`) : ce step ne fait que lui
       # attacher les fichiers. `make_latest` est RÉPÉTÉ ici parce que
       # l'action renvoie un PATCH à l'API GitHub dont le défaut documenté
       # est `true` : omis, une release du greffon redeviendrait « latest »
@@ -369,9 +368,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ needs.prepare.outputs.tag }}"
-          # Répété comme dans le job `plugin` : le PATCH de l'action ne doit
-          # jamais retirer à l'application son statut « latest ».
-          make_latest: "true"
+          # L'attachement ne promeut JAMAIS une release incomplète. Le job
+          # `site` la rendra latest après succès Windows + Linux et validation
+          # de tous les assets indispensables.
+          make_latest: "false"
           files: |
             apps/windows/dist-installer/*.exe
             apps/windows/dist-installer/*.exe.blockmap
@@ -433,9 +433,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ needs.prepare.outputs.tag }}"
-          # Répété comme dans le job `plugin` : le PATCH de l'action ne doit
-          # jamais retirer à l'application son statut « latest ».
-          make_latest: "true"
+          # Même règle que Windows : un job d'assets ne décide jamais à lui
+          # seul que la release peut devenir latest.
+          make_latest: "false"
           files: |
             apps/windows/dist-installer/*.AppImage
             apps/windows/dist-installer/latest-linux.yml
@@ -461,6 +461,46 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: main
+
+      - name: Verify app release assets and promote latest
+        if: needs.prepare.outputs.product == 'app'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_json=$(mktemp)
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" > "$release_json"
+          jq -e '.draft == false and .prerelease == false' "$release_json" >/dev/null || {
+            echo "::error::Release draft ou prerelease avant promotion."
+            exit 1
+          }
+          for requis in \
+            "Install-NeoQuiz.exe" \
+            "Install-NeoQuiz-fr.exe" \
+            "neo-quiz-setup-${VERSION}.exe" \
+            "neo-quiz-setup-${VERSION}.exe.blockmap" \
+            "latest.yml" \
+            "neo-quiz-${VERSION}.AppImage" \
+            "latest-linux.yml" \
+            "neo-quiz.AppImage"
+          do
+            jq -e --arg nom "$requis" '.assets[] | select(.name == $nom)' "$release_json" >/dev/null || {
+              echo "::error::Asset obligatoire absent avant promotion latest : $requis"
+              exit 1
+            }
+          done
+          nsis="neo-quiz-setup-${VERSION}.exe"
+          jq -e --arg nom "$nsis" '.assets[] | select(.name == $nom) | .digest | select(type == "string" and test("^sha256:[0-9a-fA-F]{64}$"))' "$release_json" >/dev/null || {
+            echo "::error::Le NSIS n'a pas d'empreinte sha256 exploitable par le bootstrapper."
+            exit 1
+          }
+          release_id=$(jq -er '.id' "$release_json")
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" -f make_latest=true >/dev/null
+          latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
+          [ "$latest" = "$TAG" ] || { echo "::error::Promotion latest échouée: $latest"; exit 1; }
 
       - name: Write latest.json from the release
         env:

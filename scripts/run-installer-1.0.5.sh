@@ -5,6 +5,22 @@ npm ci
 npm ci --prefix apps/windows
 python scripts/prepare-installer-1.0.5.py
 
+# Le préparateur ajoute une assertion contenant l'expression GitHub avec 'app'.
+# Corriger ses guillemets avant d'exécuter le contrôle JS : le premier essai a
+# prouvé que l'assertion elle-même ne pouvait pas être parsée.
+python - <<'PY'
+from pathlib import Path
+p = Path('scripts/check-installer.mjs')
+s = p.read_text(encoding='utf-8')
+bad = "workflow.includes('make_latest: ${{ steps.version.outputs.product == 'app' }}'),"
+good = 'workflow.includes("make_latest: ${{ steps.version.outputs.product == \'app\' }}"),'
+if bad in s:
+    s = s.replace(bad, good, 1)
+elif good not in s:
+    raise SystemExit('assertion make_latest à corriger introuvable')
+p.write_text(s, encoding='utf-8')
+PY
+
 actuelle=$(node -p "require('./apps/windows/package.json').version")
 if [ "$actuelle" != "1.0.5" ]; then
   node scripts/set-version.mjs 1.0.5

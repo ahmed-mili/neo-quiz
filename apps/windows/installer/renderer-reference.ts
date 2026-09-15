@@ -3,6 +3,7 @@ import { currentLang, setLanguage, t } from "../../../src/i18n";
    `poserIcone`, pour que l'installeur ne dessine rien que l'app ne dessine. */
 import { poserIcone } from "../src/host/ui";
 import { poserGlyphe } from "../src/ui/glyphes-fenetre";
+import type { PageLegale } from "./noyau";
 import type {
 	CodeErreurInstallateur,
 	EtatInstallateur,
@@ -160,13 +161,25 @@ function rendreAction(parent: HTMLElement): void {
 	}
 }
 
+/** Un vrai lien (focusable, curseur main) qui ouvre la page du site dans le
+    navigateur par le principal ; `href="#"` garde la sémantique sans jamais
+    naviguer dans la fenêtre. */
+function lienLegal(parent: HTMLElement, page: PageLegale, texte: string): void {
+	const lien = ajouter(parent, "a", "nqi-legal-link", texte);
+	lien.href = "#";
+	lien.addEventListener("click", evenement => {
+		evenement.preventDefault();
+		window.neoInstaller.ouvrirLien(page);
+	});
+}
+
 function rendreLegal(parent: HTMLElement, classe = ""): void {
 	const legal = ajouter(parent, "div", `nqi-legal${classe ? ` ${classe}` : ""}`);
 	const ligne = ajouter(legal, "p", "nqi-legal-copy");
 	ligne.appendChild(document.createTextNode(t("installer.legal.beforeTerms")));
-	ajouter(ligne, "span", "nqi-legal-link", t("installer.legal.terms"));
+	lienLegal(ligne, "terms", t("installer.legal.terms"));
 	ligne.appendChild(document.createTextNode(t("installer.legal.between")));
-	ajouter(ligne, "span", "nqi-legal-link", t("installer.legal.privacy"));
+	lienLegal(ligne, "privacy", t("installer.legal.privacy"));
 	ligne.appendChild(document.createTextNode(t("installer.legal.afterPrivacy")));
 	ligne.appendChild(document.createTextNode(t("installer.legal.components")));
 }

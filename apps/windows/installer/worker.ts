@@ -19,7 +19,7 @@ import { spawn } from "node:child_process";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { IncomingMessage } from "node:http";
-import { argumentsNsis, resoudrePaquet, type PaquetInstallable } from "./noyau";
+import { argumentsNsis, paquetInstallable, type PaquetInstallable } from "./noyau";
 import type {
 	ChargeTravailleur,
 	CodeErreurInstallateur,
@@ -36,24 +36,17 @@ class ErreurTravailleur extends Error {
 	}
 }
 
+/** Le paquet est REVALIDÉ par le noyau, jamais cru : l'URL doit être celle
+    que la version implique, sinon un principal compromis ferait télécharger
+    et exécuter n'importe quel fichier avec les droits administrateur. */
 function paquetValide(value: unknown): value is PaquetInstallable {
 	if (!value || typeof value !== "object") return false;
 	const p = value as Record<string, unknown>;
 	if (typeof p.version !== "string" || typeof p.nom !== "string" || typeof p.url !== "string" ||
-		typeof p.taille !== "number" || typeof p.sha256 !== "string") return false;
-	const reconstruit = resoudrePaquet({
-		tag_name: `desktop-v${p.version}`,
-		draft: false,
-		prerelease: false,
-		assets: [{
-			name: p.nom,
-			browser_download_url: p.url,
-			size: p.taille,
-			digest: `sha256:${p.sha256}`,
-		}],
-	});
+		typeof p.taille !== "number" || typeof p.sha512 !== "string") return false;
+	const reconstruit = paquetInstallable({ version: p.version, nom: p.nom, taille: p.taille, sha512: p.sha512 });
 	return !!reconstruit && reconstruit.nom === p.nom && reconstruit.url === p.url &&
-		reconstruit.taille === p.taille && reconstruit.sha256 === p.sha256;
+		reconstruit.taille === p.taille && reconstruit.sha512 === p.sha512;
 }
 
 function decoderCharge(encoded: string): ChargeTravailleur | null {
@@ -120,7 +113,9 @@ async function telecharger(
 	surProgression: (recus: number) => void,
 ): Promise<void> {
 	const reponse = await ouvrirReponse(new URL(paquet.url), signal);
-	const hash = createHash("sha256");
+	/* sha512 en base64 : l'empreinte de `latest.yml`, celle qu'electron-updater
+	   vérifie aussi, et que `check:package` compare à l'exe avant publication. */
+	const hash = createHash("sha512");
 	let recus = 0;
 	let dernierEnvoi = 0;
 	const observer = new Transform({
@@ -136,7 +131,7 @@ async function telecharger(
 		},
 	});
 	await pipeline(reponse, observer, createWriteStream(destination, { flags: "wx" }), { signal });
-	if (recus !== paquet.taille || hash.digest("hex").toLowerCase() !== paquet.sha256) {
+	if (recus !== paquet.taille || hash.digest("base64") !== paquet.sha512) {
 		throw new ErreurTravailleur("integrity");
 	}
 }

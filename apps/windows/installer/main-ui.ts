@@ -2,7 +2,8 @@ import { access, statfs } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { CANAUX_INSTALLATEUR, type InfosDisqueInstallateur } from "./protocole";
-import "./main";
+import { urlLegale } from "./noyau";
+import { langueInstallateur } from "./main";
 
 const URL_COMMENTAIRES = "https://github.com/ahmed-mili/neo-quiz/issues/new";
 const LARGEUR_FENETRE = 720;
@@ -47,6 +48,14 @@ ipcMain.on(CANAUX_INSTALLATEUR.reduire, event => {
 
 ipcMain.on(CANAUX_INSTALLATEUR.commentaires, () => {
 	void shell.openExternal(URL_COMMENTAIRES);
+});
+
+/* Les deux pages légales. La valeur vient du rendu et n'est pas crue : tout
+   ce qui n'est pas l'un des deux noms est ignoré, et l'URL est composée
+   par le noyau dans la langue de l'installeur — jamais reçue telle quelle. */
+ipcMain.on(CANAUX_INSTALLATEUR.ouvrirLien, (_event, page: unknown) => {
+	if (page !== "terms" && page !== "privacy") return;
+	void shell.openExternal(urlLegale(page, langueInstallateur()));
 });
 
 void app.whenReady().then(() => {

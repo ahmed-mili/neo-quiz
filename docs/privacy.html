@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neo Quiz Privacy Policy</title>
+<link rel="icon" href="icon.png">
+<style>
+	/* Same tokens, wallpaper and glass as the download page (index.html):
+	   these pages are read from the installer's legal line and from the
+	   site footer, they must look like the same site. */
+	:root {
+		--fond: rgb(30, 30, 46);
+		--fond-secondaire: rgb(24, 24, 37);
+		--bordure: rgb(49, 50, 68);
+		--texte: rgb(198, 208, 245);
+		--texte-attenue: rgb(142, 149, 179);
+		--accent: rgb(101, 143, 242);
+	}
+	* { box-sizing: border-box; }
+	html, body { margin: 0; min-height: 100%; }
+	body {
+		font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui,
+			"Segoe UI", Roboto, "Inter", sans-serif;
+		color: var(--texte);
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 0 16px 40px;
+		background:
+			linear-gradient(
+				color-mix(in srgb, var(--fond) 78%, transparent),
+				color-mix(in srgb, var(--fond) 88%, transparent)
+			),
+			var(--fond) url("wallpaper.jpg") center / cover no-repeat fixed;
+	}
+	a { color: var(--accent); }
+	.barre {
+		width: 100%;
+		max-width: 760px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px 24px;
+		padding: 20px 0;
+	}
+	.barre-marque {
+		color: inherit;
+		text-decoration: none;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-weight: 700;
+		font-size: 16px;
+	}
+	.barre-marque img { width: 28px; height: 28px; border-radius: 7px; }
+	.barre-langue {
+		color: var(--texte-attenue);
+		text-decoration: none;
+		font-size: 13px;
+		border: 1px solid var(--bordure);
+		border-radius: 8px;
+		padding: 6px 10px;
+		background: color-mix(in srgb, var(--fond-secondaire) 60%, transparent);
+	}
+	.barre-langue:hover { color: var(--texte); }
+	/* The glass card of the download page, stretched into a reading column. */
+	article {
+		width: 100%;
+		max-width: 760px;
+		padding: 36px 40px 40px;
+		border-radius: 20px;
+		border: 1px solid var(--bordure);
+		background: color-mix(in srgb, var(--fond-secondaire) 55%, transparent);
+		backdrop-filter: blur(18px);
+		-webkit-backdrop-filter: blur(18px);
+		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+		line-height: 1.6;
+		font-size: 15px;
+	}
+	h1 { font-size: 30px; margin: 0 0 4px; }
+	.date { margin: 0 0 28px; color: var(--texte-attenue); font-size: 13px; }
+	h2 { font-size: 18px; margin: 28px 0 8px; }
+	p, li { margin: 8px 0; }
+	ul { padding-left: 22px; }
+	code {
+		font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+		font-size: 13px;
+		background: color-mix(in srgb, var(--fond) 70%, transparent);
+		border-radius: 5px;
+		padding: 1px 5px;
+	}
+	.resume {
+		padding: 14px 18px;
+		border-radius: 12px;
+		border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+		background: color-mix(in srgb, var(--accent) 10%, transparent);
+	}
+	.pied {
+		width: 100%;
+		max-width: 760px;
+		margin-top: 40px;
+		padding-top: 20px;
+		border-top: 1px solid var(--bordure);
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 8px 12px;
+		font-size: 13px;
+		color: var(--texte-attenue);
+	}
+	.pied a { color: var(--texte-attenue); text-decoration: underline; }
+	.pied a:hover { color: var(--texte); }
+	@media (max-width: 500px) {
+		article { padding: 24px 18px 28px; }
+		h1 { font-size: 24px; }
+	}
+</style>
+</head>
+<body>
+	<nav class="barre">
+		<a class="barre-marque" href="./"><img src="icon.png" alt="" width="28" height="28">Neo Quiz</a>
+		<a class="barre-langue" href="fr/privacy.html" hreflang="fr" lang="fr">Français</a>
+	</nav>
+
+	<article>
+		<h1>Privacy Policy</h1>
+		<p class="date">Last updated: 15 September 2026</p>
+
+		<p class="resume">Neo Quiz has no account, no telemetry, no analytics and no ads. It runs
+		on your device and keeps your data there. Its author, Ahmed Mili, operates no server and
+		receives nothing from the app. The only network connections are listed below, one by
+		one.</p>
+
+		<h2>1. What is stored, and where</h2>
+		<p>Everything Neo Quiz stores stays on your computer, in plain files you can open, copy or
+		delete:</p>
+		<ul>
+			<li><strong>Your quizzes</strong>: Markdown notes in the folders you open in the app
+			(or in your Obsidian vault, for the plugin).</li>
+			<li><strong>Your review history</strong>: which questions you answered and when, in a
+			<code>.neo-quiz/review-log.jsonl</code> file inside each of those folders. It only ever
+			grows by appending lines and can be deleted to start over.</li>
+			<li><strong>App settings</strong>: language, opened folders, AI tool preferences, window
+			state, in <code>settings.json</code> under your user profile
+			(<code>%APPDATA%\Neo Quiz</code> on Windows).</li>
+		</ul>
+		<p>Uninstalling removes the program and leaves these files in place, so nothing of yours is
+		lost by mistake. Delete them yourself if you want them gone.</p>
+
+		<h2>2. Network connections</h2>
+		<p>The app and its installer connect to exactly these services, and to nothing else:</p>
+		<ul>
+			<li><strong>GitHub</strong> (<code>github.com</code>): the installer downloads the
+			application package from the project’s releases; the desktop app checks there for a
+			newer version when it starts and periodically while it runs (you can turn this off in
+			Settings). GitHub sees your IP address and standard request metadata, under the
+			<a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub
+			Privacy Statement</a>.</li>
+			<li><strong>Ollama</strong> (<code>ollama.com</code>, and the Ollama server you
+			configure, local by default): the list of available models, when you open the AI
+			generation page. See <a href="https://ollama.com/privacy">Ollama’s privacy policy</a>.</li>
+		</ul>
+
+		<h2>3. AI generation</h2>
+		<p>Generating a quiz is optional and only happens when you start it. The prompt you write
+		and the notes or PDF text you attach are handed to the tool you selected, which sends them
+		to its provider under your own account:</p>
+		<ul>
+			<li>Claude Code CLI → Anthropic (<a href="https://www.anthropic.com/privacy">privacy policy</a>);</li>
+			<li>Codex CLI → OpenAI (<a href="https://openai.com/policies/privacy-policy">privacy policy</a>);</li>
+			<li>Ollama → your own machine, or Ollama’s cloud if you chose a cloud model.</li>
+		</ul>
+		<p>The tools are launched without any file access: the model cannot read anything on your
+		disk by itself. Only what you explicitly attach is sent, and Neo Quiz never sees or keeps
+		a copy of the exchange beyond the quiz it writes into your note.</p>
+
+		<h2>4. This website</h2>
+		<p>The download pages are static files hosted on GitHub Pages, which logs requests under
+		the GitHub Privacy Statement above. They set no cookies and run no analytics. The only
+		thing kept in your browser is your language choice, in <code>localStorage</code>, once
+		you pick one from the menu.</p>
+
+		<h2>5. Sharing, children, your rights</h2>
+		<p>No personal data is collected, so none is shared, sold or transferred, and there is
+		nothing to request access to or deletion of: your data is the files above, under your
+		control. Neo Quiz is not directed at children and collects nothing from anyone.</p>
+
+		<h2>6. Changes</h2>
+		<p>If a future version connects to a new service or stores something new, this page will
+		say so, with a new date above.</p>
+
+		<h2>7. Contact</h2>
+		<p>Questions go through the project’s
+		<a href="https://github.com/ahmed-mili/neo-quiz/issues">GitHub issues</a>.</p>
+	</article>
+
+	<footer class="pied">
+		<a href="./">Download</a>
+		<span aria-hidden="true">·</span>
+		<a href="https://github.com/ahmed-mili/neo-quiz">Source code</a>
+		<span aria-hidden="true">·</span>
+		<a href="terms.html">Terms of Use</a>
+		<span aria-hidden="true">·</span>
+		<span>MIT</span>
+	</footer>
+</body>
+</html>

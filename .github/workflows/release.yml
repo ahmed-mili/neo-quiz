@@ -8,8 +8,10 @@ name: Release Neo Quiz
 #   - un tag `desktop-vX.Y.Z` PUBLIE L'APPLICATION (installeur Windows,
 #     AppImage) — sa release n'est promue « latest » qu'APRÈS validation des
 #     assets Windows + Linux, parce qu'electron-updater (fournisseur github,
-#     sans `allowPrerelease`) lit `/releases/latest` puis le `latest.yml` de
-#     CETTE release pour savoir s'il existe une mise à jour ;
+#     sans `allowPrerelease`) ET le bootstrapper `NeoQuiz-X.Y.Z.exe` lisent
+#     `/releases/latest` puis le `latest.yml` de CETTE release — par la
+#     redirection `releases/latest/download/latest.yml` de github.com, jamais
+#     par l'API REST (60 requêtes par heure et par IP sans jeton) ;
 #   - `workflow_dispatch` RÉPÈTE par défaut sans publier, sur le produit choisi ;
 #     avec `publish: true`, il publie par la MÊME chaîne. Cela permet une
 #     automatisation sans recopier les jobs de build ni leur logique de signature.
@@ -100,7 +102,8 @@ jobs:
 
       # La release existe avant les builds pour recevoir leurs assets, mais
       # reste NON latest. `/releases/latest` est consommé par le bootstrapper :
-      # il ne doit jamais pointer vers une release dont le NSIS manque encore.
+      # il ne doit jamais pointer vers une release dont le NSIS ou le
+      # `latest.yml` manque encore.
       - name: Create Release
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
         uses: softprops/action-gh-release@v2
@@ -234,17 +237,6 @@ jobs:
         run: npm run pack:installer
         working-directory: apps/windows
 
-      # Le MÊME bootstrapper sous un second nom : `Install-NeoQuiz-fr.exe`,
-      # que la page française du site distribue. L'installeur lit la langue
-      # dans son propre nom de fichier (`installer/noyau.ts`,
-      # `langueDepuisNom`) et la transmet à l'application — un exe téléchargé
-      # ne sait pas autrement de quelle page il vient. (Le bootstrapper ne
-      # passe pas par SignPath : seul le NSIS versionné y est signé.)
-      - name: Duplicate the bootstrapper under its French name
-        shell: bash
-        run: cp Install-NeoQuiz.exe Install-NeoQuiz-fr.exe
-        working-directory: apps/windows/dist-installer-bootstrapper
-
       # Les étapes SignPath ci-dessous sont sautées tant que
       # `vars.SIGNPATH_ORGANIZATION_ID` n'est pas posée : `main` reste
       # publiable non signé pendant que la demande de certificat est en cours.
@@ -355,14 +347,16 @@ jobs:
             apps/windows/dist-installer/*.exe
             apps/windows/dist-installer/*.exe.blockmap
             apps/windows/dist-installer/latest.yml
-            apps/windows/dist-installer-bootstrapper/Install-NeoQuiz.exe
-            apps/windows/dist-installer-bootstrapper/Install-NeoQuiz-fr.exe
+            apps/windows/dist-installer-bootstrapper/NeoQuiz-*.exe
           if-no-files-found: error
 
-      # `Install-NeoQuiz.exe` est désormais l'entrée PUBLIQUE stable. Le
-      # NSIS n'a plus d'alias fixe : seul son nom VERSIONNÉ est attaché, car le
-      # bootstrapper le résout avec le tag et electron-updater le lit dans
-      # `latest.yml`. Cela empêche le site de contourner le bootstrapper.
+      # `NeoQuiz-X.Y.Z.exe` (le bootstrapper, nommé par `artifactName` dans
+      # `installer/electron-builder.config.mjs`) est l'entrée PUBLIQUE : un
+      # seul fichier, versionné comme `Obsidian-1.13.7.exe`, la langue étant
+      # celle de Windows. Le NSIS n'a plus d'alias fixe : seul son nom
+      # VERSIONNÉ est attaché, car le bootstrapper le résout par `latest.yml`
+      # et electron-updater l'y lit aussi. Cela empêche le site de contourner
+      # le bootstrapper.
       - name: Attach Windows package to release
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
         uses: softprops/action-gh-release@v2
@@ -376,8 +370,7 @@ jobs:
             apps/windows/dist-installer/*.exe
             apps/windows/dist-installer/*.exe.blockmap
             apps/windows/dist-installer/latest.yml
-            apps/windows/dist-installer-bootstrapper/Install-NeoQuiz.exe
-            apps/windows/dist-installer-bootstrapper/Install-NeoQuiz-fr.exe
+            apps/windows/dist-installer-bootstrapper/NeoQuiz-*.exe
 
   app-linux:
     needs: prepare
@@ -478,8 +471,7 @@ jobs:
             exit 1
           }
           for requis in \
-            "Install-NeoQuiz.exe" \
-            "Install-NeoQuiz-fr.exe" \
+            "NeoQuiz-${VERSION}.exe" \
             "neo-quiz-setup-${VERSION}.exe" \
             "neo-quiz-setup-${VERSION}.exe.blockmap" \
             "latest.yml" \
@@ -492,11 +484,6 @@ jobs:
               exit 1
             }
           done
-          nsis="neo-quiz-setup-${VERSION}.exe"
-          jq -e --arg nom "$nsis" '.assets[] | select(.name == $nom) | .digest | select(type == "string" and test("^sha256:[0-9a-fA-F]{64}$"))' "$release_json" >/dev/null || {
-            echo "::error::Le NSIS n'a pas d'empreinte sha256 exploitable par le bootstrapper."
-            exit 1
-          }
           release_id=$(jq -er '.id' "$release_json")
           gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" -f make_latest=true >/dev/null
           latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')

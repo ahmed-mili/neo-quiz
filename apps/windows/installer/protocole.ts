@@ -1,4 +1,4 @@
-import type { PaquetInstallable } from "./noyau";
+import type { PageLegale, PaquetInstallable } from "./noyau";
 
 /* ══════════════════════════════════════════════════════════
    CONTRAT DU BOOTSTRAPPER
@@ -18,6 +18,7 @@ export const CANAUX_INSTALLATEUR = {
 	annuler: "neo-installer:annuler",
 	reduire: "neo-installer:reduire",
 	commentaires: "neo-installer:commentaires",
+	ouvrirLien: "neo-installer:ouvrir-lien",
 	fermer: "neo-installer:fermer",
 	etat: "neo-installer:etat",
 } as const;
@@ -66,6 +67,11 @@ export interface PontInstallateur {
 	annuler(): Promise<void>;
 	reduire(): void;
 	commentaires(): void;
+	/** Ouvre une des deux pages légales du site dans le navigateur. Le rendu
+	    ne nomme que la PAGE : l'URL est composée par le principal
+	    (`installer/noyau.ts`, `urlLegale`), dans la langue de l'installeur —
+	    un rendu compromis ne fait ouvrir que l'une de ces deux adresses. */
+	ouvrirLien(page: PageLegale): void;
 	fermer(): void;
 	surEtat(rappel: (etat: EtatInstallateur) => void): void;
 }

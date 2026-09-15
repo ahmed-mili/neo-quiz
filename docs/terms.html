@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neo Quiz Terms of Use</title>
+<link rel="icon" href="icon.png">
+<style>
+	/* Same tokens, wallpaper and glass as the download page (index.html):
+	   these pages are read from the installer's legal line and from the
+	   site footer, they must look like the same site. */
+	:root {
+		--fond: rgb(30, 30, 46);
+		--fond-secondaire: rgb(24, 24, 37);
+		--bordure: rgb(49, 50, 68);
+		--texte: rgb(198, 208, 245);
+		--texte-attenue: rgb(142, 149, 179);
+		--accent: rgb(101, 143, 242);
+	}
+	* { box-sizing: border-box; }
+	html, body { margin: 0; min-height: 100%; }
+	body {
+		font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui,
+			"Segoe UI", Roboto, "Inter", sans-serif;
+		color: var(--texte);
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 0 16px 40px;
+		background:
+			linear-gradient(
+				color-mix(in srgb, var(--fond) 78%, transparent),
+				color-mix(in srgb, var(--fond) 88%, transparent)
+			),
+			var(--fond) url("wallpaper.jpg") center / cover no-repeat fixed;
+	}
+	a { color: var(--accent); }
+	.barre {
+		width: 100%;
+		max-width: 760px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px 24px;
+		padding: 20px 0;
+	}
+	.barre-marque {
+		color: inherit;
+		text-decoration: none;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-weight: 700;
+		font-size: 16px;
+	}
+	.barre-marque img { width: 28px; height: 28px; border-radius: 7px; }
+	.barre-langue {
+		color: var(--texte-attenue);
+		text-decoration: none;
+		font-size: 13px;
+		border: 1px solid var(--bordure);
+		border-radius: 8px;
+		padding: 6px 10px;
+		background: color-mix(in srgb, var(--fond-secondaire) 60%, transparent);
+	}
+	.barre-langue:hover { color: var(--texte); }
+	/* The glass card of the download page, stretched into a reading column. */
+	article {
+		width: 100%;
+		max-width: 760px;
+		padding: 36px 40px 40px;
+		border-radius: 20px;
+		border: 1px solid var(--bordure);
+		background: color-mix(in srgb, var(--fond-secondaire) 55%, transparent);
+		backdrop-filter: blur(18px);
+		-webkit-backdrop-filter: blur(18px);
+		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+		line-height: 1.6;
+		font-size: 15px;
+	}
+	h1 { font-size: 30px; margin: 0 0 4px; }
+	.date { margin: 0 0 28px; color: var(--texte-attenue); font-size: 13px; }
+	h2 { font-size: 18px; margin: 28px 0 8px; }
+	p, li { margin: 8px 0; }
+	ul { padding-left: 22px; }
+	.pied {
+		width: 100%;
+		max-width: 760px;
+		margin-top: 40px;
+		padding-top: 20px;
+		border-top: 1px solid var(--bordure);
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 8px 12px;
+		font-size: 13px;
+		color: var(--texte-attenue);
+	}
+	.pied a { color: var(--texte-attenue); text-decoration: underline; }
+	.pied a:hover { color: var(--texte); }
+	@media (max-width: 500px) {
+		article { padding: 24px 18px 28px; }
+		h1 { font-size: 24px; }
+	}
+</style>
+</head>
+<body>
+	<nav class="barre">
+		<a class="barre-marque" href="./"><img src="icon.png" alt="" width="28" height="28">Neo Quiz</a>
+		<a class="barre-langue" href="fr/terms.html" hreflang="fr" lang="fr">Français</a>
+	</nav>
+
+	<article>
+		<h1>Terms of Use</h1>
+		<p class="date">Last updated: 15 September 2026</p>
+
+		<p>Neo Quiz is a free, open-source application by Ahmed Mili that turns your notes into
+		interactive quizzes: a Windows and Linux desktop app, and a plugin for Obsidian. These
+		terms apply to the application, its installer and this website. By installing or using
+		Neo Quiz you accept them.</p>
+
+		<h2>1. Licence</h2>
+		<p>Neo Quiz is distributed under the
+		<a href="https://github.com/ahmed-mili/neo-quiz/blob/main/LICENSE">MIT License</a>. You may
+		use, copy, modify and redistribute it, for any purpose, as long as the licence notice stays
+		with it. Nothing in these terms restricts what the licence grants.</p>
+
+		<h2>2. No warranty</h2>
+		<p>The software is provided “as is”, without warranty of any kind. It is written and
+		maintained by one person, in the open. To the extent permitted by law, the author is not
+		liable for any loss arising from its use, including loss of notes or quiz data. Keep your
+		own backups of the folders you open in Neo Quiz.</p>
+
+		<h2>3. Your content</h2>
+		<p>Your notes, quizzes, answers and review history are yours. They stay in the folders you
+		choose on your own device; Neo Quiz has no server and never uploads them. See the
+		<a href="privacy.html">Privacy Policy</a> for exactly what is stored where.</p>
+
+		<h2>4. Third-party AI tools</h2>
+		<p>Quiz generation is optional and runs through tools you install and configure yourself:
+		Claude Code CLI (Anthropic), Codex CLI (OpenAI) or Ollama (on your machine, or Ollama’s
+		cloud models). Each of them is governed by its provider’s own terms, requires your own
+		account or subscription, and bills you directly where applicable. Neo Quiz only passes
+		them what you ask it to generate, and only when you ask.</p>
+
+		<h2>5. Updates</h2>
+		<p>The desktop app checks GitHub for a newer release when it starts, downloads it in the
+		background and installs it the next time it closes. You can turn this off in Settings; the
+		installer and the update mechanism only ever fetch files published on the project’s GitHub
+		releases.</p>
+
+		<h2>6. Fair use</h2>
+		<p>Do not use Neo Quiz to break the law or the terms of the AI providers you connect to it.
+		If you distribute a modified version, make clear that it is not the official one.</p>
+
+		<h2>7. Changes</h2>
+		<p>These terms may change as the software evolves. The current version is always this page,
+		with its date above; using Neo Quiz after a change means you accept the updated terms.</p>
+
+		<h2>8. Contact</h2>
+		<p>Questions and requests go through the project’s
+		<a href="https://github.com/ahmed-mili/neo-quiz/issues">GitHub issues</a>.</p>
+	</article>
+
+	<footer class="pied">
+		<a href="./">Download</a>
+		<span aria-hidden="true">·</span>
+		<a href="https://github.com/ahmed-mili/neo-quiz">Source code</a>
+		<span aria-hidden="true">·</span>
+		<a href="privacy.html">Privacy Policy</a>
+		<span aria-hidden="true">·</span>
+		<span>MIT</span>
+	</footer>
+</body>
+</html>

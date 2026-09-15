@@ -3,8 +3,8 @@
 
    `lireLangue` est PURE (aucun `pont()`, aucun DOM) : c'est elle que
    `scripts/check-langue.mjs` éprouve sur une valeur BRUTE lue du disque, qui
-   peut avoir été écrite par le bootstrapper d'installation, par une autre
-   version, ou à la main. Les deux autres passent par `pont()`, lu à l'APPEL
+   peut avoir été écrite par une autre version, ou à la main (le bootstrapper
+   n'écrit plus rien ici depuis le 2026-09-15 : il suit Windows, comme « auto »). Les deux autres passent par `pont()`, lu à l'APPEL
    — même règle que `reprise.ts`.
 ══════════════════════════════════════════════════════════ */
 

@@ -509,8 +509,7 @@ if (!app.requestSingleInstanceLock()) {
 		   rendu lit par `navigator.language` (`src/host/platform.ts`). Le mode
 		   « auto » de `src/i18n.ts` n'a ni hôte ni `navigator` ici — la langue
 		   est posée EXPLICITEMENT — sauf si le réglage `language` en décide
-		   autrement (page Réglages, ou le bootstrapper d'après la page du site
-		   d'où l'exe a été téléchargé) : le principal suit le même réglage que
+		   autrement (page Réglages) : le principal suit le même réglage que
 		   le rendu, sinon un dialogue natif parlerait une autre langue que la
 		   fenêtre. Une valeur inconnue vaut « auto ». */
 		const donnees = app.getPath("userData");

@@ -33,6 +33,13 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=desktop-v$version" >> "$GITHUB_OUTPUT"
 
+      # Deux portes mènent à release.yml : ce workflow (un bump poussé depuis
+      # chatgpt.com, qui ne peut pas lancer `git ship`) et le TAG que `git ship`
+      # pousse d'un seul `--atomic` avec le commit. Dans le second cas la
+      # release n'existe pas encore quand ce job démarre (`prepare` la crée
+      # ~20 s plus tard) : tester la seule release relançait un second build
+      # de la même version. Le tag, lui, est déjà là — c'est lui qu'on teste
+      # d'abord.
       - name: Vérifier que cette version n'est pas déjà publiée
         id: decision
         env:
@@ -40,7 +47,10 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          if [ -n "$(git ls-remote --tags origin "refs/tags/$TAG")" ]; then
+            echo "Le tag $TAG existe déjà sur origin : release.yml tourne (ou a tourné) par lui."
+            echo "publier=false" >> "$GITHUB_OUTPUT"
+          elif gh release view "$TAG" >/dev/null 2>&1; then
             echo "La release $TAG existe déjà : aucune republication."
             echo "publier=false" >> "$GITHUB_OUTPUT"
           else

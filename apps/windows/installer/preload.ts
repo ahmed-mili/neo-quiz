@@ -2,6 +2,7 @@
    reçoit ni `ipcRenderer`, ni Electron, ni Node : une future injection HTML
    dans la fenêtre d'installation ne devient donc pas une primitive système. */
 import { contextBridge, ipcRenderer } from "electron";
+import type { PageLegale } from "./noyau";
 import {
 	CANAUX_INSTALLATEUR,
 	type ChoixDossierInstallateur,
@@ -21,6 +22,7 @@ const pont: PontInstallateur = {
 	annuler: () => ipcRenderer.invoke(CANAUX_INSTALLATEUR.annuler) as Promise<void>,
 	reduire: () => ipcRenderer.send(CANAUX_INSTALLATEUR.reduire),
 	commentaires: () => ipcRenderer.send(CANAUX_INSTALLATEUR.commentaires),
+	ouvrirLien: (page: PageLegale) => ipcRenderer.send(CANAUX_INSTALLATEUR.ouvrirLien, page),
 	fermer: () => ipcRenderer.send(CANAUX_INSTALLATEUR.fermer),
 	surEtat(rappel: (etat: EtatInstallateur) => void) {
 		ipcRenderer.on(CANAUX_INSTALLATEUR.etat, (_event, etat: EtatInstallateur) => rappel(etat));

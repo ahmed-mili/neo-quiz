@@ -576,7 +576,7 @@
 					Français
 					<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"></path></svg>
 				</div>
-				<a class="item" href="../">English</a>
+				<a class="item" href="../" data-langue="en">English</a>
 			</div>
 		</div>
 	</nav>
@@ -694,6 +694,10 @@
 		<span aria-hidden="true">·</span>
 		<a href="https://github.com/ahmed-mili/neo-quiz/blob/main/docs/guide/install.md#code-signing-policy">Code signing policy</a>
 		<span aria-hidden="true">·</span>
+		<a href="terms.html">Conditions d’utilisation</a>
+		<span aria-hidden="true">·</span>
+		<a href="privacy.html">Confidentialité</a>
+		<span aria-hidden="true">·</span>
 		<span>MIT</span>
 	</footer>
 
@@ -707,7 +711,17 @@
 		// Une cible peut être un nom d'asset exact (bootstrapper Windows) ou
 		// une extension (AppImage Linux). Le nom exact est indispensable dès
 		// qu'une release Windows contient le bootstrapper ET le moteur NSIS.
+		// L'installeur Windows est versionné comme `Obsidian-1.13.7.exe`
+		// (`NeoQuiz-1.0.1.exe`, `artifactName` dans
+		// apps/windows/installer/electron-builder.config.mjs) : retrouvé par
+		// MOTIF, jamais par un nom fixe, pour que la page ne porte aucune version.
+		var MOTIF_INSTALLEUR_WINDOWS = /^NeoQuiz-\d+\.\d+\.\d+\.exe$/i;
+
+		// `cible` : un nom d'asset exact, une extension (".appimage") ou une RegExp.
 		function trouverActif(assets, cible) {
+			if (cible instanceof RegExp) {
+				return (assets || []).find(function (a) { return cible.test(String(a.name || "")); });
+			}
 			var cherchee = String(cible || "").toLowerCase();
 			var parExtension = cherchee.startsWith(".");
 			return (assets || []).find(function (a) {
@@ -758,14 +772,11 @@
 			})
 			.then(function (donnees) {
 				latestChargee = donnees;
-				// Le bootstrapper FRANÇAIS : mêmes octets que `Install-NeoQuiz.exe`,
-				// attaché sous ce second nom par release.yml pour que l'installeur
-				// (et l'application qu'il installe) démarrent en français — le
-				// fichier ne sait pas d'où il vient autrement. Repli sur le nom
-				// anglais tant qu'une release ne porte pas encore le second.
-				var actifWindows = trouverActif(donnees.assets, "Install-NeoQuiz-fr.exe")
-					|| trouverActif(donnees.assets, "Install-NeoQuiz.exe");
-				afficherVersion("windows", donnees, "Install-NeoQuiz-fr.exe", null);
+				// Un seul installeur pour les deux pages : il parle la langue
+				// d'affichage de Windows, comme l'application (plus de copie
+				// `-fr.exe` : la langue ne voyage plus dans le nom du fichier).
+				var actifWindows = trouverActif(donnees.assets, MOTIF_INSTALLEUR_WINDOWS);
+				afficherVersion("windows", donnees, MOTIF_INSTALLEUR_WINDOWS, null);
 				var carteWindows = document.getElementById("carte-windows");
 				if (actifWindows && carteWindows) carteWindows.setAttribute("href", actifWindows.browser_download_url);
 				afficherVersion("linux", donnees, ".appimage", null);
@@ -980,6 +991,13 @@
 			}
 
 			bouton.addEventListener("click", basculer);
+			// A click on a language is a CHOICE, remembered so the root page
+			// stops guessing from the browser language (see its <head> script).
+			Array.prototype.forEach.call(menu.querySelectorAll("a.item[data-langue]"), function (lien) {
+				lien.addEventListener("click", function () {
+					try { localStorage.setItem("nq-langue", lien.getAttribute("data-langue")); } catch (e) { /* storage blocked */ }
+				});
+			});
 			document.addEventListener("click", function (e) {
 				if (!conteneur.contains(e.target)) fermer();
 			});

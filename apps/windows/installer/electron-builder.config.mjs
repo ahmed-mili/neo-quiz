@@ -25,7 +25,12 @@ export default async function () {
 		win: {
 			target: "portable",
 			icon: "icons/icon.ico",
-			artifactName: "Install-NeoQuiz.exe",
+			/* Le nom que l'utilisateur voit dans Téléchargements, versionné comme
+			   `Obsidian-1.13.7.exe`. La release l'attache aussi sous
+			   `NeoQuiz-X.Y.Z-fr.exe` pour la page française (la langue voyage dans
+			   le nom, `installer/noyau.ts`, `langueDepuisNom`). ${version} est
+			   celle d'apps/windows/package.json : une seule source. */
+			artifactName: "NeoQuiz-${version}.exe",
 			/* L'exe Electron EXTRAIT ne doit pas demander l'admin de lui-même :
 			   seul `Start-Process -Verb RunAs`, après le clic, fait l'élévation. */
 			requestedExecutionLevel: "asInvoker",

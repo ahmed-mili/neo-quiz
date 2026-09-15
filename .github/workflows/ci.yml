@@ -154,5 +154,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: neo-quiz-windows-installer
-          path: apps/windows/dist-installer-bootstrapper/Install-NeoQuiz.exe
+          path: apps/windows/dist-installer-bootstrapper/NeoQuiz-*.exe
           if-no-files-found: error

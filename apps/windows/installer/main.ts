@@ -9,14 +9,14 @@
 ══════════════════════════════════════════════════════════ */
 
 import { randomBytes, randomUUID } from "node:crypto";
-import { access, mkdir, readFile, rename, statfs, writeFile } from "node:fs/promises";
+import { access, statfs } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { setLanguage, t } from "../../../src/i18n";
 import { PRODUCT_NAME } from "../../../src/branding";
-import { langueDepuisNom, langueDepuisZone, resoudrePaquet, type LangueInstallateur, type PaquetInstallable, type ReleaseGithub } from "./noyau";
+import { langueDepuisLocale, resoudrePaquet, URL_LATEST_YML, type LangueInstallateur, type PaquetInstallable } from "./noyau";
 import {
 	CANAUX_INSTALLATEUR,
 	type ChargeTravailleur,
@@ -27,7 +27,6 @@ import {
 import { executerTravailleur } from "./worker";
 
 const DRAPEAU_TRAVAILLEUR = "--neo-quiz-installer-worker";
-const API_RELEASE = "https://api.github.com/repos/ahmed-mili/neo-quiz/releases/latest";
 const USER_AGENT = "Neo-Quiz-Installer";
 
 let fenetre: BrowserWindow | null = null;
@@ -37,11 +36,13 @@ let serveurTube: Server | null = null;
 let processusElevation: ReturnType<typeof spawn> | null = null;
 let installationActive = false;
 let fermetureAutorisee = false;
-/** La langue retenue, et si elle vient du SITE (nom du fichier ou référent)
-    plutôt que de la locale système : seule la première mérite d'être écrite
-    dans les réglages de l'application — un choix, pas une déduction. */
+/** La langue de l'installeur : celle de Windows (`detecterLangue`). Lue par
+    `main-ui.ts` pour ouvrir les pages légales dans la même langue. */
 let langue: LangueInstallateur = "en";
-let langueDuSite = false;
+
+export function langueInstallateur(): LangueInstallateur {
+	return langue;
+}
 
 function argumentsTravailleur(): { tube: string; charge: string } | null {
 	const index = process.argv.indexOf(DRAPEAU_TRAVAILLEUR);
@@ -120,21 +121,17 @@ function dossierValide(dossier: string): boolean {
 	return parse(normalise).root !== normalise;
 }
 
+/** Le `latest.yml` de la release courante, par la redirection
+    `releases/latest/download/` de github.com — la même lecture que
+    l'auto-updater de l'application, et SANS le quota de 60 requêtes par heure
+    et par IP de l'API REST (voir `URL_LATEST_YML`). `fetch` suit lui-même les
+    deux redirections (release, puis stockage des assets). */
 async function chargerPaquet(): Promise<PaquetInstallable> {
-	const reponse = await fetch(API_RELEASE, {
-		headers: {
-			Accept: "application/vnd.github+json",
-			"User-Agent": USER_AGENT,
-		},
+	const reponse = await fetch(URL_LATEST_YML, {
+		headers: { "User-Agent": USER_AGENT },
 	});
 	if (!reponse.ok) throw new Error("release indisponible");
-	const json: unknown = await reponse.json();
-	let paquet: PaquetInstallable | null = null;
-	try {
-		paquet = resoudrePaquet(json as ReleaseGithub);
-	} catch {
-		paquet = null;
-	}
+	const paquet = resoudrePaquet(await reponse.text());
 	if (!paquet) throw new Error("release invalide");
 	return paquet;
 }
@@ -186,7 +183,6 @@ async function traiterMessage(message: MessageTravailleur): Promise<void> {
 			   s'initialise caché. Il ne disparaît qu'une fois la vraie fenêtre de
 			   l'application devenue visible, donc réellement prête. */
 			envoyerEtat({ phase: "demarrage" });
-			await ecrireLangueApplication();
 			const lancee = await lancerApplicationEtAttendre(message.executable);
 			if (!lancee) {
 				nettoyerSession();
@@ -247,71 +243,12 @@ async function ecouterTravailleur(nomTube: string, secret: string): Promise<void
 	});
 }
 
-/** La langue de l'installeur, dans l'ordre du noyau : nom du fichier
-    téléchargé, flux `Zone.Identifier` du navigateur, locale système. */
-async function detecterLangue(): Promise<void> {
-	const executable = executablePortable();
-	const parNom = executable ? langueDepuisNom(parse(executable).base) : null;
-	/* Les deux liens du site distribuent désormais des NOMS distincts : le nom
-	   suffit donc immédiatement et évite une lecture ADS avant d'ouvrir la
-	   fenêtre. Zone.Identifier ne sert plus que de repli pour un fichier renommé. */
-	if (parNom) {
-		langue = parNom; langueDuSite = true;
-		return;
-	}
-	/* Le nom par défaut (`Install-NeoQuiz.exe`) est aussi celui que GitHub
-	   sert à qui n'est pas passé par le site : le référent tranche. */
-	if (executable) {
-		try {
-			const zone = await readFile(`${executable}:Zone.Identifier`, "utf8");
-			const parZone = langueDepuisZone(zone);
-			if (parZone) {
-				langue = parZone; langueDuSite = true;
-				return;
-			}
-		} catch {
-			// pas de flux : fichier copié, ou navigateur qui n'en pose pas
-		}
-	}
-	if (parNom) {
-		langue = parNom; langueDuSite = true;
-		return;
-	}
-	langue = /^fr\b/i.test(app.getLocale().replace(/_/g, "-")) ? "fr" : "en";
-}
-
-/** Écrit la langue du site dans les réglages de l'APPLICATION, pour qu'elle
-    démarre dans la langue où l'utilisateur l'a téléchargée. Même fichier que
-    `electron/main.ts` (`%APPDATA%\Neo Quiz\settings.json`, clé `language`),
-    et JAMAIS par-dessus un choix : si la clé existe déjà, on ne touche à
-    rien. Écriture atomique comme `reglages.ts`, sans en importer le module
-    (il tirerait la file d'écriture de l'app dans le bootstrapper). */
-async function ecrireLangueApplication(): Promise<void> {
-	if (!langueDuSite) return;
-	const dossier = join(app.getPath("appData"), PRODUCT_NAME);
-	const fichier = join(dossier, "settings.json");
-	let contenu: Record<string, unknown> = {};
-	try {
-		const brut: unknown = JSON.parse(await readFile(fichier, "utf8"));
-		if (brut && typeof brut === "object" && !Array.isArray(brut)) contenu = brut as Record<string, unknown>;
-		if ("language" in contenu) return;
-	} catch {
-		// absent, ou illisible : un fichier illisible n'est pas écrasé non plus
-		try {
-			await access(fichier);
-			return;
-		} catch {
-			// vraiment absent
-		}
-	}
-	try {
-		await mkdir(dossier, { recursive: true });
-		const temporaire = `${fichier}.${process.pid}.tmp`;
-		await writeFile(temporaire, JSON.stringify({ ...contenu, language: langue }, null, 2), "utf8");
-		await rename(temporaire, fichier);
-	} catch {
-		// la langue de l'app n'est pas une raison d'échouer l'installation
-	}
+/** La langue de l'installeur : celle de Windows, comme l'application en
+    mode « auto » (`electron/main.ts`). `app.getLocale()` n'est fiable
+    qu'après `ready` — d'où l'appel depuis `whenReady`. Rien n'est écrit
+    dans les réglages de l'application : elle fera la même déduction. */
+function detecterLangue(): void {
+	langue = langueDepuisLocale(app.getLocale());
 }
 
 /** L'application garde maintenant sa vraie fenêtre CACHÉE jusqu'au signal
@@ -365,15 +302,6 @@ async function lancerApplicationEtAttendre(executable: string): Promise<boolean>
 			void attendreFenetreApplication(pid).then(terminer);
 		});
 	});
-}
-
-function executablePortable(): string | null {
-	/* `process.execPath` pointe l'exe EXTRAIT dans `%TEMP%`. L'élever ferait
-	   afficher à l'UAC la signature de ce fichier interne, pas celle du
-	   portable téléchargé. electron-builder fournit le chemin du portable
-	   d'origine précisément via cette variable. */
-	const chemin = process.env.PORTABLE_EXECUTABLE_FILE;
-	return chemin && isAbsolute(chemin) ? chemin : null;
 }
 
 async function lancerTravailleurEleve(nomTube: string, charge: string): Promise<number> {
@@ -551,8 +479,8 @@ if (travailleur) {
 			fenetre.show();
 			fenetre.focus();
 		});
-		void app.whenReady().then(async () => {
-			await detecterLangue();
+		void app.whenReady().then(() => {
+			detecterLangue();
 			setLanguage(langue);
 			installerCanaux();
 			creerFenetre();

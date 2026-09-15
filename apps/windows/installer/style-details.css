@@ -17,7 +17,12 @@
 .nqi-legal-link {
 	color: #7ea8ff;
 	font-weight: 500;
+	text-decoration: none;
+	cursor: pointer;
 }
+
+.nqi-legal-link:hover,
+.nqi-legal-link:focus-visible { text-decoration: underline; }
 
 .nqi-feedback {
 	position: absolute;

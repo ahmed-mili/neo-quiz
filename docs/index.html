@@ -4,6 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Download Neo Quiz</title>
+<script>
+	// The page follows the BROWSER language, the most reliable signal a
+	// static site has: no request, no geo-IP guess (a VPN, an expat or a
+	// bilingual country would get it wrong). Runs before the first paint,
+	// once: a visitor whose first preferred language is French lands on
+	// `fr/`, unless they already picked a language from the menu (that
+	// choice is remembered in localStorage and always wins).
+	(function () {
+		try {
+			var choix = localStorage.getItem("nq-langue");
+			var navigateur = (navigator.languages && navigator.languages[0]) || navigator.language || "";
+			var cible = choix || (/^fr\b/i.test(navigateur) ? "fr" : "en");
+			if (cible === "fr") location.replace("fr/");
+		} catch (e) { /* storage blocked: stay in English */ }
+	})();
+</script>
 <link rel="icon" href="icon.png">
 <style>
 	/* Colors copied as-is from apps/windows/src/theme/host-vars.css
@@ -581,7 +597,7 @@
 					English
 					<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"></path></svg>
 				</div>
-				<a class="item" href="fr/">Français</a>
+				<a class="item" href="fr/" data-langue="fr">Français</a>
 			</div>
 		</div>
 	</nav>
@@ -699,6 +715,10 @@
 		<span aria-hidden="true">·</span>
 		<a href="https://github.com/ahmed-mili/neo-quiz/blob/main/docs/guide/install.md#code-signing-policy">Code signing policy</a>
 		<span aria-hidden="true">·</span>
+		<a href="terms.html">Terms of Use</a>
+		<span aria-hidden="true">·</span>
+		<a href="privacy.html">Privacy Policy</a>
+		<span aria-hidden="true">·</span>
 		<span>MIT</span>
 	</footer>
 
@@ -712,7 +732,17 @@
 		// An app target can be an exact asset name (Windows bootstrapper) or an
 		// extension (Linux AppImage). Exact matching matters now that a Windows
 		// release contains both the bootstrapper and the hidden NSIS engine.
+		// The Windows installer is versioned like `Obsidian-1.13.7.exe`
+		// (`NeoQuiz-1.0.1.exe`, `artifactName` in
+		// apps/windows/installer/electron-builder.config.mjs): found by
+		// pattern, never by a fixed name, so the page never carries a version.
+		var MOTIF_INSTALLEUR_WINDOWS = /^NeoQuiz-\d+\.\d+\.\d+\.exe$/i;
+
+		// `cible`: an exact asset name, an extension (".appimage") or a RegExp.
 		function trouverActif(assets, cible) {
+			if (cible instanceof RegExp) {
+				return (assets || []).find(function (a) { return cible.test(String(a.name || "")); });
+			}
 			var cherchee = String(cible || "").toLowerCase();
 			var parExtension = cherchee.startsWith(".");
 			return (assets || []).find(function (a) {
@@ -762,8 +792,8 @@
 			})
 			.then(function (donnees) {
 				latestChargee = donnees;
-				var actifWindows = trouverActif(donnees.assets, "Install-NeoQuiz.exe");
-				afficherVersion("windows", donnees, "Install-NeoQuiz.exe", null);
+				var actifWindows = trouverActif(donnees.assets, MOTIF_INSTALLEUR_WINDOWS);
+				afficherVersion("windows", donnees, MOTIF_INSTALLEUR_WINDOWS, null);
 				var carteWindows = document.getElementById("carte-windows");
 				if (actifWindows && carteWindows) carteWindows.setAttribute("href", actifWindows.browser_download_url);
 				afficherVersion("linux", donnees, ".appimage", null);
@@ -978,6 +1008,13 @@
 			}
 
 			bouton.addEventListener("click", basculer);
+			// A click on a language is a CHOICE, remembered so the root page
+			// stops guessing from the browser language (see its <head> script).
+			Array.prototype.forEach.call(menu.querySelectorAll("a.item[data-langue]"), function (lien) {
+				lien.addEventListener("click", function () {
+					try { localStorage.setItem("nq-langue", lien.getAttribute("data-langue")); } catch (e) { /* storage blocked */ }
+				});
+			});
 			document.addEventListener("click", function (e) {
 				if (!conteneur.contains(e.target)) fermer();
 			});

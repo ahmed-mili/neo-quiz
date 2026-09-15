@@ -104,6 +104,9 @@ export default async function () {
 		nsis: {
 			oneClick: false,
 			allowToChangeInstallationDirectory: true,
+			/* L'installation garde le wizard NSIS parce que le bootstrapper le
+			   lance en silence ; seul le désinstalleur visible doit être compact. */
+			include: "installer/uninstaller.nsh",
 			/* La valeur par défaut, ÉCRITE pour qu'une lecture future ne la
 			   « nettoie » pas : la mise à jour désinstalle l'ancienne version
 			   avant d'installer la neuve, et `userData`

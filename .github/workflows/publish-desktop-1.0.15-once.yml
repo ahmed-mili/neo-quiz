@@ -1,0 +1,61 @@
+name: Publish desktop 1.0.15 once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-desktop-1.0.15-once.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  validate-and-publish:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          npm ci
+          npm --prefix apps/windows ci
+      - name: Verify version and installer checks
+        shell: pwsh
+        run: |
+          $version = node -p "require('./apps/windows/package.json').version"
+          if ($version -ne '1.0.15') { throw "Version inattendue: $version" }
+          npm run check:installer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run check:package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run check:updater
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm --prefix apps/windows run typecheck:installer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build real Windows package
+        shell: pwsh
+        run: |
+          npm --prefix apps/windows run pack:win
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run check:package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm --prefix apps/windows run pack:installer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run check:installer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Trigger existing release chain
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release.yml --ref main -f version=1.0.15 -f product=app -f publish=true
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

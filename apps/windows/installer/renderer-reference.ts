@@ -21,6 +21,8 @@ let echantillonTelechargement: { recus: number; instant: number } | null = null;
 let debitTelechargement: number | null = null;
 let confirmationAnnulation = false;
 let annulationDemandee = false;
+let affichage100Jusqua = 0;
+let minuterieDemarrage: ReturnType<typeof setTimeout> | null = null;
 
 function ajouter<K extends keyof HTMLElementTagNameMap>(
 	parent: HTMLElement,
@@ -295,11 +297,21 @@ function rendreEtapeProgression(parent: HTMLElement): void {
 		statut = t("installer.status.downloading", { percent: formatPourcent(pourcent) });
 		detail = detailTelechargement(etat.recus, etat.total);
 	} else if (etat.phase === "verification") {
-		pourcent = 100;
+		/* Le calcul SHA-256 ne fournit pas de progression exploitable à l'UI. */
+		pourcent = null;
 		statut = t("installer.status.verifying");
 	} else if (etat.phase === "installation") {
-		pourcent = etat.pourcent;
-		statut = t("installer.status.installingProgress", { percent: formatPourcent(pourcent) });
+		/* NSIS silencieux ne donne pas sa progression réelle au bootstrapper.
+		   Les valeurs intermédiaires historiques étaient donc seulement une
+		   estimation temporelle : on ne les affiche plus. Le 100 % envoyé après
+		   le vrai code de sortie 0 reste, lui, une information exacte. */
+		if (etat.pourcent >= 100) {
+			pourcent = 100;
+			statut = t("installer.status.installingProgress", { percent: formatPourcent(100) });
+		} else {
+			pourcent = null;
+			statut = t("installer.status.installing");
+		}
 	}
 
 	const bloc = ajouter(etape, "div", "nqi-progress-block");
@@ -374,6 +386,11 @@ function lancerInstallation(): void {
 	if (!infos) return;
 	confirmationAnnulation = false;
 	annulationDemandee = false;
+	affichage100Jusqua = 0;
+	if (minuterieDemarrage !== null) {
+		clearTimeout(minuterieDemarrage);
+		minuterieDemarrage = null;
+	}
 	etat = { phase: "elevation" };
 	rendre();
 	void window.neoInstaller.installer(infos.dossier).catch(() => {
@@ -391,6 +408,11 @@ async function initialiser(): Promise<void> {
 	debitTelechargement = null;
 	confirmationAnnulation = false;
 	annulationDemandee = false;
+	affichage100Jusqua = 0;
+	if (minuterieDemarrage !== null) {
+		clearTimeout(minuterieDemarrage);
+		minuterieDemarrage = null;
+	}
 	rendre();
 	try {
 		infos = await window.neoInstaller.initialiser();
@@ -439,6 +461,26 @@ const langueUrl = new URLSearchParams(window.location.search).get("lang");
 setLanguage(langueUrl === "fr" || langueUrl === "en" ? langueUrl : "auto");
 window.neoInstaller.surEtat(nouvelEtat => {
 	mesurerDebit(nouvelEtat);
+	if (nouvelEtat.phase === "installation" && nouvelEtat.pourcent >= 100) {
+		/* Le worker n'envoie 100 qu'après un vrai code de sortie 0. Le garder
+		   visible quelques centaines de millisecondes évite que « demarrage »
+		   remplace le DOM avant même que Chromium ait peint la frame à 100 %. */
+		affichage100Jusqua = performance.now() + 450;
+	}
+	if (nouvelEtat.phase === "demarrage" && affichage100Jusqua > performance.now()) {
+		const attente = Math.max(0, affichage100Jusqua - performance.now());
+		if (minuterieDemarrage !== null) clearTimeout(minuterieDemarrage);
+		minuterieDemarrage = setTimeout(() => {
+			minuterieDemarrage = null;
+			etat = nouvelEtat;
+			rendre();
+		}, attente);
+		return;
+	}
+	if (nouvelEtat.phase !== "demarrage" && minuterieDemarrage !== null) {
+		clearTimeout(minuterieDemarrage);
+		minuterieDemarrage = null;
+	}
 	if (nouvelEtat.phase === "annule") {
 		confirmationAnnulation = false;
 		annulationDemandee = false;

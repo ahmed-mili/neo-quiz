@@ -3,14 +3,30 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def replace_once(path: str, old: str, new: str, marker: str) -> None:
-    p = ROOT / path
-    s = p.read_text(encoding="utf-8")
-    if marker in s:
+def text(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+def write(path: str, value: str) -> None:
+    (ROOT / path).write_text(value, encoding="utf-8")
+
+
+def replace_once(path: str, old: str, new: str, done: str) -> None:
+    s = text(path)
+    if done in s:
         return
     if s.count(old) != 1:
-        raise SystemExit(f"{path}: motif unique introuvable pour {marker!r}")
-    p.write_text(s.replace(old, new, 1), encoding="utf-8")
+        raise SystemExit(f"{path}: motif unique introuvable pour {done!r}")
+    write(path, s.replace(old, new, 1))
+
+
+def delete_once(path: str, old: str) -> None:
+    s = text(path)
+    if old not in s:
+        return
+    if s.count(old) != 1:
+        raise SystemExit(f"{path}: motif à supprimer non unique")
+    write(path, s.replace(old, "", 1))
 
 
 # ── Bootstrapper : la fin d'installation a sa PROPRE fenêtre top-level. ──
@@ -26,7 +42,8 @@ replace_once(
     '''/** La fenêtre de l'application est créée avec `show: false` et n'est montrée
     qu'à `ready-to-show`. Attendre une fenêtre Win32 VISIBLE revient donc à
     attendre l'initialisation que l'application juge elle-même suffisante pour
-    apparaître, sans ajouter un second protocole dans le rendu. */\nasync function attendreFenetreApplication(pid: number): Promise<boolean> {''',
+    apparaître, sans ajouter un second protocole dans le rendu. */
+async function attendreFenetreApplication(pid: number): Promise<boolean> {''',
     '''function fermerFenetreDemarrage(): void {
 \tconst attente = fenetreDemarrage;
 \tfenetreDemarrage = null;
@@ -146,7 +163,6 @@ replace_once(
     'const attenteVisible = await afficherFenetreDemarrage();',
 )
 
-# Le rendu "launch" reste le même bundle, mais n'initialise PAS l'installateur.
 replace_once(
     "apps/windows/installer/renderer-reference.ts",
     '''function rendreDemarrage(parent: HTMLElement): void {
@@ -176,15 +192,13 @@ replace_once(
     '/* Pas de « carte dans une fenêtre » : cette page EST la petite fenêtre. */',
 )
 
-replace_once(
+delete_once(
     "apps/windows/installer/renderer-reference.ts",
     '''\n\tif (etat.phase === "demarrage") {
 \t\trendreDemarrage(root);
 \t\treturn;
 \t}
 ''',
-    '\n',
-    'if (etat.phase === "demarrage") {',
 )
 
 old_bottom = '''const langueUrl = new URLSearchParams(window.location.search).get("lang");
@@ -247,12 +261,7 @@ replace_once(
     'const modeAffichage = parametresUrl.get("mode");',
 )
 
-replace_once(
-    "apps/windows/installer/protocole.ts",
-    '\t| { phase: "demarrage" }\n',
-    '',
-    'phase: "demarrage"',
-)
+delete_once("apps/windows/installer/protocole.ts", '\t| { phase: "demarrage" }\n')
 
 replace_once(
     "apps/windows/installer/style-details.css",
@@ -308,14 +317,12 @@ replace_once(
 \t\t * Le rappel à exécuter AVANT que la fenêtre ne se ferme,''',
     'prete(): Promise<void>;',
 )
-
 replace_once(
     "apps/windows/electron/pont.ts",
     '\tevenement: "neo:evenement",\n\tarmerFermeture: "neo:fenetre/armer-fermeture",',
     '\tevenement: "neo:evenement",\n\tfenetrePrete: "neo:fenetre/prete",\n\tarmerFermeture: "neo:fenetre/armer-fermeture",',
     'fenetrePrete: "neo:fenetre/prete"',
 )
-
 replace_once(
     "apps/windows/electron/preload.ts",
     '''\tfenetre: {
@@ -325,7 +332,6 @@ replace_once(
 \t\tasync surFermeture(rappel) {''',
     'prete: () => ipcRenderer.invoke(CANAUX.fenetrePrete)',
 )
-
 replace_once(
     "apps/windows/electron/canaux.ts",
     '''\tfenetre: {
@@ -335,7 +341,6 @@ replace_once(
 \t\treduire(): void;''',
     'prete(): void;',
 )
-
 replace_once(
     "apps/windows/electron/canaux.ts",
     '''\t/* ─── LA FENÊTRE SANS CADRE ───
@@ -351,7 +356,6 @@ replace_once(
 \tipcMain.handle(CANAUX.fenetreReduire, () => deps.fenetre.reduire());''',
     'ipcMain.handle(CANAUX.fenetrePrete, () => deps.fenetre.prete());',
 )
-
 replace_once(
     "apps/windows/electron/main.ts",
     '\tfenetre.once("ready-to-show", () => fenetre?.show());\n',
@@ -359,9 +363,8 @@ replace_once(
 \t   volontairement cachée jusqu'au signal explicite du rendu, APRÈS lecture
 \t   des réglages, scan initial et montage de l'écran utilisable. */
 ''',
-    'La fenêtre reste\n\t   volontairement cachée jusqu\'au signal explicite du rendu',
+    'volontairement cachée jusqu\'au signal explicite du rendu',
 )
-
 replace_once(
     "apps/windows/electron/main.ts",
     '''\t\t\tfenetre: {
@@ -375,7 +378,6 @@ replace_once(
 \t\t\t\treduire: () => fenetre?.minimize(),''',
     'if (!fenetre || fenetre.isDestroyed() || fenetre.isVisible()) return;',
 )
-
 replace_once(
     "apps/windows/src/main.ts",
     'void demarrer();',
@@ -389,7 +391,7 @@ replace_once(
     'signal prêt impossible:',
 )
 
-# ── Contrôles nommés : séparation de fenêtre + vrai signal de disponibilité. ──
+# ── Contrôles nommés. ──
 replace_once(
     "scripts/check-installer.mjs",
     'const configBootstrapper = readFileSync(resolve(racine, "apps/windows/installer/electron-builder.config.mjs"), "utf8");',

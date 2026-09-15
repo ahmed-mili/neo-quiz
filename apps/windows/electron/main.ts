@@ -223,7 +223,9 @@ function creerFenetre(): void {
 		},
 	});
 
-	fenetre.once("ready-to-show", () => fenetre?.show());
+	/* `ready-to-show` ne signifie que « Chromium a peint ». La fenêtre reste
+	   volontairement cachée jusqu'au signal explicite du rendu, APRÈS lecture
+	   des réglages, scan initial et montage de l'écran utilisable. */
 
 	/* L'état de la fenêtre est POUSSÉ au rendu : agrandie ou non (l'icône du
 	   bouton du milieu), focus ou non (les glyphes de la barre s'atténuent),
@@ -569,6 +571,11 @@ if (!app.requestSingleInstanceLock()) {
 			miseAJour,
 			fermerPourInstaller: () => fenetre?.close(),
 			fenetre: {
+				prete: () => {
+					if (!fenetre || fenetre.isDestroyed() || fenetre.isVisible()) return;
+					fenetre.show();
+					fenetre.focus();
+				},
 				reduire: () => fenetre?.minimize(),
 				agrandirOuRestaurer: () => {
 					if (!fenetre) return;

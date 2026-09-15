@@ -23,6 +23,13 @@ const renduInstallateur = readFileSync(resolve(racine, "apps/windows/installer/r
 const principalInstallateur = readFileSync(resolve(racine, "apps/windows/installer/main.ts"), "utf8");
 const travailleurInstallateur = readFileSync(resolve(racine, "apps/windows/installer/worker.ts"), "utf8");
 const configBootstrapper = readFileSync(resolve(racine, "apps/windows/installer/electron-builder.config.mjs"), "utf8");
+const protocoleInstallateur = readFileSync(resolve(racine, "apps/windows/installer/protocole.ts"), "utf8");
+const styleInstallateur = readFileSync(resolve(racine, "apps/windows/installer/style-details.css"), "utf8");
+const principalApplication = readFileSync(resolve(racine, "apps/windows/electron/main.ts"), "utf8");
+const pontApplication = readFileSync(resolve(racine, "apps/windows/electron/pont.ts"), "utf8");
+const preloadApplication = readFileSync(resolve(racine, "apps/windows/electron/preload.ts"), "utf8");
+const canauxApplication = readFileSync(resolve(racine, "apps/windows/electron/canaux.ts"), "utf8");
+const renduApplication = readFileSync(resolve(racine, "apps/windows/src/main.ts"), "utf8");
 
 await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argumentsNsis, langueDepuisNom, langueDepuisZone }) => {
 	const r = makeReporter("Installateur — bootstrapper");
@@ -145,6 +152,34 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argume
 	r.check("expérience : mentions légales absentes à partir de l'étape 3",
 		[blocProgression.includes("rendreLegal("), renduInstallateur.includes("rendreLegal(panneau);")],
 		[false, true]);
+
+	r.check("fin installation : fenêtre de lancement séparée et centrée, jamais un modal",
+		[
+			principalInstallateur.includes("let fenetreDemarrage: BrowserWindow | null = null;"),
+			principalInstallateur.includes("const attente = new BrowserWindow({"),
+			principalInstallateur.includes("attente.center();"),
+			principalInstallateur.includes('query: { lang: langue, mode: "launch" }'),
+			principalInstallateur.includes("if (attenteVisible && fenetre && !fenetre.isDestroyed()) fenetre.hide();"),
+			renduInstallateur.includes('modeAffichage === "launch"'),
+			renduInstallateur.includes('const carte = ajouter(etape, "section", "nqi-launch-card")'),
+			protocoleInstallateur.includes('phase: "demarrage"'),
+			styleInstallateur.includes("cette page EST la fenêtre indépendante de lancement"),
+		],
+		[true, true, true, true, true, true, false, false, true]);
+
+	r.check("fin installation : la vraie app devient visible seulement quand elle est prête",
+		[
+			principalApplication.includes('fenetre.once("ready-to-show", () => fenetre?.show())'),
+			pontApplication.includes("prete(): Promise<void>;"),
+			pontApplication.includes('fenetrePrete: "neo:fenetre/prete"'),
+			preloadApplication.includes("prete: () => ipcRenderer.invoke(CANAUX.fenetrePrete)"),
+			canauxApplication.includes("ipcMain.handle(CANAUX.fenetrePrete, () => deps.fenetre.prete());"),
+			principalApplication.includes("if (!fenetre || fenetre.isDestroyed() || fenetre.isVisible()) return;"),
+			renduApplication.includes("void demarrer().finally(() =>"),
+			renduApplication.includes("pont().fenetre.prete()"),
+			principalInstallateur.includes("attendreFenetreApplication(pid)"),
+		],
+		[false, true, true, true, true, true, true, true, true]);
 
 	r.check("démarrage : le bootstrapper évite les deux extractions coûteuses",
 		[

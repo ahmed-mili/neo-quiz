@@ -409,6 +409,8 @@ export interface Pont {
 	};
 
 	fenetre: {
+		/** Signale que le rendu a fini son initialisation et peut être montré. */
+		prete(): Promise<void>;
 		/**
 		 * Le rappel à exécuter AVANT que la fenêtre ne se ferme, et que la
 		 * fermeture ATTEND. C'est le seul chemin qui sache attendre une
@@ -518,6 +520,7 @@ export const CANAUX = {
 	    qui interrogerait le disque en boucle pour voir ce qui a changé serait
 	    l'inverse d'un surveillant. */
 	evenement: "neo:evenement",
+	fenetrePrete: "neo:fenetre/prete",
 	armerFermeture: "neo:fenetre/armer-fermeture",
 	fermeture: "neo:fenetre/fermeture",
 	fermetureTerminee: "neo:fenetre/fermeture-terminee",

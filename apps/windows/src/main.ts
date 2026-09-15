@@ -337,4 +337,10 @@ async function demarrer(): Promise<void> {
 	}
 }
 
-void demarrer();
+void demarrer().finally(() => {
+	/* C'est CE signal, et non `ready-to-show`, qui autorise la vraie fenêtre à
+	   apparaître. En installation, le bootstrapper garde sa petite fenêtre
+	   d'attente jusqu'à cet instant. Sur une erreur de démarrage, `demarrer`
+	   a déjà posé le message dans le rendu : on montre donc aussi cette erreur. */
+	void pont().fenetre.prete().catch(e => console.error(LOG_PREFIX, "signal prêt impossible:", e));
+});

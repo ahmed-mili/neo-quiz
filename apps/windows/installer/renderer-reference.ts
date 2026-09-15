@@ -322,8 +322,8 @@ function rendreDemarrage(parent: HTMLElement): void {
 	const etape = ajouter(parent, "main", "nqi-launch-stage");
 	etape.setAttribute("role", "status");
 	etape.setAttribute("aria-label", t("installer.windowTitle"));
-	const carte = ajouter(etape, "section", "nqi-launch-card");
-	const marque = ajouter(carte, "div", "nqi-launch-brand");
+	/* Pas de « carte dans une fenêtre » : cette page EST la petite fenêtre. */
+	const marque = ajouter(etape, "div", "nqi-launch-brand");
 	const icone = ajouter(marque, "img", "nqi-launch-icon");
 	icone.src = "./icon.png";
 	icone.alt = "";
@@ -337,11 +337,6 @@ function rendre(): void {
 	const root = document.getElementById("app");
 	if (!root) return;
 	root.replaceChildren();
-
-	if (etat.phase === "demarrage") {
-		rendreDemarrage(root);
-		return;
-	}
 
 	rendreBarreTitre(root);
 	const contenu = ajouter(root, "main", "nqi-shell");
@@ -434,23 +429,36 @@ function mesurerDebit(nouvelEtat: EtatInstallateur): void {
    `query.lang`) : nom du fichier téléchargé, référent du navigateur, ou
    locale système — jamais `navigator.language` seul, qui ignorerait la page
    du site d'où l'exe vient. « auto » seulement si l'URL n'en dit rien. */
-const langueUrl = new URLSearchParams(window.location.search).get("lang");
+const parametresUrl = new URLSearchParams(window.location.search);
+const langueUrl = parametresUrl.get("lang");
+const modeAffichage = parametresUrl.get("mode");
 setLanguage(langueUrl === "fr" || langueUrl === "en" ? langueUrl : "auto");
-window.neoInstaller.surEtat(nouvelEtat => {
-	mesurerDebit(nouvelEtat);
-	if (nouvelEtat.phase === "annule") {
-		confirmationAnnulation = false;
-		annulationDemandee = false;
-		etat = { phase: "pret" };
+
+if (modeAffichage === "launch") {
+	document.documentElement.lang = currentLang();
+	document.title = t("installer.windowTitle");
+	const root = document.getElementById("app");
+	if (root) {
+		root.replaceChildren();
+		rendreDemarrage(root);
+	}
+} else {
+	window.neoInstaller.surEtat(nouvelEtat => {
+		mesurerDebit(nouvelEtat);
+		if (nouvelEtat.phase === "annule") {
+			confirmationAnnulation = false;
+			annulationDemandee = false;
+			etat = { phase: "pret" };
+			rendre();
+			window.neoInstaller.fermer();
+			return;
+		}
+		if (nouvelEtat.phase === "erreur") {
+			confirmationAnnulation = false;
+			annulationDemandee = false;
+		}
+		etat = nouvelEtat;
 		rendre();
-		window.neoInstaller.fermer();
-		return;
-	}
-	if (nouvelEtat.phase === "erreur") {
-		confirmationAnnulation = false;
-		annulationDemandee = false;
-	}
-	etat = nouvelEtat;
-	rendre();
-});
-void initialiser();
+	});
+	void initialiser();
+}

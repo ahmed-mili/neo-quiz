@@ -120,6 +120,7 @@ const pont: Pont = {
 	},
 
 	fenetre: {
+		prete: () => ipcRenderer.invoke(CANAUX.fenetrePrete),
 		async surFermeture(rappel) {
 			rappelsFermeture.push(rappel);
 			poserEcouteurFermeture();

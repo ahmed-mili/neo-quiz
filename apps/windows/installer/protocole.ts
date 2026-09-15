@@ -54,7 +54,6 @@ export type EtatInstallateur =
 	| { phase: "telechargement"; recus: number; total: number }
 	| { phase: "verification" }
 	| { phase: "installation"; pourcent: number }
-	| { phase: "demarrage" }
 	| { phase: "annule" }
 	| { phase: "erreur"; code: CodeErreurInstallateur };
 

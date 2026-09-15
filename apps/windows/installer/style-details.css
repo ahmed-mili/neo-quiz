@@ -259,28 +259,16 @@
 	cursor: default;
 }
 
-/* Étape 5 : un écran de transition, pas une nouvelle page de l'assistant. Il
-   masque donc le décor et la barre de titre, et ne disparaît que quand la vraie
-   fenêtre de Neo Quiz est devenue visible. */
+/* Étape 5 : cette page EST la fenêtre indépendante de lancement. Pas de
+   carte intérieure ni de voile de modal : juste Neo Quiz au centre. */
 .nqi-launch-stage {
 	position: absolute;
 	inset: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 64px;
-	background: #111318;
-}
-
-.nqi-launch-card {
-	width: min(480px, 100%);
-	height: 252px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border-radius: 9px;
-	background: #020304;
-	box-shadow: 0 24px 70px rgba(0, 0, 0, .38);
+	background: #202124;
+	-webkit-app-region: drag;
 }
 
 .nqi-launch-brand {

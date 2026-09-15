@@ -78,6 +78,7 @@ export interface DependancesCanaux {
 	    `main.ts` sur l'instance `BrowserWindow`. Le NOM de `commande` est déjà
 	    jugé par `enregistrerCanaux` (union fermée) avant d'arriver ici. */
 	fenetre: {
+		prete(): void;
 		reduire(): void;
 		agrandirOuRestaurer(): void;
 		fermer(): void;
@@ -618,6 +619,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	   Le rendu dessine la barre ; le principal exécute. Rien ne traverse
 	   qu'un ordre sans argument, ou un nom d'une union fermée, ou un nombre
 	   borné ici : aucun chemin, aucune URL. */
+	ipcMain.handle(CANAUX.fenetrePrete, () => deps.fenetre.prete());
 	ipcMain.handle(CANAUX.fenetreReduire, () => deps.fenetre.reduire());
 	ipcMain.handle(CANAUX.fenetreAgrandir, () => deps.fenetre.agrandirOuRestaurer());
 	ipcMain.handle(CANAUX.fenetreFermer, () => deps.fenetre.fermer());

@@ -10,7 +10,7 @@
 
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, readdir, rm } from "node:fs/promises";
 import { get } from "node:https";
 import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -187,6 +187,44 @@ async function lancerNsis(
 	});
 }
 
+async function nettoyerInstallationFraiche(dossier: string, supprimerDossier: boolean): Promise<void> {
+	/* Pendant NSIS on ne tue pas brutalement le processus : une interruption au
+	   milieu d'une écriture peut laisser registre/raccourcis incohérents. La
+	   demande est mémorisée, NSIS termine sa transaction, puis une installation
+	   FRAÎCHE est désinstallée proprement avant de rendre « annulé ». Une mise
+	   à jour existante n'est jamais supprimée : mieux vaut conserver une app
+	   cohérente que détruire la version précédente en prétendant annuler. */
+	let desinstalleur: string | null = null;
+	try {
+		const noms = await readdir(dossier);
+		const nom = noms.find(item => /^uninstall.*\.exe$/i.test(item));
+		if (nom) desinstalleur = join(dossier, nom);
+	} catch {
+		// Le dossier peut déjà avoir disparu : rien à nettoyer.
+	}
+	if (desinstalleur) {
+		await new Promise<void>(resolvePromise => {
+			const enfant = spawn(desinstalleur as string, ["/S"], { windowsHide: true, stdio: "ignore" });
+			let fini = false;
+			const terminer = (): void => {
+				if (fini) return;
+				fini = true;
+				clearTimeout(limite);
+				resolvePromise();
+			};
+			const limite = setTimeout(() => {
+				try { enfant.kill(); } catch { /* déjà terminé */ }
+				terminer();
+			}, 20_000);
+			enfant.once("error", terminer);
+			enfant.once("exit", terminer);
+		});
+	}
+	if (supprimerDossier) {
+		try { await rm(dossier, { recursive: true, force: true }); } catch { /* meilleur effort */ }
+	}
+}
+
 async function ouvrirTube(nom: string): Promise<Socket> {
 	return await new Promise<Socket>((resolvePromise, reject) => {
 		const socket = connect(nom);
@@ -242,9 +280,12 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 	envoyer(socket, { type: "auth", secret: charge.secret });
 
 	const annulation = new AbortController();
-	let installationCommencee = false;
+	let dossierExistait = true;
+	try { await access(charge.dossier); } catch { dossierExistait = false; }
+	let installationExistante = true;
+	try { await access(join(charge.dossier, "neo-quiz.exe")); } catch { installationExistante = false; }
 	ecouterCommandes(socket, commande => {
-		if (commande.type === "annuler" && !installationCommencee) annulation.abort();
+		if (commande.type === "annuler") annulation.abort();
 	});
 
 	const temporaire = await mkdtemp(join(tmpdir(), "neo-quiz-installer-"));
@@ -260,10 +301,20 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 		}
 
 		envoyer(socket, { type: "verification" });
-		installationCommencee = true;
+		if (annulation.signal.aborted) {
+			envoyer(socket, { type: "annule" });
+			await terminerTube(socket);
+			return 0;
+		}
 		await lancerNsis(cheminPaquet, charge.dossier, pourcent => {
 			envoyer(socket, { type: "installation", pourcent });
 		});
+		if (annulation.signal.aborted) {
+			if (!installationExistante) await nettoyerInstallationFraiche(charge.dossier, !dossierExistait);
+			envoyer(socket, { type: "annule" });
+			await terminerTube(socket);
+			return 0;
+		}
 
 		const executable = join(charge.dossier, "neo-quiz.exe");
 		try {
@@ -275,7 +326,8 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 		await terminerTube(socket);
 		return 0;
 	} catch (erreur) {
-		if (annulation.signal.aborted && !installationCommencee) {
+		if (annulation.signal.aborted) {
+			if (!installationExistante) await nettoyerInstallationFraiche(charge.dossier, !dossierExistait);
 			envoyer(socket, { type: "annule" });
 			await terminerTube(socket);
 			return 0;

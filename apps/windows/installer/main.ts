@@ -34,8 +34,8 @@ let fenetre: BrowserWindow | null = null;
 let paquetCourant: PaquetInstallable | null = null;
 let socketTravailleur: Socket | null = null;
 let serveurTube: Server | null = null;
+let processusElevation: ReturnType<typeof spawn> | null = null;
 let installationActive = false;
-let installationCritique = false;
 let fermetureAutorisee = false;
 /** La langue retenue, et si elle vient du SITE (nom du fichier ou référent)
     plutôt que de la locale système : seule la première mérite d'être écrite
@@ -140,6 +140,11 @@ async function chargerPaquet(): Promise<PaquetInstallable> {
 }
 
 function nettoyerSession(): void {
+	const elevation = processusElevation;
+	processusElevation = null;
+	if (elevation && !elevation.killed) {
+		try { elevation.kill(); } catch { /* déjà terminé */ }
+	}
 	socketTravailleur?.destroy();
 	socketTravailleur = null;
 	if (serveurTube) {
@@ -147,7 +152,6 @@ function nettoyerSession(): void {
 	}
 	serveurTube = null;
 	installationActive = false;
-	installationCritique = false;
 }
 
 async function traiterMessage(message: MessageTravailleur): Promise<void> {
@@ -161,7 +165,6 @@ async function traiterMessage(message: MessageTravailleur): Promise<void> {
 			envoyerEtat({ phase: "verification" });
 			return;
 		case "installation":
-			installationCritique = true;
 			envoyerEtat({ phase: "installation", pourcent: message.pourcent });
 			return;
 		case "annule":
@@ -245,7 +248,10 @@ async function ecouterTravailleur(nomTube: string, secret: string): Promise<void
 async function detecterLangue(): Promise<void> {
 	const executable = executablePortable();
 	const parNom = executable ? langueDepuisNom(parse(executable).base) : null;
-	if (parNom && parNom !== "en") {
+	/* Les deux liens du site distribuent désormais des NOMS distincts : le nom
+	   suffit donc immédiatement et évite une lecture ADS avant d'ouvrir la
+	   fenêtre. Zone.Identifier ne sert plus que de repli pour un fichier renommé. */
+	if (parNom) {
 		langue = parNom; langueDuSite = true;
 		return;
 	}
@@ -385,8 +391,13 @@ async function lancerTravailleurEleve(nomTube: string, charge: string): Promise<
 				NQ_INSTALLER_PAYLOAD: charge,
 			},
 		});
-		enfant.once("error", () => resolvePromise(-1));
-		enfant.once("exit", code => resolvePromise(code ?? -1));
+		processusElevation = enfant;
+		const terminer = (code: number): void => {
+			if (processusElevation === enfant) processusElevation = null;
+			resolvePromise(code);
+		};
+		enfant.once("error", () => terminer(-1));
+		enfant.once("exit", code => terminer(code ?? -1));
 	});
 }
 
@@ -396,7 +407,6 @@ async function demarrerInstallation(dossier: string): Promise<void> {
 		return;
 	}
 	installationActive = true;
-	installationCritique = false;
 	envoyerEtat({ phase: "elevation" });
 
 	const nomTube = `\\\\.\\pipe\\neo-quiz-installer-${randomUUID()}`;
@@ -452,8 +462,16 @@ function installerCanaux(): void {
 		await demarrerInstallation(dossier);
 	});
 	ipcMain.handle(CANAUX_INSTALLATEUR.annuler, async () => {
-		if (!installationActive || installationCritique || !socketTravailleur) return;
-		socketTravailleur.write(`${JSON.stringify({ type: "annuler" })}\n`);
+		if (!installationActive) return;
+		if (socketTravailleur) {
+			socketTravailleur.write(`${JSON.stringify({ type: "annuler" })}\n`);
+			return;
+		}
+		/* Avant l'authentification du travailleur, l'unique processus en attente
+		   est PowerShell/RunAs. Le terminer ferme cette tentative UAC sans
+		   laisser l'interface coincée sur un faux état d'attente. */
+		nettoyerSession();
+		envoyerEtat({ phase: "annule" });
 	});
 	ipcMain.on(CANAUX_INSTALLATEUR.fermer, () => {
 		if (installationActive) return;
@@ -496,7 +514,11 @@ function creerFenetre(): void {
 	   rendu, là où un canal IPC arriverait après la première peinture — et le
 	   rendu a sa propre instance d'i18n, `setLanguage` d'ici ne l'atteint pas. */
 	void fenetre.loadFile(join(__dirname, "index.html"), { query: { lang: langue } });
-	fenetre.once("ready-to-show", () => fenetre?.show());
+	fenetre.webContents.once("dom-ready", () => {
+		if (!fenetre || fenetre.isDestroyed()) return;
+		fenetre.show();
+		fenetre.focus();
+	});
 	fenetre.on("close", evenement => {
 		if (installationActive && !fermetureAutorisee) evenement.preventDefault();
 	});

@@ -28,6 +28,8 @@ export const EN_INSTALLER = {
 	"installer.legal.afterPrivacy": ". ",
 	"installer.legal.components": "The installation includes the components required to run the application and may add shortcuts to your desktop and Start menu.",
 	"installer.status.elevation": "Waiting for Windows authorization…",
+	"installer.status.downloadingPending": "Downloading…",
+	"installer.status.cancelling": "Cancelling…",
 	"installer.status.downloading": "Downloading… {percent}%",
 	"installer.status.downloadDetail": "{downloaded} downloaded of {total} — {seconds}s remaining",
 	"installer.status.downloadDetailNoTime": "{downloaded} downloaded of {total}",
@@ -43,4 +45,8 @@ export const EN_INSTALLER = {
 	"installer.error.generic": "The installation could not continue.",
 	"installer.elevationDialog.title": "Unable to install",
 	"installer.elevationDialog.body": "Neo Quiz requires administrator privileges to install. Click Cancel, then restart the installer.",
+	"installer.cancelDialog.title": "Stop installation?",
+	"installer.cancelDialog.body": "Neo Quiz will not be installed on this PC.",
+	"installer.cancelDialog.no": "No",
+	"installer.cancelDialog.yes": "Yes",
 } as const;

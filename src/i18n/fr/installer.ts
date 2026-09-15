@@ -28,6 +28,8 @@ export const FR_INSTALLER = {
 	"installer.legal.afterPrivacy": ". ",
 	"installer.legal.components": "L’installation comprend les composants nécessaires au fonctionnement de l’application et peut ajouter des raccourcis sur votre bureau et dans le menu Démarrer.",
 	"installer.status.elevation": "En attente de l'autorisation Windows…",
+	"installer.status.downloadingPending": "Téléchargement…",
+	"installer.status.cancelling": "Annulation…",
 	"installer.status.downloading": "Téléchargement… {percent} %",
 	"installer.status.downloadDetail": "{downloaded} téléchargés sur {total} — {seconds} s restantes",
 	"installer.status.downloadDetailNoTime": "{downloaded} téléchargés sur {total}",
@@ -43,4 +45,8 @@ export const FR_INSTALLER = {
 	"installer.error.generic": "L'installation n'a pas pu continuer.",
 	"installer.elevationDialog.title": "Installation impossible",
 	"installer.elevationDialog.body": "Neo Quiz nécessite les droits administrateur pour être installé. Cliquez sur Annuler, puis relancez le programme d’installation.",
+	"installer.cancelDialog.title": "Arrêter l'installation ?",
+	"installer.cancelDialog.body": "Neo Quiz ne sera pas installé sur ce PC.",
+	"installer.cancelDialog.no": "Non",
+	"installer.cancelDialog.yes": "Oui",
 };

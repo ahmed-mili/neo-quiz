@@ -19,6 +19,8 @@ let etat: EtatInstallateur = { phase: "pret" };
 let chargement = true;
 let echantillonTelechargement: { recus: number; instant: number } | null = null;
 let debitTelechargement: number | null = null;
+let confirmationAnnulation = false;
+let annulationDemandee = false;
 
 function ajouter<K extends keyof HTMLElementTagNameMap>(
 	parent: HTMLElement,
@@ -70,9 +72,9 @@ function libelleErreur(code: CodeErreurInstallateur): string {
 	}
 }
 
-function phaseVerrouilleFermeture(): boolean {
+function phaseInstallationActive(): boolean {
 	return etat.phase === "elevation" || etat.phase === "telechargement" ||
-		etat.phase === "verification" || etat.phase === "installation" || etat.phase === "demarrage";
+		etat.phase === "verification" || etat.phase === "installation";
 }
 
 function rendreBarreTitre(parent: HTMLElement): void {
@@ -95,8 +97,10 @@ function rendreBarreTitre(parent: HTMLElement): void {
 	fermer.type = "button";
 	fermer.title = t("installer.close");
 	fermer.setAttribute("aria-label", t("installer.close"));
-	fermer.disabled = phaseVerrouilleFermeture();
-	fermer.addEventListener("click", () => window.neoInstaller.fermer());
+	fermer.addEventListener("click", () => {
+		if (phaseInstallationActive()) ouvrirConfirmationAnnulation();
+		else window.neoInstaller.fermer();
+	});
 	poserGlyphe(fermer, "close");
 }
 
@@ -231,14 +235,58 @@ function detailTelechargement(recus: number, total: number): string {
 	});
 }
 
+function ouvrirConfirmationAnnulation(): void {
+	if (!phaseInstallationActive() || annulationDemandee) return;
+	confirmationAnnulation = true;
+	rendre();
+}
+
+function confirmerAnnulation(): void {
+	if (!phaseInstallationActive() || annulationDemandee) return;
+	confirmationAnnulation = false;
+	annulationDemandee = true;
+	rendre();
+	void window.neoInstaller.annuler().catch(() => {
+		annulationDemandee = false;
+		etat = { phase: "erreur", code: "generic" };
+		rendre();
+	});
+}
+
+function rendreConfirmationAnnulation(parent: HTMLElement): void {
+	const voile = ajouter(parent, "div", "nqi-cancel-overlay");
+	const dialogue = ajouter(voile, "section", "nqi-cancel-dialog");
+	dialogue.setAttribute("role", "alertdialog");
+	dialogue.setAttribute("aria-modal", "true");
+	const titre = ajouter(dialogue, "h2", "nqi-cancel-title", t("installer.cancelDialog.title"));
+	titre.id = "nqi-cancel-title";
+	dialogue.setAttribute("aria-labelledby", titre.id);
+	const message = ajouter(dialogue, "p", "nqi-cancel-copy", t("installer.cancelDialog.body"));
+	message.id = "nqi-cancel-copy";
+	dialogue.setAttribute("aria-describedby", message.id);
+	const actions = ajouter(dialogue, "div", "nqi-cancel-actions");
+	const non = ajouter(actions, "button", "nqi-cancel-no", t("installer.cancelDialog.no"));
+	non.type = "button";
+	non.autofocus = true;
+	non.addEventListener("click", () => {
+		confirmationAnnulation = false;
+		rendre();
+	});
+	const oui = ajouter(actions, "button", "nqi-cancel-yes", t("installer.cancelDialog.yes"));
+	oui.type = "button";
+	oui.addEventListener("click", confirmerAnnulation);
+}
+
 function rendreEtapeProgression(parent: HTMLElement): void {
 	const etape = ajouter(parent, "section", "nqi-progress-stage");
 	ajouter(etape, "h1", "nqi-progress-title", t("installer.title"));
 
-	let pourcent = 0;
-	let statut = t("installer.status.verifying");
+	let pourcent: number | null = null;
+	let statut = t("installer.status.downloadingPending");
 	let detail: string | null = null;
-	if (etat.phase === "telechargement") {
+	if (annulationDemandee) {
+		statut = t("installer.status.cancelling");
+	} else if (etat.phase === "telechargement") {
 		pourcent = etat.total > 0 ? (etat.recus / etat.total) * 100 : 0;
 		statut = t("installer.status.downloading", { percent: formatPourcent(pourcent) });
 		detail = detailTelechargement(etat.recus, etat.total);
@@ -253,7 +301,7 @@ function rendreEtapeProgression(parent: HTMLElement): void {
 	const bloc = ajouter(etape, "div", "nqi-progress-block");
 	rendreProgression(bloc, pourcent, "nqi-progress-wide");
 	ajouter(bloc, "p", "nqi-progress-status", statut);
-	if (detail) ajouter(bloc, "p", "nqi-progress-detail", detail);
+	if (detail && !annulationDemandee) ajouter(bloc, "p", "nqi-progress-detail", detail);
 
 	rendreCommentaires(etape, "nqi-progress-feedback");
 	rendreLegal(etape, "nqi-progress-legal");
@@ -261,8 +309,8 @@ function rendreEtapeProgression(parent: HTMLElement): void {
 	const actions = ajouter(etape, "div", "nqi-progress-actions");
 	const annuler = ajouter(actions, "button", "nqi-progress-cancel", t("installer.cancel"));
 	annuler.type = "button";
-	annuler.disabled = etat.phase !== "telechargement";
-	if (!annuler.disabled) annuler.addEventListener("click", () => { void window.neoInstaller.annuler(); });
+	annuler.disabled = annulationDemandee;
+	if (!annuler.disabled) annuler.addEventListener("click", ouvrirConfirmationAnnulation);
 	const installer = ajouter(actions, "button", "nqi-progress-install", t("installer.install"));
 	installer.type = "button";
 	installer.disabled = true;
@@ -302,8 +350,9 @@ function rendre(): void {
 		return;
 	}
 
-	if (etat.phase === "telechargement" || etat.phase === "verification" || etat.phase === "installation") {
+	if (etat.phase === "elevation" || etat.phase === "telechargement" || etat.phase === "verification" || etat.phase === "installation") {
 		rendreEtapeProgression(contenu);
+		if (confirmationAnnulation) rendreConfirmationAnnulation(root);
 		return;
 	}
 
@@ -320,6 +369,8 @@ function rendre(): void {
 
 function lancerInstallation(): void {
 	if (!infos) return;
+	confirmationAnnulation = false;
+	annulationDemandee = false;
 	etat = { phase: "elevation" };
 	rendre();
 	void window.neoInstaller.installer(infos.dossier).catch(() => {
@@ -335,6 +386,8 @@ async function initialiser(): Promise<void> {
 	disque = null;
 	echantillonTelechargement = null;
 	debitTelechargement = null;
+	confirmationAnnulation = false;
+	annulationDemandee = false;
 	rendre();
 	try {
 		infos = await window.neoInstaller.initialiser();
@@ -383,7 +436,19 @@ const langueUrl = new URLSearchParams(window.location.search).get("lang");
 setLanguage(langueUrl === "fr" || langueUrl === "en" ? langueUrl : "auto");
 window.neoInstaller.surEtat(nouvelEtat => {
 	mesurerDebit(nouvelEtat);
-	etat = nouvelEtat.phase === "annule" ? { phase: "pret" } : nouvelEtat;
+	if (nouvelEtat.phase === "annule") {
+		confirmationAnnulation = false;
+		annulationDemandee = false;
+		etat = { phase: "pret" };
+		rendre();
+		window.neoInstaller.fermer();
+		return;
+	}
+	if (nouvelEtat.phase === "erreur") {
+		confirmationAnnulation = false;
+		annulationDemandee = false;
+	}
+	etat = nouvelEtat;
 	rendre();
 });
 void initialiser();

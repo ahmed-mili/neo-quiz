@@ -307,3 +307,75 @@
 @media (prefers-reduced-motion: reduce) {
 	.nqi-loading-spinner { animation-duration: 1.8s; }
 }
+
+.nqi-cancel-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 40;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, .42);
+}
+
+.nqi-cancel-dialog {
+	width: 520px;
+	padding: 32px 32px 30px;
+	border-radius: 12px;
+	background: #1c2230;
+	box-shadow: 0 24px 70px rgba(0, 0, 0, .46);
+}
+
+.nqi-cancel-title {
+	margin: 0;
+	font-size: 24px;
+	line-height: 1.2;
+	font-weight: 500;
+	letter-spacing: -.3px;
+	color: #f7f9ff;
+}
+
+.nqi-cancel-copy {
+	margin: 10px 0 0;
+	font-size: 14px;
+	line-height: 1.45;
+	color: rgba(235, 240, 250, .88);
+}
+
+.nqi-cancel-actions {
+	margin-top: 54px;
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+}
+
+.nqi-cancel-no,
+.nqi-cancel-yes {
+	min-width: 108px;
+	height: 44px;
+	padding: 0 22px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.nqi-cancel-no {
+	border: 1px solid rgba(169, 188, 224, .42);
+	background: transparent;
+	color: #8eb5ff;
+}
+
+.nqi-cancel-yes {
+	border: 0;
+	background: #5b9dff;
+	color: #061224;
+}
+
+.nqi-cancel-no:hover,
+.nqi-cancel-no:focus-visible,
+.nqi-cancel-yes:hover,
+.nqi-cancel-yes:focus-visible {
+	filter: brightness(1.08);
+	outline: none;
+}

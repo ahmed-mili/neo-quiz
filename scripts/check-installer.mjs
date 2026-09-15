@@ -19,6 +19,9 @@ const racine = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const workflow = readFileSync(resolve(racine, ".github/workflows/release.yml"), "utf8");
 const siteEn = readFileSync(resolve(racine, "docs/index.html"), "utf8");
 const siteFr = readFileSync(resolve(racine, "docs/fr/index.html"), "utf8");
+const renduInstallateur = readFileSync(resolve(racine, "apps/windows/installer/renderer-reference.ts"), "utf8");
+const principalInstallateur = readFileSync(resolve(racine, "apps/windows/installer/main.ts"), "utf8");
+const travailleurInstallateur = readFileSync(resolve(racine, "apps/windows/installer/worker.ts"), "utf8");
 
 await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argumentsNsis, langueDepuisNom, langueDepuisZone }) => {
 	const r = makeReporter("Installateur — bootstrapper");
@@ -104,6 +107,34 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argume
 		workflow.includes("apps/windows/dist-installer-bootstrapper/Install-NeoQuiz-fr.exe"), true);
 	r.check("publication : le nom français est une copie du même exe",
 		workflow.includes("cp Install-NeoQuiz.exe Install-NeoQuiz-fr.exe"), true);
+
+	const debutPromotion = workflow.indexOf("- name: Verify app release assets and promote latest");
+	const debutLatestJson = workflow.indexOf("- name: Write latest.json from the release");
+	const blocPromotion = debutPromotion >= 0 && debutLatestJson > debutPromotion
+		? workflow.slice(debutPromotion, debutLatestJson)
+		: "";
+	r.check("publication : desktop devient latest seulement après les assets complets",
+		[
+			workflow.includes("make_latest: ${{ steps.version.outputs.product == 'app' }}"),
+			workflow.includes('make_latest: "true"'),
+			blocPromotion.includes('"Install-NeoQuiz.exe"'),
+			blocPromotion.includes('"Install-NeoQuiz-fr.exe"'),
+			blocPromotion.includes('"neo-quiz-setup-${VERSION}.exe"'),
+			blocPromotion.includes("sha256:"),
+			blocPromotion.includes("-f make_latest=true"),
+		],
+		[false, false, true, true, true, true, true]);
+
+	r.check("expérience : chargement immédiat, étape 3 directe et annulation partout",
+		[
+			principalInstallateur.includes('webContents.once("dom-ready"'),
+			renduInstallateur.includes('etat.phase === "elevation" || etat.phase === "telechargement"'),
+			renduInstallateur.includes('installer.cancelDialog.title'),
+			renduInstallateur.includes('annuler.disabled = annulationDemandee'),
+			principalInstallateur.includes('if (socketTravailleur) {'),
+			travailleurInstallateur.includes('if (commande.type === "annuler") annulation.abort();'),
+		],
+		[true, true, true, true, true, true]);
 
 	/* La langue voyage AVEC le fichier : par son nom d'abord, par le flux
 	   `Zone.Identifier` du navigateur ensuite. Un nom sans rapport ou un

@@ -10,11 +10,9 @@ name: Release Neo Quiz
 #     (`make_latest: true`), parce qu'electron-updater (fournisseur github,
 #     sans `allowPrerelease`) lit `/releases/latest` puis le `latest.yml` de
 #     CETTE release pour savoir s'il existe une mise à jour ;
-#   - `workflow_dispatch` RÉPÈTE sans publier, sur le produit choisi : mêmes
-#     jobs, mêmes builds, mais les fichiers sont déposés en artefacts de
-#     workflow et aucune release n'est créée. C'est ainsi qu'on éprouve cette
-#     chaîne sur un dépôt public sans laisser une release de test derrière
-#     soi.
+#   - `workflow_dispatch` RÉPÈTE par défaut sans publier, sur le produit choisi ;
+#     avec `publish: true`, il publie par la MÊME chaîne. Cela permet une
+#     automatisation sans recopier les jobs de build ni leur logique de signature.
 # La signature Authenticode de l'installeur Windows (SignPath) est optionnelle,
 # activée par la variable de dépôt `SIGNPATH_ORGANIZATION_ID` : tant qu'elle est
 # absente, `main` reste publiable non signé.
@@ -26,17 +24,22 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version à répéter (sans le v), écrite dans le fichier de version le temps du build"
+        description: "Version à construire (sans le v), écrite dans le fichier de version le temps du build"
         required: true
         default: "0.0.0-repetition"
       product:
-        description: "Produit à répéter"
+        description: "Produit à construire"
         required: true
         type: choice
         options:
           - app
           - plugin
         default: "app"
+      publish:
+        description: "Publier réellement la release demandée"
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   # Résout version / tag / produit une seule fois, et crée la release AVANT
@@ -95,16 +98,17 @@ jobs:
             echo "tag=$tag" >> "$GITHUB_OUTPUT"
           fi
 
-      # Sur tag seulement : la release existe avant que les jobs de build y
-      # attachent leurs fichiers. `make_latest` distingue les deux produits :
-      # l'application devient la release « latest » du dépôt, le greffon ne
-      # la touche jamais (voir l'en-tête).
+      # Sur tag, ou sur dispatch explicitement publiant, la release existe avant
+      # que les jobs de build y attachent leurs fichiers. `make_latest`
+      # distingue les deux produits : l'application devient la release
+      # « latest » du dépôt, le greffon ne la touche jamais.
       - name: Create Release
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ steps.version.outputs.tag }}"
           name: "${{ steps.version.outputs.tag }}"
+          target_commitish: ${{ github.sha }}
           # Pré-version dès que le tag porte un suffixe semver (v2.0.0-beta,
           # -rc.1, -alpha…) : c'est la définition même de semver, donc une
           # future v2.1.0 sans suffixe sortira en release normale sans qu'on
@@ -163,7 +167,7 @@ jobs:
           ls -lh release/
 
       - name: Upload plugin (répétition)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: neo-quiz-plugin
@@ -176,7 +180,7 @@ jobs:
       # est `true` : omis, une release du greffon redeviendrait « latest »
       # et electron-updater ne trouverait plus d'installeur.
       - name: Attach plugin to release
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ needs.prepare.outputs.tag }}"
@@ -267,12 +271,9 @@ jobs:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
           project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          # En répétition (workflow_dispatch) : le certificat de test,
-          # auto-signé, n'engage pas la réputation du dépôt. Sur un tag : le
-          # certificat SignPath Foundation, dont chaque demande exige
-          # l'approbation manuelle d'Ahmed dans le portail SignPath — d'où le
-          # délai d'attente d'une heure ci-dessous.
-          signing-policy-slug: ${{ github.event_name == 'workflow_dispatch' && 'test-signing' || 'release-signing' }}
+          # Une répétition reçoit le certificat de test ; une vraie publication,
+          # même déclenchée par workflow_dispatch, reçoit la politique release.
+          signing-policy-slug: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish != 'true' && 'test-signing' || 'release-signing' }}
           github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: 3600
@@ -296,6 +297,7 @@ jobs:
         shell: pwsh
         env:
           EVENEMENT: ${{ github.event_name }}
+          PUBLIER: ${{ github.event.inputs.publish }}
         run: |
           $nomExe = (Select-String -Path apps/windows/dist-installer/latest.yml -Pattern '^path:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
           $cheminExe = "apps/windows/dist-installer/$nomExe"
@@ -320,9 +322,9 @@ jobs:
           }
           Write-Host "publisherName d'app-update.yml : $(if ($publisherName) { $publisherName } else { '(absent)' })"
 
-          if ($env:EVENEMENT -ne 'workflow_dispatch') {
+          if ($env:EVENEMENT -ne 'workflow_dispatch' -or $env:PUBLIER -eq 'true') {
             # Certificat SignPath Foundation, approuvé par Windows : la
-            # signature doit être valide.
+            # signature doit être valide pour toute vraie publication.
             if ($sig.Status -ne 'Valid') {
               Write-Error "Signature invalide : $($sig.Status)"
               exit 1
@@ -336,7 +338,7 @@ jobs:
           } else {
             # Certificat de test (répétition), non approuvé par Windows :
             # on affiche seulement, sans exiger 'Valid'.
-            Write-Host "Répétition (workflow_dispatch) : signature affichée sans être exigée valide."
+            Write-Host "Répétition : signature affichée sans être exigée valide."
           }
 
       # Déplacé après les étapes SignPath : ce contrôle doit voir le
@@ -346,7 +348,7 @@ jobs:
         run: npm run check:package
 
       - name: Upload Windows package (répétition)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: neo-quiz-windows-setup
@@ -363,7 +365,7 @@ jobs:
       # bootstrapper le résout avec le tag et electron-updater le lit dans
       # `latest.yml`. Cela empêche le site de contourner le bootstrapper.
       - name: Attach Windows package to release
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ needs.prepare.outputs.tag }}"
@@ -409,7 +411,7 @@ jobs:
       - name: Package config and contents
         run: npm run check:package
       - name: Upload AppImage (répétition)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: neo-quiz-linux-appimage
@@ -427,7 +429,7 @@ jobs:
           cp apps/windows/dist-installer/neo-quiz-*.AppImage apps/windows/dist-installer/neo-quiz.AppImage
 
       - name: Attach AppImage to release
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "${{ needs.prepare.outputs.tag }}"
@@ -445,12 +447,12 @@ jobs:
   # heure et par adresse IP sans jeton : une promo derrière un même réseau
   # l'atteignait en quelques minutes et la page perdait ses versions. Ce job
   # tourne une fois les jobs du produit publié finis, écrit SEULEMENT le
-  # fichier du produit qui vient d'être tagué, et le pousse sur `main` (Pages
-  # se republie). Des jobs SKIPPED (`plugin` sur un tag d'app, ou l'inverse)
-  # sont normaux : un seul produit par tag.
+  # fichier du produit publié, et le pousse sur `main` (Pages se republie).
+  # Des jobs SKIPPED (`plugin` sur une app, ou l'inverse) sont normaux : un seul
+  # produit est construit par exécution.
   site:
     needs: [prepare, plugin, app-windows, app-linux]
-    if: ${{ !cancelled() && github.event_name != 'workflow_dispatch' && needs.prepare.result == 'success' && needs.plugin.result != 'failure' && needs['app-windows'].result != 'failure' && needs['app-linux'].result != 'failure' }}
+    if: ${{ !cancelled() && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true') && needs.prepare.result == 'success' && needs.plugin.result != 'failure' && needs['app-windows'].result != 'failure' && needs['app-linux'].result != 'failure' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

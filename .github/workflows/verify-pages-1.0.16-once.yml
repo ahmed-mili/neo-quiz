@@ -1,0 +1,49 @@
+name: Verify Pages 1.0.16 once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-pages-1.0.16-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify live GitHub Pages serves 1.0.16
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=false
+          for i in {1..60}; do
+            body=$(curl --fail --silent --show-error "https://ahmed-mili.github.io/neo-quiz/latest.json?nocache=$(date +%s%N)" || true)
+            if printf '%s' "$body" | grep -q '"tag_name":"desktop-v1.0.16"' \
+              && printf '%s' "$body" | grep -q '"name":"Install-NeoQuiz.exe"' \
+              && printf '%s' "$body" | grep -q '"name":"Install-NeoQuiz-fr.exe"'; then
+              curl --fail --silent --show-error "https://ahmed-mili.github.io/neo-quiz/?nocache=$(date +%s%N)" >/dev/null
+              ok=true
+              break
+            fi
+            sleep 10
+          done
+          test "$ok" = true
+
+      - name: Remove temporary publication helpers
+        shell: bash
+        run: |
+          rm -f .github/workflows/prepare-desktop-1.0.16-once.yml
+          rm -f .github/workflows/verify-pages-1.0.16-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: remove 1.0.16 publication helpers"
+          git push origin main

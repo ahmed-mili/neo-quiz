@@ -304,7 +304,9 @@ function rendreEtapeProgression(parent: HTMLElement): void {
 	if (detail && !annulationDemandee) ajouter(bloc, "p", "nqi-progress-detail", detail);
 
 	rendreCommentaires(etape, "nqi-progress-feedback");
-	rendreLegal(etape, "nqi-progress-legal");
+	/* Les mentions légales sont acceptées avant le clic sur Installer (étape 2).
+	   Comme Google Play Games, elles ne sont plus répétées pendant le
+	   téléchargement et l’installation : la progression reste visuellement nette. */
 
 	const actions = ajouter(etape, "div", "nqi-progress-actions");
 	const annuler = ajouter(actions, "button", "nqi-progress-cancel", t("installer.cancel"));

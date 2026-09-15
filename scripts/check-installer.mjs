@@ -137,6 +137,15 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, argume
 		],
 		[true, true, true, true, true, true]);
 
+	const debutProgression = renduInstallateur.indexOf("function rendreEtapeProgression");
+	const debutDemarrage = renduInstallateur.indexOf("function rendreDemarrage", debutProgression);
+	const blocProgression = debutProgression >= 0 && debutDemarrage > debutProgression
+		? renduInstallateur.slice(debutProgression, debutDemarrage)
+		: "";
+	r.check("expérience : mentions légales absentes à partir de l'étape 3",
+		[blocProgression.includes("rendreLegal("), renduInstallateur.includes("rendreLegal(panneau);")],
+		[false, true]);
+
 	r.check("démarrage : le bootstrapper évite les deux extractions coûteuses",
 		[
 			configBootstrapper.includes('compression: "store"'),

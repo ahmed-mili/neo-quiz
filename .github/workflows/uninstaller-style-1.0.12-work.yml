@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   implement-publish-verify:
-    if: github.event.head_commit.message == 'chore: prepare styled uninstaller 1.0.12'
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -41,7 +40,6 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
-
           p = Path('scripts/check-package.mjs')
           s = p.read_text(encoding='utf-8')
           pattern = re.compile(r'r\.check\("désinstallation : fenêtre d\x27attente avec spinner, sans barre de progression",[\s\S]*?\);\nr\.check\("author\.name est celui attendu par winget et SignPath"')
@@ -71,7 +69,6 @@ jobs:
               raise SystemExit('Bloc de contrôle désinstallation 1.0.11 introuvable ou ambigu')
           p.write_text(s2, encoding='utf-8')
           PY
-
           node scripts/set-version.mjs 1.0.12
           test "$(node -p "require('./apps/windows/package.json').version")" = "1.0.12"
           test "$(node -p "require('./apps/windows/package-lock.json').version")" = "1.0.12"

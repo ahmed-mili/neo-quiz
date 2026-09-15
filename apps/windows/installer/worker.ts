@@ -141,16 +141,48 @@ async function telecharger(
 	}
 }
 
-async function lancerNsis(installeur: string, dossier: string): Promise<void> {
+async function lancerNsis(
+	installeur: string,
+	dossier: string,
+	surProgression: (pourcent: number) => void,
+): Promise<void> {
 	await new Promise<void>((resolvePromise, reject) => {
 		const enfant = spawn(installeur, argumentsNsis(dossier), {
 			windowsHide: true,
 			stdio: "ignore",
 		});
-		enfant.once("error", () => reject(new ErreurTravailleur("installation")));
+		/* NSIS 26 est lancé en `/S` et n'expose aucune progression de
+		   décompression au processus parent. On ne fabrique donc pas un faux
+		   pourcentage de fichiers : la jauge indique seulement l'AVANCEMENT
+		   TEMPOREL de l'étape, borné à 96 %, puis passe à 100 % uniquement quand
+		   NSIS rend réellement un code 0. Ce qui se perd : ce pourcentage ne peut
+		   pas être interprété comme « x % des octets installés ». */
+		const debut = Date.now();
+		let dernier = -1;
+		const publier = (pourcent: number): void => {
+			const borne = Math.max(0, Math.min(100, Math.round(pourcent * 10) / 10));
+			if (borne <= dernier) return;
+			dernier = borne;
+			surProgression(borne);
+		};
+		publier(0);
+		const minuterie = setInterval(() => {
+			const ecoulees = Date.now() - debut;
+			publier(Math.min(96, 96 * (1 - Math.exp(-ecoulees / 5200))));
+		}, 120);
+		const terminer = (): void => clearInterval(minuterie);
+		enfant.once("error", () => {
+			terminer();
+			reject(new ErreurTravailleur("installation"));
+		});
 		enfant.once("exit", code => {
-			if (code === 0) resolvePromise();
-			else reject(new ErreurTravailleur("installation"));
+			terminer();
+			if (code === 0) {
+				publier(100);
+				resolvePromise();
+			} else {
+				reject(new ErreurTravailleur("installation"));
+			}
 		});
 	});
 }
@@ -229,8 +261,9 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 
 		envoyer(socket, { type: "verification" });
 		installationCommencee = true;
-		envoyer(socket, { type: "installation" });
-		await lancerNsis(cheminPaquet, charge.dossier);
+		await lancerNsis(cheminPaquet, charge.dossier, pourcent => {
+			envoyer(socket, { type: "installation", pourcent });
+		});
 
 		const executable = join(charge.dossier, "neo-quiz.exe");
 		try {

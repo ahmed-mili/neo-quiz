@@ -1,0 +1,215 @@
+name: Uninstaller bar 1.0.10
+
+on:
+  push:
+    paths:
+      - ".github/workflows/uninstaller-bar-1.0.10-work.yml"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  validate-windows-package:
+    if: github.event.head_commit.message == 'chore: start uninstaller bar 1.0.10'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm ci --prefix apps/windows
+
+      - name: Apply flat uninstaller bar and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/prepare-uninstaller-bar-1.0.10.py
+          actuelle=$(node -p "require('./apps/windows/package.json').version")
+          if [ "$actuelle" != "1.0.10" ]; then node scripts/set-version.mjs 1.0.10; fi
+          test "$(node -p "require('./apps/windows/package.json').version")" = "1.0.10"
+          test "$(node -p "require('./apps/windows/package-lock.json').version")" = "1.0.10"
+          test "$(node -p "require('./apps/windows/package-lock.json').packages[''].version")" = "1.0.10"
+
+      - name: Build real Windows package and validate it
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check:package
+          npm --prefix apps/windows run pack:win
+          npm run check:package
+          npm run check:installer
+
+  implement-publish-verify:
+    if: github.event.head_commit.message == 'chore: start uninstaller bar 1.0.10'
+    needs: validate-windows-package
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          npm ci
+          npm ci --prefix apps/windows
+
+      - name: Apply flat uninstaller bar
+        run: |
+          set -euo pipefail
+          python scripts/prepare-uninstaller-bar-1.0.10.py
+
+      - name: Set version with repository script
+        run: |
+          set -euo pipefail
+          actuelle=$(node -p "require('./apps/windows/package.json').version")
+          if [ "$actuelle" != "1.0.10" ]; then node scripts/set-version.mjs 1.0.10; fi
+          test "$(node -p "require('./apps/windows/package.json').version")" = "1.0.10"
+          test "$(node -p "require('./apps/windows/package-lock.json').version")" = "1.0.10"
+          test "$(node -p "require('./apps/windows/package-lock.json').packages[''].version")" = "1.0.10"
+
+      - name: Prove the uninstaller-bar control is discriminating
+        run: |
+          set -euo pipefail
+          cp apps/windows/installer/uninstaller.nsh /tmp/uninstaller.good
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('apps/windows/installer/uninstaller.nsh')
+          s = p.read_text(encoding='utf-8')
+          old = 'SetCtlColors $NeoQuizRemplissageProgression 000000 1A73E8'
+          if s.count(old) != 1:
+              raise SystemExit('couleur bleue unique introuvable')
+          p.write_text(s.replace(old, 'SetCtlColors $NeoQuizRemplissageProgression 000000 FF0000', 1), encoding='utf-8')
+          PY
+          set +e
+          npm run check:package > /tmp/discriminance-uninstaller-bar.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/discriminance-uninstaller-bar.log
+          test "$code" -ne 0
+          grep -F "ÉCHEC  désinstallation : barre plate fidèle avec progression et pourcentage" /tmp/discriminance-uninstaller-bar.log
+          cp /tmp/uninstaller.good apps/windows/installer/uninstaller.nsh
+          npm run check:package
+
+      - name: Run pre-publication checks
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release.yml", aliases: true); puts "release.yml YAML OK"'
+          npm run check:package
+          npm run check:installer
+          npm run check:updater
+          npm run check
+          npm --prefix apps/windows run typecheck
+          npm --prefix apps/windows run typecheck:electron
+          npm --prefix apps/windows run typecheck:installer
+
+      - name: Commit 1.0.10 to main and remove temporary helpers
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/uninstaller-bar-1.0.10-work.yml scripts/prepare-uninstaller-bar-1.0.10.py
+          git add \
+            apps/windows/installer/uninstaller.nsh \
+            scripts/check-package.mjs \
+            apps/windows/package.json \
+            apps/windows/package-lock.json
+          git diff --cached --quiet && { echo "::error::Aucun changement 1.0.10 à committer."; exit 1; }
+          git commit -m "fix(uninstaller): match flat progress bar in 1.0.10"
+          git push origin main
+          echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Publish through existing release workflow
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --ref main -f version=1.0.10 -f product=app -f publish=true
+          run_id=""
+          for tentative in $(seq 1 40); do
+            run_id=$(gh run list --workflow release.yml --event workflow_dispatch --limit 40 --json databaseId,headSha \
+              --jq ".[] | select(.headSha == \"${RELEASE_SHA}\") | .databaseId" | head -n 1)
+            [ -n "$run_id" ] && break
+            sleep 3
+          done
+          [ -n "$run_id" ] || { echo "::error::Run release.yml introuvable."; exit 1; }
+          echo "RELEASE_RUN_ID=$run_id" >> "$GITHUB_ENV"
+          echo "Release run: $run_id"
+
+      - name: Wait for final release CI result
+        run: |
+          set +e
+          gh run watch "$RELEASE_RUN_ID" --exit-status --interval 10
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            gh run view "$RELEASE_RUN_ID" --log-failed || true
+            exit "$code"
+          fi
+          test "$(gh run view "$RELEASE_RUN_ID" --json conclusion --jq '.conclusion')" = "success"
+
+      - name: Verify real 1.0.10 release assets and latest
+        run: |
+          set -euo pipefail
+          release_json=$(mktemp)
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/desktop-v1.0.10" > "$release_json"
+          for requis in \
+            "Install-NeoQuiz.exe" \
+            "Install-NeoQuiz-fr.exe" \
+            "neo-quiz-setup-1.0.10.exe" \
+            "neo-quiz-setup-1.0.10.exe.blockmap" \
+            "latest.yml" \
+            "neo-quiz-1.0.10.AppImage" \
+            "latest-linux.yml" \
+            "neo-quiz.AppImage"
+          do
+            jq -e --arg nom "$requis" '.assets[] | select(.name == $nom and .state == "uploaded" and .size > 0)' "$release_json" >/dev/null || {
+              echo "::error::Asset final absent ou vide: $requis"
+              exit 1
+            }
+          done
+          jq -e --arg nom "neo-quiz-setup-1.0.10.exe" '.assets[] | select(.name == $nom) | .digest | select(type == "string" and test("^sha256:[0-9a-fA-F]{64}$"))' "$release_json" >/dev/null
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')" = "desktop-v1.0.10"
+          version_main=$(gh api "repos/${GITHUB_REPOSITORY}/contents/apps/windows/package.json?ref=main" --jq '.content' | base64 -d | jq -r '.version')
+          test "$version_main" = "1.0.10"
+          latest_main=$(gh api "repos/${GITHUB_REPOSITORY}/contents/docs/latest.json?ref=main" --jq '.content' | base64 -d)
+          printf '%s' "$latest_main" | grep -F '"tag_name":"desktop-v1.0.10"'
+          printf '%s' "$latest_main" | grep -F '"name":"Install-NeoQuiz.exe"'
+          printf '%s' "$latest_main" | grep -F '"name":"Install-NeoQuiz-fr.exe"'
+
+      - name: Verify GitHub Pages serves 1.0.10
+        run: |
+          set -euo pipefail
+          ok=0
+          for tentative in $(seq 1 60); do
+            contenu=$(curl -fsSL "https://ahmed-mili.github.io/neo-quiz/latest.json?uninstaller-110=${GITHUB_RUN_ID}-${tentative}" || true)
+            if printf '%s' "$contenu" | grep -F '"tag_name":"desktop-v1.0.10"' >/dev/null \
+              && printf '%s' "$contenu" | grep -F '"name":"Install-NeoQuiz.exe"' >/dev/null \
+              && printf '%s' "$contenu" | grep -F '"name":"Install-NeoQuiz-fr.exe"' >/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          [ "$ok" -eq 1 ] || { echo "::error::GitHub Pages ne sert pas la 1.0.10 complète."; exit 1; }
+          echo "UNINSTALLER_BAR_1_0_10_READY"

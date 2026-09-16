@@ -75,7 +75,7 @@ function decoderMessage(ligne: string): MessageTravailleur | null {
 					? { type: "telechargement", recus: v.recus, total: v.total } : null;
 			case "verification": return { type: "verification" };
 			case "installation":
-				return typeof v.pourcent === "number" && Number.isFinite(v.pourcent)
+				return v.pourcent === null || (typeof v.pourcent === "number" && Number.isFinite(v.pourcent))
 					? { type: "installation", pourcent: v.pourcent } : null;
 			case "termine": return typeof v.executable === "string" ? { type: "termine", executable: v.executable } : null;
 			case "annule": return { type: "annule" };

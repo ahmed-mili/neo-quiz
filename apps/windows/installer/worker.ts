@@ -9,8 +9,8 @@
 ══════════════════════════════════════════════════════════ */
 
 import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { access, mkdtemp, readdir, rm } from "node:fs/promises";
+import { createWriteStream, type Dirent } from "node:fs";
+import { access, mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { get } from "node:https";
 import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -19,7 +19,7 @@ import { spawn } from "node:child_process";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { IncomingMessage } from "node:http";
-import { argumentsNsis, paquetInstallable, type PaquetInstallable } from "./noyau";
+import { argumentsNsis, paquetInstallable, progressionInstallation, type PaquetInstallable } from "./noyau";
 import type {
 	ChargeTravailleur,
 	CodeErreurInstallateur,
@@ -43,10 +43,14 @@ function paquetValide(value: unknown): value is PaquetInstallable {
 	if (!value || typeof value !== "object") return false;
 	const p = value as Record<string, unknown>;
 	if (typeof p.version !== "string" || typeof p.nom !== "string" || typeof p.url !== "string" ||
-		typeof p.taille !== "number" || typeof p.sha512 !== "string") return false;
-	const reconstruit = paquetInstallable({ version: p.version, nom: p.nom, taille: p.taille, sha512: p.sha512 });
+		typeof p.taille !== "number" || typeof p.sha512 !== "string" ||
+		!(p.tailleInstallee === null || typeof p.tailleInstallee === "number")) return false;
+	const reconstruit = paquetInstallable({
+		version: p.version, nom: p.nom, taille: p.taille, sha512: p.sha512, tailleInstallee: p.tailleInstallee,
+	});
 	return !!reconstruit && reconstruit.nom === p.nom && reconstruit.url === p.url &&
-		reconstruit.taille === p.taille && reconstruit.sha512 === p.sha512;
+		reconstruit.taille === p.taille && reconstruit.sha512 === p.sha512 &&
+		reconstruit.tailleInstallee === p.tailleInstallee;
 }
 
 function decoderCharge(encoded: string): ChargeTravailleur | null {
@@ -136,35 +140,72 @@ async function telecharger(
 	}
 }
 
+/** Somme récursive des tailles de fichiers d'un dossier. NSIS écrit pendant
+    qu'on lit : une entrée qui disparaît ou se verrouille entre le `readdir`
+    et le `stat` (`ENOENT`, `EPERM`, `EBUSY`…) est normale, jamais fatale — le
+    sondage ne doit jamais faire échouer l'installation, juste manquer un
+    octet qu'un prochain passage recomptera. */
+async function tailleDossier(dossier: string): Promise<number> {
+	let total = 0;
+	let entrees: Dirent[];
+	try {
+		entrees = await readdir(dossier, { withFileTypes: true });
+	} catch {
+		return total;
+	}
+	for (const entree of entrees) {
+		const chemin = join(dossier, entree.name);
+		try {
+			if (entree.isDirectory()) total += await tailleDossier(chemin);
+			else if (entree.isFile()) total += (await stat(chemin)).size;
+		} catch {
+			// Entrée disparue ou verrouillée pendant l'écriture NSIS : ignorée.
+		}
+	}
+	return total;
+}
+
 async function lancerNsis(
 	installeur: string,
 	dossier: string,
-	surProgression: (pourcent: number) => void,
+	tailleInstallee: number | null,
+	surProgression: (pourcent: number | null) => void,
 ): Promise<void> {
 	await new Promise<void>((resolvePromise, reject) => {
 		const enfant = spawn(installeur, argumentsNsis(dossier), {
 			windowsHide: true,
 			stdio: "ignore",
 		});
-		/* NSIS 26 est lancé en `/S` et n'expose aucune progression de
-		   décompression au processus parent. On ne fabrique donc pas un faux
-		   pourcentage de fichiers : la jauge indique seulement l'AVANCEMENT
-		   TEMPOREL de l'étape, borné à 96 %, puis passe à 100 % uniquement quand
-		   NSIS rend réellement un code 0. Ce qui se perd : ce pourcentage ne peut
-		   pas être interprété comme « x % des octets installés ». */
-		const debut = Date.now();
-		let dernier = -1;
-		const publier = (pourcent: number): void => {
-			const borne = Math.max(0, Math.min(100, Math.round(pourcent * 10) / 10));
-			if (borne <= dernier) return;
-			dernier = borne;
-			surProgression(borne);
+		/* Le pourcentage compte les octets RÉELLEMENT écrits dans le dossier
+		   d'installation, sondés périodiquement, contre le total publié par la
+		   CI (`tailleInstallee`). Une mise à jour commence par RÉTRÉCIR le
+		   dossier (NSIS retire l'ancienne version) : `progressionInstallation`
+		   (noyau pur) retient le minimum observé et ne quitte l'indéterminé
+		   qu'une fois la croissance nettement repartie. Sans `tailleInstallee`
+		   (release qui ne le publie pas encore, ou sondage qui échoue de bout
+		   en bout), la jauge reste indéterminée comme avant ce correctif. */
+		let minimum: number | null = null;
+		let dernier: number | null = null;
+		let sondageEnCours = false;
+		const publier = (pourcent: number | null): void => {
+			dernier = pourcent;
+			surProgression(pourcent);
 		};
-		publier(0);
-		const minuterie = setInterval(() => {
-			const ecoulees = Date.now() - debut;
-			publier(Math.min(96, 96 * (1 - Math.exp(-ecoulees / 5200))));
-		}, 120);
+		publier(null);
+		const sonder = async (): Promise<void> => {
+			if (sondageEnCours) return;
+			sondageEnCours = true;
+			try {
+				const courant = await tailleDossier(dossier);
+				if (minimum === null || courant < minimum) minimum = courant;
+				publier(progressionInstallation({ courant, minimum, total: tailleInstallee, dernier }));
+			} catch {
+				// Le sondage ne doit jamais faire échouer l'installation.
+			} finally {
+				sondageEnCours = false;
+			}
+		};
+		const minuterie = setInterval(() => { void sonder(); }, 400);
 		const terminer = (): void => clearInterval(minuterie);
 		enfant.once("error", () => {
 			terminer();
@@ -301,7 +342,7 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 			await terminerTube(socket);
 			return 0;
 		}
-		await lancerNsis(cheminPaquet, charge.dossier, pourcent => {
+		await lancerNsis(cheminPaquet, charge.dossier, charge.paquet.tailleInstallee, pourcent => {
 			envoyer(socket, { type: "installation", pourcent });
 		});
 		if (annulation.signal.aborted) {

@@ -23,10 +23,25 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+/** Remplace `sha512:`/`size:` en gardant tout le reste de `latest.yml`
+    IDENTIQUE (indentation, ordre des clés, et toute autre clé comme
+    `installedSize`) : une regex par ligne ciblée, jamais une réécriture
+    complète du YAML. Exportée pour que `check:package` la charge et prouve,
+    sans écrire de fichier, que `installedSize` traverse la signature intacte. */
+export function reecrireLatestYml(latestBrut, { sha512, size }) {
+	return latestBrut
+		.replace(/^(\s*sha512:\s*).+$/gm, `$1${sha512}`)
+		.replace(/^(\s*size:\s*).+$/gm, `$1${size}`);
+}
+
 const racine = fileURLToPath(new URL("..", import.meta.url));
 const distInstaller = `${racine}apps/windows/dist-installer/`;
 const latestPath = `${distInstaller}latest.yml`;
 
+/* Le corps CLI ne s'exécute que sur `node scripts/update-info-after-signing.mjs`,
+   jamais sur un `import` — `check:package` importe `reecrireLatestYml` seule,
+   sans que ça touche un fichier ni ne lise `process.argv` d'un autre script. */
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 if (!existsSync(latestPath)) {
 	console.error(`latest.yml introuvable : ${latestPath}`);
 	process.exitCode = 1;
@@ -63,12 +78,7 @@ if (!existsSync(latestPath)) {
 		// modifierait l'exe déjà signé).
 		const { size, sha512 } = await buildBlockMap(cheminExe, "gzip", cheminBlockmap);
 
-		// Remplace chaque `sha512:` et `size:` en gardant le format
-		// d'electron-builder à l'identique (indentation, ordre des clés) :
-		// une regex par ligne, jamais une réécriture complète du YAML.
-		const latestMisAJour = latestBrut
-			.replace(/^(\s*sha512:\s*).+$/gm, `$1${sha512}`)
-			.replace(/^(\s*size:\s*).+$/gm, `$1${size}`);
+		const latestMisAJour = reecrireLatestYml(latestBrut, { sha512, size });
 		writeFileSync(latestPath, latestMisAJour, "utf8");
 
 		console.log(`Exe : ${cheminExe}`);
@@ -78,4 +88,5 @@ if (!existsSync(latestPath)) {
 		console.log(`taille après : ${size}`);
 		console.log(`latest.yml et ${cheminBlockmap} mis à jour.`);
 	}
+}
 }

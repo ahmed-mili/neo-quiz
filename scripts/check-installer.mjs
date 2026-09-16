@@ -37,7 +37,7 @@ const renduApplication = readFileSync(resolve(racine, "apps/windows/src/main.ts"
 
 const noyauInstallateur = readFileSync(resolve(racine, "apps/windows/installer/noyau.ts"), "utf8");
 
-await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquetInstallable, argumentsNsis, langueDepuisLocale, urlLegale, URL_LATEST_YML }) => {
+await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquetInstallable, progressionInstallation, argumentsNsis, langueDepuisLocale, urlLegale, URL_LATEST_YML }) => {
 	const r = makeReporter("Installateur — bootstrapper");
 	/* Un PNG peut avoir un en-tête valide tout en affichant des pixels abîmés.
 	   Décompresser les IDAT vérifie aussi leur somme de contrôle zlib. */
@@ -101,6 +101,7 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 		url: `https://github.com/ahmed-mili/neo-quiz/releases/download/desktop-v${version}/${nom}`,
 		taille,
 		sha512,
+		tailleInstallee: null,
 	};
 
 	r.check("release : latest.yml donne le NSIS versionné, sa taille et son sha512",
@@ -128,6 +129,54 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 	r.check("travailleur : une taille non entière ou nulle est refusée",
 		[paquetInstallable({ version, nom, taille: 0, sha512 }), paquetInstallable({ version, nom, taille: 1.5, sha512 })],
 		[null, null]);
+
+	/* Le pourcentage d'installation compte les octets écrits contre
+	   `installedSize`, publié par la CI sous une clé racine facultative de
+	   `latest.yml`. Absente, non entière, nulle, négative, ou plus petite que
+	   le setup lui-même → `tailleInstallee: null`, jamais une valeur devinée. */
+	const tailleInstallee = 400_000_000;
+	const latestYmlAvecTailleInstallee = `${latestYml}installedSize: ${tailleInstallee}\n`;
+	r.check("installedSize : lue et validée quand elle est publiée",
+		resoudrePaquet(latestYmlAvecTailleInstallee)?.tailleInstallee, tailleInstallee);
+	r.check("installedSize : absente sur les releases qui ne la publient pas encore (1.0.0, 1.0.1)",
+		resoudrePaquet(latestYml)?.tailleInstallee, null);
+	r.check("installedSize : non entière, nulle, négative ou plus petite que le setup → null",
+		[
+			paquetInstallable({ version, nom, taille, sha512, tailleInstallee: 12.5 })?.tailleInstallee,
+			paquetInstallable({ version, nom, taille, sha512, tailleInstallee: 0 })?.tailleInstallee,
+			paquetInstallable({ version, nom, taille, sha512, tailleInstallee: -1 })?.tailleInstallee,
+			paquetInstallable({ version, nom, taille, sha512, tailleInstallee: taille })?.tailleInstallee,
+			paquetInstallable({ version, nom, taille, sha512, tailleInstallee: taille - 1 })?.tailleInstallee,
+		],
+		[null, null, null, null, null]);
+	r.check("installedSize : un logiciel installé plus gros que son setup est accepté",
+		paquetInstallable({ version, nom, taille, sha512, tailleInstallee: taille + 1 })?.tailleInstallee,
+		taille + 1);
+
+	/* `progressionInstallation` (noyau pur) : le calcul qui remplace la
+	   minuterie exponentielle. Chaque cas est DISCRIMINANT — casser la règle
+	   qu'il éprouve doit le faire rougir. */
+	const total = 1_000_000_000;
+	r.check("progression : sans total publié, toujours indéterminée",
+		progressionInstallation({ courant: 999_999_999, minimum: 0, total: null, dernier: 50 }), null);
+	r.check("progression : avant que la croissance dépasse le seuil, indéterminée",
+		progressionInstallation({ courant: 1_000_000, minimum: 0, total, dernier: null }), null);
+	r.check("progression : une fois le seuil dépassé, le ratio depuis le minimum",
+		progressionInstallation({ courant: 100_000_000, minimum: 0, total, dernier: null }), 10);
+	r.check("progression : plafonnée à 99, jamais republiée à 100 avant le code de sortie 0",
+		progressionInstallation({ courant: 999_999_999, minimum: 0, total, dernier: 90 }), 99);
+	r.check("progression : une mise à jour qui rétrécit d'abord ne publie rien tant que la croissance n'a pas repris",
+		[
+			progressionInstallation({ courant: 500_000_000, minimum: 500_000_000, total, dernier: null }),
+			progressionInstallation({ courant: 495_000_000, minimum: 495_000_000, total, dernier: null }),
+			progressionInstallation({ courant: 500_000_000, minimum: 495_000_000, total, dernier: null }),
+		],
+		[null, null, null]);
+	r.check("progression : la croissance qui reprend franchement après un minimum sort de l'indéterminé",
+		progressionInstallation({ courant: 495_000_000 + 9 * 1024 * 1024, minimum: 495_000_000, total, dernier: null }) !== null,
+		true);
+	r.check("progression : jamais de valeur republiée en dessous de la précédente",
+		progressionInstallation({ courant: 100_000_000, minimum: 0, total, dernier: 42 }), 42);
 
 	const dossier = "C:\\Program Files\\Neo Quiz";
 	const args = argumentsNsis(dossier);

@@ -314,16 +314,17 @@ function rendreEtapeProgression(parent: HTMLElement): void {
 		pourcent = null;
 		statut = t("installer.status.verifying");
 	} else if (etat.phase === "installation") {
-		/* NSIS silencieux ne donne pas sa progression réelle au bootstrapper.
-		   Les valeurs intermédiaires historiques étaient donc seulement une
-		   estimation temporelle : on ne les affiche plus. Le 100 % envoyé après
-		   le vrai code de sortie 0 reste, lui, une information exacte. */
-		if (etat.pourcent >= 100) {
-			pourcent = 100;
-			statut = t("installer.status.installingProgress", { percent: formatPourcent(100) });
-		} else {
+		/* Le pourcentage compte désormais les octets réellement écrits dans le
+		   dossier d'installation, comme celui du téléchargement — `null` tant
+		   que le principal ne sait pas encore le calculer (release sans taille
+		   installée publiée, mise à jour qui n'a pas fini de rétrécir). Le
+		   100 % envoyé après le vrai code de sortie 0 de NSIS reste exact. */
+		if (etat.pourcent === null) {
 			pourcent = null;
 			statut = t("installer.status.installing");
+		} else {
+			pourcent = etat.pourcent;
+			statut = t("installer.status.installingProgress", { percent: formatPourcent(etat.pourcent) });
 		}
 	}
 
@@ -474,7 +475,7 @@ const langueUrl = new URLSearchParams(window.location.search).get("lang");
 setLanguage(langueUrl === "fr" || langueUrl === "en" ? langueUrl : "auto");
 window.neoInstaller.surEtat(nouvelEtat => {
 	mesurerDebit(nouvelEtat);
-	if (nouvelEtat.phase === "installation" && nouvelEtat.pourcent >= 100) {
+	if (nouvelEtat.phase === "installation" && nouvelEtat.pourcent !== null && nouvelEtat.pourcent >= 100) {
 		/* Le worker n'envoie 100 qu'après un vrai code de sortie 0. Le garder
 		   visible quelques centaines de millisecondes évite que « demarrage »
 		   remplace le DOM avant même que Chromium ait peint la frame à 100 %. */

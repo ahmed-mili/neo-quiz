@@ -24,6 +24,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readFile } from "node:fs/promises";
 import { makeReporter } from "./lib/load-src.mjs";
+import { reecrireLatestYml } from "./update-info-after-signing.mjs";
 
 /* `signtoolOptions.publisherName` n'est pas encore posé : le CN du
    certificat ne se lit que dans le journal CI, sur le premier exe signé par
@@ -97,6 +98,18 @@ r.check("publisherName n'est posé qu'une fois le CN du certificat connu",
    `app-update.yml` — sans elle, electron-updater n'a aucun flux à lire et
    se tait. Le dépôt est FIXE : un rendu ne choisit jamais d'où vient une
    mise à jour. */
+/* La clé `installedSize` du pourcentage d'installation (`apps/windows/
+   installer/noyau.ts`, `progressionInstallation`) doit traverser la
+   signature INTACTE : `reecrireLatestYml` ne cible que les lignes
+   `sha512:`/`size:`, jamais `installedSize:`. */
+r.check("la réécriture après signature préserve installedSize",
+	reecrireLatestYml(
+		["version: 1.0.2", "files:", "  - url: a.exe", "    sha512: AAA", "    size: 10", "path: a.exe",
+			"sha512: AAA", "installedSize: 314159265", "releaseDate: 'x'", ""].join("\n"),
+		{ sha512: "BBB", size: "20" },
+	),
+	["version: 1.0.2", "files:", "  - url: a.exe", "    sha512: BBB", "    size: 20", "path: a.exe",
+		"sha512: BBB", "installedSize: 314159265", "releaseDate: 'x'", ""].join("\n"));
 r.check("publish vise les releases GitHub du dépôt",
 	[config.publish?.provider, config.publish?.owner, config.publish?.repo],
 	["github", "ahmed-mili", "neo-quiz"]);
@@ -136,6 +149,30 @@ if (existsSync(asar)) {
 	p.check("latest.yml porte la version de l'application",
 		existsSync(latest) ? /^version:\s*(.+)$/m.exec(readFileSync(latest, "utf8"))?.[1]?.trim() : null,
 		application.version);
+	/* `installedSize` alimente le pourcentage d'installation du bootstrapper
+	   (`apps/windows/installer/noyau.ts`, `progressionInstallation`) : sans
+	   elle, il reste indéterminé. `scripts/write-installed-size.mjs` doit
+	   l'avoir écrite dans le MÊME `pack:win` que celui qui a produit
+	   `win-unpacked` — une tolérance de ±2 % couvre le léger écart entre le
+	   dossier mesuré et le fichier `latest.yml` généré au même instant. */
+	const latestYmlBrut = existsSync(latest) ? readFileSync(latest, "utf8") : "";
+	const installedSizePubliee = Number(/^installedSize:\s*(.+)$/m.exec(latestYmlBrut)?.[1]?.trim());
+	p.check("latest.yml porte installedSize", Number.isInteger(installedSizePubliee) && installedSizePubliee > 0, true);
+	const dossierWinUnpacked = `${appWindows}dist-installer/win-unpacked`;
+	if (existsSync(dossierWinUnpacked)) {
+		const tailleReelleWinUnpacked = await (async function tailleDossier(dossier) {
+			const { readdir, stat } = await import("node:fs/promises");
+			let total = 0;
+			for (const entree of await readdir(dossier, { withFileTypes: true })) {
+				const chemin = `${dossier}/${entree.name}`;
+				if (entree.isDirectory()) total += await tailleDossier(chemin);
+				else if (entree.isFile()) total += (await stat(chemin)).size;
+			}
+			return total;
+		})(dossierWinUnpacked);
+		const ecart = Math.abs(installedSizePubliee - tailleReelleWinUnpacked) / tailleReelleWinUnpacked;
+		p.check("installedSize correspond au vrai win-unpacked (±2 %)", ecart <= 0.02, true);
+	}
 	/* Le contrôle qui rougit si l'exe a été remplacé (par ex. par sa version
 	   signée) sans repasser par `scripts/update-info-after-signing.mjs` :
 	   `latest.yml` et le blockmap décriraient alors un fichier qui n'existe

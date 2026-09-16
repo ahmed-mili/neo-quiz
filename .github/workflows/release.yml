@@ -247,6 +247,12 @@ jobs:
         run: npm run pack:win
         working-directory: apps/windows
 
+      # Le pourcentage d'installation du bootstrapper compte les octets écrits
+      # dans le dossier d'installation contre CETTE taille : `win-unpacked`
+      # existe encore, avant que SignPath ne remplace l'exe non signé.
+      - name: Write installedSize into latest.yml
+        run: node scripts/write-installed-size.mjs
+
       # Le bootstrapper est le SEUL exécutable que le site remet directement
       # à l'utilisateur. Le NSIS versionné reste publié, mais comme moteur
       # silencieux téléchargé par le bootstrapper et comme paquet de mise à

@@ -35,6 +35,13 @@ export interface PaquetInstallable {
 	/** Base64, tel qu'electron-builder l'écrit — et tel que `check:package`
 	    le compare à l'exe réel avant chaque publication. */
 	sha512: string;
+	/** Poids du logiciel une fois installé, publié par la CI sous la clé
+	    racine `installedSize` de `latest.yml` (somme du dossier `win-unpacked`
+	    qu'elle vient de construire). `null` pour toute release qui ne la porte
+	    pas encore (1.0.0, 1.0.1) ou dont la valeur est invalide : le
+	    pourcentage d'installation retombe alors sur une barre indéterminée,
+	    jamais sur une valeur devinée. */
+	tailleInstallee: number | null;
 }
 
 /** Candidat à valider : ce qu'on a lu d'un `latest.yml`, ou ce que le
@@ -44,6 +51,10 @@ export interface CandidatPaquet {
 	nom: string;
 	taille: number;
 	sha512: string;
+	/** Non encore validée : `paquetInstallable` applique la même sévérité que
+	    les autres champs (entier, positif, plus grand que le setup) et
+	    retombe sur `null` plutôt que de refuser tout le paquet. */
+	tailleInstallee?: number | null;
 }
 
 /** Une version publiée, sans suffixe : `releases/latest` ne sert jamais une
@@ -59,17 +70,27 @@ const SHA512_BASE64 = /^[A-Za-z0-9+/]{86}==$/;
     point d'entrée. L'URL est CONSTRUITE depuis la version, jamais lue : le
     fichier ne peut pas rediriger le téléchargement hors du dépôt. */
 export function paquetInstallable(candidat: CandidatPaquet): PaquetInstallable | null {
-	const { version, nom, taille, sha512 } = candidat;
+	const { version, nom, taille, sha512, tailleInstallee } = candidat;
 	if (!VERSION_PUBLIEE.test(version)) return null;
 	if (nom !== `neo-quiz-setup-${version}.exe`) return null;
 	if (!Number.isInteger(taille) || taille <= 0) return null;
 	if (!SHA512_BASE64.test(sha512)) return null;
+	/* Un logiciel installé pèse toujours plus que son installeur compressé :
+	   une valeur qui ne respecte pas ça (absente, non entière, nulle,
+	   négative, ou plus petite que `taille`) n'est pas une ERREUR de paquet,
+	   c'est simplement une release sans cette information — `null`, jamais
+	   une exception qui invaliderait tout le paquet. */
+	const tailleInstalleeValidee =
+		Number.isInteger(tailleInstallee) && (tailleInstallee as number) > taille
+			? (tailleInstallee as number)
+			: null;
 	return {
 		version,
 		nom,
 		url: `${DEPOT_RELEASES}/download/desktop-v${version}/${nom}`,
 		taille,
 		sha512,
+		tailleInstallee: tailleInstalleeValidee,
 	};
 }
 
@@ -110,7 +131,42 @@ export function resoudrePaquet(latestYml: string): PaquetInstallable | null {
 	const entree = fichiers.find(f => f.get("url") === nom);
 	if (!entree || entree.get("sha512") !== sha512) return null;
 	const taille = Number(entree.get("size"));
-	return paquetInstallable({ version, nom, taille, sha512 });
+	/* Clé racine facultative, ignorée d'electron-updater comme de tout lecteur
+	   qui ne la connaît pas : absente sur les releases publiées avant elle. */
+	const installedSize = racine.get("installedSize");
+	const tailleInstallee = installedSize === undefined ? null : Number(installedSize);
+	return paquetInstallable({ version, nom, taille, sha512, tailleInstallee });
+}
+
+/** Le seuil de croissance qui distingue une VRAIE reprise (une mise à jour
+    a fini de retirer l'ancienne version) d'un simple sursaut d'écriture NSIS. */
+const SEUIL_CROISSANCE_OCTETS = 8 * 1024 * 1024;
+
+/** Le pourcentage d'installation, comme fonction PURE des octets observés.
+    Étant donné le minimum jamais vu (une mise à jour commence par RÉTRÉCIR
+    le dossier, le temps que NSIS retire l'ancienne version), le courant, le
+    total publié et la dernière valeur émise :
+    - `total` absent → `null` pendant toute l'étape (repli sans régression) ;
+    - tant que la croissance depuis le minimum ne dépasse pas le seuil,
+      `dernier` est repropagé tel quel (donc `null` avant toute reprise) ;
+    - une fois le seuil dépassé, `(courant - minimum) / (total - minimum)`,
+      borné à [0, 99] ;
+    - jamais de valeur republiée en dessous de `dernier` : la jauge ne recule
+      jamais, quelle que soit la fluctuation du sondage suivant. */
+export function progressionInstallation(e: {
+	courant: number;
+	minimum: number;
+	total: number | null;
+	dernier: number | null;
+}): number | null {
+	const { courant, minimum, total, dernier } = e;
+	if (total === null) return null;
+	const denominateur = total - minimum;
+	const croissance = courant - minimum;
+	if (denominateur <= 0 || croissance < SEUIL_CROISSANCE_OCTETS) return dernier;
+	const brut = (croissance / denominateur) * 100;
+	const borne = Math.max(0, Math.min(99, brut));
+	return dernier !== null && borne < dernier ? dernier : borne;
 }
 
 /** Arguments de l'installeur assisté d'electron-builder en mode silencieux.

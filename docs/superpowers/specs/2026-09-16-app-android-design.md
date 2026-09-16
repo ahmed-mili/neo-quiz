@@ -8,6 +8,12 @@ génération et l'édition » — est levé depuis le 13 septembre.
 Ce document fige les décisions de pile et de périmètre. Il ne contient pas de
 plan d'implémentation : chacun des cinq sous-projets aura le sien.
 
+> [!ATTENTION] CE DOCUMENT EST CORRIGÉ PAR SA §2bis
+> Écrit tôt dans la soirée du 2026-09-16, il conclut « tout en web via
+> Capacitor ». **Cette conclusion est abandonnée le soir même**, après une
+> recherche qui manquait. Lire la §2bis avant le reste : le périmètre et
+> l'accès aux fichiers restent valables, la pile change.
+
 ## 1. Le périmètre, décidé
 
 **L'application Android fait tout** : réviser, notifier, créer, éditer, et
@@ -75,6 +81,38 @@ sur exactement ce risque : pendant toute la migration Tauri → Electron,
 `src/` n'a pas bougé d'une ligne. Si Capacitor devenait un problème, l'hôte
 Android est une fine couche TypeScript au-dessus de ses plugins ; on la
 réécrit sans toucher aux 31 290 lignes partagées.
+
+
+## 2bis. La pile, CORRIGÉE le 2026-09-16 au soir
+
+**Coquille Kotlin native + Jetpack Compose, et une WebView pour les deux seuls
+écrans qui manipulent des maths : le lecteur de quiz ET l'éditeur.**
+
+Ce que la §2 avait raté : elle posait le choix comme binaire — tout natif ou
+tout web — alors que la WebView peut être **cantonnée**. Les trois paris du
+natif intégral restent vrais, mais ils ne portent que sur les écrans
+mathématiques. Pour tout le reste — listes, navigation, réglages,
+notifications, Storage Access Framework — rien n'oblige à la WebView, et c'est
+là que le natif se sent.
+
+Ce qui a manqué à la §2, et qui a été relevé depuis : **aucun éditeur de
+formules n'existe en Compose**. `vkochenkov/EquationDisplayer` (17 étoiles,
+dernier commit 2024-06-23) et `Abdo-21/CExpr` (10 étoiles, 2024-10-14) sont
+abandonnés ; `mohamedrejeb/compose-rich-editor` (1 853 étoiles, actif) fait du
+texte riche et pas de maths. MathLive reste donc obligatoire — mais dans DEUX
+écrans, pas dans toute l'application.
+
+C'est l'architecture d'AnkiDroid, notre jumeau fonctionnel (Kotlin dominant,
+70 fichiers touchant `WebView`, HTML pour les cartes), élargie à l'éditeur.
+
+**Le reste de ce document tient** : le périmètre (§1), le Storage Access
+Framework (§3), le découpage en cinq sous-projets (§4), et le contrat d'hôte
+comme assurance (§2, dernier paragraphe). Seule la §5 change de forme : la
+coquille est Gradle et Kotlin, pas Capacitor, et l'hôte Android parle à la
+WebView par un pont typé, sur le modèle de `apps/windows/electron/pont.ts`.
+
+Le classement des piles Android, avec les citations et leurs sources, vit dans
+le vault : `Projets/Piles Android.md`.
 
 ## 3. Les fichiers, décidé
 

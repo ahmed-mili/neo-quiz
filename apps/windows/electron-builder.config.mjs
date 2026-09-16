@@ -50,6 +50,12 @@ export default async function () {
 			   — la CI l'a refusé le 2026-09-16. Les AppImage n'en demandaient
 			   aucune, d'où son absence jusqu'ici. */
 			homepage: "https://ahmed-mili.github.io/neo-quiz/",
+			/* Ces deux-là ne bloquent AUCUN build — c'est pour ça qu'elles
+			   manquaient — mais elles se lisent dans `apt show neo-quiz` : sans
+			   elles le control file du 1.0.7 portait « Description: » vide et
+			   « License: unknown », alors que le dépôt est MIT. */
+			description: "Play interactive quizzes with spaced repetition, written as quiz-blocks in your notes.",
+			license: "MIT",
 		},
 		directories: {
 			// `output` evite que l'installeur atterrisse dans `dist/`, deja pris
@@ -136,6 +142,43 @@ export default async function () {
 			   l'adresse `noreply` de GitHub qui tient ce rôle, jamais une
 			   adresse personnelle. */
 			maintainer: "Ahmed Mili <ahmed-mili@users.noreply.github.com>",
+			/* La ligne courte de `apt show`, au-dessus de la description. */
+			synopsis: "Interactive quizzes with spaced repetition",
+		},
+		/* ─────────── le paquet Debian ───────────
+		   Sibling de `linux`, et non une clé dedans : c'est ainsi
+		   qu'electron-builder nomme les options propres à la cible `deb`. */
+		deb: {
+			/* LES DÉPENDANCES, ÉCRITES EN ALTERNATIVES. Les valeurs par défaut
+			   d'electron-builder (`libgtk-3-0`, `libatspi2.0-0`, `libnotify4`…)
+			   sont ANTÉRIEURES à la transition `t64` de Debian, qui a renommé
+			   plusieurs de ces paquets en `…t64`. Kali suit Debian testing et
+			   a donc les noms neufs. Savoir si les paquets renommés déclarent
+			   encore l'ancien nom en `Provides` demanderait une machine Debian
+			   récente ; la forme `ancien | nouveau` est CORRECTE dans les deux
+			   cas — une alternative qui n'existe pas dans l'archive n'est
+			   simplement jamais choisie, elle ne fait pas échouer le paquet.
+			   Les trois autres (`libnss3`, `libxtst6`, `libuuid1`, `xdg-utils`)
+			   n'ont pas été renommées : elles restent telles quelles. */
+			depends: [
+				"libgtk-3-0 | libgtk-3-0t64",
+				"libnotify4 | libnotify4t64",
+				"libnss3",
+				"libxss1",
+				"libxtst6",
+				"xdg-utils",
+				"libatspi2.0-0 | libatspi2.0-0t64",
+				"libuuid1",
+				"libsecret-1-0 | libsecret-1-0t64",
+			],
+			/* AUCUN recommandé. Le défaut d'electron-builder est
+			   `libappindicator3-1`, retiré de Debian trixie : il ne servirait
+			   qu'à faire râler `apt` sur une dépendance introuvable. */
+			recommends: [],
+			/* `default` est la valeur qu'electron-builder pose faute de mieux ;
+			   `education` correspond à la catégorie déjà déclarée pour l'entrée
+			   `.desktop`. */
+			packageCategory: "education",
 		},
 		nsis: {
 			/* Le bootstrapper installe toujours dans Program Files avec /allusers.

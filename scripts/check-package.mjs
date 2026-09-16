@@ -79,6 +79,29 @@ r.check("le .deb a la page d'accueil et le mainteneur qu'il exige",
 /* Le champ Maintainer voyage dans chaque paquet public. */
 r.check("le mainteneur du .deb ne publie pas d'adresse personnelle",
 	/users\.noreply\.github\.com>$/.test(config.linux?.maintainer ?? ""), true);
+/* CE QUE `apt show neo-quiz` AFFICHE. Aucune de ces trois valeurs ne fait
+   échouer un build — c'est pour ça qu'elles manquaient toutes les trois dans
+   le .deb 1.0.7, dont le control file portait « Description: » vide et
+   « License: unknown ». Elles ne se voient qu'en lisant le paquet produit. */
+r.check("le .deb se présente : description, licence, résumé, catégorie",
+	[
+		(config.extraMetadata?.description ?? "").length > 20,
+		config.extraMetadata?.license,
+		(config.linux?.synopsis ?? "").length > 10,
+		config.deb?.packageCategory,
+	],
+	[true, "MIT", true, "education"]);
+/* LES DÉPENDANCES QUI DÉCIDENT SI LE PAQUET S'INSTALLE. Les défauts
+   d'electron-builder précèdent la transition `t64` de Debian ; sur une Debian
+   testing (Kali) les noms renommés pourraient ne plus résoudre. La forme
+   `ancien | nouveau` marche dans les deux cas. Et le recommandé par défaut,
+   `libappindicator3-1`, a été retiré de Debian trixie. */
+r.check("les dépendances renommées par la transition t64 ont leur alternative",
+	["libgtk-3-0", "libnotify4", "libatspi2.0-0", "libsecret-1-0"]
+		.filter(nom => !(config.deb?.depends ?? []).includes(`${nom} | ${nom}t64`)),
+	[]);
+r.check("le .deb ne recommande pas un paquet retiré de Debian",
+	(config.deb?.recommends ?? ["libappindicator3-1"]).length, 0);
 r.check("le nom des artefacts Linux porte l'architecture",
 	(config.linux?.artifactName ?? "").includes("${arch}"), true);
 r.check("la fenêtre Linux est associée à son entrée .desktop",

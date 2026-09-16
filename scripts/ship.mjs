@@ -22,7 +22,7 @@
  *   2. les vérifications (`runChecks`) — rien ne se commite avant qu'elles passent ;
  *   3. le commit du travail, quand il y en a — après confirmation de ce qui est balayé ;
  *   4. la montée de version de la cible choisie (`set-version.mjs`) ;
- *   5. le commit « Version X » et le tag `desktop-vX` (plugin : `vX`) ;
+ *   5. le commit « Version X » et le tag `desktop-vX` (plugin : `X` nu, sans préfixe) ;
  *   6. le push, atomique, de la branche ET de l'étiquette.
  *
  * Le push est la DERNIÈRE étape, et il est atomique. Tout ce qui casse avant
@@ -288,7 +288,7 @@ export function versionCommitArgs(version) {
 }
 
 export function tagArgs(version, target = "app") {
-	return ["tag", `${target === "plugin" ? "v" : "desktop-v"}${version}`];
+	return ["tag", `${target === "plugin" ? "" : "desktop-v"}${version}`];
 }
 
 export function pushArgs(version, target = "app") {

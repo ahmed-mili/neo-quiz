@@ -2,8 +2,12 @@ name: Release Neo Quiz
 
 # Deux PRODUITS INDÉPENDANTS, deux familles de tags, un seul flux de mise à
 # jour :
-#   - un tag `vX.Y.Z` PUBLIE le GREFFON (main.js, styles.css, manifest.json) —
-#     sa release est marquée `make_latest: false` : BRAT et Obsidian ne
+#   - un tag NU `X.Y.Z` (sans préfixe, ex. `1.0.0`) PUBLIE le GREFFON
+#     (main.js, styles.css, manifest.json) — c'est le numéro que lit
+#     `obsidianmd/obsidian-releases` pour la liste communautaire. Les anciens
+#     tags `vX.Y.Z` (avant la tâche 3 du chantier « greffon lecteur »)
+#     publient encore le greffon, pour ne pas casser une release en cours.
+#     Sa release est marquée `make_latest: false` : BRAT et Obsidian ne
 #     lisent jamais « latest », ils lisent `manifest.json` sur `main` ;
 #   - un tag `desktop-vX.Y.Z` PUBLIE L'APPLICATION (installeur Windows,
 #     AppImage) — sa release n'est promue « latest » qu'APRÈS validation des
@@ -23,6 +27,7 @@ on:
     tags:
       - 'v*'
       - 'desktop-v*'
+      - '[0-9]*'
   workflow_dispatch:
     inputs:
       version:
@@ -77,7 +82,10 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             produit="$PRODUIT_SAISI"
-            if [ "$produit" = "app" ]; then prefixe="desktop-v"; else prefixe="v"; fi
+            # Tag NU pour le greffon depuis la tâche 3 (chantier « greffon
+            # lecteur ») : pas de préfixe, `obsidianmd/obsidian-releases` lit
+            # le numéro tel quel.
+            if [ "$produit" = "app" ]; then prefixe="desktop-v"; else prefixe=""; fi
             echo "version=$VERSION_SAISIE" >> "$GITHUB_OUTPUT"
             echo "tag=$prefixe$VERSION_SAISIE" >> "$GITHUB_OUTPUT"
             echo "product=$produit" >> "$GITHUB_OUTPUT"
@@ -88,6 +96,16 @@ jobs:
                 echo "product=app" >> "$GITHUB_OUTPUT"
                 echo "version=${tag#desktop-v}" >> "$GITHUB_OUTPUT"
                 ;;
+              # Tag NU (« 1.0.0 »), la forme du greffon depuis la tâche 3.
+              # Avant v*) : un tag numérique ne commence jamais par une lettre,
+              # donc l'ordre n'a pas d'incidence, mais la même règle que
+              # `release.yml` en tête l'énonce dans cet ordre.
+              [0-9]*)
+                echo "product=plugin" >> "$GITHUB_OUTPUT"
+                echo "version=$tag" >> "$GITHUB_OUTPUT"
+                ;;
+              # Anciens tags du greffon (avant la tâche 3), gardés pour ne pas
+              # casser une release déjà en cours.
               v*)
                 echo "product=plugin" >> "$GITHUB_OUTPUT"
                 echo "version=${tag#v}" >> "$GITHUB_OUTPUT"

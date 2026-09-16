@@ -134,7 +134,7 @@ test("sans vault réel présent, seules les vérifications rapides tournent", ()
 	const { checks, skippedVaults } = checksToRun([]);
 	assert.deepEqual(
 		checks.map((c) => c.label),
-		["typecheck", "check:md", "check:export", "check:lesson"]
+		["typecheck", "check:md", "check:export"]
 	);
 	assert.equal(skippedVaults, true);
 });
@@ -143,7 +143,7 @@ test("un vault présent ajoute check:markers et audit-vaults, avec son chemin", 
 	const { checks, skippedVaults } = checksToRun(["C:/obsidian-vaults/Personal"]);
 	assert.deepEqual(
 		checks.map((c) => c.label),
-		["typecheck", "check:md", "check:export", "check:lesson", "check:markers", "audit-vaults"]
+		["typecheck", "check:md", "check:export", "check:markers", "audit-vaults"]
 	);
 	assert.equal(skippedVaults, false);
 	const auditVaults = checks.find((c) => c.label === "audit-vaults");
@@ -336,13 +336,13 @@ for (const args of [["--plugin", "minor", "Fix", "--watch"], ["minor", "Fix", "-
 	});
 }
 
-test("les étiquettes du plugin conservent leur famille vX", () => {
-	assert.deepEqual(tagArgs("2.6.2", "plugin"), ["tag", "v2.6.2"]);
-	assert.deepEqual(pushArgs("2.6.2", "plugin"), ["push", "--atomic", "origin", "main", "v2.6.2"]);
+test("les étiquettes du plugin sont NUES, sans préfixe", () => {
+	assert.deepEqual(tagArgs("2.6.2", "plugin"), ["tag", "2.6.2"]);
+	assert.deepEqual(pushArgs("2.6.2", "plugin"), ["push", "--atomic", "origin", "main", "2.6.2"]);
 });
 
 test("les conflits citent le tag et la commande de récupération de la bonne cible", () => {
 	assert.match(describeTagConflict({ local: true, remote: false }, "1.0.0"), /git tag -d desktop-v1\.0\.0/);
 	assert.match(describeTagConflict({ local: false, remote: true }, "1.0.0"), /desktop-v1\.0\.0/);
-	assert.match(describeTagConflict({ local: true, remote: false }, "2.6.1", "plugin"), /git tag -d v2\.6\.1/);
+	assert.match(describeTagConflict({ local: true, remote: false }, "2.6.1", "plugin"), /git tag -d 2\.6\.1/);
 });

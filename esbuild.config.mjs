@@ -49,7 +49,11 @@ function copyManifest() {
 
 async function bundleCSS() {
 	await esbuild.build({
-		entryPoints: ["src/assets/css/index.css"],
+		// Le greffon n'embarque plus dashboard/editor/ui-select/color-picker/
+		// effort-slider/settings-code : ce sont des styles du tableau de bord et
+		// de la page « Générer », partis dans l'application Windows (tâche 3 du
+		// chantier « greffon lecteur »). `index.css` reste l'entrée de l'app.
+		entryPoints: ["src/assets/css/plugin.css"],
 		outfile: "dist/styles.css",
 		bundle: true,
 		minify: false,		// Désactivé pour avoir du CSS lisible
@@ -61,7 +65,7 @@ async function bundleCSS() {
 
 	// Supprimer le commentaire d'entry point laissé par esbuild
 	let css = fs.readFileSync("dist/styles.css", "utf8");
-	css = css.replace(/\n\/\* src\/assets\/css\/index\.css \*\/\s*$/, "");
+	css = css.replace(/\n\/\* src\/assets\/css\/plugin\.css \*\/\s*$/, "");
 	fs.writeFileSync("dist/styles.css", css);
 	deployFileToVaults("dist/styles.css");
 	console.log("styles.css bundlé (tous les @import inlinés).");

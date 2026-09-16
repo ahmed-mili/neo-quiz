@@ -4,11 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Vue d'ensemble
 
-Plugin Obsidian qui transforme des blocs de code ` ```quiz-blocks ` (tableau JSON5)
-en quiz interactifs : rendu avec transitions, éditeur visuel, mode examen, génération
-IA. 100 % TypeScript strict (ESM). **Commentaires en français** ; **UI traduite**
-(anglais par défaut, cf. « Langue » ci-dessous) — le plugin vise la liste
-communautaire d'Obsidian.
+Plugin Obsidian LECTEUR qui joue des blocs de code ` ```quiz-blocks ` (tableau
+JSON5) en quiz interactifs : rendu avec transitions, mode examen, LaTeX,
+journal de révision partagé avec l'application Neo Quiz. Créer et éditer un
+quiz, générer par IA, vivent dans l'application (`apps/windows/`) depuis le
+chantier « greffon lecteur » (2026-09-13) — voir « Structure du dépôt » et
+« Architecture » plus bas. 100 % TypeScript strict (ESM). **Commentaires en
+français** ; **UI traduite** (anglais par défaut, cf. « Langue » ci-dessous) —
+le plugin vise la liste communautaire d'Obsidian.
 
 ## Langue (i18n)
 
@@ -46,21 +49,21 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   n'emploie les **extensions DOM** d'Obsidian (`createEl`, `empty`, `setText`…),
   qu'aucun `import` ne trahit — passer par `ajouter` de `src/dom.ts` ; **aucun
   fichier de `src/` n'importe depuis `apps/`** (le code partagé ne connaît pas ses
-  hôtes), sauf les fichiers nommés dans `EXCEPTIONS_APPS` — `src/dashboard.ts`,
-  la seule ; la liste est un CLIQUET comme
-  `RESTANTS` : une entrée qui n'importe plus rien d'`apps/` fait échouer le
-  contrôle au lieu de couvrir la violation suivante ; et **le rendu de l'app (`apps/windows/src/`) n'importe
+  hôtes), sauf les fichiers nommés dans `EXCEPTIONS_APPS` ; la liste est un CLIQUET
+  comme `RESTANTS` : une entrée qui n'importe plus rien d'`apps/` (ou de
+  `RESTANTS` qui n'importe plus Obsidian) fait échouer le contrôle au lieu de
+  couvrir la violation suivante ; et **le rendu de l'app (`apps/windows/src/`) n'importe
   jamais un module qui tire Node** — `node:*`, `chokidar`, `electron`, ni un
   module de `apps/windows/electron/` hors de `SANS_NODE` (`catalogue`,
   `ressources`, `pont`, eux-mêmes vérifiés purs). Vite EXTERNALISE `node:fs` avec un
   simple avertissement et `check:app` reste vert : sans cette assertion, un
   `import { readFile } from "node:fs"` dans le rendu ne rougissait nulle part, et
   `perimetre.ts` importé du rendu recréait côté Chromium l'accès disque total que
-  le pont existe pour retirer. Il annonce le nombre de fichiers encore liés
-  (**6** — la tranche 5 a libéré la page « Générer » et `hotkey-format.ts` ;
-  les deux derniers de `src/dashboard/` sont `ai-usage.ts` et `usage-modal.ts`,
-  l'ÉCRAN D'USAGE, qui reste au greffon par décision et non par reste). Dans la
-  CI : lancé à la main, ce serait la discipline et non le contrôle qui
+  le pont existe pour retirer. `RESTANTS` et `EXCEPTIONS_APPS` sont VIDES depuis
+  la tâche 2 du chantier « greffon lecteur » (2026-09-13) : plus aucun fichier de
+  `src/` n'importe Obsidian ni `apps/` — les deux listes restent en place, vides,
+  comme cliquets pour un retour en arrière, pas comme couverture d'un reste.
+  Dans la CI : lancé à la main, ce serait la discipline et non le contrôle qui
   tiendrait la frontière.
 - `npm run check:dashboard-dom` — **le cliquet ne suffit pas seul** : `check:host`
   ne protège un fichier de ses extensions DOM que TANT QU'il reste hors de
@@ -186,7 +189,10 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
     bumpe `apps/windows/package.json` (+ lockfile synchronisé), tag `desktop-vX.Y.Z`,
     release GitHub **latest**.
   - `git ship --plugin [major|minor|patch|X.Y.Z] "Message"` — le greffon,
-    bumpe `src/assets/manifest.json`, tag `vX.Y.Z`, release GitHub `make_latest: false`.
+    bumpe `src/assets/manifest.json`, tag NU `X.Y.Z` (sans préfixe depuis la
+    tâche 3 du chantier « greffon lecteur » — c'est le numéro que lit
+    `obsidianmd/obsidian-releases` ; les anciens tags `vX.Y.Z` restent acceptés
+    par `release.yml`), release GitHub `make_latest: false`.
 
   `release.yml` construit le seul produit désigné par la famille de tag et publie.
   (Pas `npm run release` : il pointe vers un fichier absent.)
@@ -204,17 +210,28 @@ Vérification d'un changement = `npm run check`, plus `check:md` / `check:export
   `C:\obsidian-vaults\*\.obsidian\plugins\quiz-blocks` déjà existant. Override par la
   variable d'env `VAULT_PLUGIN_DIR`. Si aucun vault n'est détecté, la sortie reste
   dans `dist/` — **pas de fallback `["."]`** (n'écrit jamais les artefacts dans le repo).
-- **CSS** : bundlé depuis `src/assets/css/index.css` (arbre de `@import`). Les fontes
-  MathLive (~300 Ko) sont inlinées en data-URI via le loader esbuild → pas de CDN.
+- **CSS** : bundlé depuis `src/assets/css/plugin.css` (arbre de `@import`), qui
+  n'importe PAS les styles du tableau de bord, de l'éditeur, ni des quatre
+  composants de la page « Générer » (`ui-select`, `color-picker`,
+  `effort-slider`, `settings-code`) — ces classes ne sont référencées ni par
+  `src/engine` ni par `apps/obsidian` (le greffon ne rend plus qu'un quiz).
+  `src/assets/css/index.css`, qui les importe tous, reste l'entrée de
+  l'application (`apps/windows` consomme `src/assets/css/` par chemin
+  relatif). Les fontes MathLive (~300 Ko) sont inlinées en data-URI via le
+  loader esbuild → pas de CDN.
 - **main.js** : format `cjs`, `target es2020`, `external: ["obsidian", "electron"]`.
 
 ## Boucle de dev (appliquer une modif dans Obsidian)
 
 `build` **déploie** `main.js` (« Reload without saving » ne suffit pas toujours) :
 - CSS → désactiver/réactiver le plugin.
-- Vue JS (dashboard, onglet d'un quiz) → refermer/rouvrir la vue.
+- Rendu d'un quiz (moteur) → refermer/rouvrir la note, ou basculer le mode
+  d'affichage.
 - Sûr → redémarrage complet d'Obsidian, ou recharger via le CLI Obsidian
   (`obsidian plugin:reload id=quiz-blocks`).
+
+Le tableau de bord, l'éditeur et la génération IA ne vivent plus dans
+Obsidian : leur boucle de dev est celle de l'application (`npm run app:dev`).
 
 ## Structure du dépôt : un code partagé, plusieurs hôtes
 
@@ -267,19 +284,21 @@ Vérification d'un changement = `npm run check`, plus `check:md` / `check:export
 ## Architecture (le point important)
 
 Point d'entrée du greffon : `apps/obsidian/main.ts` → `apps/obsidian/plugin.ts`
-(`InteractiveQuizPlugin extends Plugin`).
-`plugin.ts` porte le `SettingTab`, les settings persistés + leurs migrations, installe
-l'hôte (`installHost` en tête d'`onload`, `uninstallHost` en fin d'`onunload`), et
-enregistre : le processeur de bloc `quiz-blocks` (→ moteur), la vue dashboard, la vue
-onglet d'un quiz (`quiz-blocks-builder`).
+(`InteractiveQuizPlugin extends Plugin`). Réduit au LECTEUR depuis le chantier
+« greffon lecteur » (2026-09-13) : `plugin.ts` porte un `SettingTab` de deux
+réglages (langue, coloration), installe l'hôte (`installHost` en tête
+d'`onload`, `uninstallHost` en fin d'`onunload`), et enregistre le SEUL
+processeur de bloc `quiz-blocks` (→ moteur). Plus de vue dashboard, plus
+d'onglet `quiz-blocks-builder` : créer et éditer un quiz vivent dans
+l'application (voir plus bas).
 
-Les **deux sous-systèmes d'INTERFACE** suivent le **même pattern** : une factory
-`createXHandlers(ctx)` par module, et un **god-object `ctx` typé**, assemblé en
-plusieurs passes puis injecté dans toutes les factories (référence croisée). Le param
-d'appel externe est nommé `context`, le god-object interne `ctx` — jamais confondus
-(ni avec le `MarkdownPostProcessorContext` d'Obsidian).
-
-1. **Moteur de rendu** — `src/engine.ts` + `src/engine/*.ts` (17 modules).
+1. **Moteur de rendu** — `src/engine.ts` + `src/engine/*.ts` (17 modules), le
+   SEUL sous-système d'interface que le greffon embarque encore. Suit le
+   pattern `createXHandlers(ctx)` par module et un **god-object `ctx` typé**,
+   assemblé en plusieurs passes puis injecté dans toutes les factories
+   (référence croisée). Le param d'appel externe est nommé `context`, le
+   god-object interne `ctx` — jamais confondus (ni avec le
+   `MarkdownPostProcessorContext` d'Obsidian).
    `renderInteractiveQuiz(context)` construit le `ctx` (type `EngineCtx`, la plus
    grosse interface du projet), instancie les 17 factories, puis les greffe et
    **aplatit ~55 méthodes** sur `ctx` via `Object.assign`. Le type
@@ -292,19 +311,25 @@ d'appel externe est nommé `context`, le god-object interne `ctx` — jamais con
    - Le cycle de vie est lié au `MarkdownRenderChild` : `destroyQuiz()` en `onunload`
      retire listeners/observers/timers (sans ça, chaque re-render fuit une instance).
 
-2. **Dashboard** — `src/dashboard.ts` + `src/dashboard/*.ts`. `ItemView` 2 colonnes
-   (Accueil / Mes quiz / Détail / Générer). Ici le `ctx` (`DashboardCtx`) est **petit** :
-   les 5 handlers (`nav`, `home`, `quizzes`, `detail`, `ai`) sont greffés sur la **vue**
-   (`this`), pas sur `ctx`. `types/dashboard-ctx.ts` scinde donc `DashboardCtx` (le
-   littéral) et `DashboardView` (l'hôte `this`).
+2. **Dashboard** — `src/dashboard/*.ts`, le second sous-système d'interface, au
+   **même pattern** `createXHandlers(ctx)`, mais qui ne vit plus que dans
+   `apps/windows/` : `apps/windows/src/ui/dashboard-shell.ts` en est l'hôte
+   (remplace l'`ItemView` `src/dashboard.ts`, disparu à la tâche 1 du chantier
+   « greffon lecteur »). 2 colonnes (Accueil / Mes quiz / Détail / Générer). Le
+   `ctx` (`DashboardCtx`) est **petit** : les 5 handlers (`nav`, `home`,
+   `quizzes`, `detail`, `ai`) sont greffés sur la **vue** (`this`), pas sur
+   `ctx`. `types/dashboard-ctx.ts` scinde donc `DashboardCtx` (le littéral) et
+   `DashboardView` (l'hôte `this`).
 
 **La page « quiz » est UNIQUE** (`dashboard/detail.ts`, `createQuizPage(deps)`) :
 questions à gauche, question courante à droite, bouton « Editor » qui bascule
 consultation ⇄ édition **sur place**. Décrite par une `QuizPageSpec` (titre,
-`load()`, `save?()`, retour, bouton principal), elle sert **trois hôtes** : la vue
-détail du dashboard, la page « Générer » (brouillon sans note jusqu'à son
-enregistrement automatique, `QuizDraft.file === null`) et l'onglet
-`quiz-blocks-builder` (`src/editor.ts`).
+`load()`, `save?()`, retour, bouton principal), elle sert **deux hôtes**,
+tous deux dans l'application : la vue détail du dashboard et la page
+« Générer » (brouillon sans note jusqu'à son enregistrement automatique,
+`QuizDraft.file === null`). Le troisième hôte d'avant le chantier, l'onglet
+`quiz-blocks-builder` du greffon (`src/editor.ts`), est parti avec lui à la
+tâche 1.
 L'**éditeur en trois colonnes a été supprimé** le 2026-07-31 (« pas assez
 intuitif ») : il ne reste de `src/editor/` que ce que la page consomme —
 `editor-form.ts` (les champs par type, atteints via `dashboard/detail-form-bridge.ts`),

@@ -152,7 +152,7 @@ for (const args of [["--plugin", "patch"], ["patch", "--plugin"]]) {
 		assert.equal(result.status, 0, result.stderr);
 		assert.equal((await f.read("src/assets/manifest.json")).version, "2.6.2");
 		assert.equal((await f.read("apps/windows/package.json")).version, "1.0.0");
-		assert.match(result.stdout, /git tag v2\.6\.2/);
+		assert.match(result.stdout, /git tag 2\.6\.2/);
 		assert.doesNotMatch(result.stdout, /desktop-v/);
 	});
 }

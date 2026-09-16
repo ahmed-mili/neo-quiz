@@ -172,26 +172,57 @@ async function tailleDossier(dossier: string): Promise<number> {
 	return total;
 }
 
+/** Les dossiers temporaires que NSIS s'est créés DEPUIS le lancement.
+
+    NSIS crée son `$PLUGINSDIR` sous `%TEMP%`, sous la forme `nsXXXXX.tmp` :
+    il y recopie l'archive de l'application puis l'y extrait, et le
+    désinstalleur d'une mise à jour y DÉPLACE l'ancienne version avant de
+    l'effacer. C'est donc là que se voit la majeure partie du travail.
+
+    ON NE LUI IMPOSE PAS SON `%TEMP%`. Le faire aurait évité de reconnaître son
+    dossier — mais `$PLUGINSDIR` est aussi d'où NSIS charge `UAC.dll`, dont
+    dépend `UAC_IsAdmin`, et dont dépend à son tour la désinstallation de
+    l'ancienne version (`multiUser.nsh` : `IfNot UAC_IsAdmin` → `Quit`,
+    code 2). Passer un environnement à un processus qu'on ne contrôle pas, pour
+    une simple mesure, n'en vaut pas le risque.
+
+    La date de création borne ce qu'on compte : un installeur d'un autre
+    logiciel lancé AVANT nous n'entre pas dans le total. Un lancé PENDANT le
+    nôtre y entrerait — c'est la limite assumée de cette mesure, et elle est
+    bornée par le total connu (`paquet + installe`). */
+async function tailleTemporairesNsis(depuis: number): Promise<number> {
+	let total = 0;
+	let entrees: Dirent[];
+	try {
+		entrees = await readdir(tmpdir(), { withFileTypes: true });
+	} catch {
+		return total;
+	}
+	for (const entree of entrees) {
+		if (!entree.isDirectory() || !/^ns[0-9A-Za-z]+.tmp$/i.test(entree.name)) continue;
+		const chemin = join(tmpdir(), entree.name);
+		try {
+			if ((await stat(chemin)).birthtimeMs < depuis) continue;
+		} catch {
+			continue;
+		}
+		total += await tailleDossier(chemin);
+	}
+	return total;
+}
+
 async function lancerNsis(
 	installeur: string,
 	dossier: string,
 	bareme: BaremeInstallation,
-	tempNsis: string,
 	surProgression: (pourcent: number | null) => void,
 ): Promise<void> {
 	await new Promise<void>((resolvePromise, reject) => {
-		/* LE `TEMP` PRIVÉ. NSIS crée son `$PLUGINSDIR` sous `%TEMP%` : il y
-		   recopie l'archive de l'application PUIS l'y extrait — l'étape la plus
-		   longue des deux qui écrivent vraiment, et la seule qui couvre le
-		   milieu de l'installation. Lui donner un dossier À NOUS évite d'avoir
-		   à RECONNAÎTRE le sien parmi les `ns*.tmp` de `%TEMP%` (un autre
-		   installeur lancé en même temps y aurait été compté comme du travail
-		   de Neo Quiz), et l'ancien désinstalleur que NSIS lance hérite du même
-		   environnement : son travail passe par le même dossier. */
+		/* L'environnement est celui du travailleur, INTACT : voir la note de
+		   `tailleTemporairesNsis` pour ce que coûterait de le remplacer. */
 		const enfant = spawn(installeur, argumentsNsis(dossier), {
 			windowsHide: true,
 			stdio: "ignore",
-			env: { ...process.env, TEMP: tempNsis, TMP: tempNsis },
 		});
 		const depart = Date.now();
 		/* Tout l'état roulant vit dans le noyau (`suivre`), et pas ici : le creux
@@ -209,7 +240,7 @@ async function lancerNsis(
 			try {
 				const [courant, tempCourant] = await Promise.all([
 					tailleDossier(dossier),
-					tailleDossier(tempNsis),
+					tailleTemporairesNsis(depart),
 				]);
 				suivi = suivre(bareme, suivi, {
 					ecoule: Date.now() - depart,
@@ -347,10 +378,6 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 	});
 
 	const temporaire = await mkdtemp(join(tmpdir(), "neo-quiz-installer-"));
-	/* Le dossier que NSIS recevra comme %TEMP% : voir la note de lancerNsis.
-	   Créé ici, à côté du nôtre, pour être retiré par le même « finally »
-	   quel que soit le chemin de sortie. */
-	const tempNsis = await mkdtemp(join(tmpdir(), "neo-quiz-nsis-"));
 	const cheminPaquet = join(temporaire, charge.paquet.nom);
 	try {
 		await telecharger(charge.paquet, cheminPaquet, annulation.signal, recus => {
@@ -376,7 +403,6 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 			cheminPaquet,
 			charge.dossier,
 			{ paquet: charge.paquet.taille, installe: charge.paquet.tailleInstallee, initial },
-			tempNsis,
 			pourcent => {
 				envoyer(socket, { type: "installation", pourcent });
 			},
@@ -410,10 +436,6 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 		return 1;
 	} finally {
 		await rm(temporaire, { recursive: true, force: true });
-		/* NSIS retire lui-même son $PLUGINSDIR, mais un installeur interrompu
-		   peut le laisser : ce nettoyage est un MEILLEUR EFFORT, jamais une
-		   erreur qui masquerait celle qui a fait entrer dans ce « finally ». */
-		try { await rm(tempNsis, { recursive: true, force: true }); } catch { /* meilleur effort */ }
 		/* `dirname` est volontairement touché ici par le typechecker via cet
 		   import utilisé : il rappelle que `cheminPaquet` reste dans notre
 		   dossier temporaire et n'est jamais supprimé par un chemin reçu. */

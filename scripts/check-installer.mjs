@@ -204,13 +204,13 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 	   fait quitter l'étape d'extraction, quelle que soit la valeur du
 	   temporaire : c'est la dernière étape qui écrit. */
 	r.check("mise en place : comptée depuis le CREUX, pas depuis zéro",
-		progression(maj, { dossier: 10_000_000 + installe / 2, creux: 10_000_000 }), 89.5);
+		progression(maj, { dossier: 10_000_000 + installe / 2, creux: 10_000_000, extrait: paquet + installe }), 89.5);
 	r.check("mise en place : un dossier au niveau de son creux n'a encore rien reçu",
 		progression(maj, { ecoule: 0, dossier: 10_000_000, creux: 10_000_000 }), 0);
 	r.check("mise en place : une mise à jour qui RÉTRÉCIT ne publie aucun recul",
 		progression(maj, { ecoule: 0, dossier: 0, creux: 0, dernier: 60 }), 60);
 	r.check("mise en place : plafonnée à 99, jamais 100 avant le code de sortie 0 de NSIS",
-		progression(neuve, { dossier: 10 * installe, creux: 0 }), 99);
+		progression(neuve, { dossier: 10 * installe, creux: 0, extrait: paquet + installe }), 99);
 	r.check("progression : jamais de valeur republiée en dessous de la précédente",
 		progression(neuve, { ecoule: 0, extrait: (paquet + installe) / 2, dernier: 90 }), 90);
 
@@ -253,6 +253,21 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 	   ce soit après la dernière mise en place : ce qui a été extrait ne doit
 	   pas se dé-extraire. Sans le maximum, le sondage suivant retomberait
 	   sous le seuil, donc dans l'étape aveugle. */
+	/* LA DÉSINSTALLATION QUI ÉCHOUE ET SE RÉTRACTE, vue à l'écran le
+	   2026-09-16 : `un.atomicRMDir` d'electron-builder déplace les fichiers
+	   hors du dossier, la désinstallation échoue, il les REMET. Le dossier
+	   retrouve sa taille ; le creux, lui, est un cliquet et garde la valeur
+	   basse. Sans garde, `dossier - creux` valait des centaines de mégaoctets
+	   et la barre affichait 84 % alors que rien n'avait été installé. */
+	r.check("désinstallation rétractée : un dossier qui regrossit sans extraction n'est PAS une mise en place",
+		(() => {
+			let etat = suiviInitial(maj);
+			etat = suivre(maj, etat, { ecoule: 1_000, dossier: maj.initial, temporaire: 100_000 });
+			etat = suivre(maj, etat, { ecoule: 2_000, dossier: 200_000_000, temporaire: 100_000 });
+			etat = suivre(maj, etat, { ecoule: 3_000, dossier: maj.initial, temporaire: 100_000 });
+			return etat.dernier < 60;
+		})(), true);
+
 	r.check("extraction : ce qui est extrait ne se dé-extrait pas quand NSIS vide son temporaire",
 		(() => {
 			let etat = suiviInitial(neuve);

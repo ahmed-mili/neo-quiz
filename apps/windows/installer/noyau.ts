@@ -321,13 +321,26 @@ export function progressionInstallation(
 	const bareme2 = initial > 0 ? BAREMES.maj : BAREMES.neuve;
 	const place = Math.max(0, dossier - creux);
 
+	const extractionCommencee = extrait >= SEUIL_EXTRACTION_OCTETS;
+
 	let valeur: number;
-	if (place > 0) {
+	if (place > 0 && extractionCommencee) {
 		/* Étape 4 : la mise en place, à l'octet près, du palier d'extraction
-		   jusqu'au plafond. */
+		   jusqu'au plafond.
+
+		   LA GARDE `extractionCommencee` N'EST PAS DÉCORATIVE. Le creux du
+		   dossier est un cliquet : il retient le plus bas jamais vu. Or quand la
+		   désinstallation de l'ancienne version ÉCHOUE, `un.atomicRMDir`
+		   d'electron-builder a déjà déplacé une partie des fichiers hors du
+		   dossier — puis il les REMET. Le dossier retrouve sa taille, mais le
+		   creux, lui, garde la valeur basse : sans cette garde, `place` valait
+		   soudain des centaines de mégaoctets et la barre sautait à 84 % alors
+		   que RIEN n'avait été installé (vu à l'écran le 2026-09-16). Un dossier
+		   qui grossit n'est une mise en place que si quelque chose a d'abord été
+		   extrait ; sinon c'est une désinstallation qui se rétracte. */
 		const part = Math.min(1, place / installe);
 		valeur = bareme2.extraction + (PALIER_FIN - bareme2.extraction) * part;
-	} else if (extrait >= SEUIL_EXTRACTION_OCTETS) {
+	} else if (extractionCommencee) {
 		/* Étape 3 : l'archive puis son contenu, à l'octet près. Les deux
 		   coexistent dans le dossier temporaire, d'où le total `paquet +
 		   installe`. */

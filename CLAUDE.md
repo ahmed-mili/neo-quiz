@@ -204,6 +204,17 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   `release.yml` construit le seul produit désigné par la famille de tag et publie.
   (Pas `npm run release` : il pointe vers un fichier absent.)
 
+- **UNE VERSION PUBLIÉE NE SE SUPPRIME PLUS** (règle posée le 2026-09-16, après
+  en avoir supprimé dix dans la journée). Chaque suppression coûte : une
+  installation existante ne voit JAMAIS un numéro plus petit comme une mise à
+  jour — elle reste bloquée et il faut désinstaller/réinstaller à la main ; et
+  supprimer la release « latest » fait promouvoir automatiquement celle du
+  GREFFON par GitHub, alors que `releases/latest/download/latest.yml` est
+  précisément ce que lisent le bootstrapper et l'auto-updater (quelques minutes
+  pendant lesquelles l'installeur ne trouve plus rien). Ce qui n'est pas prêt
+  ne se publie pas ; ce qui est publié reste, et se corrige par la version
+  suivante.
+
 Vérification d'un changement = `npm run check`, plus `check:md` / `check:export` /
 `check:markers` si le rendu ou l'écriture sont touchés, **`check:quiz-io` dès que
 `dashboard/detail-io.ts` bouge** (c'est le seul chemin qui réécrit une note),

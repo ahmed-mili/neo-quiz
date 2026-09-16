@@ -353,6 +353,21 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 	const blocProgression = debutProgression >= 0 && debutDemarrage > debutProgression
 		? renduInstallateur.slice(debutProgression, debutDemarrage)
 		: "";
+	/* UN MESSAGE DE PROGRESSION NE REBÂTIT PAS LA PAGE. Chaque message du
+	   travailleur — toutes les 100 ms au téléchargement, 150 ms à
+	   l'installation — passait par `rendre()`, donc par `replaceChildren()` :
+	   la modale de confirmation était recréée dix fois par seconde et son
+	   animation d'entrée rejouait sans fin (clignotement vu à l'écran le
+	   2026-09-16), le bouton était recréé sous le curseur, et le FOCUS clavier
+	   était détruit à chaque fois. Le rafraîchissement doit passer AVANT le
+	   rendu complet, et `rendre()` doit oublier les nœuds qu'il détruit. */
+	r.check("progression : un message qui avance la barre ne reconstruit pas le DOM",
+		[
+			renduInstallateur.includes("if (phasePrecedente === nouvelEtat.phase && rafraichirProgression()) return;"),
+			renduInstallateur.includes("progressionVive = null;"),
+		],
+		[true, true]);
+
 	/* L'étape « démarrage » garde la rangée d'actions, Annuler grisé, avec
 	   l'infobulle qui dit pourquoi. Sans ce cas, la rangée pourrait disparaître
 	   à nouveau sans que rien ne rougisse — et c'est précisément ce qui faisait

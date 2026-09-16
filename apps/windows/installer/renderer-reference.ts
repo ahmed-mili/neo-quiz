@@ -321,10 +321,10 @@ function rendreConfirmationAnnulation(parent: HTMLElement): void {
 	oui.addEventListener("click", confirmerAnnulation);
 }
 
-function rendreEtapeProgression(parent: HTMLElement): void {
-	const etape = ajouter(parent, "section", "nqi-progress-stage");
-	ajouter(etape, "h1", "nqi-progress-title", t("installer.title"));
-
+/** Ce que l'étape de progression AFFICHE, séparé de la façon dont elle le
+    construit : le premier rendu bâtit le DOM avec, les messages suivants ne
+    font que remplacer ces trois valeurs. */
+function libellesProgression(): { pourcent: number | null; statut: string; detail: string | null } {
 	let pourcent: number | null = null;
 	let statut = t("installer.status.downloadingPending");
 	let detail: string | null = null;
@@ -352,11 +352,61 @@ function rendreEtapeProgression(parent: HTMLElement): void {
 			statut = t("installer.status.installingProgress", { percent: formatPourcent(etat.pourcent) });
 		}
 	}
+	return { pourcent, statut, detail };
+}
+
+/** LES SEULS NŒUDS QUI CHANGENT d'un message du travailleur au suivant.
+
+    Sans eux, chaque message — toutes les 100 ms au téléchargement, 150 ms à
+    l'installation — passait par `rendre()`, donc par `root.replaceChildren()` :
+    la page ENTIÈRE était détruite et rebâtie dix fois par seconde. Trois
+    conséquences, dont deux visibles et une grave :
+    - la modale de confirmation était recréée à chaque fois, donc son animation
+      d'entrée rejouait sans fin — le clignotement vu à l'écran le 2026-09-16 ;
+    - le bouton Annuler était recréé sous le curseur, donc son `:hover` et sa
+      transition repartaient de zéro, d'où un survol qui clignote ;
+    - le FOCUS clavier était détruit dix fois par seconde : la modale était
+      inatteignable au clavier, et personne ne l'avait remarqué.
+    Une barre qui avance ne justifie pas de rebâtir une page. */
+let progressionVive: {
+	piste: HTMLElement;
+	barre: HTMLElement;
+	statut: HTMLElement;
+	detail: HTMLElement;
+} | null = null;
+
+/** Remplace les trois valeurs sans toucher au reste du DOM. Rend `false` quand
+    l'étape affichée n'est pas celle-là — l'appelant fait alors un vrai rendu. */
+function rafraichirProgression(): boolean {
+	if (!progressionVive || chargement || !phaseInstallationActive()) return false;
+	const { pourcent, statut, detail } = libellesProgression();
+	progressionVive.piste.classList.toggle("is-indeterminate", pourcent === null);
+	progressionVive.barre.style.width = pourcent === null
+		? ""
+		: `${Math.max(0, Math.min(100, pourcent))}%`;
+	progressionVive.statut.textContent = statut;
+	const texteDetail = detail && !annulationDemandee ? detail : "";
+	progressionVive.detail.textContent = texteDetail;
+	progressionVive.detail.hidden = texteDetail === "";
+	return true;
+}
+
+function rendreEtapeProgression(parent: HTMLElement): void {
+	const etape = ajouter(parent, "section", "nqi-progress-stage");
+	ajouter(etape, "h1", "nqi-progress-title", t("installer.title"));
+	const { pourcent, statut, detail } = libellesProgression();
 
 	const bloc = ajouter(etape, "div", "nqi-progress-block");
 	rendreProgression(bloc, pourcent, "nqi-progress-wide");
-	ajouter(bloc, "p", "nqi-progress-status", statut);
-	if (detail && !annulationDemandee) ajouter(bloc, "p", "nqi-progress-detail", detail);
+	const statutEl = ajouter(bloc, "p", "nqi-progress-status", statut);
+	/* Le détail existe TOUJOURS, masqué quand il est vide : le rafraîchissement
+	   n'a ainsi aucun nœud à créer ni à retirer, et la hauteur du bloc ne saute
+	   pas d'un message à l'autre. */
+	const detailEl = ajouter(bloc, "p", "nqi-progress-detail", detail && !annulationDemandee ? detail : "");
+	detailEl.hidden = !(detail && !annulationDemandee);
+	const piste = bloc.querySelector<HTMLElement>(".nqi-progress");
+	const barre = bloc.querySelector<HTMLElement>(".nqi-progress-bar");
+	progressionVive = piste && barre ? { piste, barre, statut: statutEl, detail: detailEl } : null;
 
 	rendreCommentaires(etape, "nqi-progress-feedback");
 	/* Les mentions légales sont acceptées avant le clic sur Installer (étape 2).
@@ -411,6 +461,9 @@ function rendre(): void {
 	document.title = t("installer.windowTitle");
 	const root = document.getElementById("app");
 	if (!root) return;
+	/* Le DOM part : les nœuds retenus pour le rafraîchissement ne valent plus
+	   rien, et les garder ferait écrire dans des éléments détachés. */
+	progressionVive = null;
 	root.replaceChildren();
 
 	rendreBarreTitre(root);
@@ -560,7 +613,13 @@ window.neoInstaller.surEtat(nouvelEtat => {
 		confirmationAnnulation = false;
 		annulationDemandee = false;
 	}
+	const phasePrecedente = etat.phase;
 	etat = nouvelEtat;
+	/* Un message qui ne fait qu'avancer la barre se contente des trois nœuds
+	   vivants ; la page n'est rebâtie que lorsqu'on CHANGE d'étape. C'est ce
+	   qui empêche la modale de confirmation, le survol du bouton et le focus
+	   clavier d'être détruits dix fois par seconde. */
+	if (phasePrecedente === nouvelEtat.phase && rafraichirProgression()) return;
 	rendre();
 });
 void initialiser();

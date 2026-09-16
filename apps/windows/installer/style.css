@@ -337,6 +337,15 @@ button { font: inherit; color: inherit; }
 }
 .nqi-secondary:hover { background: rgba(255, 255, 255, .075); }
 
+/* Le texte de la page « déjà installé » : une phrase entière, à gauche, là où
+   .nqi-status est un libellé court aligné à droite. */
+.nqi-already-copy {
+	margin: 0 0 18px;
+	font-size: 13px;
+	line-height: 1.5;
+	color: rgba(207, 218, 239, .78);
+}
+
 .nqi-status,
 .nqi-error {
 	margin: 0 0 8px;

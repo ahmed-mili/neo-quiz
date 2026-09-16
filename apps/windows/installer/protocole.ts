@@ -19,6 +19,7 @@ export const CANAUX_INSTALLATEUR = {
 	reduire: "neo-installer:reduire",
 	commentaires: "neo-installer:commentaires",
 	ouvrirLien: "neo-installer:ouvrir-lien",
+	ouvrirApplication: "neo-installer:ouvrir-application",
 	fermer: "neo-installer:fermer",
 	etat: "neo-installer:etat",
 } as const;
@@ -37,6 +38,10 @@ export interface InfosInitialesInstallateur {
 	tailleTelechargement: number;
 	dossier: string;
 	espaceDisponible: number;
+	/** Neo Quiz est-il DÉJÀ installé dans ce dossier ? Le bootstrapper ne sert
+	    qu'à la PREMIÈRE installation : les mises à jour arrivent par
+	    electron-updater, depuis l'application elle-même. */
+	dejaInstalle: boolean;
 }
 
 export interface ChoixDossierInstallateur {
@@ -72,6 +77,10 @@ export interface PontInstallateur {
 	    (`installer/noyau.ts`, `urlLegale`), dans la langue de l'installeur —
 	    un rendu compromis ne fait ouvrir que l'une de ces deux adresses. */
 	ouvrirLien(page: PageLegale): void;
+	/** Ouvre l'installation DÉJÀ présente. Le rendu ne nomme aucun chemin : le
+	    principal lance l'exécutable du dossier qu'il connaît, et seulement s'il
+	    existe — un rendu compromis ne peut pas faire lancer autre chose. */
+	ouvrirApplication(): void;
 	fermer(): void;
 	surEtat(rappel: (etat: EtatInstallateur) => void): void;
 }

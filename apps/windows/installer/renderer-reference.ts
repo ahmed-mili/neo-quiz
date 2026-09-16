@@ -231,6 +231,31 @@ function rendreErreurElevation(parent: HTMLElement): void {
 	annuler.addEventListener("click", () => window.neoInstaller.fermer());
 }
 
+/** L'installation existe déjà : le bootstrapper ne sert qu'à la PREMIÈRE
+    installation (voir `installationPresente` dans `main.ts`). Plutôt que de
+    laisser NSIS échouer après l'UAC et 113 Mo téléchargés, on le dit tout de
+    suite, et on propose la seule action utile : ouvrir l'application, d'où les
+    mises à jour arrivent. */
+function rendreDejaInstalle(parent: HTMLElement): void {
+	if (!infos) return;
+	const panneau = ajouter(parent, "section", "nqi-panel");
+	ajouter(panneau, "h1", "nqi-title", t("installer.alreadyInstalled.title"));
+	ajouter(panneau, "p", "nqi-already-copy", t("installer.alreadyInstalled.body"));
+	const emplacement = ajouter(panneau, "section", "nqi-location");
+	ajouter(emplacement, "div", "nqi-location-label", t("installer.location.label"));
+	const chemin = ajouter(emplacement, "div", "nqi-path", infos.dossier);
+	chemin.title = infos.dossier;
+	rendreCommentaires(panneau);
+	const actions = ajouter(panneau, "div", "nqi-actions");
+	const fermer = ajouter(actions, "button", "nqi-secondary", t("installer.close"));
+	fermer.type = "button";
+	fermer.addEventListener("click", () => window.neoInstaller.fermer());
+	const ouvrir = ajouter(actions, "button", "nqi-primary", t("installer.alreadyInstalled.open"));
+	ouvrir.type = "button";
+	ouvrir.autofocus = true;
+	ouvrir.addEventListener("click", () => window.neoInstaller.ouvrirApplication());
+}
+
 function rendreChargement(parent: HTMLElement): void {
 	const etape = ajouter(parent, "section", "nqi-loading-stage");
 	etape.setAttribute("role", "status");
@@ -382,6 +407,11 @@ function rendre(): void {
 	if (etat.phase === "elevation" || etat.phase === "telechargement" || etat.phase === "verification" || etat.phase === "installation") {
 		rendreEtapeProgression(contenu);
 		if (confirmationAnnulation) rendreConfirmationAnnulation(root);
+		return;
+	}
+
+	if (infos?.dejaInstalle) {
+		rendreDejaInstalle(contenu);
 		return;
 	}
 

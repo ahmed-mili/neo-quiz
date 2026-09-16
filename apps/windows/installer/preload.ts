@@ -23,6 +23,7 @@ const pont: PontInstallateur = {
 	reduire: () => ipcRenderer.send(CANAUX_INSTALLATEUR.reduire),
 	commentaires: () => ipcRenderer.send(CANAUX_INSTALLATEUR.commentaires),
 	ouvrirLien: (page: PageLegale) => ipcRenderer.send(CANAUX_INSTALLATEUR.ouvrirLien, page),
+	ouvrirApplication: () => ipcRenderer.send(CANAUX_INSTALLATEUR.ouvrirApplication),
 	fermer: () => ipcRenderer.send(CANAUX_INSTALLATEUR.fermer),
 	surEtat(rappel: (etat: EtatInstallateur) => void) {
 		ipcRenderer.on(CANAUX_INSTALLATEUR.etat, (_event, etat: EtatInstallateur) => rappel(etat));

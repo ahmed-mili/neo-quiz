@@ -16,7 +16,7 @@ import { spawn } from "node:child_process";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { setLanguage, t } from "../../../src/i18n";
 import { PRODUCT_NAME } from "../../../src/branding";
-import { langueDepuisLocale, resoudrePaquet, URL_LATEST_YML, type LangueInstallateur, type PaquetInstallable } from "./noyau";
+import { langueDepuisLocale, NOM_EXECUTABLE, resoudrePaquet, URL_LATEST_YML, type LangueInstallateur, type PaquetInstallable } from "./noyau";
 import {
 	CANAUX_INSTALLATEUR,
 	type ChargeTravailleur,
@@ -39,6 +39,9 @@ let fermetureAutorisee = false;
 /** La langue de l'installeur : celle de Windows (`detecterLangue`). Lue par
     `main-ui.ts` pour ouvrir les pages légales dans la même langue. */
 let langue: LangueInstallateur = "en";
+/** Le dossier d'installation que le rendu affiche, tenu à jour par le
+    principal : c'est LUI qui compose le chemin de l'exécutable à ouvrir. */
+let dossierCourant = "";
 
 export function langueInstallateur(): LangueInstallateur {
 	return langue;
@@ -113,6 +116,31 @@ function dossierDefaut(): string {
 	   respecter une installation déplacée de Program Files. */
 	const programmes = process.env.ProgramW6432 ?? process.env.ProgramFiles ?? "C:\\Program Files";
 	return join(programmes, PRODUCT_NAME);
+}
+
+/** Neo Quiz est-il DÉJÀ installé dans ce dossier ?
+
+    LE BOOTSTRAPPER NE SERT QU'À LA PREMIÈRE INSTALLATION. Les mises à jour
+    arrivent par electron-updater, depuis l'application elle-même, qui se
+    ferme avant d'installer. Lancé PAR-DESSUS une installation existante, NSIS
+    échoue dans `un.atomicRMDir` d'electron-builder — un `Rename` refusé, puis
+    `un.restoreFiles` qui remet tout, puis `Abort` (code 2) — et l'utilisateur
+    ne lit qu'« Échec de désinstallation des anciens fichiers d'application ».
+    Vu à l'écran le 2026-09-16, y compris avec le bootstrapper PUBLIÉ : le
+    défaut est antérieur à toute mesure de progression. Le dire AVANT le clic
+    vaut mieux que de le laisser échouer après l'UAC et le téléchargement.
+
+    LIMITE ASSUMÉE : on regarde le DOSSIER, pas le registre. Une installation
+    déplacée ailleurs ne serait pas vue ici — NSIS, lui, la retrouverait par le
+    registre et échouerait comme avant. Lire le registre demanderait `reg.exe`
+    ou un module natif pour un cas qui ne s'est jamais produit. */
+async function installationPresente(dossier: string): Promise<boolean> {
+	try {
+		await access(join(dossier, NOM_EXECUTABLE));
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 function dossierValide(dossier: string): boolean {
@@ -373,11 +401,13 @@ function installerCanaux(): void {
 	ipcMain.handle(CANAUX_INSTALLATEUR.initialiser, async () => {
 		paquetCourant = await chargerPaquet();
 		const dossier = dossierDefaut();
+		dossierCourant = dossier;
 		return {
 			version: paquetCourant.version,
 			tailleTelechargement: paquetCourant.taille,
 			dossier,
 			espaceDisponible: await espaceDisponible(dossier),
+			dejaInstalle: await installationPresente(dossier),
 		};
 	});
 	ipcMain.handle(CANAUX_INSTALLATEUR.choisirDossier, async (_event, courant: unknown) => {
@@ -389,6 +419,7 @@ function installerCanaux(): void {
 		});
 		const dossier = choix.canceled ? null : choix.filePaths[0];
 		if (!dossier || !dossierValide(dossier)) return null;
+		dossierCourant = dossier;
 		return { dossier, espaceDisponible: await espaceDisponible(dossier) };
 	});
 	ipcMain.handle(CANAUX_INSTALLATEUR.installer, async (_event, dossier: unknown) => {
@@ -409,6 +440,21 @@ function installerCanaux(): void {
 		   laisser l'interface coincée sur un faux état d'attente. */
 		nettoyerSession();
 		envoyerEtat({ phase: "annule" });
+	});
+	/* Le rendu ne transmet aucun chemin : le principal lance l'exécutable du
+	   dossier qu'il a lui-même calculé, et seulement s'il existe. */
+	ipcMain.on(CANAUX_INSTALLATEUR.ouvrirApplication, () => {
+		void (async () => {
+			const executable = join(dossierCourant, NOM_EXECUTABLE);
+			if (!(await installationPresente(dossierCourant))) return;
+			try {
+				spawn(executable, [], { detached: true, windowsHide: false, stdio: "ignore" }).unref();
+			} catch {
+				return;
+			}
+			fermetureAutorisee = true;
+			fenetre?.close();
+		})();
 	});
 	ipcMain.on(CANAUX_INSTALLATEUR.fermer, () => {
 		if (installationActive) return;

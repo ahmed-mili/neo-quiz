@@ -355,6 +355,13 @@ export function progressionInstallation(
 	return dernier !== null && borne < dernier ? dernier : borne;
 }
 
+/** Le binaire posé par NSIS dans le dossier d'installation — `executableName`
+    d'`electron-builder.config.mjs`, immuable comme `appId`. Trois endroits le
+    cherchent : le travailleur (pour confirmer que l'installation a réussi et
+    pour savoir s'il y en avait déjà une), et le principal (pour reconnaître une
+    installation existante avant même le clic sur Installer). */
+export const NOM_EXECUTABLE = "neo-quiz.exe";
+
 /** Arguments de l'installeur assisté d'electron-builder en mode silencieux.
     `/allusers` force le même mode machine que l'utilisateur choisissait dans
     l'ancienne page NSIS. `/D=` est spécial chez NSIS : electron-builder

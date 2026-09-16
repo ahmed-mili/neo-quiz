@@ -353,6 +353,19 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 	const blocProgression = debutProgression >= 0 && debutDemarrage > debutProgression
 		? renduInstallateur.slice(debutProgression, debutDemarrage)
 		: "";
+	/* AUCUNE ÉTAPE NE REMPLACE L'AUTRE D'UN COUP, et l'animation ne se déclenche
+	   QUE sur un changement d'étape. La condition est indispensable : un rendu
+	   complet provoqué par autre chose — la modale de confirmation qui s'ouvre —
+	   rejouerait sinon l'animation derrière elle, et on aurait recréé le
+	   clignotement par un autre chemin. */
+	r.check("étapes : transition à chaque changement, et seulement là",
+		[
+			renduInstallateur.includes("const changeEtape = etape !== derniereEtapeRendue;"),
+			renduInstallateur.includes('if (changeEtape) contenu.lastElementChild?.classList.add("nqi-entre");'),
+			styleInstallateur.includes(".nqi-entre {"),
+		],
+		[true, true, true]);
+
 	/* UN MESSAGE DE PROGRESSION NE REBÂTIT PAS LA PAGE. Chaque message du
 	   travailleur — toutes les 100 ms au téléchargement, 150 ms à
 	   l'installation — passait par `rendre()`, donc par `replaceChildren()` :

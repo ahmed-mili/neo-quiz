@@ -310,7 +310,8 @@
 	   des boutons qui changent de couleur sans s'enfoncer. Rien ne disparaît :
 	   seule l'animation tombe. */
 	.nqi-cancel-overlay,
-	.nqi-cancel-dialog { animation: none; }
+	.nqi-cancel-dialog,
+	.nqi-entre { animation: none; }
 	.nqi-progress-cancel,
 	.nqi-cancel-no,
 	.nqi-cancel-yes { transition-property: border-color, background-color, color, filter; }
@@ -341,6 +342,20 @@
 	background: #1c2230;
 	box-shadow: 0 24px 70px rgba(0, 0, 0, .46);
 	animation: nqi-dialogue-entre .18s cubic-bezier(.2, .7, .3, 1);
+}
+
+/* LE PASSAGE D'UNE ÉTAPE À L'AUTRE. Chaque étape remplace la précédente d'un
+   `replaceChildren()` : sans cela, l'écran sautait — en particulier au moment
+   qui compte, quand l'installation finit et que « Ouverture de Neo Quiz… »
+   prend la place de la barre à 100 %. La classe n'est posée QUE lorsqu'on
+   change d'étape (voir `rendre()`), jamais sur un rendu déclenché par autre
+   chose, sinon l'écran clignoterait à chaque ouverture de la modale. */
+.nqi-entre {
+	animation: nqi-etape-entre .24s cubic-bezier(.2, .7, .3, 1);
+}
+
+@keyframes nqi-etape-entre {
+	from { opacity: 0; transform: translateY(6px); }
 }
 
 @keyframes nqi-voile-entre {

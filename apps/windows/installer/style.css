@@ -247,12 +247,18 @@ button { font: inherit; color: inherit; }
 	top: 254px;
 	height: 128px;
 	padding: 23px 28px 20px;
-	border: 1px solid rgba(109, 131, 174, .24);
+	/* LA CARTE APPARTIENT AU THÈME, elle ne s'y pose plus. Le gris-neutre
+	   d'origine (bordure `rgba(109, 131, 174, .24)`, dégradé tirant sur
+	   l'ardoise) lisait comme une dalle étrangère sur le fond bleu. Bordure et
+	   liseré reprennent l'accent `#5b9dff` à très faible opacité, et le dégradé
+	   va du marine profond vers un bleu plus franc à droite, là où la courbe
+	   lumineuse du fond passe — la carte s'y fond au lieu de la masquer. */
+	border: 1px solid rgba(126, 168, 255, .26);
 	border-radius: 15px;
-	background: linear-gradient(105deg, rgba(14, 24, 40, .91), rgba(17, 28, 48, .86) 58%, rgba(21, 36, 67, .77));
+	background: linear-gradient(105deg, rgba(10, 21, 42, .91), rgba(13, 29, 57, .85) 58%, rgba(19, 44, 88, .72));
 	box-shadow:
 		0 17px 42px rgba(0, 0, 0, .23),
-		inset 0 1px 0 rgba(255, 255, 255, .018);
+		inset 0 1px 0 rgba(146, 185, 255, .07);
 	backdrop-filter: blur(16px);
 }
 
@@ -270,7 +276,9 @@ button { font: inherit; color: inherit; }
 	line-height: 1.25;
 	font-weight: 430;
 	letter-spacing: -.05px;
-	color: rgba(166, 184, 216, .76);
+	/* Même déplacement que la carte : le gris-ardoise devient un bleu froid,
+	   assez clair pour rester lisible sur le dégradé assombri. */
+	color: rgba(163, 190, 235, .80);
 }
 
 .nqi-path {

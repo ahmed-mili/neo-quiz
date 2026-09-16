@@ -375,6 +375,10 @@ let progressionVive: {
 	detail: HTMLElement;
 } | null = null;
 
+/** L'étape affichée au dernier rendu, pour n'animer que les VRAIS changements
+    d'étape — voir `rendre()`. */
+let derniereEtapeRendue = "";
+
 /** Remplace les trois valeurs sans toucher au reste du DOM. Rend `false` quand
     l'étape affichée n'est pas celle-là — l'appelant fait alors un vrai rendu. */
 function rafraichirProgression(): boolean {
@@ -470,24 +474,45 @@ function rendre(): void {
 	const contenu = ajouter(root, "main", "nqi-shell");
 	rendreHero(contenu);
 
+	/* AUCUNE ÉTAPE NE REMPLACE L'AUTRE D'UN COUP. `replaceChildren()` fait
+	   sauter l'écran, et le saut le plus dur à regarder est le dernier : la
+	   barre à 100 % remplacée sans transition par « Ouverture de Neo Quiz… ».
+	   La classe d'entrée n'est posée QUE lorsque l'étape change ; un rendu
+	   déclenché par autre chose — la modale de confirmation qui s'ouvre, une
+	   erreur d'élévation — ne rejoue rien derrière elle. */
+	const etape = chargement ? "chargement"
+		: etat.phase === "demarrage" ? "demarrage"
+		: phaseInstallationActive() ? "progression"
+		: infos?.dejaInstalle ? "dejaInstalle"
+		: "panneau";
+	const changeEtape = etape !== derniereEtapeRendue;
+	derniereEtapeRendue = etape;
+	const marquerEntree = (): void => {
+		if (changeEtape) contenu.lastElementChild?.classList.add("nqi-entre");
+	};
+
 	if (chargement) {
 		rendreChargement(contenu);
+		marquerEntree();
 		return;
 	}
 
 	if (etat.phase === "demarrage") {
 		rendreDemarrage(contenu);
+		marquerEntree();
 		return;
 	}
 
 	if (etat.phase === "elevation" || etat.phase === "telechargement" || etat.phase === "verification" || etat.phase === "installation") {
 		rendreEtapeProgression(contenu);
+		marquerEntree();
 		if (confirmationAnnulation) rendreConfirmationAnnulation(root);
 		return;
 	}
 
 	if (infos?.dejaInstalle) {
 		rendreDejaInstalle(contenu);
+		marquerEntree();
 		return;
 	}
 
@@ -499,6 +524,7 @@ function rendre(): void {
 	rendreCommentaires(panneau);
 	const actions = ajouter(panneau, "div", "nqi-actions");
 	rendreAction(actions);
+	marquerEntree();
 	rendreErreurElevation(root);
 }
 

@@ -136,6 +136,12 @@ jobs:
         run: npm run pack:win
         working-directory: apps/windows
 
+      # Le pourcentage d'installation du bootstrapper compte les octets ecrits
+      # contre cette taille : `check:package` l'exige dans `latest.yml`, ici
+      # comme dans `release.yml`, sinon le controle rougirait sur chaque push.
+      - name: Write installedSize into latest.yml
+        run: node scripts/write-installed-size.mjs
+
       - name: Package config and contents
         run: npm run check:package
 

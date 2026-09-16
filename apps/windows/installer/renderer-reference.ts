@@ -246,10 +246,10 @@ function rendreDejaInstalle(parent: HTMLElement): void {
 	const chemin = ajouter(emplacement, "div", "nqi-path", infos.dossier);
 	chemin.title = infos.dossier;
 	rendreCommentaires(panneau);
+	/* UN SEUL bouton : il n'y a qu'une action utile ici. « Fermer » ferait
+	   doublon avec la croix de la barre de titre, et mettrait à égalité un
+	   geste utile et un geste vide. */
 	const actions = ajouter(panneau, "div", "nqi-actions");
-	const fermer = ajouter(actions, "button", "nqi-secondary", t("installer.close"));
-	fermer.type = "button";
-	fermer.addEventListener("click", () => window.neoInstaller.fermer());
 	const ouvrir = ajouter(actions, "button", "nqi-primary", t("installer.alreadyInstalled.open"));
 	ouvrir.type = "button";
 	ouvrir.autofocus = true;

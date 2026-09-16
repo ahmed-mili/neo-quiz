@@ -44,6 +44,12 @@ export default async function () {
 			   paquet) et `CompanyName` dans les métadonnées de l'exe — exigée
 			   par SignPath comme métadonnée sur l'installeur signé. */
 			author: { name: "Ahmed Mili" },
+			/* EXIGÉ PAR LA CIBLE `deb`, et par elle seule : un paquet Debian
+			   porte une page d'accueil dans son control file. Sans elle,
+			   electron-builder s'arrête sur « Please specify project homepage »
+			   — la CI l'a refusé le 2026-09-16. Les AppImage n'en demandaient
+			   aucune, d'où son absence jusqu'ici. */
+			homepage: "https://ahmed-mili.github.io/neo-quiz/",
 		},
 		directories: {
 			// `output` evite que l'installeur atterrisse dans `dist/`, deja pris
@@ -124,6 +130,12 @@ export default async function () {
 			   Linux relie la fenêtre à son entrée `.desktop` (avertissement
 			   `WM_CLASS` du journal CI). */
 			desktop: { entry: { Name: "Neo Quiz", StartupWMClass: "neo-quiz" } },
+			/* Second champ exigé par le `deb` : sans lui, « It is required to
+			   set Linux .deb package maintainer ». Il est PUBLIC — il voyage
+			   dans chaque paquet et s'affiche à qui l'inspecte — donc c'est
+			   l'adresse `noreply` de GitHub qui tient ce rôle, jamais une
+			   adresse personnelle. */
+			maintainer: "Ahmed Mili <ahmed-mili@users.noreply.github.com>",
 		},
 		nsis: {
 			/* Le bootstrapper installe toujours dans Program Files avec /allusers.

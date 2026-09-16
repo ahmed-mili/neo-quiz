@@ -70,6 +70,15 @@ r.check("Linux produit AppImage x64, AppImage arm64 et deb amd64",
 	(Array.isArray(config.linux?.target) ? config.linux.target : [])
 		.map(cible => `${cible.target}:${(cible.arch ?? []).join(",")}`).sort(),
 	["AppImage:x64,arm64", "deb:x64"].sort());
+/* Les deux champs SANS LESQUELS LE BUILD LINUX ENTIER S'ARRÊTE — la cible
+   `deb` les exige, les AppImage non, et c'est ainsi que la release 1.0.6 est
+   sortie sans sa partie Linux. Leur disparition doit rougir ici, pas en CI. */
+r.check("le .deb a la page d'accueil et le mainteneur qu'il exige",
+	[config.extraMetadata?.homepage, (config.linux?.maintainer ?? "").includes("@")],
+	["https://ahmed-mili.github.io/neo-quiz/", true]);
+/* Le champ Maintainer voyage dans chaque paquet public. */
+r.check("le mainteneur du .deb ne publie pas d'adresse personnelle",
+	/users\.noreply\.github\.com>$/.test(config.linux?.maintainer ?? ""), true);
 r.check("le nom des artefacts Linux porte l'architecture",
 	(config.linux?.artifactName ?? "").includes("${arch}"), true);
 r.check("la fenêtre Linux est associée à son entrée .desktop",

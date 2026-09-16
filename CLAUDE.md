@@ -173,6 +173,13 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   passe pour sain. Le seul filet contre ça est de lire le DOM RENDU.
 - `npm run report:multiblock` — ne vérifie rien, MESURE deux limites connues. Sort
   toujours en 0.
+- `npm run report:installation -- <setup.exe> "<dossier>" [--vider]` — ne vérifie
+  rien non plus : il MESURE, sur un vrai NSIS, la part du temps que prend chaque
+  étape et le pourcentage que le noyau publierait. C'est lui qui a montré que
+  NSIS n'écrit dans le dossier d'installation que 6 à 12 % de la durée (d'où le
+  capteur de `progressionInstallation`), et que le désinstalleur DÉPLACE
+  l'ancienne version dans le dossier temporaire avant de l'effacer. Exige une
+  console ÉLEVÉE : le NSIS d'electron-builder est `requireAdministrator`.
 - `node scripts/audit-vaults.mjs "<vault>" […]` — **avant une release**, ou après
   toute retouche de `convertParsedToInternal` / `exportAll`. Aller-retour lecture →
   écriture → lecture sur de vrais vaults : le bloc réécrit se relit, et aucun champ

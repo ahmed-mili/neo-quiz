@@ -19,7 +19,14 @@ import { spawn } from "node:child_process";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { IncomingMessage } from "node:http";
-import { argumentsNsis, paquetInstallable, progressionInstallation, type PaquetInstallable } from "./noyau";
+import {
+	argumentsNsis,
+	paquetInstallable,
+	suivre,
+	suiviInitial,
+	type BaremeInstallation,
+	type PaquetInstallable,
+} from "./noyau";
 import type {
 	ChargeTravailleur,
 	CodeErreurInstallateur,
@@ -168,44 +175,59 @@ async function tailleDossier(dossier: string): Promise<number> {
 async function lancerNsis(
 	installeur: string,
 	dossier: string,
-	tailleInstallee: number | null,
+	bareme: BaremeInstallation,
+	tempNsis: string,
 	surProgression: (pourcent: number | null) => void,
 ): Promise<void> {
 	await new Promise<void>((resolvePromise, reject) => {
+		/* LE `TEMP` PRIVÉ. NSIS crée son `$PLUGINSDIR` sous `%TEMP%` : il y
+		   recopie l'archive de l'application PUIS l'y extrait — l'étape la plus
+		   longue des deux qui écrivent vraiment, et la seule qui couvre le
+		   milieu de l'installation. Lui donner un dossier À NOUS évite d'avoir
+		   à RECONNAÎTRE le sien parmi les `ns*.tmp` de `%TEMP%` (un autre
+		   installeur lancé en même temps y aurait été compté comme du travail
+		   de Neo Quiz), et l'ancien désinstalleur que NSIS lance hérite du même
+		   environnement : son travail passe par le même dossier. */
 		const enfant = spawn(installeur, argumentsNsis(dossier), {
 			windowsHide: true,
 			stdio: "ignore",
+			env: { ...process.env, TEMP: tempNsis, TMP: tempNsis },
 		});
-		/* Le pourcentage compte les octets RÉELLEMENT écrits dans le dossier
-		   d'installation, sondés périodiquement, contre le total publié par la
-		   CI (`tailleInstallee`). Une mise à jour commence par RÉTRÉCIR le
-		   dossier (NSIS retire l'ancienne version) : `progressionInstallation`
-		   (noyau pur) retient le minimum observé et ne quitte l'indéterminé
-		   qu'une fois la croissance nettement repartie. Sans `tailleInstallee`
-		   (release qui ne le publie pas encore, ou sondage qui échoue de bout
-		   en bout), la jauge reste indéterminée comme avant ce correctif. */
-		let minimum: number | null = null;
-		let dernier: number | null = null;
+		const depart = Date.now();
+		/* Tout l'état roulant vit dans le noyau (`suivre`), et pas ici : le creux
+		   du dossier, celui du dossier temporaire, et le maximum extrait sont des
+		   DÉCISIONS — celle qui distingue l'ancienne version déplacée par le
+		   désinstalleur des octets de la vraie extraction, notamment — et elles
+		   doivent s'éprouver sans lancer NSIS. Ce qui reste ici est le sondage
+		   lui-même : lire deux dossiers, et publier. */
+		let suivi = suiviInitial(bareme);
 		let sondageEnCours = false;
-		const publier = (pourcent: number | null): void => {
-			dernier = pourcent;
-			surProgression(pourcent);
-		};
-		publier(null);
+		surProgression(suivi.dernier);
 		const sonder = async (): Promise<void> => {
 			if (sondageEnCours) return;
 			sondageEnCours = true;
 			try {
-				const courant = await tailleDossier(dossier);
-				if (minimum === null || courant < minimum) minimum = courant;
-				publier(progressionInstallation({ courant, minimum, total: tailleInstallee, dernier }));
+				const [courant, tempCourant] = await Promise.all([
+					tailleDossier(dossier),
+					tailleDossier(tempNsis),
+				]);
+				suivi = suivre(bareme, suivi, {
+					ecoule: Date.now() - depart,
+					dossier: courant,
+					temporaire: tempCourant,
+				});
+				surProgression(suivi.dernier);
 			} catch {
 				// Le sondage ne doit jamais faire échouer l'installation.
 			} finally {
 				sondageEnCours = false;
 			}
 		};
-		const minuterie = setInterval(() => { void sonder(); }, 400);
+		/* 150 ms : les deux dossiers font ensemble moins de deux mille fichiers
+		   et un sondage coûte quelques millisecondes (mesuré : 0 à 5 ms), mais
+		   les étapes aveugles avancent au temps écoulé — la barre doit bouger
+		   assez souvent pour que ce soit un glissement et non des sauts. */
+		const minuterie = setInterval(() => { void sonder(); }, 150);
 		const terminer = (): void => clearInterval(minuterie);
 		enfant.once("error", () => {
 			terminer();
@@ -214,7 +236,7 @@ async function lancerNsis(
 		enfant.once("exit", code => {
 			terminer();
 			if (code === 0) {
-				publier(100);
+				surProgression(100);
 				resolvePromise();
 			} else {
 				reject(new ErreurTravailleur("installation"));
@@ -325,6 +347,10 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 	});
 
 	const temporaire = await mkdtemp(join(tmpdir(), "neo-quiz-installer-"));
+	/* Le dossier que NSIS recevra comme %TEMP% : voir la note de lancerNsis.
+	   Créé ici, à côté du nôtre, pour être retiré par le même « finally »
+	   quel que soit le chemin de sortie. */
+	const tempNsis = await mkdtemp(join(tmpdir(), "neo-quiz-nsis-"));
 	const cheminPaquet = join(temporaire, charge.paquet.nom);
 	try {
 		await telecharger(charge.paquet, cheminPaquet, annulation.signal, recus => {
@@ -342,9 +368,19 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 			await terminerTube(socket);
 			return 0;
 		}
-		await lancerNsis(cheminPaquet, charge.dossier, charge.paquet.tailleInstallee, pourcent => {
-			envoyer(socket, { type: "installation", pourcent });
-		});
+		/* Mesurée AVANT le lancement : elle dit si NSIS aura d'abord une
+		   ancienne version à retirer — une étape aveugle de plus, que le barème
+		   prend en compte — et elle sert de creux de départ à la mise en place. */
+		const initial = await tailleDossier(charge.dossier);
+		await lancerNsis(
+			cheminPaquet,
+			charge.dossier,
+			{ paquet: charge.paquet.taille, installe: charge.paquet.tailleInstallee, initial },
+			tempNsis,
+			pourcent => {
+				envoyer(socket, { type: "installation", pourcent });
+			},
+		);
 		if (annulation.signal.aborted) {
 			if (!installationExistante) await nettoyerInstallationFraiche(charge.dossier, !dossierExistait);
 			envoyer(socket, { type: "annule" });
@@ -374,6 +410,10 @@ export async function executerTravailleur(nomTube: string, chargeEncodee: string
 		return 1;
 	} finally {
 		await rm(temporaire, { recursive: true, force: true });
+		/* NSIS retire lui-même son $PLUGINSDIR, mais un installeur interrompu
+		   peut le laisser : ce nettoyage est un MEILLEUR EFFORT, jamais une
+		   erreur qui masquerait celle qui a fait entrer dans ce « finally ». */
+		try { await rm(tempNsis, { recursive: true, force: true }); } catch { /* meilleur effort */ }
 		/* `dirname` est volontairement touché ici par le typechecker via cet
 		   import utilisé : il rappelle que `cheminPaquet` reste dans notre
 		   dossier temporaire et n'est jamais supprimé par un chemin reçu. */

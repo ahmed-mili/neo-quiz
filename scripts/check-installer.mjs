@@ -37,7 +37,7 @@ const renduApplication = readFileSync(resolve(racine, "apps/windows/src/main.ts"
 
 const noyauInstallateur = readFileSync(resolve(racine, "apps/windows/installer/noyau.ts"), "utf8");
 
-await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquetInstallable, progressionInstallation, argumentsNsis, langueDepuisLocale, urlLegale, URL_LATEST_YML }) => {
+await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquetInstallable, progressionInstallation, suivre, suiviInitial, argumentsNsis, langueDepuisLocale, urlLegale, URL_LATEST_YML }) => {
 	const r = makeReporter("Installateur — bootstrapper");
 	/* Un PNG peut avoir un en-tête valide tout en affichant des pixels abîmés.
 	   Décompresser les IDAT vérifie aussi leur somme de contrôle zlib. */
@@ -153,30 +153,115 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 		paquetInstallable({ version, nom, taille, sha512, tailleInstallee: taille + 1 })?.tailleInstallee,
 		taille + 1);
 
-	/* `progressionInstallation` (noyau pur) : le calcul qui remplace la
-	   minuterie exponentielle. Chaque cas est DISCRIMINANT — casser la règle
+	/* `progressionInstallation` (noyau pur) : le calcul qui remplace le
+	   comptage du SEUL dossier d'installation. La mesure du 2026-09-16
+	   (`scripts/mesurer-installation.mjs`) a montré que NSIS n'y écrit que
+	   pendant 6 à 12 % de la durée, et tout à la fin : ce que ces cas
+	   éprouvent, c'est que la barre avance AUSSI pendant les étapes où ce
+	   dossier ne bouge pas. Chaque cas est DISCRIMINANT — casser la règle
 	   qu'il éprouve doit le faire rougir. */
-	const total = 1_000_000_000;
-	r.check("progression : sans total publié, toujours indéterminée",
-		progressionInstallation({ courant: 999_999_999, minimum: 0, total: null, dernier: 50 }), null);
-	r.check("progression : avant que la croissance dépasse le seuil, indéterminée",
-		progressionInstallation({ courant: 1_000_000, minimum: 0, total, dernier: null }), null);
-	r.check("progression : une fois le seuil dépassé, le ratio depuis le minimum",
-		progressionInstallation({ courant: 100_000_000, minimum: 0, total, dernier: null }), 10);
-	r.check("progression : plafonnée à 99, jamais republiée à 100 avant le code de sortie 0",
-		progressionInstallation({ courant: 999_999_999, minimum: 0, total, dernier: 90 }), 99);
-	r.check("progression : une mise à jour qui rétrécit d'abord ne publie rien tant que la croissance n'a pas repris",
-		[
-			progressionInstallation({ courant: 500_000_000, minimum: 500_000_000, total, dernier: null }),
-			progressionInstallation({ courant: 495_000_000, minimum: 495_000_000, total, dernier: null }),
-			progressionInstallation({ courant: 500_000_000, minimum: 495_000_000, total, dernier: null }),
-		],
-		[null, null, null]);
-	r.check("progression : la croissance qui reprend franchement après un minimum sort de l'indéterminé",
-		progressionInstallation({ courant: 495_000_000 + 9 * 1024 * 1024, minimum: 495_000_000, total, dernier: null }) !== null,
-		true);
+	const paquet = 113_000_000;
+	const installe = 390_000_000;
+	const neuve = { paquet, installe, initial: 0 };
+	const maj = { paquet, installe, initial: installe };
+	const arrondi = valeur => (valeur === null ? null : Math.round(valeur * 10) / 10);
+	const progression = (bareme, observation) =>
+		arrondi(progressionInstallation(bareme, { ecoule: 0, dossier: 0, creux: 0, extrait: 0, dernier: null, ...observation }));
+
+	r.check("progression : sans taille installée publiée, indéterminée de bout en bout",
+		progression({ paquet, installe: null, initial: 0 },
+			{ ecoule: 5_000, dossier: 200_000_000, extrait: 400_000_000 }), null);
+
+	/* L'ÉTAPE AVEUGLE. NSIS ne dit rien pendant son démarrage (et, en mise à
+	   jour, pendant la désinstallation de l'ancienne version) : ni octet dans
+	   le dossier d'installation, ni octet notable dans le temporaire. C'est le
+	   seul endroit du calcul qui avance au temps — il doit avancer VRAIMENT,
+	   et ne jamais atteindre son palier. */
+	r.check("aveugle : la barre part de zéro", progression(neuve, { ecoule: 0 }), 0);
+	r.check("aveugle : la barre avance avec le temps",
+		progression(neuve, { ecoule: 1_600 }) > progression(neuve, { ecoule: 400 }), true);
+	r.check("aveugle : le palier de l'étape n'est jamais dépassé, même après une minute",
+		progression(neuve, { ecoule: 60_000 }) <= 40, true);
+	r.check("aveugle : la barre avance ENCORE après la durée mesurée de l'étape",
+		progression(neuve, { ecoule: 6_000 }) > progression(neuve, { ecoule: 3_100 }), true);
+	r.check("aveugle : une mise à jour monte plus haut (une étape aveugle de plus) mais plus lentement",
+		[progression(maj, { ecoule: 1_600 }) < progression(neuve, { ecoule: 1_600 }),
+			progression(maj, { ecoule: 60_000 }) > progression(neuve, { ecoule: 60_000 })],
+		[true, true]);
+
+	/* LE BRUIT DU DOSSIER TEMPORAIRE. NSIS y pose ses plugins (~136 Ko) dès la
+	   première demi-seconde, et y recopie l'ancien désinstalleur (~226 Ko) en
+	   mise à jour. Sans seuil, ces quelques centaines de kilooctets feraient
+	   sauter la barre au palier d'extraction avant que rien ne soit extrait. */
+	r.check("extraction : le bruit des plugins ne déclenche pas l'étape des octets",
+		progression(neuve, { ecoule: 0, extrait: 3 * 1024 * 1024 }), 0);
+	r.check("extraction : au-delà du seuil, la barre compte les octets du temporaire",
+		progression(neuve, { ecoule: 0, extrait: (paquet + installe) / 2 }), 55);
+	r.check("extraction : le total est l'archive PLUS son contenu extrait, qui y coexistent",
+		progression(neuve, { ecoule: 0, extrait: paquet + installe }), 70);
+
+	/* LA MISE EN PLACE. Le premier octet posé dans le dossier d'installation
+	   fait quitter l'étape d'extraction, quelle que soit la valeur du
+	   temporaire : c'est la dernière étape qui écrit. */
+	r.check("mise en place : comptée depuis le CREUX, pas depuis zéro",
+		progression(maj, { dossier: 10_000_000 + installe / 2, creux: 10_000_000 }), 89.5);
+	r.check("mise en place : un dossier au niveau de son creux n'a encore rien reçu",
+		progression(maj, { ecoule: 0, dossier: 10_000_000, creux: 10_000_000 }), 0);
+	r.check("mise en place : une mise à jour qui RÉTRÉCIT ne publie aucun recul",
+		progression(maj, { ecoule: 0, dossier: 0, creux: 0, dernier: 60 }), 60);
+	r.check("mise en place : plafonnée à 99, jamais 100 avant le code de sortie 0 de NSIS",
+		progression(neuve, { dossier: 10 * installe, creux: 0 }), 99);
 	r.check("progression : jamais de valeur republiée en dessous de la précédente",
-		progressionInstallation({ courant: 100_000_000, minimum: 0, total, dernier: 42 }), 42);
+		progression(neuve, { ecoule: 0, extrait: (paquet + installe) / 2, dernier: 90 }), 90);
+
+	/* LE RELEVÉ RÉEL D'UNE MISE À JOUR, mesuré le 2026-09-16 par
+	   `npm run report:installation` — et la régression qu'il a attrapée AVANT
+	   publication. Le désinstalleur d'electron-builder ne supprime pas
+	   l'ancienne version sur place : il DÉPLACE le dossier d'installation dans
+	   le dossier temporaire (d'où les 390 713 279 octets à 7 176 ms, pile le
+	   poids de l'ancienne version) puis l'efface de là. Une première version
+	   du correctif comptait ces octets comme de l'extraction et calait la
+	   barre 1,6 seconde sur ce maximum. Ces trois cas rejouent le relevé par
+	   `suivre`, le seul endroit où cette distinction se décide. */
+	const baremeReel = { paquet: 113_062_565, installe: 389_985_505, initial: 390_211_664 };
+	const releve = [
+		[6_953, 390_211_664, 483_695],
+		[7_065, 390_211_664, 483_695],
+		[7_176, 0, 390_713_279],
+		[7_290, 0, 322_257_850],
+		[7_388, 0, 52_791_151],
+		[7_497, 0, 113_175_094],
+		[7_715, 0, 147_150_406],
+		[8_476, 0, 245_857_175],
+		[8_694, 0, 496_593_687],
+		[9_234, 32_475_055, 503_160_599],
+	];
+	let suivi = suiviInitial(baremeReel);
+	const publiees = [];
+	for (const [ecoule, dossier, temporaire] of releve) {
+		suivi = suivre(baremeReel, suivi, { ecoule, dossier, temporaire });
+		publiees.push(arrondi(suivi.dernier));
+	}
+	r.check("relevé réel : l'ancienne version déplacée dans le temporaire ne compte pas comme extraction",
+		publiees[3] < publiees[5], true);
+	r.check("relevé réel : une fois la vraie extraction commencée, chaque relevé fait monter la barre",
+		publiees.slice(5).every((valeur, index, tous) => index === 0 || valeur > tous[index - 1]), true);
+	r.check("relevé réel : aucun recul sur toute la séquence",
+		publiees.every((valeur, index, tous) => index === 0 || valeur >= tous[index - 1]), true);
+
+	/* NSIS EFFACE SON DOSSIER TEMPORAIRE en partant, et rien ne garantit que
+	   ce soit après la dernière mise en place : ce qui a été extrait ne doit
+	   pas se dé-extraire. Sans le maximum, le sondage suivant retomberait
+	   sous le seuil, donc dans l'étape aveugle. */
+	r.check("extraction : ce qui est extrait ne se dé-extrait pas quand NSIS vide son temporaire",
+		(() => {
+			let etat = suiviInitial(neuve);
+			etat = suivre(neuve, etat, { ecoule: 500, dossier: 0, temporaire: 0 });
+			etat = suivre(neuve, etat, { ecoule: 1_000, dossier: 0, temporaire: 300_000_000 });
+			const haut = etat.extrait;
+			etat = suivre(neuve, etat, { ecoule: 1_200, dossier: 0, temporaire: 0 });
+			return [haut > 0, etat.extrait === haut];
+		})(), [true, true]);
 
 	const dossier = "C:\\Program Files\\Neo Quiz";
 	const args = argumentsNsis(dossier);

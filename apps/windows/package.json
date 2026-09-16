@@ -15,7 +15,7 @@
     "build": "npm run typecheck && npm run typecheck:electron && npm run typecheck:installer && npm run build:electron && vite build",
     "pack:win": "npm run build && electron-builder --win nsis --publish never --config electron-builder.config.mjs",
     "pack:installer": "npm run build:installer && electron-builder --win portable --publish never --config installer/electron-builder.config.mjs",
-    "pack:linux": "npm run build && electron-builder --linux AppImage --publish never --config electron-builder.config.mjs"
+    "pack:linux": "npm run build && electron-builder --linux --publish never --config electron-builder.config.mjs"
   },
   "dependencies": {
     "chokidar": "^5.0.0",

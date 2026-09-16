@@ -422,7 +422,7 @@ jobs:
         run: |
           actuelle=$(node -p "require('./apps/windows/package.json').version")
           if [ "$actuelle" != "$VERSION_VOULUE" ]; then node scripts/set-version.mjs "$VERSION_VOULUE"; fi
-      - name: Build and package (AppImage)
+      - name: Build and package (AppImage x64 + arm64, deb)
         run: npm run pack:linux
         working-directory: apps/windows
       - name: Package config and contents
@@ -431,21 +431,29 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: neo-quiz-linux-appimage
+          name: neo-quiz-linux
           path: |
             apps/windows/dist-installer/*.AppImage
+            apps/windows/dist-installer/*.deb
             apps/windows/dist-installer/latest-linux.yml
+            apps/windows/dist-installer/latest-linux-arm64.yml
           if-no-files-found: error
       # Même copie sous nom fixe que pour l'installeur Windows : le lien
       # permanent de la page de téléchargement vers l'AppImage vise
       # releases/latest/download/neo-quiz.AppImage, jamais le nom versionné.
-      - name: Copy AppImage under a fixed name
+      # Le nom versionné porte désormais l'architecture (deux AppImage), donc
+      # la copie NOMME la x64 : un motif `neo-quiz-*.AppImage` attraperait les
+      # deux et `cp` écraserait l'alias avec celle qui passe en dernier.
+      - name: Copy the x64 AppImage under a fixed name
         shell: bash
         run: |
-          ls apps/windows/dist-installer/neo-quiz-*.AppImage
-          cp apps/windows/dist-installer/neo-quiz-*.AppImage apps/windows/dist-installer/neo-quiz.AppImage
+          set -euo pipefail
+          ls apps/windows/dist-installer/
+          source="apps/windows/dist-installer/neo-quiz-${{ needs.prepare.outputs.version }}-x86_64.AppImage"
+          test -f "$source"
+          cp "$source" apps/windows/dist-installer/neo-quiz.AppImage
 
-      - name: Attach AppImage to release
+      - name: Attach Linux packages to release
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
@@ -455,7 +463,9 @@ jobs:
           make_latest: "false"
           files: |
             apps/windows/dist-installer/*.AppImage
+            apps/windows/dist-installer/*.deb
             apps/windows/dist-installer/latest-linux.yml
+            apps/windows/dist-installer/latest-linux-arm64.yml
             apps/windows/dist-installer/neo-quiz.AppImage
 
   # La page de téléchargement lit `docs/latest.json` (app) et
@@ -499,7 +509,9 @@ jobs:
             "neo-quiz-setup-${VERSION}.exe" \
             "neo-quiz-setup-${VERSION}.exe.blockmap" \
             "latest.yml" \
-            "neo-quiz-${VERSION}.AppImage" \
+            "neo-quiz-${VERSION}-x86_64.AppImage" \
+            "neo-quiz-${VERSION}-arm64.AppImage" \
+            "neo-quiz-${VERSION}-amd64.deb" \
             "latest-linux.yml" \
             "neo-quiz.AppImage"
           do

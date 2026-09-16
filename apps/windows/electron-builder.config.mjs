@@ -92,10 +92,34 @@ export default async function () {
 			   refuser CHAQUE mise à jour par electron-updater, silencieusement. */
 		},
 		linux: {
-			target: "AppImage",
+			/* LES TROIS SORTIES LINUX, relevées sur obsidian.md/download le
+			   2026-09-16 : AppImage x86_64, AppImage ARM64, .deb amd64. Obsidian
+			   propose en plus Snap et Flatpak, mais ce sont des MAGASINS à
+			   alimenter à chaque version (compte Snapcraft, pull request chez
+			   Flathub) et non des cibles de build — leur Flatpak est d'ailleurs
+			   « community maintained ». Pas de .rpm : eux non plus.
+			   L'arm64 se construit sur le runner x64 : electron-builder
+			   télécharge l'Electron arm64, rien n'est compilé nativement ici.
+			   La mise à jour suit le format toute seule : electron-builder pose
+			   un fichier `resources/package-type` dans le .deb, qu'electron-updater
+			   lit pour choisir `DebUpdater` (installation par `dpkg -i`, avec une
+			   demande de mot de passe) au lieu d'`AppImageUpdater`. */
+			target: [
+				{ target: "AppImage", arch: ["x64", "arm64"] },
+				{ target: "deb", arch: ["x64"] },
+			],
 			icon: "icons/icon.png",
 			category: "Education",
-			artifactName: "neo-quiz-${version}.${ext}",
+			/* `${arch}` est OBLIGATOIRE depuis qu'il y a deux architectures, et
+			   il l'est jusque sur la x64 : electron-builder n'omet l'architecture
+			   par défaut que si AUCUN `artifactName` n'est imposé
+			   (`platformPackager.js`, `expandArtifactNamePattern` : le saut est
+			   conditionné à `!isUserForced`). Sans lui, les deux AppImage
+			   porteraient le même nom. D'où `neo-quiz-1.0.6-x64.AppImage` là où
+			   Obsidian, qui ne force pas le nom, a `Obsidian-1.13.7.AppImage`.
+			   Le lien permanent du site ne change pas pour autant : il vise
+			   l'alias `neo-quiz.AppImage`, que la CI copie depuis la x64. */
+			artifactName: "neo-quiz-${version}-${arch}.${ext}",
 			/* `StartupWMClass` = `executableName` : c'est ainsi qu'un bureau
 			   Linux relie la fenêtre à son entrée `.desktop` (avertissement
 			   `WM_CLASS` du journal CI). */

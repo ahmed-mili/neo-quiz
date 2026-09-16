@@ -61,7 +61,17 @@ r.check("executableName est immuable et sûr pour un chemin",
 	[config.executableName, /^[a-z0-9.-]+$/.test(config.executableName ?? "")], ["neo-quiz", true]);
 r.check("les artefacts ont un nom sans espace",
 	[config.win?.artifactName, config.linux?.artifactName],
-	["neo-quiz-setup-${version}.${ext}", "neo-quiz-${version}.${ext}"]);
+	["neo-quiz-setup-${version}.${ext}", "neo-quiz-${version}-${arch}.${ext}"]);
+/* LES TROIS SORTIES LINUX. Une cible perdue ne fait rougir aucun build : la
+   release sortirait simplement sans son .deb ou sans son ARM64, et la page de
+   téléchargement offrirait un lien mort. Et `${arch}` dans le nom n'est pas
+   décoratif : sans lui les deux AppImage s'écrasent (voir la note de la config). */
+r.check("Linux produit AppImage x64, AppImage arm64 et deb amd64",
+	(Array.isArray(config.linux?.target) ? config.linux.target : [])
+		.map(cible => `${cible.target}:${(cible.arch ?? []).join(",")}`).sort(),
+	["AppImage:x64,arm64", "deb:x64"].sort());
+r.check("le nom des artefacts Linux porte l'architecture",
+	(config.linux?.artifactName ?? "").includes("${arch}"), true);
 r.check("la fenêtre Linux est associée à son entrée .desktop",
 	[config.linux?.desktop?.entry?.Name, config.linux?.desktop?.entry?.StartupWMClass],
 	["Neo Quiz", "neo-quiz"]);

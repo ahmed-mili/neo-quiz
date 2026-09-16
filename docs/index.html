@@ -276,21 +276,6 @@
 	/* Le cadre n'apparaît qu'au SURVOL, et sur la ligne entière (version et
 	   taille) : c'est l'invitation à choisir une release. Seules les cartes
 	   qui ont une version sélectionnable le montrent (pas Obsidian). */
-	.carte-meta.selectionnable {
-		cursor: pointer;
-	}
-	.carte-meta.selectionnable:hover,
-	.carte-meta.selectionnable:focus-visible {
-		border-color: var(--bordure);
-		background: color-mix(in srgb, var(--fond) 60%, transparent);
-		outline: none;
-	}
-	.carte-meta.selectionnable:hover .carte-version,
-	.carte-meta.selectionnable:hover .carte-taille,
-	.carte-meta.selectionnable:focus-visible .carte-version,
-	.carte-meta.selectionnable:focus-visible .carte-taille {
-		color: var(--texte);
-	}
 
 	.carte-version {
 		font-size: 13px;
@@ -431,46 +416,10 @@
 	.carte-obsidian-plus a:hover { color: var(--texte); }
 
 	/* Dropdown menu of published versions. */
-	.menu-versions {
-		position: absolute;
-		top: 100%;
-		left: 50%;
-		transform: translateX(-50%);
-		margin-top: 6px;
-		width: 200px;
-		max-height: 240px;
-		overflow-y: auto;
-		border: 1px solid var(--bordure);
-		border-radius: 12px;
-		background: var(--fond-secondaire);
-		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-		z-index: 20;
-		text-align: left;
-		padding: 6px;
-	}
 
-	.menu-versions[hidden] { display: none; }
 
-	.menu-versions .item {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-		padding: 8px 10px;
-		border-radius: 8px;
-		font-size: 13px;
-		cursor: pointer;
-	}
 
-	.menu-versions .item:hover,
-	.menu-versions .item:focus-visible {
-		background: color-mix(in srgb, var(--accent) 20%, transparent);
-	}
 
-	.menu-versions .beta {
-		font-size: 11px;
-		color: var(--texte-attenue);
-	}
 
 	/* ===== Warnings ===== */
 
@@ -656,7 +605,6 @@
 					<span class="carte-version" id="version-linux">…</span>
 					<span class="carte-taille" id="taille-linux"></span>
 				</span>
-				<div class="menu-versions" id="menu-linux" hidden></div>
 			</a>
 
 			<!-- Obsidian: not a link, the install command fits inside the card. -->
@@ -685,6 +633,36 @@
 
 	<!-- La modale Obsidian : deux boutons, rien à copier. Ouverte par la carte
 	     Obsidian (JS) ; sans JS la carte reste un lien vers le guide. -->
+	<!-- La modale Linux : les trois formats, remplis depuis `latest.json`
+	     (les noms versionnés changent à chaque release, donc aucun lien
+	     permanent possible sauf pour l'alias x86_64). Sans JavaScript la
+	     tuile reste un lien direct vers cet alias. -->
+	<div class="modale" id="modale-linux" hidden>
+		<div class="modale-fond" data-fermer></div>
+		<div class="modale-panneau" role="dialog" aria-modal="true" aria-labelledby="modale-linux-titre">
+			<button type="button" class="modale-fermer" data-fermer aria-label="Close">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M8 8L16 16M16 8L8 16"></path></svg>
+			</button>
+			<h2 id="modale-linux-titre">Neo Quiz for Linux</h2>
+			<p class="modale-sous">Three formats, depending on your machine.</p>
+			<div class="etape">
+				<h3>AppImage — x86_64</h3>
+				<p>Most PCs. Nothing to install: make the file executable and run it.</p>
+				<a class="bouton-etape bouton-etape--accent" id="linux-appimage-x64" href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz.AppImage">Download the AppImage</a>
+			</div>
+			<div class="etape">
+				<h3>AppImage — ARM64</h3>
+				<p>Raspberry Pi, ARM laptops.</p>
+				<a class="bouton-etape" id="linux-appimage-arm64" href="https://github.com/ahmed-mili/neo-quiz/releases/latest">Download for ARM64</a>
+			</div>
+			<div class="etape">
+				<h3>.deb — amd64</h3>
+				<p>Debian, Ubuntu, Linux Mint. Updating asks for your password, as any package does.</p>
+				<a class="bouton-etape" id="linux-deb" href="https://github.com/ahmed-mili/neo-quiz/releases/latest">Download the .deb</a>
+			</div>
+			<p class="modale-note">Updates then arrive on their own, from inside the app.</p>
+		</div>
+	</div>
 	<div class="modale" id="modale-obsidian" hidden>
 		<div class="modale-fond" data-fermer></div>
 		<div class="modale-panneau" role="dialog" aria-modal="true" aria-labelledby="modale-obsidian-titre">
@@ -745,7 +723,10 @@
 				return (assets || []).find(function (a) { return cible.test(String(a.name || "")); });
 			}
 			var cherchee = String(cible || "").toLowerCase();
-			var parExtension = cherchee.startsWith(".");
+			// Un point OU un tiret : « .deb » désigne une extension,
+			// « -arm64.appimage » une fin de nom. Les deux se cherchent par
+			// suffixe ; seul un nom complet se compare à l'identique.
+			var parExtension = cherchee.startsWith(".") || cherchee.startsWith("-");
 			return (assets || []).find(function (a) {
 				var nom = String(a.name || "").toLowerCase();
 				return parExtension ? nom.endsWith(cherchee) : nom === cherchee;
@@ -797,8 +778,19 @@
 				afficherVersion("windows", donnees, MOTIF_INSTALLEUR_WINDOWS, null);
 				var carteWindows = document.getElementById("carte-windows");
 				if (actifWindows && carteWindows) carteWindows.setAttribute("href", actifWindows.browser_download_url);
-				afficherVersion("linux", donnees, ".appimage", null);
-				activerSelecteurVersion("linux", ".appimage");
+				afficherVersion("linux", donnees, "-x86_64.appimage", null);
+				// Les trois formats Linux, nommés par leur SUFFIXE exact : depuis
+				// que l'architecture entre dans le nom, ".appimage" seul en
+				// désignerait deux et en prendrait une au hasard. Le sélecteur de
+				// version a été retiré pour Linux pour la même raison — et parce
+				// que la tuile ouvre désormais une modale au lieu de télécharger.
+				[["linux-appimage-x64", "-x86_64.appimage"],
+					["linux-appimage-arm64", "-arm64.appimage"],
+					["linux-deb", ".deb"]].forEach(function (paire) {
+					var el = document.getElementById(paire[0]);
+					var actif = trouverActif(donnees.assets, paire[1]);
+					if (el && actif) el.setAttribute("href", actif.browser_download_url);
+				});
 			})
 			.catch(function () {
 				// The "…" placeholders stay put; we clear them instead of
@@ -833,118 +825,6 @@
 				var el = document.getElementById("version-obsidian");
 				if (el) el.textContent = "";
 			});
-
-		// Makes a platform's version clickable: clicking opens a menu
-		// listing the ten latest published releases. Picking one DOWNLOADS
-		// NOTHING: it only updates the displayed version/size and the
-		// tile's href, which now points to that release's asset. Only
-		// clicking the tile itself (outside the version area) downloads.
-		// Windows intentionally does NOT use this selector: every bootstrapper
-		// installs the current release, so offering an older Windows version
-		// here would claim a choice the executable does not actually honor.
-		function activerSelecteurVersion(plateforme, extension) {
-			// Le CADRE entier (version et taille) est le bouton : le clic marche
-			// partout dedans, et le survol éclaire les deux textes.
-			var bouton = document.getElementById("meta-" + plateforme);
-			var menu = document.getElementById("menu-" + plateforme);
-			var carte = document.getElementById("carte-" + plateforme);
-			if (!bouton || !menu || !carte) return;
-
-			bouton.classList.add("selectionnable");
-			bouton.setAttribute("tabindex", "0");
-			bouton.setAttribute("role", "button");
-			bouton.setAttribute("aria-haspopup", "true");
-
-			var releasesChargees = null;
-
-			function fermerMenu() {
-				menu.hidden = true;
-			}
-
-			function remplirMenu(releases) {
-				menu.innerHTML = "";
-				releases.slice(0, 10).forEach(function (release) {
-					var actif = trouverActif(release.assets, extension);
-					if (!actif) return;
-					var version = String(release.tag_name || "").replace(/^(desktop-)?v/, "");
-					if (!version) return;
-					var item = document.createElement("div");
-					item.className = "item";
-					item.tabIndex = 0;
-					item.setAttribute("role", "menuitem");
-
-					var libelle = document.createElement("span");
-					libelle.textContent = "v" + version;
-					item.appendChild(libelle);
-
-					if (release.prerelease) {
-						var beta = document.createElement("span");
-						beta.className = "beta";
-						beta.textContent = "beta";
-						item.appendChild(beta);
-					}
-
-					var estDerniere = latestChargee && release.tag_name === latestChargee.tag_name;
-					var suffixe = estDerniere ? null : (release.prerelease ? "beta" : "latest");
-
-					function choisir(e) {
-						e.preventDefault();
-						e.stopPropagation();
-						fermerMenu();
-						afficherVersion(plateforme, release, extension, suffixe);
-						carte.setAttribute("href", actif.browser_download_url);
-					}
-
-					item.addEventListener("click", choisir);
-					item.addEventListener("keydown", function (e) {
-						if (e.key === "Enter" || e.key === " ") choisir(e);
-					});
-
-					menu.appendChild(item);
-				});
-			}
-
-			function ouvrirMenu() {
-				if (releasesChargees) {
-					remplirMenu(releasesChargees);
-					menu.hidden = false;
-					return;
-				}
-				fetch("https://api.github.com/repos/" + DEPOT + "/releases")
-					.then(function (reponse) {
-						if (!reponse.ok) throw new Error("not ok");
-						return reponse.json();
-					})
-					.then(function (releases) {
-						releasesChargees = releases;
-						remplirMenu(releases);
-						menu.hidden = false;
-					})
-					.catch(function () {
-						// List unavailable: clicking the version simply does
-						// nothing, the card stays a link to latest.
-					});
-			}
-
-			function basculerMenu(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				if (menu.hidden) ouvrirMenu();
-				else fermerMenu();
-			}
-
-			bouton.addEventListener("click", basculerMenu);
-			bouton.addEventListener("keydown", function (e) {
-				if (e.key === "Enter" || e.key === " ") basculerMenu(e);
-			});
-
-			document.addEventListener("click", function (e) {
-				if (!carte.contains(e.target)) fermerMenu();
-			});
-			document.addEventListener("keydown", function (e) {
-				if (e.key === "Escape") fermerMenu();
-			});
-		}
 
 		// Obsidian card: the copy button of the PowerShell command.
 		function copierTexte(texte, bouton) {
@@ -1014,24 +894,28 @@
 
 		// La carte Obsidian ouvre la modale (deux boutons BRAT). Fermeture :
 		// la croix, le fond, Échap. Sans JS, la carte est un lien vers le guide.
-		var carteObsidian = document.getElementById("carte-obsidian");
-		var modaleObsidian = document.getElementById("modale-obsidian");
-		if (carteObsidian && modaleObsidian) {
-			var ouvrirModale = function (e) {
+		// Deux tuiles ouvrent une modale au lieu de télécharger : Obsidian (BRAT)
+		// et Linux (trois formats). Même câblage pour les deux, écrit une fois.
+		function brancherModale(idCarte, idModale) {
+			var carte = document.getElementById(idCarte);
+			var modale = document.getElementById(idModale);
+			if (!carte || !modale) return;
+			var fermer = function () { modale.hidden = true; };
+			carte.addEventListener("click", function (e) {
 				e.preventDefault();
-				modaleObsidian.hidden = false;
-				var f = modaleObsidian.querySelector(".modale-fermer");
+				modale.hidden = false;
+				var f = modale.querySelector(".modale-fermer");
 				if (f) f.focus();
-			};
-			var fermerModale = function () { modaleObsidian.hidden = true; };
-			carteObsidian.addEventListener("click", ouvrirModale);
-			modaleObsidian.querySelectorAll("[data-fermer]").forEach(function (el) {
-				el.addEventListener("click", fermerModale);
+			});
+			modale.querySelectorAll("[data-fermer]").forEach(function (el) {
+				el.addEventListener("click", fermer);
 			});
 			document.addEventListener("keydown", function (e) {
-				if (e.key === "Escape" && !modaleObsidian.hidden) fermerModale();
+				if (e.key === "Escape" && !modale.hidden) fermer();
 			});
 		}
+		brancherModale("carte-obsidian", "modale-obsidian");
+		brancherModale("carte-linux", "modale-linux");
 	</script>
 </body>
 </html>

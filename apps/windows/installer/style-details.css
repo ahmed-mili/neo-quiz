@@ -242,18 +242,36 @@
 	background: rgba(7, 15, 29, .62);
 	color: #7fb0ff;
 	cursor: pointer;
+	transition: border-color .16s ease, background-color .16s ease, color .16s ease, transform .1s ease;
 }
 
-.nqi-progress-cancel:hover:not(:disabled),
+.nqi-progress-cancel:hover:not(:disabled) {
+	border-color: rgba(126, 168, 255, .88);
+	background: rgba(18, 33, 60, .76);
+	color: #a8caff;
+}
+
+/* L'ancienne règle faisait `outline: none` en ne laissant qu'un changement de
+   couleur : au clavier, la cible du focus devenait indevinable sur un fond
+   sombre. L'anneau REMPLACE l'outline par défaut au lieu de le supprimer. */
 .nqi-progress-cancel:focus-visible:not(:disabled) {
 	border-color: rgba(126, 168, 255, .88);
 	background: rgba(18, 33, 60, .76);
-	outline: none;
+	outline: 2px solid rgba(146, 185, 255, .9);
+	outline-offset: 2px;
 }
 
+.nqi-progress-cancel:active:not(:disabled) {
+	transform: translateY(1px);
+	background: rgba(12, 24, 44, .82);
+}
+
+/* Grisé pendant « démarrage » (plus rien à annuler) et pendant qu'une
+   annulation est déjà en cours. Dans les deux cas le bouton porte un `title`
+   qui dit laquelle des deux raisons s'applique. */
 .nqi-progress-cancel:disabled {
 	opacity: .42;
-	cursor: default;
+	cursor: not-allowed;
 }
 
 .nqi-progress-install {
@@ -288,8 +306,23 @@
 
 @media (prefers-reduced-motion: reduce) {
 	.nqi-loading-spinner { animation-duration: 1.8s; }
+	/* Qui demande moins de mouvement reçoit la modale POSÉE, pas glissée, et
+	   des boutons qui changent de couleur sans s'enfoncer. Rien ne disparaît :
+	   seule l'animation tombe. */
+	.nqi-cancel-overlay,
+	.nqi-cancel-dialog { animation: none; }
+	.nqi-progress-cancel,
+	.nqi-cancel-no,
+	.nqi-cancel-yes { transition-property: border-color, background-color, color, filter; }
+	.nqi-progress-cancel:active:not(:disabled),
+	.nqi-cancel-no:active,
+	.nqi-cancel-yes:active { transform: none; }
 }
 
+/* L'APPARITION DE LA MODALE. Le voile se fond, le panneau monte de huit
+   pixels en grandissant à peine : assez pour qu'on voie d'où il vient, assez
+   court (.18 s) pour ne jamais retarder un clic. Les deux animations sont
+   coupées sous `prefers-reduced-motion` — voir le bloc en fin de fichier. */
 .nqi-cancel-overlay {
 	position: absolute;
 	inset: 0;
@@ -298,6 +331,7 @@
 	align-items: center;
 	justify-content: center;
 	background: rgba(0, 0, 0, .42);
+	animation: nqi-voile-entre .16s ease-out;
 }
 
 .nqi-cancel-dialog {
@@ -306,6 +340,15 @@
 	border-radius: 12px;
 	background: #1c2230;
 	box-shadow: 0 24px 70px rgba(0, 0, 0, .46);
+	animation: nqi-dialogue-entre .18s cubic-bezier(.2, .7, .3, 1);
+}
+
+@keyframes nqi-voile-entre {
+	from { opacity: 0; }
+}
+
+@keyframes nqi-dialogue-entre {
+	from { opacity: 0; transform: translateY(8px) scale(.985); }
 }
 
 .nqi-cancel-title {
@@ -354,10 +397,30 @@
 	color: #061224;
 }
 
+.nqi-cancel-no,
+.nqi-cancel-yes {
+	transition: filter .16s ease, border-color .16s ease, transform .1s ease;
+}
+
 .nqi-cancel-no:hover,
+.nqi-cancel-yes:hover {
+	filter: brightness(1.08);
+}
+
+.nqi-cancel-no:hover { border-color: rgba(169, 188, 224, .7); }
+
+/* Même correction que sur Annuler : l'anneau remplace l'outline, il ne la
+   supprime pas. Ces deux boutons décident d'abandonner une installation —
+   savoir lequel a le focus au clavier n'est pas un détail. */
 .nqi-cancel-no:focus-visible,
-.nqi-cancel-yes:hover,
 .nqi-cancel-yes:focus-visible {
 	filter: brightness(1.08);
-	outline: none;
+	outline: 2px solid rgba(146, 185, 255, .9);
+	outline-offset: 2px;
+}
+
+.nqi-cancel-no:active,
+.nqi-cancel-yes:active {
+	transform: translateY(1px);
+	filter: brightness(.96);
 }

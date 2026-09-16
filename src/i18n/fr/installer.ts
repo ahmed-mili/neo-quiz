@@ -46,6 +46,7 @@ export const FR_INSTALLER = {
 	"installer.error.generic": "L'installation n'a pas pu continuer.",
 	"installer.elevationDialog.title": "Installation impossible",
 	"installer.elevationDialog.body": "Neo Quiz nécessite les droits administrateur pour être installé. Cliquez sur Annuler, puis relancez le programme d’installation.",
+	"installer.cancelUnavailable": "Neo Quiz est installé, il n'y a plus rien à annuler.",
 	"installer.alreadyInstalled.title": "Neo Quiz est déjà installé",
 	"installer.alreadyInstalled.body": "Cet assistant sert à la première installation. Les mises à jour arrivent toutes seules : Neo Quiz les télécharge et les installe depuis l'application.",
 	"installer.alreadyInstalled.path": "Installé dans {path}",

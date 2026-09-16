@@ -363,11 +363,32 @@ function rendreEtapeProgression(parent: HTMLElement): void {
 	   Comme Google Play Games, elles ne sont plus répétées pendant le
 	   téléchargement et l’installation : la progression reste visuellement nette. */
 
-	const actions = ajouter(etape, "div", "nqi-progress-actions");
+	rendreActionsProgression(etape, true);
+}
+
+/** La rangée d'actions des étapes de progression, rendue aussi pendant
+    « démarrage » — avec Annuler GRISÉ plutôt qu'absent.
+
+    Un bouton qui disparaît laisse croire qu'on a perdu le contrôle ; un bouton
+    grisé dit qu'il n'y a plus rien à annuler, et son infobulle dit pourquoi.
+    C'est le seul moment où l'annulation ne peut rien faire : Neo Quiz est
+    installé et s'ouvre déjà. Partout ailleurs elle marche — immédiatement
+    pendant le téléchargement et l'élévation, et de façon DIFFÉRÉE pendant
+    l'installation, où NSIS termine sa transaction avant qu'une installation
+    fraîche soit désinstallée proprement (le tuer en pleine écriture laisserait
+    registre et raccourcis incohérents). */
+function rendreActionsProgression(parent: HTMLElement, annulable: boolean): void {
+	const actions = ajouter(parent, "div", "nqi-progress-actions");
 	const annuler = ajouter(actions, "button", "nqi-progress-cancel", t("installer.cancel"));
 	annuler.type = "button";
-	annuler.disabled = annulationDemandee;
-	if (!annuler.disabled) annuler.addEventListener("click", ouvrirConfirmationAnnulation);
+	annuler.disabled = !annulable || annulationDemandee;
+	if (annuler.disabled) {
+		annuler.title = annulationDemandee
+			? t("installer.status.cancelling")
+			: t("installer.cancelUnavailable");
+	} else {
+		annuler.addEventListener("click", ouvrirConfirmationAnnulation);
+	}
 	const installer = ajouter(actions, "button", "nqi-progress-install", t("installer.install"));
 	installer.type = "button";
 	installer.disabled = true;
@@ -381,6 +402,8 @@ function rendreDemarrage(parent: HTMLElement): void {
 	const anneau = ajouter(etape, "div", "nqi-loading-spinner");
 	anneau.setAttribute("aria-hidden", "true");
 	ajouter(etape, "p", "nqi-launching-status", t("installer.status.launching"));
+	/* La rangée reste, Annuler grisé : voir la note de `rendreActionsProgression`. */
+	rendreActionsProgression(etape, false);
 }
 
 function rendre(): void {

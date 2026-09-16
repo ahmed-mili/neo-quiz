@@ -338,7 +338,11 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 			principalInstallateur.includes('webContents.once("dom-ready"'),
 			renduInstallateur.includes('etat.phase === "elevation" || etat.phase === "telechargement"'),
 			renduInstallateur.includes('installer.cancelDialog.title'),
-			renduInstallateur.includes('annuler.disabled = annulationDemandee'),
+			/* DEUX raisons de griser, pas une : l'annulation déjà demandée, et
+			   l'étape « démarrage » où il n'y a plus rien à annuler. Le bouton
+			   reste AFFICHÉ dans les deux cas — le faire disparaître laisserait
+			   croire qu'on a perdu le contrôle. */
+			renduInstallateur.includes("annuler.disabled = !annulable || annulationDemandee"),
 			principalInstallateur.includes('if (socketTravailleur) {'),
 			travailleurInstallateur.includes('if (commande.type === "annuler") annulation.abort();'),
 		],
@@ -349,6 +353,21 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 	const blocProgression = debutProgression >= 0 && debutDemarrage > debutProgression
 		? renduInstallateur.slice(debutProgression, debutDemarrage)
 		: "";
+	/* L'étape « démarrage » garde la rangée d'actions, Annuler grisé, avec
+	   l'infobulle qui dit pourquoi. Sans ce cas, la rangée pourrait disparaître
+	   à nouveau sans que rien ne rougisse — et c'est précisément ce qui faisait
+	   croire que le bouton « ne marche pas ». */
+	const debutDemarrageSeul = renduInstallateur.indexOf("function rendreDemarrage");
+	const blocDemarrage = debutDemarrageSeul >= 0
+		? renduInstallateur.slice(debutDemarrageSeul, renduInstallateur.indexOf("\n}", debutDemarrageSeul))
+		: "";
+	r.check("annulation : la rangée d'actions reste pendant « démarrage », grisée et expliquée",
+		[
+			blocDemarrage.includes("rendreActionsProgression(etape, false)"),
+			renduInstallateur.includes('t("installer.cancelUnavailable")'),
+		],
+		[true, true]);
+
 	r.check("expérience : mentions légales absentes à partir de l'étape 3",
 		[blocProgression.includes("rendreLegal("), renduInstallateur.includes("rendreLegal(panneau);")],
 		[false, true]);

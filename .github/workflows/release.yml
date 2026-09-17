@@ -490,7 +490,12 @@ jobs:
             apps/windows/dist-installer/*.deb
             apps/windows/dist-installer/latest-linux.yml
             apps/windows/dist-installer/latest-linux-arm64.yml
-            apps/windows/dist-installer/neo-quiz.AppImage
+            # PAS de ligne `neo-quiz.AppImage` : le motif `*.AppImage`
+            # ci-dessus l'attrape DÉJÀ (c'est la copie à nom fixe faite juste
+            # avant). Listé deux fois, le même fichier de ~100 Mo partait en
+            # deux envois concurrents, qui se disputaient le répertoire
+            # temporaire de l'action : « Error saving asset », puis « Headers
+            # Timeout Error » après 17 minutes (1.2.1 et 1.2.2, 2026-09-17).
 
   # La page de téléchargement lit `docs/latest.json` (app) et
   # `docs/latest-plugin.json` (greffon), servis par GitHub Pages, sans limite

@@ -539,7 +539,7 @@
 	   cherchait le mot suivant. Il faut qu'il soit assez large pour dire « c'est
 	   fini, ça reprend » — ici un bon tiers de ce que la piste montre — sans
 	   jamais la vider tout à fait. */
-	padding-right: 72px;
+	padding-right: var(--nq-ecart, 72px);
 }
 
 /* Les deux bords s'ESTOMPENT pendant que ça défile : sans eux, le chemin se

@@ -133,17 +133,42 @@ export function renderModuleCard(
 			piste.classList.add("is-libre");
 		});
 		/* Après la peinture : dans la même image, `scrollWidth` vaut encore
-		   `clientWidth` et aucune carte ne défilerait jamais. */
-		requestAnimationFrame(() => {
-			if (piste.scrollWidth - piste.clientWidth <= 2) return;
-			const echo = ajouter(rail, "span", "qbd-module-card__path-texte qbd-module-card__path-texte--echo", libelle);
-			/* L'écho est un doublon VISUEL : une aide technique qui le lirait
-			   annoncerait le chemin deux fois de suite. */
-			echo.setAttribute("aria-hidden", "true");
+		   `clientWidth` et aucune carte ne défilerait jamais.
+		   L'ÉCART VAUT LA LARGEUR DE LA PISTE, et non un nombre fixe : c'est
+		   la seule valeur qui garantisse qu'on ne voie jamais les deux
+		   exemplaires à la fois. Avec 72 px et une carte élargie — un zoom,
+		   une fenêtre agrandie —, la fin du chemin et sa reprise tenaient
+		   ensemble à l'écran, séparées par un trou : on lisait « …Python
+		   Efrei/Bachelor… » comme une seule ligne (Ahmed, 2026-09-17).
+		   Recalibré à chaque changement de largeur : le zoom de l'interface ne
+		   redessine pas les cartes, et l'écart serait resté celui d'avant. */
+		const calibrer = (): void => {
+			piste.classList.remove("is-defilant");
+			piste.style.removeProperty("--nq-ecart");
+			if (piste.scrollWidth - piste.clientWidth <= 2) {
+				rail.querySelector(".qbd-module-card__path-texte--echo")?.remove();
+				return;
+			}
+			piste.style.setProperty("--nq-ecart", `${Math.round(piste.clientWidth)}px`);
+			if (!rail.querySelector(".qbd-module-card__path-texte--echo")) {
+				const echo = ajouter(rail, "span", "qbd-module-card__path-texte qbd-module-card__path-texte--echo", libelle);
+				/* L'écho est un doublon VISUEL : une aide technique qui le lirait
+				   annoncerait le chemin deux fois de suite. */
+				echo.setAttribute("aria-hidden", "true");
+			}
 			const pas = texte.getBoundingClientRect().width;
 			piste.style.setProperty("--nq-duree", `${Math.max(6, Math.round(pas / 30))}s`);
 			piste.classList.add("is-defilant");
+		};
+		requestAnimationFrame(calibrer);
+		/* L'observateur se DÉBRANCHE dès que la piste quitte le document : une
+		   grille se redessine à chaque navigation, et autant d'observateurs
+		   restés derrière retiendraient autant de cartes mortes. */
+		const observateur = new ResizeObserver(() => {
+			if (!piste.isConnected) { observateur.disconnect(); return; }
+			if (!piste.classList.contains("is-libre")) calibrer();
 		});
+		observateur.observe(piste);
 	}
 	if (onMenu) {
 		const moreBtn = ajouter(footer, "button", "qbd-card-more qbd-module-card__menu");

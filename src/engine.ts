@@ -362,6 +362,7 @@ async function renderInteractiveQuiz(context: RenderQuizContext): Promise<void> 
 
 	const quizState: QuizState = {
 		practiceMode: "qcm",
+		startMode: "exam",
 		selections: initSelections(),
 		textOnlyAnswers: initTextOnlyAnswers(),
 		textOnlyChecked: initTextOnlyChecked(),

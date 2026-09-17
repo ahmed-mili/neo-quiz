@@ -526,7 +526,11 @@
 	padding-bottom: 11px;
 }
 
-/* ── Dot de statut : vert prêt / orange config / rouge erreur ── */
+/* ── Dot de statut : orange « serveur arrêté » / rouge « absent ». Il n'y a
+   PLUS de pastille verte ni de pastille « vérification » (2026-09-17) : un
+   fournisseur qui répond n'affiche rien, sa version dans le sous-titre le dit
+   déjà. D'où la disparition de `--ok`, de `--checking` et du keyframe qui le
+   faisait pulser. ── */
 .qbd-status-dot {
 	display: inline-block;
 	width: 7px;
@@ -534,20 +538,6 @@
 	border-radius: 50%;
 	flex-shrink: 0;
 	background: var(--text-faint);
-}
-
-.qbd-status-dot--checking {
-	animation: qbd-dot-pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes qbd-dot-pulse {
-	0%, 100% { opacity: 0.35; }
-	50%      { opacity: 1; }
-}
-
-.qbd-status-dot--ok {
-	background: var(--color-green, #4ade80);
-	box-shadow: 0 0 6px color-mix(in srgb, var(--color-green, #4ade80) 60%, transparent);
 }
 
 .qbd-status-dot--warn {
@@ -1076,13 +1066,11 @@
 	overflow: hidden;
 }
 
-/* Rangée de chips « notes », superposée à la 1ʳᵉ ligne du texte (état par
-   défaut — mesuré puis éventuellement basculé en repli par
-   layoutChipsRow, cf. ai.ts). `text-indent` posé en JS sur le textarea
-   pousse le texte après la rangée ; les lignes suivantes reviennent à
-   gauche puisque text-indent ne touche QUE la 1ʳᵉ ligne. Le conteneur
-   laisse passer les clics hors des chips (vers le textarea dessous) ;
-   seuls les chips eux-mêmes sont cliquables. */
+/* Les pièces jointes du composer : des CARTES, en rangée défilante AU-DESSUS
+   du champ (retour Ahmed 2026-09-17, référence claude.ai). Plus de
+   superposition à la première ligne du texte : `layoutChipsRow` (ai.ts) pose
+   toujours `--stacked`, et la position absolue ci-dessous n'est plus que
+   l'état d'un premier rendu, avant ce premier appel. */
 .qbd-ai-composer-chips {
 	position: absolute;
 	top: 0;
@@ -1090,8 +1078,8 @@
 	z-index: 1;
 	display: flex;
 	flex-wrap: nowrap;
-	align-items: center;
-	gap: 6px;
+	align-items: stretch;
+	gap: 10px;
 	pointer-events: none;
 }
 
@@ -1099,73 +1087,158 @@
 	pointer-events: auto;
 }
 
-/* Repli : la rangée est trop large pour laisser de la place au texte sur
-   la 1ʳᵉ ligne (plusieurs fichiers, nom déplié en chemin complet…) —
-   retour en flux normal AU-DESSUS du champ, comme les vignettes
-   d'image ; text-indent est alors remis à vide côté JS. */
+/* La rangée en flux normal : une seule ligne qui DÉFILE, jamais un retour à
+   la ligne — sept PDF font sept cartes côte à côte et une barre, comme sur
+   claude.ai. La barre est fine et reste visible : c'est elle qui dit qu'il y
+   a plus à droite. */
 .qbd-ai-composer-chips--stacked {
 	position: static;
-	flex-wrap: wrap;
-	margin-bottom: 6px;
+	/* La rangée reçoit les clics (retour Ahmed 2026-09-17 : la barre de
+	   défilement ne se laissait pas saisir). Le `pointer-events: none` de
+	   l'état de base laissait passer les clics vers le champ DESSOUS, quand
+	   la rangée se superposait au texte ; en flux normal elle n'a plus rien
+	   dessous, et sa barre est à elle. */
+	pointer-events: auto;
+	flex-wrap: nowrap;
+	overflow-x: auto;
+	overflow-y: hidden;
+	margin-bottom: 8px;
+	padding-bottom: 8px;
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in srgb, var(--text-normal) 22%, transparent) transparent;
 }
 
+.qbd-ai-composer-chips--stacked::-webkit-scrollbar { height: 6px; }
+.qbd-ai-composer-chips--stacked::-webkit-scrollbar-thumb {
+	background: color-mix(in srgb, var(--text-normal) 22%, transparent);
+	border-radius: 999px;
+}
+.qbd-ai-composer-chips--stacked::-webkit-scrollbar-track { background: transparent; }
+
+/* La carte : le nom en haut sur deux lignes, le badge d'extension en bas à
+   gauche, la croix en haut à droite au survol. Largeur fixe pour que la
+   rangée reste une rangée de cartes égales, quel que soit le nom. */
 .qbd-ai-note-chip {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	padding: 5px 8px;
-	background: var(--background-primary);
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: 10px;
+	flex: 0 0 auto;
+	width: 124px;
+	/* Hauteur FIXE, pas minimale (retour Ahmed 2026-09-17 : le type doit se
+	   voir « quoi qu'il arrive, peu importe la longueur du nom »). Un nom qui
+	   déborde est COUPÉ par la zone du nom (ci-dessous), jamais poussé sous le
+	   badge : la carte ne grandit pas, le badge reste à sa place. */
+	height: 104px;
+	box-sizing: border-box;
+	padding: 12px 12px 10px;
+	background: color-mix(in srgb, var(--background-primary) 70%, transparent);
 	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m, 8px);
-	font-size: 11.5px;
+	border-radius: 12px;
+	font-size: 12.5px;
 	color: var(--text-normal);
-	max-width: 240px;
 	cursor: default;
+	transition: border-color 0.16s ease, background 0.16s ease;
 }
 
-/* Chip avec chemin connu : bascule nom+extension ⇄ chemin complet au clic
-   (le × garde son rôle de suppression, cf. e.stopPropagation en JS). */
+/* Carte avec chemin connu : bascule nom ⇄ chemin complet au clic (le ×
+   garde son rôle de suppression, cf. e.stopPropagation en JS). */
 .qbd-ai-note-chip--toggle {
 	cursor: pointer;
 }
 
 .qbd-ai-note-chip--toggle:hover {
 	border-color: color-mix(in srgb, var(--interactive-accent) 35%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--text-normal) 5%, var(--background-primary));
 }
 
-.qbd-ai-note-chip-icon {
-	display: inline-flex;
-	align-items: center;
-	color: var(--interactive-accent);
+/* Deux lignes, puis des points de suspension : « CM1 - Introdu… à
+   Python.pdf » se reconnaît, et toutes les cartes gardent la même hauteur. */
+.qbd-ai-note-chip-name {
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	/* `flex: 1` + `min-height: 0` : le nom prend ce que le badge lui laisse,
+	   et pas un pixel de plus — la ceinture sous les bretelles du clamp. */
+	flex: 1 1 auto;
+	min-height: 0;
+	max-height: 2.7em;
+	overflow: hidden;
+	overflow-wrap: anywhere;
+	line-height: 1.35;
+	font-weight: 500;
+	padding-right: 12px;
+}
+
+.qbd-ai-note-chip-badge {
 	flex-shrink: 0;
 }
 
-.qbd-ai-note-chip-icon svg {
-	width: 13px;
-	height: 13px;
+/* Le nom coupé AU MILIEU (poserCarte, ai.ts) : la tête sur la première ligne,
+   points de suspension à droite ; la queue — l'extension — sur la seconde,
+   entière. Le conteneur quitte le clamp de deux lignes : ce sont ses deux
+   enfants qui font les deux lignes. */
+.qbd-ai-note-chip-name--split {
+	display: flex;
+	flex-direction: column;
+	-webkit-line-clamp: unset;
+	/* La place de la croix n'est réservée que sur la PREMIÈRE ligne : la
+	   queue prend toute la largeur, ses douze caractères doivent tenir. */
+	padding-right: 0;
 }
 
-.qbd-ai-note-chip-name {
-	overflow: hidden;
-	text-overflow: ellipsis;
+.qbd-ai-note-chip-name-head {
+	padding-right: 12px;
+}
+
+.qbd-ai-note-chip-name-head,
+.qbd-ai-note-chip-name-tail {
+	display: block;
 	white-space: nowrap;
-	min-width: 0;
+	overflow: hidden;
+}
+
+.qbd-ai-note-chip-name-head {
+	text-overflow: ellipsis;
+}
+
+.qbd-ai-note-chip-badge {
+	align-self: flex-start;
+	padding: 2px 7px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--text-normal) 12%, transparent);
+	color: var(--text-muted);
+	font-family: var(--font-monospace, monospace);
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	line-height: 1.5;
 }
 
 .qbd-ai-note-chip-remove {
+	position: absolute;
+	top: 6px;
+	right: 6px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 16px;
-	height: 16px;
+	width: 20px;
+	height: 20px;
 	padding: 0;
 	border: none;
 	border-radius: 50%;
-	background: transparent !important;
+	background: color-mix(in srgb, var(--background-primary) 80%, transparent) !important;
 	box-shadow: none !important;
 	color: var(--text-faint);
 	cursor: pointer;
-	flex-shrink: 0;
+	opacity: 0;
+	transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.qbd-ai-note-chip:hover .qbd-ai-note-chip-remove,
+.qbd-ai-note-chip-remove:focus-visible {
+	opacity: 1;
 }
 
 .qbd-ai-note-chip-remove:hover {
@@ -1173,12 +1246,535 @@
 }
 
 .qbd-ai-note-chip-remove svg {
-	width: 11px;
-	height: 11px;
+	width: 12px;
+	height: 12px;
+}
+
+/* La carte d'un PDF DESSINÉ : la première page remplit la carte, le badge
+   se pose dessus en bas à gauche (référence claude.ai : une carte de PDF
+   montre sa page, pas son nom — le nom est dans le tooltip et l'aperçu). */
+.qbd-ai-note-chip--thumb {
+	/* La page est POSÉE DANS la carte, jamais recadrée (retour Ahmed
+	   2026-09-17, référence claude.ai) : une diapo en paysage se voit en
+	   paysage, une page A4 en portrait se voit en portrait — la FORME du
+	   document est une information, et `object-fit: cover` la mangeait en
+	   remplissant la carte avec le coin supérieur gauche. D'où un fond sombre
+	   autour de la page plutôt qu'un fond blanc plein cadre, et plus de badge
+	   ni de nom par-dessus : la page parle d'elle-même. */
+	padding: 0;
+	overflow: hidden;
+	align-items: center;
+	justify-content: center;
+	gap: 0;
+	background: color-mix(in srgb, var(--background-primary) 88%, #000);
+}
+
+.qbd-ai-note-chip-thumb {
+	position: static;
+	display: block;
+	/* AUCUNE marge (Ahmed, 2026-09-17, deux fois : « trop dézoomé », puis
+	   « réduit encore ») : la page touche les bords de la carte par son côté
+	   long. Ce qui dit la forme, c'est le fond qu'on voit sur le côté COURT —
+	   deux bandes pour un portrait, deux bandeaux pour un paysage — et il n'a
+	   pas besoin d'une marge de plus pour se voir. */
+	max-width: 100%;
+	max-height: 100%;
+	width: auto;
+	height: auto;
+	border-radius: 2px;
+	/* L'ombre dit que c'est une feuille posée, et détache une page blanche du
+	   fond sombre sans lui mettre de cadre. */
+	box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.55);
+	pointer-events: none;
+}
+
+/* Sur une vignette, le badge et le nom ne sont PAS rendus (poserCarte) : rien
+   ne recouvre la page. Seule la croix reste, sur un fond qui la détache quelle
+   que soit la couleur dessous. */
+.qbd-ai-note-chip--thumb .qbd-ai-note-chip-remove {
+	background: rgba(20, 22, 32, 0.82) !important;
+	color: rgba(255, 255, 255, 0.88);
+}
+
+/* Dans la bulle envoyée : mêmes cartes, plus petites, sans croix. */
+.qbd-ai-sent-chips .qbd-ai-note-chip {
+	width: 108px;
+	min-height: 88px;
+	padding: 10px 10px 8px;
+	font-size: 11.5px;
 }
 
 .qbd-ai-file-input {
 	display: none;
+}
+
+/* ── L'aperçu d'une pièce jointe (clic sur sa carte) : une modale large, la
+   ligne de métadonnées sous le titre, puis le texte en `<pre>` ou les pages
+   en images l'une sous l'autre (référence claude.ai, 2026-09-17). ── */
+.qbd-ai-preview-modal {
+	width: 760px;
+	max-width: calc(100vw - 32px);
+}
+
+.qbd-ai-preview-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin: -6px 0 14px;
+	font-size: 12px;
+	color: var(--text-faint);
+}
+
+.qbd-ai-preview-meta-sep {
+	opacity: 0.6;
+}
+
+.qbd-ai-preview-meta-path {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--font-monospace, monospace);
+	font-size: 11px;
+}
+
+/* ── L'aperçu d'une NOTE, rendue (markdown-preview.ts) : la typographie
+   d'une note en lecture, dans la modale. Classes `mdp-*` posées par le
+   rendu ; les balises nues (h1…, ul, table, blockquote) viennent de lui aussi
+   et de lui seul. ── */
+.qbd-ai-preview-md {
+	padding: 4px 6px 8px;
+	font-size: 14px;
+	line-height: 1.6;
+	color: var(--text-normal);
+	overflow-wrap: anywhere;
+}
+
+.qbd-ai-preview-md h1, .qbd-ai-preview-md h2, .qbd-ai-preview-md h3,
+.qbd-ai-preview-md h4, .qbd-ai-preview-md h5, .qbd-ai-preview-md h6 {
+	margin: 1.1em 0 0.4em;
+	line-height: 1.25;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+.qbd-ai-preview-md h1 { font-size: 1.6em; }
+.qbd-ai-preview-md h2 { font-size: 1.35em; }
+.qbd-ai-preview-md h3 { font-size: 1.15em; }
+.qbd-ai-preview-md h4, .qbd-ai-preview-md h5, .qbd-ai-preview-md h6 { font-size: 1em; }
+.qbd-ai-preview-md > :first-child { margin-top: 0; }
+
+.qbd-ai-preview-md p { margin: 0 0 0.8em; }
+.qbd-ai-preview-md ul, .qbd-ai-preview-md ol { margin: 0 0 0.8em; padding-left: 1.6em; }
+.qbd-ai-preview-md li { margin: 0.15em 0; }
+.qbd-ai-preview-md li > ul, .qbd-ai-preview-md li > ol { margin: 0.15em 0 0; }
+.qbd-ai-preview-md hr { border: 0; border-top: 1px solid var(--background-modifier-border); margin: 1.2em 0; }
+.qbd-ai-preview-md code {
+	padding: 1px 5px;
+	border-radius: 5px;
+	background: color-mix(in srgb, var(--text-normal) 10%, transparent);
+	font-family: var(--font-monospace, monospace);
+	font-size: 0.9em;
+}
+.qbd-ai-preview-md pre.mdp-code {
+	margin: 0 0 0.9em;
+	padding: 12px 14px;
+	border-radius: 10px;
+	border: 1px solid var(--background-modifier-border);
+	background: color-mix(in srgb, var(--background-primary) 70%, transparent);
+	overflow-x: auto;
+}
+.qbd-ai-preview-md pre.mdp-code code { padding: 0; background: transparent; font-size: 12.5px; line-height: 1.5; }
+
+.qbd-ai-preview-md blockquote {
+	margin: 0 0 0.9em;
+	padding: 4px 14px;
+	border-left: 3px solid var(--background-modifier-border);
+	color: var(--text-muted);
+}
+
+/* L'encadré : le gabarit des callouts d'Ahmed — bloc plat, barre d'accent à
+   gauche, coins arrondis, titre gras coloré. Une teinte par grande famille ;
+   les autres types prennent l'accent. */
+.mdp-callout {
+	--mdp-callout: var(--interactive-accent);
+	margin: 0 0 0.9em;
+	padding: 10px 14px;
+	border-left: 3px solid var(--mdp-callout);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--mdp-callout) 10%, transparent);
+}
+.mdp-callout[data-type="warning"], .mdp-callout[data-type="attention"], .mdp-callout[data-type="caution"] { --mdp-callout: #f59e0b; }
+.mdp-callout[data-type="danger"], .mdp-callout[data-type="error"], .mdp-callout[data-type="bug"], .mdp-callout[data-type="fail"], .mdp-callout[data-type="failure"] { --mdp-callout: #ef4466; }
+.mdp-callout[data-type="success"], .mdp-callout[data-type="check"], .mdp-callout[data-type="done"], .mdp-callout[data-type="tip"], .mdp-callout[data-type="hint"] { --mdp-callout: #10b981; }
+.mdp-callout[data-type="question"], .mdp-callout[data-type="help"], .mdp-callout[data-type="faq"] { --mdp-callout: #f59e0b; }
+.mdp-callout[data-type="quote"], .mdp-callout[data-type="cite"] { --mdp-callout: #8b8b8b; }
+.mdp-callout[data-type="example"] { --mdp-callout: #8b5cf6; }
+.mdp-callout-title { font-weight: 700; color: var(--mdp-callout); margin-bottom: 4px; }
+.mdp-callout-body > :last-child { margin-bottom: 0; }
+
+.qbd-ai-preview-md table.mdp-table {
+	border-collapse: collapse;
+	margin: 0 0 0.9em;
+	font-size: 0.95em;
+}
+.qbd-ai-preview-md table.mdp-table th, .qbd-ai-preview-md table.mdp-table td {
+	padding: 5px 10px;
+	border: 1px solid var(--background-modifier-border);
+	text-align: left;
+	vertical-align: top;
+}
+.qbd-ai-preview-md table.mdp-table th { background: color-mix(in srgb, var(--text-normal) 6%, transparent); }
+
+.mdp-task { display: inline-flex; align-items: baseline; gap: 7px; }
+.mdp-task-box {
+	display: inline-block;
+	width: 13px; height: 13px;
+	border: 1.5px solid var(--text-muted);
+	border-radius: 4px;
+	transform: translateY(1px);
+	flex-shrink: 0;
+}
+.mdp-task.is-done .mdp-task-box { background: var(--interactive-accent); border-color: var(--interactive-accent); }
+.mdp-task.is-done { color: var(--text-muted); text-decoration: line-through; }
+
+.mdp-link { color: var(--interactive-accent); text-decoration: none; }
+.mdp-link:hover { text-decoration: underline; }
+.mdp-wikilink { color: var(--interactive-accent); }
+.mdp-embed {
+	display: inline-block;
+	padding: 1px 7px;
+	border-radius: 6px;
+	border: 1px dashed var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: 0.9em;
+}
+
+/* Les propriétés en tête de note, comme le bloc « Propriétés » d'Obsidian. */
+.mdp-frontmatter {
+	margin: 0 0 14px;
+	padding: 8px 12px;
+	border-radius: 10px;
+	border: 1px solid var(--background-modifier-border);
+	background: color-mix(in srgb, var(--background-primary) 70%, transparent);
+	font-size: 12.5px;
+}
+.mdp-prop { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 2px 0; }
+.mdp-prop-key { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mdp-prop-value { color: var(--text-normal); overflow-wrap: anywhere; }
+.mdp-prop--item .mdp-prop-value::before { content: "– "; color: var(--text-faint); }
+
+/* ── Le PDF : la carte d'aperçu de claude.ai, RELEVÉE AU STYLE CALCULÉ dans
+   son DOM le 2026-09-17, et non d'après une capture — une capture ne donne ni
+   les états ni les valeurs : panneau de 400 px, `padding` de 24, titre en
+   22/28, page bornée à 267 px dans les DEUX sens, deux feuilles BLANCHES sous
+   la page qui ne débordent que par la droite, et un éventail au survol.
+   Ce qui n'est PAS copié : le gris neutre de son panneau. Le fond vient du
+   thème de l'application (décision d'Ahmed, 2026-09-17) — sans quoi cette
+   modale ne ressemblerait plus à aucune autre surface de l'app. ── */
+
+/* `min-width: 0` N'EST PAS DÉCORATIF : `:where(.modal)` (modal.css) pose un
+   plancher de 420 px pour les panneaux SANS largeur propre, et un `min-width`
+   l'emporte TOUJOURS sur un `width` — la modale sortait donc à 420 px, 5 %
+   plus large que la référence, sans qu'aucune règle ne paraisse fautive.
+   Celle-ci a sa largeur ; le `max-width` hérité la borne toujours sur une
+   fenêtre étroite. */
+.qbd-ai-preview-modal--pdf {
+	width: 400px;
+	min-width: 0;
+	/* Le `p-xl` de la référence. TOUTE la métrique verticale en dépend : les
+	   16 px de `:where(.modal)` tasseraient le titre contre la page. */
+	padding: 24px;
+}
+
+/* Le titre : 22/28, pas le `1.1em/1.3` des autres modales. Sur 400 px, un nom
+   de cours passe à deux lignes — c'est ce que fait la référence, qui ne
+   tronque jamais un nom de fichier. Le `-4px` du haut reprend son `-mt-1` :
+   il rattrape le demi-interligne pour aligner la première ligne sur le haut
+   de la croix. */
+.qbd-ai-preview-modal--pdf .modal-title {
+	margin: -4px 32px 12px 0;
+	font-size: 22px;
+	line-height: 28px;
+	overflow-wrap: break-word;
+}
+
+.qbd-ai-preview-modal--pdf .modal-close-button {
+	top: 16px;
+	right: 16px;
+	width: 32px;
+	height: 32px;
+	border-radius: 8px;
+}
+
+/* La scène. 30 et 5, et NON les 32 et 8 que déclarent les classes de la
+   référence : son image est en ligne et déborde de son conteneur de deux
+   pixels en haut et de trois en bas, si bien que ses marges se VOIENT comme
+   42 (les 12 du titre comprises) et 5. Ici, `line-height: 0` supprime ce
+   débord — reprendre 32 et 8 tels quels aurait donc écarté la légende de
+   trois pixels de plus que sur la référence. On copie ce qui se voit, pas ce
+   qui s'écrit. Et c'est la DIFFÉRENCE entre ces deux écarts qui fait lire la
+   légende comme appartenant à la page plutôt que comme une ligne de plus
+   dans la modale. */
+.qbd-ai-preview-pdf {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 5px;
+	padding: 30px 0 0;
+}
+
+/* La main, sur la ZONE et non sur le seul bouton : `is-openable` n'est posée
+   (`dashboard/ai.ts`) que lorsqu'il y a vraiment un fichier à ouvrir. Un PDF
+   sans chemin, ou venu d'une racine externe que le contrat sait lire mais pas
+   ouvrir, n'a pas de bouton : il ne doit pas non plus avoir la main, sans quoi
+   le curseur promettrait un clic qui ne fait rien. */
+.qbd-ai-preview-pdf.is-openable {
+	cursor: pointer;
+}
+
+/* Le conteneur ne fait que CENTRER : la taille vient de la feuille, qui la
+   tient de la page. Le plancher réserve la place pendant le dessin. */
+.qbd-ai-preview-stack {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	min-height: 120px;
+}
+
+/* LA FEUILLE — elle enveloppe l'image et se moule dessus (`inline-block` +
+   `line-height: 0`), donc les deux feuilles de dessous suivent la forme du
+   document, quelle qu'elle soit. `z-index: 0` en fait un CONTEXTE
+   D'EMPILEMENT : sans lui, les pseudo-éléments en `z-index: -1` remontent
+   jusqu'au fond de la modale et passent DERRIÈRE lui — invisibles. C'est le
+   `filter: drop-shadow` qui jouait ce rôle jusqu'ici ; il est parti avec
+   l'ombre unique, remplacée par une ombre PAR feuille comme dans la
+   référence. */
+.qbd-ai-preview-sheet {
+	position: relative;
+	z-index: 0;
+	display: inline-block;
+	line-height: 0;
+}
+
+/* Les deux feuilles de dessous : du papier BLANC translucide (50 % et 70 %),
+   jamais un gris en dur — c'est le fond du panneau qui transparaît qui fait
+   leur gris, donc elles suivent le thème au lieu de jurer avec lui. Elles
+   sont plus COURTES que la page (96 % et 98 %) et ne débordent que par la
+   DROITE : une pile qui dépasse aussi par le bas se lit comme une ombre
+   ratée. `::before` porte la plus lointaine — à `z-index` égal c'est l'ordre
+   de peinture qui tranche, et la plus décalée doit rester DESSOUS. */
+.qbd-ai-preview-sheet::before,
+.qbd-ai-preview-sheet::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	width: 100%;
+	box-sizing: border-box;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 8px;
+	background: #fff;
+	z-index: -1;
+	opacity: 0;
+	transition:
+		opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+		transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+		border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qbd-ai-preview-sheet::before {
+	top: 2%;
+	height: 96%;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+.qbd-ai-preview-sheet::after {
+	top: 1%;
+	height: 98%;
+	box-shadow: 0 1px 2px rgba(11, 11, 11, 0.06), 0 2px 8px rgba(0, 0, 0, 0.24);
+}
+
+/* Elles n'apparaissent qu'AVEC la page (`is-ready`) : deux rectangles blancs
+   seuls, pendant le dessin, feraient croire à un défaut d'affichage. */
+.qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::before {
+	opacity: 0.5;
+	transform: translateX(8px);
+}
+
+.qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::after {
+	opacity: 0.7;
+	transform: translateX(4px);
+}
+
+/* LA PAGE : sa forme d'origine, dans une boîte CARRÉE de 267 px — c'est ainsi
+   que la référence borne ses vignettes (un rendu de 400 px de côté, affiché à
+   1,5×), et c'est ce qui donne à une page A4 la même présence qu'à une
+   diapositive 16:9. La borne d'avant (260 px de HAUT pour 270 de large)
+   rapetissait les portraits, qui sont la forme la plus courante d'un cours. */
+.qbd-ai-preview-stack-page {
+	display: block;
+	max-width: 267px;
+	max-height: 267px;
+	width: auto;
+	height: auto;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 8px;
+	background: #fff;
+	box-shadow: 0 1px 2px rgba(11, 11, 11, 0.06), 0 2px 8px rgba(0, 0, 0, 0.24);
+	transition:
+		rotate 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+		border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Au survol, la pile s'ÉVENTAILLE : la page bascule d'un degré à gauche, les
+   deux feuilles de deux et trois degrés à droite en glissant d'un pixel de
+   plus, et les trois bordures passent à l'accent ASSOMBRI. Assombri parce
+   que, sur du papier blanc, la référence pose un liseré discret et non un
+   cadre : l'accent plein transformerait la page en champ de saisie. Les 50 %
+   sont réglés sur la LUMINANCE de son liseré (0,037), pas sur sa teinte —
+   les deux produits n'ont pas le même bleu, et copier la teinte aurait fait
+   entrer une couleur étrangère au thème pour un trait d'un pixel. */
+.qbd-ai-preview-pdf:hover .qbd-ai-preview-stack-page,
+.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-stack-page {
+	rotate: -1deg;
+	border-color: color-mix(in oklab, var(--interactive-accent) 50%, #000);
+}
+
+.qbd-ai-preview-pdf:hover .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::before,
+.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::before {
+	transform: translateX(10px) rotate(3deg);
+	border-color: color-mix(in oklab, var(--interactive-accent) 50%, #000);
+}
+
+.qbd-ai-preview-pdf:hover .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::after,
+.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::after {
+	transform: translateX(5px) rotate(2deg);
+	border-color: color-mix(in oklab, var(--interactive-accent) 50%, #000);
+}
+
+/* La légende : 14 px et un poids NORMAL — « Ouvrir » n'est pas un bouton
+   d'action, c'est l'invitation qui prend la place du nombre de pages ; en 600
+   il criait plus fort que le titre. */
+.qbd-ai-preview-caption {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px;
+	font-size: 14px;
+	line-height: 20px;
+	color: var(--text-muted);
+}
+
+/* « N pages » ne se contente pas de s'effacer : il RÉTRÉCIT (0,75) pendant
+   que « Ouvrir » grandit depuis la moitié. Les deux mouvements se croisent au
+   même endroit, ce qui remplace le clignotement d'un fondu croisé par un seul
+   geste. */
+.qbd-ai-preview-caption-pages {
+	transition:
+		opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+		scale 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qbd-ai-preview-open {
+	position: absolute;
+	inset: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	padding: 0;
+	border: 0;
+	background: transparent !important;
+	box-shadow: none !important;
+	color: var(--interactive-accent);
+	font: inherit;
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qbd-ai-preview-pdf:hover .qbd-ai-preview-caption-pages,
+.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-caption-pages {
+	opacity: 0;
+	scale: 0.75;
+}
+
+.qbd-ai-preview-pdf:hover .qbd-ai-preview-open,
+.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-open {
+	opacity: 1;
+}
+
+/* JAMAIS de soulignement, ni au repos ni au survol ni au focus (Ahmed,
+   2026-09-17) : il barrait l'icône au milieu, et la référence n'en met pas
+   non plus. Le survol est déjà signalé par la pile qui s'éventaille et par la
+   légende qui bascule ; une troisième marque n'apporte que du bruit. Écrit en
+   NÉGATIF sur l'élément et ses états, et non seulement omis : le bouton hérite
+   d'une feuille de style d'agent utilisateur et de règles de lien plus larges.
+   */
+.qbd-ai-preview-open,
+.qbd-ai-preview-open:hover,
+.qbd-ai-preview-open:focus,
+.qbd-ai-preview-open:focus-visible {
+	text-decoration: none;
+}
+
+.qbd-ai-preview-open-icon {
+	display: inline-flex;
+	scale: 0.5;
+	transition: scale 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qbd-ai-preview-pdf:hover .qbd-ai-preview-open-icon,
+.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-open-icon {
+	scale: 1;
+}
+
+.qbd-ai-preview-open-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* Mouvement réduit : les positions de REPOS restent (la pile, le décalage des
+   feuilles, la légende), seuls le geste et son fondu disparaissent. Le survol
+   ne doit alors RIEN déplacer : un éventail instantané serait précisément le
+   défaut que ce réglage existe pour éviter. */
+@media (prefers-reduced-motion: reduce) {
+	.qbd-ai-preview-sheet::before,
+	.qbd-ai-preview-sheet::after,
+	.qbd-ai-preview-stack-page,
+	.qbd-ai-preview-caption-pages,
+	.qbd-ai-preview-open,
+	.qbd-ai-preview-open-icon {
+		transition: none;
+	}
+
+	.qbd-ai-preview-pdf:hover .qbd-ai-preview-stack-page,
+	.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-stack-page {
+		rotate: none;
+	}
+
+	.qbd-ai-preview-pdf:hover .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::before,
+	.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::before {
+		transform: translateX(8px);
+	}
+
+	.qbd-ai-preview-pdf:hover .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::after,
+	.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::after {
+		transform: translateX(4px);
+	}
+
+	.qbd-ai-preview-open-icon,
+	.qbd-ai-preview-pdf:hover .qbd-ai-preview-open-icon,
+	.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-open-icon {
+		scale: 1;
+	}
+
+	.qbd-ai-preview-pdf:hover .qbd-ai-preview-caption-pages,
+	.qbd-ai-preview-pdf:focus-within .qbd-ai-preview-caption-pages {
+		scale: 1;
+	}
 }
 
 .qbd-ai-image-thumb {
@@ -1348,6 +1944,12 @@
 	flex-direction: column;
 	gap: 1px;
 	padding: 4px;
+	/* BORNÉ EN HAUTEUR depuis que le même menu sert à la Destination
+	   (2026-09-17) : les presets de questions sont six, les dossiers de quiz
+	   peuvent être trente, et un menu absolu qui déborde le popover sort de
+	   l'écran sans ascenseur. Sans effet sur les six presets. */
+	max-height: 40vh;
+	overflow-y: auto;
 	/* MÊME surface glass que .qbd-select-menu (un seul style de menu
 	   flottant — obsidian:plugin-design §3) : fond natif translucide,
 	   backdrop brightness theme-aware, bordure adoucie, ombre 2 couches. */

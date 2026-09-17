@@ -60,10 +60,11 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 	};
 
 	/* Décision GLOBALE, historique : tout le quiz en réponse libre + auto-
-	   évaluation. Ne dépend plus d'un bouton dans l'UI (retiré 2026-08-31) mais
-	   reste posée par la configuration du bloc (démarrage « Entraînement » d'un
-	   examen, cf. startModeSelectorHtml/exam.ts:startTrainingMode) — un chemin
-	   hors Leçon, conservé tel quel. Les décisions qui portent sur le quiz
+	   évaluation. Ne dépend plus d'AUCUN contrôle depuis le 2026-09-17 : le
+	   bouton de l'UI est parti le 2026-08-31, et le démarrage « Practice » d'un
+	   examen (exam.ts, ex-startTrainingMode) est retiré à son tour — « Apprendre »
+	   garde les types de question. `practiceMode === "text"` ne vient plus que
+	   du rôle `recall` d'une leçon. Les décisions qui portent sur le quiz
 	   ENTIER et qui n'ont AUCUNE alternative par question (écran de
 	   soumission, navigation flèche/onglet Résultats, phases d'examen)
 	   restent branchées ici.

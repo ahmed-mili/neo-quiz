@@ -26,6 +26,8 @@
 
 import { BrowserWindow, Menu, app, dialog, net, protocol, shell } from "electron";
 import * as fs from "node:fs/promises";
+// Le SEUL usage synchrone du disque dans ce fichier — voir `poserLocaleChromium`.
+import { readFileSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -33,11 +35,12 @@ import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
 import { setLanguage, t } from "../../../src/i18n";
 import { enregistrerCanaux } from "./canaux";
 import { cheminDossierDefaut } from "./dossier-defaut";
+import { chargerPathRegistre } from "./process";
 import { perimetreInitial } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { CANAUX, CLE_REGLAGES_IA, CLE_REGLAGES_LANGUE, CLE_REGLAGES_ZOOM } from "./pont";
+import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_IA, CLE_REGLAGES_LANGUE, CLE_REGLAGES_ZOOM } from "./pont";
 import type { EtatFenetre } from "./pont";
-import { creerMiseAJour, lireReglageAuto } from "./mise-a-jour";
+import { creerMiseAJour } from "./mise-a-jour";
 import type { MiseAJour } from "./mise-a-jour";
 import { creerReglages } from "./reglages";
 import type { Reglages } from "./reglages";
@@ -288,9 +291,16 @@ function creerFenetre(): void {
 	   `location.reload()` dont `choisirDossier` dépend, puisqu'un rechargement
 	   vise l'URL de l'application ; toute autre origine est REFUSÉE ici et
 	   remise au NAVIGATEUR de l'utilisateur, où un lien légitime a sa place. */
-	/** Ouvre `url` dans le navigateur de l'utilisateur si c'est du `https?:`,
-	    sinon le refus est NOMMÉ dans la console. Partagée entre la navigation
-	    de premier niveau et `setWindowOpenHandler` : un seul filtre. */
+	/** Ouvre `url` hors de la fenêtre si c'est du `https?:` (le navigateur) ou
+	    de l'`obsidian:` (Obsidian, pour ouvrir une note de vault — demande
+	    Ahmed 2026-09-17, `ctx.openInObsidian`), sinon le refus est NOMMÉ dans
+	    la console. Partagée entre la navigation de premier niveau et
+	    `setWindowOpenHandler` : un seul filtre.
+
+	    `obsidian:` est sans danger à ce niveau : l'URI ne fait qu'ouvrir un
+	    vault et une note dans une application que l'utilisateur a installée,
+	    et tout autre schéma (`file:`, `javascript:`, un exécutable enregistré
+	    comme gestionnaire) reste refusé. */
 	const remettreAuNavigateur = (url: string): void => {
 		/* Sous `try` : `memeOrigine` rend `false` sur une URL non analysable, et
 		   un `throw` ici, APRÈS le `preventDefault`, ferait sortir l'écouteur en
@@ -301,7 +311,7 @@ function creerFenetre(): void {
 		} catch {
 			// URL illisible : refusée, et rien à remettre au navigateur.
 		}
-		if (/^https?:$/.test(protocole)) void shell.openExternal(url);
+		if (/^(https?|obsidian):$/.test(protocole)) void shell.openExternal(url);
 		else console.warn(LOG_PREFIX, "navigation refusée:", url);
 	};
 	const refuserHorsOrigine = (e: Electron.Event, url: string): void => {
@@ -489,6 +499,49 @@ protocol.registerSchemesAsPrivileged([
    la barre oblique ferait du dossier de données un sous-dossier fantôme. */
 app.setName(PRODUCT_NAME);
 
+/**
+ * LA LOCALE DE CHROMIUM, POSÉE DEPUIS LE RÉGLAGE DE LANGUE.
+ *
+ * LE DÉFAUT QUE ÇA CORRIGE : l'application traduite en anglais affichait ses
+ * champs de date d'examen en « jj/mm/aaaa ». Le format d'un
+ * `<input type="date">` n'est décidé NI par `t()`, NI par l'attribut `lang` de
+ * la page : Chromium le tire de sa propre locale, celle du SYSTÈME par défaut.
+ * Windows en français plus interface en anglais donnait donc un titre anglais
+ * au-dessus d'un champ français, et rien dans la page Réglages ne pouvait le
+ * changer — c'était le seul morceau d'interface que le réglage de langue
+ * n'atteignait pas.
+ *
+ * SYNCHRONE, ET AVANT `app.ready` : un commutateur de ligne de commande n'est
+ * lu qu'au démarrage de Chromium. Attendre la lecture asynchrone des réglages
+ * (`creerReglages`, dans `whenReady`) serait trop tard. Le fichier fait
+ * quelques centaines d'octets et n'est lu qu'ici, une fois : c'est le cas
+ * exact où le synchrone est le bon outil.
+ *
+ * `auto` NE POSE RIEN : le mode automatique veut justement dire « suivre le
+ * système », et le champ de date le suit déjà.
+ *
+ * TOUTE ERREUR EST IGNORÉE : fichier absent (premier lancement), illisible,
+ * verrouillé par un antivirus. Le démarrage ne doit pas dépendre d'un confort
+ * de format de date — `reglages.ts` relira le même fichier dans `whenReady`,
+ * et c'est LUI qui traite ses erreurs pour de bon (mise de côté d'un JSON
+ * corrompu).
+ */
+function poserLocaleChromium(): void {
+	try {
+		const brut = readFileSync(path.join(app.getPath("userData"), "settings.json"), "utf-8");
+		const langue = (JSON.parse(brut) as Record<string, unknown>)[CLE_REGLAGES_LANGUE];
+		/* Des locales COMPLÈTES, région comprise : « en » seul laisse Chromium
+		   choisir sa région et donc son format de date. `en-US` et `fr-FR` sont
+		   les deux que les dictionnaires du dépôt servent (`src/i18n/`). */
+		if (langue === "en") app.commandLine.appendSwitch("lang", "en-US");
+		else if (langue === "fr") app.commandLine.appendSwitch("lang", "fr-FR");
+	} catch {
+		// Voir l'en-tête : le démarrage ne dépend pas de cette lecture.
+	}
+}
+
+poserLocaleChromium();
+
 /* UNE SEULE INSTANCE. `reglages.ts` tient sa table en mémoire et réécrit le
    fichier entier à chaque changement : deux instances écraseraient chacune
    les réglages de l'autre à tour de rôle, sans un mot. La seconde instance
@@ -512,6 +565,16 @@ if (!app.requestSingleInstanceLock()) {
 		   autrement (page Réglages) : le principal suit le même réglage que
 		   le rendu, sinon un dialogue natif parlerait une autre langue que la
 		   fenêtre. Une valeur inconnue vaut « auto ». */
+		/* LE `PATH` DU REGISTRE, fusionné dans celui de ce processus. À faire
+		   AVANT toute recherche de CLI — c'est la vraie cause des « CLI
+		   introuvable » : le `PATH` d'un processus est figé à son lancement, et
+		   un installateur qui écrit dans le registre n'atteint jamais une
+		   application déjà ouverte (ni celle que l'explorateur a lancée avec le
+		   `PATH` de l'ouverture de session). Best effort : une lecture qui
+		   échoue laisse le `PATH` du processus tel quel. */
+		const ajoutsPath = await chargerPathRegistre();
+		if (ajoutsPath) console.log(LOG_PREFIX, "PATH du registre :", ajoutsPath, "dossier(s) ajouté(s)");
+
 		const donnees = app.getPath("userData");
 		reglages = creerReglages(path.join(donnees, "settings.json"));
 		const langueReglee = await reglages.lire(CLE_REGLAGES_LANGUE);
@@ -529,7 +592,16 @@ if (!app.requestSingleInstanceLock()) {
 		   n'a pas besoin que ce dossier existe : `autoriser` ignore déjà en
 		   silence un chemin absent (`perimetre.ts`), donc le démarrage continue
 		   sans le défaut, sur les autres dossiers ouverts ou vide. */
-		dossierDefaut = cheminDossierDefaut(process.platform, os.homedir());
+		/* CELUI QUE L'UTILISATEUR A CHOISI, sinon celui qu'on calcule. Le
+		   réglage est écrit par le seul canal `systeme.choisirDossierDefaut`,
+		   depuis un chemin venu du dialogue natif — jamais du rendu (voir sa
+		   documentation dans `pont.ts`). Une valeur qui n'est pas une chaîne
+		   utile (clé absente, réglage trafiqué à la main) retombe sur le chemin
+		   calculé plutôt que de faire démarrer l'application sans défaut. */
+		const defautChoisi = await reglages.lire(CLE_DOSSIER_DEFAUT);
+		dossierDefaut = typeof defautChoisi === "string" && defautChoisi.trim()
+			? defautChoisi
+			: cheminDossierDefaut(process.platform, os.homedir());
 		try {
 			await fs.mkdir(dossierDefaut, { recursive: true });
 		} catch (e) {
@@ -550,7 +622,6 @@ if (!app.requestSingleInstanceLock()) {
 		// ou `vaultsObsidian` devient aussitôt servable, sans second registre.
 		servirRessources(perimetre);
 		miseAJour = creerMiseAJour({
-			reglages: reglagesOuErreur(),
 			envoyer: etat => {
 				if (fenetre && !fenetre.isDestroyed()) fenetre.webContents.send(CANAUX.miseAJourEtat, etat);
 			},
@@ -558,7 +629,11 @@ if (!app.requestSingleInstanceLock()) {
 		enregistrerCanaux({
 			perimetre,
 			reglagesOuErreur,
-			dossierDefaut,
+			/* LU À CHAQUE APPEL, jamais capturé : l'utilisateur peut changer ce
+			   dossier en cours de session, et les canaux doivent servir le
+			   nouveau dès l'instant où il est écrit. */
+			dossierDefaut: () => dossierDefaut,
+			poserDossierDefaut: abs => { dossierDefaut = abs; },
 			envoyer(canal, charge) {
 				if (fenetre && !fenetre.isDestroyed()) fenetre.webContents.send(canal, charge);
 			},
@@ -595,9 +670,9 @@ if (!app.requestSingleInstanceLock()) {
 		});
 		creerFenetre();
 		// APRÈS la fenêtre : une erreur réseau au démarrage ne doit rien
-		// retarder. `initialiser`, pas `reglerAuto` : il réécrirait le réglage
-		// qu'on vient de lire.
-		miseAJour.initialiser(await lireReglageAuto(reglagesOuErreur()));
+		// retarder. Sans argument — la mise à jour automatique ne se règle
+		// plus, elle est le seul mode (voir `mise-a-jour-etat.ts`).
+		miseAJour.initialiser();
 	}).catch(e => {
 		/* Le FILET FINAL (fix round 1) : sans lui, une exception n'importe où
 		   dans cette chaîne (réglages, périmètre, réseau, fenêtre) rejette une

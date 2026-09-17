@@ -7,8 +7,17 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 
 	/* ── Composer ── */
 	"ai.composer.placeholder": "Sur quoi portera le quiz ?",
-	"ai.composer.placeholderAttached": "Instructions (facultatif)",
 	"ai.composer.addContent": "Ajouter du contenu",
+	"ai.preview.size": "{kb} Ko",
+	"ai.preview.linesOne": "{n} ligne",
+	"ai.preview.linesOther": "{n} lignes",
+	"ai.preview.pagesOne": "{n} page",
+	"ai.preview.pagesOther": "{n} pages",
+	"ai.preview.pageAlt": "Page {n}",
+	"ai.preview.rendering": "Rendu des pages…",
+	"ai.preview.renderFailed": "Ce PDF n'a pas pu être dessiné",
+	"ai.preview.open": "Ouvrir",
+	"ai.preview.openFailed": "Impossible d'ouvrir {name}",
 	"ai.composer.quizOptions": "Options du quiz",
 	"ai.composer.generate": "Générer le quiz",
 	"ai.composer.stop": "Arrêter",

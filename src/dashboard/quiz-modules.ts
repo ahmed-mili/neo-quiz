@@ -25,6 +25,21 @@ export interface ModuleInfo {
 	/** Icône Lucide choisie dans « Modifier dossier » (carré teinté de la carte)
 	    — absente = icône par défaut (cf. module-card.ts). */
 	icon?: string;
+	/**
+	 * LE CHEMIN RÉEL DU DOSSIER, et non son seul segment (2026-09-17).
+	 *
+	 * `folder` est une CLÉ — un segment, « XTI301 - Écosystème Python » —
+	 * parce que c'est tout ce qu'un lien de la note de correspondance permet
+	 * de nommer. Ça suffit pour regrouper et pour afficher ; ça ne suffit pas
+	 * pour ÉCRIRE. Un chemin du contrat commence par l'identifiant d'une
+	 * racine ouverte (`Efrei/…`), et `fs.write("XTI301 - Écosystème
+	 * Python/x.md")` échouait sur « chemin hors des dossiers ouverts ».
+	 *
+	 * Absent = inconnu, et l'appelant retombe sur `folder` — le comportement
+	 * d'avant, qui reste juste pour un module posé à la racine d'un dossier
+	 * ouvert.
+	 */
+	path?: string;
 }
 
 /** Override persisté par le modal « Modifier dossier » (menu ⋯ d'un module).
@@ -35,11 +50,19 @@ export interface ModuleOverride {
 	ue?: string | null;
 	color?: string;
 	icon?: string;
-	/** Date d'examen du module, format `AAAA-MM-JJ` (chantier ordonnanceur,
-	    UI de saisie posée par la task 9). Déclaré ici dès la task 7 —
-	    l'adaptateur du journal de révision (review-store.ts) le lit déjà en
-	    `?.`, sans attendre l'UI qui l'écrit. */
-	examDate?: string;
+	/** Le chemin du contrat du dossier (cf. `ModuleInfo.path`). Écrit par les
+	    modals qui DÉSIGNENT un dossier — « Créer un dossier vide » et « Ouvrir
+	    un dossier existant » —, parce qu'eux le connaissent. C'est la seule
+	    source de vérité pour un dossier déclaré SANS quiz : sans quiz dedans,
+	    il n'y a aucun chemin d'où le déduire. */
+	path?: string;
+	/* PAS DE `examDate` ICI, et c'est délibéré (2026-09-17) : ces overrides
+	   sont indexés par NOM DE SEGMENT, qui confond deux dossiers homonymes
+	   ouverts depuis deux racines — acceptable pour une couleur, pas pour un
+	   horizon de rétention. La date vit désormais sous la clé de module de
+	   l'hôte (`DashboardShellCtx.examDate`). Les valeurs déjà écrites sous
+	   cette clé restent sur le disque, ignorées : elles n'ont jamais eu
+	   d'effet, aucun lecteur ne les a jamais relues. */
 }
 
 /** Applique les overrides réglages PAR-DESSUS la table issue de la note.
@@ -55,6 +78,7 @@ export function applyModuleOverrides(map: ModuleMap, overrides: Record<string, M
 			ue: ov.ue !== undefined ? ov.ue : base.ue,
 			color: ov.color ?? base.color,
 			icon: ov.icon ?? base.icon,
+			path: ov.path ?? base.path,
 		};
 		byFolder.set(folder, merged);
 		// Une UE inventée dans le modal doit exister dans l'axe UE.
@@ -124,10 +148,14 @@ export function moduleForQuiz(quizPath: string, map: ModuleMap): ModuleInfo {
 	// segs sans le fichier : on remonte du plus profond vers la racine.
 	for (let i = segs.length - 2; i >= 0; i--) {
 		const hit = map.byFolder.get(segs[i]);
-		if (hit) return hit;
+		/* Le chemin RÉEL se DÉDUIT ici, et c'est le seul endroit qui le peut :
+		   on tient à la fois le segment reconnu et sa POSITION dans le chemin
+		   du quiz. Un `path` déjà déclaré (override) l'emporte — lui vaut pour
+		   le module entier, quand celui-ci ne vaut que pour ce quiz-là. */
+		if (hit) return hit.path ? hit : { ...hit, path: segs.slice(0, i + 1).join("/") };
 	}
 	const parent = segs.length >= 2 ? segs[segs.length - 2] : "";
-	return { folder: parent, name: parent, ue: null };
+	return { folder: parent, name: parent, ue: null, path: segs.slice(0, -1).join("/") || undefined };
 }
 
 /** Un module affiché : ses quiz + agrégats. */
@@ -135,6 +163,11 @@ export interface ModuleGroup {
 	folder: string;
 	name: string;
 	ue: string | null;
+	/** Chemin réel du dossier (cf. `ModuleInfo.path`) : celui de la
+	    déclaration, sinon celui déduit du premier quiz du groupe. Absent pour
+	    un dossier déclaré sans quiz ET sans chemin — les déclarations d'avant
+	    le 2026-09-17. */
+	path?: string;
 	/** Couleur de liseré override (cf. ModuleInfo.color). */
 	color?: string;
 	/** Icône Lucide override (cf. ModuleInfo.icon). */
@@ -157,12 +190,17 @@ export function buildModuleGroups(
 	const acc = new Map<string, ModuleGroup>();
 	for (const folder of alwaysInclude) {
 		const info = map.byFolder.get(folder) ?? { folder, name: folder, ue: null };
-		acc.set(folder, { folder, name: info.name, ue: info.ue, color: info.color, icon: info.icon, quizzes: [], total: 0, mastered: 0 });
+		acc.set(folder, { folder, name: info.name, ue: info.ue, color: info.color, icon: info.icon, path: info.path, quizzes: [], total: 0, mastered: 0 });
 	}
 	for (const q of quizzes) {
 		const m = moduleForQuiz(q.path, map);
 		let g = acc.get(m.folder);
-		if (!g) { g = { folder: m.folder, name: m.name, ue: m.ue, color: m.color, icon: m.icon, quizzes: [], total: 0, mastered: 0 }; acc.set(m.folder, g); }
+		if (!g) { g = { folder: m.folder, name: m.name, ue: m.ue, color: m.color, icon: m.icon, path: m.path, quizzes: [], total: 0, mastered: 0 }; acc.set(m.folder, g); }
+		/* Un groupe né d'`alwaysInclude` (déclaré, 0 quiz) n'a de chemin que
+		   celui de sa déclaration. Le premier quiz qui s'y range le lui donne
+		   si elle n'en portait pas — les dossiers déclarés avant le
+		   2026-09-17 n'en ont aucun. */
+		if (!g.path && m.path) g.path = m.path;
 		g.quizzes.push(q);
 	}
 	const groups = [...acc.values()];
@@ -210,4 +248,13 @@ export function buildUeGroups(modules: ModuleGroup[], map: ModuleMap): UeGroup[]
 	for (const ue of map.ueOrder) push(ue);
 	push(null); // « Sans UE » en dernier
 	return groups;
+}
+
+
+/** Ce groupe est-il le SAS des quiz générés ? Par le CHEMIN, jamais par le
+    nom (`DashboardShellCtx.generatedFolder`). Un groupe sans chemin (déclaré
+    avant le 2026-09-17, sans quiz) n'est jamais le sas : le sas contient
+    toujours au moins un quiz dès qu'on le voit, donc il a toujours un chemin. */
+export function estLeSas(group: ModuleGroup, sas: string | undefined): boolean {
+	return !!sas && !!group.path && group.path === sas;
 }

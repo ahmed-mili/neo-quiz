@@ -83,6 +83,19 @@
 	box-shadow: 0 18px 48px -12px color-mix(in srgb, var(--background-primary) 85%, transparent);
 }
 
+/* LE PANNEAU N'EST PAS UN CONTRÔLE. Il porte `tabindex="-1"` et reçoit le
+   focus à l'ouverture (le piège à focus de `host/modal.ts`) ; Chromium en
+   déduit un `:focus-visible` et dessine son anneau par défaut — un cadre
+   BLANC de 1 px sur les quatre côtés de la modale, visible sur toutes les
+   captures. Il n'indique rien d'utile : on ne « valide » pas un panneau, et
+   les boutons qu'il contient gardent le leur, qui devient enfin lisible une
+   fois ce cadre parti. Retiré ICI, sur le conteneur, et NULLE PART sur un
+   élément qui, lui, s'active. */
+:where(.modal):focus,
+:where(.modal):focus-visible {
+	outline: none;
+}
+
 .modal-title {
 	margin: 0 32px 12px 0; /* la place de la croix, en haut à droite */
 	font-size: 1.1em;
@@ -127,4 +140,39 @@
 .modal-close-button svg {
 	width: 16px;
 	height: 16px;
+}
+
+/* ── LA MODALE DES RÉGLAGES ──
+   672 px, ET C'EST UNE SOUSTRACTION, pas un chiffre rond : les sections de la
+   page (`.nq-reglages-section`, shell.css) sont calées à 640 px depuis qu'elle
+   était un écran plein, et 640 + les 32 px de `padding` du panneau les fait
+   remplir la modale exactement. Plus large, elles flotteraient au milieu de
+   marges vides ; plus étroit, les rangées « libellé à gauche, champ à droite »
+   se replieraient sur deux lignes.
+   La hauteur, elle, est déjà bornée par `:where(.modal)` (85 vh) et c'est
+   `.modal-content` qui défile — rien à ajouter ici.
+
+   `.qbd-content` est la classe de contenu du TABLEAU DE BORD, que
+   `settings.ts` réemploie : son `padding` de 28/32 px et son fondu d'entrée ont
+   un sens dans un écran plein, pas dans un panneau qui apporte déjà ses 16 px
+   et sa propre animation. On les neutralise ICI plutôt que de faire diverger la
+   page de son autre hôte. */
+.nq-reglages-modal {
+	width: 672px;
+}
+
+.nq-reglages-modal .qbd-content {
+	padding: 0;
+	animation: none;
+}
+
+
+/* ── LA MODALE DE CHOIX D'UN FOND ──
+   Plus étroite que celle des Réglages par-dessus laquelle elle s'ouvre : une
+   liste d'une vignette et deux lignes de texte n'a pas besoin de 672 px, et
+   la différence de largeur montre à l'œil qu'il y a bien deux boîtes
+   empilées. La hauteur est déjà bornée par `:where(.modal)` (85 vh), et c'est
+   `.modal-content` qui défile. */
+.nq-fond-modal {
+	width: 460px;
 }

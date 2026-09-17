@@ -50,7 +50,12 @@ function ouvrir(spec: HostModalSpec): HostModalHandle {
 	   l'animation d'entrée du CSS partagé, et l'ajouter plus tard la ferait
 	   rejouer après coup. `spec.className` par-dessus, jamais à la place. */
 	const panneau = ajouter(conteneur, "div", "modal qbd-anim-modal");
-	if (spec.className) panneau.classList.add(spec.className);
+	/* PLUSIEURS classes, séparées par des espaces, sont admises — comme un
+	   attribut `class`. `classList.add("a b")` lève une DOMException (un jeton
+	   ne contient pas d'espace), et elle partait ICI, avant la croix, le titre,
+	   le contenu et l'écouteur d'Échap : un panneau vide, impossible à fermer
+	   (l'aperçu d'un PDF, 2026-09-17). Le contrat le dit désormais. */
+	for (const cls of (spec.className ?? "").split(/\s+/)) if (cls) panneau.classList.add(cls);
 	panneau.setAttribute("role", "dialog");
 	panneau.setAttribute("aria-modal", "true");
 

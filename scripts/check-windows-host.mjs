@@ -812,21 +812,27 @@ function installerPont(fichiers = {}, perimetre = null) {
 	};
 }
 
-/* L'ABSENCE DU MOTEUR PDF, statiquement. `HostPdf` est un membre OPTIONNEL du
-   contrat : l'hôte Obsidian le porte (pdf.js embarqué, éprouvé par
-   `check:obsidian-host`), la fenêtre ne le porte PAS, et c'est cette absence
-   qui fait refuser un PDF joint avec `ai.error.pdfUnsupportedInApp` plutôt que
-   d'en attacher le texte vide. Un `pdf:` posé ici « en attendant » rendrait la
-   page acquiesçante et muette. STATIQUE parce que `index.ts` importe MathLive,
-   qu'esbuild ne charge pas hors de la fenêtre — c'est justement pourquoi
-   `platform.ts` et `roots.ts` en ont été extraits. */
+/* LE MOTEUR PDF, statiquement — et par le VRAI module qui le porte.
+   `HostPdf` est un membre OPTIONNEL du contrat. La fenêtre ne le portait PAS
+   jusqu'au 2026-09-17 (divergence écrite, tranche 5), et ce bloc exigeait
+   son ABSENCE : un `pdf:` posé « en attendant » avec un moteur qui ne lit
+   rien aurait rendu la page « Générer » acquiesçante et muette. Depuis
+   qu'Ahmed a tranché « B pour les PDF », c'est l'inverse qu'il faut tenir :
+   le membre EST déclaré, et il vient de `./pdf.ts` — pas d'un objet posé à
+   la main dans `index.ts`, où un `extractText` vide repasserait inaperçu.
+   L'extraction elle-même s'éprouve avec le vrai moteur dans `check:pdf`.
+   STATIQUE parce que `index.ts` importe MathLive, qu'esbuild ne charge pas
+   hors de la fenêtre — c'est justement pourquoi `platform.ts`, `roots.ts`
+   et `pdf-texte.ts` en ont été extraits. */
 {
-	const r = makeReporter("Hôte Windows — pas de moteur PDF (statique)");
+	const r = makeReporter("Hôte Windows — le moteur PDF (statique)");
 	const source = readFileSync("apps/windows/src/host/index.ts", "utf-8");
 	const nu = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-	r.check("l'hôte assemblé ne déclare aucun membre pdf", /\bpdf\s*:/.test(nu), false);
-	/* Sans ce second cas, renommer la fonction assembleuse viderait le premier
-	   de tout sens : il resterait vert sur un fichier qu'il ne reconnaît plus. */
+	r.check("l'hôte assemblé déclare le membre pdf par createWindowsPdf()", /\bpdf\s*:\s*createWindowsPdf\(\)/.test(nu), true);
+	r.check("… importé de ./pdf.ts, le seul module qui charge pdfjs-dist", /import \{ createWindowsPdf \} from "\.\/pdf"/.test(nu), true);
+	/* Sans ce troisième cas, renommer la fonction assembleuse viderait les
+	   deux premiers de tout sens : ils resteraient verts sur un fichier
+	   qu'ils ne reconnaissent plus. */
 	r.check("… et c'est bien l'hôte assemblé qui a été lu", nu.includes("export function createWindowsHost("), true);
 	r.done();
 }
@@ -1611,6 +1617,26 @@ await withSrcModule("apps/windows/src/host/modal.ts", async ({ createWindowsModa
 		for (const fn of dom.minuteurs.splice(0)) fn();
 		r.check("le filet de sécurité qui suit ne rappelle pas onClose",
 			journal, ["onOpen", "onClose"]);
+
+		/* PLUSIEURS CLASSES dans `className`, comme un attribut `class`.
+		   `classList.add("a b")` lève une DOMException dans un vrai navigateur
+		   (un jeton ne contient pas d'espace), et elle partait AVANT la croix,
+		   le titre et le contenu : un panneau vide, impossible à fermer —
+		   l'aperçu d'un PDF, vu à l'écran le 2026-09-17. */
+		let ouvert = false;
+		const deux = modals.open({
+			className: "qbd-ai-preview-modal qbd-ai-preview-modal--pdf",
+			title: "CM1.pdf",
+			onOpen: () => { ouvert = true; },
+		});
+		r.check("deux classes séparées par une espace sont posées toutes les deux",
+			["qbd-ai-preview-modal", "qbd-ai-preview-modal--pdf"].every(c => deux.panelEl.classList.contains(c)), true);
+		r.check("… et le panneau a bien sa croix, son titre et son contenu",
+			[...deux.panelEl.children].map(e => e.className),
+			["modal-close-button", "modal-title", "modal-content"]);
+		r.check("… et onOpen a été appelé", ouvert, true);
+		deux.close();
+		for (const fn of dom.minuteurs.splice(0)) fn();
 	} finally {
 		dom.retirer();
 	}

@@ -102,8 +102,11 @@ const pont: Pont = {
 
 	systeme: {
 		ouvrir: abs => ipcRenderer.invoke(CANAUX.ouvrir, abs),
+		copierTexte: texte => ipcRenderer.invoke(CANAUX.systemeCopierTexte, texte),
 		vaultsObsidian: () => ipcRenderer.invoke(CANAUX.vaultsObsidian),
 		dossierDefaut: () => ipcRenderer.invoke(CANAUX.systemeDossierDefaut),
+		relancer: () => ipcRenderer.invoke(CANAUX.systemeRelancer),
+		choisirDossierDefaut: () => ipcRenderer.invoke(CANAUX.systemeChoisirDossierDefaut),
 	},
 
 	reseau: {
@@ -159,7 +162,6 @@ const pont: Pont = {
 		},
 		verifier: () => ipcRenderer.invoke(CANAUX.miseAJourVerifier),
 		installer: () => ipcRenderer.invoke(CANAUX.miseAJourInstaller),
-		reglerAuto: auto => ipcRenderer.invoke(CANAUX.miseAJourReglage, auto),
 	},
 };
 

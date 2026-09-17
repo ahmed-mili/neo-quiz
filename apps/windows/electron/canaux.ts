@@ -30,21 +30,23 @@
    réussi.
 ══════════════════════════════════════════════════════════ */
 
-import { dialog, ipcMain, net, shell } from "electron";
+import { app, clipboard, dialog, ipcMain, net, shell } from "electron";
 import type { BrowserWindow } from "electron";
 import * as path from "node:path";
+// Le dossier par défaut CHOISI est créé ici s'il manque — voir son canal.
+import * as fsp from "node:fs/promises";
 import { LOG_PREFIX } from "../../../src/branding";
 import { creerFichiers, stat, statEntree } from "./fichiers";
 import { absoluDepuisContrat, contratDepuisAbsolu, creerIndex, renameDirVersAbsolu } from "./index-fichiers";
 import type { EvenementSurveillant, Index } from "./index-fichiers";
 import { listerRacine, normaliser } from "./parcours";
 import { t } from "../../../src/i18n";
-import { cheminCliPourLancement, validerReglagesIa } from "./garde-ia";
+import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { demarrerOllama, erreurCli, estOutilAutorise, lireCache, ollamaInstalle, run } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
-import { CANAUX, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
+import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
 import type { EtatFenetre, EvenementDisque, RequeteCli, RequeteReseau, ResultatCli } from "./pont";
 import type { Reglages } from "./reglages";
 import { autoriserHote, fetchBorne } from "./reseau";
@@ -60,8 +62,16 @@ export interface DependancesCanaux {
 	reglagesOuErreur(): Reglages;
 	/** Le chemin absolu du dossier de quiz par défaut (tranche 9), déjà créé
 	    et autorisé au périmètre par `main.ts` — le canal `systeme.dossierDefaut`
-	    le sert tel quel, sans autre calcul. */
-	dossierDefaut: string;
+	    le sert tel quel, sans autre calcul.
+	    UNE FONCTION, ET NON PLUS UNE CHAÎNE : depuis que l'utilisateur peut le
+	    CHANGER en cours de session (`systeme.choisirDossierDefaut`), une valeur
+	    capturée au démarrage servirait l'ANCIEN chemin jusqu'au redémarrage —
+	    la fenêtre rechargerait sur le dossier qu'elle vient de quitter. */
+	dossierDefaut(): string;
+	/** Retient le nouveau dossier par défaut, une fois le dialogue accepté et
+	    le chemin admis au périmètre. C'est `main.ts` qui tient la variable :
+	    lui seul l'a lue au démarrage, et lui seul doit la corriger. */
+	poserDossierDefaut(abs: string): void;
 	/** Pousse une charge vers la fenêtre (`webContents.send`), si elle existe. */
 	envoyer(canal: string, charge: unknown): void;
 	/** La fenêtre, pour y RATTACHER un dialogue natif (modal de la fenêtre,
@@ -171,37 +181,14 @@ async function ecrireTexte(etat: EtatDisque, abs: string, contenu: string): Prom
 
 /* ─────────── les canaux ─────────── */
 
-/**
- * Le réglage « chemin de l'exécutable » de CET outil, lu dans le magasin du
- * PRINCIPAL — jamais pris de l'appel IPC — ET REJUGÉ AU LANCEMENT (ruling 16).
- *
- * C'est la moitié qui fait que la liste blanche de noms tient : si le rendu
- * pouvait envoyer un chemin, elle ne séparerait plus rien. Mais la lire ne
- * suffit pas : la garde à l'ÉCRITURE (`garde-ia.ts`) a jugé ce chemin contre le
- * périmètre D'ALORS, et le périmètre grandit — l'utilisateur ouvre plus tard le
- * dossier qui contient un `x.cmd` écrit par la fenêtre, et le chemin admis hier
- * est dedans aujourd'hui. Le verdict est donc REJOUÉ ici, avec `perimetre.contient`
- * et `statEntree` d'aujourd'hui (`cheminCliPourLancement`, pur, éprouvé par
- * `check:electron-reglages`) ; un refus est NOMMÉ (`refuse`), journalisé, et
- * rien n'est lancé — ni ce chemin, ni un repli sur le `PATH`.
- *
- * `undefined` quand rien n'est réglé, ou quand l'outil n'a pas de réglage
- * (Ollama : cherché à ses emplacements officiels). `run` retombe alors sur le
- * `PATH` étendu.
- */
-async function cheminCliRegle(reglages: Reglages, tool: string, perimetre: Perimetre): Promise<string | undefined> {
-	const verdict = await cheminCliPourLancement(
-		await reglages.lire(CLE_REGLAGES_IA),
-		tool,
-		async chemin => (await statEntree(chemin))?.isFile === true,
-		chemin => perimetre.contient(chemin),
-	);
-	if ("refus" in verdict) {
-		console.warn(LOG_PREFIX, "CLI", tool, "refusé :", verdict.refus);
-		throw erreurCli("refuse", verdict.refus);
-	}
-	return verdict.chemin;
-}
+/* PLUS DE RÉGLAGE « chemin de l'exécutable » (2026-09-17) : `cheminCliRegle`
+   lisait la clé `ai` du magasin du principal et rejouait sa garde au
+   lancement. Les deux champs des Réglages sont partis, et avec eux la seule
+   façon dont un chemin d'exécutable pouvait venir de la fenêtre. Ce qui lance
+   un CLI, désormais, est un NOM de la liste blanche résolu sur le `PATH` —
+   celui du processus, fusionné au démarrage avec le `PATH` du REGISTRE
+   (`process.ts`, `chargerPathRegistre`), qui est ce que les deux champs
+   rattrapaient à la main. */
 
 /** REJETTE si un des dossiers de la valeur n'est pas déjà dans le périmètre. */
 async function verifierDossiers(perimetre: Perimetre, valeur: unknown): Promise<void> {
@@ -225,6 +212,20 @@ async function verifierDossierFond(perimetre: Perimetre, valeur: unknown): Promi
 	if (typeof valeur !== "object") {
 		throw new Error("réglage fond refusé : valeur n'est pas un objet : " + String(valeur));
 	}
+	/* LA FORME EMBARQUÉE (`{ embarque }`) n'a AUCUN chemin : la photo est
+	   livrée avec l'application et servie par elle. Il n'y a donc rien à juger
+	   contre le périmètre — et rien à y admettre au démarrage suivant, ce qui
+	   est précisément ce que cette garde existe pour empêcher. Une valeur
+	   d'identifiant inconnue est sans danger et sans effet : le rendu la relit
+	   avec son catalogue (`fonds-catalogue.ts`) et retombe sur le fond par
+	   défaut si elle n'y figure pas. */
+	const embarque = (valeur as { embarque?: unknown }).embarque;
+	if (embarque !== undefined) {
+		if (typeof embarque !== "string" || embarque.trim() === "") {
+			throw new Error("réglage fond refusé : embarque doit être une chaîne : " + String(embarque));
+		}
+		return;
+	}
 	const dossier = (valeur as { dossier?: unknown }).dossier;
 	const image = (valeur as { image?: unknown }).image;
 	if (typeof dossier !== "string" || dossier.trim() === "") {
@@ -238,8 +239,23 @@ async function verifierDossierFond(perimetre: Perimetre, valeur: unknown): Promi
 	}
 }
 
+/** REJETTE le dossier par défaut s'il n'est pas une chaîne déjà au périmètre.
+    Même raison que `verifierDossiers` : `perimetreInitial` l'admet au
+    démarrage suivant, donc un chemin qui n'y est pas encore élargirait le
+    périmètre d'une session à l'autre. `null`/`undefined` (retour au chemin
+    calculé) n'admettent rien : acceptés. */
+async function verifierDossierDefaut(perimetre: Perimetre, valeur: unknown): Promise<void> {
+	if (valeur === null || valeur === undefined) return;
+	if (typeof valeur !== "string" || valeur.trim() === "") {
+		throw new Error("dossier par défaut refusé : valeur invalide : " + String(valeur));
+	}
+	if (!(await perimetre.contient(valeur))) {
+		throw new Error("dossier par défaut refusé : hors périmètre : " + valeur);
+	}
+}
+
 export function enregistrerCanaux(deps: DependancesCanaux): void {
-	const { perimetre, reglagesOuErreur, dossierDefaut } = deps;
+	const { perimetre, reglagesOuErreur, dossierDefaut, poserDossierDefaut } = deps;
 	/* L'état du DISQUE vu par ce processus : les racines déclarées, l'index et
 	   son surveillant. Il vit ici, pas dans `main.ts` : la fenêtre n'a pas à le
 	   connaître, elle ne fait que recevoir ce que `deps.envoyer` lui pousse. */
@@ -385,6 +401,11 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 		/* La clé du FOND D'ÉCRAN est gardée pour la même raison que `folders` :
 		   `perimetreInitial` admet `fond.dossier` au démarrage suivant. */
 		if (cle === CLE_REGLAGES_FOND) await verifierDossierFond(perimetre, valeur);
+		/* Le dossier PAR DÉFAUT nourrit lui aussi le périmètre au démarrage
+		   suivant. Le rendu n'a aucune raison d'écrire cette clé — c'est
+		   `systeme.choisirDossierDefaut` qui la pose — mais la porte générique
+		   reste ouverte, et une clé gardée nulle part est une clé libre. */
+		if (cle === CLE_DOSSIER_DEFAUT) await verifierDossierDefaut(perimetre, valeur);
 		await reglagesOuErreur().ecrire(String(cle), valeur);
 	});
 
@@ -458,7 +479,56 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	/* Sans argument, comme `vaultsObsidian` : le chemin est fixé par le
 	   principal (`dossier-defaut.ts`), jamais choisi par le rendu. Déjà créé
 	   et autorisé au périmètre avant l'ouverture de la fenêtre — voir `main.ts`. */
-	ipcMain.handle(CANAUX.systemeDossierDefaut, async () => dossierDefaut);
+	ipcMain.handle(CANAUX.systemeDossierDefaut, async () => dossierDefaut());
+
+	/* CHANGER le dossier par défaut. Tout se passe ICI, et pas dans le rendu :
+	   le chemin vient du dialogue natif (jamais d'un argument), il est créé s'il
+	   manque, admis au périmètre, puis écrit — dans cet ordre, parce qu'un
+	   réglage qui pointerait vers un dossier absent ou hors périmètre ferait
+	   démarrer la session suivante sans dossier par défaut du tout.
+	   `mkdir` PEUT ÉCHOUER (disque protégé, lecteur en lecture seule) : on
+	   rejette alors sans rien écrire, et le dossier précédent reste en place —
+	   c'est la même règle qu'au démarrage (`main.ts`), où un défaut
+	   incréable n'empêche pas l'application de s'ouvrir. */
+	ipcMain.handle(CANAUX.systemeChoisirDossierDefaut, async () => {
+		/* `createDirectory` : le dialogue de Windows sait créer le dossier sur
+		   place, ce qui évite d'avoir à sortir de l'application pour en
+		   préparer un. Rattaché à la fenêtre quand elle existe, comme les
+		   autres dialogues de ce fichier. */
+		const fenetre = deps.fenetreCourante();
+		const proprietes: ("openDirectory" | "createDirectory")[] = ["openDirectory", "createDirectory"];
+		const choix = fenetre
+			? await dialog.showOpenDialog(fenetre, { properties: proprietes })
+			: await dialog.showOpenDialog({ properties: proprietes });
+		if (choix.canceled || choix.filePaths.length === 0) return null;
+		const abs = normaliser(choix.filePaths[0]);
+		await fsp.mkdir(abs, { recursive: true });
+		await perimetre.autoriser(abs);
+		await reglagesOuErreur().ecrire(CLE_DOSSIER_DEFAUT, abs);
+		poserDossierDefaut(abs);
+		return abs;
+	});
+
+	/* RELANCER. `app.relaunch()` réutilise l'exécutable et les arguments du
+	   processus courant — le rendu n'en fournit aucun, et n'en fournira jamais
+	   (voir `Pont.systeme.relancer`). `quit()` et NON `exit()` : `exit()` tue
+	   le processus sans passer par le `close` de la fenêtre, donc sans le
+	   délai de garde qui laisse le rendu vider ses écritures en attente — la
+	   dernière frappe d'un quiz ouvert serait perdue à chaque changement de
+	   langue. */
+	/* Le presse-papiers : du TEXTE, et rien d'autre. Une chaîne, et bornée —
+	   le principal ne fait pas plus confiance au rendu ici qu'ailleurs, et un
+	   chemin de fichier tient largement dans huit kilo-octets. Aucune
+	   LECTURE n'est exposée : `clipboard.readText` n'a pas de canal. */
+	ipcMain.handle(CANAUX.systemeCopierTexte, (_e, texte: unknown) => {
+		if (typeof texte !== "string" || texte.length > 8192) throw new Error("copie refusée : le presse-papiers ne prend qu'un texte borné");
+		clipboard.writeText(texte);
+	});
+
+	ipcMain.handle(CANAUX.systemeRelancer, async () => {
+		app.relaunch();
+		app.quit();
+	});
 
 	ipcMain.handle(CANAUX.vaultsObsidian, async () => {
 		/* Les vaults qu'Obsidian déclare LUI-MÊME entrent au périmètre : l'écran
@@ -590,7 +660,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 				fichiers,
 				sortieFichier: typeof s.sortieFichier === "string" ? s.sortieFichier : undefined,
 				signal: controleur.signal,
-			}, { cheminRegle: await cheminCliRegle(reglagesOuErreur(), tool, perimetre) });
+			});
 			return { ok: true, stdout: res.stdout, stderr: res.stderr, code: res.code, sortie: res.sortie };
 		} catch (e) {
 			/* Le NOM survit, c'est tout l'objet de l'enveloppe. « erreur » est le
@@ -648,5 +718,4 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	ipcMain.handle(CANAUX.miseAJourInstaller, () => {
 		if (deps.miseAJour.armerInstallation()) deps.fermerPourInstaller();
 	});
-	ipcMain.handle(CANAUX.miseAJourReglage, (_e, auto: unknown) => deps.miseAJour.reglerAuto(auto === true));
 }

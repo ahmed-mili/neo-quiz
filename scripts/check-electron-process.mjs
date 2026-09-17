@@ -515,6 +515,28 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 		return { dossier, lanceur };
 	};
 
+	/** Un dossier où `codex` et `claude` sont NODE LUI-MÊME, sans script fixe :
+	    le premier argument du `run` est donc le script lancé.
+
+	    Il remplace l'option `cheminRegle` que ces cas passaient jusqu'au
+	    2026-09-17 (« lance cet exécutable-ci »). Le réglage « chemin de
+	    l'exécutable » a été retiré du produit : le seul chemin par lequel un
+	    CLI est trouvé est désormais le `PATH`, et c'est donc par le `PATH` que
+	    les cas doivent le poser — sinon ils éprouveraient une porte qui
+	    n'existe plus. */
+	const poserNodeNu = () => {
+		const dossier = mkdtempSync(join(racine, "nodenu-"));
+		for (const nom of ["codex", "claude"]) {
+			const lanceur = join(dossier, process.platform === "win32" ? nom + ".cmd" : nom);
+			if (process.platform === "win32") {
+				writeFileSync(lanceur, "@echo off\r\n\"" + process.execPath + "\" %*\r\n");
+			} else {
+				writeFileSync(lanceur, "#!/bin/sh\nexec \"" + process.execPath + "\" \"$@\"\n", { mode: 0o755 });
+			}
+		}
+		return dossier;
+	};
+
 	const nomDuRejet = async (promesse) => {
 		try {
 			await promesse;
@@ -531,45 +553,53 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 		const ailleurs = poserFauxCli("autre", "process.stdout.write('DU-REGLAGE');");
 		const env = envDe(surPath.dossier);
 
-		await cas(r, "resoudreExecutable : le réglage l'emporte sur le PATH, sinon le PATH, sinon null", async () => {
-			/* Le réglage EN PREMIER, sinon il ne servirait à rien : on ne le
-			   remplit QUE parce que la recherche automatique échoue ou trouve la
-			   mauvaise installation. Comparaison en minuscules : sous Windows
-			   `PATHEXT` est écrit en MAJUSCULES, donc le chemin trouvé porte
-			   « .CMD » là où le fichier posé s'appelle « .cmd » — même fichier,
-			   système insensible à la casse, et rien de ce qui suit n'en dépend. */
+		await cas(r, "resoudreExecutable : le PATH, et rien d'autre", async () => {
+			/* UNE SEULE SOURCE depuis le 2026-09-17. Le réglage « chemin de
+			   l'exécutable » passait devant ; il a été retiré, et ce cas garde
+			   ce qui reste : le nom est cherché sur le `PATH` étendu, et un
+			   outil qui n'y est pas rend `null` — jamais un chemin deviné.
+			   Comparaison en minuscules : sous Windows `PATHEXT` est écrit en
+			   MAJUSCULES, donc le chemin trouvé porte « .CMD » là où le fichier
+			   posé s'appelle « .cmd » — même fichier, système insensible à la
+			   casse, et rien de ce qui suit n'en dépend. */
 			const bas = (p) => (typeof p === "string" ? p.toLowerCase() : p);
-			r.check("resoudreExecutable : le réglage l'emporte sur le PATH, sinon le PATH, sinon null",
+			r.check("resoudreExecutable : le PATH, et rien d'autre",
 				{
-					regle: bas(resoudreExecutable("codex", ailleurs.lanceur, env)),
-					parLePath: bas(resoudreExecutable("codex", undefined, env)),
-					videIgnore: bas(resoudreExecutable("codex", "   ", env)),
-					aucun: resoudreExecutable("claude", undefined, env),
+					parLePath: bas(resoudreExecutable("codex", env)),
+					aucun: resoudreExecutable("claude", env),
 				},
 				{
-					regle: bas(ailleurs.lanceur),
 					parLePath: bas(surPath.lanceur),
-					videIgnore: bas(surPath.lanceur),
 					aucun: null,
 				});
+			/* LE CLIQUET : un second argument « chemin » ne doit pas revenir.
+			   `resoudreExecutable` en prenait un, et c'était par lui qu'un
+			   chemin venu de la fenêtre atteignait `spawn`. */
+			/* `length` compte les paramètres SANS valeur par défaut : `(tool,
+			   env = process.env)` en déclare un seul. Il en déclarait deux
+			   quand le chemin réglé passait devant — remettre un tel paramètre
+			   ferait remonter ce compte, et c'est tout ce qu'on lui demande. */
+			r.check("resoudreExecutable ne prend plus de chemin en second argument",
+				resoudreExecutable.length, 1);
 		});
 
-		await cas(r, "run lance l'exécutable du réglage, et celui du PATH quand il n'y en a pas", async () => {
+		await cas(r, "run lance bien l'exécutable trouvé sur le PATH", async () => {
 			/* LA MOITIÉ QUI MANQUERAIT à la vérification ci-dessus : `resoudre`
-			   peut rendre le bon chemin et `run` en lancer un autre. Les deux
-			   appels passent par le repli `cmd.exe` sous Windows (le lanceur est
-			   un `.cmd`), donc ce cas éprouve AUSSI que ce repli aboutit. */
-			const parReglage = await run({ tool: "codex", args: [], stdin: "" }, { cheminRegle: ailleurs.lanceur, env });
+			   peut rendre le bon chemin et `run` en lancer un autre. L'appel
+			   passe par le repli `cmd.exe` sous Windows (le lanceur est un
+			   `.cmd`), donc ce cas éprouve AUSSI que ce repli aboutit. */
 			const parPath = await run({ tool: "codex", args: [], stdin: "" }, { env });
-			r.check("run lance l'exécutable du réglage, et celui du PATH quand il n'y en a pas",
-				{ parReglage: parReglage.stdout, parPath: parPath.stdout, code: parPath.code },
-				{ parReglage: "DU-REGLAGE", parPath: "DU-PATH", code: 0 });
+			r.check("run lance bien l'exécutable trouvé sur le PATH",
+				{ parPath: parPath.stdout, code: parPath.code },
+				{ parPath: "DU-PATH", code: 0 });
 		});
 
 		/* ── LE STDIN, LES FLUX, LE CODE DE SORTIE ──
-		   Lancés par `process.execPath` DIRECTEMENT (le réglage « chemin ») :
-		   c'est le chemin `spawn` sans interpréteur, l'autre moitié du repli
-		   `cmd.exe` éprouvé juste au-dessus. */
+		   Lancés par un `codex`/`claude` du `PATH` qui EST node lui-même
+		   (`poserNodeNu`) : le premier argument est donc le script à exécuter.
+		   C'est ainsi que ces cas désignent l'exécutable depuis que le réglage
+		   « chemin » n'existe plus — par le `PATH`, le seul chemin qui reste. */
+		const envNode = envDe(poserNodeNu());
 		const rapporteur = join(racine, "rapporteur.js");
 		writeFileSync(rapporteur, [
 			"let entree = '';",
@@ -588,7 +618,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 			   LONGUEUR si une partie du prompt était perdue. */
 			const res = await run(
 				{ tool: "codex", args: [rapporteur, "-p", "--model", "opus"], stdin: "x".repeat(5000) },
-				{ cheminRegle: process.execPath, env },
+				{ env: envNode },
 			);
 			r.check("run écrit le stdin complet puis le ferme, et passe les arguments",
 				res.stdout, "OUT:5000:-p,--model,opus");
@@ -628,15 +658,15 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 					horsListe: await nomDuRejet(run({ tool: "notepad", args: [], stdin: "" }, { env })),
 					sautDeLigne: await nomDuRejet(run(
 						{ tool: "codex", args: [rapporteur, "a\nb"], stdin: "" },
-						{ cheminRegle: process.execPath, env },
+						{ env: envNode },
 					)),
 					fichiersSansMarqueur: await nomDuRejet(run(
 						{ tool: "codex", args: [rapporteur], stdin: "", fichiers: [piece] },
-						{ cheminRegle: process.execPath, env },
+						{ env: envNode },
 					)),
 					sortieSansMarqueur: await nomDuRejet(run(
 						{ tool: "codex", args: [rapporteur], stdin: "", sortieFichier: "out.txt" },
-						{ cheminRegle: process.execPath, env },
+						{ env: envNode },
 					)),
 				},
 				{ horsListe: "refuse", sautDeLigne: "refuse", fichiersSansMarqueur: "refuse", sortieSansMarqueur: "refuse" });
@@ -653,7 +683,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 					pathVide: await nomDuRejet(run({ tool: "claude", args: [], stdin: "" }, { env: envDe(vide) })),
 					regleFausse: await nomDuRejet(run(
 						{ tool: "claude", args: [], stdin: "" },
-						{ cheminRegle: join(racine, "n-existe-pas.exe"), env },
+						{ env: envDe(vide) },
 					)),
 				},
 				{ pathVide: "introuvable", regleFausse: "introuvable" });
@@ -665,7 +695,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 			r.check("un timeout tue le process et rejette « timeout »",
 				await nomDuRejet(run(
 					{ tool: "codex", args: [dormeur], stdin: "", timeoutMs: 300 },
-					{ cheminRegle: process.execPath, env },
+					{ env: envNode },
 				)),
 				"timeout");
 		});
@@ -674,12 +704,12 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 		await cas(r, "un second run du même outil rejette « occupe » ; un autre outil passe", async () => {
 			const lent = join(racine, "lent.js");
 			writeFileSync(lent, "setTimeout(() => { process.stdout.write('FINI'); }, 500);");
-			const premier = run({ tool: "codex", args: [lent], stdin: "" }, { cheminRegle: process.execPath, env });
-			const second = await nomDuRejet(run({ tool: "codex", args: [lent], stdin: "" }, { cheminRegle: process.execPath, env }));
+			const premier = run({ tool: "codex", args: [lent], stdin: "" }, { env: envNode });
+			const second = await nomDuRejet(run({ tool: "codex", args: [lent], stdin: "" }, { env: envNode }));
 			/* Le verrou est par OUTIL : bloquer Codex pendant que Claude tourne
 			   serait une limite inventée, et l'utilisateur ne peut de toute façon
 			   lancer qu'une génération à la fois par fournisseur. */
-			const autre = await run({ tool: "claude", args: [lent], stdin: "" }, { cheminRegle: process.execPath, env });
+			const autre = await run({ tool: "claude", args: [lent], stdin: "" }, { env: envNode });
 			r.check("un second run du même outil rejette « occupe » ; un autre outil passe",
 				{ second, autre: autre.stdout, premier: (await premier).stdout },
 				{ second: "occupe", autre: "FINI", premier: "FINI" });
@@ -695,10 +725,10 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 			writeFileSync(echoue, "process.exit(3);");
 			const apresIntrouvable = await nomDuRejet(run(
 				{ tool: "codex", args: [], stdin: "" },
-				{ cheminRegle: join(racine, "n-existe-pas.exe"), env },
+				{ env: envDe(vide) },
 			));
-			const apresEchec = await run({ tool: "codex", args: [echoue], stdin: "" }, { cheminRegle: process.execPath, env });
-			const ensuite = await run({ tool: "codex", args: [rapporteur], stdin: "ok" }, { cheminRegle: process.execPath, env });
+			const apresEchec = await run({ tool: "codex", args: [echoue], stdin: "" }, { env: envNode });
+			const ensuite = await run({ tool: "codex", args: [rapporteur], stdin: "ok" }, { env: envNode });
 			r.check("le verrou est relâché sur TOUTES les issues, y compris un échec",
 				{ apresIntrouvable, codeEchec: apresEchec.code, ensuite: ensuite.stdout },
 				{ apresIntrouvable: "introuvable", codeEchec: 3, ensuite: "OUT:2:" });
@@ -771,7 +801,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 			writeFileSync(ecrivain, "require('fs').writeFileSync(process.argv[2], 'LANCE');");
 			const nom = await nomDuRejet(run(
 				{ tool: "codex", args: [ecrivain, marqueurDeVie], stdin: "", signal: c.signal },
-				{ cheminRegle: process.execPath, env },
+				{ env: envNode },
 			));
 			await dodo(150);
 			r.check("un signal déjà abandonné rejette « annule » sans rien lancer",
@@ -791,7 +821,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 			writeFileSync(quitteur, "process.exit(2);");
 			const res = await run(
 				{ tool: "codex", args: [quitteur], stdin: "x".repeat(4000000) },
-				{ cheminRegle: process.execPath, env },
+				{ env: envNode },
 			);
 			r.check("un CLI qui sort sans lire son entrée ne tue pas le processus principal",
 				{ code: res.code, vivant: true }, { code: 2, vivant: true });
@@ -844,7 +874,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 			const c = new AbortController();
 			const promesse = run(
 				{ tool: "codex", args: [dormeur], stdin: "", signal: c.signal },
-				{ cheminRegle: process.execPath, env, tuer: async (pid) => { pidVu = pid; await tuerArbre(pid); } },
+				{ env: envNode, tuer: async (pid) => { pidVu = pid; await tuerArbre(pid); } },
 			);
 			await dodo(400); // l'enfant tourne
 			c.abort();
@@ -874,7 +904,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 			const c = new AbortController();
 			const promesse = run(
 				{ tool: "codex", args: [dormeur], stdin: "", signal: c.signal },
-				{ cheminRegle: process.execPath, env, tuer: async (pid) => { pidVu = pid; }, delaiGardeMs: 300 },
+				{ env: envNode, tuer: async (pid) => { pidVu = pid; }, delaiGardeMs: 300 },
 			);
 			await dodo(400);
 			const debut = Date.now();
@@ -914,9 +944,11 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
  * et celle de la garde de la clé `ai` (`check:electron-reglages`).
  *
  * Ce qu'elle empêche : que la liste blanche glisse APRÈS le lancement, et
- * surtout que le CHEMIN de l'exécutable vienne un jour de l'appel IPC plutôt
- * que du magasin du principal — auquel cas la liste de noms ne séparerait plus
- * rien, le rendu envoyant le chemin qu'il veut.
+ * surtout que le CHEMIN de l'exécutable vienne un jour de la fenêtre — auquel
+ * cas la liste de noms ne séparerait plus rien, le rendu envoyant le chemin
+ * qu'il veut. Il n'a plus de chemin du tout à lui donner depuis le
+ * 2026-09-17 : le réglage qui en portait un a été retiré, et `run` résout
+ * toujours le NOM sur le `PATH`.
  */
 {
 	const r = makeReporter("Électron — le canal process.run (statique)");
@@ -935,29 +967,20 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 	r.check("le canal process.run juge le NOM (estOutilAutorise) AVANT de lancer",
 		{ trouve: corps !== null, garde: garde >= 0, avantLancement: garde >= 0 && lancement > garde },
 		{ trouve: true, garde: true, avantLancement: true });
-	r.check("le chemin de l'exécutable est lu dans le magasin du PRINCIPAL, jamais reçu du rendu",
+	/* LE CLIQUET, ET IL A CHANGÉ DE SENS. Ces deux assertions vérifiaient que le
+	   canal lisait le chemin de l'exécutable dans le MAGASIN du principal (et
+	   le rejugeait contre le périmètre du jour) plutôt que de l'accepter de
+	   l'appel IPC. Le réglage a été retiré : il n'y a plus de chemin à lire, et
+	   ce qu'il faut tenir désormais est qu'aucun n'en revienne — ni du rendu,
+	   ni des réglages. Un `s.chemin` accepté du rendu, ou une option `chemin`
+	   passée à `run`, rouvrirait d'un coup la porte que la liste blanche de
+	   NOMS existe pour tenir fermée. */
+	r.check("aucun chemin d'exécutable n'atteint run : ni du rendu, ni d'un réglage",
 		{
-			duMagasin: corps !== null && corps.includes("cheminCliRegle(reglagesOuErreur()"),
 			pasDeCheminRecu: corps !== null && !/s\.chemin/.test(corps),
+			pasDOptionChemin: corps !== null && !/chemin\s*:/.test(corps.slice(corps.indexOf("await run("))),
+			plusDeLectureDeReglage: !source.includes("cheminCliRegle("),
 		},
-		{ duMagasin: true, pasDeCheminRecu: true });
-	/* REJUGÉ AU LANCEMENT (ruling 16) : `cheminCliRegle` ne LIT pas seulement le
-	   réglage, elle le repasse par le verdict pur (`cheminCliPourLancement`,
-	   éprouvé par `check:electron-reglages`) avec le périmètre D'AUJOURD'HUI —
-	   qui a pu grandir depuis l'écriture — et l'existence du fichier. Sans ce
-	   rejeu, un `.cmd` écrit par la fenêtre dans un dossier ouvert APRÈS coup
-	   serait lancé tel quel. */
-	const debutRegle = source.indexOf("async function cheminCliRegle(");
-	const finRegle = debutRegle >= 0 ? source.indexOf("\n}\n", debutRegle) : -1;
-	const corpsRegle = debutRegle >= 0 && finRegle > debutRegle ? source.slice(debutRegle, finRegle) : "";
-	r.check("cheminCliRegle rejoue le verdict pur avec le périmètre du jour avant de rendre un chemin",
-		{
-			trouve: corpsRegle.length > 0,
-			verdict: corpsRegle.includes("cheminCliPourLancement("),
-			perimetre: corpsRegle.includes("perimetre.contient("),
-			existence: corpsRegle.includes("statEntree("),
-			refusNomme: corpsRegle.includes('erreurCli("refuse"'),
-		},
-		{ trouve: true, verdict: true, perimetre: true, existence: true, refusNomme: true });
+		{ pasDeCheminRecu: true, pasDOptionChemin: true, plusDeLectureDeReglage: true });
 	r.done();
 }

@@ -7,13 +7,19 @@ export const EN_AI = {
 	"ai.page.title": "Generate a quiz",
 
 	/* ── Composer ── */
-	"ai.composer.placeholder": "What should the quiz be about ?",
-	/* Au moins une pièce jointe (chip note/PDF ou vignette image) : le champ
-	   devient réellement optionnel (canGenerate accepte texte OU images OU
-	   notes) — la question d'origine n'a plus de sens, le sujet est déjà le
-	   fichier joint. */
-	"ai.composer.placeholderAttached": "Add instructions (optional)",
+	"ai.composer.placeholder": "What should the quiz be about?",
 	"ai.composer.addContent": "Add content",
+	/* ── L'aperçu d'une pièce jointe (clic sur sa carte) ── */
+	"ai.preview.size": "{kb} KB",
+	"ai.preview.linesOne": "{n} line",
+	"ai.preview.linesOther": "{n} lines",
+	"ai.preview.pagesOne": "{n} page",
+	"ai.preview.pagesOther": "{n} pages",
+	"ai.preview.pageAlt": "Page {n}",
+	"ai.preview.rendering": "Rendering pages…",
+	"ai.preview.renderFailed": "This PDF could not be drawn",
+	"ai.preview.open": "Open",
+	"ai.preview.openFailed": "Could not open {name}",
 	"ai.composer.quizOptions": "Quiz options",
 	"ai.composer.generate": "Generate quiz",
 	"ai.composer.stop": "Stop",

@@ -609,8 +609,10 @@ export interface HostModalHandle {
 }
 
 export interface HostModalSpec {
-	/** Classe posée sur le PANNEAU (« qbd-create-modal », « qbd-medit-modal »).
-	    Le CSS partagé la cible déjà ; l'hôte ne la choisit pas. */
+	/** Classe(s) posée(s) sur le PANNEAU (« qbd-create-modal »,
+	    « qbd-medit-modal »), comme un attribut `class` : plusieurs, séparées
+	    par des espaces, sont admises. Le CSS partagé les cible déjà ; l'hôte
+	    ne les choisit pas. */
 	className?: string;
 	title?: string;
 	/** Construit le contenu. Appelé une fois, après attachement — un appelant
@@ -646,6 +648,15 @@ export interface HostPdf {
 	/** Le texte de toutes les pages, une section par page. Chaîne vide pour un
 	    PDF scanné (sans couche texte) : c'est à l'appelant de le dire. */
 	extractText(data: Uint8Array): Promise<string>;
+	/**
+	 * Les pages DESSINÉES, en images (`data:` URL PNG), à la largeur demandée
+	 * — pour la vignette d'une carte de pièce jointe et l'aperçu d'une modale
+	 * (référence claude.ai, Ahmed 2026-09-17). `max` borne le nombre de pages
+	 * rendues ; `total` est le nombre de pages du document, rendues ou non.
+	 * OPTIONNEL, comme le membre lui-même : un hôte qui sait lire le texte
+	 * mais pas dessiner rend la carte sans vignette et l'aperçu en texte.
+	 */
+	renderPages?(data: Uint8Array, opts: { width: number; max?: number }): Promise<{ pages: string[]; total: number }>;
 }
 
 export interface Host {

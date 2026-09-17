@@ -69,16 +69,22 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		return `<div class="quiz-nav">${ctx.quiz.map((_, i) => `<a class="quiz-tab ${tabClass(i)}" href="#" data-nav="${i}">Q${i + 1}</a>`).join("")}<a class="quiz-tab is-result ${resultsActive}" href="#" data-nav-results="1">${t("engine.nav.results")}</a></div>`;
 	}
 
+	/* DEUX modes, et deux seulement (Ahmed, 2026-09-17) : APPRENDRE et se
+	   TESTER. « Practice » — les réponses en texte libre — est retiré : la
+	   spec du mode Leçon (§6, 2026-08-31) l'avait déjà condamné, et un an plus
+	   tard il était toujours là. Apprendre en premier : c'est ce qu'on fait
+	   avant de se tester. Le choix vit dans `quizState.startMode`, pas dans
+	   `practiceMode` — celui-ci ne sert plus qu'au rôle `recall` d'une leçon. */
 	function startModeSelectorHtml(): string {
-		const isTraining = ctx.quizState.practiceMode === "text";
+		const learn = ctx.quizState.startMode === "learn";
 		return `<div class="quiz-start-mode-selector" role="group" aria-label="${ctx.escapeHtmlAttr(t("engine.start.selectorAria"))}">
-			<button class="quiz-start-mode-option${!isTraining ? " is-active" : ""}" type="button" data-quiz-start-mode="exam" aria-pressed="${!isTraining ? "true" : "false"}">
+			<button class="quiz-start-mode-option${learn ? " is-active" : ""}" type="button" data-quiz-start-mode="learn" aria-pressed="${learn ? "true" : "false"}">
+				<span class="quiz-start-mode-title">${t("engine.start.learnTitle")}</span>
+				<span class="quiz-start-mode-sub">${t("engine.start.learnSub")}</span>
+			</button>
+			<button class="quiz-start-mode-option${!learn ? " is-active" : ""}" type="button" data-quiz-start-mode="exam" aria-pressed="${!learn ? "true" : "false"}">
 				<span class="quiz-start-mode-title">${t("engine.start.examTitle")}</span>
 				<span class="quiz-start-mode-sub">${t("engine.start.examSub")}</span>
-			</button>
-			<button class="quiz-start-mode-option${isTraining ? " is-active" : ""}" type="button" data-quiz-start-mode="training" aria-pressed="${isTraining ? "true" : "false"}">
-				<span class="quiz-start-mode-title">${t("engine.start.trainingTitle")}</span>
-				<span class="quiz-start-mode-sub">${t("engine.start.trainingSub")}</span>
 			</button>
 		</div>`;
 	}

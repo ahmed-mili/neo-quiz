@@ -184,10 +184,94 @@
 	line-height: 1.5;
 }
 
+/* La ligne de détail (date de modification du fichier à effacer) : sous le
+   message, plus petite et plus discrète — une information, pas un second
+   avertissement. Le message porte déjà sa marge basse ; on la reprend ici. */
+.qb-confirm-message + .qb-confirm-details {
+	margin: -1.1em 0 1.5em;
+	font-size: 0.8em;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
 .qb-confirm-buttons {
 	display: flex;
-	gap: 0.75em;
+	gap: 10px;
 	justify-content: flex-end;
+	margin-top: 4px;
+}
+
+/* ── Les deux boutons d'une confirmation (retour Ahmed 2026-09-17 : deux
+   boutons gris INDISCERNABLES, « Annuler » et « Supprimer » rendus pareil).
+   `.qb-btn` seul ne pose aucun fond : c'était le bouton par défaut du thème.
+   Ici, scoppé à la rangée pour ne pas toucher les autres `.qb-btn` de
+   l'éditeur : Annuler est le bouton SECONDAIRE de l'application (translucide,
+   liseré, liseré accent au survol — le même que les actions de panneau), et
+   le dernier bouton est le PRIMAIRE : accent plein, ou ROUGE plein quand il
+   détruit (`.qb-btn-danger`). On ne peut pas confondre ce qui efface avec
+   ce qui annule. ── */
+.qb-confirm-buttons .qb-btn {
+	height: 36px;
+	padding: 0 16px;
+	border-radius: 10px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-normal);
+	background: color-mix(in srgb, var(--background-primary) 85%, transparent);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: none;
+	transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease,
+		transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+
+.qb-confirm-buttons .qb-btn:hover {
+	border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary));
+	transform: translateY(-1px);
+	box-shadow: 0 3px 8px -4px rgba(0, 0, 0, 0.4);
+}
+
+.qb-confirm-buttons .qb-btn:active {
+	transform: translateY(0);
+	box-shadow: none;
+}
+
+.qb-confirm-buttons .qb-btn:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+
+/* Le primaire non destructif (« Réinitialiser les stats », un déplacement) :
+   l'accent plein. */
+.qb-confirm-buttons .qb-btn:last-child:not(.qb-btn-danger) {
+	background: var(--interactive-accent);
+	border-color: transparent;
+	color: #fff;
+}
+
+.qb-confirm-buttons .qb-btn:last-child:not(.qb-btn-danger):hover {
+	background: var(--interactive-accent);
+	border-color: transparent;
+	filter: brightness(1.12);
+}
+
+/* Le primaire DESTRUCTIF : rouge plein, blanc dessus. Le rouge de la palette
+   des dossiers (`MODULE_PALETTE`), pas un rouge de plus. */
+.qb-confirm-buttons .qb-btn-danger {
+	background: #ef4466;
+	border-color: transparent;
+	color: #fff;
+}
+
+.qb-confirm-buttons .qb-btn-danger:hover {
+	background: #ef4466;
+	border-color: transparent;
+	color: #fff;
+	filter: brightness(1.12);
+}
+
+.qb-confirm-buttons .qb-btn-danger:focus-visible {
+	outline-color: #ef4466;
 }
 
 .qb-type-grid {

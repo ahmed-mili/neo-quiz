@@ -5,10 +5,6 @@ export const FR_REVIEW: Record<keyof typeof EN_REVIEW, string> = {
 	"review.settings.folders": "Dossiers de quiz",
 	"review.settings.foldersHint": "Neo Quiz lit les blocs quiz-blocks de ces dossiers. Rien n'est copié, rien n'est déplacé.",
 	"review.settings.addFolder": "Ajouter un dossier",
-	"review.settings.removeFolder": "Retirer de la liste",
-	"review.settings.removeHint": "Le dossier et son historique de révision restent sur le disque.",
+	"review.settings.removeFolder": "Retirer — le dossier et son historique de révision restent sur le disque, et il n'est plus rouvert",
 	"review.settings.full": "Neo Quiz lit jusqu'à {count} dossiers.",
-	"review.settings.exams": "Dates d'examen",
-	"review.settings.examsHint": "Une date resserre le retour de la matière. Laissée vide, elle est révisée pour être retenue durablement.",
-	"review.settings.noModules": "Aucune matière pour l'instant — ouvrez un dossier dont les quiz sont rangés en sous-dossiers.",
 };

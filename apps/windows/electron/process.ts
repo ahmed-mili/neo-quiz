@@ -185,7 +185,7 @@ export async function ollamaInstalle(env: NodeJS.ProcessEnv = process.env): Prom
     répondait « non installé » DANS L'APPLICATION SEULEMENT, là où le greffon
     (qui passe par `lancerCli` et `buildChildEnv`) le voyait. */
 async function repondAVersion(outil: Outil, env: NodeJS.ProcessEnv): Promise<boolean> {
-	const executable = resoudreExecutable(outil, undefined, env);
+	const executable = resoudreExecutable(outil, env);
 	if (!executable) return false;
 	try {
 		const res = await lancer({
@@ -218,11 +218,11 @@ export async function demarrerOllama(env: NodeJS.ProcessEnv = process.env): Prom
 			const exe = join(env.LOCALAPPDATA || "", "Programs", "Ollama", "ollama app.exe");
 			enfant = existsSync(exe)
 				? spawn(exe, [], options)
-				: spawn(resoudreExecutable("ollama", undefined, env) || "ollama", ["serve"], options);
+				: spawn(resoudreExecutable("ollama", env) || "ollama", ["serve"], options);
 		} else if (process.platform === "darwin") {
 			enfant = spawn("open", ["-a", "Ollama"], options);
 		} else {
-			enfant = spawn(resoudreExecutable("ollama", undefined, env) || "ollama", ["serve"], options);
+			enfant = spawn(resoudreExecutable("ollama", env) || "ollama", ["serve"], options);
 		}
 		enfant.on("error", () => { /* constaté par le poll de l'appelant */ });
 		enfant.unref();
@@ -376,8 +376,9 @@ export function estOutilAutorise(tool: unknown): tool is Outil {
  * endroits.
  */
 export function environnementEnfant(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+	const home = dossierPersonnel(env);
 	const extra: string[] = [
-		join(dossierPersonnel(env), ".local", "bin"),
+		join(home, ".local", "bin"),
 		"/opt/homebrew/bin",
 		"/usr/local/bin",
 		env.APPDATA ? join(env.APPDATA, "npm") : null,
@@ -385,37 +386,150 @@ export function environnementEnfant(env: NodeJS.ProcessEnv = process.env): NodeJ
 		env.CODEX_INSTALL_DIR || null,
 		// Installateur Windows d'Ollama (CLI `ollama.exe` au même endroit).
 		env.LOCALAPPDATA ? join(env.LOCALAPPDATA, "Programs", "Ollama") : null,
+		/* ── LES GESTIONNAIRES QUE LES DEUX CLI EMPRUNTENT AUSSI ──
+		   Ajoutés le 2026-09-17, quand les deux champs « chemin de
+		   l'exécutable » des Réglages ont été retirés : la sonde devait
+		   couvrir ce que ces champs rattrapaient à la main.
+		   `~/.claude/local` est l'installation LOCALE de Claude Code
+		   (`claude migrate-installer`, qui sort le CLI de npm global) ; les
+		   autres sont les dossiers de binaires des gestionnaires de paquets
+		   qui servent à installer ces mêmes CLI. Un dossier absent ne coûte
+		   rien : la résolution le saute sans erreur. */
+		join(home, ".claude", "local"),
+		join(home, ".bun", "bin"),
+		join(home, ".yarn", "bin"),
+		join(home, ".volta", "bin"),
+		join(home, "scoop", "shims"),
+		env.LOCALAPPDATA ? join(env.LOCALAPPDATA, "pnpm") : null,
 	].filter((p): p is string => Boolean(p));
 	const courant = env.PATH || "";
 	const fusion = courant + delimiter + extra.filter(p => !courant.includes(p)).join(delimiter);
 	return Object.assign({}, env, { PATH: fusion, Path: fusion });
 }
 
+/* ══════════════════════════════════════════════════════════
+   LE `PATH` DU REGISTRE — la cause réelle des « CLI introuvable »
+
+   Sous Windows, le `PATH` d'un processus est FIGÉ à son lancement. Tout
+   installateur de CLI (npm global, Codex, bun, scoop…) écrit son dossier dans
+   le `PATH` du REGISTRE et diffuse `WM_SETTINGCHANGE` ; les processus déjà
+   lancés, eux, gardent l'ancien — et une application lancée depuis le menu
+   Démarrer hérite du `PATH` de l'explorateur, pris lui-même à l'ouverture de
+   la session. « Installé dans le terminal, invisible dans l'application » vient
+   de là, pas d'un chemin exotique.
+
+   C'est ce que les deux champs « chemin de l'exécutable » des Réglages
+   rattrapaient à la main. Ils ont été retirés le 2026-09-17 ; les lire ICI,
+   dans le registre, fait le même travail sans rien demander — et sans jamais
+   accepter un chemin venu de la fenêtre, ce que ces champs, eux, faisaient.
+
+   LU UNE FOIS, EN CACHE. `reg.exe` est un processus : le faire tourner à
+   chaque résolution paierait deux `spawn` pour chaque lancement de CLI. La
+   lecture est lancée au démarrage du principal (`chargerPathRegistre`) et son
+   résultat FUSIONNÉ dans `process.env.PATH`, d'où tout le reste le voit —
+   `environnementEnfant`, `resoudreExecutable`, `ollamaInstalle`.
+
+   BEST EFFORT, TOUJOURS : pas de Windows, `reg.exe` absent, clé illisible,
+   sortie inattendue — on garde le `PATH` du processus et rien ne change. Cette
+   fonction ne doit jamais faire échouer un démarrage pour un confort de
+   détection.
+══════════════════════════════════════════════════════════ */
+
+/** Les deux clés où Windows garde le `PATH` : celle de l'utilisateur, puis
+    celle de la machine. L'ordre est celui que Windows lui-même applique en
+    composant l'environnement d'une session. */
+const CLES_PATH: ReadonlyArray<readonly [string, string]> = [
+	["HKCU\\Environment", "Path"],
+	["HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", "Path"],
+];
+
+/** Remplace les `%VAR%` d'une valeur `REG_EXPAND_SZ` — `reg.exe` les rend
+    telles quelles, et un `%USERPROFILE%\.bunin` non expansé ne désigne aucun
+    dossier. Une variable inconnue est laissée en place : le dossier n'existera
+    pas, la résolution le sautera. */
+function expanser(valeur: string, env: NodeJS.ProcessEnv): string {
+	return valeur.replace(/%([^%]+)%/g, (tout, nom: string) => {
+		const v = env[nom] ?? env[nom.toUpperCase()];
+		return typeof v === "string" ? v : tout;
+	});
+}
+
+/** La valeur d'une clé de registre, ou `null`. `reg.exe` est appelé par
+    `spawn` avec un TABLEAU d'arguments — jamais une ligne composée. */
+function lireCleRegistre(cle: string, nom: string): Promise<string | null> {
+	return new Promise(resoudre => {
+		let sortie = "";
+		let fini = false;
+		const terminer = (v: string | null): void => { if (!fini) { fini = true; resoudre(v); } };
+		try {
+			const p = spawn("reg.exe", ["query", cle, "/v", nom], { windowsHide: true });
+			/* UN DÉLAI DE GARDE : `reg.exe` sur une ruche montée en réseau peut
+			   ne jamais répondre, et ce démarrage l'attendrait indéfiniment. */
+			const garde = setTimeout(() => { try { p.kill(); } catch (e) { /* déjà mort */ } terminer(null); }, 4000);
+			p.stdout?.on("data", (d: Buffer) => { sortie += d.toString(); });
+			p.on("error", () => { clearTimeout(garde); terminer(null); });
+			p.on("close", () => {
+				clearTimeout(garde);
+				/* La ligne est « <nom>    REG_EXPAND_SZ    <valeur> » ; la valeur
+				   contient des espaces (« C:/Program Files/… »), d'où la capture
+				   du reste de la ligne plutôt qu'un découpage sur l'espace. */
+				const m = /^\s*\S+\s+REG_(?:EXPAND_)?SZ\s+(.*)$/m.exec(sortie);
+				terminer(m ? m[1].trim() : null);
+			});
+		} catch (e) {
+			terminer(null);
+		}
+	});
+}
+
+/**
+ * Fusionne le `PATH` du registre dans celui du processus. À appeler UNE FOIS,
+ * au démarrage du principal. Rend le nombre de dossiers ajoutés (zéro hors
+ * Windows, ou quand le processus avait déjà tout).
+ */
+export async function chargerPathRegistre(
+	env: NodeJS.ProcessEnv = process.env,
+	plateforme: string = process.platform,
+): Promise<number> {
+	if (plateforme !== "win32") return 0;
+	const courant = (env.PATH || "").split(delimiter).filter(Boolean);
+	const deja = new Set(courant.map(d => d.toLowerCase().replace(/[\\/]+$/, "")));
+	const ajouts: string[] = [];
+	for (const [cle, nom] of CLES_PATH) {
+		const brut = await lireCleRegistre(cle, nom);
+		if (!brut) continue;
+		for (const dossier of expanser(brut, env).split(delimiter).map(d => d.trim()).filter(Boolean)) {
+			const norme = dossier.toLowerCase().replace(/[\\/]+$/, "");
+			if (deja.has(norme)) continue;
+			deja.add(norme);
+			ajouts.push(dossier);
+		}
+	}
+	if (!ajouts.length) return 0;
+	const fusion = [...courant, ...ajouts].join(delimiter);
+	env.PATH = fusion;
+	// Windows lit `Path` autant que `PATH` : les deux doivent rester d'accord.
+	if (env.Path !== undefined) env.Path = fusion;
+	return ajouts.length;
+}
+
 /**
  * L'exécutable à lancer pour cet outil, ou `null` quand rien ne porte ce nom.
  *
- * DEUX SOURCES, DANS CET ORDRE, et l'ordre est la moitié utile de la fonction :
- * 1. le RÉGLAGE « chemin de l'exécutable » de l'utilisateur, s'il est rempli.
- *    Il l'emporte, sinon il ne servirait à rien : on ne le remplit QUE parce que
- *    la recherche automatique a échoué ou trouve la mauvaise installation. Il
- *    est rendu TEL QUEL, sans test d'existence — un chemin devenu faux donne un
- *    rejet `introuvable` au lancement, c'est-à-dire la Notice « CLI introuvable »
- *    que l'utilisateur doit voir, et non un repli silencieux sur le `PATH` qui
- *    lancerait une AUTRE installation que celle qu'il a désignée ;
- * 2. sinon le premier fichier du `PATH` étendu qui porte ce nom, `PATHEXT`
- *    compris sous Windows (`claude.cmd` d'une installation npm).
+ * UNE SEULE SOURCE : le premier fichier du `PATH` étendu qui porte ce nom,
+ * `PATHEXT` compris sous Windows (`claude.cmd` d'une installation npm). Il en a
+ * eu deux jusqu'au 2026-09-17, le réglage « chemin de l'exécutable » passant
+ * devant ; ce réglage a été retiré, et c'est le `PATH` lui-même qui a été
+ * élargi pour couvrir ce qu'il rattrapait (registre Windows, dossiers de
+ * binaires des gestionnaires de paquets).
  *
  * L'ENVIRONNEMENT EST UN PARAMÈTRE : c'est la seule façon pour un contrôle
- * d'éprouver l'ORDRE des deux sources sans dépendre de ce que la machine a
- * d'installé.
+ * d'éprouver la résolution sans dépendre de ce que la machine a d'installé.
  */
 export function resoudreExecutable(
 	tool: Outil,
-	cheminRegle: string | undefined,
 	env: NodeJS.ProcessEnv = process.env,
 ): string | null {
-	const regle = typeof cheminRegle === "string" ? cheminRegle.trim() : "";
-	if (regle) return regle;
 	const etendu = environnementEnfant(env);
 	const extensions = extensionsExecutables(etendu, process.platform);
 	for (const dossier of (etendu.PATH || "").split(delimiter).filter(Boolean)) {
@@ -662,12 +776,14 @@ const verrous = new Set<string>();
  * Lance un CLI, pièces jointes comprises. C'est `HostProcess.run`
  * (`src/host/types.ts`) vu du processus principal.
  *
- * `cheminRegle` est le réglage « chemin de l'exécutable », lu par `canaux.ts`
- * dans le magasin du PRINCIPAL — jamais pris de l'appel IPC, sinon la liste
- * blanche de noms ne servirait à rien : le rendu enverrait le chemin qu'il
- * veut. Le réglage est gardé À L'ÉCRITURE et REJUGÉ AU LANCEMENT par l'appelant
- * (`garde-ia.ts`, `cheminCliPourLancement` : hors du périmètre, entre autres) —
- * ce qui arrive ici a déjà passé les deux ; `run` le prend tel quel.
+ * L'EXÉCUTABLE EST TOUJOURS RÉSOLU SUR LE `PATH`, à partir du seul NOM de
+ * l'outil. Il a existé un réglage « chemin de l'exécutable » que `canaux.ts`
+ * lisait dans le magasin du principal et passait ici ; il a été retiré le
+ * 2026-09-17, et avec lui la seule façon dont un chemin de programme pouvait
+ * venir de la fenêtre. Ce qui rattrape aujourd'hui les installations que le
+ * `PATH` du processus ne voit pas, c'est la fusion du `PATH` du REGISTRE au
+ * démarrage (`chargerPathRegistre`), plus les emplacements connus
+ * d'`environnementEnfant`.
  */
 export async function run(spec: {
 	tool: string;
@@ -679,7 +795,6 @@ export async function run(spec: {
 	fichiers?: FichierJoint[];
 	sortieFichier?: string;
 }, options: {
-	cheminRegle?: string;
 	env?: NodeJS.ProcessEnv;
 	/** Les deux coutures de `lancer`, transmises telles quelles. */
 	tuer?: (pid: number | undefined) => Promise<void>;
@@ -710,7 +825,7 @@ export async function run(spec: {
 	}
 	verrous.add(spec.tool);
 	try {
-		const executable = resoudreExecutable(spec.tool, options.cheminRegle, env);
+		const executable = resoudreExecutable(spec.tool, env);
 		/* Rejeté AVANT d'écrire quoi que ce soit : un dossier temporaire créé
 		   pour être aussitôt effacé ne prouverait rien, et l'utilisateur doit
 		   voir « CLI introuvable », pas « le modèle n'a rien répondu ». */

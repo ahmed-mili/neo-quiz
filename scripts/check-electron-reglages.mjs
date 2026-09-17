@@ -582,105 +582,24 @@ await withSrcModule("apps/windows/electron/garde-ia.ts", async ({ cheminCliPourL
 		r.check("le refus d'un dossier prime sur l'URL : rien n'est admis quand une moitié est refusée", "refus" in v, true);
 	});
 
-	/* ── cheminClaude / cheminCodex : le champ qui fait LANCER un programme ──
+	/* ── LES CHEMINS DE CLI RÉGLÉS À LA MAIN N'EXISTENT PLUS (2026-09-17) ──
 
-	   C'est la garde la plus importante de cette clé depuis la tâche 7. Le
-	   réglage désigne un exécutable que le PRINCIPAL lancera : une liste blanche
-	   de NOMS d'outils ne sépare plus rien si le chemin, lui, peut être
-	   n'importe quoi. Les trois conditions ne se remplacent pas —
-	   — ABSOLU : un chemin relatif serait résolu contre le dossier courant du
-	     processus principal, que l'utilisateur ne connaît pas ;
-	   — EXISTANT : dit à l'ÉCRITURE, là où on peut encore le corriger, plutôt
-	     qu'à la prochaine génération sous la forme « CLI introuvable » ;
-	   — LANÇABLE : `.js`, `.ps1`, `.vbs` sont des SCRIPTS qu'un interpréteur
-	     choisi par le système exécuterait — le pont refuse déjà de les OUVRIR
-	     (`EXTENSIONS_EXECUTABLES`), les admettre ici rouvrirait la même porte
-	     par l'autre bout ; un `.docx` ne se lance pas du tout, et produirait un
-	     échec obscur très loin de l'écran où il a été saisi. */
-	await cas(r, "un chemin de CLI absolu, existant et lançable est admis ; vide l'efface", async () => {
-		const [exe, cmd, sansExtension, vide, absent] = await Promise.all([
-			valider({ cheminClaude: "C:/Outils/claude.exe" }),
-			valider({ cheminCodex: "C:/Outils/codex.cmd" }),
-			// Sans extension : la forme normale d'un exécutable sous Unix.
-			valider({ cheminClaude: "C:/Outils/claude" }),
-			valider({ cheminClaude: "   " }),
-			valider({ aiModel: "x" }),
-		]);
-		r.check("un chemin de CLI absolu, existant et lançable est admis ; vide l'efface",
-			[exe, cmd, sansExtension, vide, absent].map(v => "ok" in v), [true, true, true, true, true]);
-	});
-	await cas(r, "un chemin de CLI relatif, inexistant, non-chaîne ou non lançable est refusé, nommé", async () => {
-		const [relatif, inexistant, pasChaine, script, document] = await Promise.all([
-			// EXISTANT et LANÇABLE : seule la règle « absolu » peut le refuser.
-			valider({ cheminClaude: "outils/claude.exe" }),
-			valider({ cheminClaude: "C:/Outils/absent.exe" }),
-			valider({ cheminClaude: 42 }),
-			valider({ cheminCodex: "C:/Outils/lance.ps1" }),
-			valider({ cheminCodex: "C:/Outils/note.docx" }),
-		]);
-		r.check("un chemin de CLI relatif, inexistant, non-chaîne ou non lançable est refusé, nommé",
-			[relatif, inexistant, pasChaine, script, document]
-				.map(v => "refus" in v && /cheminC(laude|odex)/.test(v.refus)),
-			[true, true, true, true, true]);
-	});
-	await cas(r, "un .js existant est refusé : ce n'est pas un CLI, c'est un script qu'un interpréteur exécuterait", async () => {
-		/* Le cas le plus dangereux, et le seul que l'existence ne filtre PAS :
-		   le fichier existe pour de bon. C'est la séquence « écris un `.js` dans
-		   un dossier ouvert, puis désigne-le comme CLI » — celle que le refus
-		   d'extension, et lui seul, empêche. */
-		const v = await valider({ cheminClaude: "C:/Outils/shim.js" });
-		r.check("un .js existant est refusé : ce n'est pas un CLI, c'est un script qu'un interpréteur exécuterait",
-			"refus" in v && v.refus.includes(".js"), true);
-	});
-	await cas(r, "un chemin de CLI DANS le périmètre est refusé à l'écriture, nommé", async () => {
-		/* LA CONDITION QUI TIENT TOUT LE RESTE (revue finale, C1). Le fichier
-		   EXISTE et porte une extension lançable : seule la règle « hors du
-		   périmètre » peut le refuser. Sans elle : `fichiers.write(
-		   "<racine>/x.cmd")` — borné, l'extension n'est jugée qu'à l'ouverture —
-		   puis ce chemin dans `cheminClaude`, et la génération suivante lance ce
-		   que la fenêtre vient d'écrire, dans le processus principal. Un CLI
-		   légitime n'est jamais dans un dossier de quiz. */
-		const v = await valider({ cheminClaude: "D:/Quiz/Cours/claude.cmd" });
-		r.check("un chemin de CLI DANS le périmètre est refusé à l'écriture, nommé",
-			"refus" in v && v.refus.includes("dossier ouvert") && v.refus.includes("cheminClaude"), true);
-	});
-	await cas(r, "au lancement, le chemin réglé est REJUGÉ avec le périmètre du jour", async () => {
-		/* Le périmètre GRANDIT après l'écriture : l'utilisateur ouvre plus tard
-		   le dossier qui contient le `.cmd`. Le même chemin, admis contre un
-		   périmètre qui ne le contient pas, est REFUSÉ contre celui qui le
-		   contient — et alors rien n'est lancé, pas même un repli. */
-		const dansQuiz = { cheminClaude: "D:/Quiz/Cours/claude.cmd" };
-		const [hier, aujourdhui, valide, rien, autreOutil, disparu] = await Promise.all([
-			cheminCliPourLancement(dansQuiz, "claude", existe, async () => false),
-			cheminCliPourLancement(dansQuiz, "claude", existe, contient),
-			cheminCliPourLancement({ cheminClaude: " C:/Outils/claude.exe " }, "claude", existe, contient),
-			cheminCliPourLancement({ aiModel: "x" }, "claude", existe, contient),
-			cheminCliPourLancement({ cheminClaude: "D:/Quiz/Cours/claude.cmd" }, "ollama", existe, contient),
-			cheminCliPourLancement({ cheminCodex: "C:/Outils/absent.exe" }, "codex", existe, contient),
-		]);
-		r.check("au lancement, le chemin réglé est REJUGÉ avec le périmètre du jour",
-			{
-				hier,
-				aujourdhui: "refus" in aujourdhui && aujourdhui.refus.includes("dossier ouvert"),
-				valide,
-				rien,
-				autreOutil,
-				disparu: "refus" in disparu && disparu.refus.includes("aucun fichier"),
-			},
-			{
-				hier: { chemin: "D:/Quiz/Cours/claude.cmd" },
-				aujourdhui: true,
-				valide: { chemin: "C:/Outils/claude.exe" },
-				rien: { chemin: undefined },
-				autreOutil: { chemin: undefined },
-				disparu: true,
-			});
-	});
-	await cas(r, "le refus d'un chemin de CLI prime sur une URL valide", async () => {
-		/* Rien n'est admis quand une moitié est refusée : sinon l'hôte d'Ollama
-		   entrerait dans la liste du réseau alors que l'écriture est refusée. */
-		const v = await valider({ aiOllamaUrl: "http://localhost:11434", cheminCodex: "C:/Outils/lance.ps1" });
-		r.check("le refus d'un chemin de CLI prime sur une URL valide", "refus" in v, true);
+	   Cinq cas vivaient ici : un chemin de CLI devait être absolu, existant,
+	   d'une extension lançable, et HORS du périmètre — sans quoi
+	   `fichiers.write("<racine>/x.cmd")` puis ce chemin dans le réglage
+	   faisaient lancer au principal ce que le rendu venait d'écrire. Les deux
+	   champs des Réglages sont partis avec leur garde : aucun chemin
+	   d'exécutable ne vient plus de la fenêtre, ni par l'IPC ni par les
+	   réglages, et ce qui lance un CLI est un NOM de la liste blanche résolu
+	   sur le `PATH` (`check:electron-process`).
+
+	   Le cas ci-dessous est ce qui reste de cette règle, et il vaut CLIQUET :
+	   la garde n'a plus aucune clé qui désigne un programme. Remettre un
+	   `cheminClaude` sans remettre sa garde ne rougirait nulle part. */
+	await cas(r, "aucune clé de chemin d'exécutable n'est admise en silence", async () => {
+		const source = await readFile("apps/windows/electron/garde-ia.ts", "utf-8");
+		r.check("aucune clé de chemin d'exécutable n'est admise en silence",
+			/cheminClaude|cheminCodex/.test(source.replace(/\/\*[\s\S]*?\*\//g, "")), false);
 	});
 
 	/* ── STATIQUE : la garde est appelée AVANT l'écriture, dans le gestionnaire ── */

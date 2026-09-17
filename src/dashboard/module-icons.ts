@@ -29,3 +29,18 @@ export const MODULE_ICONS = [
 
 /** Icône d'un module sans choix explicite (fallback carte + aperçu modal). */
 export const DEFAULT_MODULE_ICON = "book";
+/** L'icône du SAS des quiz générés (`ctx.generatedFolder`) : la même que le
+    bouton « Générer » du rail et la carte « Créer avec l'IA » — c'est le
+    même geste vu depuis l'autre bout. */
+export const GENERATED_MODULE_ICON = "sparkles";
+
+
+/** L'icône d'un module : la sienne, sinon celle du SAS, sinon le défaut.
+    UNE SEULE RÈGLE pour les trois lecteurs (la carte, le titre d'un dossier
+    ouvert, le modal « Modifier dossier ») — symétrique de `moduleAccent`.
+    Le modal la recalculait à la main et ignorait le SAS : il montrait un
+    livre là où la carte montrait l'étincelle, et son aperçu contredisait
+    ce que l'utilisateur avait sous les yeux (Ahmed, 2026-09-17). */
+export function moduleIcon(m: { icon?: string }, opts?: { generated?: boolean }): string {
+	return m.icon || (opts?.generated ? GENERATED_MODULE_ICON : DEFAULT_MODULE_ICON);
+}

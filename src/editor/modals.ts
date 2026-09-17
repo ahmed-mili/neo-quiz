@@ -63,6 +63,9 @@ export function openConfirmModal(
 	confirmText: string,
 	cancelText: string,
 	callback: (confirmed: boolean) => void,
+	/** Une ligne de détail sous le message (la date de modification d'un
+	    fichier qu'on s'apprête à effacer) — en retrait, plus discrète. */
+	details?: string,
 ): void {
 	let confirmed = false;
 	requireHost("modals").open({
@@ -74,6 +77,7 @@ export function openConfirmModal(
 			// quatre libellés arrivent en paramètres, jamais d'une constante.
 			ajouter(c, "h2", "qb-confirm-title", title);
 			ajouter(c, "p", "qb-confirm-message", message);
+			if (details) ajouter(c, "p", "qb-confirm-details", details);
 
 			const btnRow = ajouter(c, "div", "qb-confirm-buttons");
 

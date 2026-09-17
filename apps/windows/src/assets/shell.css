@@ -144,15 +144,47 @@ body {
 	margin-top: 4px;
 }
 
-/* Une rangée par dossier : icône, nom + chemin, bouton de retrait. */
+/* Une rangée par dossier : icône, nom + chemin, bouton de retrait.
+   AUTO-SUFFISANTE, ET C'EST LA CORRECTION D'UN BUG RÉEL. Cette classe a été
+   portée par DEUX balises — un `<div>` pour un dossier ouvert, un `<button>`
+   pour un vault qu'un clic ajoutait (rangée disparue le 2026-09-17, les vaults
+   s'ouvrent seuls). Tant qu'elle ne déclarait ni `text-align`, ni `font`, ni
+   `width`, la feuille de style du NAVIGATEUR remplissait les trous du
+   `<button>` — `text-align: center` en tête, hérité par le nom et le chemin :
+   les rangées proposées s'affichaient centrées, les autres à gauche, sans
+   qu'aucune règle du dépôt ne dise pourquoi. Ces déclarations restent : une
+   classe de rangée doit poser elle-même tout ce que l'UA poserait, pour que le
+   rendu ne dépende jamais de la balise choisie. */
 .nq-reglages-dossier {
 	display: flex;
 	align-items: center;
 	gap: 12px;
+	width: 100%;
+	box-sizing: border-box;
+	margin: 0;
 	padding: 10px 14px;
 	border-radius: var(--radius-m);
 	border: 1px solid var(--background-modifier-border);
 	background: var(--background-secondary);
+	font: inherit;
+	color: inherit;
+	text-align: start;
+}
+
+/* LA RANGÉE DU FOND D'ÉCRAN est elle-même la commande : elle prend donc la
+   main du curseur et un survol, qu'un `<div>` n'a pas (Ahmed, 2026-09-17 ;
+   `ui/fond.ts` y pose `role="button"`). Seule celle-là : les deux autres
+   rangées de cette page (le dossier par défaut, chaque vault) restent des
+   lignes d'affichage avec leurs propres boutons, et une main sur elles
+   promettrait un clic qui ne fait rien. */
+.nq-fond-rangee {
+	cursor: pointer;
+	transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.nq-fond-rangee:hover {
+	border-color: var(--text-accent);
+	background: var(--background-modifier-hover);
 }
 
 .nq-reglages-icone {
@@ -183,10 +215,19 @@ body {
 	flex: 1;
 }
 
+/* `unicode-bidi: isolate` SUR LES DEUX : un nom de dossier peut être écrit
+   dans une écriture de droite à gauche (« C:/obsidian-vaults/الإسلام »).
+   Sans isolation, ce segment et le texte latin qui l'entoure appartiennent au
+   même paragraphe bidi : les caractères neutres de la frontière (« / », « : »,
+   un tiret, une parenthèse) se rangent alors du côté du voisin le plus fort et
+   changent de place à l'affichage — et l'ellipsis d'un chemin trop long se
+   pose du mauvais bout. Isolé, chaque libellé forme son propre paragraphe :
+   son ordre interne est correct et n'influence plus rien autour de lui. */
 .nq-reglages-nom {
 	font-size: 13px;
 	font-weight: 600;
 	color: var(--text-normal);
+	unicode-bidi: isolate;
 }
 
 .nq-reglages-chemin {
@@ -195,6 +236,7 @@ body {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	unicode-bidi: isolate;
 }
 
 /* Bouton de retrait : une icône seule, pas un bouton pilule — un dossier de
@@ -210,6 +252,32 @@ body {
 	background: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
+}
+
+/* « Changer », sur la rangée du dossier par défaut : un bouton TEXTE, pas une
+   icône — la croix et le « + » disent une action évidente, « changer de
+   dossier » n'a pas de glyphe qui se lise sans hésiter. `flex: none` pour
+   qu'il ne se laisse pas écraser par un chemin long, qui a son ellipsis. */
+.nq-reglages-changer {
+	flex: none;
+	padding: 5px 12px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: transparent;
+	color: var(--text-muted);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.nq-reglages-changer:hover:not(:disabled) {
+	border-color: var(--text-accent);
+	color: var(--text-normal);
+}
+
+.nq-reglages-changer:disabled {
+	opacity: 0.5;
+	cursor: default;
 }
 
 .nq-reglages-retirer:hover {
@@ -230,34 +298,133 @@ body {
 	margin-top: 6px;
 }
 
-/* ── Le fond d'écran (Réglages) ── */
-.nq-fond-grille { display: grid; grid-template-columns: repeat(auto-fill, 96px); gap: 8px; }
-.nq-fond-vignette { width: 96px; height: 60px; border: 2px solid transparent; border-radius: 6px; background: center / cover no-repeat; cursor: pointer; }
-.nq-fond-vignette[data-active] { border-color: var(--text-accent); }
+/* ── Le fond d'écran (Réglages) ──
+   L'APERÇU de la rangée : le fond courant, à la place qu'occupe l'icône d'un
+   dossier dans les autres rangées de cette page. C'est lui qui dit sur quoi
+   portent le bouton et la croix d'à côté — la section n'avait jusqu'ici que
+   des commandes, et rien qui montre leur objet. Le format est celui du
+   sélecteur de Neo Calendar (74 × 44). */
+.nq-fond-apercu {
+	flex: none;
+	width: 74px;
+	height: 44px;
+	border-radius: var(--radius-s);
+	border: 1px solid var(--background-modifier-border);
+	background: center / cover no-repeat;
+}
 
-/* ── La mise à jour automatique (rail + « À propos ») ── */
-.nq-maj-bouton { color: var(--text-accent); }
-.nq-maj-bloc { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.nq-maj-auto { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
-.nq-reglages-langue { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 12.5px; }
-.nq-reglages-langue .qbd-select { min-width: 220px; }
-.nq-maj-installer, .nq-maj-verifier { align-self: flex-start; }
-
-/* ── Les dates d'examen (tâche 10) ──
-   Une rangée par module : nom + racine, puis le champ de date. Pas d'icône ici
-   — contrairement à `.nq-reglages-dossier`, un module n'a rien de visuel à
-   distinguer (aucun logo, aucun type de dossier). `.nq-reglages-nom` et
-   `.nq-reglages-chemin` sont RÉUTILISÉES telles quelles : même rôle que dans
-   la liste des dossiers ci-dessus. */
-.nq-reglages-module {
+/* ── LA MODALE DE CHOIX D'UN FOND ──
+   Une LISTE, pas une grille de vignettes nues : chaque ligne porte le nom de
+   la photo et son auteur, que vingt cases de 96 pixels ne pouvaient pas dire.
+   Même forme que la boîte de choix de Neo Calendar. */
+.nq-fond-option {
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	padding: 10px 14px;
+	width: 100%;
+	box-sizing: border-box;
+	margin: 0;
+	padding: 6px 8px;
+	border: 1px solid transparent;
 	border-radius: var(--radius-m);
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-secondary);
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: start;
+	cursor: pointer;
 }
+
+.nq-fond-option:hover {
+	background: var(--background-modifier-hover);
+}
+
+.nq-fond-option[aria-selected="true"] {
+	border-color: var(--text-accent);
+}
+
+/* La ligne « ouvrir un dossier » : une ACTION, pas un fond. Le filet la sépare
+   de ce qui se choisit en dessous — elle n'a pas de vignette à aligner. */
+.nq-fond-option--action {
+	gap: 10px;
+	margin-bottom: 6px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	border-radius: 0;
+	color: var(--text-accent);
+}
+
+.nq-fond-option-icone {
+	display: grid;
+	place-items: center;
+	flex: none;
+}
+
+.nq-fond-option-icone svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* Le format de l'aperçu de la rangée, en plus petit : ces photos sont des
+   paysages, une vignette carrée les recadrerait en bandeau. */
+.nq-fond-option-image {
+	flex: none;
+	width: 64px;
+	height: 38px;
+	border-radius: var(--radius-s);
+	border: 1px solid var(--background-modifier-border);
+	background: center / cover no-repeat;
+}
+
+.nq-fond-option-texte {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	flex: 1;
+}
+
+.nq-fond-option-nom {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	unicode-bidi: isolate;
+}
+
+.nq-fond-option-credit {
+	font-size: 11px;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* La coche de l'option posée. La boîte existe même vide : sans elle, la ligne
+   cochée serait plus étroite de 20 px que ses voisines. */
+.nq-fond-option-coche {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 20px;
+	color: var(--text-accent);
+}
+
+.nq-fond-option-coche svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* ── La mise à jour automatique (rail + « À propos ») ── */
+.nq-maj-bouton { color: var(--text-accent); }
+/* Une ligne « case à cocher + libellé » des Réglages. Elle s'est appelée
+   `.nq-maj-auto` tant que l'interrupteur des mises à jour automatiques
+   existait ; il est parti le 2026-09-17 (l'application se met à jour, toujours)
+   et son seul porteur est désormais « Rouvrir là où on s'était arrêté ». */
+.nq-reglages-case { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.nq-reglages-langue { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 12.5px; }
+.nq-reglages-langue .qbd-select { min-width: 220px; }
 
 /* Le champ de date natif : mêmes variables que `.qbd-medit-input` (modal
    « Modifier dossier » du greffon, même contrôle) — deux champs de date qui se
@@ -278,30 +445,6 @@ body {
 }
 
 .nq-reglages-date:focus {
-	border-color: var(--interactive-accent);
-}
-
-/* Le champ « chemin de l'exécutable » : le même contrôle que la date, en
-   LARGE — un chemin absolu (« C:\Users\…\AppData\Roaming\npm\claude.cmd »)
-   tronqué à 150 px serait illisible au moment précis où il faut le relire pour
-   le corriger. `min-width: 0` parce que la ligne est un flex : sans lui, la
-   largeur intrinsèque du champ empêcherait le libellé de rétrécir et la ligne
-   déborderait. */
-.nq-reglages-chemin-cli {
-	flex: 1 1 auto;
-	min-width: 0;
-	height: 34px;
-	padding: 0 10px;
-	font: inherit;
-	font-size: 13px;
-	color: var(--text-normal);
-	background: var(--background-modifier-form-field);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m);
-	outline: none;
-}
-
-.nq-reglages-chemin-cli:focus {
 	border-color: var(--interactive-accent);
 }
 
@@ -359,3 +502,88 @@ body {
 .nq-menu-ligne:hover, .nq-menu-ligne:focus, .nq-menu-ligne[aria-expanded="true"] { background: var(--background-modifier-hover); outline: none; }
 .nq-menu-separateur { height: 1px; margin: 6px 0; background: var(--background-modifier-border); }
 .nq-menu-version { display: flex; align-items: center; height: 28px; padding: 0 10px 0 28px; color: var(--text-faint); font-size: 13px; cursor: default; }
+
+/* ══════════════════════════════════════════════════════════
+   LES BARRES DE DÉFILEMENT DE LA FENÊTRE
+
+   POURQUOI CETTE RÈGLE VIT ICI ET NULLE PART AILLEURS. Un sélecteur universel
+   `*::-webkit-scrollbar` dans l'arbre PARTAGÉ (`src/assets/css/`) repeindrait
+   toutes les barres d'OBSIDIAN dès que le greffon y injecte sa feuille — la
+   fenêtre entière, pas seulement le bloc du quiz. `shell.css` n'est chargé que
+   par `apps/windows/src/main.ts` : la portée y est exactement celle qu'on
+   veut, la nôtre.
+
+   CE QUE ÇA CORRIGE : `.modal-content` n'avait aucun style de barre, et
+   Chromium peignait donc la barre NATIVE de Windows — large, avec ses deux
+   flèches et son rail gris opaque, au milieu d'une modale sombre. Le tableau
+   de bord, lui, était déjà stylé (`dashboard/dashboard-base.css`) : c'est cette
+   règle-ci qui étend le traitement à TOUT ce qui défile dans la fenêtre, et
+   qui aligne le tableau de bord sur le même dessin plutôt que d'en garder deux.
+
+   LE PIÈGE, DÉJÀ PAYÉ AILLEURS (`components/ui-select.css`,
+   `components/color-picker.css`) : depuis Chromium 121, poser `scrollbar-width`
+   sur un élément fait IGNORER ses règles `::-webkit-scrollbar`. Ce n'est pas un
+   conflit à arbitrer ici — c'est ce qui rend cette règle SÛRE : les conteneurs
+   qui thèment déjà leur barre par le standard (`scrollbar-width: thin` +
+   `scrollbar-color`) ou qui la masquent (`scrollbar-width: none`) ne sont pas
+   touchés par ce qui suit. Ne JAMAIS ajouter `scrollbar-width` ici : ce serait
+   désactiver tout ce bloc d'un coup, sans une erreur.
+   ══════════════════════════════════════════════════════════ */
+
+*::-webkit-scrollbar,
+.qbd-content::-webkit-scrollbar,
+.qbd-ai-result-list::-webkit-scrollbar {
+	width: 12px;
+	height: 12px;
+}
+
+/* Les deux FLÈCHES d'extrémité de la barre native. Sans cette règle elles
+   restent, non stylées, et ce sont elles qui trahissaient le plus la barre du
+   système dans la modale. */
+*::-webkit-scrollbar-button {
+	display: none;
+}
+
+*::-webkit-scrollbar-track,
+.qbd-content::-webkit-scrollbar-track,
+.qbd-ai-result-list::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* Le pouce fait 12 px de boîte mais 6 px à l'œil : la bordure TRANSPARENTE,
+   découpée par `background-clip: padding-box`, tient la marge qui le fait
+   flotter au lieu de coller au bord. C'est ce qui distingue une barre
+   d'application d'une barre de système. */
+*::-webkit-scrollbar-thumb,
+.qbd-content::-webkit-scrollbar-thumb,
+.qbd-ai-result-list::-webkit-scrollbar-thumb {
+	background: var(--background-modifier-border);
+	border: 3px solid transparent;
+	background-clip: padding-box;
+	border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover,
+.qbd-content::-webkit-scrollbar-thumb:hover,
+.qbd-ai-result-list::-webkit-scrollbar-thumb:hover {
+	background: var(--background-modifier-border-hover);
+	background-clip: padding-box;
+}
+
+/* L'angle entre une barre verticale et une horizontale : peint en gris par le
+   système quand on ne le dit pas. */
+*::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+/* Le titre d'un groupe dans la modale de choix : « Montagnes », « De votre
+   dossier »… Il range vingt photos en rayons — une liste plate de vingt
+   lignes se balaie, elle ne se parcourt pas. */
+.nq-fond-separateur {
+	margin: 12px 0 2px;
+	font-size: 11.5px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}

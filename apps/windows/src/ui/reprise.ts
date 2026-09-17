@@ -12,7 +12,7 @@
 ══════════════════════════════════════════════════════════ */
 
 import { pont } from "../host/pont";
-import { CLE_DERNIERE_VUE, CLE_REGLAGES_REPRISE } from "../../electron/pont";
+import { CLE_DERNIERE_VUE } from "../../electron/pont";
 import type { DashboardViewName } from "../../../../src/types/dashboard-ctx";
 
 export interface DerniereVue {
@@ -50,21 +50,18 @@ export function lireDerniereVue(brut: unknown): DerniereVue | null {
 	return resultat;
 }
 
-/** Lit le réglage au démarrage : l'interrupteur (défaut `true` — reprendre
-    est le comportement attendu, seul l'`!== false` explicite d'un fichier
-    déjà écrit le désactive) et la dernière vue connue. */
-export async function chargerReprise(): Promise<{ actif: boolean; vue: DerniereVue | null }> {
-	const [actifBrut, vueBrute] = await Promise.all([
-		pont().reglages.lire(CLE_REGLAGES_REPRISE),
-		pont().reglages.lire(CLE_DERNIERE_VUE),
-	]);
-	return { actif: actifBrut !== false, vue: lireDerniereVue(vueBrute) };
-}
-
-/** Écrit l'interrupteur : appelé une seule fois, au changement, jamais à
-    chaque frappe — même geste que `reglerAuto` de la mise à jour. */
-export async function reglerReprise(actif: boolean): Promise<void> {
-	await pont().reglages.ecrire(CLE_REGLAGES_REPRISE, actif);
+/**
+ * La dernière vue connue, s'il y en a une.
+ *
+ * PLUS D'INTERRUPTEUR (2026-09-17). Un réglage `resume` disait s'il fallait
+ * rouvrir ou non ; sa case a été retirée des Réglages, et sa LECTURE avec elle.
+ * Retirer la lecture était le point important : l'interrupteur parti, un
+ * `false` déjà écrit sur une installation aurait figé son démarrage sur
+ * l'accueil, sans plus rien pour le rallumer. Ce qui reste écrit sous cette clé
+ * est ignoré, jamais effacé — comme les réglages de la dictée.
+ */
+export async function chargerReprise(): Promise<DerniereVue | null> {
+	return lireDerniereVue(await pont().reglages.lire(CLE_DERNIERE_VUE));
 }
 
 let minuterie: number | null = null;

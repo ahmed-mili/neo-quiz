@@ -291,13 +291,66 @@ export async function saveFolders(liste: DossierQuiz[]): Promise<void> {
 	await pont().reglages.ecrire(CLE_DOSSIERS, gardes);
 }
 
-/** Ajoute un dossier et rend la liste complète. Un chemin déjà présent n'est
-    pas ajouté deux fois : il rendrait deux racines sur les mêmes fichiers,
-    donc deux fois chaque quiz au catalogue. */
+/**
+ * Ce qu'un chemin est vis-à-vis des racines DÉJÀ ouvertes. PURE, et éprouvée
+ * par `npm run check:folders`.
+ *
+ * Les trois refus disent la même chose : **deux racines ne doivent jamais se
+ * recouvrir**. `depuisAbsolu` (roots.ts) tranche par « la plus longue racine
+ * gagne », donc un même fichier changerait de chemin du contrat selon la
+ * racine retenue — et la clé du journal de révision porte ce chemin. Deux
+ * racines gigognes, c'est deux historiques pour la même question, et la
+ * seconde repart éternellement à neuf.
+ *
+ * - `doublon` : exactement la même racine (le cas que le code refusait déjà) ;
+ * - `dedans` : le chemin est SOUS une racine ouverte — c'est le cas d'un
+ *   dossier de cours dans un vault, et il ne s'ouvre pas, il se DÉCLARE
+ *   (« Ouvrir un dossier existant », `quizzesModuleOverrides`) ;
+ * - `contient` : le chemin est AU-DESSUS d'une racine ouverte (on a désigné
+ *   `C:/obsidian-vaults` alors qu'un vault est déjà ouvert dessous).
+ *
+ * La comparaison ignore la casse : Windows l'ignore aussi, et `depuisAbsolu`
+ * fait de même — deux règles qui divergeraient sur ce point laisseraient
+ * passer ici ce qu'elle refuse là.
+ */
+export type LienAvecRacines = "libre" | "doublon" | "dedans" | "contient";
+
+export function lienAvecRacines(chemin: string, racines: readonly { path: string }[]): LienAvecRacines {
+	const bas = normaliserChemin(chemin).toLowerCase().replace(/\/+$/, "");
+	if (!bas) return "libre";
+	for (const r of racines) {
+		const racine = normaliserChemin(r.path).toLowerCase().replace(/\/+$/, "");
+		if (!racine) continue;
+		if (bas === racine) return "doublon";
+		if (bas.startsWith(racine + "/")) return "dedans";
+	}
+	/* Le « contient » n'est cherché qu'après : un chemin qui serait à la fois
+	   sous une racine et au-dessus d'une autre est d'abord « dedans », la
+	   réponse qui dit quoi faire (le déclarer). */
+	for (const r of racines) {
+		const racine = normaliserChemin(r.path).toLowerCase().replace(/\/+$/, "");
+		if (racine && racine.startsWith(bas + "/")) return "contient";
+	}
+	return "libre";
+}
+
+/** Ajoute un dossier et rend la liste complète. Un chemin qui RECOUVRE une
+    racine déjà ouverte n'est pas ajouté — voir `lienAvecRacines` pour ce que
+    ça coûterait. L'appelant compare la longueur de la liste rendue, ou
+    interroge `lienAvecRacines` lui-même pour nommer la cause. */
 export async function addFolder(chemin: string): Promise<DossierQuiz[]> {
 	const liste = await savedFolders();
 	const normalise = normaliserChemin(chemin);
-	if (liste.some(d => d.path.toLowerCase() === normalise.toLowerCase())) return liste;
+	if (lienAvecRacines(normalise, liste) !== "libre") return liste;
+	/* IL SORT DES ÉCARTÉS : rouvrir à la main un vault qu'on avait retiré doit
+	   le rouvrir POUR DE BON. Sans ça, il resterait ouvert cette fois-ci, puis
+	   serait le seul vault de la machine que l'ouverture automatique saute —
+	   sans que rien ne le dise. */
+	const ecartes = await cheminsEcartes();
+	if (ecartes.some(c => c.toLowerCase() === normalise.toLowerCase())) {
+		await pont().reglages.ecrire(CLE_VAULTS_ECARTES,
+			ecartes.filter(c => c.toLowerCase() !== normalise.toLowerCase()));
+	}
 	/* `MAX_DOSSIERS` compte les emplacements SUPPLÉMENTAIRES (spec §2.1) : le
 	   défaut est en plus, il ne mange pas de la limite. */
 	if (liste.filter(d => !d.parDefaut).length >= MAX_DOSSIERS) return liste;
@@ -307,16 +360,139 @@ export async function addFolder(chemin: string): Promise<DossierQuiz[]> {
 	return savedFolders();
 }
 
+/**
+ * CHANGE le dossier de quiz par défaut. Rend le nouveau chemin, ou `null` si
+ * l'utilisateur a annulé le dialogue.
+ *
+ * L'ANCIEN DÉFAUT EST GARDÉ, EN EMPLACEMENT SUPPLÉMENTAIRE. C'est le point
+ * important, et ce n'est pas une politesse : les quiz de l'ancien dossier
+ * restent sur le disque, mais l'application ne lit QUE ses racines — sans ce
+ * rattrapage, changer de dossier ferait disparaître du catalogue tout ce qu'on
+ * y avait écrit, et ferait disparaître avec eux les statistiques de révision
+ * qui s'y rattachent. Il garde sa croix : le retirer reste à un clic, alors
+ * qu'une disparition ne se rattrape qu'en retrouvant le chemin de mémoire.
+ *
+ * Le dossier n'est PAS déplacé, et rien n'est copié : changer le dossier par
+ * défaut change l'endroit où les prochains quiz seront créés, pas où les
+ * précédents vivent.
+ */
+export async function setDefaultFolder(): Promise<string | null> {
+	const avant = await dossierParDefaut();
+	const choisi = await pont().systeme.choisirDossierDefaut();
+	if (!choisi) return null;
+	/* Le même dossier qu'avant : rien à rattraper, et l'ajouter en
+	   supplémentaire ferait deux racines sur les mêmes fichiers. */
+	if (avant && avant.path.toLowerCase() !== normaliserChemin(choisi).toLowerCase()) {
+		/* `addFolder` ignore un chemin déjà présent et respecte `MAX_DOSSIERS` :
+		   une liste pleine ne fait pas échouer le changement, elle laisse
+		   simplement l'ancien dossier de côté — il est toujours sur le disque
+		   et s'ajoute à la main après avoir fait de la place. */
+		await addFolder(avant.path);
+	}
+	return choisi;
+}
+
+/* ══════════════════════════════════════════════════════════
+   LES VAULTS OBSIDIAN OUVERTS TOUT SEULS
+
+   Tout vault qu'Obsidian déclare sur cette machine est ouvert au démarrage,
+   sans que personne ait à cliquer : quelqu'un qui a déjà ses notes dans
+   Obsidian veut ses quiz, pas une liste de cases à cocher.
+
+   CE QUI REND LA CROIX ENCORE POSSIBLE. Sans mémoire, un vault retiré serait
+   redétecté au lancement suivant et rouvert aussitôt — la croix deviendrait un
+   bouton sans effet, et c'est exactement le genre de défaut qu'on ne remarque
+   qu'après avoir cliqué trois fois. `removeFolder` note donc le chemin
+   RETIRÉ ; l'ouverture automatique saute ce qui figure dans cette liste. La
+   règle tient en une phrase : tout vault de la machine est ouvert, SAUF ceux
+   que l'utilisateur a retirés — et « Ajouter un dossier » les rouvre, ce qui
+   les fait sortir de la liste.
+══════════════════════════════════════════════════════════ */
+
+const CLE_VAULTS_ECARTES = "dismissedFolders";
+
+/** Les chemins retirés à la main, en minuscules (la comparaison de chemins est
+    insensible à la casse sous Windows, comme partout ailleurs dans ce module). */
+async function cheminsEcartes(): Promise<string[]> {
+	try {
+		const brut = await pont().reglages.lire(CLE_VAULTS_ECARTES);
+		return Array.isArray(brut) ? brut.filter((v): v is string => typeof v === "string") : [];
+	} catch (e) {
+		/* Illisible : on n'écarte rien. Le pire est de rouvrir un vault que
+		   l'utilisateur avait retiré — visible, et rattrapable d'une croix —,
+		   là où échouer tout le démarrage ne l'est pas. */
+		console.warn(LOG_PREFIX, "dossiers écartés illisibles:", e);
+		return [];
+	}
+}
+
+/**
+ * Ouvre les vaults Obsidian détectés qui ne sont ni déjà ouverts ni écartés.
+ * Rend le nombre de dossiers ajoutés — zéro est le cas courant, à partir du
+ * deuxième lancement.
+ *
+ * UNE SEULE ÉCRITURE, quel que soit le nombre de vaults : `addFolder` relit et
+ * réécrit les réglages à chaque appel, et `saveFolders` interroge le disque
+ * pour chaque entrée. En boucle, cinq vaults, c'est cinq lectures, cinq
+ * réécritures et vingt-cinq `exists` au démarrage.
+ */
+export async function ouvrirVaultsDetectes(): Promise<number> {
+	let vaults: VaultConnu[];
+	try {
+		vaults = await obsidianVaults();
+	} catch (e) {
+		// Obsidian absent, liste illisible : un état NORMAL, pas une panne.
+		console.warn(LOG_PREFIX, "vaults Obsidian illisibles:", e);
+		return 0;
+	}
+	if (!vaults.length) return 0;
+	const liste = await savedFolders();
+	const connus = new Set(liste.map(d => d.path.toLowerCase()));
+	const ecartes = new Set((await cheminsEcartes()).map(c => c.toLowerCase()));
+	const ids = new Set(liste.map(d => d.id));
+	const suivante = liste.filter(d => !d.parDefaut);
+	let ajoutes = 0;
+	for (const v of vaults) {
+		const normalise = normaliserChemin(v.chemin);
+		const cle = normalise.toLowerCase();
+		if (connus.has(cle) || ecartes.has(cle)) continue;
+		// La limite compte les emplacements SUPPLÉMENTAIRES (spec §2.1).
+		if (suivante.length >= MAX_DOSSIERS) break;
+		const nom = nomDeDossier(normalise);
+		const id = idUnique(nom, ids);
+		ids.add(id);
+		suivante.push({ id, path: normalise, name: nom });
+		connus.add(cle);
+		ajoutes++;
+	}
+	if (ajoutes) await saveFolders(suivante);
+	return ajoutes;
+}
+
 /** Retire un dossier. Le JOURNAL du dossier n'est pas touché : il vit dans le
     dossier, avec les notes qu'il décrit, et le rajouter plus tard doit rendre
     l'historique — c'est précisément ce que son nouvel emplacement permet. */
 export async function removeFolder(id: string): Promise<DossierQuiz[]> {
 	if (id === ID_DOSSIER_DEFAUT) return savedFolders();
+	const liste = await savedFolders();
+	const retire = liste.find(d => d.id === id);
+	/* ÉCARTÉ, sans quoi la croix ne retirerait rien de durable : un vault
+	   Obsidian retiré est redétecté au lancement suivant et rouvert
+	   automatiquement (voir `ouvrirVaultsDetectes`). Noté pour TOUT dossier,
+	   vault ou non : un dossier ordinaire n'est jamais rouvert tout seul, la
+	   ligne en trop ne coûte rien, et savoir ici lequel est un vault
+	   demanderait un aller-retour de plus au disque. */
+	if (retire) {
+		const ecartes = await cheminsEcartes();
+		const cle = retire.path.toLowerCase();
+		if (!ecartes.some(c => c.toLowerCase() === cle)) {
+			await pont().reglages.ecrire(CLE_VAULTS_ECARTES, [...ecartes, retire.path]);
+		}
+	}
 	/* `saveFolders` écrit sous `folders`, où le défaut n'entre JAMAIS (voir
 	   `savedFolders`) : il est retiré ici de la liste écrite, puis
 	   `savedFolders` le replace devant à la prochaine lecture. */
-	const suivante = (await savedFolders()).filter(d => d.id !== id && !d.parDefaut);
-	await saveFolders(suivante);
+	await saveFolders(liste.filter(d => d.id !== id && !d.parDefaut));
 	return savedFolders();
 }
 
@@ -327,8 +503,9 @@ export interface VaultConnu {
 }
 
 /**
- * Les vaults qu'Obsidian connaît sur cette machine, pour les proposer d'un
- * clic plutôt que de faire naviguer l'utilisateur dans le sélecteur natif.
+ * Les vaults qu'Obsidian connaît sur cette machine. Ils étaient PROPOSÉS d'un
+ * clic dans les Réglages ; depuis le 2026-09-17 ils sont simplement OUVERTS au
+ * démarrage (`ouvrirVaultsDetectes`), son unique appelante.
  *
  * La lecture se fait DANS LE PROCESSUS PRINCIPAL (`electron/vaults.ts`) : le
  * fichier vit dans le dossier de configuration d'Obsidian, et donner au rendu

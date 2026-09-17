@@ -6,7 +6,7 @@ import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord } from "./stats-store";
 import { renderQuizCard } from "./quiz-card";
 import { renderModuleCard } from "./module-card";
-import { moduleForQuiz, buildModuleGroups, buildUeGroups } from "./quiz-modules";
+import { moduleForQuiz, buildModuleGroups, buildUeGroups, estLeSas } from "./quiz-modules";
 import type { ModuleMap, ModuleGroup, UeGroup } from "./quiz-modules";
 import { computeQuizState } from "./quiz-mastery";
 import { buildRecentModuleGroups } from "./quiz-recent";
@@ -14,6 +14,7 @@ import type { RecentGroupKey } from "./quiz-recent";
 import { moduleAccent } from "./module-color";
 import { renderCollapsibleSection } from "./collapsible";
 import { suggestIcons } from "./icon-suggest";
+import { renderFolderSections } from "./folder-sections";
 
 /* ══════════════════════════════════════════════════════════
    QUIZZES RENDER — extrait de quizzes.ts (Task 4) pour rester
@@ -75,8 +76,10 @@ function renderModuleGrid(deps: GridDeps, parent: HTMLElement, groups: ModuleGro
 			}, suggestIcons(group.name, group.ue));
 		}
 		: undefined;
+	const sas = deps.ctx.generatedFolder?.();
 	for (const g of groups) {
-		const card = renderModuleCard(grid, g, (m) => deps.openModule(m.folder), onMenu, pickIcon);
+		const card = renderModuleCard(grid, g, (m) => deps.openModule(m.folder), onMenu, pickIcon,
+			{ generated: estLeSas(g, sas) });
 		card.style.setProperty("--qbd-card-delay", entryDelay());
 	}
 }
@@ -166,22 +169,40 @@ export function renderModuleDrill(
 ): void {
 	treeEl.replaceChildren();
 
-	if (inModule.length === 0) {
-		const empty = ajouter(treeEl, "div", "qbd-empty-state");
-		ajouter(empty, "p", undefined, t("dashboard.quizzes.empty"));
-		return;
-	}
-
 	// Module ouvert : sert à l'accent des cartes (le nom est déjà porté par le
 	// titre du header, quizzes.ts).
 	const info = map.byFolder.get(openModuleFolder);
-	const accent = moduleAccent(info ?? { folder: openModuleFolder });
 
-	// ── Layout 2 colonnes : grille de cartes + panneau « Progrès » (repli 1
-	// colonne sous une largeur seuil, cf. dashboard-quizzes.css). ──
-	const layout = ajouter(treeEl, "div", "qbd-quizzes-drill-layout");
+	/* Le CHEMIN du dossier ouvert : déclaré, sinon déduit d'un quiz. Il sert
+	   trois fois — reconnaître le sas, lister le contenu du dossier, et rien
+	   d'autre. `undefined` pour un dossier déclaré avant le 2026-09-17 sans
+	   quiz : ni sections, ni sas, la grille seule comme avant. */
+	const cheminOuvert = info?.path ?? (inModule.length > 0 ? moduleForQuiz(inModule[0].path, map).path : undefined);
+
+	/* PLUS de retour anticipé sur un dossier sans quiz : un dossier de cours
+	   qu'on vient de déclarer (« Ouvrir un dossier existant ») n'a aucun quiz
+	   et TOUS ses documents — c'est précisément là qu'il faut voir les trois
+	   sections, et le bouton pour générer. L'état vide reste, à la place de la
+	   grille, avec la phrase qui dit quoi faire. */
+
+	// ── Layout 2 colonnes : colonne principale (grille + sections du dossier)
+	// + panneau « Progrès » (repli 1 colonne sous une largeur seuil, cf.
+	// dashboard-quizzes.css). ──
+	/* Le SAS n'a pas de panneau « Progrès » : on n'y progresse pas, on y
+	   passe. La colonne principale prend alors toute la largeur (une seule
+	   colonne de layout, cf. `.qbd-quizzes-drill-layout--plein`). Reconnu par
+	   le CHEMIN du dossier ouvert, comme la carte. */
+	const sas = !!ctx.generatedFolder && cheminOuvert !== undefined && cheminOuvert === ctx.generatedFolder();
+	const accent = moduleAccent(info ?? { folder: openModuleFolder }, { generated: sas });
+	const layout = ajouter(treeEl, "div", "qbd-quizzes-drill-layout" + (sas ? " qbd-quizzes-drill-layout--plein" : ""));
 	layout.style.setProperty("--accent", accent);
-	const grid = ajouter(layout, "div", "qbd-home-grid qbd-quizzes-drill-grid");
+	const principal = ajouter(layout, "div", "qbd-quizzes-drill-main");
+	if (inModule.length === 0) {
+		const empty = ajouter(principal, "div", "qbd-empty-state");
+		ajouter(empty, "p", undefined, t("dashboard.quizzes.empty"));
+		if (cheminOuvert !== undefined) ajouter(empty, "p", "qbd-empty-state-hint", t("dashboard.quizzes.emptyFolderHint"));
+	}
+	const grid = ajouter(principal, "div", "qbd-home-grid qbd-quizzes-drill-grid");
 	for (const [index, quiz] of inModule.entries()) {
 		renderQuizCard(grid, quiz, stats[quiz.path], (q) => ctx.navigate("detail", { quiz: q }), {
 			onPlay: (q) => ctx.openQuiz(q),
@@ -195,7 +216,14 @@ export function renderModuleDrill(
 		});
 	}
 
-	renderProgressPanel(layout, inModule, stats);
+	/* Les trois sections (Documents, Liens, Notes) sous la grille — pour tout
+	   dossier dont on connaît le chemin, le sas compris : ce qu'on y a généré
+	   vient parfois d'un PDF qu'on voudra revoir. */
+	if (cheminOuvert !== undefined) {
+		renderFolderSections(principal, { ctx, folder: cheminOuvert, rerender });
+	}
+
+	if (!sas) renderProgressPanel(layout, inModule, stats);
 }
 
 /** Donut structurel du handoff 7a : un anneau conique de 150 px et un disque

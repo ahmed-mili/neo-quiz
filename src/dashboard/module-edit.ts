@@ -3,12 +3,13 @@ import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
-import { moduleForQuiz } from "./quiz-modules";
+import { moduleForQuiz, estLeSas } from "./quiz-modules";
 import type { ModuleGroup, ModuleMap, ModuleOverride } from "./quiz-modules";
 import { openActionMenu } from "./ui-select";
 import { openColorPicker } from "./color-picker";
-import { openIconPicker, DEFAULT_MODULE_ICON } from "./icon-picker";
-import { MODULE_PALETTE, hashAccent } from "./module-color";
+import { openIconPicker } from "./icon-picker";
+import { moduleIcon } from "./module-icons";
+import { MODULE_PALETTE, moduleAccent } from "./module-color";
 import { suggestIcons } from "./icon-suggest";
 
 type ModuleEditState = Required<Pick<ModuleOverride, "name" | "ue">>
@@ -21,7 +22,7 @@ const MODULE_EDIT_HANDLED_FIELDS = {
 	ue: true,
 	color: true,
 	icon: true,
-	examDate: true,
+	path: true,
 } satisfies Record<keyof ModuleOverride, true>;
 
 /** Centralise le contrat de persistance du modal pour que la date civile reste
@@ -34,7 +35,13 @@ export function buildModuleOverride(folder: string, state: ModuleEditState): Mod
 	ov.ue = state.ue;
 	if (state.color) ov.color = state.color;
 	if (state.icon) ov.icon = state.icon;
-	if (state.examDate) ov.examDate = state.examDate;
+	/* REPORTÉ TEL QUEL, jamais recalculé : ce modal ne désigne aucun dossier,
+	   il édite un nom et des couleurs. L'appelant lui passe le chemin DÉJÀ
+	   DÉCLARÉ (et rien quand il n'y en a pas) — sans ce report, renommer un
+	   dossier effacerait son chemin, et « Nouveau quiz » y retomberait sur le
+	   segment seul. On ne promeut PAS ici un chemin déduit d'un quiz : il vaut
+	   pour ce quiz, et il se recalcule tout seul au rendu suivant. */
+	if (state.path) ov.path = state.path;
 	return ov;
 }
 
@@ -62,7 +69,15 @@ export function openModuleEditModal(
 	let ue = group.ue;
 	let color = group.color;
 	let icon = group.icon;
-	let examDate = ctx.settings.quizzesModuleOverrides?.[group.folder]?.examDate;
+	/* Le SAS des quiz générés se reconnaît au CHEMIN (`estLeSas`), comme la
+	   carte et le titre du dossier ouvert : c'est ce qui fait que l'aperçu
+	   d'icône et la teinte du modal montrent ce que l'utilisateur voit
+	   ailleurs, et non le défaut générique. */
+	const genere = estLeSas(group, ctx.generatedFolder?.());
+	/* Le chemin DÉCLARÉ, lu dans l'override et non dans le groupe : celui du
+	   groupe peut être déduit d'un quiz, et le persister figerait dans les
+	   réglages une valeur qui, aujourd'hui, se recalcule seule. */
+	const path = ctx.settings.quizzesModuleOverrides?.[group.folder]?.path;
 	/** Un changement au moins a eu lieu → onClose persiste + rafraîchit. */
 	let dirty = false;
 
@@ -74,7 +89,7 @@ export function openModuleEditModal(
 	   écriture disque est différée à onClose (pas de martèlement I/O). */
 	const apply = (): void => {
 		const overrides = { ...(ctx.settings.quizzesModuleOverrides || {}) };
-		const ov = buildModuleOverride(group.folder, { name, ue, color, icon, examDate });
+		const ov = buildModuleOverride(group.folder, { name, ue, color, icon, path });
 		overrides[group.folder] = ov;
 		ctx.settings.quizzesModuleOverrides = overrides;
 		dirty = true;
@@ -92,14 +107,14 @@ export function openModuleEditModal(
 			// Accent effectif (couleur choisie sinon dérivée du nom) dès l'ouverture :
 			// il teinte l'aperçu d'icône ci-dessous ; paintDots() le met à jour quand
 			// la couleur change.
-			c.style.setProperty("--mod-color", color ?? hashAccent(group.folder));
+			c.style.setProperty("--mod-color", moduleAccent({ folder: group.folder, color }, { generated: genere }));
 
 			// ── Icône EN HAUT (au-dessus du nom, demande Ahmed 2026-07-19) : aperçu
 			// carré teinté ; clic → picker avec recherche + suggestions du module ──
 			ajouter(c, "p", "qbd-medit-label", t("dashboard.quizzes.moduleEditIcon"));
 			const iconBtn = ajouter(c, "button", "qbd-medit-icon-btn");
 			iconBtn.type = "button";
-			const paintIcon = () => { iconBtn.replaceChildren(); currentHost().ui.setIcon(iconBtn, icon ?? DEFAULT_MODULE_ICON); };
+			const paintIcon = () => { iconBtn.replaceChildren(); currentHost().ui.setIcon(iconBtn, moduleIcon({ icon }, { generated: genere })); };
 			paintIcon();
 			iconBtn.addEventListener("click", () => {
 				// Portalé au PANNEAU du modal (comme le color picker) → pas de vol
@@ -135,22 +150,34 @@ export function openModuleEditModal(
 				})));
 			});
 
-			// La date d'examen pilote l'horizon de rétention de l'ordonnanceur :
-			// 20 à 40 % de l'échéance pour une semaine, 5 à 10 % pour un an
-			// (Cepeda 2008). Vide = horizon durable, jamais deviné ailleurs.
-			const dateWrap = ajouter(c, "div");
-			const dateLabel = ajouter(dateWrap, "label", "qbd-medit-label", t("dashboard.module.examDate"));
-			const dateInput = ajouter(dateWrap, "input", "qbd-medit-input");
-			dateInput.type = "date";
-			// Le lien explicite fournit le nom accessible et rend le libellé cliquable.
-			dateInput.id = "qbd-medit-exam-date";
-			dateLabel.htmlFor = dateInput.id;
-			dateInput.value = examDate ?? "";
-			dateInput.addEventListener("change", () => {
-				examDate = dateInput.value || undefined;
-				apply();
-			});
-			ajouter(dateWrap, "p", "qbd-medit-hint", t("dashboard.module.examDateHint"));
+			/* La date d'examen pilote l'horizon de rétention de l'ordonnanceur :
+			   20 à 40 % de l'échéance pour une semaine, 5 à 10 % pour un an
+			   (Cepeda 2008). Vide = horizon durable, jamais deviné ailleurs.
+
+			   ELLE NE PASSE PAS PAR `apply()` : c'est l'hôte qui la garde, sous
+			   une clé qui porte la racine du dossier, là où les overrides ne
+			   connaissent qu'un nom de segment (voir `DashboardShellCtx`).
+			   Sans les deux membres — ou sur un dossier qui n'a aucun quiz,
+			   donc aucune clé de module — le champ n'est PAS rendu : un champ
+			   de date qui n'a aucun effet est pire que son absence. */
+			const setExamDate = ctx.setExamDate;
+			if (ctx.examDate && setExamDate && group.quizzes.length) {
+				const dateWrap = ajouter(c, "div");
+				const dateLabel = ajouter(dateWrap, "label", "qbd-medit-label", t("dashboard.module.examDate"));
+				const dateInput = ajouter(dateWrap, "input", "qbd-medit-input");
+				dateInput.type = "date";
+				// Le lien explicite fournit le nom accessible et rend le libellé cliquable.
+				dateInput.id = "qbd-medit-exam-date";
+				dateLabel.htmlFor = dateInput.id;
+				dateInput.value = ctx.examDate(group) ?? "";
+				dateInput.addEventListener("change", () => {
+					setExamDate(group, dateInput.value || undefined);
+					/* `onSaved` et non `apply()` : rien n'a changé dans les
+					   overrides, mais la grille affiche l'échéance du dossier. */
+					onSaved();
+				});
+				ajouter(dateWrap, "p", "qbd-medit-hint", t("dashboard.module.examDateHint"));
+			}
 
 			// ── Couleur (8 pastilles ; re-cliquer la pastille active la retire →
 			// retour au liseré par avancement) + pastille « couleur personnalisée »
@@ -197,7 +224,7 @@ export function openModuleEditModal(
 				// comme la carte). Défaut = accent quand aucune couleur n'est choisie.
 				// L'aperçu d'icône montre l'accent EFFECTIF (couleur choisie sinon
 				// dérivée du nom) — WYSIWYG avec la carte.
-				c.style.setProperty("--mod-color", color ?? hashAccent(group.folder));
+				c.style.setProperty("--mod-color", moduleAccent({ folder: group.folder, color }, { generated: genere }));
 			};
 			paintDots();
 			// Pas de bouton « Enregistrer » : auto-save (apply() sur chaque
@@ -264,8 +291,13 @@ export function openNewFolderModal(
 				}
 				// Déclaré en override : la carte du dossier (0 quiz) apparaît tout de
 				// suite, sans attendre qu'un premier quiz y soit créé.
+				/* Avec son CHEMIN (2026-09-17) : la clé n'est qu'un segment, et un
+				   dossier vide n'a aucun quiz d'où déduire le reste. Sans lui,
+				   « Nouveau quiz » dans le dossier qu'on vient de créer écrivait
+				   hors des dossiers ouverts. `path` est déjà calculé deux lignes
+				   plus haut, c'est là qu'on créé le dossier. */
 				const overrides = { ...(ctx.settings.quizzesModuleOverrides || {}) };
-				if (!overrides[clean]) overrides[clean] = { name: clean };
+				if (!overrides[clean]) overrides[clean] = { name: clean, path };
 				ctx.settings.quizzesModuleOverrides = overrides;
 				ctx.saveSettings().catch(() => {});
 				m.close();

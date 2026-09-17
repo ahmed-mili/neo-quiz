@@ -8,11 +8,13 @@ import { chargerLangue } from "./ui/langue";
 import { LOG_PREFIX } from "../../../src/branding";
 import { createScanner } from "../../../src/dashboard/scanner";
 import type { QuizIndexEntry, Scanner } from "../../../src/dashboard/scanner";
-import { currentHost, installHost } from "../../../src/host/current";
+import { currentHost, installHost, requireHost } from "../../../src/host/current";
+import type { HostModalHandle } from "../../../src/host/types";
 import { createWindowsHost, createWindowsIndex, creerCarteRacines } from "./host";
+import type { CarteRacines } from "./host";
 import type { RacineOuverte } from "./host";
 import { pont } from "./host/pont";
-import { chargerExamDates, estVaultObsidian, savedFolders } from "./host/folder";
+import { chargerExamDates, estVaultObsidian, ouvrirVaultsDetectes, savedFolders } from "./host/folder";
 import type { ReviewStore } from "../../../src/review/review-store";
 import type { StatsStore } from "../../../src/dashboard/stats-store";
 import { creerJournalApp } from "./review/store";
@@ -57,16 +59,13 @@ import { appliquerFond, fondSuivant } from "./ui/fond";
  */
 let demonterCourant: (() => void | Promise<void>) | null = null;
 
-/**
- * L'entrée « Réglages… » du menu d'application (et `Ctrl+,`) : ouvre la page
- * Réglages une fois la coquille montée. La barre est montée UNE FOIS, avant
- * le premier écran (voir `demarrer`) : elle ne peut donc pas fermer
- * directement sur `root` / `scanner` / `store` / `stats`, qui n'existent pas
- * encore à son montage. `mount` réaffecte cette variable à chaque montage —
- * il n'y a plus qu'un seul écran de départ depuis la tranche 9 (le dossier
- * par défaut supprime l'écran « aucun dossier »).
- */
-let ouvrirReglagesCourant: () => void = () => {};
+/* La carte des racines du démarrage, retenue pour la SEULE chose que le
+   contrat d'hôte ne peut pas rendre : traduire un chemin ABSOLU du disque en
+   chemin du contrat. `HostPaths` ne porte jamais de chemin absolu, et c'est
+   voulu — mais le sélecteur natif, lui, n'en rend que. Une seconde
+   implémentation de la règle « la plus longue racine gagne » (`depuisAbsolu`)
+   divergerait en silence : on passe la carte, on ne la recopie pas. */
+let carteCourante: CarteRacines | null = null;
 
 /* ═══ LES RÉGLAGES IA — l'`AiSettingsHost` de l'application ═══
 
@@ -123,41 +122,59 @@ function demonter(): Promise<void> | void {
 export function mount(root: HTMLElement, scanner: Scanner, store: ReviewStore, stats: StatsStore): void {
 	void demonter();
 	root.textContent = "";
-	ouvrirReglagesCourant = () => ouvrirReglages(root, scanner, store, stats);
 	demonterCourant = monterDashboard(root, {
 		scanner,
 		statsStore: stats,
 		reviewStore: store,
 		aiSettings: reglagesIa,
+		cheminDuContrat: (absolu) => carteCourante?.depuisAbsolu(absolu) ?? null,
+		cheminAbsolu: (contrat) => carteCourante?.absolu(contrat) ?? null,
 		onOpenQuiz: (entry) => { void ouvrirQuiz(root, scanner, store, stats, entry); },
-		onOpenSettings: () => ouvrirReglages(root, scanner, store, stats),
+		onOpenSettings: () => ouvrirReglages(),
 	});
 }
 
+/** La modale des réglages, quand elle est ouverte. Une SEULE à la fois : le
+    bouton de la barre de titre reste cliquable pendant qu'elle est là, et deux
+    panneaux empilés liraient les mêmes réglages sans jamais se voir l'un
+    l'autre. */
+let reglagesOuverts: HostModalHandle | null = null;
+
 /**
- * La page « Réglages » : démonter la liste, monter la page ; au retour,
- * démonter la page et remonter la liste. La gestion des dossiers y vit
- * désormais tout entière — la liste n'a plus qu'un bouton pour y aller.
+ * Les « Réglages » : une MODALE centrée par-dessus l'écran courant, depuis
+ * qu'elle a cessé d'être un écran à part entière.
+ *
+ * POURQUOI CE N'EST PLUS UN ÉCRAN. La page remplaçait le tableau de bord :
+ * l'ouvrir le DÉTRUISAIT, et la fermer le reconstruisait depuis zéro
+ * (`mount()`), page et défilement perdus — pour un écran dont on ne fait que
+ * cocher une case. La modale, elle, laisse l'écran courant monté dessous : il
+ * n'y a plus rien à reconstruire au retour.
+ *
+ * ELLE NE PASSE DONC PAS PAR `demonterCourant` : cette variable désigne
+ * l'ÉCRAN, et l'écrire ici ferait démonter la modale à la place du tableau de
+ * bord au prochain changement d'écran — le tableau de bord resterait dans le
+ * DOM, ses écouteurs vivants, sous le suivant. Le démontage de la page se fait
+ * dans `onClose`, que l'hôte appelle APRÈS la disparition.
  */
-function ouvrirReglages(root: HTMLElement, scanner: Scanner, store: ReviewStore, stats: StatsStore): void {
-	void demonter();
-	root.textContent = "";
-	demonterCourant = renderSettings(root, {
-		scanner,
-		aiSettings: reglagesIa,
-		onBack: () => mount(root, scanner, store, stats),
-		/* RECHARGER : ajouter ou retirer un dossier change les racines de
-		   l'hôte, et l'hôte est installé une seule fois. Un remontage à chaud
-		   laisserait vivre l'index et le surveillant de l'ancienne liste. */
-		onFoldersChanged: () => location.reload(),
-		/* PAS de rechargement ici : `setExamDate` (host/folder.ts) met déjà à
-		   jour `datesExamen` EN MÉMOIRE, de façon synchrone. Revenir à la liste
-		   appelle `mount()`, qui la reconstruit entièrement — la carte « À
-		   réviser » (tâche 11) y relit `store.plan(Date.now())`, qui appelle
-		   `horizons()` (donc `examDates()`) À CHAQUE appel : rien à invalider,
-		   contrairement à un changement de dossier qui change les racines de
-		   l'hôte lui-même. */
-		onExamDatesChanged: () => {},
+function ouvrirReglages(): void {
+	if (reglagesOuverts) return;
+	let demonterReglages: (() => void) | null = null;
+	reglagesOuverts = requireHost("modals").open({
+		className: "nq-reglages-modal",
+		title: t("review.settings.title"),
+		onOpen: poignee => {
+			demonterReglages = renderSettings(poignee.contentEl, {
+				/* RECHARGER : ajouter ou retirer un dossier change les racines de
+				   l'hôte, et l'hôte est installé une seule fois. Un remontage à
+				   chaud laisserait vivre l'index et le surveillant de l'ancienne
+				   liste. */
+				onFoldersChanged: () => location.reload(),
+			});
+		},
+		onClose: () => {
+			reglagesOuverts = null;
+			demonterReglages?.();
+		},
 	});
 }
 
@@ -203,7 +220,12 @@ async function demarrer(): Promise<void> {
 	   changements d'écran qui suivent (coquille, réglages), qui eux se
 	   démontent et se remontent par `demonterCourant`. */
 	monterBarreTitre(document.body, {
-		ouvrirReglages: () => ouvrirReglagesCourant(),
+		/* DIRECTEMENT la fonction : elle ne ferme plus sur l'écran courant
+		   depuis que les Réglages sont une modale posée par-dessus lui. La
+		   barre de titre est montée une seule fois, avant le premier écran —
+		   c'est ce qui imposait l'indirection par une variable réaffectée à
+		   chaque montage. */
+		ouvrirReglages,
 		fondSuivant: () => { void fondSuivant(); },
 	});
 	/* Le dossier du fond est DÉJÀ admis au périmètre par le principal
@@ -211,6 +233,13 @@ async function demarrer(): Promise<void> {
 	   qu'à poser l'image, sans attendre les dossiers de quiz ci-dessous. */
 	await appliquerFond();
 	try {
+		/* AVANT de lire les dossiers : tout vault Obsidian de la machine qui
+		   n'est ni ouvert ni écarté est ouvert ici, sans un clic (voir
+		   `ouvrirVaultsDetectes`). Au démarrage et nulle part ailleurs — c'est
+		   le seul moment où les racines de l'hôte ne sont pas encore
+		   calculées ; le faire depuis les Réglages forcerait un rechargement
+		   de la fenêtre à leur ouverture. */
+		await ouvrirVaultsDetectes();
 		const dossiers = await savedFolders();
 		/* `dossiers` contient TOUJOURS au moins le dossier par défaut
 		   (tranche 9) : `savedFolders()` le pose devant à chaque lecture. Il
@@ -239,6 +268,7 @@ async function demarrer(): Promise<void> {
 		   par défaut et son prochain démarrage, un cas qu'aucun écran ne
 		   protège mieux qu'une coquille simplement vide. */
 		const carte = creerCarteRacines(ouvertes);
+		carteCourante = carte;
 		const index = await createWindowsIndex(carte);
 		installHost(createWindowsHost(carte, index));
 		/* Le scanner PARTAGÉ, sur l'hôte Windows : c'est lui qui décide ce
@@ -329,8 +359,8 @@ async function demarrer(): Promise<void> {
 		   premier montage — `reprendre` échoue silencieusement (quiz supprimé
 		   entre deux lancements) et laisse alors la coquille sur son défaut
 		   ("home"), sans Notice : une note disparue n'est pas une erreur. */
-		const reprise = await chargerReprise();
-		if (reprise.actif && reprise.vue) reprendre(reprise.vue, scanner);
+		const derniereVue = await chargerReprise();
+		if (derniereVue) reprendre(derniereVue, scanner);
 		mount(root, scanner, store, stats);
 	} catch (e) {
 		root.textContent = t("app.error.startup", { error: e instanceof Error ? e.message : String(e) });

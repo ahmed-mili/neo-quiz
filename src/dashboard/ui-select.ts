@@ -1081,6 +1081,18 @@ export interface OpenOptionsMenuOptions {
 	types: string[];
 	onCount?: (n: number) => void;
 	onType?: (t: string) => void;
+	/**
+	 * DESTINATION du quiz généré : les dossiers proposés, le premier étant le
+	 * défaut. Absente ou vide = pas de section Destination, et c'est le cas du
+	 * GREFFON — il écrit dans le vault ouvert, il n'y a pas de choix à faire.
+	 *
+	 * Un DROPDOWN local et non une liste à coche comme le Type : les types
+	 * sont cinq pour toujours, les dossiers peuvent être trente.
+	 */
+	folders?: { value: string; label: string }[];
+	/** Dossier courant (une `value` de `folders`). */
+	folder?: string;
+	onFolder?: (value: string) => void;
 }
 
 /*
@@ -1224,6 +1236,59 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 		items.push({ t, btn, check });
 	}
 	refreshItems();
+
+	/* ── Destination : le dossier qui recevra le quiz généré ──
+	   Même anatomie que le dropdown des questions (trigger + menu local), et
+	   pour la même raison : un `createSelect` appellerait `closeAllSelects()`,
+	   qui fermerait le popover qui le contient. */
+	const folders = opts.folders ?? [];
+	if (folders.length > 0) {
+		let folder = folders.some(f => f.value === opts.folder) ? String(opts.folder) : folders[0].value;
+		ajouter(menuEl, "div", "qbd-options-pop-title", t("dashboard.select.optionsDestination"));
+		const destRow = ajouter(menuEl, "div", "qbd-options-pop-row");
+		const destWrap = ajouter(destRow, "div", "qbd-opts-dd-wrap");
+		const destTrigger = ajouter(destWrap, "button", "qbd-opts-dd");
+		destTrigger.type = "button";
+		const destLabel = ajouter(destTrigger, "span", "qbd-opts-dd-label");
+		const destChev = ajouter(destTrigger, "span", "qbd-select-chevron");
+		currentHost().ui.setIcon(destChev, "chevron-down");
+		const destMenu = ajouter(destWrap, "div", "qbd-opts-dd-menu is-hidden");
+
+		const refreshDest = () => {
+			const choisi = folders.find(f => f.value === folder) ?? folders[0];
+			// `textContent` (via `ajouter`) : ces libellés viennent du disque.
+			destLabel.textContent = choisi.label;
+			destTrigger.setAttribute("aria-expanded", destMenu.classList.contains("is-hidden") ? "false" : "true");
+			for (const b of Array.from(destMenu.querySelectorAll<HTMLButtonElement>(".qbd-opts-dd-item"))) {
+				const active = b.dataset.folder === folder;
+				b.classList.toggle("is-active", active);
+				const check = b.querySelector(".qbd-select-check");
+				if (!check) continue;
+				check.replaceChildren();
+				if (active) currentHost().ui.setIcon(check as HTMLElement, "check");
+			}
+		};
+
+		for (const f of folders) {
+			const item = ajouter(destMenu, "button", "qbd-opts-dd-item");
+			item.type = "button";
+			item.dataset.folder = f.value;
+			ajouter(item, "span", "qbd-select-check");
+			ajouter(item, "span", undefined, f.label);
+			item.addEventListener("click", () => {
+				folder = f.value;
+				destMenu.classList.add("is-hidden");
+				refreshDest();
+				if (opts.onFolder) opts.onFolder(folder);
+			});
+		}
+
+		destTrigger.addEventListener("click", () => {
+			destMenu.classList.toggle("is-hidden");
+			refreshDest();
+		});
+		refreshDest();
+	}
 
 	// ── Position (pattern openEffortSlider : sous l'ancre, sinon dessus) ──
 	const rect = anchorEl.getBoundingClientRect();

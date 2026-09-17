@@ -28,18 +28,16 @@ import { autoUpdater } from "electron-updater";
 import { LOG_PREFIX } from "../../../src/branding";
 import { ETAT_INITIAL, transition } from "./mise-a-jour-etat";
 import type { EtatMiseAJour, EvenementMiseAJour } from "./mise-a-jour-etat";
-import type { Reglages } from "./reglages";
-import { CLE_REGLAGES_MAJ } from "./pont";
 
 const GARDE_FOCUS_MS = 15 * 60 * 1000;
 const PERIODE_MS = 4 * 60 * 60 * 1000;
 
 export interface MiseAJour {
 	etat(): EtatMiseAJour;
-	/** Au démarrage, APRÈS la fenêtre : pose le réglage lu du disque sans le
-	    réécrire, arme le minuteur, et lance la première vérification si le
-	    réglage est vrai. */
-	initialiser(auto: boolean): void;
+	/** Au démarrage, APRÈS la fenêtre : arme le minuteur et lance la première
+	    vérification. SANS PARAMÈTRE depuis le 2026-09-17 — il n'y a plus de
+	    réglage à lire, la mise à jour automatique est le seul mode. */
+	initialiser(): void;
 	verifier(): Promise<void>;
 	/** Vrai si une mise à jour prête a été armée pour l'installation : c'est
 	    à l'appelant de fermer la fenêtre, puis d'appeler `installerArmee()`
@@ -48,13 +46,11 @@ export interface MiseAJour {
 	installationArmee(): boolean;
 	/** `quitAndInstall` : ne revient pas si tout va bien. */
 	installerArmee(): void;
-	reglerAuto(auto: boolean): Promise<void>;
 	surFocus(): void;
 	arreter(): void;
 }
 
 export function creerMiseAJour(deps: {
-	reglages: Reglages;
 	envoyer(etat: EtatMiseAJour): void;
 }): MiseAJour {
 	let etat: EtatMiseAJour = ETAT_INITIAL;
@@ -103,15 +99,14 @@ export function creerMiseAJour(deps: {
 
 	function armerMinuteur(): void {
 		if (minuteur) clearInterval(minuteur);
-		minuteur = etat.auto ? setInterval(() => { void verifier(); }, PERIODE_MS) : null;
+		minuteur = setInterval(() => { void verifier(); }, PERIODE_MS);
 	}
 
 	return {
 		etat: () => etat,
-		initialiser(auto) {
-			etat = { ...etat, auto };
+		initialiser() {
 			armerMinuteur();
-			if (auto) void verifier();
+			void verifier();
 		},
 		verifier,
 		armerInstallation() {
@@ -123,14 +118,8 @@ export function creerMiseAJour(deps: {
 		installerArmee() {
 			autoUpdater.quitAndInstall(true, true);
 		},
-		async reglerAuto(auto) {
-			await deps.reglages.ecrire(CLE_REGLAGES_MAJ, { auto });
-			appliquer({ type: "reglage", auto });
-			armerMinuteur();
-			if (auto) void verifier();
-		},
 		surFocus() {
-			if (!etat.auto || Date.now() - derniereVerification < GARDE_FOCUS_MS) return;
+			if (Date.now() - derniereVerification < GARDE_FOCUS_MS) return;
 			void verifier();
 		},
 		arreter() {
@@ -140,8 +129,9 @@ export function creerMiseAJour(deps: {
 	};
 }
 
-/** Le réglage persisté, ou vrai : la mise à jour automatique est le défaut. */
-export async function lireReglageAuto(reglages: Reglages): Promise<boolean> {
-	const v = await reglages.lire(CLE_REGLAGES_MAJ);
-	return !(v && typeof v === "object" && (v as { auto?: unknown }).auto === false);
-}
+/* PLUS DE `lireReglageAuto` NI DE `CLE_REGLAGES_MAJ` (2026-09-17) : la mise à
+   jour automatique ne se coupe plus. Retirer la seule LECTURE de cette clé
+   était le point important — l'interrupteur parti, un `{ auto: false }` déjà
+   écrit sur une installation aurait éteint ses mises à jour pour toujours,
+   sans plus rien pour les rallumer. Ce qui reste dans `settings.json` est
+   ignoré, jamais effacé. */

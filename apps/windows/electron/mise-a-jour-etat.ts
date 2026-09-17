@@ -8,13 +8,17 @@
    logique du mécanisme, et elle vit ici, sans Electron ni réseau, pour être
    éprouvée par `npm run check:updater` — la même règle que `garde-ia.ts`.
 
-   Deux décisions qui ne se voient pas dans les types :
-   - une ERREUR après « prête » ne retire pas la mise à jour déjà
-     téléchargée : le paquet est sur le disque, vérifié, et un échec de
-     re-vérification réseau n'y change rien ;
-   - couper le réglage OUBLIE une vérification ou un téléchargement en
-     cours, mais garde « prête » : le fichier est là, l'utilisateur peut
-     encore vouloir cliquer.
+   LA MISE À JOUR AUTOMATIQUE NE SE COUPE PLUS (2026-09-17). Le drapeau `auto`
+   et son événement `reglage` sont partis avec l'interrupteur des Réglages :
+   l'application vérifie, télécharge et installe, toujours. Ce n'est pas qu'un
+   retrait d'écran — le réglage était PERSISTÉ, et laisser sa lecture en place
+   sans plus rien pour le rallumer aurait figé à jamais les installations où un
+   `{ auto: false }` traînait déjà. La clé n'est plus lue ; ce qui reste écrit
+   sur le disque est ignoré, comme les réglages de la dictée.
+
+   Une décision qui ne se voit pas dans les types : une ERREUR après « prête »
+   ne retire pas la mise à jour déjà téléchargée — le paquet est sur le disque,
+   vérifié, et un échec de re-vérification réseau n'y change rien.
 ══════════════════════════════════════════════════════════ */
 
 export type PhaseMiseAJour = "inactif" | "verification" | "a-jour" | "telechargement" | "prete" | "erreur";
@@ -24,7 +28,6 @@ export interface EtatMiseAJour {
 	version?: string;
 	pourcent?: number;
 	message?: string;
-	auto: boolean;
 }
 
 export type EvenementMiseAJour =
@@ -33,28 +36,24 @@ export type EvenementMiseAJour =
 	| { type: "update-not-available" }
 	| { type: "download-progress"; percent: number }
 	| { type: "update-downloaded"; version: string }
-	| { type: "error"; message: string }
-	| { type: "reglage"; auto: boolean };
+	| { type: "error"; message: string };
 
-export const ETAT_INITIAL: EtatMiseAJour = { phase: "inactif", auto: true };
+export const ETAT_INITIAL: EtatMiseAJour = { phase: "inactif" };
 
 export function transition(etat: EtatMiseAJour, ev: EvenementMiseAJour): EtatMiseAJour {
 	switch (ev.type) {
 		case "checking-for-update":
-			return { phase: "verification", auto: etat.auto };
+			return { phase: "verification" };
 		case "update-available":
-			return { phase: "telechargement", version: ev.version, pourcent: 0, auto: etat.auto };
+			return { phase: "telechargement", version: ev.version, pourcent: 0 };
 		case "download-progress":
 			return { ...etat, pourcent: Math.max(0, Math.min(100, Math.round(ev.percent))) };
 		case "update-downloaded":
-			return { phase: "prete", version: ev.version, auto: etat.auto };
+			return { phase: "prete", version: ev.version };
 		case "update-not-available":
-			return { phase: "a-jour", auto: etat.auto };
+			return { phase: "a-jour" };
 		case "error":
 			if (etat.phase === "prete") return etat;
-			return { phase: "erreur", message: ev.message, auto: etat.auto };
-		case "reglage":
-			if (etat.phase === "prete") return { ...etat, auto: ev.auto };
-			return ev.auto ? { ...etat, auto: true } : { phase: "inactif", auto: false };
+			return { phase: "erreur", message: ev.message };
 	}
 }

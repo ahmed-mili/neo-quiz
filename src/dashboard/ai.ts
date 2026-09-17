@@ -1,8 +1,8 @@
 import JSON5 from "json5";
 import type { EditorExamOptions } from "../types/editor-ctx";
-import type { DashboardViewName } from "../types/dashboard-ctx";
+import type { AiPreset, DashboardViewName, NavigateData } from "../types/dashboard-ctx";
 import type { HostFile } from "../host/types";
-import { currentHost } from "../host/current";
+import { currentHost, requireHost } from "../host/current";
 import { ajouter } from "../dom";
 import { LOG_PREFIX } from "../branding";
 import * as aiProviders from "./ai-providers";
@@ -12,6 +12,9 @@ import { aiSettingsDefaults } from "./ai-settings-host";
 import type { AiSettingsHost } from "./ai-settings-host";
 import { createAiClient } from "./ai-client";
 import { createSelect, closeAllSelects, openActionMenu, openModelMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
+import { badgeDeFichier } from "./file-icons";
+import { renderMarkdownPreview } from "../markdown-preview";
+import { mathifyElement } from "../engine/mathjax";
 import type { SelectHandle, SelectOption } from "./ui-select";
 import { formatHotkey } from "../hotkey-format";
 import { findQuizModeConfigIndex } from "../quiz-utils";
@@ -30,7 +33,7 @@ import { ecrireFrontmatterNeoQuiz } from "../quiz-frontmatter";
 import { ensureFolder, freeNotePath } from "./folder-create";
 import type { DraftQuestion } from "../editor/utils";
 import type { ParsedQuizItem } from "../editor/modals";
-import { t } from "../i18n";
+import { currentLang, t } from "../i18n";
 import type { TransKey } from "../i18n";
 
 /* ══════════════════════════════════════════════════════════
@@ -70,10 +73,14 @@ interface NoteAttachment {
 	    fichier choisi/déposé sans origine connue. */
 	path?: string;
 	source: AttachmentSource;
-	/** Chip dépliée (chemin complet) ou repliée (nom+extension) — bascule
-	    au clic ; ignoré si `path` est absent (fichier déposé sans origine
-	    connue : ni vault ni racine externe, rien de plus à montrer). */
-	expanded?: boolean;
+	/** Les OCTETS d'un PDF, gardés pour l'aperçu (les pages dessinées à la
+	    demande, `host.pdf.renderPages`) ; `content` n'en est que le texte.
+	    Absent pour une note. */
+	bytes?: Uint8Array;
+	/** La première page en image (`data:` URL), pour la carte — comme sur
+	    claude.ai, une carte de PDF montre sa page, pas son nom. Absent quand
+	    l'hôte ne dessine pas, ou pour une note. */
+	thumb?: string;
 }
 
 /** Image jointe (vignette + objet fichier). */
@@ -179,11 +186,22 @@ export interface AiPageDeps {
 	/** Pour indexer la note où le quiz vient d'être inséré, puis ouvrir sa page. */
 	scanner: Scanner;
 	statsStore: StatsStore;
-	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void;
+	navigate(view: DashboardViewName, data?: NavigateData): void;
 	/** Les notes OUVERTES dans l'hôte (onglets Obsidian), en tête des deux
 	    pickers de notes. Absent = aucune : l'application n'a pas d'onglets. */
 	openFiles?(): HostFile[];
 	usage?: AiUsageDeps;
+	/**
+	 * Les dossiers où la page peut écrire le quiz généré, en plus du dossier
+	 * par défaut (`<racine par défaut>/<aiOutputFolder>`, toujours proposé en
+	 * premier). Absente = pas de section « Destination » dans le popover des
+	 * options, et la génération écrit là où elle a toujours écrit : c'est le
+	 * cas du GREFFON, qui n'a qu'un vault ouvert et donc aucun choix à offrir.
+	 *
+	 * `path` est un chemin du CONTRAT complet (« Efrei/…/XTI301 »), le seul
+	 * que `fs.write` accepte ; c'est l'hôte qui le connaît, pas cette page.
+	 */
+	quizFolders?(): { path: string; name: string }[];
 	/** Rend un BLOC de code (commande d'installation d'un CLI) dans `host`.
 	    Sous Obsidian, le moteur Markdown de l'app : coloration Prism, style de
 	    bloc de l'utilisateur, bouton « copier » du post-processeur natif.
@@ -201,6 +219,10 @@ export interface AiHandlers {
 	    et URL d'objet des images encore en mémoire. Sans lui, chaque
 	    ouverture/fermeture du dashboard en laissait une série derrière elle. */
 	dispose(): void;
+	/** « Créer avec l'IA » depuis un dossier : règle la destination et joint
+	    les sources AVANT le prochain `render`. Appelé par l'hôte à la
+	    navigation (`NavigateData.aiPreset`), jamais par la page elle-même. */
+	preset(p: AiPreset): void;
 }
 
 export function createAiHandlers(deps: AiPageDeps): AiHandlers {
@@ -219,6 +241,28 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	let noteAttachments: NoteAttachment[] = []; // [{ name, content, path? }]
 	let questionCount = 5;
 	let questionType = "Mixte";
+	/* Destination du quiz généré : un chemin du CONTRAT, ou "" pour le dossier
+	   par défaut. Comme le nombre et le type, elle vaut pour la SESSION de la
+	   page et n'est pas persistée — rouvrir « Générer » repart du défaut,
+	   c'est-à-dire du comportement d'avant le 2026-09-17. */
+	let destination = "";
+	/* Les sources qu'un préréglage demande de joindre, consommées par le
+	   PREMIER `render` qui suit : joindre exige un composer rendu (les chips
+	   et la vignette d'une image y vivent), et `preset` est appelé avant. */
+	let aJoindre: string[] = [];
+
+	function preset(p: AiPreset): void {
+		/* Un résultat affiché ou une erreur sont balayés par un clic sur
+		   « Créer avec l'IA » depuis un dossier : on repart d'un composer vide,
+		   comme le fait `resetGeneration` quand un quiz généré est enregistré.
+		   Une génération EN COURS, elle, est arrêtée d'abord (`abort`, le même
+		   geste que le bouton Stop) : on ne joint pas des sources à un composer
+		   dont le CLI tourne encore. */
+		if (phase === "loading") activeClient?.abort();
+		if (phase !== "idle") resetGeneration();
+		destination = p.destination;
+		aJoindre = [...p.attach];
+	}
 	let images: ComposerImage[] = [];
 	// Refs du dernier render : cibles des raccourcis du composer
 	// (dashboard.bindComposerHotkeys → openAddFiles/openAddNotes).
@@ -309,6 +353,155 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		return !!(composerText.trim() || images.length > 0 || noteAttachments.length > 0);
 	}
 
+	/** Le contenu d'une carte de pièce jointe : la première page en image pour
+	    un PDF dessiné, sinon le nom sur deux lignes ; le badge d'extension
+	    dans les deux cas ; le tooltip natif porte le chemin entier. */
+	function poserCarte(chip: HTMLElement, note: NoteAttachment): void {
+		chip.title = note.path || note.name;
+		if (note.thumb) {
+			/* La page SEULE, posée dans la carte : ni badge ni nom par-dessus
+			   (retour Ahmed 2026-09-17, référence claude.ai). Sa forme — paysage
+			   ou portrait — est ce qu'on lit d'un coup d'œil, et le nom vit dans
+			   l'infobulle et dans l'aperçu. */
+			chip.classList.add("qbd-ai-note-chip--thumb");
+			const img = ajouter(chip, "img", "qbd-ai-note-chip-thumb");
+			img.src = note.thumb;
+			img.alt = note.name;
+			img.draggable = false;
+			return;
+		}
+		{
+			/* LA FIN DU NOM RESTE VISIBLE, quelle que soit sa longueur (retour
+			   Ahmed 2026-09-17, référence claude.ai : « TP2 - Entrées… » sur la
+			   première ligne, « xceptions.md » sur la seconde). Un nom court
+			   s'affiche tel quel ; un nom long est coupé AU MILIEU : la tête sur
+			   une ligne avec ses points de suspension, la queue — les douze
+			   derniers caractères, l'extension comprise — sur la ligne du
+			   dessous, jamais tronquée. Une troncature en fin de nom perdait
+			   l'extension, la seule chose qu'on cherche des yeux. */
+			const nom = ajouter(chip, "span", "qbd-ai-note-chip-name");
+			const QUEUE = 12;
+			if (note.name.length <= QUEUE + 4) {
+				nom.textContent = note.name;
+			} else {
+				nom.classList.add("qbd-ai-note-chip-name--split");
+				ajouter(nom, "span", "qbd-ai-note-chip-name-head", note.name.slice(0, -QUEUE));
+				ajouter(nom, "span", "qbd-ai-note-chip-name-tail", note.name.slice(-QUEUE));
+			}
+		}
+		ajouter(chip, "span", "qbd-ai-note-chip-badge", badgeDeFichier(note.name));
+	}
+
+	/** L'aperçu d'une pièce jointe, dans une modale (référence claude.ai,
+	    Ahmed 2026-09-17).
+	    - Une NOTE : la ligne de métadonnées (poids, lignes, chemin), puis la
+	      note RENDUE — titres, listes, encadrés — par `renderMarkdownPreview`.
+	    - Un PDF : sa première page en pile de feuilles, « N pages » dessous,
+	      et au survol « Ouvrir », qui l'ouvre dans l'application par défaut du
+	      système. Une seule page dessinée, à l'ouverture : c'est une vitrine,
+	      pas un lecteur — l'application par défaut est le lecteur. */
+	function ouvrirApercu(note: NoteAttachment): void {
+		const estPdf = !!note.bytes;
+		requireHost("modals").open({
+			className: "qbd-ai-preview-modal" + (estPdf ? " qbd-ai-preview-modal--pdf" : ""),
+			title: note.name,
+			onOpen: (m) => {
+				const c = m.contentEl;
+				if (estPdf) { poserApercuPdf(c, note); return; }
+
+				const meta = ajouter(c, "div", "qbd-ai-preview-meta");
+				const octets = new TextEncoder().encode(note.content).length;
+				const ko = new Intl.NumberFormat(currentLang(), { maximumFractionDigits: 2 }).format(octets / 1024);
+				const puce = () => ajouter(meta, "span", "qbd-ai-preview-meta-sep", "•");
+				ajouter(meta, "span", undefined, t("ai.preview.size", { kb: ko }));
+				puce();
+				const lignes = note.content.split(/\r?\n/).length;
+				ajouter(meta, "span", undefined, t(lignes === 1 ? "ai.preview.linesOne" : "ai.preview.linesOther", { n: lignes }));
+				if (note.path) { puce(); ajouter(meta, "span", "qbd-ai-preview-meta-path", note.path).title = note.path; }
+
+				/* UNE NOTE SE VOIT RENDUE — titres, listes, encadrés, tableaux,
+				   code, propriétés — par `renderMarkdownPreview`, qui n'écrit que
+				   ses propres balises et passe tout le texte par la première porte
+				   (`renderInlineText`). C'est le seul `innerHTML` de cette page, et
+				   il ne reçoit jamais autre chose que cette sortie. Les formules
+				   `$…$` gardées par l'inline sont posées ensuite par l'hôte. */
+				const corps = ajouter(c, "div", "qbd-ai-preview-md markdown-preview-view");
+				corps.innerHTML = renderMarkdownPreview(note.content);
+				void mathifyElement(corps);
+			},
+		});
+	}
+
+	/** Le PDF : la pile de feuilles (première page dessinée à 270 px), la
+	    légende « N pages », et « Ouvrir » au survol. UN PDF SE VOIT DESSINÉ,
+	    TOUJOURS (Ahmed : « ceci ne doit plus jamais arriver », à propos d'un
+	    aperçu en texte) : si le dessin échoue, la modale le DIT et la console
+	    nomme la cause — jamais du texte brut avec une excuse. */
+	function poserApercuPdf(c: HTMLElement, note: NoteAttachment): void {
+		const zone = ajouter(c, "div", "qbd-ai-preview-pdf");
+		const pile = ajouter(zone, "div", "qbd-ai-preview-stack");
+		const legende = ajouter(zone, "div", "qbd-ai-preview-caption");
+		const pages = ajouter(legende, "span", "qbd-ai-preview-caption-pages", t("ai.preview.rendering"));
+
+		/* « Ouvrir » : par le contrat (`shell.openExternal`, un fichier de
+		   l'index — l'application y met tous les fichiers). Un PDF déposé sans
+		   chemin, ou venu d'une racine externe (que le contrat sait lire mais
+		   pas ouvrir), n'a pas de bouton : proposer une action qui échouerait
+		   vaudrait moins que rien. */
+		const fichier = note.path && note.source === "vault" ? host.fs.getFile(note.path) : null;
+		if (fichier) {
+			const ouvrir = ajouter(legende, "button", "qbd-ai-preview-open");
+			ouvrir.type = "button";
+			/* `square-arrow-out-up-right`, et non `external-link` : à 16 px, le cadre
+			   ÉCHANCRÉ de celle-ci — un rectangle auquel il manque un coin, que la
+			   flèche traverse — se lit comme un trait cassé. Le carré FERMÉ tient la
+			   petite taille, et la flèche en sort par-dessus au lieu de le trouer.
+			   Choisie par Ahmed sur planche, 2026-09-17. */
+			host.ui.setIcon(ajouter(ouvrir, "span", "qbd-ai-preview-open-icon"), "square-arrow-out-up-right");
+			ajouter(ouvrir, "span", undefined, t("ai.preview.open"));
+			/* LA CIBLE EST LA ZONE ENTIÈRE, comme sur la référence (un `<a>` qui
+			   enveloppe la page et sa légende) : c'est elle qui s'éventaille au
+			   survol et qui montre « Ouvrir », donc c'est elle qui prend la main
+			   du curseur et le clic. Une main sur une zone qui ne répond pas
+			   serait un mensonge, et une cible de 60 px au milieu d'une page de
+			   267 en serait un autre.
+			   UN SEUL écouteur, et il est posé ici : le clic du bouton — souris
+			   comme Entrée au clavier — BOUILLONNE jusqu'à la zone. En doubler
+			   un sur le bouton ouvrirait le fichier deux fois. */
+			zone.classList.add("is-openable");
+			zone.addEventListener("click", () => {
+				void host.shell.openExternal(fichier).then(ok => {
+					if (!ok) host.ui.notice(t("ai.preview.openFailed", { name: note.name }));
+				});
+			});
+		}
+
+		const dessiner = host.pdf?.renderPages
+			? host.pdf.renderPages(note.bytes as Uint8Array, { width: 270, max: 1 })
+			: Promise.reject(new Error("renderPages absent"));
+		void dessiner.then(({ pages: images, total }) => {
+			if (!zone.isConnected) return;
+			if (images[0]) {
+				/* La feuille ENVELOPPE l'image : c'est elle qui porte les deux
+				   feuilles de dessous (pseudo-éléments) et l'ombre. Sans cette
+				   enveloppe, elles se calaient sur le CONTENEUR — une boîte de
+				   taille fixe — et dépassaient d'une page portrait par le bas.
+				   Là, elles suivent la page, quelle que soit sa forme. */
+				const feuille = ajouter(pile, "div", "qbd-ai-preview-sheet");
+				const img = ajouter(feuille, "img", "qbd-ai-preview-stack-page");
+				img.src = images[0];
+				img.alt = t("ai.preview.pageAlt", { n: 1 });
+				img.draggable = false;
+				pile.classList.add("is-ready");
+			}
+			pages.textContent = t(total === 1 ? "ai.preview.pagesOne" : "ai.preview.pagesOther", { n: total });
+		}).catch((e) => {
+			console.warn(LOG_PREFIX, "aperçu PDF impossible:", note.name, e);
+			if (!zone.isConnected) return;
+			pages.textContent = t("ai.preview.renderFailed");
+		});
+	}
+
 	async function render(container: HTMLElement | null): Promise<void> {
 		if (!container) return;
 		containerRef = container;
@@ -396,7 +589,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					ajouter(body, "span", "qbd-select-option-label", o.label);
 					const st = providerStatus[o.value];
 					ajouter(body, "span", "qbd-provider-option-sub", st ? st.text : o.sub);
-					ajouter(el, "span", "qbd-status-dot qbd-status-dot--" + (st ? st.dot : "checking"));
+					// Pastille SEULEMENT quand quelque chose ne va pas (demande
+					// d'Ahmed, 2026-09-17) : orange « ça marcherait, mais le
+					// serveur est arrêté », rouge « absent ». Un fournisseur qui
+					// répond n'en porte pas — sa version dans le sous-titre le dit
+					// déjà, et une pastille verte collée à la coche de l'option
+					// choisie n'apprenait rien. Idem pendant la détection : le dot
+					// pulsant se serait posé au même endroit pour une seconde.
+					if (st && (st.dot === "warn" || st.dot === "err")) {
+						ajouter(el, "span", "qbd-status-dot qbd-status-dot--" + st.dot);
+					}
 				},
 				onChange: async (id) => {
 					await saveSettings({ aiProvider: id, aiModel: aiProviders.getProvider(id).defaultModel });
@@ -687,27 +889,20 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			chipsRow = ajouter(textZone, "div", "qbd-ai-composer-chips");
 			for (let i = 0; i < noteAttachments.length; i++) {
 				const note = noteAttachments[i];
+				/* Une CARTE, pas une pastille (retour Ahmed 2026-09-17, référence
+				   claude.ai) : le nom sur deux lignes, et l'EXTENSION en badge en
+				   bas — pas d'icône, le badge dit le type. */
 				const chip = ajouter(chipsRow, "div", "qbd-ai-note-chip");
-				const chipIcon = ajouter(chip, "span", "qbd-ai-note-chip-icon");
-				host.ui.setIcon(chipIcon, "file-text");
-				const chipName = ajouter(chip, "span", "qbd-ai-note-chip-name", (note.expanded && note.path) ? note.path : note.name);
-				// Tooltip natif = le chemin ENTIER, toujours, y compris replié :
-				// `max-width` + ellipsis peuvent tronquer même le chemin déplié
-				// (mesuré : scrollWidth > clientWidth dès un chemin un peu long),
-				// et déplier sert précisément à le lire.
-				chipName.title = note.path || note.name;
-				// Bascule nom+extension ⇄ chemin complet — seulement si un
-				// chemin est connu (un fichier déposé/choisi SANS origine
-				// connue — ni vault ni racine externe — n'en a pas : alors rien
-				// à déplier, la chip ne réagit pas au clic).
-				if (note.path) {
-					chip.classList.add("qbd-ai-note-chip--toggle");
-					chip.addEventListener("click", (e) => {
-						if ((e.target as HTMLElement).closest(".qbd-ai-note-chip-remove")) return;
-						note.expanded = !note.expanded;
-						render(containerRef);
-					});
-				}
+				poserCarte(chip, note);
+				/* Le clic OUVRE L'APERÇU (Ahmed, 2026-09-17, référence claude.ai) :
+				   le texte d'une note, les pages d'un PDF. L'ancienne bascule
+				   nom ⇄ chemin complet est partie avec : le chemin est dans la
+				   modale, et le tooltip natif le porte encore. */
+				chip.classList.add("qbd-ai-note-chip--toggle");
+				chip.addEventListener("click", (e) => {
+					if ((e.target as HTMLElement).closest(".qbd-ai-note-chip-remove")) return;
+					ouvrirApercu(note);
+				});
 				const chipRemove = ajouter(chip, "button", "qbd-ai-note-chip-remove");
 				host.ui.setIcon(chipRemove, "x");
 				const idx = i;
@@ -721,15 +916,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 
 		const composerInput = ajouter(textZone, "textarea", "qbd-ai-composer-input");
 		let mentions: MentionPickerHandle | null = null;
-		// Au moins une pièce jointe (chip note/PDF ou vignette image) : la
-		// question d'origine n'a plus de sens (le fichier EST le sujet) — le
-		// placeholder invite alors à des instructions facultatives. Recalculé
-		// à chaque render (composerInput est recréé à chaque fois) : repasse
-		// à la question dès la dernière pièce retirée (×, Backspace au
-		// caret 0, ou remove d'image), même chemin de rendu.
-		composerInput.placeholder = (images.length > 0 || noteAttachments.length > 0)
-			? t("ai.composer.placeholderAttached")
-			: t("ai.composer.placeholder");
+		// UN SEUL placeholder, quoi qu'il y ait de joint (demande Ahmed,
+		// 2026-09-17). La variante « Ajouter des instructions (facultatif) »
+		// qui apparaissait dès la première pièce jointe changeait le texte sous
+		// les yeux, et la parenthèse gênait. Le champ RESTE facultatif avec une
+		// pièce jointe (`canGenerate` accepte texte OU images OU notes) ; c'est
+		// seulement le texte qui ne bouge plus.
+		composerInput.placeholder = t("ai.composer.placeholder");
 		composerInput.value = composerText;
 		composerInput.rows = 2;
 		const autoGrow = () => {
@@ -764,33 +957,18 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// ~402px. (Ce commentaire promettait l'inverse — corrigé : ce projet
 		// s'est déjà fait piéger deux fois par un commentaire qui annonce
 		// autre chose que ce que fait le code.)
+		/* TOUJOURS au-dessus du champ, en flux normal, en rangée DÉFILANTE
+		   (2026-09-17, cartes façon claude.ai — retour Ahmed). La superposition
+		   à la première ligne du texte (un `text-indent` mesuré à la largeur
+		   des pastilles, avec repli quand elles ne tenaient pas) n'a plus de
+		   sens pour des cartes de cent pixels de haut : le mode « stacked » est
+		   le seul qui reste, et la mesure est partie avec l'autre. L'observateur
+		   de redimensionnement ci-dessous rappelle cette fonction : il ne coûte
+		   plus qu'un ajout de classe déjà posée. */
 		const layoutChipsRow = () => {
 			if (!chipsRow || !chipsRow.isConnected) return;
-			const composerWidth = composer.getBoundingClientRect().width;
-			// Largeur NATURELLE de la rangée = somme des chips + gaps, jamais
-			// chipsRow.getBoundingClientRect().width directement : une fois en
-			// --stacked (position: static, flex-wrap: wrap), la rangée est un
-			// conteneur flex de niveau bloc SANS largeur déclarée → elle
-			// s'étire à la largeur de son PARENT (textZone, quasi la carte
-			// entière), pas à celle de son contenu. Mesurer cette largeur
-			// gonflée aurait empêché tout retour en mode non-replié une fois
-			// basculé (hystérésis : rétrécir puis ragrandir le composer
-			// restait bloqué en --stacked — trouvé en testant le
-			// ResizeObserver ci-dessous, qui rend ce recalcul répété au lieu
-			// d'unique). Les chips elles-mêmes gardent leur taille propre
-			// quel que soit le mode de la rangée : les additionner est fiable
-			// dans les deux sens.
-			const chips = Array.from(chipsRow.children) as HTMLElement[];
-			const gap = parseFloat(getComputedStyle(chipsRow).columnGap) || 0;
-			const chipsWidth = chips.reduce((sum, el) => sum + el.getBoundingClientRect().width, 0)
-				+ gap * Math.max(0, chips.length - 1);
-			const GUTTER = 10;
-			const fits = composerWidth > 0 && chipsWidth <= composerWidth * 0.55;
-			chipsRow.classList.toggle("qbd-ai-composer-chips--stacked", !fits);
-			composerInput.style.textIndent = fits ? (chipsWidth + GUTTER) + "px" : "";
-			// Le passage en --stacked change immédiatement la transform (sinon
-			// elle resterait décalée d'un ancien scroll jusqu'au prochain
-			// événement "scroll", qui peut ne jamais venir en mode replié).
+			chipsRow.classList.add("qbd-ai-composer-chips--stacked");
+			composerInput.style.textIndent = "";
 			syncChipsScroll();
 		};
 		// Re-mesure quand la carte change de largeur (pane redimensionné, zoom
@@ -895,17 +1073,29 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		optsBtn.addEventListener("click", () => {
 			// Le menu ne connaît que des libellés : on traduit à l'aller et on
 			// retraduit la sélection en valeur canonique au retour.
+			const dossiers = destinationOptions();
 			openOptionsMenu(optsBtn, {
 				count: questionCount,
 				type: typeLabel(questionType), types: typeLabels(),
+				// Une SEULE entrée (le défaut) n'est pas un choix : pas de section.
+				folders: dossiers.length > 1 ? dossiers : undefined,
+				folder: destination,
 				onCount: (n) => { questionCount = n; },
-				onType: (label) => { questionType = typeValue(label); }
+				onType: (label) => { questionType = typeValue(label); },
+				onFolder: (value) => { destination = value; }
 			});
 		});
 		// Tooltip au survol : l'état courant (« 5 questions · Mixte »),
 		// relu à chaque hover — pattern attachHoverTip.
 		attachHoverTip(optsBtn, (tip) => {
 			ajouter(tip, "div", "qbd-hover-tip-title", t("ai.options.tooltip", { count: questionCount, type: typeLabel(questionType) }));
+			/* Le dossier en seconde ligne, et SEULEMENT quand il n'est pas le
+			   défaut : l'infobulle sert à voir d'un coup d'œil ce qui sort de
+			   l'ordinaire, pas à répéter l'état normal. */
+			if (destination) {
+				const choisi = destinationOptions().find(d => d.value === destination);
+				if (choisi) ajouter(tip, "div", "qbd-hover-tip-body", choisi.label);
+			}
 		});
 
 		/* Consultation du forfait, à sa place de contrôle : dans le composer,
@@ -1072,6 +1262,20 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					}
 				}
 			});
+		}
+
+		/* Les sources du préréglage, jointes UNE fois, par le même chemin que
+		   le picker « @ » (`attachVaultPath` : note, PDF par l'hôte, image).
+		   La liste est vidée AVANT de joindre : `attachVaultPath` provoque des
+		   re-rendus, et une liste encore pleine se rejouerait à chacun. Dans
+		   l'ORDRE, pas en parallèle — deux lectures de PDF de front doublent la
+		   mémoire pour rien, et l'ordre des chips est celui du dossier. */
+		if (aJoindre.length > 0) {
+			const sources = aJoindre;
+			aJoindre = [];
+			void (async () => {
+				for (const path of sources) await attachVaultPath(path);
+			})();
 		}
 	}
 
@@ -1368,7 +1572,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				   PDF vide en silence — voir `HostPdf` dans le contrat. */
 				if (!host.pdf) { host.ui.notice(t("ai.error.pdfUnsupportedInApp")); continue; }
 				try {
-					const content = await host.pdf.extractText(new Uint8Array(await file.arrayBuffer()));
+					const bytes = new Uint8Array(await file.arrayBuffer());
+					const content = await host.pdf.extractText(bytes);
 					if (!content.trim()) {
 						host.ui.notice(t("ai.notice.pdfNoText", { name: file.name }));
 					} else {
@@ -1376,7 +1581,19 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 						if (noteAttachments.some(n => attachmentKey(n) === key)) {
 							host.ui.notice(t("ai.notice.noteAlreadyAttached", { name: file.name }));
 						} else {
-							noteAttachments.push({ name: file.name, content, path: origin?.path, source });
+							/* La vignette : la première page, à la largeur de la carte
+							   (2×, le CSS ramène). Un échec de dessin n'empêche pas de
+							   joindre : la carte montre alors son nom, comme une note. */
+							let thumb: string | undefined;
+							try {
+								thumb = (await host.pdf.renderPages?.(bytes, { width: 124, max: 1 }))?.pages[0];
+							} catch (e) {
+								// NOMMÉ dans la console : une vignette absente sans trace a
+								// déjà coûté une matinée (paramètre `canvas` de pdf.js 5).
+								console.warn(LOG_PREFIX, "vignette PDF impossible:", file.name, e);
+								thumb = undefined;
+							}
+							noteAttachments.push({ name: file.name, content, path: origin?.path, source, bytes, thumb });
 						}
 					}
 				} catch (e) {
@@ -1541,10 +1758,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (msg.notes.length > 0) {
 			const chips = ajouter(bubble, "div", "qbd-ai-sent-chips");
 			for (const note of msg.notes) {
-				const chip = ajouter(chips, "div", "qbd-ai-note-chip");
-				host.ui.setIcon(ajouter(chip, "span", "qbd-ai-note-chip-icon"), "file-text");
-				const name = ajouter(chip, "span", "qbd-ai-note-chip-name", note.name);
-				name.title = note.path || note.name;
+				const chip = ajouter(chips, "div", "qbd-ai-note-chip qbd-ai-note-chip--toggle");
+				poserCarte(chip, note);
+				chip.addEventListener("click", () => ouvrirApercu(note));
 			}
 		}
 
@@ -1699,14 +1915,39 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    principal « Lancer ». Toujours la racine PAR DÉFAUT de l'hôte (demande
 	    d'Ahmed du 2026-09-13) : le dossier « Generated » doit rester dans
 	    C:\Neo Quiz, quelle que soit la note jointe par « @ ». */
+	/** Le dossier par défaut, en chemin du contrat : `<racine par défaut>/<aiOutputFolder>`. */
+	function defaultDestination(): string {
+		const local = settings().aiOutputFolder || aiSettingsDefaults().aiOutputFolder;
+		return host.paths.contractPath(host.paths.defaultRoot().id, local);
+	}
+
+	/** Les destinations proposées dans le popover des options : le défaut
+	    d'abord (valeur `""`), puis les dossiers que l'hôte déclare. Le défaut
+	    est retiré des autres s'il y figure — un même dossier deux fois dans une
+	    liste de choix est un défaut d'affichage, pas une option de plus. */
+	function destinationOptions(): { value: string; label: string }[] {
+		const defaut = defaultDestination();
+		const options = [{ value: "", label: settings().aiOutputFolder || aiSettingsDefaults().aiOutputFolder }];
+		const vus = new Set([defaut]);
+		for (const d of deps.quizFolders?.() ?? []) {
+			if (!d.path || vus.has(d.path)) continue;
+			vus.add(d.path);
+			options.push({ value: d.path, label: d.name || d.path });
+		}
+		return options;
+	}
+
 	async function saveGeneratedQuiz(): Promise<boolean> {
 		const root = host.paths.defaultRoot();
 
 		try {
 			const draft = loadGeneratedDraft();
 			if (!draft.questions.length) return false;
-			const localFolder = settings().aiOutputFolder || aiSettingsDefaults().aiOutputFolder;
-			const folder = host.paths.contractPath(root.id, localFolder);
+			/* La destination CHOISIE dans le popover des options, sinon le
+			   dossier par défaut. `destination` est déjà un chemin du contrat :
+			   il ne repasse pas par `contractPath`, qui le préfixerait une
+			   seconde fois de la racine par défaut. */
+			const folder = destination || host.paths.contractPath(root.id, settings().aiOutputFolder || aiSettingsDefaults().aiOutputFolder);
 			await ensureFolder(folder);
 			// Le même titre que la page affiche, sans les points de suspension
 			// qu'il ajoute à une demande coupée : ils n'ont rien à faire dans
@@ -2158,5 +2399,5 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		containerRef = null;
 	}
 
-	return { render, openAddFiles, openAddNotes, dispose };
+	return { render, openAddFiles, openAddNotes, dispose, preset };
 }

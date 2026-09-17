@@ -126,97 +126,27 @@ function extensionDe(chemin: string): string {
 	return point <= 0 ? "" : nom.slice(point + 1).toLowerCase();
 }
 
-/**
- * Le verdict sur un chemin de CLI saisi dans les réglages. `null` = admis.
- *
- * QUATRE CONDITIONS, ET AUCUNE NE REMPLACE LES AUTRES : une chaîne, ABSOLUE (le
- * dossier courant du principal n'est pas celui de l'utilisateur), d'une
- * extension que le lanceur sait lancer, HORS DU PÉRIMÈTRE, et EXISTANTE (un
- * chemin fautif saisi ici ne se verrait qu'à la prochaine génération, sous la
- * forme « CLI introuvable » — le dire à l'ÉCRITURE, c'est le dire là où on peut
- * encore le corriger).
- *
- * HORS DU PÉRIMÈTRE, ET C'EST LA CONDITION QUI TIENT TOUT LE RESTE (revue
- * finale, C1). Le périmètre est l'ensemble des dossiers où la fenêtre peut
- * ÉCRIRE : les racines ouvertes, et les dossiers de `aiMentionExtraFolders`
- * (admis seulement s'ils y sont déjà, donc `perimetreContient` couvre les
- * deux). Un chemin de CLI qui y tombe est la séquence en deux appels que la
- * liste blanche de NOMS existe pour rendre impossible : `fichiers.write(
- * "<racine>/x.cmd", …)` — borné, dans les règles, l'extension n'est jugée qu'à
- * l'OUVERTURE — puis `reglages.ecrire("ai", { cheminClaude: "<racine>/x.cmd" })`,
- * et la génération suivante lance ce que le rendu vient d'écrire, dans le
- * processus principal, avec ses droits. Un CLI légitime, lui, vit dans
- * `Program Files`, `~/.local/bin`, `%APPDATA%
-pm` — JAMAIS dans un dossier de
- * quiz : refuser le périmètre ne coûte aucun chemin valide. Le prédicat résout
- * les jonctions et liens (`perimetre.resoudre`) : une jonction posée dans une
- * racine et pointant sur un `.cmd` est jugée sur sa CIBLE.
- *
- * ET LA CONDITION EST REJOUÉE AU LANCEMENT (`cheminCliPourLancement`) : le
- * périmètre GRANDIT après l'écriture — l'utilisateur ouvre plus tard le dossier
- * qui contient le `.cmd` — et un chemin admis hier peut être dedans aujourd'hui.
- *
- * CE QUE CETTE GARDE N'EST PAS : une garantie que le programme désigné est bien
- * un CLI d'IA. Elle ne peut pas l'être — c'est l'UTILISATEUR qui désigne son
- * exécutable, et l'y autoriser est tout l'objet du réglage. Elle empêche qu'un
- * RENDU compromis transforme ce réglage en « lance ce que je viens d'écrire sur
- * le disque ».
- */
-export async function verifierCheminCli(
-	cle: string,
-	valeur: unknown,
-	fichierExiste: (chemin: string) => Promise<boolean>,
-	perimetreContient: (chemin: string) => Promise<boolean>,
-): Promise<string | null> {
-	if (typeof valeur !== "string") return "réglages IA refusés : " + cle + " doit être une chaîne";
-	const chemin = valeur.trim();
-	// Vide = « pas de chemin réglé », et c'est comme ça qu'on l'efface.
-	if (!chemin) return null;
-	if (!estCheminAbsolu(chemin)) {
-		return "réglages IA refusés : " + cle + " doit être un chemin absolu : " + chemin;
-	}
-	const ext = extensionDe(chemin);
-	if (ext && !EXTENSIONS_CLI.has(ext)) {
-		return "réglages IA refusés : " + cle + " n'est pas un exécutable lançable (." + ext + ") : " + chemin;
-	}
-	if (await perimetreContient(chemin)) {
-		return "réglages IA refusés : " + cle + " est dans un dossier ouvert, où la fenêtre peut écrire — un CLI n'y vit jamais : " + chemin;
-	}
-	if (!(await fichierExiste(chemin))) {
-		return "réglages IA refusés : " + cle + " ne désigne aucun fichier : " + chemin;
-	}
-	return null;
-}
+/* LES CHEMINS DE CLI RÉGLÉS À LA MAIN N'EXISTENT PLUS (2026-09-17).
 
-/**
- * Le chemin de CLI à LANCER pour cet outil, relu des réglages ET REJUGÉ — avec
- * le périmètre d'AUJOURD'HUI, pas celui de l'écriture. PURE : `canaux.ts`
- * l'appelle avec `perimetre.contient` et `statEntree`, le contrôle avec deux
- * listes.
- *
- * `{ chemin: undefined }` quand rien n'est réglé (absent, vide, autre type) ou
- * quand l'outil n'a pas de réglage (Ollama) : le lanceur retombe sur le `PATH`
- * étendu. `{ refus }` quand le chemin réglé ne passe plus la garde — et alors
- * RIEN n'est lancé, ni ce chemin, ni un repli : un repli sur le `PATH` lancerait
- * en silence une autre installation que celle que l'utilisateur a désignée.
- */
-export async function cheminCliPourLancement(
-	valeurAi: unknown,
-	tool: string,
-	fichierExiste: (chemin: string) => Promise<boolean>,
-	perimetreContient: (chemin: string) => Promise<boolean>,
-): Promise<{ chemin: string | undefined } | { refus: string }> {
-	const cle = tool === "claude" ? "cheminClaude" : tool === "codex" ? "cheminCodex" : null;
-	if (!cle) return { chemin: undefined };
-	const ia = valeurAi && typeof valeurAi === "object" && !Array.isArray(valeurAi)
-		? (valeurAi as Record<string, unknown>)
-		: {};
-	const brut = ia[cle];
-	if (typeof brut !== "string" || !brut.trim()) return { chemin: undefined };
-	const refus = await verifierCheminCli(cle, brut, fichierExiste, perimetreContient);
-	if (refus) return { refus: "au lancement, " + refus };
-	return { chemin: brut.trim() };
-}
+   `verifierCheminCli` et `cheminCliPourLancement` gardaient deux clés,
+   `cheminClaude` et `cheminCodex`, par lesquelles l'utilisateur désignait
+   l'exécutable à lancer quand la sonde automatique échouait. Les deux champs
+   ont été retirés des Réglages : le principal fusionne désormais le `PATH` du
+   REGISTRE dans le sien au démarrage (`process.ts`, `chargerPathRegistre`),
+   ce qui rattrape la vraie cause des « CLI introuvable » — un `PATH` de
+   processus figé au lancement, qu'aucun installateur ne peut mettre à jour
+   après coup.
+
+   CE RETRAIT RESSERRE LA SÉCURITÉ, il ne la relâche pas. La séquence que ces
+   gardes existaient pour rendre impossible — `fichiers.write("<racine>/x.cmd")`
+   puis ce chemin dans le réglage, et la génération suivante lance ce que le
+   rendu vient d'écrire, avec les droits du principal — n'a plus de second
+   temps : aucun chemin d'exécutable ne vient plus de la fenêtre, ni par l'IPC
+   ni par les réglages. Ne reste que la LISTE BLANCHE DE NOMS résolus sur le
+   `PATH` (`process.ts`, `resoudreExecutable`).
+
+   Ce qu'une installation a déjà écrit sous ces deux clés reste dans
+   `settings.json`, ignoré — plus personne ne le lit. */
 
 /**
  * Le verdict sur la valeur que le rendu veut écrire sous la clé `ai`.
@@ -230,11 +160,6 @@ export async function cheminCliPourLancement(
  * sélecteur « @ » au prochain lancement. L'application n'a aucune interface
  * pour remplir cette clé aujourd'hui ; la garde existe avant l'interface.
  *
- * `cheminClaude` et `cheminCodex`, s'ils sont présents, désignent un EXÉCUTABLE
- * que le principal lancera : la garde la plus importante de cette clé depuis la
- * tâche 7 — voir `verifierCheminCli`. Un réglage qui pointe sur quelque chose
- * n'est PAS un blanc-seing pour lancer n'importe quoi.
- *
  * Les autres champs (modèle, effort, journal d'usage) ne donnent aucun droit
  * au principal : ils passent tels quels.
  */
@@ -246,22 +171,12 @@ export async function validerReglagesIa(
 	if (!valeur || typeof valeur !== "object" || Array.isArray(valeur)) {
 		return { refus: "réglages IA refusés : la valeur n'est pas un objet" };
 	}
-	const { aiOllamaUrl, aiMentionExtraFolders, aiOutputFolder, cheminClaude, cheminCodex } = valeur as {
-		aiOllamaUrl?: unknown; aiMentionExtraFolders?: unknown; aiOutputFolder?: unknown; cheminClaude?: unknown; cheminCodex?: unknown;
+	const { aiOllamaUrl, aiMentionExtraFolders, aiOutputFolder } = valeur as {
+		aiOllamaUrl?: unknown; aiMentionExtraFolders?: unknown; aiOutputFolder?: unknown;
 	};
 
 	if (aiOutputFolder !== undefined && !estDossierSortieIaValide(aiOutputFolder)) {
 		return { refus: "réglages IA refusés : aiOutputFolder doit être un chemin relatif sûr" };
-	}
-
-	/* LES CHEMINS D'EXÉCUTABLE D'ABORD : c'est le champ qui donne le droit le
-	   plus fort (lancer un programme), et un refus ici doit primer sur tout le
-	   reste — rien n'est admis quand une moitié est refusée, exactement comme
-	   pour `aiMentionExtraFolders`. */
-	for (const [cle, v] of [["cheminClaude", cheminClaude], ["cheminCodex", cheminCodex]] as const) {
-		if (v === undefined) continue;
-		const refus = await verifierCheminCli(cle, v, fichierExiste, perimetreContient);
-		if (refus) return { refus };
 	}
 
 	if (aiMentionExtraFolders !== undefined) {

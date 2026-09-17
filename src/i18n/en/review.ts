@@ -9,14 +9,11 @@ export const EN_REVIEW = {
 	"review.settings.folders": "Quiz folders",
 	"review.settings.foldersHint": "Neo Quiz reads the quiz-blocks in these folders. Nothing is copied, nothing is moved.",
 	"review.settings.addFolder": "Add a folder",
-	"review.settings.removeFolder": "Remove from the list",
+	"review.settings.removeFolder": "Remove — the folder and its review history stay on disk, and it is not reopened",
 	/* Le mot compte : retirer un dossier de la liste ne touche NI aux notes,
-	   NI à l'historique de révision, qui vit dans le dossier. */
-	"review.settings.removeHint": "The folder and its review history stay on disk.",
+	   NI à l'historique de révision, qui vit dans le dossier. C'est
+	   l'INFOBULLE qui le porte depuis le 2026-09-17 — la phrase vivait sous la
+	   liste, loin du bouton qu'elle expliquait. */
 	"review.settings.full": "Neo Quiz reads up to {count} folders.",
 
-	/* ── Les dates d'examen (tâche 10) ── */
-	"review.settings.exams": "Exam dates",
-	"review.settings.examsHint": "A date tightens how often that subject comes back. Left empty, it is scheduled for long-term retention.",
-	"review.settings.noModules": "No subject yet — open a folder that has quizzes in subfolders.",
 } as const;

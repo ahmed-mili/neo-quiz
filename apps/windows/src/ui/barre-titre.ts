@@ -16,9 +16,12 @@ import { pont } from "../host/pont";
 import { poserIcone } from "../host/ui";
 import { poserGlyphe } from "./glyphes-fenetre";
 import { ouvrirMenuApp } from "./menu-app";
+import { palierZoomVoisin } from "./menu-app-arbre";
 import { CLE_REGLAGES_ZOOM } from "../../electron/pont";
 import type { EtatFenetre } from "../../electron/pont";
 import application from "../../package.json";
+// L'URL du dépôt, pour l'entrée « Source code » du menu d'application.
+import manifeste from "../../../../src/assets/manifest.json";
 
 /** Table id de menu → nom de commande d'édition (`pont().edition.commande`) :
     les six ids de `menu-app-arbre.ts` correspondent un à un aux six noms du
@@ -126,6 +129,39 @@ export function monterBarreTitre(root: HTMLElement, deps: {
 		if (typeof v === "number") zoomCourant = v;
 	});
 
+	/* ─── CTRL + MOLETTE — le zoom d'un navigateur, sur les MÊMES paliers que
+	   le sous-menu Échelle (Ahmed, 2026-09-17). Une fenêtre Electron ne le
+	   fait pas d'elle-même : sans cet écouteur, Ctrl + molette DÉFILE la page.
+
+	   `passive: false` EST la condition du `preventDefault` : Chromium rend
+	   les écouteurs `wheel` passifs par défaut, et un `preventDefault` y est
+	   ignoré avec, pour seul signe, un avertissement dans la console.
+
+	   LE DELTA S'ACCUMULE, et un palier ne tombe qu'au seuil. Un cran de
+	   molette vaut une centaine de pixels, donc un palier — ce qu'on attend ;
+	   un pincement de pavé tactile, lui, envoie des dizaines de petits deltas
+	   et traverserait les huit paliers d'un seul geste. Le delta est d'abord
+	   ramené en pixels : la même molette peut le compter en lignes ou en
+	   pages (`deltaMode`), et trois lignes n'auraient jamais atteint le seuil. */
+	const PIXELS_PAR_UNITE = [1, 16, 400]; // pixel, ligne, page
+	const SEUIL_CRAN = 50;
+	let cumulMolette = 0;
+	function surMolette(e: WheelEvent): void {
+		if (!e.ctrlKey) return;
+		e.preventDefault();
+		cumulMolette += e.deltaY * (PIXELS_PAR_UNITE[e.deltaMode] ?? 1);
+		if (Math.abs(cumulMolette) < SEUIL_CRAN) return;
+		// Vers le HAUT (delta négatif), on agrandit : le sens du navigateur.
+		const voisin = palierZoomVoisin(zoomCourant, cumulMolette < 0 ? 1 : -1);
+		cumulMolette = 0;
+		// Déjà au bout de la liste : rien à demander au principal, et la coche
+		// du menu ne doit pas bouger non plus.
+		if (Math.abs(voisin - zoomCourant) < 0.001) return;
+		zoomCourant = voisin;
+		void pont().affichage.zoom(voisin);
+	}
+	window.addEventListener("wheel", surMolette, { passive: false });
+
 	let fermerMenu: (() => void) | null = null;
 	boutonMenu.addEventListener("click", () => {
 		if (fermerMenu) { fermerMenu(); fermerMenu = null; return; }
@@ -138,6 +174,15 @@ export function monterBarreTitre(root: HTMLElement, deps: {
 					deps.ouvrirReglages();
 				} else if (id === "settings") {
 					deps.ouvrirReglages();
+				} else if (id === "repo") {
+					/* `window.open` et non une navigation : le principal REFUSE
+					   toute navigation de premier niveau vers une autre origine
+					   (elle donnerait `window.neo` à la page distante) et remet
+					   au navigateur ce qui passe par `setWindowOpenHandler`
+					   (`electron/main.ts`). C'est le même chemin qu'empruntait
+					   le `<a target="_blank">` de l'ancienne section
+					   « À propos ». */
+					window.open(manifeste.helpUrl, "_blank", "noopener");
 				} else if (id in COMMANDES_EDITION) {
 					void pont().edition.commande(COMMANDES_EDITION[id]);
 				} else if (id.startsWith("scale-") && typeof value === "number") {
@@ -204,6 +249,7 @@ export function monterBarreTitre(root: HTMLElement, deps: {
 		desabonnerFenetre();
 		observateurMenu.disconnect();
 		document.removeEventListener("keydown", surClavier, true);
+		window.removeEventListener("wheel", surMolette);
 		fermerMenu?.();
 		barre.remove();
 	};

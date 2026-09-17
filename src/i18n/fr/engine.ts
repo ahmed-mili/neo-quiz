@@ -29,13 +29,13 @@ export const FR_ENGINE: Record<keyof typeof EN_ENGINE, string> = {
 	"engine.start.selectorAria": "Choisir le mode du quiz",
 	"engine.start.examTitle": "Examen",
 	"engine.start.examSub": "QCM chronométré",
-	"engine.start.trainingTitle": "Entraînement",
-	"engine.start.trainingSub": "Réponse libre",
+	"engine.start.learnTitle": "Apprendre",
+	"engine.start.learnSub": "Sans chrono, correction après chaque réponse",
 
 	/* ── Mode examen ── */
 	"engine.exam.chooseMode": "Choisir le mode",
 	"engine.exam.startExam": "Commencer l'examen",
-	"engine.exam.startTraining": "Commencer l'entraînement",
+	"engine.exam.startLearn": "Commencer à apprendre",
 	"engine.exam.noTimer": "Sans chrono",
 	"engine.exam.duration.one": "Durée : {minutes} minute",
 	"engine.exam.duration.other": "Durée : {minutes} minutes",

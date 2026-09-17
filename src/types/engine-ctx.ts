@@ -82,7 +82,7 @@ import type { LessonHandlers } from "../engine/lesson";
  * `QuizMode` de src/quiz-utils.ts (extractExamOptions) qui n'est PAS exporté —
  * dupliqué ici plutôt que modifier quiz-utils.ts (iso-fonctionnalité Task 9).
  * `"training"` n'est PAS produit par le parsing (quiz-utils) mais assigné au
- * runtime par engine/exam.ts startTrainingMode (`ctx.quizMode = "training"`) —
+ * runtime par engine/exam.ts startLearnMode (`ctx.quizMode = "training"`) —
  * ajouté ici en Task 10c pour coller à la réalité de la mutation.
  * "learn" a été renommé "lesson" (task 0 du lot mode leçon, 2026-08-31) :
  * quiz-utils.ts continue de LIRE l'ancien nom, mais ne le renvoie plus jamais.

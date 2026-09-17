@@ -14,7 +14,7 @@ import type { GroupingKey } from "./quizzes-render";
 import { moduleAccent } from "./module-color";
 import { lireModuleMap } from "./module-map-note";
 import { markViewEnter } from "./view-enter";
-import { DEFAULT_MODULE_ICON } from "./module-icons";
+import { moduleIcon } from "./module-icons";
 
 /* ══════════════════════════════════════════════════════════
    QUIZZES VIEW — Dashboard
@@ -236,8 +236,16 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 			? quizzes.filter(q => moduleForQuiz(q.path, map).folder === openModuleFolder)
 			: [];
 		const openModuleInfo = openModuleFolder !== null ? map.byFolder.get(openModuleFolder) : undefined;
+		/* Le SAS des quiz générés (`ctx.generatedFolder`) : accent bleu et icône
+		   de l'IA à défaut d'un choix à la main, et pas de « maîtrisés » dans
+		   l'en-tête — même règle que sa carte et que sa page (quizzes-render.ts,
+		   `estLeSas`). Reconnu par le CHEMIN du dossier ouvert : déclaré, sinon
+		   déduit d'un quiz. C'est aussi le chemin que « Nouveau quiz » utilise. */
+		const cheminOuvert = openModuleInfo?.path
+			?? (inModule.length > 0 ? moduleForQuiz(inModule[0].path, map).path : undefined);
+		const sas = !!ctx.generatedFolder && cheminOuvert !== undefined && cheminOuvert === ctx.generatedFolder();
 		const openModuleAccent = openModuleFolder !== null
-			? moduleAccent(openModuleInfo ?? { folder: openModuleFolder })
+			? moduleAccent(openModuleInfo ?? { folder: openModuleFolder }, { generated: sas })
 			: null;
 
 		// Le dossier ouvert possède sa propre bannière : le halo doit rester
@@ -277,7 +285,7 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 			const titleBlock = ajouter(header, "div", "qbd-quizzes-title-block");
 			const titleEl = ajouter(titleBlock, "h2", "qbd-quizzes-title");
 			const titleIcon = ajouter(titleEl, "span", "qbd-quizzes-title-icon");
-			currentHost().ui.setIcon(titleIcon, openModuleInfo?.icon || DEFAULT_MODULE_ICON);
+			currentHost().ui.setIcon(titleIcon, moduleIcon(openModuleInfo ?? {}, { generated: sas }));
 			ajouter(titleEl, "span", "qbd-quizzes-title-text", openModuleInfo?.name || openModuleFolder);
 			ajouter(titleBlock, "div", "qbd-quizzes-title-underline");
 
@@ -293,8 +301,10 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 				ajouter(item, "div", "qbd-quizzes-header-stat-label", t(key));
 			};
 			addStat(inModule.length, "dashboard.quizzes.statQuizzes");
-			ajouter(statsWrap, "div", "qbd-quizzes-header-divider");
-			addStat(masteredCount, "dashboard.card.mastered", "qbd-quizzes-header-stat--mastered");
+			if (!sas) {
+				ajouter(statsWrap, "div", "qbd-quizzes-header-divider");
+				addStat(masteredCount, "dashboard.card.mastered", "qbd-quizzes-header-stat--mastered");
+			}
 
 			// Drill-down : créer un dossier ICI n'a pas de sens (demande Ahmed
 			// 2026-07-19) → une seule pilule « Nouveau quiz », qui ouvre le MÊME
@@ -304,7 +314,18 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 			// est alors MASQUÉ, pas grisé (Ruling 7 — un bouton d'action absent
 			// ne déroute personne, contrairement au rail de navigation).
 			if (ctx.createQuiz) {
-				const folder = openModuleFolder;
+				/* LE CHEMIN RÉEL, jamais le segment (correctif 2026-09-17) :
+				   `openModuleFolder` est une CLÉ de module (« Generated »), et
+				   l'écriture veut un chemin du contrat (« Neo Quiz/Generated »).
+				   Passer le segment faisait échouer « Nouveau quiz » dans TOUT
+				   dossier qui n'était pas posé à la racine d'un dossier ouvert —
+				   `fs.write` rendait « chemin hors des dossiers ouverts », et
+				   l'utilisateur ne voyait qu'un « Impossible de créer le quiz ».
+				   Le défaut est né avec l'application : sous Obsidian, les
+				   chemins sont relatifs au vault, donc le segment y suffisait.
+				   Ordre : la déclaration, sinon le chemin déduit d'un quiz du
+				   dossier, sinon le segment (comportement d'avant). */
+				const folder = cheminOuvert ?? openModuleFolder;
 				const newQuizBtn = ajouter(headerActions, "button", "qbd-btn--create");
 				const newQuizIcon = ajouter(newQuizBtn, "span", "qbd-btn-icon");
 				currentHost().ui.setIcon(newQuizIcon, "plus");

@@ -41,15 +41,6 @@ export const EN_APP = {
 
 	/* ── Mise à jour automatique (application seulement) ── */
 	"app.update.restart": "Restart to update",
-	"app.update.auto": "Automatic updates",
-	"app.update.autoHint": "Neo Quiz checks GitHub for a newer version, downloads it in the background, and installs it when you click Restart or when you close the app.",
-	"app.update.checkNow": "Check now",
-	"app.update.state.inactif": "Automatic updates are off.",
-	"app.update.state.verification": "Checking for updates…",
-	"app.update.state.aJour": "You have the latest version.",
-	"app.update.state.telechargement": "Downloading {version}: {pourcent}%",
-	"app.update.state.prete": "Version {version} is ready to install.",
-	"app.update.state.erreur": "Could not check for updates.",
 
 	/* ── Barre de titre et menu d'application (application seulement) ── */
 	"app.titlebar.menu": "Application menu",
@@ -77,23 +68,50 @@ export const EN_APP = {
 	   (tranche 9) — Réglages, application seulement : le greffon n'a rien à
 	   choisir, il lit le vault qui le contient. ── */
 	"app.settings.defaultFolder": "Quiz folder",
-	"app.settings.defaultFolderHint": "Neo Quiz creates its quizzes here. This folder cannot be removed.",
+	"app.settings.defaultFolderHint": "Neo Quiz creates its quizzes here. Change it and the previous folder is kept as an additional location — nothing is moved or copied.",
+	"app.settings.changeDefaultFolder": "Change",
 	"app.settings.extraFolders": "Additional locations",
-	"app.settings.extraFoldersHint": "Obsidian vaults and other folders you have opened.",
+	/* Les vaults d'Obsidian sont ouverts SANS CLIC au démarrage : le
+	   sous-titre le dit, sinon leur présence dans la liste passe pour une
+	   chose qu'on aurait faite soi-même et oubliée. Ce qu'une croix implique —
+	   le dossier reste sur le disque, et n'est plus rouvert — est passé dans
+	   l'INFOBULLE du bouton : deux phrases pour quatre lignes de liste
+	   pesaient plus que ce qu'elles expliquaient, et celle-là ne se lit qu'au
+	   moment où l'on vise la croix. */
+	"app.settings.extraFoldersHint": "Your Obsidian vaults open by themselves.",
+	"app.settings.folderAlreadyOpen": "This folder is already open.",
+	"app.settings.folderInsideOpen": "This folder is already inside one of your open folders. Add it from My quizzes → New folder → Open an existing folder.",
+	"app.settings.folderContainsOpen": "This folder contains one of your open folders.",
 
 	/* ── Réglages « Général » (application seulement) ── */
 	"app.settings.general": "General",
-	"app.reprise.label": "Reopen where you left off",
-	"app.reprise.hint": "At launch, Neo Quiz opens the last quiz and question you were on.",
 	"app.settings.languageAuto": "Automatic (follow Windows)",
 	"app.settings.languageHint": "Interface language. The installer sets it to the language of the download page; change it here at any time. Generated quizzes always follow the language of your prompt.",
 
 	/* ── Fond d'écran (application seulement) ── */
+	/* Les mises à jour : le titre remplace « About », retiré le 2026-09-17 — le
+	   menu d'application sert déjà la version et « Check for updates… », et une
+	   section qui ne fait que les répéter donne deux endroits à tenir à jour.
+	   Ne reste ici que ce que le menu n'a pas : le RÉGLAGE. */
+	"app.settings.updates": "Updates",
+
 	"app.settings.wallpaper": "Wallpaper",
-	"app.fond.none": "No folder chosen: the built-in wallpaper is used.",
+	/* Le crédit d'une photo embarquée : la licence d'Unsplash demande de citer
+	   l'auteur là où c'est raisonnable, et la ligne sous le nom de la photo est
+	   l'endroit où il est lu. Le NOM de l'auteur ne se traduit jamais. */
+	"app.fond.credit": "Photo by {auteur} — Unsplash",
+	"app.fond.yours": "From your folder",
+	"app.fond.cat.mountains": "Mountains",
+	"app.fond.cat.forest": "Forest",
+	"app.fond.cat.ocean": "Ocean",
+	"app.fond.cat.autumn": "Autumn",
+	"app.fond.cat.night": "Night",
+	"app.fond.cat.desert": "Desert",
+	"app.fond.cat.city": "City",
+	"app.fond.none": "Pick one below, or open a folder of your own.",
 	"app.fond.choose": "Choose a folder",
+	"app.fond.change": "Change",
 	"app.fond.remove": "Remove",
-	"app.fond.next": "Next wallpaper",
 	"app.fond.disparue": "The wallpaper image is gone; the first image of the folder is used.",
 	"app.fond.dossierVide": "No image in that folder; the built-in wallpaper is used.",
 } as const;

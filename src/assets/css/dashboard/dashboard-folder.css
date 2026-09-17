@@ -1,0 +1,336 @@
+/* ══════════════════════════════════════════════════════════
+   LES TROIS SECTIONS D'UN DOSSIER — Documents, Liens, Notes
+   (folder-sections.ts ; référence StudySmarter, capture 2026-09-17,
+   puis retour d'Ahmed à l'écran : UNE zone par section, bouton inclus)
+
+   Chaque section est UN panneau — la même surface glass que « Progrès »
+   (padding, rayon, liseré, ombre), et tout est dedans : l'en-tête
+   « icône · titre · compteur », la liste (ou l'état vide), et le bouton
+   d'action dans le pied. Le bouton est un contrôle de panneau, au style des
+   actions des hints de « Générer » (`qbd-ai-hint-action`) — jamais la
+   pilule blanche de « Nouveau quiz », qui est l'action de la PAGE.
+   ══════════════════════════════════════════════════════════ */
+
+/* La colonne principale du drill-down : la grille puis les sections,
+   empilées — le panneau « Progrès » reste dans la colonne de droite. */
+.qbd-quizzes-drill-main {
+	display: flex;
+	flex-direction: column;
+	gap: 22px;
+	min-width: 0;
+}
+
+.qbd-empty-state-hint {
+	margin-top: 4px;
+	font-size: 12px;
+	color: var(--text-faint);
+}
+
+.qbd-folder-sections {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+/* ── Le panneau ── */
+.qbd-folder-section {
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 18px 22px 16px;
+	min-width: 0;
+	border-radius: 18px;
+	border: 1px solid var(--qbd-glass-edge);
+	background: var(--qbd-glass-bg);
+	backdrop-filter: var(--qbd-glass-blur);
+	-webkit-backdrop-filter: var(--qbd-glass-blur);
+	box-shadow: var(--qbd-glass-sheen), var(--qbd-glass-shadow);
+}
+
+.qbd-folder-section-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.qbd-folder-section-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+.qbd-folder-section-icon {
+	display: inline-flex;
+	color: var(--text-muted);
+}
+
+.qbd-folder-section-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* Le compteur : la même typographie que « 0/3 quiz » du panneau Progrès. */
+.qbd-folder-section-count {
+	font-family: var(--font-monospace, monospace);
+	font-size: 11px;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+/* ── L'état vide : deux lignes, à gauche, sans boîte dans la boîte ── */
+.qbd-folder-empty {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 2px 0 4px;
+}
+
+.qbd-folder-empty-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.qbd-folder-empty-hint {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+/* ── La liste : des rangées séparées par un trait, dans le panneau. Chaque
+   rangée = un bouton « ouvrir » sur toute la largeur + la corbeille, révélée
+   au survol et au focus (folder-sections.ts : deux boutons dans un div). ── */
+.qbd-folder-list {
+	display: flex;
+	flex-direction: column;
+	margin: 0 -10px;
+}
+
+.qbd-folder-item {
+	display: flex;
+	align-items: center;
+	border-radius: 10px;
+	transition: background 0.15s ease;
+}
+
+.qbd-folder-item + .qbd-folder-item {
+	/* Le trait est posé en dégradé de fond, pas en bordure : une bordure
+	   supérieure suivrait le rayon de la rangée survolée et se casserait. */
+	background-image: linear-gradient(color-mix(in srgb, var(--qbd-glass-edge) 60%, transparent), color-mix(in srgb, var(--qbd-glass-edge) 60%, transparent));
+	background-size: calc(100% - 20px) 1px;
+	background-repeat: no-repeat;
+	background-position: 10px 0;
+}
+
+.qbd-folder-item:hover,
+.qbd-folder-item:focus-within {
+	background-color: color-mix(in srgb, var(--text-normal) 6%, transparent);
+}
+
+.qbd-folder-item-open {
+	appearance: none;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex: 1;
+	min-width: 0;
+	padding: 9px 10px;
+	border: 0;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--text-normal);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.qbd-folder-item-delete {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	margin-right: 6px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--text-faint);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.qbd-folder-item:hover .qbd-folder-item-delete,
+.qbd-folder-item:focus-within .qbd-folder-item-delete {
+	opacity: 1;
+}
+
+.qbd-folder-item-delete:hover {
+	color: var(--text-error, #f87171);
+	background: color-mix(in srgb, var(--text-error, #f87171) 12%, transparent);
+}
+
+.qbd-folder-item-delete svg {
+	width: 15px;
+	height: 15px;
+}
+
+/* Le focus clavier se voit : jamais `outline: none` sans remplaçant. */
+.qbd-folder-item-open:focus-visible,
+.qbd-folder-item-delete:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: -2px;
+}
+
+.qbd-folder-item-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+
+.qbd-folder-item-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+.qbd-folder-item-name {
+	flex: 1;
+	min-width: 0;
+	font-size: 13px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qbd-folder-item-meta {
+	flex-shrink: 0;
+	font-family: var(--font-monospace, monospace);
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--text-faint);
+}
+
+/* ── Le glisser-déposer (Documents) : pendant le survol d'un fichier, le
+   liseré passe à l'accent et un voile nomme le geste (`data-drop-hint`,
+   posé par folder-sections.ts). `position: relative` sur le panneau pour
+   que le voile le couvre, et lui seul. ── */
+.qbd-folder-section[data-drop-hint] {
+	position: relative;
+}
+
+.qbd-folder-section.is-dragover {
+	border-color: color-mix(in srgb, var(--interactive-accent) 70%, var(--qbd-glass-edge));
+}
+
+.qbd-folder-section.is-dragover::after {
+	content: attr(data-drop-hint);
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: inherit;
+	background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-primary));
+	color: var(--text-normal);
+	font-size: 14px;
+	font-weight: 600;
+	/* Le voile ne doit pas VOLER les évènements de dépose au panneau : c'est
+	   le panneau qui écoute, et un enfant qui les capte compterait comme un
+	   `dragleave` du parent. */
+	pointer-events: none;
+}
+
+/* ── Le pied : le bouton d'action, à droite, DANS le panneau ── */
+.qbd-folder-section-foot {
+	display: flex;
+	justify-content: flex-end;
+	padding-top: 2px;
+}
+
+/* Copie assumée du style des actions de hint (`qbd-ai-hint-action`,
+   dashboard-ai.css) : même fond, même liseré, même survol à liseré accent
+   adouci. Recopié plutôt qu'importé par la classe : ce bouton n'est pas dans
+   une grille de hint (`grid-area: action`), et une classe commune tirerait
+   ce placement avec elle. Un cran plus grand : c'est l'action d'un panneau
+   de page, pas d'une ligne d'aide. */
+.qbd-folder-section-action {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 7px 13px;
+	font-size: 12px;
+	font-weight: 600;
+	font-family: var(--font-interface, inherit);
+	color: var(--text-normal);
+	background: color-mix(in srgb, var(--background-primary) 85%, transparent) !important;
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: none !important;
+	border-radius: var(--radius-m, 8px);
+	height: auto;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: border-color 0.16s ease, background 0.16s ease,
+		color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.qbd-folder-section-action:hover {
+	border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary)) !important;
+	transform: translateY(-1px);
+	box-shadow: 0 3px 8px -4px rgba(0, 0, 0, 0.4) !important;
+}
+
+.qbd-folder-section-action:active {
+	transform: translateY(0);
+	background: color-mix(in srgb, var(--text-normal) 10%, var(--background-primary)) !important;
+	box-shadow: none !important;
+}
+
+.qbd-folder-section-action:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+
+.qbd-folder-section-action-icon {
+	display: inline-flex;
+	align-items: center;
+}
+
+.qbd-folder-section-action-icon svg {
+	width: 13px;
+	height: 13px;
+}
+
+/* Section vide : l'état vide et le bouton sur UNE ligne, texte à gauche,
+   bouton à droite — la zone reste basse. */
+.qbd-folder-section--vide {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-areas:
+		"head head"
+		"vide foot";
+	align-items: center;
+	column-gap: 16px;
+}
+
+.qbd-folder-section--vide .qbd-folder-section-head { grid-area: head; }
+.qbd-folder-section--vide .qbd-folder-empty { grid-area: vide; }
+.qbd-folder-section--vide .qbd-folder-section-foot { grid-area: foot; padding-top: 0; }
+
+@media (max-width: 640px) {
+	.qbd-folder-section--vide {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas:
+			"head"
+			"vide"
+			"foot";
+	}
+	.qbd-folder-section--vide .qbd-folder-section-foot { justify-content: flex-start; }
+}

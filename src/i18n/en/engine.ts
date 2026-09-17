@@ -43,13 +43,13 @@ export const EN_ENGINE = {
 	"engine.start.selectorAria": "Choose the quiz mode",
 	"engine.start.examTitle": "Exam",
 	"engine.start.examSub": "Timed multiple choice",
-	"engine.start.trainingTitle": "Practice",
-	"engine.start.trainingSub": "Free-text answers",
+	"engine.start.learnTitle": "Learn",
+	"engine.start.learnSub": "No timer, corrected after each answer",
 
 	/* ── Mode examen ── */
 	"engine.exam.chooseMode": "Choose your mode",
 	"engine.exam.startExam": "Start the exam",
-	"engine.exam.startTraining": "Start practising",
+	"engine.exam.startLearn": "Start learning",
 	"engine.exam.noTimer": "No timer",
 	"engine.exam.duration.one": "Duration: {minutes} minute",
 	"engine.exam.duration.other": "Duration: {minutes} minutes",

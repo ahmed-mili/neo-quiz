@@ -32,6 +32,21 @@ import { tmpdir } from "node:os";
 const [setup, cible, ...drapeaux] = process.argv.slice(2);
 const vider = drapeaux.includes("--vider");
 
+/** Le dossier cible est CRÉÉ par ce script (`mkdir`, dans `mesurer`). Un
+    chemin qui contient des espaces et qu'on a oublié de CITER ne produit donc
+    pas une erreur : il crée son PREMIER MOT pour de bon. `C:\Program
+    Files\Neo Quiz` non cité a ainsi laissé un `C:\Program` vide à la racine
+    du disque, et Windows avertit à chaque démarrage qu'un tel nom détourne
+    les chemins non cités (il cherche `C:\Program.exe` avant
+    `C:\Program Files\...`). D'où la règle : après `<setup.exe>` et
+    `<dossier>`, seuls les DRAPEAUX CONNUS sont acceptés, et le premier
+    argument doit finir par `.exe`. Un argument de plus est le reste d'un
+    chemin coupé, pas une option. */
+const DRAPEAUX_CONNUS = ["--vider"];
+const inconnus = drapeaux.filter(d => !DRAPEAUX_CONNUS.includes(d));
+const USAGE = "Usage : node scripts/mesurer-installation.mjs <setup.exe> <dossier> [--vider]";
+const CITER = "Un chemin qui contient des espaces doit être CITÉ : sans guillemets, le dossier créé serait son premier mot.";
+
 
 /** La même somme récursive que `worker.ts` : une entrée qui disparaît ou se
     verrouille pendant que NSIS écrit est normale, jamais fatale. */
@@ -167,7 +182,17 @@ async function mesurer({ suivre, suiviInitial }) {
 }
 
 if (!setup || !cible) {
-	console.error("Usage : node scripts/mesurer-installation.mjs <setup.exe> <dossier> [--vider]");
+	console.error(USAGE);
+	process.exitCode = 1;
+} else if (inconnus.length > 0) {
+	console.error(`Argument inattendu : ${inconnus.join(" ")}`);
+	console.error(CITER);
+	console.error(USAGE);
+	process.exitCode = 1;
+} else if (!setup.toLowerCase().endsWith(".exe")) {
+	console.error(`Ce n'est pas un installeur : ${setup}`);
+	console.error(CITER);
+	console.error(USAGE);
 	process.exitCode = 1;
 } else {
 	/* Le CODE RÉEL du noyau, jamais une réplique : la colonne « barre » de la

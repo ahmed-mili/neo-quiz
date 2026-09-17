@@ -12,7 +12,7 @@
  */
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
-await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, idUnique, segmentValide, MAX_DOSSIERS, appliquerExamDate, saveFolders, savedFolders, removeFolder }) => {
+await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, idUnique, segmentValide, MAX_DOSSIERS, appliquerExamDate, saveFolders, savedFolders, addFolder, removeFolder, ouvrirVaultsDetectes, lienAvecRacines }) => {
 	const r = makeReporter("Dossiers — réglage et identifiants");
 
 	r.check("aucun réglage : aucune racine", lireDossiers({}), []);
@@ -194,7 +194,67 @@ await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, id
 			reglagesEcrits.length = 0;
 			await removeFolder("Perso");
 			r.check("removeFolder retire un dossier ordinaire sans jamais écrire le défaut",
-				reglagesEcrits, [["folders", []]]);
+				reglagesEcrits.filter(([cle]) => cle === "folders"), [["folders", []]]);
+			/* ÉCARTÉ EN MÊME TEMPS, et c'est ce qui rend la croix durable : les
+			   vaults Obsidian de la machine sont rouverts à chaque démarrage
+			   (`ouvrirVaultsDetectes`), donc un retrait qui ne laisse aucune
+			   trace est un retrait qui ne tient pas jusqu'au lancement suivant. */
+			r.check("removeFolder écarte le chemin retiré",
+				reglagesEcrits.filter(([cle]) => cle === "dismissedFolders"),
+				[["dismissedFolders", ["D:/Perso"]]]);
+		} finally {
+			if (precedent === undefined) delete globalThis.window;
+			else globalThis.window = precedent;
+		}
+	}
+
+	/* ── L'OUVERTURE AUTOMATIQUE DES VAULTS OBSIDIAN (2026-09-17) ──
+
+	   Tout vault déclaré par Obsidian est ouvert au démarrage, sans un clic.
+	   Ce qui s'éprouve ici est la seule chose qui empêche cette commodité de
+	   devenir un piège : un vault RETIRÉ à la croix ne doit pas revenir au
+	   lancement suivant. Sans la liste des écartés, la croix serait un bouton
+	   qui ne retire rien au-delà de la session — et personne ne s'en
+	   apercevrait avant le troisième essai.
+
+	   Le second cas est l'envers du premier : rouvrir à la main un vault
+	   écarté doit le faire SORTIR de la liste, sinon il resterait le seul
+	   vault de la machine que l'ouverture automatique saute, sans rien pour
+	   l'expliquer. */
+	{
+		const precedent = globalThis.window;
+		const vaults = [{ chemin: "C:/obsidian-vaults/Personal", nom: "Personal" }, { chemin: "C:/obsidian-vaults/Efrei", nom: "Efrei" }];
+		const faireFenetre = (reglages, ecrits) => ({
+			neo: {
+				fichiers: { async exists() { return true; } },
+				reglages: {
+					async lire(cle) { return reglages[cle]; },
+					async ecrire(cle, valeur) { ecrits.push([cle, valeur]); reglages[cle] = valeur; },
+					async supprimer() {},
+				},
+				systeme: { async dossierDefaut() { return "C:/Neo Quiz"; }, async vaultsObsidian() { return vaults; } },
+			},
+		});
+		try {
+			const ecrits = [];
+			const reglages = {};
+			globalThis.window = faireFenetre(reglages, ecrits);
+			r.check("les vaults détectés sont ouverts au démarrage", await ouvrirVaultsDetectes(), 2);
+			r.check("une seule écriture, quel que soit le nombre de vaults",
+				ecrits.filter(([cle]) => cle === "folders").length, 1);
+			r.check("ils ne sont pas rouverts une seconde fois", await ouvrirVaultsDetectes(), 0);
+
+			const ecrits2 = [];
+			const reglages2 = { folders: [{ id: "Personal", path: "C:/obsidian-vaults/Personal", name: "Personal" }], dismissedFolders: [] };
+			globalThis.window = faireFenetre(reglages2, ecrits2);
+			await removeFolder("Personal");
+			r.check("un vault retiré ne revient PAS au démarrage suivant", await ouvrirVaultsDetectes(), 1);
+			r.check("et c'est bien l'autre vault qui a été ouvert",
+				(reglages2.folders ?? []).map(d => d.path), ["C:/obsidian-vaults/Efrei"]);
+
+			await addFolder("C:/obsidian-vaults/Personal");
+			r.check("le rouvrir à la main le fait sortir des écartés",
+				reglages2.dismissedFolders, []);
 		} finally {
 			if (precedent === undefined) delete globalThis.window;
 			else globalThis.window = precedent;
@@ -228,7 +288,63 @@ await withSrcModule("apps/windows/src/host/folder.ts", async ({ lireDossiers, id
 
 			await removeFolder("Neo Quiz-2");
 			r.check("removeFolder retire le dossier renuméroté, pas le défaut",
-				reglagesEcrits, [["folders", []]]);
+				reglagesEcrits.filter(([cle]) => cle === "folders"), [["folders", []]]);
+		} finally {
+			if (precedent === undefined) delete globalThis.window;
+			else globalThis.window = precedent;
+		}
+	}
+
+	/* ── Deux racines ne se recouvrent JAMAIS (2026-09-17) ──
+	   `addFolder` ne refusait que le doublon EXACT. Un dossier ouvert DANS
+	   une racine déjà ouverte (le dossier d'un cours dans un vault) passait :
+	   deux racines gigognes, donc deux chemins du contrat pour le même
+	   fichier — « la plus longue racine gagne » dans `depuisAbsolu` —, donc
+	   deux historiques de révision pour la même question. Le prédicat est
+	   pur ; `addFolder` s'en sert, et le refus se voit sur la liste rendue. */
+	{
+		const racines = [{ path: "C:/obsidian-vaults/Efrei" }, { path: "C:/Neo Quiz" }];
+		r.check("un chemin sans lien avec les racines est libre",
+			lienAvecRacines("D:/Cours", racines), "libre");
+		r.check("la même racine est un doublon",
+			lienAvecRacines("C:/obsidian-vaults/Efrei", racines), "doublon");
+		r.check("un dossier SOUS une racine ouverte est dedans",
+			lienAvecRacines("C:/obsidian-vaults/Efrei/B2 (2026-2027)/XTI301", racines), "dedans");
+		r.check("un dossier AU-DESSUS d'une racine ouverte la contient",
+			lienAvecRacines("C:/obsidian-vaults", racines), "contient");
+		r.check("la casse est ignorée, comme sur le disque et dans depuisAbsolu",
+			lienAvecRacines("c:/OBSIDIAN-VAULTS/efrei/Cours", racines), "dedans");
+		r.check("les séparateurs Windows et la barre finale ne changent rien",
+			lienAvecRacines("C:\\obsidian-vaults\\Efrei\\", racines), "doublon");
+		r.check("un préfixe de NOM n'est pas un préfixe de CHEMIN",
+			lienAvecRacines("C:/obsidian-vaults/Efrei2", racines), "libre");
+
+		const precedent = globalThis.window;
+		const reglages = { folders: [{ id: "Efrei", path: "C:/obsidian-vaults/Efrei", name: "Efrei" }], dismissedFolders: [] };
+		const ecrits = [];
+		globalThis.window = {
+			neo: {
+				fichiers: { async exists() { return true; } },
+				reglages: {
+					async lire(cle) { return reglages[cle]; },
+					async ecrire(cle, valeur) { ecrits.push([cle, valeur]); reglages[cle] = valeur; },
+					async supprimer() {},
+				},
+				systeme: { async dossierDefaut() { return "C:/Neo Quiz"; } },
+			},
+		};
+		try {
+			const apres = await addFolder("C:/obsidian-vaults/Efrei/B2 (2026-2027)/XTI301");
+			r.check("addFolder refuse un dossier sous une racine ouverte",
+				apres.filter(d => !d.parDefaut).map(d => d.path), ["C:/obsidian-vaults/Efrei"]);
+			r.check("et n'écrit rien",
+				ecrits.filter(([cle]) => cle === "folders").length, 0);
+			const dessus = await addFolder("C:/obsidian-vaults");
+			r.check("addFolder refuse un dossier qui contient une racine ouverte",
+				dessus.filter(d => !d.parDefaut).map(d => d.path), ["C:/obsidian-vaults/Efrei"]);
+			const libre = await addFolder("D:/Cours");
+			r.check("et accepte toujours un dossier sans lien",
+				libre.filter(d => !d.parDefaut).map(d => d.path), ["C:/obsidian-vaults/Efrei", "D:/Cours"]);
 		} finally {
 			if (precedent === undefined) delete globalThis.window;
 			else globalThis.window = precedent;

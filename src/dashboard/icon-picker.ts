@@ -1,7 +1,7 @@
 import { currentHost } from "../host/current";
 import { ajouter } from "../dom";
 import { t } from "../i18n";
-import { MODULE_ICONS, DEFAULT_MODULE_ICON } from "./module-icons";
+import { MODULE_ICONS } from "./module-icons";
 
 /* ══════════════════════════════════════════════════════════
    ICON PICKER — sélecteur d'icône Lucide pour la carte de module
@@ -11,12 +11,6 @@ import { MODULE_ICONS, DEFAULT_MODULE_ICON } from "./module-icons";
    (icônes proposées d'après le module, cf. icon-suggest.ts) et une
    grille curée par défaut. Un clic émet onChange + ferme.
 ══════════════════════════════════════════════════════════ */
-
-/* `MODULE_ICONS`/`DEFAULT_MODULE_ICON` vivent désormais dans module-icons.ts
-   (données pures, tour de correction 1, tâche 6) — ré-exportées ici pour ne
-   rien changer aux appelants existants (module-edit.ts, toujours dans
-   RESTANTS) qui les importaient d'ici. */
-export { MODULE_ICONS, DEFAULT_MODULE_ICON };
 
 const COLS = 6;
 const CELL = 34;

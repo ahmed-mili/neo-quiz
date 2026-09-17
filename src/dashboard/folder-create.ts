@@ -10,6 +10,7 @@ import { parseZip } from "./zip";
 import { QUIZ_BLOCK_RE } from "../quiz-utils";
 import { makeDefault } from "../editor/utils";
 import { exportAllWithFence } from "../editor/export";
+import { cheminsAJoindre, lireContenuDossier } from "./folder-contents";
 
 /* ══════════════════════════════════════════════════════════
    CREATE FOLDER — modal « Créer un dossier » calqué sur StudySmarter
@@ -63,6 +64,14 @@ export function openCreateFolderModal(
 			}
 			createOptionCard(m, c, "folder-plus", "#4573ff", t("dashboard.quizzes.createEmptyTitle"), t("dashboard.quizzes.createEmptyDesc"),
 				() => openNewFolderModal(ctx, map, quizzes, onDone));
+			/* MASQUÉE sous le greffon, comme la carte IA et pour une raison du
+			   même ordre : sous Obsidian, le vault EST le dossier ouvert, il n'y
+			   a aucun dossier à désigner. Les deux premières CRÉENT, celle-ci
+			   RATTACHE de l'existant, la dernière IMPORTE du reçu. */
+			if (ctx.openExistingFolder) {
+				createOptionCard(m, c, "folder-open", "#f5a524", t("dashboard.quizzes.createOpenTitle"), t("dashboard.quizzes.createOpenDesc"),
+					() => ctx.openExistingFolder!(onDone));
+			}
 			createOptionCard(m, c, "download", "#a78bfa", t("dashboard.quizzes.createImportTitle"), t("dashboard.quizzes.createImportDesc"),
 				() => void importSharedFolder(ctx, map, quizzes, onDone));
 		},
@@ -85,8 +94,18 @@ export function openCreateQuizModal(
 			const c = m.contentEl;
 			// Même garde, même raison qu'`openCreateFolderModal` ci-dessus.
 			if (ctx.canOpen("ai")) {
-				createOptionCard(m, c, "sparkles", "#3ddc84", t("dashboard.quizzes.createAiTitle"), t("dashboard.quizzes.createAiDesc"),
-					() => ctx.navigate("ai"));
+				/* DEPUIS UN DOSSIER (2026-09-17) : la page « Générer » arrive avec
+				   ce dossier en destination et ses documents et notes déjà joints
+				   (`NavigateData.aiPreset`). Le contenu se lit d'abord — `listDir`
+				   est asynchrone —, la navigation suit. Un dossier illisible rend
+				   trois listes vides, et on navigue quand même : la destination,
+				   elle, reste juste. */
+				createOptionCard(m, c, "sparkles", "#3ddc84", t("dashboard.quizzes.createAiTitle"), t("dashboard.quizzes.createAiDescFolder"),
+					() => {
+						void lireContenuDossier(folder, (path) => !!ctx.scanner.getQuiz(path)).then(contenu => {
+							ctx.navigate("ai", { aiPreset: { destination: folder, attach: cheminsAJoindre(contenu) } });
+						});
+					});
 			}
 			createOptionCard(m, c, "file-plus", "#4573ff", t("dashboard.quizzes.createQuizEmptyTitle"), t("dashboard.quizzes.createQuizEmptyDesc"),
 				() => void createQuizInFolder(ctx, folder));

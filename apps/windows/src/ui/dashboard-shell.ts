@@ -36,17 +36,20 @@ import { createHomeHandlers } from "../../../../src/dashboard/home";
 import { createQuizzesHandlers } from "../../../../src/dashboard/quizzes";
 import { createDetailHandlers } from "../../../../src/dashboard/detail";
 import { createAiHandlers } from "../../../../src/dashboard/ai";
+import { aiSettingsDefaults } from "../../../../src/dashboard/ai-settings-host";
 import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host";
 import { openIconPicker } from "../../../../src/dashboard/icon-picker";
 import { openCreateFolderModal, openCreateQuizModal } from "../../../../src/dashboard/folder-create";
 import { buildModuleCardMenu, buildQuizCardMenu } from "../../../../src/dashboard/quiz-menu";
 import { createSelect, openActionMenu } from "../../../../src/dashboard/ui-select";
-import type { DashboardPageSettings, DashboardShellCtx, DashboardViewName } from "../../../../src/types/dashboard-ctx";
+import type { DashboardPageSettings, DashboardShellCtx, DashboardViewName, NavigateData } from "../../../../src/types/dashboard-ctx";
 import type { QuizIndexEntry, Scanner } from "../../../../src/dashboard/scanner";
 import type { StatsStore } from "../../../../src/dashboard/stats-store";
 import type { ReviewStore } from "../../../../src/review/review-store";
 import type { ModuleOverride } from "../../../../src/dashboard/quiz-modules";
-import { ecrireReglage, lireReglage } from "../host/folder";
+import { ecrireReglage, estVaultObsidian, examDates, lireReglage, pickFolder, savedFolders, setExamDate as setExamDateReglage } from "../host/folder";
+import { cleModule } from "../review/catalogue";
+import { pont } from "../host/pont";
 import { monterBoutonRail } from "./mise-a-jour";
 import { noterVue } from "./reprise";
 import type { DerniereVue } from "./reprise";
@@ -179,6 +182,17 @@ export interface MonterDashboardDeps {
 	reviewStore: ReviewStore;
 	/** Les réglages IA de l'application (`main.ts`), pour la page « Générer ». */
 	aiSettings: AiSettingsHost;
+	/** Traduit un chemin ABSOLU du disque en chemin du CONTRAT, ou `null` s'il
+	    ne relève d'aucune racine ouverte. C'est `depuisAbsolu` de la carte des
+	    racines (`main.ts`), passée et non recopiée : elle porte la règle « la
+	    plus longue racine gagne », sans laquelle un dossier ouvert dans un
+	    autre donnerait deux chemins pour le même fichier — donc deux
+	    historiques de révision. */
+	cheminDuContrat(absolu: string): string | null;
+	/** L'inverse : chemin du contrat → chemin ABSOLU, ou `null` hors racines.
+	    Pour `ctx.openPath` (ouvrir un document avec le système), qui parle au
+	    principal en chemin absolu — `systeme.ouvrir`, borné au périmètre. */
+	cheminAbsolu(contrat: string): string | null;
 	onOpenQuiz(entry: QuizIndexEntry): void;
 	onOpenSettings(): void;
 }
@@ -237,6 +251,64 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 			openIconPicker(anchor, courante, onPick, document.body, suggestions ?? []);
 		},
 		createFolder: (map, quizzes, done) => openCreateFolderModal(ctx, map, quizzes, done),
+		openExistingFolder: (done) => { void ouvrirDossierExistant(done); },
+		/* Le SAS des quiz générés : le MÊME calcul que `saveGeneratedQuiz`
+		   (ai.ts, `defaultDestination`) — racine par défaut + `aiOutputFolder`.
+		   Lu à chaque appel : le réglage peut changer sans remonter la coquille. */
+		/* Ouvrir un document (PDF, image) du dossier avec l'application du
+		   système : `systeme.ouvrir` du pont, BORNÉ au périmètre par le principal
+		   et fermé aux extensions exécutables (`EXTENSIONS_EXECUTABLES`). Le
+		   rendu ne transmet qu'un chemin qu'il a lui-même traduit depuis le
+		   contrat — jamais un chemin venu d'ailleurs. */
+		openPath: async (path) => {
+			const absolu = deps.cheminAbsolu(path);
+			if (!absolu) return false;
+			try { return await pont().systeme.ouvrir(absolu); } catch { return false; }
+		},
+		/* Une note de VAULT s'ouvre dans Obsidian, par l'URI `obsidian://open`
+		   (le principal la remet à `shell.openExternal`, comme un lien web).
+		   Le nom du vault est le nom de son dossier — c'est ainsi qu'Obsidian
+		   les nomme —, et le chemin de la note est LOCAL à la racine, sans
+		   `.md`. Un dossier qui n'est pas un vault rend `false`, et l'appelant
+		   ouvre la note par le système. */
+		openInObsidian: async (path) => {
+			const host = currentHost();
+			const racine = host.paths.rootOf(path);
+			if (!racine) return false;
+			const absolu = deps.cheminAbsolu(racine.id);
+			if (!absolu || !(await estVaultObsidian(absolu))) return false;
+			const vault = absolu.replace(/\/+$/, "").split("/").pop() ?? "";
+			if (!vault) return false;
+			const local = host.paths.localPath(path).replace(/\.md$/i, "");
+			window.open(`obsidian://open?vault=${encodeURIComponent(vault)}&file=${encodeURIComponent(local)}`, "_blank");
+			return true;
+		},
+		/* `fichiers.stat` du pont, borné au périmètre par le principal comme
+		   toute lecture — `null` si absent ou si c'est un dossier. */
+		fileMtime: async (path) => {
+			const absolu = deps.cheminAbsolu(path);
+			if (!absolu) return null;
+			try { return (await pont().fichiers.stat(absolu))?.mtime ?? null; } catch { return null; }
+		},
+		/* Le chemin absolu, pour le presse-papiers. Les SÉPARATEURS sont ceux
+		   du système : le pont parle en « / » partout, mais un chemin Windows
+		   collé dans l'explorateur ou envoyé à quelqu'un s'écrit avec des
+		   « \\ ». Le test porte sur la LETTRE DE LECTEUR et non sur une
+		   variable d'environnement : c'est la seule chose qui distingue ici un
+		   chemin Windows d'un chemin POSIX, et `pack:linux` existe. */
+		copyText: async (texte) => {
+			try { await pont().systeme.copierTexte(texte); return true; } catch { return false; }
+		},
+		absolutePath: (path) => {
+			const absolu = deps.cheminAbsolu(path);
+			if (!absolu) return null;
+			return /^[a-zA-Z]:\//.test(absolu) ? absolu.replace(/\//g, "\\") : absolu;
+		},
+		generatedFolder: () => {
+			const host = currentHost();
+			const local = deps.aiSettings.get().aiOutputFolder || aiSettingsDefaults().aiOutputFolder;
+			return host.paths.contractPath(host.paths.defaultRoot().id, local);
+		},
 		renderGroupingSelect: (container, opts) => createSelect(container, opts),
 		/* Les MÊMES bâtisseurs que le greffon (`src/dashboard.ts`), sur le
 		   même `ctx` : le menu « ⋯ » ne demande que `DashboardShellCtx` depuis
@@ -247,6 +319,30 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 		},
 		openModuleMenu: (group, anchor, rerender, map) => {
 			openActionMenu(anchor, buildModuleCardMenu(ctx, rerender, map)(group, anchor));
+		},
+		/* LA DATE D'EXAMEN D'UN DOSSIER, saisie dans « Modifier dossier »
+		   (menu « ⋯ » d'une carte de module) — elle n'a plus de section dans
+		   les Réglages depuis le 2026-09-17 : la régler à l'endroit où on voit
+		   le dossier vaut mieux qu'une liste plate de toutes les matières,
+		   dont deux pouvaient porter le même nom.
+
+		   LA CONVERSION DE CLÉ EST ICI, et nulle part ailleurs : le code
+		   partagé ne connaît qu'un nom de segment, l'ordonnanceur veut une clé
+		   qui porte la racine. N'IMPORTE QUEL quiz du groupe la donne — ils
+		   sont tous dans le même dossier, donc tous sous la même clé (la page
+		   n'appelle jamais ces membres sur un groupe vide, et `cleModule`
+		   n'aurait alors rien à lire). */
+		examDate: group => {
+			const quiz = group.quizzes[0];
+			return quiz ? examDates()[cleModule(quiz.path, currentHost().paths)] : undefined;
+		},
+		setExamDate: (group, date) => {
+			const quiz = group.quizzes[0];
+			if (!quiz) return;
+			/* `setExamDate` met la table à jour EN MÉMOIRE de façon synchrone
+			   avant d'écrire : le plan, qui la relit à chaque calcul, est déjà
+			   juste quand la promesse d'écriture est encore en vol. */
+			void setExamDateReglage(cleModule(quiz.path, currentHost().paths), date ?? "");
 		},
 		// « Nouveau quiz » : une note vierge, puis sa page en ÉDITION par
 		// `openQuizPath` ci-dessous — l'éditeur existe désormais dans la fenêtre.
@@ -304,7 +400,81 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 		scanner: deps.scanner,
 		statsStore: deps.statsStore,
 		navigate: (vue, data) => naviguer(vue, data),
+		quizFolders: () => dossiersDeQuiz(),
 	});
+
+	/**
+	 * Les dossiers proposés comme destination d'un quiz généré.
+	 *
+	 * DEUX sources, et il faut les deux. Les dossiers DÉCLARÉS (« Créer un
+	 * dossier vide », « Ouvrir un dossier existant ») portent leur chemin dans
+	 * les réglages : c'est la seule trace d'un dossier encore vide, celui
+	 * qu'on vient justement de désigner pour y écrire. Et les dossiers où des
+	 * quiz vivent DÉJÀ, déduits du catalogue : ils n'ont jamais été déclarés,
+	 * mais ce sont les plus probables.
+	 *
+	 * Le dossier PARENT de chaque quiz, et non son module : un quiz rangé dans
+	 * un sous-dossier de sa matière doit proposer SON dossier, là où le module
+	 * renverrait toute une UE sur un seul emplacement.
+	 */
+	function dossiersDeQuiz(): { path: string; name: string }[] {
+		const vus = new Map<string, string>();
+		for (const [cle, ov] of Object.entries(ctx.settings.quizzesModuleOverrides || {})) {
+			if (ov?.path) vus.set(ov.path, ov.name?.trim() || cle);
+		}
+		for (const q of deps.scanner.getQuizzes()) {
+			const coupe = q.path.lastIndexOf("/");
+			if (coupe <= 0) continue;
+			const dossier = q.path.slice(0, coupe);
+			if (!vus.has(dossier)) vus.set(dossier, dossier.split("/").pop() as string);
+		}
+		return [...vus.entries()]
+			.map(([path, name]) => ({ path, name }))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
+	 * « Ouvrir un dossier existant » : le sélecteur natif, puis la DÉCLARATION
+	 * du dossier choisi.
+	 *
+	 * Ce n'est PAS `addFolder` (qui ouvre une RACINE), et la distinction est
+	 * tout l'intérêt : le dossier visé est presque toujours dans une racine
+	 * déjà ouverte — un dossier de cours dans un vault. L'ajouter comme
+	 * seconde racine donnerait deux chemins du contrat pour les mêmes fichiers,
+	 * donc deux historiques de révision pour les mêmes questions. Ici on ne
+	 * déclare qu'un DOSSIER DE QUIZ : une entrée dans les overrides, avec son
+	 * chemin, que « Nouveau quiz » et la page « Générer » savent viser.
+	 */
+	async function ouvrirDossierExistant(done: () => void): Promise<void> {
+		const choisi = await pickFolder();
+		// Annulation : ce n'est pas une erreur, c'est la réponse « non ».
+		if (!choisi) return;
+		const contrat = deps.cheminDuContrat(choisi);
+		if (!contrat) {
+			/* Hors racines : deux causes, deux messages. Un dossier qui CONTIENT
+			   une racine ouverte mérite le sien — répondre « il est dehors »
+			   quand on vient de désigner le parent de son vault ne dit pas quoi
+			   faire. Dans les deux cas on refuse : l'ouvrir ferait la racine
+			   gigogne que `depuisAbsolu` existe pour empêcher. */
+			const racines = await savedFolders();
+			const prefixe = choisi.toLowerCase() + "/";
+			const contient = racines.some(r => r.path.toLowerCase().startsWith(prefixe));
+			currentHost().ui.notice(t(contient
+				? "dashboard.quizzes.createOpenContains"
+				: "dashboard.quizzes.createOpenOutside"));
+			return;
+		}
+		/* La CLÉ reste un segment (c'est ce que lisent `moduleForQuiz` et les
+		   overrides), le CHEMIN est ce qui rend le dossier écrivable. Un nom
+		   déjà déclaré n'est pas écrasé : on ne fait que lui donner son chemin. */
+		const cle = contrat.split("/").pop() as string;
+		const overrides: Record<string, ModuleOverride> = { ...(ctx.settings.quizzesModuleOverrides || {}) };
+		overrides[cle] = { ...(overrides[cle] || {}), name: overrides[cle]?.name || cle, path: contrat };
+		ctx.settings.quizzesModuleOverrides = overrides;
+		await ctx.saveSettings();
+		currentHost().ui.notice(t("dashboard.quizzes.createOpenDone", { name: cle }));
+		done();
+	}
 
 	/** Demande « ouvrir en édition » posée par `naviguer("detail", { edit })`
 	    et consommée par le prochain `peindre()` — une seule fois, le mode
@@ -392,7 +562,11 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	 *   ne gouverne que l'état du rail. Le routeur le consulte quand même :
 	 *   une SEULE source de vérité entre le rail et lui.
 	 */
-	function naviguer(vue: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void {
+	function naviguer(vue: DashboardViewName, data?: NavigateData): void {
+		/* « Créer avec l'IA » depuis un dossier : le préréglage est posé sur
+		   la page AVANT qu'elle se peigne — c'est son premier `render` qui
+		   joint les sources, et il a besoin de la destination déjà connue. */
+		if (vue === "ai" && data?.aiPreset) ai.preset(data.aiPreset);
 		if (vue === "detail") {
 			if (!data?.quiz) return;
 			quizSelectionne = data.quiz;

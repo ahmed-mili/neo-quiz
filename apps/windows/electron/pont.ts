@@ -337,6 +337,13 @@ export interface Pont {
 		    l'utilisateur, et un `void` obligerait l'hôte à inventer un `true`
 		    qui mentirait. */
 		ouvrir(abs: string): Promise<boolean>;
+		/** Écrit du TEXTE dans le presse-papiers. Par le principal et non par
+		    `navigator.clipboard` : dans la fenêtre, `writeText` fait demander la
+		    permission `clipboard-read` (mesuré le 2026-09-17), que le gardien de
+		    `main.ts` refuse avec toutes les autres — et l'autoriser pour pouvoir
+		    ÉCRIRE donnerait à la page le droit de LIRE le presse-papiers.
+		    N'expose aucune lecture : le rendu écrit, il ne relit jamais. */
+		copierTexte(texte: string): Promise<void>;
 		/** Les vaults qu'Obsidian connaît. Une liste vide est un état NORMAL
 		    (Obsidian absent de la machine), pas une erreur. */
 		vaultsObsidian(): Promise<VaultConnu[]>;
@@ -345,6 +352,44 @@ export interface Pont {
 		    argument : ce chemin n'est jamais choisi par le rendu, seulement
 		    lu — voir `electron/dossier-defaut.ts`. */
 		dossierDefaut(): Promise<string>;
+		/**
+		 * CHANGE le dossier de quiz par défaut, et rend son nouveau chemin —
+		 * `null` si l'utilisateur a annulé.
+		 *
+		 * SANS ARGUMENT, ET C'EST LA GARDE ELLE-MÊME : le chemin vient du
+		 * dialogue natif, donc de l'utilisateur, jamais du rendu. Ce réglage
+		 * nourrit le périmètre au démarrage suivant (`perimetreInitial`) —
+		 * accepter un chemin de la fenêtre reviendrait à lui laisser choisir ce
+		 * que l'application pourra lire et écrire à la session d'après, ce que
+		 * `verifierDossiers` refuse déjà pour la clé `folders`.
+		 *
+		 * Le principal crée le dossier s'il manque, l'admet au périmètre, écrit
+		 * le réglage et met sa propre valeur à jour dans la foulée : après cet
+		 * appel, `dossierDefaut()` rend déjà le nouveau chemin.
+		 */
+		choisirDossierDefaut(): Promise<string | null>;
+		/**
+		 * RELANCE l'application — le processus entier, pas la seule fenêtre.
+		 *
+		 * UN SEUL APPELANT, ET UNE SEULE RAISON : le changement de langue.
+		 * La locale de Chromium se pose par un commutateur de ligne de commande,
+		 * lu une fois avant `app.ready` (`main.ts`, `poserLocaleChromium`) —
+		 * c'est elle, et non l'attribut `lang` de la page, qui décide du format
+		 * des champs `<input type="date">`. Un `location.reload()` retraduit
+		 * donc toute l'interface mais laisse le sélecteur de date dans l'ancienne
+		 * locale : « Exam dates » au-dessus d'un champ qui dit « jj/mm/aaaa ».
+		 *
+		 * SANS ARGUMENT, et c'est ce qui la rend sûre : le rendu ne choisit ni
+		 * exécutable ni argument de relance (`app.relaunch()` réutilise les
+		 * siens). Le pire qu'un rendu compromis en tire est de faire redémarrer
+		 * l'application — bruyant, et sans aucun gain.
+		 *
+		 * La promesse ne se résout JAMAIS dans le cas courant : l'application
+		 * s'arrête avant de répondre. L'appelant ne doit rien enchaîner après.
+		 * La fermeture passe par `app.quit()`, donc par le `close` de la fenêtre
+		 * et son délai de garde — une écriture en attente est vidée d'abord.
+		 */
+		relancer(): Promise<void>;
 	};
 
 	/**
@@ -474,15 +519,15 @@ export interface Pont {
 	 * ce qui traverse : ni URL, ni chemin, ni version — le flux est
 	 * `app-update.yml`, embarqué au paquet, et c'est le principal qui
 	 * télécharge, vérifie le sha512 et installe. Le rendu reçoit un état
-	 * (poussé, comme les événements disque) et donne trois ordres : vérifier
-	 * maintenant, installer ce qui est prêt, couper ou rétablir l'automatique.
+	 * (poussé, comme les événements disque) et donne deux ordres : vérifier
+	 * maintenant, installer ce qui est prêt. PLUS DE « couper l'automatique »
+	 * depuis le 2026-09-17 : l'application se met à jour, toujours.
 	 */
 	miseAJour: {
 		etat(): Promise<EtatMiseAJour>;
 		surEtat(rappel: (etat: EtatMiseAJour) => void): () => void;
 		verifier(): Promise<void>;
 		installer(): Promise<void>;
-		reglerAuto(auto: boolean): Promise<void>;
 	};
 }
 
@@ -543,6 +588,9 @@ export const CANAUX = {
 	ouvrir: "neo:systeme/ouvrir",
 	vaultsObsidian: "neo:systeme/vaults-obsidian",
 	systemeDossierDefaut: "neo:systeme/dossier-defaut",
+	systemeRelancer: "neo:systeme/relancer",
+	systemeCopierTexte: "neo:systeme/copier-texte",
+	systemeChoisirDossierDefaut: "neo:systeme/choisir-dossier-defaut",
 	reseauFetch: "neo:reseau/fetch",
 	reseauAnnuler: "neo:reseau/annuler",
 	processusRun: "neo:process/run",
@@ -554,7 +602,6 @@ export const CANAUX = {
 	miseAJourEtat: "neo:mise-a-jour/etat",
 	miseAJourVerifier: "neo:mise-a-jour/verifier",
 	miseAJourInstaller: "neo:mise-a-jour/installer",
-	miseAJourReglage: "neo:mise-a-jour/reglage",
 } as const;
 
 /** La clé des RÉGLAGES IA de l'application (`neo.reglages`) : les MÊMES
@@ -567,12 +614,11 @@ export const CANAUX = {
     resterait refusé alors que le réglage est bien enregistré. */
 export const CLE_REGLAGES_IA = "ai";
 
-/** La clé des réglages de mise à jour (`neo.reglages`) : `{ auto: boolean }`,
-    lue par le principal au démarrage et écrite par lui seul — le rendu passe
-    par `reglerAuto`, jamais par `reglages.ecrire`, pour que le principal
-    applique le changement à l'instant (minuteur rearmé, vérification
-    relancée si on rallume l'automatique). */
-export const CLE_REGLAGES_MAJ = "updates";
+/* LA CLÉ « updates » N'EXISTE PLUS ICI (2026-09-17). Elle portait
+   `{ auto: boolean }` ; la mise à jour automatique ne se coupe plus, donc plus
+   personne ne la lit. Ce qu'une installation a déjà écrit dessous reste dans
+   `settings.json`, ignoré — l'effacer n'apporterait rien et demanderait une
+   migration pour un octet. */
 
 /** La clé du ZOOM persisté (`neo.reglages`), lue par le principal au chargement
     de la page et écrite par lui seul (`affichage.zoom` borne puis persiste) :
@@ -580,13 +626,11 @@ export const CLE_REGLAGES_MAJ = "updates";
     s'applique aussi à une valeur que la tâche 2 tenterait d'écrire à la main. */
 export const CLE_REGLAGES_ZOOM = "zoom";
 
-/** La clé de l'interrupteur « rouvrir là où on s'était arrêté » (`neo.
-    reglages`), et la clé de la dernière vue elle-même (`DerniereVue`,
-    `apps/windows/src/ui/reprise.ts`). Écrites par le RENDU SEUL, jamais
-    gardées : ni chemin résolu ni URL, un chemin du contrat (`quiz`) que le
-    scanner valide avant tout usage (`Scanner.getQuiz`) — un chemin qui ne
-    désigne plus rien renvoie simplement à l'accueil. */
-export const CLE_REGLAGES_REPRISE = "reprise";
+/* LA CLÉ « reprise » N'EXISTE PLUS ICI (2026-09-17). Elle portait
+   l'interrupteur « rouvrir là où on s'était arrêté » ; l'application rouvre
+   désormais toujours, et plus personne ne la lit. Ce qu'une installation a
+   déjà écrit dessous reste dans `settings.json`, ignoré. `CLE_DERNIERE_VUE`,
+   elle, est toujours écrite : c'est la vue à rouvrir, pas un réglage. */
 export const CLE_DERNIERE_VUE = "derniereVue";
 
 /** La clé de la LANGUE de l'interface (`neo.reglages`) : « auto » (la langue
@@ -598,6 +642,14 @@ export const CLE_DERNIERE_VUE = "derniereVue";
     entre les deux produits. Lue par le rendu ET par le principal (ses
     dialogues natifs). */
 export const CLE_REGLAGES_LANGUE = "language";
+
+/** Le dossier de quiz PAR DÉFAUT, quand l'utilisateur en a choisi un autre que
+    celui que `electron/dossier-defaut.ts` calcule. Absente (l'état courant de
+    presque toutes les installations), c'est le chemin calculé qui vaut. Cette
+    clé n'est JAMAIS écrite par le rendu : elle nourrit le périmètre au
+    démarrage, et seul `systeme.choisirDossierDefaut` la pose, depuis un chemin
+    venu du dialogue natif. */
+export const CLE_DOSSIER_DEFAUT = "defaultFolder";
 
 /** La clé du fond d'écran (`neo.reglages`) : `{ dossier: string; image: string
     }`, ou absente (fond embarqué). Écrite par le RENDU SEUL — ni chemin

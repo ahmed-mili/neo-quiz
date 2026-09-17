@@ -34,6 +34,17 @@ jobs:
       - name: Host boundary ratchet
         run: npm run check:host
 
+      # Le contenu d'un dossier (documents, notes, `Liens.md`) et ce que
+      # « Créer avec l'IA » joint depuis un dossier : pur, lecture seule.
+      - name: Folder contents and links grammar
+        run: npm run check:folder-contents
+
+      # L'aperçu d'une note : un rendu par blocs qui n'écrit que ses propres
+      # balises. Le premier cas est la sécurité — une note reçue ne s'exécute
+      # jamais.
+      - name: Markdown preview rendering
+        run: npm run check:md-preview
+
       # Même nature : lecture seule sur `src/assets/css` et le thème de l'app.
       # Une variable CSS oubliée ne produit AUCUNE erreur, juste un texte
       # invisible — donc elle se mesure, elle ne se relit pas.
@@ -89,6 +100,12 @@ jobs:
       - name: Install dependencies (apps/windows)
         run: npm ci
         working-directory: apps/windows
+
+      # Le texte d'un PDF, par le VRAI moteur (`pdfjs-dist`, déclaré dans
+      # `apps/windows`, d'où sa place APRÈS ce second `npm ci`). Les PDF sont
+      # écrits par le script : ni fichier binaire au dépôt, ni vault.
+      - name: PDF text extraction
+        run: npm run check:pdf
 
       - name: Build and package (AppImage)
         run: npm run pack:linux

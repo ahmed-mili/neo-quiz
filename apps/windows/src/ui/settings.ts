@@ -16,56 +16,32 @@
 ══════════════════════════════════════════════════════════ */
 
 import { currentHost } from "../../../../src/host/current";
-import { currentLang, t } from "../../../../src/i18n";
+import { t } from "../../../../src/i18n";
 import { ajouter } from "../../../../src/dom";
-import manifeste from "../../../../src/assets/manifest.json";
-import application from "../../package.json";
-import { PRODUCT_NAME } from "../../../../src/branding";
-import type { Scanner } from "../../../../src/dashboard/scanner";
-import { MAX_DOSSIERS, addFolder, estVaultObsidian, examDates, obsidianVaults, pickFolder, removeFolder, savedFolders, setExamDate } from "../host/folder";
-import { cleModule, libelleModule } from "../review/catalogue";
-import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host";
+import { MAX_DOSSIERS, addFolder, estVaultObsidian, lienAvecRacines, pickFolder, removeFolder, savedFolders, setDefaultFolder } from "../host/folder";
 import { poserLogoObsidian } from "./marques";
-import { monterEtatApropos } from "./mise-a-jour";
-import { chargerReprise, reglerReprise } from "./reprise";
 import { chargerLangue, lireLangue, reglerLangue } from "./langue";
+import { pont } from "../host/pont";
 import { createSelect } from "../../../../src/dashboard/ui-select";
 import { monterReglagesFond } from "./fond";
 
 export function renderSettings(
 	root: HTMLElement,
 	deps: {
-		scanner: Scanner;
-		/** Les réglages IA de l'application — le MÊME objet que la page
-		    « Générer » consomme (`main.ts`, `reglagesIa`). Les deux champs de
-		    chemin de CLI n'ont aucun autre écran, et son `save` porte déjà le
-		    retour arrière sur refus du principal : la garde de la clé `ai` peut
-		    REFUSER un chemin (absolu, existant, lançable), et un cache laissé en
-		    avance sur le disque afficherait un réglage que rien n'a enregistré. */
-		aiSettings: AiSettingsHost;
-		onBack(): void;
 		onFoldersChanged(): void;
-		onExamDatesChanged(): void;
 	},
 ): () => void {
+	/* NI en-tête, NI bouton retour : depuis que les réglages sont une MODALE
+	   (et non plus un écran qui remplaçait le tableau de bord), le titre et la
+	   croix de fermeture sont posés par l'hôte (`src/host/modal.ts`). En
+	   remettre ici donnerait deux titres et deux façons de fermer. */
 	const contenu = ajouter(root, "div", "qbd-content");
 
-	// En-tête : retour + titre. `t()` AU RENDU, jamais dans une constante.
-	const entete = ajouter(contenu, "div", "qbd-quizzes-header");
-	const retour = ajouter(entete, "button", "qbd-quizzes-crumb-back");
-	retour.type = "button";
-	// Clé empruntée : c'est le MÊME bouton retour que la page d'un quiz.
-	retour.setAttribute("aria-label", t("dashboard.quiz.back"));
-	retour.title = t("dashboard.quiz.back");
-	currentHost().ui.setIcon(ajouter(retour, "span", "qbd-quizzes-crumb-icon"), "arrow-left");
-	retour.addEventListener("click", () => deps.onBack());
-	ajouter(entete, "h2", "qbd-quizzes-title", t("review.settings.title"));
-
 	/* ── Le dossier de quiz PAR DÉFAUT (tranche 9) ──
-	   Sans croix, sans bouton : c'est `C:\Neo Quiz`, créé par le principal, il
-	   ne se retire pas. Section STATIQUE, à la différence de celle des
-	   emplacements supplémentaires : rien ici ne change jamais en cours de
-	   page. */
+	   Sans croix — il ne se RETIRE pas, il n'y aurait plus d'endroit où créer
+	   un quiz —, mais il se CHANGE : le chemin calculé (`C:\Neo Quiz`) est un
+	   point de départ, pas une contrainte. Le bouton passe par le dialogue
+	   NATIF, seul chemin par lequel un dossier entre au périmètre. */
 	const sectionDefaut = ajouter(contenu, "section", "nq-reglages-section");
 	ajouter(sectionDefaut, "h3", "nq-reglages-titre", t("app.settings.defaultFolder"));
 	ajouter(sectionDefaut, "p", "nq-reglages-aide", t("app.settings.defaultFolderHint"));
@@ -79,10 +55,43 @@ export function renderSettings(
 		const defaut = dossiers.find(d => d.parDefaut);
 		if (defaut) ajouter(cheminDefaut, "span", undefined, defaut.path);
 	});
+	const changer = ajouter(ligneDefaut, "button", "nq-reglages-changer", t("app.settings.changeDefaultFolder"));
+	changer.type = "button";
+	changer.addEventListener("click", () => {
+		void (async () => {
+			/* DÉSARMÉ PENDANT LE DIALOGUE : il est modal à la fenêtre, mais le
+			   clavier peut le déclencher deux fois avant qu'il s'affiche, et
+			   deux dialogues empilés laisseraient le second écrire par-dessus
+			   le choix du premier. */
+			changer.disabled = true;
+			try {
+				const choisi = await setDefaultFolder();
+				// Annulation : la réponse « non », rien à faire ni à dire.
+				if (!choisi) return;
+				/* Même rechargement que pour un emplacement supplémentaire, et
+				   pour la même raison : les racines de l'hôte changent, et
+				   l'hôte n'est installé qu'une fois. */
+				deps.onFoldersChanged();
+			} catch (e) {
+				/* Le principal a refusé (dossier incréable, disque protégé) :
+				   l'ancien dossier reste en place — le dire, plutôt que de
+				   laisser un bouton sans effet apparent. */
+				currentHost().ui.notice(t("app.error.startup", {
+					error: e instanceof Error ? e.message : String(e),
+				}));
+			} finally {
+				changer.disabled = false;
+			}
+		})();
+	});
 
 	/* ── Les emplacements SUPPLÉMENTAIRES ──
-	   Les dossiers ajoutés à la main, avec leur croix, comme avant la
-	   tranche 9. */
+	   Tous les dossiers ouverts, avec leur croix : ceux qu'on a choisis à la
+	   main, et les vaults Obsidian que le démarrage a ouverts tout seuls
+	   (`ouvrirVaultsDetectes`). Plus de rangée « proposée » avec un « + »
+	   depuis le 2026-09-17 — il n'y a plus rien à proposer, tout vault de la
+	   machine est déjà là. La croix, elle, l'écarte DURABLEMENT : c'est ce qui
+	   empêche le prochain démarrage de le rouvrir. */
 	const section = ajouter(contenu, "section", "nq-reglages-section");
 	ajouter(section, "h3", "nq-reglages-titre", t("app.settings.extraFolders"));
 	ajouter(section, "p", "nq-reglages-aide", t("app.settings.extraFoldersHint"));
@@ -118,27 +127,6 @@ export function renderSettings(
 				})();
 			});
 		}
-		/* Les vaults Obsidian détectés mais pas encore ouverts, proposés en un
-		   clic (tâche 5) : ce que faisait `mountSansDossier` au premier
-		   lancement, maintenant ici, à chaque affichage de cette section. */
-		const vaults = await obsidianVaults();
-		const dejaOuverts = new Set(dossiers.map(d => d.path.toLowerCase()));
-		const detectes = vaults.filter(v => !dejaOuverts.has(v.chemin.toLowerCase()));
-		for (const v of detectes) {
-			const ligne = ajouter(liste, "button", "nq-reglages-dossier");
-			ligne.type = "button";
-			poserLogoObsidian(ajouter(ligne, "span", "nq-reglages-icone"));
-			const texte = ajouter(ligne, "div", "nq-reglages-texte");
-			ajouter(texte, "span", "nq-reglages-nom", v.nom);
-			ajouter(texte, "span", "nq-reglages-chemin", v.chemin);
-			ligne.addEventListener("click", () => {
-				void (async () => {
-					await addFolder(v.chemin);
-					deps.onFoldersChanged();
-				})();
-			});
-		}
-		ajouter(liste, "p", "nq-reglages-aide", t("review.settings.removeHint"));
 
 		actions.replaceChildren();
 		const ajout = ajouter(actions, "button", "qbd-btn--create");
@@ -157,6 +145,20 @@ export function renderSettings(
 				const choix = await pickFolder();
 				// Annulation : ce n'est pas une erreur, c'est la réponse « non ».
 				if (!choix) return;
+				/* Le refus est DIT (2026-09-17). `addFolder` rendait la liste
+				   inchangée sans un mot quand le dossier recouvrait une racine
+				   déjà ouverte : le dialogue se fermait, rien n'apparaissait, et
+				   rien n'expliquait. Un dossier SOUS une racine ouverte n'est pas
+				   une erreur de l'utilisateur — c'est juste qu'il se déclare
+				   ailleurs (« Mes quiz » → Nouveau dossier → Ouvrir un dossier
+				   existant), et le message le dit. */
+				const lien = lienAvecRacines(choix, await savedFolders());
+				if (lien !== "libre") {
+					currentHost().ui.notice(t(lien === "doublon" ? "app.settings.folderAlreadyOpen"
+						: lien === "dedans" ? "app.settings.folderInsideOpen"
+							: "app.settings.folderContainsOpen"));
+					return;
+				}
 				await addFolder(choix);
 				deps.onFoldersChanged();
 			})();
@@ -165,77 +167,25 @@ export function renderSettings(
 
 	void dessiner();
 
-	/* ── Les dates d'examen ──
-	   Section STATIQUE (pas de fonction `dessiner` propre) : la liste des
-	   modules ne peut changer qu'en ajoutant/retirant un dossier, ce qui
-	   recharge toute l'application (`onFoldersChanged`) — inutile de la
-	   recalculer ici. */
-	/* Les modules VIENNENT DU CATALOGUE, ils ne se saisissent pas : proposer
-	   une matière qui n'a aucun quiz produirait une date sans effet, et
-	   l'utilisateur croirait avoir réglé quelque chose. */
-	const modules = [...new Set(deps.scanner.getQuizzes().map(q => cleModule(q.path, currentHost().paths)))]
-		.sort((a, b) => libelleModule(a).localeCompare(libelleModule(b), currentLang()));
-
-	const exams = ajouter(contenu, "section", "nq-reglages-section");
-	ajouter(exams, "h3", "nq-reglages-titre", t("review.settings.exams"));
-	ajouter(exams, "p", "nq-reglages-aide", t("review.settings.examsHint"));
-	if (!modules.length) {
-		ajouter(exams, "p", "nq-reglages-aide", t("review.settings.noModules"));
-	}
-	for (const module of modules) {
-		const ligne = ajouter(exams, "div", "nq-reglages-module");
-		const texte = ajouter(ligne, "div", "nq-reglages-texte");
-		ajouter(texte, "span", "nq-reglages-nom", libelleModule(module));
-		// La RACINE en second : deux dossiers peuvent avoir un module homonyme,
-		// et l'utilisateur doit savoir lequel il règle.
-		ajouter(texte, "span", "nq-reglages-chemin", module);
-		/* `<input type="date">` NATIF, et c'est volontaire : la seule règle du
-		   dépôt sur les contrôles est qu'un `<select>` natif est interdit
-		   (`ui-select.ts` est le seul dropdown autorisé) — or `ui-select.ts`
-		   importe encore Obsidian, donc l'application ne peut pas s'en servir.
-		   Un champ de date n'est pas un dropdown, et c'est déjà celui que le
-		   modal « Modifier dossier » du greffon emploie (`module-edit.ts`). */
-		// Le générique de `ajouter` infère déjà `HTMLInputElement` depuis
-		// `"input"` (voir `color-picker.ts`) : un cast ici serait redondant.
-		const champ = ajouter(ligne, "input", "nq-reglages-date");
-		champ.type = "date";
-		// Valeur PERSISTÉE, jamais reformatée pour l'affichage : c'est la même
-		// chaîne `AAAA-MM-JJ` que le greffon écrit dans ses réglages.
-		champ.value = examDates()[module] ?? "";
-		champ.addEventListener("change", () => {
-			void (async () => {
-				await setExamDate(module, champ.value);
-				/* La carte « À réviser » se recalcule au prochain rendu : le
-				   plan est DÉRIVÉ, il n'y a rien à invalider. C'est la propriété
-				   qui a justifié « journal seul, état dérivé ». */
-				deps.onExamDatesChanged();
-			})();
-		});
-	}
-
 	/* ── Général ──
-	   L'interrupteur « rouvrir là où on s'était arrêté » : même patron que
-	   l'automatique des mises à jour (`nq-maj-auto`, `mise-a-jour.ts`). Décoché
-	   par défaut à l'affichage, le temps de la lecture (`chargerReprise`) —
-	   corrigé dès qu'elle répond, sans clignoter puisque le réglage par défaut
-	   est `true` et que la lecture est quasi instantanée (réglages déjà en
-	   mémoire côté principal). */
+	   PLUS D'INTERRUPTEUR « Rouvrir là où on s'était arrêté » (2026-09-17) :
+	   l'application rouvre toujours le dernier quiz et la dernière question.
+	   Le réglage a été retiré avec sa case — le garder en lecture aurait figé
+	   sur l'accueil les installations où un `false` traînait déjà. */
 	const general = ajouter(contenu, "section", "nq-reglages-section");
 	ajouter(general, "h3", "nq-reglages-titre", t("app.settings.general"));
-	const repriseLigne = ajouter(general, "label", "nq-maj-auto");
-	const repriseCase = ajouter(repriseLigne, "input");
-	repriseCase.type = "checkbox";
-	ajouter(repriseLigne, "span", undefined, t("app.reprise.label"));
-	ajouter(general, "p", "nq-reglages-aide", t("app.reprise.hint"));
-	repriseCase.addEventListener("change", () => { void reglerReprise(repriseCase.checked); });
-	void chargerReprise().then(r => { repriseCase.checked = r.actif; });
 
 	/* La langue : le SEUL dropdown autorisé (`ui-select.ts`), avec les libellés
 	   du greffon (`settings.language.*`) — mêmes trois valeurs. Au changement,
-	   le réglage est écrit puis la page RECHARGÉE : tout est rendu par `t()`
-	   au rendu, mais la barre de titre et le menu sont montés une fois pour
-	   toutes, et un rechargement est plus sûr qu'une liste de choses à
-	   redessiner qui s'allongerait en silence. */
+	   le réglage est écrit puis l'application RELANCÉE.
+
+	   PAS un `location.reload()`, et c'est la correction d'un défaut : tout est
+	   rendu par `t()`, mais le format des champs `<input type="date">` de la
+	   section « Dates d'examen » vient de la LOCALE DE CHROMIUM, posée une fois
+	   avant `app.ready` (`electron/main.ts`, `poserLocaleChromium`). Un
+	   rechargement retraduisait donc tous les libellés en laissant les champs
+	   de date dans l'ancienne locale. La relance coûte une seconde de plus
+	   qu'un rechargement — qui, lui, perdait déjà l'état de la fenêtre. */
 	const langueLigne = ajouter(general, "div", "nq-reglages-langue");
 	ajouter(langueLigne, "span", "nq-reglages-nom", t("settings.language.name"));
 	const langueSelect = createSelect(langueLigne, {
@@ -246,7 +196,8 @@ export function renderSettings(
 			{ value: "fr", label: t("settings.language.fr") },
 		],
 		onChange: valeur => {
-			void reglerLangue(lireLangue(valeur)).then(() => window.location.reload());
+			// La relance ne rend jamais la main : rien à enchaîner derrière.
+			void reglerLangue(lireLangue(valeur)).then(() => pont().systeme.relancer());
 		},
 	});
 	void chargerLangue().then(l => langueSelect.setValue(l));
@@ -257,100 +208,9 @@ export function renderSettings(
 	ajouter(fond, "h3", "nq-reglages-titre", t("app.settings.wallpaper"));
 	const demonterFond = monterReglagesFond(fond);
 
-	/* ── Les outils IA ──
-	   Le dossier est une donnée persistée, donc sa valeur n'est jamais
-	   traduite. La perte de focus évite de soumettre un chemin incomplet à la
-	   garde du processus principal à chaque caractère. */
-	const outilsIa = ajouter(contenu, "section", "nq-reglages-section");
-	ajouter(outilsIa, "h3", "nq-reglages-titre", t("settings.ai.tools.title"));
-	const dossierLigne = ajouter(outilsIa, "div", "nq-reglages-module");
-	const dossierTexte = ajouter(dossierLigne, "div", "nq-reglages-texte");
-	ajouter(dossierTexte, "span", "nq-reglages-nom", t("settings.ai.outputFolder.name"));
-	ajouter(dossierTexte, "span", "nq-reglages-chemin", t("settings.ai.outputFolder.desc"));
-	const dossierChamp = ajouter(dossierLigne, "input", "nq-reglages-chemin-cli");
-	dossierChamp.type = "text";
-	dossierChamp.value = deps.aiSettings.get().aiOutputFolder ?? "";
-	dossierChamp.addEventListener("change", () => {
-		void (async () => {
-			const voulu = dossierChamp.value.trim();
-			try {
-				await deps.aiSettings.save({ aiOutputFolder: voulu });
-			} catch (e) {
-				/* Le principal a déjà affiché la Notice et restauré le cache ; le
-				   champ revient lui aussi à la dernière valeur réellement écrite. */
-				dossierChamp.value = deps.aiSettings.get().aiOutputFolder ?? "";
-			}
-		})();
-	});
-
-	/* ── Les chemins des CLI d'IA ──
-
-	   POURQUOI CES DEUX CHAMPS EXISTENT. Une application INSTALLÉE démarre avec
-	   le `PATH` du SYSTÈME, pas celui du terminal où l'utilisateur a installé
-	   son CLI ; et un installateur qui écrit dans le `PATH` du registre
-	   n'atteint jamais un processus déjà lancé. Le principal étend déjà ce
-	   `PATH` avec les emplacements connus (npm, Codex officiel, `~/.local/bin`)
-	   — ces champs sont le DERNIER recours, pour l'installation qui n'est à
-	   aucun d'eux. Vides, ils ne font rien : c'est l'état normal.
-
-	   Section STATIQUE (pas de `dessiner`) : rien d'extérieur ne peut changer
-	   ces deux valeurs pendant que la page est ouverte.
-
-	   ÉCRITURE À LA PERTE DU FOCUS (`change`), jamais à chaque frappe : le
-	   principal GARDE cette clé et REFUSE un chemin incomplet — écrire à chaque
-	   caractère ferait donc une Notice de refus par lettre tapée. */
-	const cli = ajouter(contenu, "section", "nq-reglages-section");
-	ajouter(cli, "h3", "nq-reglages-titre", t("settings.ai.cliPath.title"));
-	ajouter(cli, "p", "nq-reglages-aide", t("settings.ai.cliPath.desc"));
-	for (const outil of ["cheminClaude", "cheminCodex"] as const) {
-		const ligne = ajouter(cli, "div", "nq-reglages-module");
-		const texte = ajouter(ligne, "div", "nq-reglages-texte");
-		ajouter(texte, "span", "nq-reglages-nom",
-			t(outil === "cheminClaude" ? "settings.ai.cliPath.claude" : "settings.ai.cliPath.codex"));
-		const champ = ajouter(ligne, "input", "nq-reglages-chemin-cli");
-		champ.type = "text";
-		champ.placeholder = t("settings.ai.cliPath.placeholder");
-		champ.value = deps.aiSettings.get()[outil] ?? "";
-		champ.addEventListener("change", () => {
-			void (async () => {
-				const voulu = champ.value.trim();
-				try {
-					await deps.aiSettings.save({ [outil]: voulu });
-				} catch (e) {
-					/* REFUSÉ par le principal : `save` a déjà remis le cache en
-					   arrière et affiché la cause. Le champ doit suivre le cache,
-					   sinon l'écran montrerait un réglage que le disque n'a pas. */
-					champ.value = deps.aiSettings.get()[outil] ?? "";
-				}
-			})();
-		});
-	}
-
-	/* ── À propos ──
-	   La version vient du package de l'app (`apps/windows/package.json`,
-	   importé en JSON et inliné par Vite), même source que l'installeur.
-	   `app.getVersion()` par le pont dirait aujourd'hui la même chose, mais
-	   on garde l'import direct pour ne pas dépendre du pont pour un texte
-	   statique. Le manifeste du plugin ne fournit ici que le lien vers le
-	   dépôt. */
-	const apropos = ajouter(contenu, "section", "nq-reglages-section");
-	ajouter(apropos, "h3", "nq-reglages-titre", t("settings.about.title"));
-	ajouter(apropos, "p", "nq-reglages-aide",
-		t("settings.about.version", { product: PRODUCT_NAME, version: application.version }));
-	const depot = ajouter(apropos, "a", "nq-reglages-lien", t("settings.about.repo"));
-	depot.href = manifeste.helpUrl;
-	// `_blank` : le principal remet toute ouverture `https?:` au navigateur
-	// (`setWindowOpenHandler`, `main.ts`) — même geste que les liens de la
-	// page « Générer ».
-	depot.target = "_blank";
-	depot.rel = "noopener";
-
-	// L'état de la mise à jour automatique : la ligne, « Vérifier
-	// maintenant », l'interrupteur — voir `mise-a-jour.ts`.
-	const demonterMaj = monterEtatApropos(apropos);
-
-	/* Le démontage désabonne désormais la mise à jour. Il est rendu quand
-	   même parce que TOUT écran en rend un — `main.ts` appelle
-	   `demonterCourant` sans savoir de quel écran il s'agit. */
-	return () => { demonterMaj(); demonterFond(); root.replaceChildren(); };
+	/* Le démontage ne désabonne plus la mise à jour : sa section est partie
+	   (2026-09-17) et le seul abonnement restant est celui du rail, qui vit
+	   aussi longtemps que la coquille. Il est rendu quand même parce que TOUT
+	   écran en rend un. */
+	return () => { demonterFond(); root.replaceChildren(); };
 }

@@ -3,7 +3,7 @@ import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { QuizIndexEntry } from "./scanner";
 import type { ModuleGroup } from "./quiz-modules";
-import { DEFAULT_MODULE_ICON } from "./module-icons";
+import { moduleIcon } from "./module-icons";
 import { moduleAccent } from "./module-color";
 
 /* ══════════════════════════════════════════════════════════
@@ -33,17 +33,22 @@ export function renderModuleCard(
 	   directement (raccourci, sans ouvrir « Modifier dossier »). L'appelant
 	   fournit le comportement (picker + persistance) car la carte n'a pas
 	   accès aux settings. */
-	onPickIcon?: (group: ModuleGroup, anchor: HTMLElement) => void
+	onPickIcon?: (group: ModuleGroup, anchor: HTMLElement) => void,
+	/* generated (opt-in) : ce dossier est le SAS des quiz générés
+	   (`ctx.generatedFolder`). Icône de l'IA à défaut d'une icône choisie, et
+	   pas de « maîtrisés » : on n'y progresse pas, on y passe. */
+	opts?: { generated?: boolean }
 ): HTMLDivElement {
 	const card = ajouter(container, "div", "qbd-module-card");
+	if (opts?.generated) card.classList.add("qbd-module-card--generated");
 	// Accent du dossier (couleur choisie, sinon dérivée du nom) → toute la
 	// teinte de la carte se dérive de --accent en CSS.
-	card.style.setProperty("--accent", moduleAccent(group));
+	card.style.setProperty("--accent", moduleAccent(group, { generated: !!opts?.generated }));
 
 	// ── En-tête : pastille d'icône + titre coloré / sous-titre UE ──
 	const header = ajouter(card, "div", "qbd-module-card__header");
 	const iconBox = ajouter(header, "div", "qbd-module-card__icon");
-	currentHost().ui.setIcon(iconBox, group.icon || DEFAULT_MODULE_ICON);
+	currentHost().ui.setIcon(iconBox, moduleIcon(group, { generated: !!opts?.generated }));
 	if (onPickIcon) {
 		// La pastille devient un raccourci « changer l'icône » ; le clic ne doit
 		// PAS aussi entrer dans le module.
@@ -74,8 +79,10 @@ export function renderModuleCard(
 		span.append(" " + t(key, { count: n }).replace(/^\s*\d+\s*/, ""));
 	};
 	addStat(group.total, group.total === 1 ? "dashboard.quizzes.moduleQuizzesOne" : "dashboard.quizzes.moduleQuizzesOther");
-	ajouter(stats, "span", "sep", "•");
-	addStat(group.mastered, group.mastered === 1 ? "dashboard.quizzes.folderMasteredOne" : "dashboard.quizzes.folderMasteredOther");
+	if (!opts?.generated) {
+		ajouter(stats, "span", "sep", "•");
+		addStat(group.mastered, group.mastered === 1 ? "dashboard.quizzes.folderMasteredOne" : "dashboard.quizzes.folderMasteredOther");
+	}
 
 	// ── Spacer + ligne séparatrice + pied (bouton ••• = menu existant) ──
 	ajouter(card, "div", "qbd-module-card__spacer");

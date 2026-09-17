@@ -1,12 +1,12 @@
 /* ══════════════════════════════════════════════════════════
    LA MISE À JOUR, VUE DU RENDU
 
-   Un seul abonnement au pont, un état courant, et deux endroits qui le
-   montrent : le rail (un bouton, seulement quand il y a quelque chose à
-   cliquer) et la section « À propos » des Réglages (l'état complet, le
-   bouton « Vérifier maintenant », l'interrupteur). Deux surfaces, une
-   source : chacune redessine depuis le MÊME état, elles ne peuvent pas se
-   contredire.
+   Un seul abonnement au pont, un état courant, et UN endroit qui le montre :
+   le rail, où un bouton apparaît quand une version est prête à installer.
+   Les Réglages en montraient un second — l'état complet, « Vérifier
+   maintenant », l'interrupteur automatique — ; la section est partie le
+   2026-09-17 avec le réglage lui-même (la mise à jour est toujours active) et
+   le bouton de vérification, que le menu d'application porte déjà.
 
    Ce module n'importe rien qui tire Node : `EtatMiseAJour` est un type,
    `pont()` lit `window.neo` à l'appel.
@@ -18,7 +18,7 @@ import { currentHost } from "../../../../src/host/current";
 import { t } from "../../../../src/i18n";
 import { ajouter } from "../../../../src/dom";
 
-let etat: EtatMiseAJour = { phase: "inactif", auto: true };
+let etat: EtatMiseAJour = { phase: "inactif" };
 const abonnes = new Set<(etat: EtatMiseAJour) => void>();
 let desabonnerPont: (() => void) | null = null;
 let pousse = false;
@@ -68,42 +68,5 @@ export function monterBoutonRail(navEl: HTMLElement): () => void {
 			bouton.remove();
 			bouton = null;
 		}
-	});
-}
-
-function ligneEtat(e: EtatMiseAJour): string {
-	switch (e.phase) {
-		case "inactif": return t("app.update.state.inactif");
-		case "verification": return t("app.update.state.verification");
-		case "a-jour": return t("app.update.state.aJour");
-		case "telechargement": return t("app.update.state.telechargement", { version: e.version ?? "", pourcent: e.pourcent ?? 0 });
-		case "prete": return t("app.update.state.prete", { version: e.version ?? "" });
-		case "erreur": return t("app.update.state.erreur");
-	}
-}
-
-/** L'état complet dans « À propos » : la ligne, le bouton d'installation
-    quand elle est prête, « Vérifier maintenant », l'interrupteur. */
-export function monterEtatApropos(section: HTMLElement): () => void {
-	const bloc = ajouter(section, "div", "nq-maj-bloc");
-	const ligne = ajouter(bloc, "p", "nq-reglages-aide");
-	const actions = ajouter(bloc, "div", "nq-reglages-actions");
-	const installer = ajouter(actions, "button", "nq-maj-installer", t("app.update.restart"));
-	installer.type = "button";
-	installer.addEventListener("click", () => { void pont().miseAJour.installer(); });
-	const verifier = ajouter(actions, "button", "nq-maj-verifier", t("app.update.checkNow"));
-	verifier.type = "button";
-	verifier.addEventListener("click", () => { void pont().miseAJour.verifier(); });
-	const ligneAuto = ajouter(bloc, "label", "nq-maj-auto");
-	const auto = ajouter(ligneAuto, "input");
-	auto.type = "checkbox";
-	ajouter(ligneAuto, "span", undefined, t("app.update.auto"));
-	ajouter(bloc, "p", "nq-reglages-aide", t("app.update.autoHint"));
-	auto.addEventListener("change", () => { void pont().miseAJour.reglerAuto(auto.checked); });
-	return abonner(e => {
-		ligne.textContent = ligneEtat(e);
-		installer.hidden = e.phase !== "prete";
-		verifier.disabled = e.phase === "verification" || e.phase === "telechargement";
-		auto.checked = e.auto;
 	});
 }

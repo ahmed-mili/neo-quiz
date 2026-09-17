@@ -296,6 +296,23 @@ export function buildQuizCardMenu(ctx: DashboardShellCtx, rerender: () => void):
 			label: t("dashboard.quizzes.menuRename"),
 			onClick: () => { openRenameQuizModal(quiz, renameQuiz, rerender); },
 		});
+		/* « Copier le chemin » — le chemin ABSOLU, comme le Ctrl+Maj+C de
+		   l'explorateur (Ahmed, 2026-09-17). Sans `absolutePath`, pas d'entrée :
+		   même règle que Partager et Renommer, une entrée qui ne peut pas tenir
+		   sa promesse ne s'affiche pas. L'échec de la copie se DIT — le
+		   presse-papiers peut être refusé, et un menu qui se ferme sans rien
+		   faire laisserait croire que c'est copié. */
+		if (ctx.absolutePath && ctx.copyText) items.push({
+			icon: "copy",
+			label: t("dashboard.quizzes.menuCopyPath"),
+			onClick: () => {
+				const absolu = ctx.absolutePath?.(quiz.path);
+				if (!absolu) { currentHost().ui.notice(t("dashboard.quizzes.pathCopyFailed")); return; }
+				void ctx.copyText?.(absolu).then(ok => {
+					currentHost().ui.notice(t(ok ? "dashboard.quizzes.pathCopied" : "dashboard.quizzes.pathCopyFailed"));
+				});
+			},
+		});
 		items.push({
 			icon: "trash-2",
 			label: t("dashboard.quizzes.menuDelete"),

@@ -19,15 +19,6 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 
 	/* ── Mise à jour automatique (application seulement) ── */
 	"app.update.restart": "Redémarrer pour mettre à jour",
-	"app.update.auto": "Mises à jour automatiques",
-	"app.update.autoHint": "Neo Quiz cherche une version plus récente sur GitHub, la télécharge en arrière-plan, et l'installe quand vous cliquez sur Redémarrer ou quand vous fermez l'application.",
-	"app.update.checkNow": "Vérifier maintenant",
-	"app.update.state.inactif": "Les mises à jour automatiques sont coupées.",
-	"app.update.state.verification": "Recherche d'une mise à jour…",
-	"app.update.state.aJour": "Vous avez la dernière version.",
-	"app.update.state.telechargement": "Téléchargement de {version} : {pourcent} %",
-	"app.update.state.prete": "La version {version} est prête à être installée.",
-	"app.update.state.erreur": "Impossible de vérifier les mises à jour.",
 
 	/* ── Barre de titre et menu d'application (application seulement) ── */
 	"app.titlebar.menu": "Menu de l'application",
@@ -53,22 +44,35 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 
 	/* ── Réglages « Général » (application seulement) ── */
 	"app.settings.defaultFolder": "Dossier de quiz",
-	"app.settings.defaultFolderHint": "Neo Quiz crée ses quiz ici. Ce dossier ne peut pas être retiré.",
+	"app.settings.defaultFolderHint": "Neo Quiz crée ses quiz ici. En changer garde le dossier précédent en emplacement supplémentaire — rien n'est déplacé ni copié.",
+	"app.settings.changeDefaultFolder": "Changer",
 	"app.settings.extraFolders": "Emplacements supplémentaires",
-	"app.settings.extraFoldersHint": "Les vaults Obsidian et les autres dossiers que vous avez ouverts.",
+	"app.settings.extraFoldersHint": "Vos vaults Obsidian s'ouvrent tout seuls.",
+	"app.settings.folderAlreadyOpen": "Ce dossier est déjà ouvert.",
+	"app.settings.folderInsideOpen": "Ce dossier est déjà dans un de vos dossiers ouverts. Ajoutez-le depuis Mes quiz → Nouveau dossier → Ouvrir un dossier existant.",
+	"app.settings.folderContainsOpen": "Ce dossier contient un de vos dossiers ouverts.",
 
 	"app.settings.general": "Général",
-	"app.reprise.label": "Rouvrir là où on s'était arrêté",
-	"app.reprise.hint": "Au lancement, Neo Quiz rouvre le dernier quiz et la dernière question consultés.",
 	"app.settings.languageAuto": "Automatique (suivre Windows)",
 	"app.settings.languageHint": "Langue de l'interface. L'installeur la règle sur la langue de la page de téléchargement ; changez-la ici à tout moment. Les quiz générés suivent toujours la langue de votre demande.",
 
 	/* ── Fond d'écran (application seulement) ── */
+	"app.settings.updates": "Mises à jour",
+
 	"app.settings.wallpaper": "Fond d'écran",
-	"app.fond.none": "Aucun dossier choisi : le fond embarqué est utilisé.",
+	"app.fond.credit": "Photo de {auteur} — Unsplash",
+	"app.fond.yours": "De votre dossier",
+	"app.fond.cat.mountains": "Montagnes",
+	"app.fond.cat.forest": "Forêt",
+	"app.fond.cat.ocean": "Océan",
+	"app.fond.cat.autumn": "Automne",
+	"app.fond.cat.night": "Nuit",
+	"app.fond.cat.desert": "Désert",
+	"app.fond.cat.city": "Ville",
+	"app.fond.none": "Choisissez-en un ci-dessous, ou ouvrez votre propre dossier.",
 	"app.fond.choose": "Choisir un dossier",
+	"app.fond.change": "Changer",
 	"app.fond.remove": "Retirer",
-	"app.fond.next": "Fond suivant",
 	"app.fond.disparue": "L'image du fond a disparu ; la première du dossier est utilisée.",
 	"app.fond.dossierVide": "Aucune image dans ce dossier ; le fond embarqué est utilisé.",
 };

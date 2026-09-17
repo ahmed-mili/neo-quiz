@@ -25,8 +25,14 @@ export function hashAccent(key: string): string {
 	return MODULE_PALETTE[h % MODULE_PALETTE.length];
 }
 
+/** L'accent du SAS des quiz générés (demande Ahmed 2026-09-17) : le bleu de
+    la palette, le premier — celui de la carte « Créer un dossier vide » et de
+    l'accent de l'application. Une couleur choisie à la main l'emporte. */
+export const GENERATED_MODULE_ACCENT = MODULE_PALETTE[0];
+
 /** Accent effectif d'un module : la couleur choisie (override) prime, sinon
-    la couleur dérivée du dossier. */
-export function moduleAccent(m: { folder: string; color?: string }): string {
-	return m.color || hashAccent(m.folder);
+    le bleu du sas pour le dossier des quiz générés, sinon la couleur dérivée
+    du dossier. */
+export function moduleAccent(m: { folder: string; color?: string }, opts?: { generated?: boolean }): string {
+	return m.color || (opts?.generated ? GENERATED_MODULE_ACCENT : hashAccent(m.folder));
 }

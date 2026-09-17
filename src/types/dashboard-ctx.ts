@@ -52,24 +52,13 @@ export interface AiSettings {
 	aiMentionExtraFolders?: string[];
 	/** Chemin relatif persistant du dossier qui reçoit les quiz générés. */
 	aiOutputFolder?: string;
-	/* ── LES CHEMINS D'EXÉCUTABLE DES CLI (application seulement) ──
-
-	   Vides/absents par défaut, et c'est l'état NORMAL : les deux hôtes
-	   cherchent d'abord le CLI dans un `PATH` étendu. Ils n'existent que pour la
-	   machine où cette recherche échoue — une APPLICATION INSTALLÉE démarre avec
-	   le `PATH` du SYSTÈME, pas celui du terminal, et un installateur qui écrit
-	   dans le `PATH` du registre n'atteint jamais un processus déjà lancé.
-
-	   LUS PAR LE SEUL PROCESSUS PRINCIPAL DE L'APPLICATION
-	   (`apps/windows/electron/canaux.ts`, dans SON magasin — jamais envoyés par
-	   la fenêtre), et GARDÉS à l'écriture (`garde-ia.ts` : absolu, existant,
-	   d'une extension lançable). Le greffon les ignore : sous Obsidian, le
-	   `PATH` étendu de `buildChildEnv` a toujours suffi, et un réglage qu'aucun
-	   écran ne montre serait un réglage mort. Déclarés ici quand même, dans la
-	   seule liste des réglages IA, parce que les deux hôtes persistent le MÊME
-	   objet : une clé connue d'un seul côté serait rognée par l'autre. */
-	cheminClaude?: string;
-	cheminCodex?: string;
+	/* PLUS DE CHEMINS D'EXÉCUTABLE DE CLI (2026-09-17). Deux champs des
+	   Réglages désignaient l'exécutable à lancer quand la sonde automatique
+	   échouait. Le processus principal fusionne désormais le `PATH` du REGISTRE
+	   dans le sien au démarrage (`electron/process.ts`, `chargerPathRegistre`),
+	   ce qui rattrape la cause réelle — un `PATH` de processus figé au
+	   lancement — sans rien demander, et sans qu'aucun chemin de programme
+	   vienne plus de la fenêtre. */
 	/* NB : cette interface s'appelle « AiSettings » mais elle est en réalité
 	   le sous-ensemble des réglages du plugin que le DASHBOARD lit — le nom
 	   ne suit plus. Le champ ci-dessous n'a rien d'IA ; le renommage est un
@@ -106,6 +95,25 @@ export interface DashboardPageSettings {
 	quizzesArchivedFolders?: string[];
 }
 
+/** Ce qu'une page transmet à la suivante en naviguant. */
+export interface NavigateData {
+	quiz?: QuizIndexEntry;
+	edit?: boolean;
+	/** « Créer avec l'IA » DEPUIS UN DOSSIER (2026-09-17) : la page « Générer »
+	    arrive avec la destination réglée sur ce dossier et ses sources déjà
+	    jointes — les documents et les notes du dossier, en chemins du contrat,
+	    joints par le même chemin que le picker « @ ». Un PDF est lu par l'hôte
+	    (`HostPdf`), une note par son texte. */
+	aiPreset?: AiPreset;
+}
+
+export interface AiPreset {
+	/** Chemin du contrat du dossier où le quiz généré sera écrit. */
+	destination: string;
+	/** Chemins du contrat à joindre, dans l'ordre. */
+	attach: string[];
+}
+
 /**
  * Ce dont les pages Accueil et Mes quiz ont besoin, et RIEN de plus.
  */
@@ -131,7 +139,7 @@ export interface DashboardShellCtx {
 	   corrigé — cf. rapport de tâche).
 	   `folder-create.ts`, lui, est passé à `DashboardShellCtx` en tranche 2.6
 	   (il n'appelle que `navigate("ai")`, à un seul argument). */
-	navigate(view: DashboardViewName, data?: { quiz?: QuizIndexEntry; edit?: boolean }): void;
+	navigate(view: DashboardViewName, data?: NavigateData): void;
 	/** Historique boutons souris (spec 2026-07-20-mouse-nav-history) : empile
 	    l'état de navigation COURANT avant un changement — appelé par quizzes.ts
 	    juste avant drill in/out. */
@@ -171,6 +179,24 @@ export interface DashboardShellCtx {
 	    opt-in — l'application ne la fournit pas (menus et modals = tranche
 	    2.6, D5). */
 	openModuleMenu?: (group: ModuleGroup, anchor: HTMLElement, rerender: () => void, map: ModuleMap) => void;
+	/* ── LA DATE D'EXAMEN D'UN DOSSIER ──
+
+	   Elle ne passe PAS par `quizzesModuleOverrides`, alors que le modal
+	   « Modifier dossier » écrit tout le reste là-bas, et c'est une correction
+	   de bug : les overrides sont indexés par `ModuleGroup.folder`, qui est un
+	   NOM DE SEGMENT (« Generated »), sans l'identifiant de la racine. Deux
+	   dossiers ouverts ayant chacun un sous-dossier de ce nom — « Neo
+	   Quiz/Generated » et « Personal/Generated », le cas d'Ahmed — partageaient
+	   donc la même entrée. Pour une couleur, c'est un défaut visible ; pour un
+	   HORIZON DE RÉTENTION, c'est une matière dont les révisions se resserrent
+	   à cause de l'examen d'une autre. L'ordonnanceur lit une clé qui porte la
+	   racine (`apps/windows/src/review/catalogue.ts`, `cleModule`), et c'est
+	   l'HÔTE qui fait la conversion : le code partagé ne connaît ni les racines
+	   ni leurs identifiants.
+
+	   Absents = le champ de date n'est pas rendu dans le modal. */
+	examDate?: (group: ModuleGroup) => string | undefined;
+	setExamDate?: (group: ModuleGroup, date: string | undefined) => void;
 	/** Sélecteur d'icône d'un module (clic sur la pastille de la carte).
 	    Absent = la pastille n'est pas cliquable — `renderModuleCard` prévoit
 	    déjà `onPickIcon?` en opt-in. `suggestions` (calculées par la PAGE
@@ -195,6 +221,55 @@ export interface DashboardShellCtx {
 	    que `openCreateFolderModal` (l'import d'un .zip partagé cherche le parent
 	    commun des modules déjà résolus — folder-create.ts). */
 	createFolder?: (map: ModuleMap, quizzes: QuizIndexEntry[], done: () => void) => void;
+	/** DÉSIGNE un dossier qui existe déjà et le déclare comme dossier de quiz
+	    (carte « Ouvrir un dossier existant » du modal de création). Absent = la
+	    carte n'est pas rendue, et c'est le cas du GREFFON pour une raison de
+	    fond : sous Obsidian le vault EST le dossier, il n'y a rien à désigner.
+	    L'hôte ouvre son sélecteur natif, traduit le chemin absolu en chemin du
+	    contrat, et écrit l'override — lui seul connaît ses racines. */
+	openExistingFolder?: (done: () => void) => void;
+	/** Le chemin du CONTRAT du dossier où atterrissent les quiz générés
+	    (`<racine par défaut>/<aiOutputFolder>`). Ce dossier est un SAS, pas
+	    une matière : sa carte porte l'icône de l'IA et ni lui ni sa page
+	    n'affichent de progression — on y range ce qui vient d'être généré,
+	    on l'en sort vers sa vraie matière. Reconnu par son CHEMIN, jamais par
+	    son nom : l'utilisateur peut renommer le réglage, et un autre dossier
+	    peut s'appeler « Generated » dans un vault. Absent = aucun dossier n'est
+	    le sas (le greffon). */
+	generatedFolder?: () => string | undefined;
+	/** Ouvre N'IMPORTE QUEL fichier du dossier (chemin du contrat) avec
+	    l'application du système — un PDF, une image. `shell.openExternal` ne
+	    prend qu'un `HostFile`, donc une NOTE de l'index ; les documents de la
+	    page d'un dossier n'y sont pas. `false` = pas ouvert, et l'appelant le
+	    dit. Absent = les documents ne s'ouvrent pas d'un clic (le greffon :
+	    Obsidian les ouvre lui-même depuis l'explorateur). */
+	openPath?: (path: string) => Promise<boolean>;
+	/** Le chemin ABSOLU d'un fichier du dossier (chemin du contrat), tel que
+	    le système l'écrit — c'est ce qu'on colle dans un explorateur ou un
+	    terminal, là où le chemin du contrat ne désigne rien hors de
+	    l'application. `null` si la racine n'est plus ouverte. Absent = pas
+	    d'entrée « Copier le chemin » dans le menu ⋯ (le greffon : Obsidian
+	    a la sienne dans son explorateur). */
+	absolutePath?: (path: string) => string | null;
+	/** Écrit du texte dans le presse-papiers ; `false` si l'hôte a refusé.
+	    L'hôte, et non `navigator.clipboard` : dans la fenêtre de
+	    l'application, l'écriture directe passe par une demande de permission
+	    `clipboard-read` que le processus principal refuse (mesuré le
+	    2026-09-17), et l'appel échoue en `NotAllowedError`. */
+	copyText?: (texte: string) => Promise<boolean>;
+	/** Ouvre une NOTE dans Obsidian (`obsidian://open`), quand la racine de ce
+	    chemin est un vault. `false` = pas un vault, ou Obsidian absent : pas
+	    une erreur, l'appelant enchaîne sur l'ouverture par le système. C'est ce
+	    qu'Ahmed a demandé (2026-09-17) pour « Créer une note » : la note vit
+	    dans un vault, c'est là qu'elle s'écrit. */
+	openInObsidian?: (path: string) => Promise<boolean>;
+	/** La date de dernière modification d'un fichier (ms), ou `null`. Le
+	    contrat ne date que les NOTES (`HostFile.mtime`, relevé sur les seuls
+	    `.md` — un `stat` par image d'un dossier de cours serait une dépense
+	    sans acheteur) ; un document, lui, se date à la demande, ici. Sert à la
+	    confirmation de suppression (Ahmed, 2026-09-17 : la date s'affiche
+	    avant d'effacer). Absent = pas de date dans la modale. */
+	fileMtime?: (path: string) => Promise<number | null>;
 	/** Sélecteur d'axe de regroupement (UE / Récent, ligne au-dessus de la
 	    grille). `createSelect` (ui-select.ts) a été libéré d'Obsidian en
 	    tranche 2.6 et les DEUX hôtes consomment désormais le MÊME dropdown

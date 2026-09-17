@@ -314,6 +314,15 @@ export type QuestionShuffleEntry =
  */
 export interface QuizState {
 	practiceMode: PracticeMode;
+	/**
+	 * Le choix de l'écran de démarrage d'un bloc `mode: "exam"` : APPRENDRE
+	 * (sans chrono ni verrou, correction et explication après chaque réponse)
+	 * ou se TESTER (l'examen). Décision d'Ahmed, 2026-09-17 : « Practice »
+	 * (les réponses en texte libre) est RETIRÉ — un quiz a deux façons de se
+	 * jouer, et cette valeur ne touche PAS `practiceMode`, qui ne sert plus
+	 * qu'au rôle `recall` d'une leçon.
+	 */
+	startMode: "learn" | "exam";
 	selections: QuestionSelection[];
 	/** Réponses libres saisies en mode entraînement texte (engine/text-only.js hasAnyAnswer). */
 	textOnlyAnswers: string[];

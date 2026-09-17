@@ -80,6 +80,12 @@ const LIBERES = [
 	"src/dashboard/ai.ts",
 	"src/dashboard/usage-format.ts",
 	"src/hotkey-format.ts",
+	/* Les trois sections d'un dossier (2026-09-17), nées directement sans
+	   Obsidian — sur la liste dès leur premier jour, pour que la règle vaille
+	   pour un fichier neuf comme pour un fichier porté. */
+	"src/dashboard/folder-contents.ts",
+	"src/dashboard/folder-sections.ts",
+	"src/dashboard/file-icons.ts",
 ];
 
 /** Retire les commentaires : une extension CITÉE en commentaire (par exemple

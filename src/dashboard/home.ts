@@ -449,12 +449,19 @@ export function createHomeHandlers(ctx: DashboardShellCtx): HomeHandlers {
 		const copyIcon = ajouter(copyBtn, "span", "qbd-btn-icon qbd-btn-icon--sm");
 		currentHost().ui.setIcon(copyIcon, "copy");
 		copyBtn.addEventListener("click", async () => {
-			try {
-				await navigator.clipboard.writeText(CODE_SAMPLE);
-				copyIcon.replaceChildren();
-				currentHost().ui.setIcon(copyIcon, "check");
-				window.setTimeout(() => { copyIcon.replaceChildren(); currentHost().ui.setIcon(copyIcon, "copy"); }, 1500);
-			} catch (e) { /* clipboard indisponible : sans effet */ }
+			/* Par l'HÔTE dès qu'il sait copier. Dans la fenêtre de l'application,
+			   `navigator.clipboard.writeText` échoue : l'écriture y fait demander la
+			   permission `clipboard-read`, que le processus principal refuse avec
+			   toutes les autres — ce bouton ne faisait donc RIEN, sans un mot, et le
+			   `catch` muet d'avant le cachait. Repli sur le navigateur là où
+			   l'écriture directe marche (Obsidian). */
+			const copie = ctx.copyText
+				? await ctx.copyText(CODE_SAMPLE)
+				: await navigator.clipboard.writeText(CODE_SAMPLE).then(() => true, () => false);
+			if (!copie) return;
+			copyIcon.replaceChildren();
+			currentHost().ui.setIcon(copyIcon, "check");
+			window.setTimeout(() => { copyIcon.replaceChildren(); currentHost().ui.setIcon(copyIcon, "copy"); }, 1500);
 		});
 	}
 

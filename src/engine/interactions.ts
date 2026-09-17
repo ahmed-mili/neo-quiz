@@ -471,7 +471,7 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		const startBtn = ctx.container.querySelector('.quiz-exam-start-btn');
 		if (startBtn) {
 			startBtn.addEventListener('click', () => {
-				if (ctx.quizState?.practiceMode === "text") ctx.exam.startTrainingMode();
+				if (ctx.quizState?.startMode === "learn") ctx.exam.startLearnMode();
 				else ctx.exam.startExam();
 			});
 		}
@@ -487,13 +487,19 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 	   ci-dessous (deux fonctions a selecteurs distincts, [data-quiz-mode]
 	   contre [data-quiz-start-mode]), contrairement a ce qu’affirmait a tort
 	   le commentaire d’une revue precedente. */
+	/* Le choix Apprendre / Examen de l'écran de démarrage. Il ne passe PLUS
+	   par `setPracticeMode` (2026-09-17) : « Practice » est retiré, et
+	   `practiceMode` ne sert plus qu'au rôle `recall` d'une leçon. On note le
+	   choix et on repeint l'écran — le libellé du bouton et le résumé
+	   (« Sans chrono » ou la durée) en dépendent. */
 	function bindStartModeControls(rootEl: HTMLElement | null = ctx.container): void {
 		rootEl?.querySelectorAll?.<HTMLElement>("[data-quiz-start-mode]")?.forEach(btn => {
 			btn.addEventListener("click", e => {
 				e.preventDefault();
-				const nextMode = btn.dataset.quizStartMode === "training" ? "text" : "qcm";
-				if (nextMode === ctx.quizState.practiceMode) return;
-				ctx.setPracticeMode(nextMode);
+				const next = btn.dataset.quizStartMode === "learn" ? "learn" : "exam";
+				if (next === ctx.quizState.startMode) return;
+				ctx.quizState.startMode = next;
+				ctx.render();
 			});
 		});
 	}

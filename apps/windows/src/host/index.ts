@@ -30,6 +30,7 @@ import { createWindowsMath } from "./math";
 import { createWindowsModals } from "./modal";
 import { createWindowsNet } from "./net";
 import { createWindowsPlatform } from "./platform";
+import { createWindowsPdf } from "./pdf";
 import { createWindowsProcess } from "./process";
 import { createWindowsUi } from "./ui";
 
@@ -133,13 +134,13 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		platform: createWindowsPlatform(),
 		shell,
 		paths,
-		/* PAS de `pdf` — et c'est une divergence ÉCRITE, pas un oubli (tranche 5,
-		   tâche 6). `HostPdf` est optionnel au contrat : sous Obsidian il porte
-		   le pdf.js EMBARQUÉ de l'application (`loadPdfJs`), que la fenêtre n'a
-		   pas. Sans ce membre, la page « Générer » REFUSE un PDF joint avec la
-		   Notice `ai.error.pdfUnsupportedInApp` au lieu d'en attacher le texte
-		   vide en silence. Le poser ici avec un moteur qui ne lit rien serait
-		   pire que son absence ; une tranche future qui embarquerait pdf.js n'a
-		   qu'à l'implémenter, sans toucher `ai.ts`. */
+		/* `pdf` depuis le 2026-09-17 (`./pdf.ts`, pdfjs-dist chargé à la
+		   demande). Le membre était ABSENT avant, et c'était une divergence
+		   écrite (tranche 5, tâche 6) : sans lui, la page « Générer » refusait
+		   un PDF joint avec la Notice `ai.error.pdfUnsupportedInApp` plutôt que
+		   d'attacher un texte vide en silence. `ai.ts` n'a pas bougé : c'est
+		   exactement ce que le contrat promettait. Le greffon lecteur, lui, ne
+		   porte plus ce membre (il ne génère plus). */
+		pdf: createWindowsPdf(),
 	};
 }

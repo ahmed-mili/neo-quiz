@@ -5,7 +5,7 @@ export interface ExamHandlers {
 	examTimerHtml(): string;
 	startExamTimer(): void;
 	startExam(): void;
-	startTrainingMode(): void;
+	startLearnMode(): void;
 	updateExamTimerDisplay(): void;
 	handleExamTimeUp(): void;
 	stopExamTimer(): void;
@@ -20,9 +20,9 @@ export function createExamHandlers(ctx: EngineCtx): ExamHandlers {
 	function examTimerHtml(): string {
     if (!ctx.isExamMode) return "";
     if (!ctx.examStarted) {
-        const isTraining = ctx.quizState?.practiceMode === "text";
+        const learn = ctx.quizState?.startMode === "learn";
         const modeSelectorHtml = typeof ctx.cards?.startModeSelectorHtml === "function" ? ctx.cards.startModeSelectorHtml() : "";
-        const primaryLabel = t(isTraining ? "engine.exam.startTraining" : "engine.exam.startExam");
+        const primaryLabel = t(learn ? "engine.exam.startLearn" : "engine.exam.startExam");
         // examOptions est non-null en mode examen (garde isExamMode ci-dessus) ;
         // `!` reproduit exactement l'accès direct du JS (throw si null, jamais
         // atteint), et reste DANS la branche examen : l'entraînement ne le lit pas.
@@ -32,7 +32,7 @@ export function createExamHandlers(ctx: EngineCtx): ExamHandlers {
             const minutes = ctx.examOptions!.durationMinutes;
             return t(minutes > 1 ? "engine.exam.duration.other" : "engine.exam.duration.one", { minutes });
         };
-        const summaryLabel = isTraining ? t("engine.exam.noTimer") : durationLabel();
+        const summaryLabel = learn ? t("engine.exam.noTimer") : durationLabel();
         const questionCount = t(
             ctx.quiz.length > 1 ? "engine.exam.questionCount.other" : "engine.exam.questionCount.one",
             { count: ctx.quiz.length }
@@ -104,8 +104,8 @@ export function createExamHandlers(ctx: EngineCtx): ExamHandlers {
 
 	function startExam(): void {
     if (!ctx.isExamMode || ctx.examStarted) return;
-    if (ctx.quizState?.practiceMode === "text") {
-        startTrainingMode();
+    if (ctx.quizState?.startMode === "learn") {
+        startLearnMode();
         return;
     }
 
@@ -150,7 +150,15 @@ export function createExamHandlers(ctx: EngineCtx): ExamHandlers {
     }
 }
 
-    function startTrainingMode(): void {
+    /* APPRENDRE : le quiz sans chrono ni verrou, chaque question corrigée
+       et expliquée — les questions gardent leur TYPE (QCM, appariement,
+       texte…). C'est l'ex-`startTrainingMode` sans sa dernière ligne, celle
+       qui forçait `practiceMode = "text"` et transformait tout en réponse
+       libre : ce « Practice » est retiré (Ahmed, 2026-09-17). Ce qu'on garde
+       est ce que la littérature valide pour apprendre — la récupération avec
+       correction et explication (Butler 2013 : l'explication fait le
+       transfert), voir `Productivité/Les meilleures méthodes d'apprentissage`. */
+    function startLearnMode(): void {
         if (!ctx.isExamMode || ctx.examStarted) return;
 
         ctx.trainingSession = true;
@@ -160,7 +168,7 @@ export function createExamHandlers(ctx: EngineCtx): ExamHandlers {
         ctx.examEnded = false;
         ctx.examStartTime = 0;
         ctx.examTimeRemaining = 0;
-        ctx.quizState.practiceMode = "text";
+        ctx.quizState.practiceMode = "qcm";
         ctx.quizState.current = 0;
         ctx.quizState.prevCurrent = 0;
         ctx.quizState.lastQuestionIndex = 0;
@@ -233,7 +241,7 @@ export function createExamHandlers(ctx: EngineCtx): ExamHandlers {
 		const btn = ctx.container?.querySelector('[data-exam-start-screen="1"] .quiz-exam-start-btn');
 		if (btn) {
 			btn.addEventListener('click', () => {
-				if (ctx.quizState?.practiceMode === "text") startTrainingMode();
+				if (ctx.quizState?.startMode === "learn") startLearnMode();
 				else startExam();
 			});
 		}
@@ -243,7 +251,7 @@ export function createExamHandlers(ctx: EngineCtx): ExamHandlers {
 		examTimerHtml,
 		startExamTimer,
 		startExam,
-		startTrainingMode,
+		startLearnMode,
 		updateExamTimerDisplay,
 		handleExamTimeUp,
 		stopExamTimer,

@@ -449,12 +449,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		const legende = ajouter(zone, "div", "qbd-ai-preview-caption");
 		const pages = ajouter(legende, "span", "qbd-ai-preview-caption-pages", t("ai.preview.rendering"));
 
-		/* « Ouvrir » : par le contrat (`shell.openExternal`, un fichier de
-		   l'index — l'application y met tous les fichiers). Un PDF déposé sans
-		   chemin, ou venu d'une racine externe (que le contrat sait lire mais
-		   pas ouvrir), n'a pas de bouton : proposer une action qui échouerait
-		   vaudrait moins que rien. */
-		const fichier = note.path && note.source === "vault" ? host.fs.getFile(note.path) : null;
+		/* « Ouvrir » : par le contrat (`shell.openExternal`). Un PDF venu d'une
+		   racine externe ou du dialogue natif a un chemin ABSOLU que l'hôte a
+		   admis ; un PDF déposé (`source: "file"`) n'en a pas et garde son
+		   aperçu sans bouton — proposer une action qui échouerait vaudrait
+		   moins que rien. */
+		const fichier: HostFile | string | null = note.path
+			? (note.source === "vault" ? host.fs.getFile(note.path) : note.source === "external" ? note.path : null)
+			: null;
 		if (fichier) {
 			const ouvrir = ajouter(legende, "button", "qbd-ai-preview-open");
 			ouvrir.type = "button";
@@ -1213,6 +1215,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// (le réglage peut changer), retiré dans `dispose`.
 		if (raccourciComposer) raccourciComposer.retirer();
 		const surTouche = (e: KeyboardEvent): void => {
+			/* L'input de fichier n'existe que tant que la page « Générer » est
+			   rendue ; le conteneur, lui, est PARTAGÉ par toutes les vues
+			   (tâche 8) et survit à la navigation. Sans cette garde, `openAddFiles`
+			   préférant désormais le dialogue natif (sans le repli
+			   `fileInputRef.isConnected` de `fileInput.click()`), Ctrl+E depuis
+			   une autre page ouvrirait quand même un dialogue de fichiers. */
+			if (!fileInputRef || !fileInputRef.isConnected) return;
 			const hk = eventToHotkey(e);
 			const voulu = settings().hotkeyAddFiles;
 			if (!hk || !voulu || hk.key !== voulu.key) return;
@@ -1743,6 +1752,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   Obsidian a disparu avec la vue dashboard (tâche 2, greffon lecteur) ;
 	   l'écoute clavier vit désormais dans `render()`, ci-dessus. */
 	function openAddFiles(): void {
+		/* Par le dialogue natif quand l'hôte en a un : les chemins reviennent,
+		   admis en lecture, et l'aperçu d'un PDF pourra l'OUVRIR. Sans lui, le
+		   `<input type="file">` du navigateur, dont le File n'a aucun chemin. */
+		const natif = host.fs.externe.pickFiles;
+		if (natif) {
+			void natif("documents").then(async (chemins) => {
+				for (const abs of chemins) await attachExternalPath(abs);
+			});
+			return;
+		}
 		if (fileInputRef && fileInputRef.isConnected) fileInputRef.click();
 	}
 

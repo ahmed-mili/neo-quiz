@@ -21,7 +21,6 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.composer.quizOptions": "Options du quiz",
 	"ai.composer.generate": "Générer le quiz",
 	"ai.composer.stop": "Arrêter",
-	"ai.add.files": "Ajouter des fichiers ou des images",
 	"ai.add.filesTip": "Ajouter des fichiers ou des images ({hotkey})",
 	"ai.mention.noMatch": "Aucun fichier correspondant",
 	"ai.mention.truncated": "Trop de fichiers dans {roots} — la recherche peut être incomplète",

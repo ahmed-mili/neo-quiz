@@ -60,8 +60,10 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		   (`engine/resources.ts`) a besoin d'un booléen pour décider s'il doit
 		   prévenir l'utilisateur. */
 		async openExternal(file) {
-			if (!file || !index.get(file.path)) return false;
-			const a = carte.absolu(file.path);
+			/* Une CHAÎNE est un chemin ABSOLU déjà admis au périmètre (dialogue
+			   natif, `HostFs.externe.pickFiles`) : passée telle quelle, sans
+			   passer par l'index du contrat qui ne la connaît pas. */
+			const a = typeof file === "string" ? file : (file && index.get(file.path) ? carte.absolu(file.path) : null);
 			if (!a) return false;
 			try {
 				return await pont().systeme.ouvrir(a);

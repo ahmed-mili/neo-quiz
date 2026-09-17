@@ -557,6 +557,9 @@ export function createObsidianHost(
 		   (Android) / « application par défaut » se redéduit chez l'appelant
 		   depuis `platform.isMobile`, elle n'a pas à voyager ici. */
 		async openExternal(file) {
+			// Pas de racine externe sous le greffon : une chaîne (chemin ABSOLU
+			// admis par le dialogue natif de l'application) n'a rien à ouvrir ici.
+			if (typeof file === "string") return false;
 			const f = file && tfile(file.path);
 			if (!f) return false;
 			try {

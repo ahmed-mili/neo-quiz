@@ -281,6 +281,10 @@ export interface HostFs {
 		/** Rejette si absent, illisible ou hors périmètre. */
 		read(abs: string): Promise<string>;
 		readBinary(abs: string): Promise<Uint8Array>;
+		/** Le dialogue natif de fichiers de l'hôte, OPTIONNEL (le greffon n'en
+		    a pas : la page garde son `<input type="file">`). Rend des chemins
+		    ABSOLUS que l'hôte a admis en lecture et ouverture ; `[]` si annulé. */
+		pickFiles?(kind: "documents" | "images" | "any"): Promise<string[]>;
 	};
 }
 
@@ -352,8 +356,10 @@ export interface HostMath {
 }
 
 export interface HostShell {
-	/** Ouvre le fichier avec l'application par défaut du système. */
-	openExternal(file: HostFile): Promise<boolean>;
+	/** Ouvre le fichier avec l'application par défaut du système. Une CHAÎNE
+	    est un chemin ABSOLU : un fichier que l'hôte a admis (dialogue natif).
+	    Sous le greffon, seule la forme `HostFile` existe. */
+	openExternal(file: HostFile | string): Promise<boolean>;
 	/** Révèle le fichier dans l'explorateur de l'hôte. `false` quand l'hôte
 	    n'a pas d'explorateur : ce n'est PAS une erreur, l'appelant enchaîne
 	    sur l'ouverture externe. */

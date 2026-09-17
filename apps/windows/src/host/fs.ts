@@ -614,6 +614,10 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 			async readBinary(abs) {
 				return await pont().fichiers.readBinary(normaliser(abs));
 			},
+			/* Le dialogue natif (`systeme.choisirFichiers`) : chaque chemin rendu
+			   a déjà été admis au périmètre en lecture et ouverture par le
+			   principal (`autoriserFichier`) — rien à borner ici. */
+			pickFiles: kind => pont().systeme.choisirFichiers(kind),
 		},
 	};
 }

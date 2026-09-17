@@ -107,6 +107,7 @@ const pont: Pont = {
 		dossierDefaut: () => ipcRenderer.invoke(CANAUX.systemeDossierDefaut),
 		relancer: () => ipcRenderer.invoke(CANAUX.systemeRelancer),
 		choisirDossierDefaut: () => ipcRenderer.invoke(CANAUX.systemeChoisirDossierDefaut),
+		choisirFichiers: kind => ipcRenderer.invoke(CANAUX.systemeChoisirFichiers, kind),
 	},
 
 	reseau: {

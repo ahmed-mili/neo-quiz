@@ -192,6 +192,26 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	   d'un autre drapeau, laisserait la page « Générer » morte sur le bureau. */
 	r.check("isDesktopApp est vrai sous un Obsidian de bureau", host.platform.isDesktopApp, true);
 
+	/* `openExternal` d'une CHAÎNE (un chemin ABSOLU admis par le dialogue
+	   natif de l'application) : sous le greffon, cette forme n'a rien à
+	   ouvrir — pas de racine externe. La garde doit couper AVANT même de
+	   consulter `vault.getAbstractFileByPath` : `getAbstractFileByPath` est
+	   ici truqué pour rendre TOUJOURS un fichier réel, quel que soit
+	   l'argument (y compris `undefined`, ce que `file.path` vaudrait sur une
+	   chaîne sans la garde) — sans la garde, ce mock ferait `tfile` réussir
+	   sur N'IMPORTE QUELLE chaîne et `openWithDefaultApp` serait appelé sur
+	   un fichier sans rapport avec l'argument reçu. */
+	let openWithDefaultAppAppele = false;
+	const appAvecOuvertureTruquee = {
+		...fausseApp(fichiers),
+		vault: { ...fausseApp(fichiers).vault, getAbstractFileByPath: () => fichiers[0] },
+		openWithDefaultApp: async () => { openWithDefaultAppAppele = true; },
+	};
+	const hostAvecOuvertureTruquee = createObsidianHost(appAvecOuvertureTruquee, { manifest: {} });
+	r.check("openExternal d'une chaîne rend false sans appeler openWithDefaultApp",
+		[await hostAvecOuvertureTruquee.shell.openExternal("C:/Users/x/Downloads/choisi.pdf"), openWithDefaultAppAppele],
+		[false, false]);
+
 	/* La regex de cards.ts décide quelles URL sont DÉJÀ résolues. Un préfixe
 	   oublié fait réécrire une URL bonne — et le défaut n'apparaîtrait que
 	   dans l'app, à l'exécution. Rien d'autre ne le verrait. */

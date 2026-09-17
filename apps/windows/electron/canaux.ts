@@ -9,14 +9,21 @@
    surveillant pousse ses événements vers le rendu.
 
    LA RÈGLE QUI GOUVERNE CE FICHIER : aucun chemin venu du rendu n'atteint une
-   primitive sans passer par `perimetre.borner` (`./perimetre.ts`). Tous les
-   canaux `fichiers.*`, plus `systeme.ouvrir`, y passent ; `demarrer` FILTRE
-   ses racines contre le périmètre au lieu de le définir ; et les deux clés des
-   réglages qui donnent un DROIT au principal sont GARDÉES à l'écriture :
-   `folders`, qui nourrit le périmètre au prochain démarrage, et `ai`
-   (`garde-ia.ts`), dont l'hôte d'`aiOllamaUrl` entre dans la liste du réseau
-   et dont `aiMentionExtraFolders` désigne des dossiers lus par les canaux.
-   `ouvrir` refuse EN PLUS les extensions exécutables
+   primitive sans passer par le périmètre (`./perimetre.ts`) — depuis le
+   2026-09-17, par DEUX portes. `perimetre.borner` pour tout ce qui LIT ou
+   OUVRE (`read`, `readBinary`, `exists`, `stat`, `statEntree`, `list`,
+   `listerDossier`, `liste`, `ouvrir`…) ; `perimetre.bornerEcriture` pour tout
+   ce qui ÉCRIT, DÉPLACE ou EFFACE (`write`, `writeBinary`, `append`, la
+   moitié écriture de `process` — `ecrireSiInchange` —, `mkdirs`, `trash`,
+   `remove`, `rename` sur ses deux arguments) : elle n'accepte que les
+   RACINES, jamais un fichier admis par le dialogue natif. Tous les canaux
+   `fichiers.*`, plus `systeme.ouvrir`, passent par l'une des deux ;
+   `demarrer` FILTRE ses racines contre le périmètre au lieu de le définir ;
+   et les deux clés des réglages qui donnent un DROIT au principal sont
+   GARDÉES à l'écriture : `folders`, qui nourrit le périmètre au prochain
+   démarrage, et `ai` (`garde-ia.ts`), dont l'hôte d'`aiOllamaUrl` entre dans
+   la liste du réseau et dont `aiMentionExtraFolders` désigne des dossiers lus
+   par les canaux. `ouvrir` refuse EN PLUS les extensions exécutables
    (`EXTENSIONS_EXECUTABLES`, `ressources.ts`) : le périmètre borne l'écriture
    et la lecture, pas l'exécution, et `write` puis `ouvrir` d'un `.bat` les
    composerait.
@@ -288,7 +295,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	ipcMain.handle(CANAUX.readCached, async (_e, abs: unknown) => fichiers.readCached(await perimetre.borner(abs)));
 
 	ipcMain.handle(CANAUX.write, async (_e, abs: unknown, contenu: string) => {
-		const a = await perimetre.borner(abs);
+		const a = await perimetre.bornerEcriture(abs);
 		await ecrireTexte(etat, a, String(contenu));
 		return await fraicheur(a);
 	});
@@ -308,7 +315,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	   écritures rapprochées. `null` n'est pas une erreur, c'est la réponse
 	   « le fichier a changé, rejoue ton rappel ». */
 	ipcMain.handle(CANAUX.ecrireSiInchange, async (_e, abs: unknown, lu: string, contenu: string) => {
-		const a = await perimetre.borner(abs);
+		const a = await perimetre.bornerEcriture(abs);
 		const actuel = await fichiers.read(a);
 		if (actuel !== lu) return null;
 		await ecrireTexte(etat, a, String(contenu));
@@ -316,25 +323,25 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	});
 
 	ipcMain.handle(CANAUX.writeBinary, async (_e, abs: unknown, data: Uint8Array) => {
-		const a = await perimetre.borner(abs);
+		const a = await perimetre.bornerEcriture(abs);
 		await fichiers.writeBinary(a, data);
 		return await fraicheur(a);
 	});
 
 	ipcMain.handle(CANAUX.append, async (_e, abs: unknown, contenu: string) => {
-		const a = await perimetre.borner(abs);
+		const a = await perimetre.bornerEcriture(abs);
 		await fichiers.append(a, String(contenu));
 		return await fraicheur(a);
 	});
 
 	ipcMain.handle(CANAUX.exists, async (_e, abs: unknown) => fichiers.exists(await perimetre.borner(abs)));
-	ipcMain.handle(CANAUX.mkdirs, async (_e, abs: unknown) => fichiers.mkdirs(await perimetre.borner(abs)));
+	ipcMain.handle(CANAUX.mkdirs, async (_e, abs: unknown) => fichiers.mkdirs(await perimetre.bornerEcriture(abs)));
 	/* `racine` doit ÊTRE une racine autorisée, pas seulement y tomber : c'est
 	   d'elle que `trash` déduit `<racine>/.trash/<relatif>`, et une racine
 	   quelconque ferait de `path.relative` un `../../…` — un déplacement vers
 	   n'importe où. Et `abs` doit tomber SOUS cette racine-là. */
 	ipcMain.handle(CANAUX.trash, async (_e, abs: unknown, racine: unknown) => {
-		const a = await perimetre.borner(abs);
+		const a = await perimetre.bornerEcriture(abs);
 		if (typeof racine !== "string" || !(await perimetre.estRacine(racine))) {
 			throw new Error("trash : racine inconnue : " + String(racine));
 		}
@@ -347,9 +354,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	   forme, sinon le miroir du rendu tiendrait deux clés pour un seul fichier. */
 	ipcMain.handle(CANAUX.list, async (_e, dossier: unknown) =>
 		(await fichiers.list(await perimetre.borner(dossier))).map(normaliser));
-	ipcMain.handle(CANAUX.remove, async (_e, abs: unknown) => fichiers.remove(await perimetre.borner(abs)));
+	ipcMain.handle(CANAUX.remove, async (_e, abs: unknown) => fichiers.remove(await perimetre.bornerEcriture(abs)));
 	ipcMain.handle(CANAUX.rename, async (_e, de: unknown, vers: unknown) =>
-		fichiers.rename(await perimetre.borner(de), await perimetre.borner(vers)));
+		fichiers.rename(await perimetre.bornerEcriture(de), await perimetre.bornerEcriture(vers)));
 	ipcMain.handle(CANAUX.stat, async (_e, abs: unknown) => stat(await perimetre.borner(abs)));
 	/* Les trois canaux des RACINES EXTERNES du sélecteur « @ » (`HostFs.externe`,
 	   `src/host/types.ts`), BORNÉS comme tous les autres : c'est le périmètre,
@@ -508,6 +515,33 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 		await reglagesOuErreur().ecrire(CLE_DOSSIER_DEFAUT, abs);
 		poserDossierDefaut(abs);
 		return abs;
+	});
+
+	/* Le dialogue natif de FICHIERS : « Add files » du composer. Les filtres
+	   sont composés ICI depuis une union fermée, jamais reçus. Chaque fichier
+	   choisi est admis au périmètre en LECTURE et OUVERTURE seulement
+	   (`autoriserFichier`) : c'est ce qui donne un bouton « Ouvrir » à
+	   l'aperçu d'un PDF joint, sans ouvrir le disque en écriture. */
+	const FILTRES: Record<string, { name: string; extensions: string[] }[]> = {
+		documents: [{ name: "Documents", extensions: ["pdf", "md", "txt"] }, { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+		images: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+		any: [],
+	};
+	ipcMain.handle(CANAUX.systemeChoisirFichiers, async (_e, kind: unknown) => {
+		const filtres = typeof kind === "string" && kind in FILTRES ? FILTRES[kind] : FILTRES.any;
+		const fenetre = deps.fenetreCourante();
+		const proprietes: ("openFile" | "multiSelections")[] = ["openFile", "multiSelections"];
+		const choix = fenetre
+			? await dialog.showOpenDialog(fenetre, { properties: proprietes, filters: filtres })
+			: await dialog.showOpenDialog({ properties: proprietes, filters: filtres });
+		if (choix.canceled) return [];
+		const admis: string[] = [];
+		for (const brut of choix.filePaths) {
+			const abs = normaliser(brut);
+			await perimetre.autoriserFichier(abs);
+			admis.push(abs);
+		}
+		return admis;
 	});
 
 	/* RELANCER. `app.relaunch()` réutilise l'exécutable et les arguments du

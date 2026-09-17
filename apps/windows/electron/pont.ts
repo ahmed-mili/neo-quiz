@@ -373,6 +373,15 @@ export interface Pont {
 		 */
 		choisirDossierDefaut(): Promise<string | null>;
 		/**
+		 * Le dialogue natif de FICHIERS (« Add files » du composer). Les
+		 * filtres sont composés dans le PRINCIPAL depuis une union fermée —
+		 * le rendu ne les choisit pas plus qu'il ne choisit un chemin.
+		 * Chaque chemin rendu a été admis au PÉRIMÈTRE en lecture et
+		 * ouverture seulement (`perimetre.autoriserFichier`), jamais en
+		 * écriture : voir `./perimetre.ts`. `[]` si l'utilisateur annule.
+		 */
+		choisirFichiers(kind: "documents" | "images" | "any"): Promise<string[]>;
+		/**
 		 * RELANCE l'application — le processus entier, pas la seule fenêtre.
 		 *
 		 * UN SEUL APPELANT, ET UNE SEULE RAISON : le changement de langue.
@@ -603,6 +612,7 @@ export const CANAUX = {
 	systemeRelancer: "neo:systeme/relancer",
 	systemeCopierTexte: "neo:systeme/copier-texte",
 	systemeChoisirDossierDefaut: "neo:systeme/choisir-dossier-defaut",
+	systemeChoisirFichiers: "neo:systeme/choisir-fichiers",
 	reseauFetch: "neo:reseau/fetch",
 	reseauAnnuler: "neo:reseau/annuler",
 	processusRun: "neo:process/run",

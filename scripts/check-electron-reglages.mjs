@@ -325,6 +325,33 @@ await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetr
 				{ racine: true, sousDossier: false, etranger: false });
 		});
 
+		await cas(r, "un FICHIER admis se lit et s'ouvre, mais ne s'écrit pas", async () => {
+			const choisi = join(ailleurs, "choisi.pdf");
+			await writeFile(choisi, "%PDF", "utf-8");
+			await p.autoriserFichier(choisi);
+			r.check("un FICHIER admis se lit et s'ouvre, mais ne s'écrit pas",
+				{
+					lecture: await p.borner(choisi),
+					ecriture: await aRejete(() => p.bornerEcriture(choisi)),
+					voisin: await aRejete(() => p.borner(join(ailleurs, "secret.md"))),
+					racineEcriture: await p.bornerEcriture(join(racine, "Cours", "n.md")),
+				},
+				{
+					lecture: choisi.replace(/\\/g, "/"),
+					ecriture: true,
+					voisin: true,
+					racineEcriture: join(racine, "Cours", "n.md").replace(/\\/g, "/"),
+				});
+		});
+
+		await cas(r, "autoriserFichier ignore un dossier et un chemin absent", async () => {
+			await p.autoriserFichier(ailleurs);
+			await p.autoriserFichier(join(ailleurs, "absent.pdf"));
+			r.check("autoriserFichier ignore un dossier et un chemin absent",
+				{ dossier: await aRejete(() => p.borner(join(ailleurs, "secret.md"))), absent: await aRejete(() => p.borner(join(ailleurs, "absent.pdf"))) },
+				{ dossier: true, absent: true });
+		});
+
 		await cas(r, "un argument qui n'est pas une chaîne est refusé AVEC SA CAUSE", async () => {
 			/* La CAUSE, pas seulement le rejet : sans la garde `typeof`, un objet
 			   ferait jeter `path.resolve` (une TypeError sans rapport) et une
@@ -410,15 +437,20 @@ await withSrcModule("apps/windows/electron/perimetre.ts", async ({ creerPerimetr
 /**
  * LA BORNE DES CANAUX `fichiers.*`, STATIQUEMENT (tranche 5, tâche 5, ruling
  * 14). `canaux.ts` tire Electron et ne se charge dans aucun script : la
- * preuve que CHAQUE canal de fichiers passe par `perimetre.borner` était donc
+ * preuve que CHAQUE canal de fichiers passe par le périmètre était donc
  * celle de personne — un canal ajouté sans sa borne (c'est arrivé trois fois
  * d'un coup à la tranche 5 : `listerDossier`, `statEntree`, `readBinary`)
  * serait un accès disque total depuis la fenêtre, et aucun contrôle ne
  * rougirait. Ici : la liste des canaux est DÉRIVÉE de `CANAUX` (`pont.ts`, sans
  * Node), jamais recopiée ; chaque `ipcMain.handle(CANAUX.<x>, …)` dont le canal
- * commence par `neo:fichiers/` doit contenir `perimetre.borner(` dans son corps
- * — délimité par les parenthèses équilibrées de l'appel, pas par une regex
- * de ligne, parce qu'un gestionnaire s'étend souvent sur dix lignes.
+ * commence par `neo:fichiers/` doit contenir `perimetre.borner(` OU
+ * `perimetre.bornerEcriture(` dans son corps — délimité par les parenthèses
+ * équilibrées de l'appel, pas par une regex de ligne, parce qu'un gestionnaire
+ * s'étend souvent sur dix lignes. Depuis le 2026-09-17, le périmètre a DEUX
+ * portes (`bornerEcriture` pour ce qui écrit, déplace ou efface) : ce test ne
+ * distingue pas laquelle, seulement qu'AU MOINS UNE des deux borne le canal —
+ * `check:electron-reglages` (groupe « périmètre ») éprouve LAQUELLE pour
+ * chaque canal, par ses cas de comportement, pas par cette liste statique.
  */
 await withSrcModule("apps/windows/electron/pont.ts", async ({ CANAUX }) => {
 	const r = makeReporter("Périmètre — chaque canal fichiers.* est borné (statique)");
@@ -447,9 +479,9 @@ await withSrcModule("apps/windows/electron/pont.ts", async ({ CANAUX }) => {
 	r.check("chaque canal fichiers.* de CANAUX a un gestionnaire dans canaux.ts", sansGestionnaire, []);
 	const nonBornes = canauxFichiers.filter(nom => {
 		const corps = corpsDe(nom);
-		return corps !== null && !corps.includes("perimetre.borner(");
+		return corps !== null && !corps.includes("perimetre.borner(") && !corps.includes("perimetre.bornerEcriture(");
 	});
-	r.check("chaque gestionnaire fichiers.* appelle perimetre.borner(", nonBornes, []);
+	r.check("chaque gestionnaire fichiers.* appelle perimetre.borner( ou perimetre.bornerEcriture(", nonBornes, []);
 	/* La liste dérivée n'est pas vide, et elle contient les trois canaux de la
 	   tranche 5 : sans ce cas, un `CANAUX` renommé (« neo:fs/… ») viderait la
 	   liste et rendrait les deux cas ci-dessus verts sur rien. */

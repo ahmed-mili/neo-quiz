@@ -259,6 +259,11 @@ réponse étant toujours non.
   rend du HTML qui n'est pas toujours celui de l'utilisateur. Le cas du `..` est
   CONCATÉNÉ, jamais composé par `path.join` : `join` replie déjà les `..` et le cas
   était vert quoi qu'on casse.
+  Depuis le 2026-09-17, le périmètre a DEUX listes : les racines (lecture et
+  écriture) et les fichiers admis par le dialogue natif (lecture et ouverture
+  seulement, `autoriserFichier`/`bornerEcriture`). Le cas « un fichier admis ne
+  s'écrit pas » est ce qui empêche « choisis-moi ce fichier » de devenir
+  « écris dedans ».
   Et le dossier de RÉGLAGES (`userData`) reste HORS périmètre au démarrage : il
   porte `settings.json`, dont la clé `folders` nourrit le périmètre à la session
   suivante — l'y admettre laisserait le pont réécrire ce fichier en brut et
@@ -276,8 +281,11 @@ réponse étant toujours non.
   reste intacte après le refus.
   Depuis la tranche 5 (tâche 5, ruling 14), un groupe STATIQUE : **chaque
   gestionnaire `ipcMain.handle(CANAUX.<x>, …)` de `canaux.ts` dont le canal est
-  `neo:fichiers/*` contient `perimetre.borner(`**, la liste des canaux DÉRIVÉE
-  de `CANAUX` (`pont.ts`), jamais recopiée. `canaux.ts` tire Electron et ne se
+  `neo:fichiers/*` contient `perimetre.borner(` OU `perimetre.bornerEcriture(`**
+  (les deux portes du périmètre depuis le 2026-09-17 — ce test ne distingue pas
+  laquelle, seulement qu'AU MOINS UNE borne le canal ; c'est le groupe
+  COMPORTEMENTAL « périmètre » qui prouve laquelle pour chaque canal), la liste
+  des canaux DÉRIVÉE de `CANAUX` (`pont.ts`), jamais recopiée. `canaux.ts` tire Electron et ne se
   charge dans aucun script : jusque-là, la borne de chaque canal n'était prouvée
   par personne, et trois canaux nés d'un coup (`listerDossier`, `statEntree`,
   `readBinary`) auraient pu arriver sans elle — un accès disque total depuis la

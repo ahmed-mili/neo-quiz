@@ -13,7 +13,8 @@
 
    CE QUI ALIMENTE LA LISTE, et rien d'autre : la clé `folders` des réglages
    (lue au démarrage, côté principal), le sélecteur natif (`choisirDossier`),
-   les vaults qu'Obsidian déclare lui-même (`vaultsObsidian`). JAMAIS le
+   les vaults qu'Obsidian déclare lui-même (`vaultsObsidian`), et les FICHIERS
+   choisis dans le dialogue natif (`choisirFichiers`), en LECTURE SEULE. JAMAIS le
    dossier de données de l'application (Ruling 12) : il porte `settings.json`,
    dont la clé `folders` nourrit cette liste au démarrage suivant — l'admettre
    ferait du pont un moyen d'écrire cette clé en brut, hors de la garde de
@@ -57,6 +58,13 @@ export interface Perimetre {
 	    périmètre ; REJETTE avec une cause nommée sinon. C'est la seule porte
 	    par laquelle un chemin du pont atteint une primitive. */
 	borner(chemin: unknown): Promise<string>;
+	/** Admet UN fichier existant (résolu) en LECTURE et OUVERTURE — jamais en
+	    écriture. C'est ce qu'un fichier choisi dans le dialogue natif obtient :
+	    l'utilisateur l'a désigné pour le joindre, pas pour qu'on l'écrase. */
+	autoriserFichier(abs: string): Promise<void>;
+	/** Comme `borner`, mais n'accepte que les RACINES : les canaux qui
+	    écrivent, déplacent ou effacent passent par ici. */
+	bornerEcriture(chemin: unknown): Promise<string>;
 	/** Les racines autorisées, résolues. */
 	racines(): string[];
 }
@@ -85,11 +93,18 @@ async function resoudre(chemin: string): Promise<string | null> {
 
 export function creerPerimetre(): Perimetre {
 	const racines: string[] = [];
+	/* La SECONDE liste : des FICHIERS (jamais des dossiers), admis un par un
+	   par `autoriserFichier`, en LECTURE ET OUVERTURE seulement. `dansPerimetre`
+	   ne la consulte que quand `ecriture` est faux — c'est ce qui empêche
+	   « choisis-moi ce fichier » de devenir « écris dedans ». */
+	const fichiersLecture: string[] = [];
 
-	async function dansPerimetre(chemin: string): Promise<string | null> {
+	async function dansPerimetre(chemin: string, ecriture = false): Promise<string | null> {
 		const reel = await resoudre(chemin);
 		if (reel === null) return null;
-		return contratDepuisAbsolu(racines, reel) === null ? null : reel;
+		if (contratDepuisAbsolu(racines, reel) !== null) return reel;
+		if (!ecriture && fichiersLecture.some(f => f.toLowerCase() === reel.toLowerCase())) return reel;
+		return null;
 	}
 
 	return {
@@ -102,6 +117,16 @@ export function creerPerimetre(): Perimetre {
 				return;
 			}
 			if (!racines.some(r => r.toLowerCase() === reel.toLowerCase())) racines.push(reel);
+		},
+		async autoriserFichier(abs) {
+			const reel = await resoudre(abs);
+			if (reel === null) return;
+			try {
+				if (!(await fs.stat(reel)).isFile()) return;
+			} catch {
+				return;
+			}
+			if (!fichiersLecture.some(f => f.toLowerCase() === reel.toLowerCase())) fichiersLecture.push(reel);
 		},
 		async contient(chemin) {
 			return (await dansPerimetre(chemin)) !== null;
@@ -119,6 +144,15 @@ export function creerPerimetre(): Perimetre {
 			}
 			if ((await dansPerimetre(chemin)) === null) {
 				throw new Error("chemin hors des dossiers ouverts : " + chemin);
+			}
+			return normaliser(path.resolve(chemin));
+		},
+		async bornerEcriture(chemin) {
+			if (typeof chemin !== "string" || !chemin.trim()) {
+				throw new Error("chemin invalide : " + JSON.stringify(chemin));
+			}
+			if ((await dansPerimetre(chemin, true)) === null) {
+				throw new Error("chemin hors des dossiers ouverts (écriture) : " + chemin);
 			}
 			return normaliser(path.resolve(chemin));
 		},

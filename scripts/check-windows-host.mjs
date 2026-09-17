@@ -722,6 +722,7 @@ function installerPont(fichiers = {}, perimetre = null) {
 			async ouvrir(p) { journal.push(["ouvrir", p]); return true; },
 			async vaultsObsidian() { return []; },
 			async dossierDefaut() { return "C:/Neo Quiz"; },
+			async choisirFichiers(kind) { journal.push(["systeme.choisirFichiers", kind]); return ["C:/tmp/choisi.pdf"]; },
 		},
 		/* Le RÉSEAU du pont, journalisé : ce que le rendu a décidé d'envoyer (la
 		   requête SANS `signal`, l'identifiant) et ce qu'il annule. La réponse
@@ -835,6 +836,25 @@ function installerPont(fichiers = {}, perimetre = null) {
 	   deux premiers de tout sens : ils resteraient verts sur un fichier
 	   qu'ils ne reconnaissent plus. */
 	r.check("… et c'est bien l'hôte assemblé qui a été lu", nu.includes("export function createWindowsHost("), true);
+	r.done();
+}
+
+/* `shell.openExternal` D'UNE CHAÎNE, statiquement — même raison que le bloc
+   PDF ci-dessus (`index.ts` importe MathLive par `createWindowsModals`/
+   `createWindowsUi`, qu'esbuild ne charge pas hors de la fenêtre : ce module
+   ne peut pas être chargé dynamiquement dans ce script, contrairement à
+   `fs.ts`, qui porte le cas COMPORTEMENTAL d'`externe.pickFiles` un peu plus
+   bas). Une CHAÎNE (un fichier admis par le dialogue natif) doit devenir
+   `a` TELLE QUELLE, sans passer par `index.get`/`carte.absolu`, qui ne
+   connaissent que les chemins du CONTRAT — leur faire lire un chemin ABSOLU
+   le rejetterait comme « pas dans l'index ». */
+{
+	const r = makeReporter("Hôte Windows — openExternal d'une chaîne (statique)");
+	const source = readFileSync("apps/windows/src/host/index.ts", "utf-8");
+	const nu = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+	r.check("openExternal traite une CHAÎNE comme un chemin ABSOLU, sans consulter l'index",
+		/const a = typeof file === "string" \? file : \(file && index\.get\(file\.path\) \? carte\.absolu\(file\.path\) : null\);/.test(nu),
+		true);
 	r.done();
 }
 
@@ -1098,6 +1118,15 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, bui
 		r.check("externe.read lit par le pont", await fs.externe.read("C:/Users/x/Downloads/Cours/notes.txt"), "notes");
 		r.check("externe.readBinary rend les octets",
 			[...await fs.externe.readBinary("C:/Users/x/Downloads/poly.pdf")], [...new TextEncoder().encode("pdf")]);
+
+		/* Le dialogue natif de fichiers (« Add files ») : une pure DÉLÉGATION au
+		   pont, sans rien borner ici — c'est le PRINCIPAL qui admet chaque
+		   chemin choisi au périmètre (`autoriserFichier`), voir `canaux.ts`. */
+		const avantPick = pont.journal.length;
+		r.check("externe.pickFiles rend les chemins admis par le principal",
+			await fs.externe.pickFiles("documents"), ["C:/tmp/choisi.pdf"]);
+		r.check("… et journalise le kind demandé, tel quel",
+			pont.journal.slice(avantPick), [["systeme.choisirFichiers", "documents"]]);
 
 		/* ── externe : HORS périmètre ── */
 

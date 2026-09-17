@@ -500,7 +500,7 @@
 }
 /* LE CHEMIN, ENTIER, DANS UNE PISTE (Ahmed, 2026-09-17). La carte fait 350 px
    et un chemin d'école en fait le double : plutôt que de le couper, la piste
-   le fait DÉFILER, et un clic la libère pour le parcourir à la main.
+   le fait DÉFILER.
    `min-width: 0` sur les deux niveaux, sans quoi un flex refuse de rétrécir
    sous la largeur de son contenu et c'est la CARTE qui s'élargirait. */
 .qbd-module-card__path {
@@ -510,9 +510,12 @@
 	flex: 0 1 auto;
 	min-width: 0;
 	margin-right: auto;
-	/* Le reste de la carte s'ouvre au clic, pas le chemin : le curseur ne doit
-	   pas promettre ici ce que le clic ne fera pas. */
-	cursor: default;
+	/* IL NE RÉAGIT À RIEN (Ahmed, 2026-09-17 : « il défile tranquillement,
+	   c'est tout »). Pas de clic qui l'arrête, pas de curseur qui change, pas
+	   de sélection : la souris le traverse et c'est la CARTE, dessous, qui
+	   reçoit le survol et le clic — un chemin qu'on peut attraper est un
+	   chemin qui saute au premier geste. */
+	pointer-events: none;
 }
 
 /* La pastille du vault : la taille de la ligne, à la couleur du chemin — un
@@ -585,35 +588,14 @@
 	to { transform: translateX(-50%); }
 }
 
-/* LIBÉRÉE PAR UN CLIC : l'animation s'arrête, le défilement natif prend la
-   main (le second exemplaire est retiré par le script — il ferait lire le
-   chemin deux fois). La barre est cachée : dans une carte de 148 px, elle
-   mangerait la ligne qu'elle sert. */
-.qbd-module-card__path-piste.is-libre {
-	overflow-x: auto;
-	scrollbar-width: none;
-}
-
-.qbd-module-card__path-piste.is-libre::-webkit-scrollbar {
-	display: none;
-}
-
-.qbd-module-card__path-piste.is-libre .qbd-module-card__path-rail {
-	animation: none;
-	transform: none;
-}
-
-/* Mouvement réduit : le chemin ne bouge plus de lui-même, et la piste est
-   libre D'EMBLÉE — sans quoi il n'y aurait plus aucun moyen d'en lire la fin. */
+/* Mouvement réduit : le chemin ne bouge plus de lui-même. Il reste coupé au
+   bord de la piste, estompé par le masque ci-dessus : c'est le début du
+   chemin qui situe, et une piste qu'on ferait défiler à la main serait une
+   interaction de plus sur un élément qui n'en a aucune. */
 @media (prefers-reduced-motion: reduce) {
 	.qbd-module-card__path-piste .qbd-module-card__path-rail {
 		animation: none;
 		transform: none;
-	}
-
-	.qbd-module-card__path-piste {
-		overflow-x: auto;
-		scrollbar-width: none;
 	}
 }
 /* Bouton ••• = menu ⋯ existant (icône ellipsis Lucide ≈ •••), stylé comme le

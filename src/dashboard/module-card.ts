@@ -91,8 +91,10 @@ export function renderModuleCard(
 	const footer = ajouter(card, "div", "qbd-module-card__footer");
 	/* LE CHEMIN, ENTIER (Ahmed, 2026-09-17). Plus de milieu réduit : la carte
 	   le montre en entier dans une piste de largeur bornée, qui DÉFILE de
-	   droite à gauche en boucle quand il déborde, et qu'un clic rend libre
-	   pour le parcourir à la main.
+	   droite à gauche en boucle quand il déborde. Et RIEN D'AUTRE (Ahmed,
+	   2026-09-17) : aucun clic ne l'arrête, aucun curseur ne le désigne — la
+	   piste est transparente aux gestes (`pointer-events: none`, CSS), c'est
+	   la carte qui les reçoit.
 	   LA BOUCLE EST SANS COUTURE PARCE QUE LE TEXTE EST EN DEUX EXEMPLAIRES :
 	   le rail glisse de la largeur d'un exemplaire, et à l'instant où il
 	   revient à zéro le second occupe exactement la place que le premier
@@ -122,16 +124,6 @@ export function renderModuleCard(
 		const rail = ajouter(piste, "div", "qbd-module-card__path-rail");
 		const libelle = `${racine.name}/${currentHost().paths.localPath(group.path)}`;
 		const texte = ajouter(rail, "span", "qbd-module-card__path-texte", libelle);
-		/* Un clic LIBÈRE la piste : le second exemplaire s'en va — il ferait
-		   lire le chemin deux fois à qui le parcourt à la main —, l'animation
-		   s'arrête et le défilement natif prend la main. `stopPropagation`
-		   parce que le reste de la carte ouvre le dossier, et lire un chemin
-		   n'est pas l'ouvrir. */
-		piste.addEventListener("click", (e) => {
-			e.stopPropagation();
-			rail.querySelector(".qbd-module-card__path-texte--echo")?.remove();
-			piste.classList.add("is-libre");
-		});
 		/* Après la peinture : dans la même image, `scrollWidth` vaut encore
 		   `clientWidth` et aucune carte ne défilerait jamais.
 		   L'ÉCART VAUT LA LARGEUR DE LA PISTE, et non un nombre fixe : c'est
@@ -166,7 +158,7 @@ export function renderModuleCard(
 		   restés derrière retiendraient autant de cartes mortes. */
 		const observateur = new ResizeObserver(() => {
 			if (!piste.isConnected) { observateur.disconnect(); return; }
-			if (!piste.classList.contains("is-libre")) calibrer();
+			calibrer();
 		});
 		observateur.observe(piste);
 	}

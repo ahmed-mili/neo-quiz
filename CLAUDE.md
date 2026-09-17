@@ -13,6 +13,30 @@ chantier « greffon lecteur » (2026-09-13) — voir « Structure du dépôt » 
 français** ; **UI traduite** (anglais par défaut, cf. « Langue » ci-dessous) —
 le plugin vise la liste communautaire d'Obsidian.
 
+## La mémoire du projet est la note du vault, pas un fichier de mémoire
+
+`C:\obsidian-vaults\Personal\Projets\Neo Quiz\Objectifs & Idées.md` est
+**la** mémoire du chantier en cours : ce qui est fait, en cours, à faire, et
+combien il en reste. Décidé le 2026-09-17 (« c'est ce dossier qui doit te
+servir de mémoire du projet, au moins pour les plans ; à chaque fois je dois
+dire de mettre à jour les tâches, c'est épuisant »). Règles, **sans jamais
+attendre qu'Ahmed le demande** :
+
+- **Au début d'une session** sur un chantier : lire le callout `[!goal]`
+  courant de cette note avant tout — c'est là, pas dans `memory/`, que vit
+  l'état du plan.
+- **Dès qu'un plan est commité** : ses N tâches y sont écrites en entier, une
+  ligne `- [ ] <span class="num">TN.</span> **titre** : une phrase` par tâche,
+  dans une tranche `**Le plan, tâche par tâche**` du callout de la version
+  en cours — la dernière ligne dit combien il y en a.
+- **À chaque dispatch** d'une tâche : sa ligne passe `- [/]`. **À chaque revue
+  close** : `- [x]` + SHA court entre parenthèses. Un bug ou une idée vus à
+  l'écran pendant le chantier : une ligne de plus dans le même callout, le
+  jour même.
+- **Toujours par un agent haiku** (jamais la session principale), avec le
+  texte exact des lignes à changer. C'est le rôle que la mémoire
+  `feedback_note-vault-task-in-progress` ne fait que pointer.
+
 ## Langue (i18n)
 
 - **Jamais de chaîne visible en dur** dans le code : tout passe par `t("<domaine>.<clé>")`

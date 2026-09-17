@@ -2154,6 +2154,144 @@ git commit -m "l'aperçu d'une note reprend les snippets de son vault, portés p
 
 ---
 
+### Task 13: La destination d'un quiz généré porte l'icône de son dossier et sa racine
+
+Vu à l'écran par Ahmed le 2026-09-17 au soir, pendant le chantier : le menu
+« Destination » du popover des options listait « Generated » DEUX fois. Ce ne
+sont pas des doublons : `C:\Neo Quiz\Generated` (le défaut, 2 quiz) et
+`C:\obsidian-vaults\Personal\Generated` (1 quiz) existent tous deux. La liste
+a raison de montrer les deux, elle a tort de les rendre indiscernables. Et
+Ahmed voudrait y voir l'icône choisie pour chaque dossier.
+
+**Files:**
+- Modify: `src/dashboard/ai.ts` (`AiPageDeps.quizFolders`, `destinationOptions`)
+- Modify: `apps/windows/src/ui/dashboard-shell.ts` (`dossiersDeQuiz`)
+- Modify: `src/dashboard/ui-select.ts` (`openOptionsMenu`, section Destination, ~lignes 1095-1300)
+- Modify: `src/assets/css/dashboard/dashboard-ai.css` (`.qbd-opts-dd-icon`, `.qbd-opts-dd-sub`, ~ligne 1999)
+- Modify: `CHANGELOG.md`
+
+**Interfaces:**
+- Consumes: `moduleIcon(m, { generated })`, `GENERATED_MODULE_ICON` de `src/dashboard/module-icons.ts` ; `moduleAccent(m, { generated })`, `GENERATED_MODULE_ACCENT` de `src/dashboard/module-color.ts` ; `ctx.generatedFolder?()` (`DashboardShellCtx`) ; `currentHost().paths.rootOf(path)` (`HostPaths`, rend `HostRoot | null`, dont `name`).
+- Produces: `AiPageDeps.quizFolders?(): { path: string; name: string; icon: string; color: string; root: string }[]` ; `openOptionsMenu(..., { folders?: { value: string; label: string; icon?: string; color?: string; sub?: string }[] })`.
+
+- [ ] **Step 1: L'hôte décrit chaque dossier**
+
+Dans `apps/windows/src/ui/dashboard-shell.ts`, `dossiersDeQuiz()` rend pour chaque dossier, en plus de `path` et `name`, son icône, sa couleur et sa racine :
+
+```ts
+	/* L'icône, la couleur et la RACINE de chaque dossier, pour que le menu
+	   « Destination » les montre : deux dossiers homonymes (« Generated » dans
+	   Neo Quiz et dans Personal) étaient indiscernables (Ahmed, 2026-09-17).
+	   Même règle d'icône et d'accent que la carte du dossier (`moduleIcon`,
+	   `moduleAccent`) : une icône choisie l'emporte, le SAS des générés a son
+	   étincelle, le reste son livre. */
+	function decrire(path: string, name: string): { path: string; name: string; icon: string; color: string; root: string } {
+		const overrides = ctx.settings.quizzesModuleOverrides || {};
+		const ov = Object.values(overrides).find(o => o?.path === path) ?? overrides[name];
+		const generated = path === ctx.generatedFolder?.();
+		return {
+			path, name,
+			icon: moduleIcon(ov ?? {}, { generated }),
+			color: moduleAccent({ folder: name, color: ov?.color }, { generated }),
+			root: currentHost().paths.rootOf(path)?.name ?? "",
+		};
+	}
+```
+
+et `return [...vus.entries()].map(([path, name]) => decrire(path, name)).sort((a, b) => a.name.localeCompare(b.name));`. Importer `moduleIcon` et `moduleAccent` depuis `src/dashboard/module-icons` et `src/dashboard/module-color` (chemins relatifs comme les autres imports de `src/` dans ce fichier). Vérifier que `ctx` (le `DashboardShellCtx`) est en portée là où `dossiersDeQuiz` est définie ; sinon lire `ctx.settings` et `generatedFolder` par le même chemin que les fonctions voisines.
+
+- [ ] **Step 2: La page compose les options**
+
+Dans `src/dashboard/ai.ts`, `AiPageDeps.quizFolders?(): { path: string; name: string; icon: string; color: string; root: string }[]` (doc : « `icon`, `color`, `root` : l'apparence de la carte du dossier et le nom de sa racine, pour que deux dossiers homonymes se distinguent »). `destinationOptions()` devient :
+
+```ts
+	function destinationOptions(): { value: string; label: string; icon: string; color: string; sub: string }[] {
+		const defaut = defaultDestination();
+		const racine = host.paths.defaultRoot();
+		const options = [{
+			value: "",
+			label: settings().aiOutputFolder || aiSettingsDefaults().aiOutputFolder,
+			icon: GENERATED_MODULE_ICON,
+			color: GENERATED_MODULE_ACCENT,
+			sub: racine.name,
+		}];
+		const vus = new Set([defaut]);
+		for (const d of deps.quizFolders?.() ?? []) {
+			if (!d.path || vus.has(d.path)) continue;
+			vus.add(d.path);
+			options.push({ value: d.path, label: d.name || d.path, icon: d.icon, color: d.color, sub: d.root });
+		}
+		return options;
+	}
+```
+
+Importer `GENERATED_MODULE_ICON` (`./module-icons`) et `GENERATED_MODULE_ACCENT` (`./module-color`). L'infobulle du bouton d'options (`attachHoverTip`, ~ligne 1107) affiche `choisi.label` : la laisser telle quelle.
+
+- [ ] **Step 3: Le menu montre icône, nom et racine**
+
+Dans `src/dashboard/ui-select.ts`, le type `folders` d'`openOptionsMenu` devient `{ value: string; label: string; icon?: string; color?: string; sub?: string }[]`. Dans la boucle `for (const f of folders)` :
+
+```ts
+			const item = ajouter(destMenu, "button", "qbd-opts-dd-item");
+			item.type = "button";
+			item.dataset.folder = f.value;
+			ajouter(item, "span", "qbd-select-check");
+			if (f.icon) {
+				const ic = ajouter(item, "span", "qbd-opts-dd-icon");
+				if (f.color) ic.style.setProperty("--accent", f.color);
+				currentHost().ui.setIcon(ic, f.icon);
+			}
+			const body = ajouter(item, "span", "qbd-opts-dd-body");
+			ajouter(body, "span", "qbd-opts-dd-name", f.label);
+			// La RACINE en sous-titre : c'est elle qui distingue deux dossiers
+			// homonymes (« Generated » de Neo Quiz et de Personal).
+			if (f.sub) ajouter(body, "span", "qbd-opts-dd-sub", f.sub);
+```
+
+(le `addEventListener("click", …)` qui suit ne change pas). Et le déclencheur (`refreshDest`) montre l'icône du dossier choisi devant son nom : remplacer `destLabel.textContent = choisi.label;` par
+
+```ts
+			destLabel.replaceChildren();
+			if (choisi.icon) {
+				const ic = ajouter(destLabel, "span", "qbd-opts-dd-icon");
+				if (choisi.color) ic.style.setProperty("--accent", choisi.color);
+				currentHost().ui.setIcon(ic, choisi.icon);
+			}
+			ajouter(destLabel, "span", undefined, choisi.label);
+```
+
+- [ ] **Step 4: Le CSS** (`dashboard-ai.css`, après `.qbd-opts-dd-item.is-active`)
+
+```css
+/* Destination : l'icône du dossier (à sa couleur) et sa racine en sous-titre. */
+.qbd-opts-dd-icon { display: inline-flex; flex-shrink: 0; color: var(--accent, var(--text-muted)); }
+.qbd-opts-dd-icon svg { width: 14px; height: 14px; }
+.qbd-opts-dd-label { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.qbd-opts-dd-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; text-align: left; }
+.qbd-opts-dd-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qbd-opts-dd-sub { font-size: 10.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+```
+
+Lire les règles existantes de `.qbd-opts-dd-item` et `.qbd-opts-dd-label` (~lignes 1990-2025) : si `.qbd-opts-dd-item` n'est pas déjà en `display: flex; align-items: center; gap`, l'y mettre, sinon l'icône et le corps ne s'alignent pas.
+
+- [ ] **Step 5: Vérifier**
+
+Run: `npm run check && npm run check:app && npm run check:host`
+Expected: vert. À l'écran (Ahmed) : Générer → options → Destination : « Generated · Neo Quiz » avec l'étincelle, « Generated · Personal », « Templates · Personal », « XTI301 - Écosystème Python · Efrei » avec son icône `braces` bleue.
+
+- [ ] **Step 6: CHANGELOG**
+
+`### Fixed` : `- Two destination folders with the same name (two "Generated") are told apart: each entry shows its folder icon and the root it belongs to.`
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/dashboard/ai.ts apps/windows/src/ui/dashboard-shell.ts src/dashboard/ui-select.ts src/assets/css/dashboard/dashboard-ai.css CHANGELOG.md
+git commit -m "la destination d'un quiz porte l'icône de son dossier et sa racine"
+```
+
+---
+
 ### Task 12: Vérification dans la VM, note du vault, livraison (contrôleur)
 
 **Files:**
@@ -2171,7 +2309,7 @@ Installer `NeoQuiz-1.1.0.exe` dans la VM (ou attendre la mise à jour), puis lan
 
 - [ ] **Step 3: Relire `CHANGELOG.md`**
 
-La section `[Unreleased]` porte, dans l'ordre `### Added`, `### Changed`, `### Fixed`, une ligne par changement visible des tâches 5 à 11 ; aucune ligne ne cite un fichier ni un SHA. `deduireNiveau` doit rendre `minor` : `node -e "import('./scripts/changelog.mjs').then(async m => console.log(m.deduireNiveau(m.lireUnreleased(require('fs').readFileSync('CHANGELOG.md','utf8')).sections)))"` → `minor`.
+La section `[Unreleased]` porte, dans l'ordre `### Added`, `### Changed`, `### Fixed`, une ligne par changement visible des tâches 5 à 11 et 13 ; aucune ligne ne cite un fichier ni un SHA. `deduireNiveau` doit rendre `minor` : `node -e "import('./scripts/changelog.mjs').then(async m => console.log(m.deduireNiveau(m.lireUnreleased(require('fs').readFileSync('CHANGELOG.md','utf8')).sections)))"` → `minor`.
 
 - [ ] **Step 4: La note du vault**
 

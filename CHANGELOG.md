@@ -26,6 +26,7 @@ release notes.
 - The dots in the AI provider menu line up whatever the length of the status text.
 - The "Add files" shortcut now works in the app.
 - A PDF added with "Add files" can now be opened from its preview, like one attached with "@".
+- Two destination folders with the same name (two "Generated") are told apart: each entry shows its folder icon and the root it belongs to.
 
 ## [1.1.0] - 2026-09-17
 

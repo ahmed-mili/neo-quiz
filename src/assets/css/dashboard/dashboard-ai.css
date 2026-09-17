@@ -2048,6 +2048,14 @@
 	color: var(--interactive-accent);
 }
 
+/* Destination : l'icône du dossier (à sa couleur) et sa racine en sous-titre. */
+.qbd-opts-dd-icon { display: inline-flex; flex-shrink: 0; color: var(--accent, var(--text-muted)); }
+.qbd-opts-dd-icon svg { width: 14px; height: 14px; }
+.qbd-opts-dd-label { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.qbd-opts-dd-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; text-align: left; }
+.qbd-opts-dd-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qbd-opts-dd-sub { font-size: 10.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ── Champ nombre (visible quand « Personnalisé », 1-100) ──
    Police d'interface + chiffres tabulaires (la mono rendait le « 20 »
    bizarre — retour Ahmed). */

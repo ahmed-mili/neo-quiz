@@ -10,6 +10,8 @@ import type { Scanner, QuizIndexEntry } from "./scanner";
 import type { StatsStore } from "./stats-store";
 import { aiSettingsDefaults } from "./ai-settings-host";
 import type { AiSettingsHost } from "./ai-settings-host";
+import { GENERATED_MODULE_ICON } from "./module-icons";
+import { GENERATED_MODULE_ACCENT } from "./module-color";
 import { createAiClient } from "./ai-client";
 import { createSelect, closeAllSelects, openModelMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
 import { badgeDeFichier } from "./file-icons";
@@ -202,8 +204,11 @@ export interface AiPageDeps {
 	 *
 	 * `path` est un chemin du CONTRAT complet (« Efrei/…/XTI301 »), le seul
 	 * que `fs.write` accepte ; c'est l'hôte qui le connaît, pas cette page.
+	 *
+	 * `icon`, `color`, `root` : l'apparence de la carte du dossier et le nom
+	 * de sa racine, pour que deux dossiers homonymes se distinguent.
 	 */
-	quizFolders?(): { path: string; name: string }[];
+	quizFolders?(): { path: string; name: string; icon: string; color: string; root: string }[];
 	/** Rend un BLOC de code (commande d'installation d'un CLI) dans `host`.
 	    Sous Obsidian, le moteur Markdown de l'app : coloration Prism, style de
 	    bloc de l'utilisateur, bouton « copier » du post-processeur natif.
@@ -1992,14 +1997,21 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    d'abord (valeur `""`), puis les dossiers que l'hôte déclare. Le défaut
 	    est retiré des autres s'il y figure — un même dossier deux fois dans une
 	    liste de choix est un défaut d'affichage, pas une option de plus. */
-	function destinationOptions(): { value: string; label: string }[] {
+	function destinationOptions(): { value: string; label: string; icon: string; color: string; sub: string }[] {
 		const defaut = defaultDestination();
-		const options = [{ value: "", label: settings().aiOutputFolder || aiSettingsDefaults().aiOutputFolder }];
+		const racine = host.paths.defaultRoot();
+		const options = [{
+			value: "",
+			label: settings().aiOutputFolder || aiSettingsDefaults().aiOutputFolder,
+			icon: GENERATED_MODULE_ICON,
+			color: GENERATED_MODULE_ACCENT,
+			sub: racine.name,
+		}];
 		const vus = new Set([defaut]);
 		for (const d of deps.quizFolders?.() ?? []) {
 			if (!d.path || vus.has(d.path)) continue;
 			vus.add(d.path);
-			options.push({ value: d.path, label: d.name || d.path });
+			options.push({ value: d.path, label: d.name || d.path, icon: d.icon, color: d.color, sub: d.root });
 		}
 		return options;
 	}

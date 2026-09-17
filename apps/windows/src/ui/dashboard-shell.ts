@@ -41,6 +41,8 @@ import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host"
 import { openIconPicker } from "../../../../src/dashboard/icon-picker";
 import { openCreateFolderModal, openCreateQuizModal } from "../../../../src/dashboard/folder-create";
 import { buildModuleCardMenu, buildQuizCardMenu } from "../../../../src/dashboard/quiz-menu";
+import { moduleIcon } from "../../../../src/dashboard/module-icons";
+import { moduleAccent } from "../../../../src/dashboard/module-color";
 import { createSelect, openActionMenu } from "../../../../src/dashboard/ui-select";
 import type { DashboardPageSettings, DashboardShellCtx, DashboardViewName, NavigateData } from "../../../../src/types/dashboard-ctx";
 import type { QuizIndexEntry, Scanner } from "../../../../src/dashboard/scanner";
@@ -424,7 +426,7 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	 * un sous-dossier de sa matière doit proposer SON dossier, là où le module
 	 * renverrait toute une UE sur un seul emplacement.
 	 */
-	function dossiersDeQuiz(): { path: string; name: string }[] {
+	function dossiersDeQuiz(): { path: string; name: string; icon: string; color: string; root: string }[] {
 		const vus = new Map<string, string>();
 		for (const [cle, ov] of Object.entries(ctx.settings.quizzesModuleOverrides || {})) {
 			if (ov?.path) vus.set(ov.path, ov.name?.trim() || cle);
@@ -435,9 +437,24 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 			const dossier = q.path.slice(0, coupe);
 			if (!vus.has(dossier)) vus.set(dossier, dossier.split("/").pop() as string);
 		}
-		return [...vus.entries()]
-			.map(([path, name]) => ({ path, name }))
-			.sort((a, b) => a.name.localeCompare(b.name));
+		/* L'icône, la couleur et la RACINE de chaque dossier, pour que le menu
+		   « Destination » les montre : deux dossiers homonymes (« Generated » dans
+		   Neo Quiz et dans Personal) étaient indiscernables (Ahmed, 2026-09-17).
+		   Même règle d'icône et d'accent que la carte du dossier (`moduleIcon`,
+		   `moduleAccent`) : une icône choisie l'emporte, le SAS des générés a son
+		   étincelle, le reste son livre. */
+		function decrire(path: string, name: string): { path: string; name: string; icon: string; color: string; root: string } {
+			const overrides = ctx.settings.quizzesModuleOverrides || {};
+			const ov = Object.values(overrides).find(o => o?.path === path) ?? overrides[name];
+			const generated = path === ctx.generatedFolder?.();
+			return {
+				path, name,
+				icon: moduleIcon(ov ?? {}, { generated }),
+				color: moduleAccent({ folder: name, color: ov?.color }, { generated }),
+				root: currentHost().paths.rootOf(path)?.name ?? "",
+			};
+		}
+		return [...vus.entries()].map(([path, name]) => decrire(path, name)).sort((a, b) => a.name.localeCompare(b.name));
 	}
 
 	/**

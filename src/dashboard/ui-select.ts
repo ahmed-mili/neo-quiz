@@ -1102,7 +1102,7 @@ export interface OpenOptionsMenuOptions {
 	 * Un DROPDOWN local et non une liste à coche comme le Type : les types
 	 * sont cinq pour toujours, les dossiers peuvent être trente.
 	 */
-	folders?: { value: string; label: string }[];
+	folders?: { value: string; label: string; icon?: string; color?: string; sub?: string }[];
 	/** Dossier courant (une `value` de `folders`). */
 	folder?: string;
 	onFolder?: (value: string) => void;
@@ -1270,7 +1270,13 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 		const refreshDest = () => {
 			const choisi = folders.find(f => f.value === folder) ?? folders[0];
 			// `textContent` (via `ajouter`) : ces libellés viennent du disque.
-			destLabel.textContent = choisi.label;
+			destLabel.replaceChildren();
+			if (choisi.icon) {
+				const ic = ajouter(destLabel, "span", "qbd-opts-dd-icon");
+				if (choisi.color) ic.style.setProperty("--accent", choisi.color);
+				currentHost().ui.setIcon(ic, choisi.icon);
+			}
+			ajouter(destLabel, "span", undefined, choisi.label);
 			destTrigger.setAttribute("aria-expanded", destMenu.classList.contains("is-hidden") ? "false" : "true");
 			for (const b of Array.from(destMenu.querySelectorAll<HTMLButtonElement>(".qbd-opts-dd-item"))) {
 				const active = b.dataset.folder === folder;
@@ -1287,7 +1293,16 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 			item.type = "button";
 			item.dataset.folder = f.value;
 			ajouter(item, "span", "qbd-select-check");
-			ajouter(item, "span", undefined, f.label);
+			if (f.icon) {
+				const ic = ajouter(item, "span", "qbd-opts-dd-icon");
+				if (f.color) ic.style.setProperty("--accent", f.color);
+				currentHost().ui.setIcon(ic, f.icon);
+			}
+			const body = ajouter(item, "span", "qbd-opts-dd-body");
+			ajouter(body, "span", "qbd-opts-dd-name", f.label);
+			// La RACINE en sous-titre : c'est elle qui distingue deux dossiers
+			// homonymes (« Generated » de Neo Quiz et de Personal).
+			if (f.sub) ajouter(body, "span", "qbd-opts-dd-sub", f.sub);
 			item.addEventListener("click", () => {
 				folder = f.value;
 				destMenu.classList.add("is-hidden");

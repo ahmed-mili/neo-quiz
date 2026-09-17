@@ -23,8 +23,10 @@ import { cheminsAJoindre, lireContenuDossier } from "./folder-contents";
 
 /** Une carte-option du modal de création (icône teintée + titre + description
     + chevron) — partagée par les DEUX modals de création : même DOM, mêmes
-    classes, fidélité garantie à la capture StudySmarter (2026-07-19). */
-function createOptionCard(modal: HostModalHandle, parent: HTMLElement, icon: string, accent: string, title: string, desc: string, onPick: () => void): void {
+    classes, fidélité garantie à la capture StudySmarter (2026-07-19).
+    `modal` nul sur l'accueil vide (`home.ts`), où les mêmes trois cartes se
+    rendent sur la page : rien à fermer. */
+export function createOptionCard(modal: HostModalHandle | null, parent: HTMLElement, icon: string, accent: string, title: string, desc: string, onPick: () => void): void {
 	const card = ajouter(parent, "button", "qbd-create-option");
 	card.type = "button";
 	card.style.setProperty("--accent", accent);
@@ -35,7 +37,7 @@ function createOptionCard(modal: HostModalHandle, parent: HTMLElement, icon: str
 	ajouter(txt, "div", "qbd-create-option-desc", desc);
 	const chev = ajouter(card, "div", "qbd-create-option-chevron");
 	currentHost().ui.setIcon(chev, "chevron-right");
-	card.addEventListener("click", () => { modal.close(); onPick(); });
+	card.addEventListener("click", () => { modal?.close(); onPick(); });
 }
 
 export function openCreateFolderModal(

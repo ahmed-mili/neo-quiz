@@ -35,16 +35,9 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 
 	/* ── Onboarding ── */
 	"dashboard.onboarding.title": "Bienvenue dans Neo Quiz",
-	"dashboard.onboarding.lead": "Transformez vos notes en quiz interactifs — QCM, texte à compléter, association — pour réviser et vous auto-évaluer.",
+	"dashboard.onboarding.lead": "Transformez vos notes en quiz interactifs : QCM, texte à compléter, association, pour réviser et vous auto-évaluer.",
 	"dashboard.onboarding.generate": "Générer mon premier quiz",
 	"dashboard.onboarding.or": "ou",
-	"dashboard.onboarding.manualTitle": "Créer un quiz à la main",
-	"dashboard.onboarding.manualDesc": "Ajoutez un bloc de code quiz-blocks dans n'importe quelle note :",
-	"dashboard.onboarding.copy": "Copier le bloc",
-	/* ⚠️ Jamais d'apostrophe dans ces 2 valeurs (injectées dans du JSON5 entre
-	   apostrophes simples) — cf. le commentaire du dictionnaire anglais. */
-	"dashboard.onboarding.sampleTitle": "Ma première question",
-	"dashboard.onboarding.samplePrompt": "Quelle est la capitale de la France ?",
 
 	/* ── Mes quiz ── */
 	"dashboard.quizzes.new": "Nouveau dossier",

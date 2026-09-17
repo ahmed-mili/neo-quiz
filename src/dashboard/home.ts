@@ -13,6 +13,8 @@ import { moduleAccent } from "./module-color";
 import { lireModuleMap } from "./module-map-note";
 import { renderCollapsibleSection } from "./collapsible";
 import { markViewEnter } from "./view-enter";
+import { createOptionCard, importSharedFolder } from "./folder-create";
+import { openNewFolderModal } from "./module-edit";
 
 /* ══════════════════════════════════════════════════════════
    HOME VIEW — Dashboard
@@ -108,7 +110,7 @@ export function createHomeHandlers(ctx: DashboardShellCtx): HomeHandlers {
 
 		// ── Premier usage : aucun quiz → onboarding guidé ──
 		if (allQuizzes.length === 0) {
-			renderOnboarding(container);
+			renderOnboarding(container, map, allQuizzes);
 			return;
 		}
 
@@ -385,7 +387,7 @@ export function createHomeHandlers(ctx: DashboardShellCtx): HomeHandlers {
 		btn.addEventListener("click", (e) => { e.stopPropagation(); open(); });
 	}
 
-	function renderOnboarding(container: HTMLElement): void {
+	function renderOnboarding(container: HTMLElement, map: ModuleMap, allQuizzes: QuizIndexEntry[]): void {
 		const wrap = ajouter(container, "div", "qbd-onboarding");
 
 		const icon = ajouter(wrap, "div", "qbd-onboarding-icon");
@@ -410,59 +412,19 @@ export function createHomeHandlers(ctx: DashboardShellCtx): HomeHandlers {
 		const divider = ajouter(wrap, "div", "qbd-onboarding-divider");
 		ajouter(divider, "span", undefined, t("dashboard.onboarding.or"));
 
-		// Méthode manuelle (divulgation progressive)
-		const manual = ajouter(wrap, "div", "qbd-onboarding-manual");
-		const manualHead = ajouter(manual, "div", "qbd-onboarding-manual-head");
-		const mIcon = ajouter(manualHead, "span", "qbd-onboarding-manual-icon");
-		currentHost().ui.setIcon(mIcon, "code");
-		ajouter(manualHead, "span", undefined, t("dashboard.onboarding.manualTitle"));
-
-		ajouter(manual, "p", "qbd-onboarding-manual-desc", t("dashboard.onboarding.manualDesc"));
-
-		// Construit au rendu (et non en constante de module) : l'exemple affiché
-		// ET copié doit être dans la langue courante. ⚠️ Les 2 valeurs traduites
-		// sont injectées entre apostrophes SIMPLES : une apostrophe dans la
-		// traduction casserait le JSON5 collé par l'utilisateur (contrainte
-		// rappelée dans les 2 dictionnaires). Les noms de villes ne se traduisent
-		// pas — ce sont les réponses de la question.
-		const CODE_SAMPLE = [
-			"```quiz-blocks",
-			"[",
-			"  {",
-			`    title: '${t("dashboard.onboarding.sampleTitle")}',`,
-			`    prompt: '${t("dashboard.onboarding.samplePrompt")}',`,
-			"    options: ['Lyon', 'Paris', 'Marseille'],",
-			"    correctIndex: 1,",
-			"  }",
-			"]",
-			"```"
-		].join("\n");
-
-		const codeWrap = ajouter(manual, "div", "qbd-onboarding-code-wrap");
-		const pre = ajouter(codeWrap, "pre", "qbd-onboarding-code");
-		ajouter(pre, "code", undefined, CODE_SAMPLE);
-
-		const copyBtn = ajouter(codeWrap, "button", "qbd-onboarding-copy");
-		// `aria-label` n'est pas la propriété `cls`/`text` d'`ajouter` : posée en
-		// ATTRIBUT après coup, comme `aria-expanded` dans collapsible.ts.
-		copyBtn.setAttribute("aria-label", t("dashboard.onboarding.copy"));
-		const copyIcon = ajouter(copyBtn, "span", "qbd-btn-icon qbd-btn-icon--sm");
-		currentHost().ui.setIcon(copyIcon, "copy");
-		copyBtn.addEventListener("click", async () => {
-			/* Par l'HÔTE dès qu'il sait copier. Dans la fenêtre de l'application,
-			   `navigator.clipboard.writeText` échoue : l'écriture y fait demander la
-			   permission `clipboard-read`, que le processus principal refuse avec
-			   toutes les autres — ce bouton ne faisait donc RIEN, sans un mot, et le
-			   `catch` muet d'avant le cachait. Repli sur le navigateur là où
-			   l'écriture directe marche (Obsidian). */
-			const copie = ctx.copyText
-				? await ctx.copyText(CODE_SAMPLE)
-				: await navigator.clipboard.writeText(CODE_SAMPLE).then(() => true, () => false);
-			if (!copie) return;
-			copyIcon.replaceChildren();
-			currentHost().ui.setIcon(copyIcon, "check");
-			window.setTimeout(() => { copyIcon.replaceChildren(); currentHost().ui.setIcon(copyIcon, "copy"); }, 1500);
-		});
+		/* Les trois cartes du modal « Créer un dossier », rendues sur place
+		   (spec « utilisable par n'importe qui », § 1) : personne ne crée un quiz
+		   à la main dans un bloc de code, et « Générer » au-dessus EST la carte
+		   IA. Même composant, même CSS : aucune apparence de plus à tenir. */
+		const cartes = ajouter(wrap, "div", "qbd-onboarding-cards");
+		createOptionCard(null, cartes, "folder-plus", "#4573ff", t("dashboard.quizzes.createEmptyTitle"), t("dashboard.quizzes.createEmptyDesc"),
+			() => openNewFolderModal(ctx, map, allQuizzes, rerender));
+		if (ctx.openExistingFolder) {
+			createOptionCard(null, cartes, "folder-open", "#f5a524", t("dashboard.quizzes.createOpenTitle"), t("dashboard.quizzes.createOpenDesc"),
+				() => ctx.openExistingFolder!(rerender));
+		}
+		createOptionCard(null, cartes, "download", "#a78bfa", t("dashboard.quizzes.createImportTitle"), t("dashboard.quizzes.createImportDesc"),
+			() => void importSharedFolder(ctx, map, allQuizzes, rerender));
 	}
 
 	/** Accent du DOSSIER d'un quiz — même source que « Mes quiz ». */

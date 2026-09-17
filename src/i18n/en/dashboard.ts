@@ -42,17 +42,9 @@ export const EN_DASHBOARD = {
 
 	/* ── Onboarding (premier usage, aucun quiz) ── */
 	"dashboard.onboarding.title": "Welcome to Neo Quiz",
-	"dashboard.onboarding.lead": "Turn your notes into interactive quizzes — multiple choice, fill in the blank, matching — to revise and test yourself.",
+	"dashboard.onboarding.lead": "Turn your notes into interactive quizzes: multiple choice, fill in the blank, matching, to revise and test yourself.",
 	"dashboard.onboarding.generate": "Generate my first quiz",
 	"dashboard.onboarding.or": "or",
-	"dashboard.onboarding.manualTitle": "Create a quiz by hand",
-	"dashboard.onboarding.manualDesc": "Add a quiz-blocks code block to any note:",
-	"dashboard.onboarding.copy": "Copy the block",
-	/* Contenu de l'exemple de code copiable. ⚠️ Ces 2 valeurs sont injectées dans
-	   des chaînes JSON5 entre apostrophes SIMPLES : jamais d'apostrophe dedans
-	   (elle casserait le bloc collé par l'utilisateur). Cf. home.ts. */
-	"dashboard.onboarding.sampleTitle": "My first question",
-	"dashboard.onboarding.samplePrompt": "What is the capital of France?",
 
 	/* ── Mes quiz ── */
 	"dashboard.quizzes.new": "New folder",

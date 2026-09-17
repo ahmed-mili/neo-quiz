@@ -18,6 +18,7 @@ release notes.
 
 ### Changed
 - The hint under the composer no longer shows a raw command; it opens the same window.
+- The welcome screen no longer shows a code block: it offers to generate a quiz, create an empty folder, open an existing folder or import a quiz.
 
 ### Fixed
 - The dots in the AI provider menu line up whatever the length of the status text.

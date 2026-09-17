@@ -126,8 +126,12 @@ jobs:
       # Les NOTES de la release viennent de CHANGELOG.md (tâche 2 du chantier
       # « utilisable par n'importe qui ») : une version de l'application sans
       # section dans le fichier ÉCHOUE ICI, avant qu'une release n'existe.
-      # Le greffon n'a pas de changelog : corps vide.
+      # Le greffon n'a pas de changelog : corps vide. Même garde que « Create
+      # Release » juste en dessous : une répétition `workflow_dispatch` porte
+      # une version placeholder qui n'a aucune section dans le CHANGELOG, et
+      # elle ne publie rien.
       - name: Release notes
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
         shell: bash
         run: |
           if [ "${{ steps.version.outputs.product }}" = "app" ]; then

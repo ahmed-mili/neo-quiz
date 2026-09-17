@@ -423,88 +423,95 @@ jobs:
           set -euo pipefail
           gh release upload "${{ needs.prepare.outputs.tag }}"             apps/windows/dist-installer/*.exe             apps/windows/dist-installer/*.exe.blockmap             apps/windows/dist-installer/latest.yml             apps/windows/dist-installer-bootstrapper/NeoQuiz-*.exe             --clobber
 
-  app-linux:
-    needs: prepare
-    if: needs.prepare.outputs.product == 'app'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 20
-      - name: Install dependencies (racine)
-        run: npm ci
-      - name: Install dependencies (apps/windows)
-        run: npm ci
-        working-directory: apps/windows
-      # Même garde que le job `plugin` : « Rien à changer » sort en 1.
-      - name: Update app version
-        shell: bash
-        env:
-          VERSION_VOULUE: ${{ needs.prepare.outputs.version }}
-        run: |
-          actuelle=$(node -p "require('./apps/windows/package.json').version")
-          if [ "$actuelle" != "$VERSION_VOULUE" ]; then node scripts/set-version.mjs "$VERSION_VOULUE"; fi
-      - name: Build and package (AppImage x64 + arm64, deb)
-        run: npm run pack:linux
-        working-directory: apps/windows
-      - name: Package config and contents
-        run: npm run check:package
-      - name: Upload AppImage (répétition)
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: neo-quiz-linux
-          path: |
-            apps/windows/dist-installer/*.AppImage
-            apps/windows/dist-installer/*.deb
-            apps/windows/dist-installer/latest-linux.yml
-            apps/windows/dist-installer/latest-linux-arm64.yml
-          if-no-files-found: error
-      # Même copie sous nom fixe que pour l'installeur Windows : le lien
-      # permanent de la page de téléchargement vers l'AppImage vise
-      # releases/latest/download/neo-quiz.AppImage, jamais le nom versionné.
-      # Le nom versionné porte désormais l'architecture (deux AppImage), donc
-      # la copie NOMME la x64 : un motif `neo-quiz-*.AppImage` attraperait les
-      # deux et `cp` écraserait l'alias avec celle qui passe en dernier.
-      - name: Copy the x64 AppImage under a fixed name
-        shell: bash
-        run: |
-          set -euo pipefail
-          ls apps/windows/dist-installer/
-          source="apps/windows/dist-installer/neo-quiz-${{ needs.prepare.outputs.version }}-x86_64.AppImage"
-          test -f "$source"
-          cp "$source" apps/windows/dist-installer/neo-quiz.AppImage
+  # ── Linux, EN SOMMEIL (choix d'Ahmed, 2026-09-17) ──────────────────
+  # Il n'utilise l'application que sous Windows, et ce job allongeait chaque
+  # release de plusieurs minutes pour des paquets que personne ne télécharge.
+  # Il est CONSERVÉ EN COMMENTAIRE, pas supprimé : pour le réveiller, le
+  # décommenter, remettre `app-linux` dans les `needs` et la condition du job
+  # `site`, les quatre assets Linux dans la liste des requis, et la carte
+  # Linux du site. Les versions déjà publiées gardent leurs paquets Linux.
+#  app-linux:
+#    needs: prepare
+#    if: needs.prepare.outputs.product == 'app'
+#    runs-on: ubuntu-latest
+#    permissions:
+#      contents: write
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v7
+#      - name: Setup Node
+#        uses: actions/setup-node@v6
+#        with:
+#          node-version: 20
+#      - name: Install dependencies (racine)
+#        run: npm ci
+#      - name: Install dependencies (apps/windows)
+#        run: npm ci
+#        working-directory: apps/windows
+#      # Même garde que le job `plugin` : « Rien à changer » sort en 1.
+#      - name: Update app version
+#        shell: bash
+#        env:
+#          VERSION_VOULUE: ${{ needs.prepare.outputs.version }}
+#        run: |
+#          actuelle=$(node -p "require('./apps/windows/package.json').version")
+#          if [ "$actuelle" != "$VERSION_VOULUE" ]; then node scripts/set-version.mjs "$VERSION_VOULUE"; fi
+#      - name: Build and package (AppImage x64 + arm64, deb)
+#        run: npm run pack:linux
+#        working-directory: apps/windows
+#      - name: Package config and contents
+#        run: npm run check:package
+#      - name: Upload AppImage (répétition)
+#        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish != 'true'
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: neo-quiz-linux
+#          path: |
+#            apps/windows/dist-installer/*.AppImage
+#            apps/windows/dist-installer/*.deb
+#            apps/windows/dist-installer/latest-linux.yml
+#            apps/windows/dist-installer/latest-linux-arm64.yml
+#          if-no-files-found: error
+#      # Même copie sous nom fixe que pour l'installeur Windows : le lien
+#      # permanent de la page de téléchargement vers l'AppImage vise
+#      # releases/latest/download/neo-quiz.AppImage, jamais le nom versionné.
+#      # Le nom versionné porte désormais l'architecture (deux AppImage), donc
+#      # la copie NOMME la x64 : un motif `neo-quiz-*.AppImage` attraperait les
+#      # deux et `cp` écraserait l'alias avec celle qui passe en dernier.
+#      - name: Copy the x64 AppImage under a fixed name
+#        shell: bash
+#        run: |
+#          set -euo pipefail
+#          ls apps/windows/dist-installer/
+#          source="apps/windows/dist-installer/neo-quiz-${{ needs.prepare.outputs.version }}-x86_64.AppImage"
+#          test -f "$source"
+#          cp "$source" apps/windows/dist-installer/neo-quiz.AppImage
 
-      # Même raison que pour Windows : `gh release upload`, pas l'action au
-      # tag flottant. Les motifs se recouvrent volontairement — `*.AppImage`
-      # attrape aussi la copie à nom fixe `neo-quiz.AppImage` faite juste
-      # avant —, ce que `gh` gère sans broncher.
-      - name: Attach Linux packages to release
-        if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release upload "${{ needs.prepare.outputs.tag }}"             apps/windows/dist-installer/*.AppImage             apps/windows/dist-installer/*.deb             apps/windows/dist-installer/latest-linux.yml             apps/windows/dist-installer/latest-linux-arm64.yml             --clobber
+#      # Même raison que pour Windows : `gh release upload`, pas l'action au
+#      # tag flottant. Les motifs se recouvrent volontairement — `*.AppImage`
+#      # attrape aussi la copie à nom fixe `neo-quiz.AppImage` faite juste
+#      # avant —, ce que `gh` gère sans broncher.
+#      - name: Attach Linux packages to release
+#        if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
+#        shell: bash
+#        env:
+#          GH_TOKEN: ${{ github.token }}
+#        run: |
+#          set -euo pipefail
+#          gh release upload "${{ needs.prepare.outputs.tag }}"             apps/windows/dist-installer/*.AppImage             apps/windows/dist-installer/*.deb             apps/windows/dist-installer/latest-linux.yml             apps/windows/dist-installer/latest-linux-arm64.yml             --clobber
 
-  # La page de téléchargement lit `docs/latest.json` (app) et
-  # `docs/latest-plugin.json` (greffon), servis par GitHub Pages, sans limite
-  # de requêtes, plutôt que l'API GitHub, qui refuse au-delà de 60 appels par
-  # heure et par adresse IP sans jeton : une promo derrière un même réseau
-  # l'atteignait en quelques minutes et la page perdait ses versions. Ce job
-  # tourne une fois les jobs du produit publié finis, écrit SEULEMENT le
-  # fichier du produit publié, et le pousse sur `main` (Pages se republie).
-  # Des jobs SKIPPED (`plugin` sur une app, ou l'inverse) sont normaux : un seul
-  # produit est construit par exécution.
+#  # La page de téléchargement lit `docs/latest.json` (app) et
+#  # `docs/latest-plugin.json` (greffon), servis par GitHub Pages, sans limite
+#  # de requêtes, plutôt que l'API GitHub, qui refuse au-delà de 60 appels par
+#  # heure et par adresse IP sans jeton : une promo derrière un même réseau
+#  # l'atteignait en quelques minutes et la page perdait ses versions. Ce job
+#  # tourne une fois les jobs du produit publié finis, écrit SEULEMENT le
+#  # fichier du produit publié, et le pousse sur `main` (Pages se republie).
+#  # Des jobs SKIPPED (`plugin` sur une app, ou l'inverse) sont normaux : un seul
+#  # produit est construit par exécution.
   site:
-    needs: [prepare, plugin, app-windows, app-linux]
-    if: ${{ !cancelled() && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true') && needs.prepare.result == 'success' && needs.plugin.result != 'failure' && needs['app-windows'].result != 'failure' && needs['app-linux'].result != 'failure' }}
+    needs: [prepare, plugin, app-windows]
+    if: ${{ !cancelled() && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true') && needs.prepare.result == 'success' && needs.plugin.result != 'failure' && needs['app-windows'].result != 'failure' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -533,12 +540,7 @@ jobs:
             "NeoQuiz-${VERSION}.exe" \
             "neo-quiz-setup-${VERSION}.exe" \
             "neo-quiz-setup-${VERSION}.exe.blockmap" \
-            "latest.yml" \
-            "neo-quiz-${VERSION}-x86_64.AppImage" \
-            "neo-quiz-${VERSION}-arm64.AppImage" \
-            "neo-quiz-${VERSION}-amd64.deb" \
-            "latest-linux.yml" \
-            "neo-quiz.AppImage"
+            "latest.yml"
           do
             jq -e --arg nom "$requis" '.assets[] | select(.name == $nom)' "$release_json" >/dev/null || {
               echo "::error::Asset obligatoire absent avant promotion latest : $requis"

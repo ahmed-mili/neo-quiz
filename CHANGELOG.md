@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-17
+
 ### Added
 - Install Claude Code, the Codex CLI or Ollama from the app: a provider that is missing opens a window that explains what it is, installs it in one click (PowerShell opens with the official installer) and detects it once it is there. Manual steps stay available.
 

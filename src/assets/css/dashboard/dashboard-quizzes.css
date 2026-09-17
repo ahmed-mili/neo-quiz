@@ -365,6 +365,22 @@
 	transition-duration: 60ms;
 }
 
+/* LA CARTE NE S'ENFONCE PAS SOUS UN CLIC QUI NE LUI EST PAS ADRESSÉ (Ahmed,
+   2026-09-17). Le clic sur l'icône ouvre le choix d'icône et n'entre pas dans
+   le dossier — le script l'arrête (`stopPropagation`, `module-card.ts`) —, mais
+   `:active` n'est pas un événement : c'est un ÉTAT, posé sur l'élément pressé
+   ET sur tous ses ancêtres. Aucun `stopPropagation` ne l'empêche, et la carte
+   répondait donc à un geste destiné à son icône.
+   La valeur rétablie est celle du SURVOL, pas celle du repos : la souris est
+   forcément sur la carte pour presser son icône, la voir retomber à plat
+   pendant le clic serait un second faux mouvement. Le survol, lui, reste :
+   la carte EST survolée, et le curseur peut encore ressortir de l'icône pour
+   l'ouvrir. */
+.qbd-module-card:has(.qbd-module-card__icon--editable:active) {
+	transform: translateY(-3px);
+	transition-duration: 0.12s;
+}
+
 /* En-tête : pastille d'icône + colonne titre/sous-titre. */
 .qbd-module-card__header {
 	padding: 13px 16px 0;

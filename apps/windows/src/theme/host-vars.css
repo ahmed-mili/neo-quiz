@@ -44,6 +44,11 @@
 	--color-orange: rgb(250, 179, 135);
 	--color-red: rgb(243, 139, 168);
 	--color-yellow: rgb(249, 226, 175);
+	/* Les trois teintes des jetons du modal d'installation (Catppuccin
+	   Mocha, comme les trois ci-dessus). */
+	--color-blue: rgb(137, 180, 250);
+	--color-cyan: rgb(137, 220, 235);
+	--color-purple: rgb(203, 166, 247);
 	/* LA PILE D'OBSIDIAN, RECOPIÉE À L'IDENTIQUE de son `--font-default`
 	   (relevé le 2026-09-09 dans `obsidian-1.13.7.asar`, qui est la seule
 	   source : la valeur ne se devine pas).

@@ -48,6 +48,36 @@ const SONDE_MS = 3000;
    - Claude Code : installateur natif (code.claude.com/docs/en/setup) ;
    - Codex CLI : installateur officiel (learn.chatgpt.com/docs/codex/cli) ;
    - Ollama : winget (paquet officiel Ollama.Ollama) sur Windows. */
+/* Coloration d'une ligne de shell SANS colorateur embarqué : les commandes
+   du modal sont trois lignes connues (irm, curl, winget), pas du code
+   arbitraire — une grammaire à quatre jetons suffit (chaîne "…", drapeau
+   -x/--xx, tube |, le reste étant la commande en tête de segment). Chaque
+   jeton est un span, le texte passe par textContent : rien n'est interprété. */
+export function colorerCommande(code: HTMLElement, ligne: string): void {
+	const re = /"[^"]*"|\|| +|[^\s"|]+/g;
+	let debutSegment = true;
+	for (const m of ligne.match(re) || []) {
+		let cls: string | undefined;
+		if (m.startsWith('"')) cls = "qbd-tok-string";
+		else if (m === "|") { cls = "qbd-tok-pipe"; debutSegment = true; }
+		else if (m.trim() === "") cls = undefined;
+		else if (m.startsWith("-")) cls = "qbd-tok-flag";
+		else if (debutSegment) { cls = "qbd-tok-cmd"; debutSegment = false; }
+		else if (/^https?:\/\//.test(m)) cls = "qbd-tok-url";
+		if (cls) ajouter(code, "span", cls, m);
+		else code.appendChild(document.createTextNode(m));
+		if (m.startsWith('"')) {
+			// Une chaîne contient elle-même une commande (irm … | iex) : on
+			// la colore à son tour, mais dans un span de chaîne.
+			const inner = code.lastElementChild as HTMLElement;
+			inner.textContent = "";
+			inner.appendChild(document.createTextNode('"'));
+			colorerCommande(inner, m.slice(1, -1));
+			inner.appendChild(document.createTextNode('"'));
+		}
+	}
+}
+
 export function installCmd(provider: InstallProvider, isWindows: boolean): { code: string; lang: string } {
 	if (provider === "claude-code") {
 		return isWindows
@@ -159,7 +189,7 @@ export function openInstallModal(deps: InstallModalDeps): void {
 			const cmd = installCmd(deps.provider, win);
 			const bloc = ajouter(li2, "div", "qbd-install-code markdown-rendered markdown-preview-view");
 			if (deps.renderCodeBlock) deps.renderCodeBlock(bloc, cmd.code, cmd.lang);
-			else ajouter(ajouter(bloc, "pre"), "code", "language-" + cmd.lang, cmd.code);
+			else colorerCommande(ajouter(ajouter(bloc, "pre"), "code", "language-" + cmd.lang), cmd.code);
 			const copier = ajouter(li2, "button", "qbd-btn qbd-install-copy");
 			copier.type = "button";
 			const copierIcone = ajouter(copier, "span", "qbd-btn-icon qbd-btn-icon--sm");

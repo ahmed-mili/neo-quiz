@@ -1487,6 +1487,15 @@
 	box-shadow: none;
 }
 .qbd-install-copy:hover { color: var(--text-normal); border-color: var(--interactive-accent); background: var(--background-modifier-hover); }
+.qbd-install-code code { font-family: var(--font-monospace, ui-monospace, monospace); color: var(--text-normal); }
+.qbd-install-code .qbd-tok-cmd { color: var(--color-purple, #c084fc); font-weight: 600; }
+.qbd-install-code .qbd-tok-flag { color: var(--color-cyan, #67e8f9); }
+.qbd-install-code .qbd-tok-string { color: var(--color-green, #86efac); }
+.qbd-install-code .qbd-tok-string .qbd-tok-cmd { color: var(--color-green, #86efac); font-weight: 600; }
+.qbd-install-code .qbd-tok-string .qbd-tok-flag,
+.qbd-install-code .qbd-tok-string .qbd-tok-url { color: var(--color-green, #86efac); opacity: 0.85; }
+.qbd-install-code .qbd-tok-url { color: var(--color-blue, #93c5fd); }
+.qbd-install-code .qbd-tok-pipe { color: var(--text-muted); }
 .qbd-install-code pre { border: 1px solid var(--background-modifier-border); background: var(--background-primary-alt, var(--background-secondary)); }
 
 /* La voie manuelle réutilise la section repliable de « Mes quiz », dont

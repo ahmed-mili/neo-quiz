@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-09-17
+
 ### Fixed
 - The install command in the install window is syntax-coloured (command, flags, string, URL) instead of plain grey text.
 

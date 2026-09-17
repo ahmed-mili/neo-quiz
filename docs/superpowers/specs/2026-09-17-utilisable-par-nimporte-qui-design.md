@@ -381,7 +381,20 @@ un rendu par blocs, sûr, avec les callouts colorés par le CSS de l'app ; les
 propriétés en tête rendues en tableau ; une ligne « poids · lignes · chemin »
 qui déborde ; un lien `[TP1 — …](TP1.pdf)` laissé brut.
 
-### 6a. Les styles du vault d'où vient la note
+### 6a. Les styles du vault d'où vient la note — ABANDONNÉ le 2026-09-17 au soir
+
+Décision d'Ahmed pendant le chantier : « les callouts ont tous le même style,
+celui qu'on définit nous-mêmes, si récupérer les snippets du vault est
+compliqué, pas fiable à 100 % et coûteux ». Les trois sont vrais : un snippet
+est écrit pour tout le DOM d'Obsidian et les variables de son thème, l'aperçu
+n'en reproduit qu'une partie (un snippet à moitié appliqué se lit comme un
+bug), et la mécanique (canal, portage `@scope`, `url()`, contrôle) était la
+plus grosse tâche restante. La tâche 11 du plan est retirée ; ce qui suit
+reste comme trace de la conception, pas comme engagement. **L'aperçu rend
+tous les callouts dans UN style, le nôtre** (§ 6b) : le DOM d'Obsidian, les
+couleurs et icônes des types natifs, une couleur et une icône par défaut pour
+les types personnalisés.
+
 
 Une note qui appartient à un **vault Obsidian déclaré** (les racines dont
 `HostRoot.vault` est vrai, ou une note d'une racine externe située DANS un

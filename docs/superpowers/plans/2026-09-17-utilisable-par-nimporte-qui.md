@@ -1901,7 +1901,12 @@ git commit -m "l'aperçu d'une note : callouts au DOM d'Obsidian, liens en texte
 
 ---
 
-### Task 11: L'aperçu reprend les snippets du vault d'où vient la note
+### Task 11: ABANDONNÉE — l'aperçu reprend les snippets du vault d'où vient la note
+
+> **Retirée le 2026-09-17 au soir** (décision d'Ahmed, spec § 6a) : pas fiable
+> à 100 %, complexe, coûteuse. Tous les callouts gardent le style unique de la
+> tâche 10. Ne pas exécuter ; le texte ci-dessous est conservé comme trace.
+
 
 **Files:**
 - Create: `src/vault-styles.ts` (pur : `porterSnippet`, `assemblerStyles`)
@@ -2309,7 +2314,7 @@ Installer `NeoQuiz-1.1.0.exe` dans la VM (ou attendre la mise à jour), puis lan
 
 - [ ] **Step 3: Relire `CHANGELOG.md`**
 
-La section `[Unreleased]` porte, dans l'ordre `### Added`, `### Changed`, `### Fixed`, une ligne par changement visible des tâches 5 à 11 et 13 ; aucune ligne ne cite un fichier ni un SHA. `deduireNiveau` doit rendre `minor` : `node -e "import('./scripts/changelog.mjs').then(async m => console.log(m.deduireNiveau(m.lireUnreleased(require('fs').readFileSync('CHANGELOG.md','utf8')).sections)))"` → `minor`.
+La section `[Unreleased]` porte, dans l'ordre `### Added`, `### Changed`, `### Fixed`, une ligne par changement visible des tâches 5 à 10 et 13 ; aucune ligne ne cite un fichier ni un SHA. `deduireNiveau` doit rendre `minor` : `node -e "import('./scripts/changelog.mjs').then(async m => console.log(m.deduireNiveau(m.lireUnreleased(require('fs').readFileSync('CHANGELOG.md','utf8')).sections)))"` → `minor`.
 
 - [ ] **Step 4: La note du vault**
 

@@ -405,20 +405,23 @@ jobs:
       # VERSIONNÉ est attaché, car le bootstrapper le résout par `latest.yml`
       # et electron-updater l'y lit aussi. Cela empêche le site de contourner
       # le bootstrapper.
+      # `gh release upload`, et NON softprops/action-gh-release : ce tag
+      # FLOTTANT `@v2` a changé entre 1.2.0 (verte, 21h56) et 1.2.1, et depuis,
+      # tout envoi de gros paquet meurt — « Error creating asset temp dir »
+      # côté Windows, « Error saving asset » puis « Headers Timeout Error »
+      # après 17 minutes côté Linux (2026-09-17, quatre runs). `gh` est déjà
+      # installé sur les runners, envoie les fichiers l'un après l'autre et ne
+      # peut pas changer sous nos pieds. L'attachement ne promeut JAMAIS une
+      # release incomplète : le job `site` la rendra latest après succès
+      # Windows + Linux et validation de tous les assets indispensables.
       - name: Attach Windows package to release
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "${{ needs.prepare.outputs.tag }}"
-          # L'attachement ne promeut JAMAIS une release incomplète. Le job
-          # `site` la rendra latest après succès Windows + Linux et validation
-          # de tous les assets indispensables.
-          make_latest: "false"
-          files: |
-            apps/windows/dist-installer/*.exe
-            apps/windows/dist-installer/*.exe.blockmap
-            apps/windows/dist-installer/latest.yml
-            apps/windows/dist-installer-bootstrapper/NeoQuiz-*.exe
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "${{ needs.prepare.outputs.tag }}"             apps/windows/dist-installer/*.exe             apps/windows/dist-installer/*.exe.blockmap             apps/windows/dist-installer/latest.yml             apps/windows/dist-installer-bootstrapper/NeoQuiz-*.exe             --clobber
 
   app-linux:
     needs: prepare
@@ -477,25 +480,18 @@ jobs:
           test -f "$source"
           cp "$source" apps/windows/dist-installer/neo-quiz.AppImage
 
+      # Même raison que pour Windows : `gh release upload`, pas l'action au
+      # tag flottant. Les motifs se recouvrent volontairement — `*.AppImage`
+      # attrape aussi la copie à nom fixe `neo-quiz.AppImage` faite juste
+      # avant —, ce que `gh` gère sans broncher.
       - name: Attach Linux packages to release
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "${{ needs.prepare.outputs.tag }}"
-          # Même règle que Windows : un job d'assets ne décide jamais à lui
-          # seul que la release peut devenir latest.
-          make_latest: "false"
-          files: |
-            apps/windows/dist-installer/*.AppImage
-            apps/windows/dist-installer/*.deb
-            apps/windows/dist-installer/latest-linux.yml
-            apps/windows/dist-installer/latest-linux-arm64.yml
-            # PAS de ligne `neo-quiz.AppImage` : le motif `*.AppImage`
-            # ci-dessus l'attrape DÉJÀ (c'est la copie à nom fixe faite juste
-            # avant). Listé deux fois, le même fichier de ~100 Mo partait en
-            # deux envois concurrents, qui se disputaient le répertoire
-            # temporaire de l'action : « Error saving asset », puis « Headers
-            # Timeout Error » après 17 minutes (1.2.1 et 1.2.2, 2026-09-17).
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "${{ needs.prepare.outputs.tag }}"             apps/windows/dist-installer/*.AppImage             apps/windows/dist-installer/*.deb             apps/windows/dist-installer/latest-linux.yml             apps/windows/dist-installer/latest-linux-arm64.yml             --clobber
 
   # La page de téléchargement lit `docs/latest.json` (app) et
   # `docs/latest-plugin.json` (greffon), servis par GitHub Pages, sans limite

@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Fixed
+- The release packages are attached again: the upload step no longer depends on a third-party action whose floating tag broke every large upload (1.2.1, 1.2.2 and 1.2.3 shipped incomplete).
+
 ## [1.2.3] - 2026-09-17
 
 ### Fixed

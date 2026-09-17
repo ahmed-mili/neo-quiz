@@ -1366,6 +1366,15 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 
 	function setStatus(id: string, providerSelect: SelectHandle<ProviderSelectOption> | null, dot: string, text: string): void {
 		providerStatus[id] = { dot, text };
+		// Un fournisseur ABSENT ne se sélectionne pas — mais un `aiProvider`
+		// persisté n'était jamais revalidé : les réglages survivent à une
+		// désinstallation (voulu), et une VM réinstallée affichait « GPT-5.6 »
+		// avec le Codex CLI manquant (vécu 2026-09-17). La sélection retombe
+		// à « aucun », comme si l'on n'avait jamais choisi.
+		if (dot === "err" && settings().aiProvider === id) {
+			void saveSettings({ aiProvider: "", aiModel: "" }).then(() => render(containerRef));
+			return;
+		}
 		// Redessine le trigger (dot de statut du fournisseur choisi) et les
 		// options du menu s'il est ouvert (versions re-détectées à l'ouverture,
 		// et `disabled` recalculé : un fournisseur peut passer en erreur — ou en

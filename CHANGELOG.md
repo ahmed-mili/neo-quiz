@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-17
+
 ### Fixed
 - The install window's "Install manually" section no longer looks like a grey folder header with a stray count.
 - A provider that is no longer installed is no longer kept as the selected one: the selection goes back to "none" instead of showing a model nothing can run (settings survive a reinstall, so a previous choice used to stick).

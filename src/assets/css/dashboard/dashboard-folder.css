@@ -127,8 +127,17 @@
 	background-position: 10px 0;
 }
 
+/* `:has(:focus-visible)` ET NON `:focus-within` : en fermant le modal d'une
+   image, l'hôte REND le focus au bouton qui l'avait ouvert (`host/modal.ts`,
+   et c'est ce qu'il doit faire pour qui navigue au clavier). Avec
+   `:focus-within`, la rangée gardait donc son fond et sa corbeille après un
+   clic à la souris, sans que rien ne la survole — l'effet restait collé
+   (Ahmed, 2026-09-17). `:focus-visible` ne se pose que si la dernière
+   interaction était au CLAVIER : le fond revient pour un Tab, jamais pour un
+   clic. Mesuré après fermeture : `:focus-within` vrai,
+   `:has(:focus-visible)` faux. */
 .qbd-folder-item:hover,
-.qbd-folder-item:focus-within {
+.qbd-folder-item:has(:focus-visible) {
 	background-color: color-mix(in srgb, var(--text-normal) 6%, transparent);
 }
 
@@ -167,7 +176,7 @@
 }
 
 .qbd-folder-item:hover .qbd-folder-item-delete,
-.qbd-folder-item:focus-within .qbd-folder-item-delete {
+.qbd-folder-item:has(:focus-visible) .qbd-folder-item-delete {
 	opacity: 1;
 }
 

@@ -164,7 +164,9 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 
 		/* ── Installer un CLI : la recette est FIXE, dans ce module, jamais composée
 		   depuis le rendu. Ces cas gardent l'URL officielle, l'étape de connexion,
-		   l'encodage (aucune citation ne traverse `cmd`), et la forme des arguments.
+		   l'encodage (le base64 ne contient que `[A-Za-z0-9+/=]`, donc il ne peut
+		   refermer ni l'apostrophe de `-ArgumentList` ni le guillemet de
+		   `-Command`), et la forme des arguments.
 
 		   ARGUMENTS TERMINAL PAR SHELLEXECUTE (`Start-Process`), et non `cmd /c
 		   start` : la sonde du 2026-09-17 (tâche 3, probe § 3c) a mesuré qu'un

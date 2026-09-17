@@ -618,8 +618,11 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	   est celle de `process.ts`, et une confirmation NATIVE — rédigée ici, sur
 	   la langue posée par `main.ts` — précède le lancement, comme pour l'hôte
 	   Ollama des réglages. `cancelId` = refus : fermer la boîte, c'est dire
-	   non. Hors Windows, `indisponible` sans rien lancer : le modal du rendu
-	   montre alors les étapes manuelles. */
+	   non. Le bouton par défaut est ANNULER (`defaultId: 1`), comme la porte
+	   de l'hôte Ollama juste au-dessus : une frappe réflexe sur Entrée ne doit
+	   pas lancer un script d'installation distant. Hors Windows,
+	   `indisponible` sans rien lancer : le modal du rendu montre alors les
+	   étapes manuelles. */
 	const NOMS_OUTILS: Record<Outil, string> = { claude: "Claude Code", codex: "Codex CLI", ollama: "Ollama" };
 	const SOURCES_OUTILS: Record<Outil, string> = { claude: "claude.ai/install.ps1", codex: "chatgpt.com/codex/install.ps1", ollama: "winget (Ollama.Ollama)" };
 	ipcMain.handle(CANAUX.processusInstaller, async (_e, tool: unknown): Promise<"lance" | "annule" | "indisponible"> => {
@@ -635,7 +638,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 			message: t("app.installCli.message", { name }),
 			detail: t("app.installCli.detail", { source: SOURCES_OUTILS[tool] }),
 			buttons: [t("app.installCli.run"), t("app.installCli.cancel")],
-			defaultId: 0,
+			defaultId: 1,
 			cancelId: 1,
 		};
 		const parent = deps.fenetreCourante();

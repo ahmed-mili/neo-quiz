@@ -549,10 +549,12 @@ pm` — jamais dans un dossier de quiz : refuser le périmètre (qui
   Depuis le chantier « utilisable par n'importe qui » (2026-09-17), il garde
   aussi la RECETTE d'installation de chaque CLI (`scriptInstallation`) :
   l'URL officielle, l'étape de connexion, le rechargement du PATH, et
-  l'encodage `-EncodedCommand` qui fait qu'aucune citation ne traverse
-  `cmd.exe`. Le canal `processus.installer` est la seule capacité du pont qui
-  ouvre une fenêtre : il ne reçoit qu'un nom, jugé par `estOutilAutorise`, et
-  une confirmation native du principal précède le lancement.
+  l'encodage `-EncodedCommand` : le base64 ne contient que `[A-Za-z0-9+/=]`,
+  donc il ne peut refermer ni l'apostrophe de `-ArgumentList` ni le guillemet
+  de `-Command` (`argumentsTerminal`). Le canal `processus.installer` est la
+  seule capacité du pont qui ouvre une fenêtre : il ne reçoit qu'un nom, jugé
+  par `estOutilAutorise`, et une confirmation native du principal précède le
+  lancement.
 - `npm run check:package` — l'EMPAQUETAGE : la configuration résolue
   d'electron-builder, et le paquet local s'il existe. Défauts empêchés côté
   configuration : depuis que l'application a sa propre version

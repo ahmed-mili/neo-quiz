@@ -243,9 +243,11 @@ export async function demarrerOllama(env: NodeJS.ProcessEnv = process.env): Prom
 
    LA RECETTE VIT ICI, jamais dans le rendu : `canaux.ts` ne reçoit qu'un nom
    d'outil, jugé par `estOutilAutorise` avant tout. `-EncodedCommand` porte
-   le script en base64 (UTF-16LE, ce que PowerShell attend) : aucune
-   apostrophe, aucun `|`, aucun `$` ne traverse `cmd.exe` en clair, donc
-   aucune question de citation.
+   le script en base64 (UTF-16LE, ce que PowerShell attend) : le base64 ne
+   contient que `[A-Za-z0-9+/=]`, donc il ne peut refermer ni l'apostrophe de
+   `-ArgumentList` ni le guillemet de `-Command` (`argumentsTerminal`) —
+   aucune apostrophe, aucun `|`, aucun `$` du script n'atteint jamais la
+   ligne de commande en clair.
 
    PAR SHELLEXECUTE (`Start-Process`), ET NON `cmd /c start` : une sonde sur
    la machine réelle (tâche 3, spec § 3c) a mesuré le `MainWindowHandle` de

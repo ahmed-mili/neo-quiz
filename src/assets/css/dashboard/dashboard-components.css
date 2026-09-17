@@ -733,7 +733,7 @@
    quizzes.ts) : un re-render interne du drill (reset de stats) ne fait plus
    clignoter les cartes. Keyframes définis dans dashboard-quizzes.css. */
 .qbd-quizzes-enter .qbd-quiz-card.qbd-quiz-card--folder {
-	animation: qbd-folder-card-in 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+	animation: qbd-folder-card-in 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
 	animation-delay: var(--qbd-card-delay, 100ms);
 }
 

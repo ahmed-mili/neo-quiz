@@ -73,6 +73,14 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   qu'aucun contrôle ne le dise. Ce script nomme, en dehors de `RESTANTS`, les
   pages du tableau de bord portées en tranche 2.5 : sa liste ne peut que
   GRANDIR, jamais rétrécir.
+- `npm run check:view-enter` — l'entrée d'une vue se TERMINE (`src/dashboard/
+  view-enter.ts`) : `markViewEnter` ignore les animations INFINIES en
+  attendant la fin de l'entrée, et aucune animation posée sous `.qbd-*-enter`
+  n'est en `both` ni `forwards`. Une animation d'entrée finie qui garde la
+  main sur `transform` rend les transitions de survol muettes : la carte SAUTE
+  de 0 à -3 px en une image. Le chemin qui défile en boucle l'a provoqué
+  (2026-09-17) en empêchant la classe d'entrée de tomber ; ça ne se voit qu'à
+  la souris, jamais dans un typecheck. Dans la CI.
 - `npm run check:theme` — le thème de l'app définit toutes les variables CSS
   qu'Obsidian fournissait. Une oubliée ne produit AUCUNE erreur : un texte
   invisible sur un fond de la même couleur. Symétrique et dans la CI.

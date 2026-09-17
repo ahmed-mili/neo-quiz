@@ -51,6 +51,14 @@ jobs:
       - name: App theme completeness
         run: npm run check:theme
 
+      # L'entrée d'une vue se TERMINE : `markViewEnter` n'attend que les
+      # animations qui peuvent finir, et aucune animation d'entrée ne garde
+      # ses propriétés après sa fin. Sans quoi le survol d'une carte saute au
+      # lieu de glisser — et ça ne se voit qu'à la souris, jamais dans un
+      # typecheck. Pur, lecture seule sur `src/`.
+      - name: View enter terminates
+        run: npm run check:view-enter
+
       # Le bootstrapper lance l'installeur NSIS en silence : l'ordre des
       # arguments et la sélection du paquet ne peuvent donc pas être relus à
       # l'écran. Ce contrôle charge le noyau réellement appelé par l'installeur.

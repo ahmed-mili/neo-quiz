@@ -192,18 +192,18 @@
 
 .qbd-ai-enter .qbd-ai-title-row,
 .qbd-ai-enter .qbd-ai-result-zone {
-	animation: qbd-ai-in 0.34s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+	animation: qbd-ai-in 0.34s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
 }
 
 .qbd-ai-enter .qbd-ai-composer {
-	animation: qbd-ai-in 0.38s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+	animation: qbd-ai-in 0.38s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
 	animation-delay: 70ms;
 }
 
 .qbd-ai-enter .qbd-ai-model-hint,
 .qbd-ai-enter .qbd-ai-preview-loading,
 .qbd-ai-enter .qbd-ai-preview-error {
-	animation: qbd-ai-in 0.38s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+	animation: qbd-ai-in 0.38s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
 	animation-delay: 130ms;
 }
 

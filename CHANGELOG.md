@@ -13,6 +13,12 @@ release notes.
 
 ## [Unreleased]
 
+### Added
+- Install Claude Code, the Codex CLI or Ollama from the app: a provider that is missing opens a window that explains what it is, installs it in one click (PowerShell opens with the official installer) and detects it once it is there. Manual steps stay available.
+
+### Changed
+- The hint under the composer no longer shows a raw command; it opens the same window.
+
 ### Fixed
 - The dots in the AI provider menu line up whatever the length of the status text.
 
@@ -66,4 +72,3 @@ Version 1.0.2 was withdrawn the same day; its changes are part of 1.0.3.
 
 ### Added
 - The Neo Quiz desktop app, independent from the Obsidian plugin: read, review, edit and generate quizzes from the folders you open, with automatic updates.
-

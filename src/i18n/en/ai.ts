@@ -95,18 +95,43 @@ export const EN_AI = {
 
 	/* ── Hints contextuels sous le composer ── */
 	"ai.hint.claudeDesktopOnly": "Generating with Claude is available on desktop only.",
-	"ai.hint.claudeNotInstalled": "Claude Code is not installed. Install it, then connect your account with “/login”:",
+	"ai.hint.claudeNotInstalled": "Claude Code is not installed.",
 	"ai.hint.installClaude": "Install Claude Code",
 	"ai.hint.codexDesktopOnly": "Generating with ChatGPT (Codex CLI) is available on desktop only.",
-	"ai.hint.codexNotInstalled": "The Codex CLI is not installed — it is OpenAI's terminal tool, different from the Codex app. Install it, then connect your ChatGPT account with “codex login”:",
+	"ai.hint.codexNotInstalled": "The Codex CLI is not installed.",
 	"ai.hint.installCodex": "Install Codex CLI",
 	// Ni « installed », ni la version, ni ce qui se passera ensuite : le statut du
 	// fournisseur donne déjà la version, et les modèles qui apparaissent se voient
 	// (demande Ahmed). Ce message ne dit QUE ce qui manque et comment y remédier.
 	"ai.hint.ollamaServerOff": "Ollama is installed but its server is not running.",
 	"ai.hint.startOllama": "Start Ollama",
-	"ai.hint.ollamaNotInstalled": "Ollama is not installed. Install it, start it, and the plugin will detect it automatically:",
-	"ai.hint.downloadOllama": "Download Ollama",
+	"ai.hint.ollamaNotInstalled": "Ollama is not installed.",
+	"ai.hint.installOllama": "Install Ollama",
+
+	/* ── Le modal d'un fournisseur absent (spec « utilisable par n'importe qui », § 3b) ── */
+	"ai.install.title.claude-code": "Claude Code is not installed",
+	"ai.install.title.codex": "The Codex CLI is not installed",
+	"ai.install.title.ollama": "Ollama is not installed",
+	"ai.install.what.claude-code": "Claude Code is Anthropic's command-line tool. Neo Quiz uses it with your Claude account (Pro or Max) to generate quizzes.",
+	"ai.install.what.codex": "The Codex CLI is OpenAI's command-line tool, used with a ChatGPT subscription. It is not the Codex desktop app.",
+	"ai.install.what.ollama": "Ollama runs free models on your own computer. No account needed.",
+	"ai.install.auto": "Install automatically",
+	"ai.install.autoHint": "Neo Quiz opens PowerShell and runs the official installer. You will see everything it does.",
+	"ai.install.manual": "Install manually",
+	"ai.install.step1": "Open PowerShell: press Windows + X, then I. (Or open the Start menu, type “PowerShell” and press Enter.)",
+	"ai.install.step1Unix": "Open a terminal.",
+	"ai.install.step2": "Copy this command, paste it into the window (right click) and press Enter:",
+	"ai.install.step3.claude-code": "When it is done, type claude, press Enter, and follow the instructions to sign in with your Claude account.",
+	"ai.install.step3.codex": "When it is done, type codex login, press Enter, and sign in with your ChatGPT account.",
+	"ai.install.step3.ollama": "When it is done, Ollama starts by itself.",
+	"ai.install.step4": "Come back to Neo Quiz: the installation is detected automatically.",
+	"ai.install.learnMore": "Learn more",
+	"ai.install.copy": "Copy the command",
+	"ai.install.running": "Installing in PowerShell… Neo Quiz will detect it by itself.",
+	"ai.install.detected": "{name} v{version} is installed.",
+	"ai.install.detectedNoVersion": "{name} is installed.",
+	"ai.install.continue": "Continue",
+	"ai.install.terminalFailed": "PowerShell could not be opened. Follow the manual steps below.",
 
 	/* ── Modèles : accroche courte (à droite du nom) et description ── */
 	"ai.modelHint.mostPowerful": "most powerful",

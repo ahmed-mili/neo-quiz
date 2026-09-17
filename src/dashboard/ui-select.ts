@@ -165,9 +165,9 @@ export function createSelect<T extends SelectOption = SelectOption>(parent: HTML
 				if (o.hint) ajouter(optBtn, "span", "qbd-select-option-hint", o.hint);
 			}
 			optBtn.addEventListener("click", () => {
-				/* Une option désactivée n''est pas grisée (le sous-titre et la
-				   pastille disent déjà l''état) mais ne prend JAMAIS la coche : le
-				   menu se ferme et l''appelant décide quoi montrer. */
+				/* Une option désactivée n'est pas grisée (le sous-titre et la
+				   pastille disent déjà l'état) mais ne prend JAMAIS la coche : le
+				   menu se ferme et l'appelant décide quoi montrer. */
 				if (o.disabled) {
 					closeMenu();
 					opts.onDisabledClick?.(o.value);
@@ -1637,5 +1637,3 @@ export function openMentionMenu(anchorEl: HTMLElement, onClose?: () => void): Me
 		},
 	};
 }
-
-

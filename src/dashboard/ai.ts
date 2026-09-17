@@ -35,6 +35,8 @@ import type { DraftQuestion } from "../editor/utils";
 import type { ParsedQuizItem } from "../editor/modals";
 import { currentLang, t } from "../i18n";
 import type { TransKey } from "../i18n";
+import { openInstallModal } from "./ai-install-modal";
+import type { InstallProvider } from "./ai-install-modal";
 
 /* ══════════════════════════════════════════════════════════
    AI VIEW — Dashboard
@@ -207,6 +209,9 @@ export interface AiPageDeps {
 	    bloc de l'utilisateur, bouton « copier » du post-processeur natif.
 	    Absent, la page pose un `<pre><code>` nu — le texte est le même. */
 	renderCodeBlock?(host: HTMLElement, code: string, lang: string): void;
+	/** Le presse-papiers par l'hôte (le modal d'installation copie une
+	    commande) ; dans la fenêtre de l'app, `navigator.clipboard` est refusé. */
+	copyText?(texte: string): Promise<boolean>;
 }
 
 /** Handlers de la vue « Générer » — retour de createAiHandlers(deps). */
@@ -571,7 +576,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		const buildProviderControl = (parent: HTMLElement): void => {
 			const sel = createSelect<ProviderSelectOption>(parent, {
 				value: provider || undefined,
-				options: aiProviders.PROVIDERS.map(p => ({ value: p.id, label: p.name, logo: p.logo, sub: p.sub })),
+				options: optionsFournisseurs(),
 				renderTrigger: (el, o) => {
 					if (!o) {
 						// Aucun fournisseur : slot vide, le tooltip guide.
@@ -604,6 +609,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					await saveSettings({ aiProvider: id, aiModel: aiProviders.getProvider(id).defaultModel });
 					render(container);
 				},
+				// Une option DÉSACTIVÉE (fournisseur absent) ne se sélectionne pas :
+				// elle ouvre son modal d'installation, avec le même rafraîchissement
+				// que le bouton du hint.
+				onDisabledClick: (id) => ouvrirModalInstallation(id as InstallProvider, () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true })),
 				// Re-vérifie les CLI à CHAQUE ouverture du menu (force = sans TTL) :
 				// après un « claude/codex update », la version affichée se met à
 				// jour toute seule, le menu ouvert est redessiné à l'arrivée des
@@ -1283,6 +1292,19 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   Lus par le sélecteur de fournisseur (trigger + options). */
 	const providerStatus: Record<string, ProviderStatusEntry> = {};
 
+	/* Les options du sélecteur de fournisseur, reconstruites à chaque appel :
+	   `disabled` suit `providerStatus`, rempli en asynchrone (setStatus la
+	   rappelle dès qu'un statut arrive), donc un fournisseur qui échoue pendant
+	   que le menu est déjà construit devient bien non sélectionnable. Extraite
+	   ici pour ne calculer qu'UNE fois la règle (« err » → désactivé), appelée
+	   par buildProviderControl comme par setStatus. */
+	function optionsFournisseurs(): ProviderSelectOption[] {
+		return aiProviders.PROVIDERS.map(p => ({
+			value: p.id, label: p.name, logo: p.logo, sub: p.sub,
+			disabled: providerStatus[p.id]?.dot === "err",
+		}));
+	}
+
 	/* Dernier hint connu par provider (null = rien à signaler). Le sélecteur
 	   affiche déjà le statut de CHAQUE fournisseur : le hint correspondant est
 	   donc calculé pour tous, pas seulement pour l'actif, et ré-affiché
@@ -1299,38 +1321,37 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	function setStatus(id: string, providerSelect: SelectHandle<ProviderSelectOption> | null, dot: string, text: string): void {
 		providerStatus[id] = { dot, text };
 		// Redessine le trigger (dot de statut du fournisseur choisi) et les
-		// options du menu s'il est ouvert (versions re-détectées à l'ouverture).
+		// options du menu s'il est ouvert (versions re-détectées à l'ouverture,
+		// et `disabled` recalculé : un fournisseur peut passer en erreur — ou en
+		// sortir — pendant que le menu est déjà construit).
 		if (providerSelect && providerSelect.el.isConnected) {
-			providerSelect.setValue((settings().aiProvider || undefined) as string);
+			providerSelect.setOptions(optionsFournisseurs(), settings().aiProvider || undefined);
 			if (providerSelect.refreshMenu) providerSelect.refreshMenu();
 		}
 	}
 
-	/* Commande d'installation par fournisseur — CHAQUE fournisseur absent en
-	   propose une, dans un bloc code prêt à coller (demande Ahmed). Formes
-	   officielles vérifiées le 2026-07-14 :
-	   - Claude Code : installateur natif, « Native Install (Recommended) »
-	     (code.claude.com/docs/en/setup) ;
-	   - Codex CLI : installateur officiel de la plateforme
-	     (learn.chatgpt.com/docs/codex/cli) ;
-	   - Ollama : winget (paquet officiel Ollama.Ollama) sur Windows, le
-	     script officiel ailleurs — docs.ollama.com ne publie pas de one-liner
-	     PowerShell, l'exe d'installation étant la voie mise en avant. */
-	function installCmd(provider: "claude-code" | "codex" | "ollama"): { code: string; lang: string } {
-		const win = host.platform.isWindows;
-		if (provider === "claude-code") {
-			return win
-				? { code: "irm https://claude.ai/install.ps1 | iex", lang: "powershell" }
-				: { code: "curl -fsSL https://claude.ai/install.sh | bash", lang: "bash" };
-		}
-		if (provider === "codex") {
-			return win
-				? { code: 'powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"', lang: "powershell" }
-				: { code: "curl -fsSL https://chatgpt.com/codex/install.sh | sh", lang: "bash" };
-		}
-		return win
-			? { code: "winget install --id Ollama.Ollama -e", lang: "powershell" }
-			: { code: "curl -fsSL https://ollama.com/install.sh | sh", lang: "bash" };
+	/* Le modal d'un fournisseur absent — ouvert depuis l'option du menu (qui
+	   ne se sélectionne pas) comme depuis le bouton du hint. Sur détection, le
+	   fournisseur devient celui des réglages ; à la fermeture, statuts et
+	   hints sont relus pour que le menu dise le nouvel état. */
+	function ouvrirModalInstallation(id: InstallProvider, rafraichir: () => void): void {
+		const probe = id === "claude-code" ? () => aiProviders.checkClaudeCode(true)
+			: id === "codex" ? () => aiProviders.checkCodex(true)
+			: () => aiProviders.checkOllama(settings().aiOllamaUrl, true);
+		openInstallModal({
+			provider: id,
+			probe: async () => {
+				const res = await probe();
+				return res.ok ? { ok: true, version: "version" in res ? res.version : undefined } : { ok: false };
+			},
+			onDetected: async () => {
+				if (settings().aiProvider === id) return;
+				await saveSettings({ aiProvider: id, aiModel: aiProviders.getProvider(id).defaultModel });
+			},
+			onClose: () => { rafraichir(); render(containerRef); },
+			copyText: deps.copyText,
+			renderCodeBlock: deps.renderCodeBlock,
+		});
 	}
 
 	/* Hint contextuel sous la rangée modèle : icône + texte
@@ -1403,10 +1424,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				setHint("claude-code", hintZone, provider, {
 					type: "err", icon: "download",
 					text: t("ai.hint.claudeNotInstalled"),
-					...installCmd("claude-code"),
 					action: {
-						label: t("ai.hint.installClaude"), icon: "arrow-up-right",
-						onClick: () => window.open("https://claude.com/claude-code", "_blank")
+						label: t("ai.hint.installClaude"), icon: "download",
+						onClick: () => ouvrirModalInstallation("claude-code", () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true }))
 					}
 				});
 			}
@@ -1437,10 +1457,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				setHint("codex", hintZone, provider, {
 					type: "err", icon: "download",
 					text: t("ai.hint.codexNotInstalled"),
-					...installCmd("codex"),
 					action: {
-						label: t("ai.hint.installCodex"), icon: "arrow-up-right",
-						onClick: () => window.open("https://learn.chatgpt.com/docs/codex/cli#getting-started", "_blank")
+						label: t("ai.hint.installCodex"), icon: "download",
+						onClick: () => ouvrirModalInstallation("codex", () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true }))
 					}
 				});
 			}
@@ -1510,10 +1529,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					setHint("ollama", hintZone, provider, {
 						type: "err", icon: "download",
 						text: t("ai.hint.ollamaNotInstalled"),
-						...installCmd("ollama"),
 						action: {
-							label: t("ai.hint.downloadOllama"), icon: "arrow-up-right",
-							onClick: () => window.open("https://ollama.com/download", "_blank")
+							label: t("ai.hint.installOllama"), icon: "download",
+							onClick: () => ouvrirModalInstallation("ollama", () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true }))
 						}
 					});
 				}

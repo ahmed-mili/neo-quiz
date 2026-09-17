@@ -227,6 +227,14 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	   doit toujours jouer son entrée, y compris au retour d'un quiz. */
 	let dernierePeinte: DashboardViewName | null = null;
 
+	/* Le presse-papiers du pont, partagé par le menu « ⋯ » (copier un chemin)
+	   et le modal d'installation (`ai-install-modal.ts`, copier une commande) :
+	   `navigator.clipboard` est refusé côté rendu, le principal seul peut
+	   écrire dans le presse-papiers système. */
+	const copierTexte = async (texte: string): Promise<boolean> => {
+		try { await pont().systeme.copierTexte(texte); return true; } catch { return false; }
+	};
+
 	const ctx: DashboardShellCtx = {
 		scanner: deps.scanner,
 		statsStore: deps.statsStore,
@@ -296,9 +304,7 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 		   « \\ ». Le test porte sur la LETTRE DE LECTEUR et non sur une
 		   variable d'environnement : c'est la seule chose qui distingue ici un
 		   chemin Windows d'un chemin POSIX, et `pack:linux` existe. */
-		copyText: async (texte) => {
-			try { await pont().systeme.copierTexte(texte); return true; } catch { return false; }
-		},
+		copyText: copierTexte,
 		absolutePath: (path) => {
 			const absolu = deps.cheminAbsolu(path);
 			if (!absolu) return null;
@@ -401,6 +407,7 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 		statsStore: deps.statsStore,
 		navigate: (vue, data) => naviguer(vue, data),
 		quizFolders: () => dossiersDeQuiz(),
+		copyText: copierTexte,
 	});
 
 	/**

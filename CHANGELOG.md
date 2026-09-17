@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Fixed
+- The dots in the AI provider menu line up whatever the length of the status text.
+
 ## [1.1.0] - 2026-09-17
 
 ### Added
@@ -63,3 +66,4 @@ Version 1.0.2 was withdrawn the same day; its changes are part of 1.0.3.
 
 ### Added
 - The Neo Quiz desktop app, independent from the Obsidian plugin: read, review, edit and generate quizzes from the folders you open, with automatic updates.
+

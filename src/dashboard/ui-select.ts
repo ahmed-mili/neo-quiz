@@ -48,6 +48,8 @@ export interface SelectOption {
 	value: string;
 	label: string;
 	hint?: string;
+	/** Visible, mais pas sélectionnable : un clic appelle `onDisabledClick` (le fournisseur absent ouvre son modal d'installation). */
+	disabled?: boolean;
 }
 
 export interface SelectOptions<T extends SelectOption = SelectOption> {
@@ -56,6 +58,8 @@ export interface SelectOptions<T extends SelectOption = SelectOption> {
 	onChange?: (value: string) => void;
 	/** Appelé à chaque ouverture du menu (rafraîchissements async). */
 	onOpen?: () => void;
+	/** Le clic sur une option `disabled` — le menu se ferme d'abord. */
+	onDisabledClick?: (value: string) => void;
 	disabled?: boolean;
 	placeholder?: string;
 	renderTrigger?: (labelEl: HTMLElement, current: T | null) => void;
@@ -147,12 +151,13 @@ export function createSelect<T extends SelectOption = SelectOption>(parent: HTML
 		if (!menuEl) return;
 		menuEl.replaceChildren();
 		for (const o of options) {
-			const optBtn = ajouter(menuEl, "button", "qbd-select-option" + (o.value === value ? " is-active" : ""));
+			const optBtn = ajouter(menuEl, "button", "qbd-select-option" + (o.value === value && !o.disabled ? " is-active" : ""));
 			optBtn.type = "button";
 			optBtn.setAttribute("role", "option");
-			optBtn.setAttribute("aria-selected", o.value === value ? "true" : "false");
+			optBtn.setAttribute("aria-selected", o.value === value && !o.disabled ? "true" : "false");
+			if (o.disabled) optBtn.setAttribute("aria-disabled", "true");
 			const check = ajouter(optBtn, "span", "qbd-select-check");
-			if (o.value === value) currentHost().ui.setIcon(check, "check");
+			if (o.value === value && !o.disabled) currentHost().ui.setIcon(check, "check");
 			if (opts.renderOption) {
 				opts.renderOption(optBtn, o);
 			} else {
@@ -160,6 +165,14 @@ export function createSelect<T extends SelectOption = SelectOption>(parent: HTML
 				if (o.hint) ajouter(optBtn, "span", "qbd-select-option-hint", o.hint);
 			}
 			optBtn.addEventListener("click", () => {
+				/* Une option désactivée n''est pas grisée (le sous-titre et la
+				   pastille disent déjà l''état) mais ne prend JAMAIS la coche : le
+				   menu se ferme et l''appelant décide quoi montrer. */
+				if (o.disabled) {
+					closeMenu();
+					opts.onDisabledClick?.(o.value);
+					return;
+				}
 				const changed = o.value !== value;
 				value = o.value;
 				refreshLabel();
@@ -1624,3 +1637,5 @@ export function openMentionMenu(anchorEl: HTMLElement, onClose?: () => void): Me
 		},
 	};
 }
+
+

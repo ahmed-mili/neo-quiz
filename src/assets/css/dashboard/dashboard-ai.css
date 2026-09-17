@@ -478,13 +478,17 @@
 	vertical-align: -4px;
 }
 
-/* Option du menu : logo + (nom / statut) + dot */
+/* Option du menu : logo + (nom / statut) + dot.
+   `flex: 1` et non une marge : la pastille et la coche ont chacune `margin-left: auto`,
+   et deux marges automatiques se PARTAGENT l''espace libre — la pastille dépendait de
+   la longueur du sous-titre (vu le 2026-09-17). Le corps absorbe tout, il ne reste
+   rien à partager. */
 .qbd-provider-option-body {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
 	min-width: 0;
-	margin-right: 14px;
+	flex: 1 1 auto;
 }
 
 .qbd-provider-option-body .qbd-select-option-label {
@@ -2753,3 +2757,4 @@
   padding-top: 18px;
   border-top: 1px solid var(--background-modifier-border);
 }
+

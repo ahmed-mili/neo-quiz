@@ -11,12 +11,12 @@ import type { StatsStore } from "./stats-store";
 import { aiSettingsDefaults } from "./ai-settings-host";
 import type { AiSettingsHost } from "./ai-settings-host";
 import { createAiClient } from "./ai-client";
-import { createSelect, closeAllSelects, openActionMenu, openModelMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
+import { createSelect, closeAllSelects, openModelMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
 import { badgeDeFichier } from "./file-icons";
 import { renderMarkdownPreview } from "../markdown-preview";
 import { mathifyElement } from "../engine/mathjax";
 import type { SelectHandle, SelectOption } from "./ui-select";
-import { formatHotkey } from "../hotkey-format";
+import { formatHotkey, eventToHotkey } from "../hotkey-format";
 import { findQuizModeConfigIndex } from "../quiz-utils";
 import { attachMentionPicker } from "./mention-picker";
 import type { MentionPickerHandle } from "./mention-picker";
@@ -218,7 +218,6 @@ export interface AiPageDeps {
 export interface AiHandlers {
 	render(container: HTMLElement): Promise<void>;
 	openAddFiles(): void;
-	openAddNotes(): void;
 	/** Rend ce que la page tient au système à la fermeture de la vue :
 	    observateur de taille, écoute « focus fenêtre », page du quiz généré,
 	    et URL d'objet des images encore en mémoire. Sans lui, chaque
@@ -269,10 +268,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		aJoindre = [...p.attach];
 	}
 	let images: ComposerImage[] = [];
-	// Refs du dernier render : cibles des raccourcis du composer
-	// (dashboard.bindComposerHotkeys → openAddFiles/openAddNotes).
-	let addBtnRef: HTMLButtonElement | null = null;
+	// Ref du dernier render : cible du raccourci Ctrl+E (openAddFiles).
 	let fileInputRef: HTMLInputElement | null = null;
+	// Écouteur du raccourci « Ajouter des fichiers », posé sur le conteneur
+	// de la page à chaque render (cf. plus bas) et retiré ici comme dans
+	// `dispose` avant d'en reposer un nouveau — jamais deux à la fois.
+	let raccourciComposer: { retirer(): void } | null = null;
 	// Listener « focus fenêtre » du re-check des statuts CLI (remplacé à
 	// chaque render, retiré quand la zone de hint disparaît).
 	let __focusRecheck: (() => void) | null = null;
@@ -1174,26 +1175,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			target.value = "";
 		});
 		fileInputRef = fileInput;
-		addBtnRef = addBtn;
 
-		// Menu « + » (maquette Ahmed 2026-07-11 231626) : deux actions,
-		// raccourci configurable affiché à droite (réglages du plugin).
-		addBtn.addEventListener("click", () => {
-			openActionMenu(addBtn, [
-				{
-					icon: "paperclip",
-					label: t("ai.add.files"),
-					hint: formatHotkey(settings().hotkeyAddFiles),
-					onClick: () => fileInput.click()
-				},
-				{
-					icon: "file-text",
-					label: t("ai.add.notes"),
-					hint: formatHotkey(settings().hotkeyAddNotes),
-					onClick: () => openAddNotes()
-				}
-			]);
-		});
+		// Le « + » ouvre DIRECTEMENT le sélecteur de fichiers : « Add notes »
+		// a disparu (le picker « @ » fait la même chose, mieux), et un menu à
+		// une seule entrée serait un détour. L'infobulle porte le raccourci.
+		addBtn.title = t("ai.add.filesTip", { hotkey: formatHotkey(settings().hotkeyAddFiles) });
+		addBtn.setAttribute("aria-label", addBtn.title);
+		addBtn.addEventListener("click", () => openAddFiles());
 
 		// Toute la carte est cliquable pour écrire (demande 2026-07-10) :
 		// un clic hors des contrôles focus le champ, caret en fin de texte.
@@ -1218,6 +1206,24 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			composer.classList.remove("qbd-ai-composer--dragover");
 			if (e.dataTransfer?.files?.length) addComposerFiles(Array.from(e.dataTransfer.files));
 		});
+
+		// Le raccourci « Ajouter des fichiers » : dans l'application, rien ne
+		// le liait depuis la tâche 1 du greffon lecteur — le menu affichait un
+		// raccourci mort. Posé sur le conteneur de la page, relu à chaque frappe
+		// (le réglage peut changer), retiré dans `dispose`.
+		if (raccourciComposer) raccourciComposer.retirer();
+		const surTouche = (e: KeyboardEvent): void => {
+			const hk = eventToHotkey(e);
+			const voulu = settings().hotkeyAddFiles;
+			if (!hk || !voulu || hk.key !== voulu.key) return;
+			const a = [...(hk.modifiers || [])].sort().join("+");
+			const b = [...(voulu.modifiers || [])].sort().join("+");
+			if (a !== b) return;
+			e.preventDefault();
+			openAddFiles();
+		};
+		container.addEventListener("keydown", surTouche);
+		raccourciComposer = { retirer: () => container.removeEventListener("keydown", surTouche) };
 
 		// Hint contextuel du fournisseur (CLI absent, serveur offline…) :
 		// sous le composer depuis la suppression de la carte « Modèle IA ».
@@ -1732,19 +1738,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		}
 	}
 
-	/* Cibles des raccourcis du composer (Scope de la vue dashboard) et du
-	   menu « + ». Actifs seulement si le composer est rendu (vue Générer). */
+	/* Cible du raccourci Ctrl+E et du clic sur le « + » — actif seulement si
+	   le composer est rendu (vue Générer). L'ancien binding par Scope
+	   Obsidian a disparu avec la vue dashboard (tâche 2, greffon lecteur) ;
+	   l'écoute clavier vit désormais dans `render()`, ci-dessus. */
 	function openAddFiles(): void {
 		if (fileInputRef && fileInputRef.isConnected) fileInputRef.click();
-	}
-
-	function openAddNotes(): void {
-		if (!addBtnRef || !addBtnRef.isConnected) return;
-		openNotePicker(addBtnRef, {
-			openFiles: deps.openFiles?.() ?? [],
-			allFiles: host.fs.listMarkdown(),
-			onPick: (file) => attachNoteVaultFile(file)
-		});
 	}
 
 	/* ── Bulle de la demande envoyée (référence claude.ai) ──
@@ -2405,6 +2404,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		closeAllSelects();
 		if (composerResizeObserver) { composerResizeObserver.disconnect(); composerResizeObserver = null; }
 		if (__focusRecheck) { window.removeEventListener("focus", __focusRecheck); __focusRecheck = null; }
+		raccourciComposer?.retirer();
+		raccourciComposer = null;
 		// `void` : après un échec d'écriture, ce brouillon n'a toujours pas de
 		// note à autosauvegarder ; la promesse rendue est déjà résolue.
 		signalerGeneration(false);
@@ -2417,5 +2418,5 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		containerRef = null;
 	}
 
-	return { render, openAddFiles, openAddNotes, dispose, preset };
+	return { render, openAddFiles, dispose, preset };
 }

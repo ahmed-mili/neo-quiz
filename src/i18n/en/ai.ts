@@ -24,7 +24,7 @@ export const EN_AI = {
 	"ai.composer.generate": "Generate quiz",
 	"ai.composer.stop": "Stop",
 	"ai.add.files": "Add files or images",
-	"ai.add.notes": "Add notes",
+	"ai.add.filesTip": "Add files or images ({hotkey})",
 	/* Picker « @ » : aucune entrée pour le token tapé. */
 	"ai.mention.noMatch": "No matching file",
 	/* Pied du menu : une garde anti-explosion a coupé l'indexation d'une ou

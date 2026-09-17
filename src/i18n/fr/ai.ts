@@ -22,7 +22,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.composer.generate": "Générer le quiz",
 	"ai.composer.stop": "Arrêter",
 	"ai.add.files": "Ajouter des fichiers ou des images",
-	"ai.add.notes": "Ajouter des notes",
+	"ai.add.filesTip": "Ajouter des fichiers ou des images ({hotkey})",
 	"ai.mention.noMatch": "Aucun fichier correspondant",
 	"ai.mention.truncated": "Trop de fichiers dans {roots} — la recherche peut être incomplète",
 	"ai.mention.externalRootGone": "Impossible d'attacher « {name} » : son dossier hors coffre a été retiré des réglages",

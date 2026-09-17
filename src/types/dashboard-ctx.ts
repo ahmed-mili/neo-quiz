@@ -48,6 +48,8 @@ export interface AiSettings {
 	/** Lecture opt-in de l'usage de l'abonnement du fournisseur. */
 	aiUsageLimitsEnabled?: boolean;
 	hotkeyAddFiles?: Hotkey | null;
+	/** IGNORÉ depuis le 2026-09-17 (le bouton « Add notes » n'existe plus) ;
+	    jamais effacé, comme les réglages de la dictée. */
 	hotkeyAddNotes?: Hotkey | null;
 	aiMentionExtraFolders?: string[];
 	/** Chemin relatif persistant du dossier qui reçoit les quiz générés. */

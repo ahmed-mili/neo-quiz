@@ -19,9 +19,11 @@ release notes.
 ### Changed
 - The hint under the composer no longer shows a raw command; it opens the same window.
 - The welcome screen no longer shows a code block: it offers to generate a quiz, create an empty folder, open an existing folder or import a quiz.
+- The "+" button of the composer opens the file picker directly; "Add notes" is gone (use "@" to attach a note). The shortcut is Ctrl+E.
 
 ### Fixed
 - The dots in the AI provider menu line up whatever the length of the status text.
+- The "Add files" shortcut now works in the app.
 
 ## [1.1.0] - 2026-09-17
 

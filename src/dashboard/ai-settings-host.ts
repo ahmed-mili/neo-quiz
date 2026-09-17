@@ -43,7 +43,7 @@ export interface AiSettingsHost {
 export function aiSettingsDefaults(): Required<Pick<AiSettings,
 	"aiProvider" | "aiModel" | "aiEffort" | "aiCodexFast" | "aiOllamaUrl" | "aiOllamaCloudKey"
 	| "aiOllamaModels" | "aiOllamaCatalog" | "aiUsageLog" | "aiUsageLimitsEnabled"
-	| "aiMentionExtraFolders" | "aiOutputFolder">> & { hotkeyAddFiles: Hotkey; hotkeyAddNotes: Hotkey } {
+	| "aiMentionExtraFolders" | "aiOutputFolder">> & { hotkeyAddFiles: Hotkey } {
 	return {
 		// Aucun fournisseur par défaut : le choix reste la première étape.
 		aiProvider: "",
@@ -64,11 +64,8 @@ export function aiSettingsDefaults(): Required<Pick<AiSettings,
 		// Désactivé par défaut : lire les quotas du compte suppose d'ouvrir le
 		// fichier de session du CLI installé — jamais sans demande explicite.
 		aiUsageLimitsEnabled: false,
-		// Raccourcis du composer IA (menu « + »). Ctrl+U = le raccourci de
-		// claude.ai pour « Ajouter des fichiers » ; Ctrl+F reste le réflexe
-		// « recherche » partout ailleurs.
-		hotkeyAddFiles: { modifiers: ["Mod"], key: "u" },
-		hotkeyAddNotes: { modifiers: ["Mod"], key: "e" },
+		// Ctrl+E, plus facile à atteindre que Ctrl+U (demande Ahmed, 2026-09-17).
+		hotkeyAddFiles: { modifiers: ["Mod"], key: "e" },
 		// Vide par défaut : le « @ » se limite au vault tant qu'on n'ajoute rien.
 		aiMentionExtraFolders: [],
 		// Donnée persistée, donc jamais traduite : les deux hôtes écrivent au même endroit.

@@ -88,5 +88,8 @@ export function createWindowsProcess(): HostProcess {
 		demarrerOllama() {
 			return pont().processus.demarrerOllama();
 		},
+		installerCli(tool) {
+			return pont().processus.installer(tool);
+		},
 	};
 }

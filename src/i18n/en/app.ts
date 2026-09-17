@@ -114,4 +114,12 @@ export const EN_APP = {
 	"app.fond.remove": "Remove",
 	"app.fond.disparue": "The wallpaper image is gone; the first image of the folder is used.",
 	"app.fond.dossierVide": "No image in that folder; the built-in wallpaper is used.",
+
+	/* ── Installer un CLI depuis l'app : la confirmation NATIVE du principal ── */
+	"app.installCli.title": "Install {name}?",
+	"app.installCli.message": "Neo Quiz will open PowerShell and run the official {name} installer there.",
+	"app.installCli.detail": "Source: {source}. You will see everything the installer does. Close the PowerShell window when it is finished.",
+	"app.installCli.run": "Open PowerShell and install",
+	"app.installCli.cancel": "Cancel",
+	"app.installCli.done": "{name} is set up. You can close this window and go back to Neo Quiz.",
 } as const;

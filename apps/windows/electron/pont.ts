@@ -49,6 +49,10 @@
 import type { HostNetRequest, HostNetResponse, HostProcess } from "../../../src/host/types";
 export type { EtatMiseAJour, PhaseMiseAJour } from "./mise-a-jour-etat";
 import type { EtatMiseAJour } from "./mise-a-jour-etat";
+/* Le type des NOMS d'outils que le principal accepte de lancer/installer.
+   `import type` seulement : ce module reste sans Node (`check:host`,
+   assertion 6), et `Outil` n'est qu'une union de littéraux. */
+import type { Outil } from "./process";
 
 /** Une requête réseau telle qu'elle TRAVERSE le pont : `HostNetRequest` sans
     son `signal`. Un `AbortSignal` ne se clone pas (l'IPC sérialise par clonage
@@ -451,6 +455,14 @@ export interface Pont {
 		lireCache(tool: "claude" | "codex"): Promise<{ mtimeMs: number; json: unknown } | null>;
 		ollamaInstalle(): Promise<boolean>;
 		demarrerOllama(): Promise<boolean>;
+		/** Ouvre un terminal VISIBLE qui installe l'outil puis y connecte le
+		    compte : `HostProcess.installerCli` vu du rendu. Le NOM est ce qui
+		    traverse — jamais un chemin ni une recette — et `canaux.ts` le juge
+		    par `estOutilAutorise` avant toute autre chose, comme `run`. Une
+		    confirmation NATIVE du principal précède le lancement, écrite et
+		    traduite là-bas (comme pour l'hôte Ollama des réglages) : un rendu
+		    compromis ne peut ni la formuler ni y répondre. */
+		installer(tool: Outil): Promise<"lance" | "annule" | "indisponible">;
 	};
 
 	fenetre: {
@@ -598,6 +610,7 @@ export const CANAUX = {
 	processusLireCache: "neo:process/lire-cache",
 	processusOllamaInstalle: "neo:process/ollama-installe",
 	processusDemarrerOllama: "neo:process/demarrer-ollama",
+	processusInstaller: "neo:process/installer",
 	miseAJourEtatLire: "neo:mise-a-jour/etat-lire",
 	miseAJourEtat: "neo:mise-a-jour/etat",
 	miseAJourVerifier: "neo:mise-a-jour/verifier",

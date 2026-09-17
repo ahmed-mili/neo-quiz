@@ -35,7 +35,7 @@ import type { BrowserWindow } from "electron";
 import * as path from "node:path";
 // Le dossier par défaut CHOISI est créé ici s'il manque — voir son canal.
 import * as fsp from "node:fs/promises";
-import { LOG_PREFIX } from "../../../src/branding";
+import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
 import { creerFichiers, stat, statEntree } from "./fichiers";
 import { absoluDepuisContrat, contratDepuisAbsolu, creerIndex, renameDirVersAbsolu } from "./index-fichiers";
 import type { EvenementSurveillant, Index } from "./index-fichiers";
@@ -44,7 +44,8 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, erreurCli, estOutilAutorise, lireCache, ollamaInstalle, run } from "./process";
+import { demarrerOllama, erreurCli, estOutilAutorise, lancerTerminal, lireCache, ollamaInstalle, run, scriptInstallation } from "./process";
+import type { Outil } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
 import type { EtatFenetre, EvenementDisque, RequeteCli, RequeteReseau, ResultatCli } from "./pont";
@@ -611,6 +612,38 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	});
 	ipcMain.handle(CANAUX.processusOllamaInstalle, () => ollamaInstalle());
 	ipcMain.handle(CANAUX.processusDemarrerOllama, () => demarrerOllama());
+
+	/* ─── INSTALLER UN CLI ───
+	   Même porte que `processusRun` : le NOM est jugé avant tout, la recette
+	   est celle de `process.ts`, et une confirmation NATIVE — rédigée ici, sur
+	   la langue posée par `main.ts` — précède le lancement, comme pour l'hôte
+	   Ollama des réglages. `cancelId` = refus : fermer la boîte, c'est dire
+	   non. Hors Windows, `indisponible` sans rien lancer : le modal du rendu
+	   montre alors les étapes manuelles. */
+	const NOMS_OUTILS: Record<Outil, string> = { claude: "Claude Code", codex: "Codex CLI", ollama: "Ollama" };
+	const SOURCES_OUTILS: Record<Outil, string> = { claude: "claude.ai/install.ps1", codex: "chatgpt.com/codex/install.ps1", ollama: "winget (Ollama.Ollama)" };
+	ipcMain.handle(CANAUX.processusInstaller, async (_e, tool: unknown): Promise<"lance" | "annule" | "indisponible"> => {
+		if (!estOutilAutorise(tool)) {
+			console.warn(LOG_PREFIX, "installation refusée, outil hors liste:", tool);
+			throw erreurCli("refuse", "outil hors liste : " + String(tool));
+		}
+		if (process.platform !== "win32") return "indisponible";
+		const name = NOMS_OUTILS[tool];
+		const options = {
+			type: "question" as const,
+			title: t("app.installCli.title", { name }),
+			message: t("app.installCli.message", { name }),
+			detail: t("app.installCli.detail", { source: SOURCES_OUTILS[tool] }),
+			buttons: [t("app.installCli.run"), t("app.installCli.cancel")],
+			defaultId: 0,
+			cancelId: 1,
+		};
+		const parent = deps.fenetreCourante();
+		const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+		if (response !== 0) return "annule";
+		const titre = PRODUCT_NAME + " - " + name;
+		return lancerTerminal(titre, scriptInstallation(tool, titre, t("app.installCli.done", { name }))) ? "lance" : "indisponible";
+	});
 
 	/* ─── LANCER UN CLI ───
 

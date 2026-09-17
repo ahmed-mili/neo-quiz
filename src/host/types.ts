@@ -506,6 +506,13 @@ export interface HostProcess {
 	    best-effort : `false` quand rien n'a pu être lancé. L'appelant constate
 	    le résultat en interrogeant le serveur, pas ici. */
 	demarrerOllama(): Promise<boolean>;
+	/** Ouvre un terminal VISIBLE qui installe l'outil puis y connecte le
+	    compte (recette fixe de l'hôte). `lance` : le terminal est parti, c'est
+	    la sonde de l'appelant (`checkClaudeCode`…) qui constatera le résultat ;
+	    `annule` : l'utilisateur a refusé la confirmation de l'hôte ;
+	    `indisponible` : l'hôte ne sait pas ouvrir de terminal (hors Windows)
+	    ou le lancement a échoué. */
+	installerCli(tool: CliTool): Promise<"lance" | "annule" | "indisponible">;
 }
 
 /**

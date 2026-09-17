@@ -75,4 +75,11 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.fond.remove": "Retirer",
 	"app.fond.disparue": "L'image du fond a disparu ; la première du dossier est utilisée.",
 	"app.fond.dossierVide": "Aucune image dans ce dossier ; le fond embarqué est utilisé.",
+
+	"app.installCli.title": "Installer {name} ?",
+	"app.installCli.message": "Neo Quiz va ouvrir PowerShell et y lancer l'installation officielle de {name}.",
+	"app.installCli.detail": "Source : {source}. Vous verrez tout ce que fait l'installateur. Fermez la fenêtre PowerShell quand c'est terminé.",
+	"app.installCli.run": "Ouvrir PowerShell et installer",
+	"app.installCli.cancel": "Annuler",
+	"app.installCli.done": "{name} est installé. Vous pouvez fermer cette fenêtre et revenir dans Neo Quiz.",
 };

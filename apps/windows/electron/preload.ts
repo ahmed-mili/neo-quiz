@@ -120,6 +120,7 @@ const pont: Pont = {
 		lireCache: tool => ipcRenderer.invoke(CANAUX.processusLireCache, tool),
 		ollamaInstalle: () => ipcRenderer.invoke(CANAUX.processusOllamaInstalle),
 		demarrerOllama: () => ipcRenderer.invoke(CANAUX.processusDemarrerOllama),
+		installer: tool => ipcRenderer.invoke(CANAUX.processusInstaller, tool),
 	},
 
 	fenetre: {

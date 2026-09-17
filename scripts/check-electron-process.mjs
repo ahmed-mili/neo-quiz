@@ -51,7 +51,8 @@ async function cas(r, nom, fn) {
 }
 
 await withSrcModule("apps/windows/electron/process.ts", async ({
-	OUTILS, avecFichiers, cheminCache, dossierPersonnel, emplacementsOllama, estOutilAutorise, lireCache,
+	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, emplacementsOllama, encoderCommande,
+	estOutilAutorise, lireCache, scriptInstallation,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -160,6 +161,49 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 					juge: [true, true, true, false, false, false, false, false],
 				});
 		});
+
+		/* ── Installer un CLI : la recette est FIXE, dans ce module, jamais composée
+		   depuis le rendu. Ces cas gardent l'URL officielle, l'étape de connexion,
+		   l'encodage (aucune citation ne traverse `cmd`), et la forme des arguments.
+
+		   ARGUMENTS TERMINAL PAR SHELLEXECUTE (`Start-Process`), et non `cmd /c
+		   start` : la sonde du 2026-09-17 (tâche 3, probe § 3c) a mesuré qu'un
+		   `cmd /c start` lancé par `spawn` n'ouvre JAMAIS de fenêtre visible (un
+		   `conhost` au `MainWindowHandle` nul), alors que `Start-Process` en ouvre
+		   une vraie, hébergée par le terminal par défaut de l'utilisateur. Le titre
+		   passe donc par le SCRIPT (`$host.UI.RawUI.WindowTitle`), pas par la ligne
+		   de commande. */
+		{
+			const claude = scriptInstallation("claude", "Neo Quiz - Claude Code", "Vous pouvez fermer cette fenêtre.");
+			r.check("claude : le titre de la fenêtre est la première ligne du script",
+				claude.startsWith("$host.UI.RawUI.WindowTitle = 'Neo Quiz - Claude Code'"), true);
+			r.check("claude : le script installe depuis claude.ai", claude.includes("irm https://claude.ai/install.ps1 | iex"), true);
+			r.check("claude : le PATH de la session est rechargé avant de lancer claude",
+				claude.indexOf("GetEnvironmentVariable('Path','User')") > 0 && claude.indexOf("GetEnvironmentVariable('Path','User')") < claude.lastIndexOf("\nclaude"), true);
+			r.check("claude : le script finit par la connexion du compte", /\nclaude\s*$/.test(claude.replace(/\nWrite-Host[^\n]*$/, "")), true);
+			const codex = scriptInstallation("codex", "Neo Quiz - Codex CLI", "x");
+			r.check("codex : installe depuis chatgpt.com puis codex login", codex.includes("irm https://chatgpt.com/codex/install.ps1 | iex") && codex.includes("\ncodex login"), true);
+			const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", "x");
+			r.check("ollama : winget, paquet officiel, accords acceptés", ollama.includes("winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements"), true);
+			r.check("le message de fin est cité pour PowerShell (une apostrophe est doublée)",
+				scriptInstallation("ollama", "Neo Quiz - Ollama", "c'est fini").includes("Write-Host 'c''est fini'"), true);
+
+			const script = "Write-Host 'é | $x'";
+			const b64 = encoderCommande(script);
+			r.check("encoderCommande : base64 d'UTF-16LE, aller-retour exact", Buffer.from(b64, "base64").toString("utf16le"), script);
+			r.check("encoderCommande : rien d'autre que du base64", /^[A-Za-z0-9+/=]+$/.test(b64), true);
+
+			const args = argumentsTerminal("Neo Quiz", script);
+			r.check("argumentsTerminal : ShellExecute (Start-Process), -EncodedCommand, jamais le script en clair",
+				{
+					debut: args.slice(0, 2),
+					troisieme: args[2].includes(
+						"Start-Process powershell.exe -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-EncodedCommand','" + b64,
+					),
+					clair: args[2].includes("Write-Host"),
+				},
+				{ debut: ["-NoProfile", "-Command"], troisieme: true, clair: false });
+		}
 
 		/* ── LES PIÈCES JOINTES, ET LE DOSSIER QUI LES PORTE ──
 

@@ -759,6 +759,7 @@ function installerPont(fichiers = {}, perimetre = null) {
 			},
 			async ollamaInstalle() { journal.push(["processus.ollamaInstalle"]); return true; },
 			async demarrerOllama() { journal.push(["processus.demarrerOllama"]); return true; },
+			async installer(tool) { journal.push(["processus.installer", tool]); return "lance"; },
 		},
 		fenetre: {
 			async surFermeture() {},
@@ -1878,6 +1879,10 @@ await withSrcModule("apps/windows/src/host/process.ts", async ({ createWindowsPr
 				demarre: true,
 				appels: ["processus.lireCache:codex", "processus.ollamaInstalle", "processus.demarrerOllama"],
 			});
+
+		r.check("installerCli relaie le NOM de l'outil au canal, et rend son verdict",
+			{ verdict: await processus.installerCli("claude"), appel: pont.journal.find(l => l[0] === "processus.installer") },
+			{ verdict: "lance", appel: ["processus.installer", "claude"] });
 
 		/* ── `run` ── */
 

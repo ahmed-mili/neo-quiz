@@ -233,6 +233,103 @@ export async function demarrerOllama(env: NodeJS.ProcessEnv = process.env): Prom
 }
 
 /* ══════════════════════════════════════════════════════════
+   INSTALLER UN CLI — UN TERMINAL VISIBLE, UNE RECETTE FIXE
+
+   « Utilisable par n'importe qui » (spec du 2026-09-17, § 3c) : l'utilisateur
+   ne sait pas ce qu'est PowerShell et ne collera pas une commande. L'app
+   ouvre donc le terminal ELLE-MÊME, avec la recette OFFICIELLE de chaque
+   outil, et le laisse ouvert pour qu'on voie l'installateur travailler puis
+   la connexion du compte se faire au même endroit.
+
+   LA RECETTE VIT ICI, jamais dans le rendu : `canaux.ts` ne reçoit qu'un nom
+   d'outil, jugé par `estOutilAutorise` avant tout. `-EncodedCommand` porte
+   le script en base64 (UTF-16LE, ce que PowerShell attend) : aucune
+   apostrophe, aucun `|`, aucun `$` ne traverse `cmd.exe` en clair, donc
+   aucune question de citation.
+
+   PAR SHELLEXECUTE (`Start-Process`), ET NON `cmd /c start` : une sonde sur
+   la machine réelle (tâche 3, spec § 3c) a mesuré le `MainWindowHandle` de
+   l'hôte de console créé par six variantes — `cmd /c start` lancé par
+   `spawn` n'ouvre JAMAIS de fenêtre visible (un `conhost` au handle nul),
+   qu'il soit détaché, masqué ou non ; `Start-Process` depuis un parent lancé
+   normalement en ouvre une VRAIE, hébergée par le terminal par défaut de
+   l'utilisateur (Windows Terminal compris). Le TITRE passe donc par le
+   SCRIPT (`$host.UI.RawUI.WindowTitle`), pas par la ligne de commande : il
+   n'a plus à être cité dans `argumentsTerminal`.
+
+   NI `detached` NI `windowsHide` sur ce qui lance PowerShell : la même sonde
+   a montré qu'un lanceur détaché ou masqué redonne un `conhost` sans
+   fenêtre. Le process lanceur meurt tout de suite ; c'est la fenêtre ouverte
+   par `Start-Process` qui reste.
+
+   LE PATH DE LA SESSION EST RECHARGÉ avant de lancer `claude`/`codex` :
+   `claude install` écrit le PATH utilisateur dans le registre, et la session
+   PowerShell déjà ouverte ne le voit pas (lu dans install.ps1).
+══════════════════════════════════════════════════════════ */
+
+const RECHARGER_PATH = "$env:Path = [Environment]::GetEnvironmentVariable('Path','User') + ';' + [Environment]::GetEnvironmentVariable('Path','Machine')";
+
+/** Une chaîne littérale PowerShell entre apostrophes (la seule forme qui
+    n'interpole rien) : l'apostrophe se double. */
+function citerPs(texte: string): string {
+	return "'" + texte.replace(/'/g, "''") + "'";
+}
+
+/**
+ * Le script PowerShell complet qui installe `tool` puis y connecte le
+ * compte. PURE. `titre` en est la PREMIÈRE ligne (`$host.UI.RawUI.
+ * WindowTitle`) : c'est la seule façon de le porter jusqu'à la fenêtre une
+ * fois que `argumentsTerminal` ne le cite plus sur la ligne de commande.
+ */
+export function scriptInstallation(tool: Outil, titre: string, messageFin: string): string {
+	const lignes: string[] = ["$host.UI.RawUI.WindowTitle = " + citerPs(titre)];
+	if (tool === "claude") {
+		lignes.push("irm https://claude.ai/install.ps1 | iex", RECHARGER_PATH, "Write-Host " + citerPs(messageFin), "claude");
+	} else if (tool === "codex") {
+		lignes.push("irm https://chatgpt.com/codex/install.ps1 | iex", RECHARGER_PATH, "Write-Host " + citerPs(messageFin), "codex login");
+	} else {
+		lignes.push("winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements", "Write-Host " + citerPs(messageFin));
+	}
+	return lignes.join("\n");
+}
+
+export function encoderCommande(script: string): string {
+	return Buffer.from(script, "utf16le").toString("base64");
+}
+
+/** `titre` n'est PLUS cité ici (voir l'en-tête) : gardé en paramètre pour que
+    `lancerTerminal` ait un seul point d'appel, il ne sert plus qu'à composer
+    le script — pas cette ligne de commande. */
+export function argumentsTerminal(titre: string, script: string): string[] {
+	/* ShellExecute (`Start-Process`) et non `cmd /c start` : c'est la seule
+	   forme qui a ouvert une VRAIE fenêtre à la sonde du 2026-09-17 (mesurée au
+	   `MainWindowHandle` de l'hôte de console), et elle honore le terminal par
+	   défaut de l'utilisateur, Windows Terminal compris. Le titre passe par le
+	   SCRIPT (`$host.UI.RawUI.WindowTitle`), pas par la ligne de commande : il
+	   n'a donc pas à être cité ici. Le base64 ne contient que [A-Za-z0-9+/=],
+	   donc aucune apostrophe ne peut refermer la liste d'arguments. */
+	return ["-NoProfile", "-Command",
+		`Start-Process powershell.exe -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-EncodedCommand','${encoderCommande(script)}'`];
+}
+
+export function lancerTerminal(titre: string, script: string): boolean {
+	if (process.platform !== "win32") return false;
+	try {
+		/* NI `detached` NI `windowsHide` sur ce qui ouvre la fenêtre : la sonde
+		   a montré qu'un lanceur détaché ou masqué redonne un `conhost` sans
+		   fenêtre. Le processus lanceur meurt tout de suite ; c'est la fenêtre
+		   ouverte par ShellExecute qui reste. */
+		const enfant = spawn("powershell.exe", argumentsTerminal(titre, script), { stdio: "ignore" });
+		enfant.on("error", e => { console.warn(LOG_PREFIX, "terminal d'installation non lancé:", e); });
+		enfant.unref();
+		return true;
+	} catch (e) {
+		console.warn(LOG_PREFIX, "terminal d'installation non lancé:", e);
+		return false;
+	}
+}
+
+/* ══════════════════════════════════════════════════════════
    LES PIÈCES JOINTES D'UN APPEL, ET LE DOSSIER QUI LES PORTE
 
    Jumeau de `avecFichiers` dans `apps/obsidian/host.ts` pour sa moitié DISQUE

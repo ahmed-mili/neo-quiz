@@ -472,7 +472,29 @@
 .qbd-module-card__footer {
 	padding: 5px 12px 8px;
 	display: flex;
+	/* Le menu reste À DROITE même sans chemin à sa gauche : c'est l'emplacement
+	   qui pousse (`margin-right: auto`), et non le pied qui répartit — un
+	   `space-between` collerait le menu à gauche sur une carte sans chemin. */
 	justify-content: flex-end;
+	align-items: center;
+	gap: 10px;
+}
+/* L'EMPLACEMENT du dossier : la seule ligne de la carte qui ne soit pas à
+   lire, mais à consulter. D'où le pied, la taille la plus petite de la carte
+   et la couleur la plus pâle — il situe, il ne raconte pas. `min-width: 0`
+   et l'ellipsis parce qu'un chemin d'école déborde toujours : c'est la FIN
+   qui saute, et `emplacementDeModule` a déjà réduit le milieu à « … » pour
+   que le segment conservé soit le parent immédiat. */
+.qbd-module-card__path {
+	flex: 0 1 auto;
+	margin-right: auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	line-height: 22px;
+	color: var(--text-faint);
 }
 /* Bouton ••• = menu ⋯ existant (icône ellipsis Lucide ≈ •••), stylé comme le
    handoff. !important contre le chrome natif des `button` d'Obsidian. */

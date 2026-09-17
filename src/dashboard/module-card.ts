@@ -3,6 +3,7 @@ import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { QuizIndexEntry } from "./scanner";
 import type { ModuleGroup } from "./quiz-modules";
+import { emplacementDeModule } from "./quiz-modules";
 import { moduleIcon } from "./module-icons";
 import { moduleAccent } from "./module-color";
 
@@ -88,6 +89,16 @@ export function renderModuleCard(
 	ajouter(card, "div", "qbd-module-card__spacer");
 	ajouter(card, "div", "qbd-module-card__divider");
 	const footer = ajouter(card, "div", "qbd-module-card__footer");
+	/* L'EMPLACEMENT, dans le pied et à gauche du menu : la seule bande de la
+	   carte qui était vide, et la plus basse — un chemin se consulte, il ne
+	   se lit pas en premier. Absent quand le groupe n'a pas de chemin (un
+	   module déclaré sans dossier) : une ligne vide dirait qu'il est quelque
+	   part sans dire où. */
+	const racine = group.path ? currentHost().paths.rootOf(group.path) : null;
+	if (group.path && racine) {
+		ajouter(footer, "span", "qbd-module-card__path",
+			emplacementDeModule(racine.name, currentHost().paths.localPath(group.path)));
+	}
 	if (onMenu) {
 		const moreBtn = ajouter(footer, "button", "qbd-card-more qbd-module-card__menu");
 		moreBtn.type = "button";

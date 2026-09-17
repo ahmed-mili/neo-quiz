@@ -529,6 +529,14 @@ export interface HostRoot {
 	    C'est l'hôte qui le sait : le greffon lit `manifest.dir`,
 	    l'application compose le chemin conventionnel. */
 	legacyReviewLog: string | null;
+	/** Cette racine est-elle un vault Obsidian ? L'hôte seul le sait :
+	    le greffon VIT dans un vault, l'application l'a mesuré au démarrage
+	    (la présence d'un dossier `.obsidian`) pour chaque dossier ouvert.
+	    Sert à MARQUER un dossier dans l'interface, jamais à décider où
+	    écrire : le journal de révision est au même endroit dans les deux
+	    cas, et le faire dépendre de ceci scinderait l'historique le jour
+	    où un dossier devient un vault. */
+	vault: boolean;
 }
 
 export interface HostPaths {

@@ -3,8 +3,8 @@ import { ajouter } from "../dom";
 import { t } from "../i18n";
 import type { QuizIndexEntry } from "./scanner";
 import type { ModuleGroup } from "./quiz-modules";
-import { emplacementDeModule } from "./quiz-modules";
 import { moduleIcon } from "./module-icons";
+import { poserLogoObsidian } from "./brand-icons";
 import { moduleAccent } from "./module-color";
 
 /* ══════════════════════════════════════════════════════════
@@ -89,15 +89,61 @@ export function renderModuleCard(
 	ajouter(card, "div", "qbd-module-card__spacer");
 	ajouter(card, "div", "qbd-module-card__divider");
 	const footer = ajouter(card, "div", "qbd-module-card__footer");
-	/* L'EMPLACEMENT, dans le pied et à gauche du menu : la seule bande de la
-	   carte qui était vide, et la plus basse — un chemin se consulte, il ne
-	   se lit pas en premier. Absent quand le groupe n'a pas de chemin (un
-	   module déclaré sans dossier) : une ligne vide dirait qu'il est quelque
-	   part sans dire où. */
+	/* LE CHEMIN, ENTIER (Ahmed, 2026-09-17). Plus de milieu réduit : la carte
+	   le montre en entier dans une piste de largeur bornée, qui DÉFILE de
+	   droite à gauche en boucle quand il déborde, et qu'un clic rend libre
+	   pour le parcourir à la main.
+	   LA BOUCLE EST SANS COUTURE PARCE QUE LE TEXTE EST EN DEUX EXEMPLAIRES :
+	   le rail glisse de la largeur d'un exemplaire, et à l'instant où il
+	   revient à zéro le second occupe exactement la place que le premier
+	   vient de quitter. Un exemplaire unique qui repart de la droite montre
+	   une piste vide à chaque tour — c'est le saut qu'on voit dans les
+	   marquees bâclés. L'écart entre les deux est un `padding` PORTÉ PAR
+	   CHAQUE exemplaire, et non un `gap` du rail : le `gap` ne compte qu'une
+	   fois entre les deux, la boucle se décalerait de la moitié à chaque tour.
+	   La mesure est faite au rendu (`scrollWidth` contre `clientWidth`) : le
+	   CSS seul ne sait pas de combien un texte déborde, et sans elle les
+	   chemins courts défileraient aussi, pour rien.
+	   La VITESSE est constante (30 px par seconde), pas la durée : à durée
+	   fixe, « Personal/Cours » filerait pendant que le chemin d'un module
+	   d'école ramperait. */
 	const racine = group.path ? currentHost().paths.rootOf(group.path) : null;
 	if (group.path && racine) {
-		ajouter(footer, "span", "qbd-module-card__path",
-			emplacementDeModule(racine.name, currentHost().paths.localPath(group.path)));
+		const chemin = ajouter(footer, "div", "qbd-module-card__path");
+		/* La pastille du vault, AVANT la piste et hors d'elle : elle dit d'où
+		   vient le dossier, elle ne fait pas partie du chemin — la voir
+		   défiler puis disparaître serait perdre l'information au moment où
+		   on lit le chemin. */
+		if (racine.vault) {
+			const marque = ajouter(chemin, "span", "qbd-module-card__path-vault");
+			poserLogoObsidian(marque, t("dashboard.quizzes.obsidianVault"));
+		}
+		const piste = ajouter(chemin, "div", "qbd-module-card__path-piste");
+		const rail = ajouter(piste, "div", "qbd-module-card__path-rail");
+		const libelle = `${racine.name}/${currentHost().paths.localPath(group.path)}`;
+		const texte = ajouter(rail, "span", "qbd-module-card__path-texte", libelle);
+		/* Un clic LIBÈRE la piste : le second exemplaire s'en va — il ferait
+		   lire le chemin deux fois à qui le parcourt à la main —, l'animation
+		   s'arrête et le défilement natif prend la main. `stopPropagation`
+		   parce que le reste de la carte ouvre le dossier, et lire un chemin
+		   n'est pas l'ouvrir. */
+		piste.addEventListener("click", (e) => {
+			e.stopPropagation();
+			rail.querySelector(".qbd-module-card__path-texte--echo")?.remove();
+			piste.classList.add("is-libre");
+		});
+		/* Après la peinture : dans la même image, `scrollWidth` vaut encore
+		   `clientWidth` et aucune carte ne défilerait jamais. */
+		requestAnimationFrame(() => {
+			if (piste.scrollWidth - piste.clientWidth <= 2) return;
+			const echo = ajouter(rail, "span", "qbd-module-card__path-texte qbd-module-card__path-texte--echo", libelle);
+			/* L'écho est un doublon VISUEL : une aide technique qui le lirait
+			   annoncerait le chemin deux fois de suite. */
+			echo.setAttribute("aria-hidden", "true");
+			const pas = texte.getBoundingClientRect().width;
+			piste.style.setProperty("--nq-duree", `${Math.max(6, Math.round(pas / 30))}s`);
+			piste.classList.add("is-defilant");
+		});
 	}
 	if (onMenu) {
 		const moreBtn = ajouter(footer, "button", "qbd-card-more qbd-module-card__menu");

@@ -1439,12 +1439,12 @@ await withSrcModule("apps/windows/src/review/catalogue.ts", async ({ construireC
 	/* Un faux `paths` : deux racines, préfixe = premier segment. C'est le
 	   contrat, pas l'implémentation Windows, qui est éprouvé ici. */
 	const paths = {
-		rootOf: (p) => ({ id: p.split("/")[0], name: p.split("/")[0], reviewLog: "", legacyReviewLog: null }),
+		rootOf: (p) => ({ id: p.split("/")[0], name: p.split("/")[0], reviewLog: "", legacyReviewLog: null, vault: false }),
 		localPath: (p) => p.split("/").slice(1).join("/"),
 		contractPath: (id, l) => (id ? `${id}/${l}` : l),
 		resultsDirFor: () => "",
 		roots: () => [],
-		defaultRoot: () => ({ id: "", name: "", reviewLog: "", legacyReviewLog: null }),
+		defaultRoot: () => ({ id: "", name: "", reviewLog: "", legacyReviewLog: null, vault: false }),
 	};
 
 	/* La clé de module porte la RACINE : sans elle, « Réseaux » de deux

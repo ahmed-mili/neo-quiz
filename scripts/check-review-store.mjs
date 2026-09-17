@@ -309,8 +309,8 @@ function fauxHote(options = {}) {
 	const abonnesFichier = new Set();
 	const abonnesDossier = new Set();
 	const racines = [
-		{ id: "A", name: "A", reviewLog: "A/.neo-quiz/review-log.jsonl", legacyReviewLog: null },
-		{ id: "B", name: "B", reviewLog: "B/.neo-quiz/review-log.jsonl", legacyReviewLog: null },
+		{ id: "A", name: "A", reviewLog: "A/.neo-quiz/review-log.jsonl", legacyReviewLog: null, vault: false },
+		{ id: "B", name: "B", reviewLog: "B/.neo-quiz/review-log.jsonl", legacyReviewLog: null, vault: false },
 	];
 	const teteDe = (p) => String(p ?? "").split("/")[0];
 	const host = {

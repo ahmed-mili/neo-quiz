@@ -653,6 +653,8 @@ export function createObsidianHost(
 	const racine: HostRoot = {
 		id: "",
 		name: app.vault.getName(),
+		/* Le greffon ne s'exécute QUE dans un vault : la question ne se pose pas. */
+		vault: true,
 		reviewLog: `${REVIEW_DIR}/${REVIEW_LOG_NAME}`,
 		/* L'ancien journal : `manifest.dir` tel que l'API le donne, jamais
 		   recomposé. Il est optionnel (PluginManifest.dir), et son absence

@@ -131,7 +131,7 @@ await withSrcModule("src/dashboard/module-icons.ts", async ({ moduleIcon }) => {
 	r.done();
 });
 
-await withSrcModule("src/dashboard/quiz-modules.ts", async ({ estLeSas, emplacementDeModule }) => {
+await withSrcModule("src/dashboard/quiz-modules.ts", async ({ estLeSas }) => {
 	const r = makeReporter("Module — reconnaître le SAS");
 	const sas = "Neo Quiz/Generated";
 	r.check("le dossier dont le CHEMIN est celui du sas", estLeSas({ folder: "Generated", path: sas }, sas), true);
@@ -142,23 +142,5 @@ await withSrcModule("src/dashboard/quiz-modules.ts", async ({ estLeSas, emplacem
 	r.check("sans sas déclaré (le greffon), aucun dossier ne l'est",
 		estLeSas({ folder: "Generated", path: sas }, undefined), false);
 	r.check("un groupe sans chemin n'est jamais le sas", estLeSas({ folder: "Generated" }, sas), false);
-
-	/* CE QUE LA CARTE MONTRE DU CHEMIN : sa racine et son parent, jamais le
-	   chemin entier — son dernier segment est le nom du dossier, déjà en
-	   titre. Une carte fait 350 px, et l'ellipsis du CSS coupe par la FIN :
-	   sans la réduction du milieu, ce serait le parent immédiat qui sauterait,
-	   c'est-à-dire le seul segment qui situe (Ahmed, 2026-09-17). */
-	r.check("un dossier à la racine rend la racine seule",
-		emplacementDeModule("Personal", "Templates"), "Personal");
-	r.check("un seul parent est nommé en entier",
-		emplacementDeModule("Efrei", "Cours/XTI301"), "Efrei / Cours");
-	r.check("au-delà, le milieu se réduit et le parent reste",
-		emplacementDeModule("Efrei", "Bachelor/B2 (2026-2027)/XTI301"), "Efrei / … / B2 (2026-2027)");
-	r.check("un chemin plus profond n'allonge pas le résultat",
-		emplacementDeModule("Efrei", "a/b/c/d/XTI301"), "Efrei / … / d");
-	/* Un chemin qui traîne un séparateur ne doit pas rendre « racine / … / »
-	   avec une moitié vide. */
-	r.check("les segments vides ne comptent pas",
-		emplacementDeModule("Personal", "/Templates/"), "Personal");
 	r.done();
 });

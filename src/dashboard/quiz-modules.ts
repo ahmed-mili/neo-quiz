@@ -258,23 +258,3 @@ export function buildUeGroups(modules: ModuleGroup[], map: ModuleMap): UeGroup[]
 export function estLeSas(group: ModuleGroup, sas: string | undefined): boolean {
 	return !!sas && !!group.path && group.path === sas;
 }
-
-/** L'EMPLACEMENT d'un dossier, tel que sa carte le montre : sa racine, puis
-    son dossier PARENT. Jamais le chemin complet — son dernier segment est
-    le nom du dossier, qui est déjà le titre de la carte, et le répéter
-    prendrait la place de ce qui manque vraiment : où il se trouve.
-
-    Au-delà d'un niveau intermédiaire, le milieu devient « … ». Une carte
-    fait 350 px : un chemin de cinq segments y serait coupé par le CSS, et
-    coupé par la FIN, c'est-à-dire précisément sur le parent immédiat, le
-    seul segment qui situe vraiment le dossier.
-
-    Un dossier posé à la racine n'a pas de parent : il rend la racine seule,
-    et non « Personal / » avec une moitié vide. */
-export function emplacementDeModule(racine: string, cheminLocal: string): string {
-	const segments = cheminLocal.split("/").filter(Boolean);
-	const parents = segments.slice(0, -1);
-	if (parents.length === 0) return racine;
-	const dernier = parents[parents.length - 1] as string;
-	return parents.length === 1 ? `${racine} / ${dernier}` : `${racine} / … / ${dernier}`;
-}

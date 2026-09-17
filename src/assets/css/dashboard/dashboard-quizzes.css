@@ -479,22 +479,123 @@
 	align-items: center;
 	gap: 10px;
 }
-/* L'EMPLACEMENT du dossier : la seule ligne de la carte qui ne soit pas à
-   lire, mais à consulter. D'où le pied, la taille la plus petite de la carte
-   et la couleur la plus pâle — il situe, il ne raconte pas. `min-width: 0`
-   et l'ellipsis parce qu'un chemin d'école déborde toujours : c'est la FIN
-   qui saute, et `emplacementDeModule` a déjà réduit le milieu à « … » pour
-   que le segment conservé soit le parent immédiat. */
+/* LE CHEMIN, ENTIER, DANS UNE PISTE (Ahmed, 2026-09-17). La carte fait 350 px
+   et un chemin d'école en fait le double : plutôt que de le couper, la piste
+   le fait DÉFILER, et un clic la libère pour le parcourir à la main.
+   `min-width: 0` sur les deux niveaux, sans quoi un flex refuse de rétrécir
+   sous la largeur de son contenu et c'est la CARTE qui s'élargirait. */
 .qbd-module-card__path {
+	display: flex;
+	align-items: center;
+	gap: 6px;
 	flex: 0 1 auto;
+	min-width: 0;
 	margin-right: auto;
+	/* Le reste de la carte s'ouvre au clic, pas le chemin : le curseur ne doit
+	   pas promettre ici ce que le clic ne fera pas. */
+	cursor: default;
+}
+
+/* La pastille du vault : la taille de la ligne, à la couleur du chemin — un
+   logo de marque ne doit pas peser plus que ce qu'il qualifie. `flex: none`
+   parce que la piste, elle, rétrécit : sans cela le logo serait le premier à
+   être écrasé sur une carte étroite. */
+.qbd-module-card__path-vault {
+	display: inline-flex;
+	flex: none;
+	color: var(--text-faint);
+}
+
+.qbd-module-card__path-vault svg {
+	width: 12px;
+	height: 12px;
+}
+
+.qbd-module-card__path-piste {
 	min-width: 0;
 	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 	font-size: 11px;
 	line-height: 22px;
 	color: var(--text-faint);
+}
+
+/* LE RAIL porte les deux exemplaires et c'est LUI qui glisse, jamais le texte :
+   animer chaque exemplaire séparément les décalerait l'un de l'autre au
+   premier arrondi. `width: max-content` pour qu'il ne se laisse pas plier à la
+   largeur de la piste — un rail à la taille de sa fenêtre n'a nulle part où
+   aller. */
+.qbd-module-card__path-rail {
+	display: flex;
+	width: max-content;
+}
+
+.qbd-module-card__path-texte {
+	white-space: nowrap;
+	/* L'écart entre la fin du chemin et sa reprise, PORTÉ PAR CHAQUE
+	   exemplaire : dans un `gap`, il ne compterait qu'une fois entre les deux,
+	   et la boucle se décalerait de sa moitié à chaque tour.
+	   72 px, ET NON UN ENTRE-DEUX (Ahmed, 2026-09-17) : à 32 px, le vide se
+	   lisait comme une grande espace entre deux mots du même chemin, et on
+	   cherchait le mot suivant. Il faut qu'il soit assez large pour dire « c'est
+	   fini, ça reprend » — ici un bon tiers de ce que la piste montre — sans
+	   jamais la vider tout à fait. */
+	padding-right: 72px;
+}
+
+/* Les deux bords s'ESTOMPENT pendant que ça défile : sans eux, le chemin se
+   coupe net contre la bordure de la piste et contre le bouton du menu, et un
+   texte tranché au milieu d'une lettre se lit comme un défaut d'affichage.
+   Seulement quand ça défile — un chemin court tient en entier, et le faner
+   sans raison le rendrait moins lisible. */
+.qbd-module-card__path-piste.is-defilant {
+	-webkit-mask-image: linear-gradient(to right, transparent 0, #000 10px, #000 calc(100% - 14px), transparent 100%);
+	mask-image: linear-gradient(to right, transparent 0, #000 10px, #000 calc(100% - 14px), transparent 100%);
+}
+
+/* La piste ne défile QUE si elle déborde : `is-defilant` n'est posée qu'après
+   mesure (`module-card.ts`). -50 % est exactement un exemplaire, écart
+   compris : à l'instant où le rail revient à zéro, le second occupe la place
+   que le premier vient de quitter, et l'œil ne voit aucun saut. `linear`,
+   parce qu'un défilement qui accélère et ralentit se lit comme une hésitation. */
+.qbd-module-card__path-piste.is-defilant .qbd-module-card__path-rail {
+	animation: qbd-path-defile var(--nq-duree, 10s) linear infinite;
+}
+
+@keyframes qbd-path-defile {
+	from { transform: translateX(0); }
+	to { transform: translateX(-50%); }
+}
+
+/* LIBÉRÉE PAR UN CLIC : l'animation s'arrête, le défilement natif prend la
+   main (le second exemplaire est retiré par le script — il ferait lire le
+   chemin deux fois). La barre est cachée : dans une carte de 148 px, elle
+   mangerait la ligne qu'elle sert. */
+.qbd-module-card__path-piste.is-libre {
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.qbd-module-card__path-piste.is-libre::-webkit-scrollbar {
+	display: none;
+}
+
+.qbd-module-card__path-piste.is-libre .qbd-module-card__path-rail {
+	animation: none;
+	transform: none;
+}
+
+/* Mouvement réduit : le chemin ne bouge plus de lui-même, et la piste est
+   libre D'EMBLÉE — sans quoi il n'y aurait plus aucun moyen d'en lire la fin. */
+@media (prefers-reduced-motion: reduce) {
+	.qbd-module-card__path-piste .qbd-module-card__path-rail {
+		animation: none;
+		transform: none;
+	}
+
+	.qbd-module-card__path-piste {
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
 }
 /* Bouton ••• = menu ⋯ existant (icône ellipsis Lucide ≈ •••), stylé comme le
    handoff. !important contre le chrome natif des `button` d'Obsidian. */

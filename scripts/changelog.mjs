@@ -2,9 +2,9 @@
  * LE CHANGELOG, LU ET ÉCRIT PAR LA MACHINE.
  *
  * `git ship` ne prend plus de niveau à la main pour l'application : il lit la
- * section `## [Unreleased]` de `CHANGELOG.md` et en DÉDUIT le niveau —
+ * section `## [Unreleased]` de `CHANGELOG.md` et en DÉDUIT le niveau :
  * `Breaking` → major, sinon `Added` ou `Changed` → minor, sinon `Fixed` →
- * patch — puis renomme la section en `## [X.Y.Z] - date` dans le commit
+ * patch, puis renomme la section en `## [X.Y.Z] - date` dans le commit
  * « Version X.Y.Z ». `release.yml` extrait ce bloc comme notes de la release.
  * C'est ce qui rend le numéro STRICT : il ne peut pas dire moins que ce que le
  * fichier annonce, et une version sans une ligne ne se livre pas.
@@ -22,11 +22,15 @@ const RANGS = { major: 3, minor: 2, patch: 1 };
 
 /** Le texte entre un titre `## …` et le suivant (ou la fin). `null` si absent. */
 function bloc(texte, titre) {
-	const debut = texte.indexOf(titre + "\n");
-	if (debut < 0 && !texte.endsWith(titre)) return null;
-	const apresTitre = debut < 0 ? texte.length : debut + titre.length + 1;
+	const avecSaut = texte.indexOf(titre + "\n");
+	const debut = avecSaut >= 0 ? avecSaut : (texte.endsWith(titre) ? texte.length - titre.length : -1);
+	if (debut < 0) return null;
+	// Le titre commence une ligne, sinon ce n'est pas un titre.
+	if (debut > 0 && texte[debut - 1] !== "\n") return null;
+	const apresTitre = Math.min(texte.length, debut + titre.length + 1);
 	const suivant = texte.indexOf("\n## ", apresTitre);
-	return { debut, fin: suivant < 0 ? texte.length : suivant + 1, corps: texte.slice(apresTitre, suivant < 0 ? texte.length : suivant + 1) };
+	const fin = suivant < 0 ? texte.length : suivant + 1;
+	return { debut, fin, corps: texte.slice(apresTitre, fin) };
 }
 
 export function lireUnreleased(texte) {

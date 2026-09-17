@@ -67,3 +67,12 @@ test("extraire rend le corps d'une version, sans son titre", () => {
 	assert.equal(extraire(EXEMPLE, "1.1.0"), "### Added\n- Wallpapers.");
 	assert.throws(() => extraire(EXEMPLE, "9.9.9"), /9\.9\.9/);
 });
+
+test("figer : Unreleased en dernière ligne, sans saut final, ne perd aucun octet", () => {
+	assert.equal(figer("# Changelog\n\n## [Unreleased]", "1.2.0", "2026-09-20"),
+		"# Changelog\n\n## [Unreleased]\n\n## [1.2.0] - 2026-09-20\n\n");
+});
+
+test("extraire accepte une version à suffixe", () => {
+	assert.equal(extraire("## [1.2.0-beta] - 2026-09-20\n\n### Fixed\n- x\n", "1.2.0-beta"), "### Fixed\n- x");
+});

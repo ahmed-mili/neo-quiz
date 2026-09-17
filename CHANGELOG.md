@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-09-17
+
 ### Fixed
 - The Linux packages are attached to the release again: the release workflow listed the same AppImage twice, and the two concurrent uploads of the same file failed the job (1.2.1 and 1.2.2 shipped without their Linux packages).
 

@@ -218,13 +218,45 @@ l'état du parent. `detached: true` est EXCLU : libuv y pose
 tournerait invisible. `-NoExit` garde la fenêtre ouverte : l'utilisateur
 voit l'installateur travailler, puis `claude` lui demande de se connecter.
 
-**C'est le seul point incertain de ce design**, et il se lève AVANT de câbler
-le reste : la tâche 1 du plan est une sonde sur la vraie machine (un script
-Node de dix lignes dans le scratchpad, lancé depuis un process sans console)
-qui montre une fenêtre PowerShell avec le script encodé. Si `start` ne
-convient pas, l'alternative est `wt.exe` quand il se résout sur le PATH
-(`resoudreExecutable("wt")`), avec le même `powershell.exe -EncodedCommand`
-derrière.
+**SONDÉ LE 2026-09-17 (tâche 3 du plan), et le résultat CORRIGE ce qui
+précède.** Six variantes lancées sur la machine d'Ahmed, en relevant le
+`MainWindowHandle` de l'hôte de console créé (`conhost` ou
+`WindowsTerminal`), parce qu'un titre de fenêtre vide ne prouve rien : sous
+Windows Terminal, la fenêtre appartient à `WindowsTerminal.exe`, pas à
+`powershell.exe`.
+
+- `cmd /c start "…" powershell -NoExit -EncodedCommand` depuis un `spawn`
+  de Node : un `conhost` naît à chaque fois, **`MainWindowHandle = 0`**,
+  aucune fenêtre. Avec ou sans `windowsHide`, avec ou sans lanceur détaché.
+- `Start-Process powershell -ArgumentList …` (donc **ShellExecute**), depuis
+  un PowerShell lancé normalement : un **`WindowsTerminal` avec un handle
+  réel**. C'est la seule variante qui a ouvert une vraie fenêtre, et elle
+  honore le « terminal par défaut » de l'utilisateur (le relais vers Windows
+  Terminal se fait tout seul).
+- La même ShellExecute, sous un lanceur Node `detached`, redonne un
+  `conhost` sans fenêtre.
+
+Ce que ça dit, et ce que ça ne dit pas : la sonde tourne sous l'arbre de
+processus de l'agent, dont les consoles sont masquées, et cet arbre ne sait
+produire aucune fenêtre visible — l'échec des variantes `detached` ne
+condamne donc pas la technique. Ce qu'elle établit, c'est que **ShellExecute
+est la seule primitive qui a ouvert une fenêtre ici**, et que `cmd /c start`
+n'y est jamais parvenu. `lancerTerminal` emploie donc ShellExecute :
+
+```
+powershell.exe -NoProfile -Command
+  "Start-Process powershell.exe -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-EncodedCommand','<b64>'"
+```
+
+sans `detached` et sans `windowsHide` sur le processus qui ouvre la fenêtre
+(le base64 ne contient que `[A-Za-z0-9+/=]`, donc les apostrophes de la liste
+d'arguments PowerShell ne peuvent pas être refermées par le script). La
+preuve qui manque — une fenêtre visible depuis le processus PRINCIPAL
+d'Electron, qui est un vrai processus interactif — ne peut se faire qu'à
+l'écran, dans l'application : c'est la vérification manuelle de la tâche 4.
+Et `installerCli` ne prétend pas savoir : il rend `lance` dès que le
+lancement n'a pas échoué, la DÉTECTION du CLI est ce qui confirme, et la
+section manuelle du modal reste la porte de sortie.
 
 **Hors Windows** : `installerCli` rend `indisponible` sans rien lancer. Le
 modal l'a déjà prévu (section manuelle seule, commandes bash de

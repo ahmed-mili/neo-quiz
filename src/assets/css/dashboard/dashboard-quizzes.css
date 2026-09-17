@@ -352,7 +352,9 @@
 	display: flex;
 	flex-direction: column;
 	border: 1px solid var(--border-soft);
-	border-radius: 10px;
+	/* 15 px, comme la carte d'un quiz : deux familles de cartes sur la même
+	   page n'ont aucune raison d'avoir deux formes. */
+	border-radius: 15px;
 	background:
 		radial-gradient(360px 150px at 0% 0%, var(--tile-bg) 0%, transparent 68%),
 		var(--card-bg);
@@ -364,7 +366,17 @@
 		box-shadow .2s cubic-bezier(0.2, 0.7, 0.3, 1),
 		transform .2s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
+/* LE MÊME SURVOL QUE LA CARTE D'UN QUIZ (Ahmed, 2026-09-17). Les deux règles
+   posaient déjà la même élévation, la même bordure et la même ombre : ce qui
+   les séparait tenait au FOND. La carte d'un dossier porte en permanence un
+   halo d'angle teinté (`--tile-bg`), si bien qu'elle est déjà colorée au
+   repos et que le survol ne change presque rien ; la carte d'un quiz part
+   d'un verre neutre, et son accent n'apparaît qu'au survol.
+   `background: var(--card-bg)` REND DONC LE FOND NEUTRE PENDANT LE SURVOL :
+   le halo d'angle s'efface, la bordure et la lueur prennent toute la place.
+   C'est le contraste qui fait l'effet, pas l'ombre — elle était déjà là. */
 .qbd-module-card:hover {
+	background: var(--card-bg);
 	transform: translateY(-3px);
 	border-color: var(--border-c);
 	box-shadow: var(--qbd-glass-sheen), 0 14px 30px -12px var(--glow), 0 0 0 1px var(--border-soft);

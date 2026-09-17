@@ -1474,7 +1474,47 @@
 .qbd-install-steps li { margin: 0 0 8px; }
 .qbd-install-code { margin: 6px 0; }
 .qbd-install-code pre { margin: 0; padding: 8px 10px; border-radius: 8px; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
-.qbd-install-copy { margin-top: 4px; }
+.qbd-install-copy {
+	margin-top: 6px;
+	height: 28px;
+	padding: 0 10px;
+	gap: 6px;
+	font-size: 12px;
+	border-radius: 7px;
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	box-shadow: none;
+}
+.qbd-install-copy:hover { color: var(--text-normal); border-color: var(--interactive-accent); background: var(--background-modifier-hover); }
+.qbd-install-code pre { border: 1px solid var(--background-modifier-border); background: var(--background-primary-alt, var(--background-secondary)); }
+
+/* La voie manuelle réutilise la section repliable de « Mes quiz », dont
+   l'en-tête (pastille de compte, fond de nœud) est dessiné pour un arbre de
+   dossiers : dans le modal il faisait un pavé gris avec un « 4 » sans sens.
+   Ici : une ligne de texte discrète avec son chevron, rien d'autre. */
+.qbd-root .qbd-install-manual-row .qbd-quizzes-node-head,
+.qbd-install-manual-row .qbd-quizzes-node-head {
+	width: auto;
+	margin: 4px 0 0;
+	padding: 4px 0;
+	gap: 6px;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-muted);
+}
+.qbd-root .qbd-install-manual-row .qbd-quizzes-node-head:hover,
+.qbd-install-manual-row .qbd-quizzes-node-head:hover { color: var(--text-normal); background: transparent; }
+.qbd-root .qbd-install-manual-row .qbd-quizzes-node-badge,
+.qbd-install-manual-row .qbd-quizzes-node-badge { display: none; }
+.qbd-install-manual-row .qbd-quizzes-node-chevron { opacity: 0.7; }
+.qbd-root .qbd-install-modal .qbd-quizzes-node,
+.qbd-install-modal .qbd-quizzes-node { margin: 0; padding: 0; background: transparent; border: none; }
+.qbd-root .qbd-install-modal .qbd-quizzes-node-body,
+.qbd-install-modal .qbd-quizzes-node-body { padding: 0; }
 .qbd-install-learn { display: inline-flex; margin-top: 12px; font-size: 12.5px; color: var(--interactive-accent); text-decoration: none; }
 .qbd-install-learn:hover { text-decoration: underline; }
 

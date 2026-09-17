@@ -373,28 +373,40 @@
 	align-items: flex-start;
 	gap: 12px;
 }
+/* L'ICÔNE EST NUE (Ahmed, 2026-09-17). La pastille portait la couleur du
+   dossier une TROISIÈME fois, après la bordure de la carte et le titre : trois
+   strates teintées empilées sur un fond d'écran qui en est déjà une. Sans
+   elle, le glyphe et le titre se lisent comme un seul objet, et la grille
+   rejoint la page d'un dossier ouvert, dont le titre porte son icône sans
+   pastille depuis toujours (`.qbd-quizzes-title-icon`).
+   19 px deviennent 22 : un glyphe seul pèse moins qu'un glyphe encadré, et
+   garder l'ancienne taille aurait fait MAIGRIR l'en-tête au lieu de l'alléger.
+   La boîte, elle, reste plus large que le glyphe — c'est la place que la
+   pastille reprend au survol. */
 .qbd-module-card__icon {
-	width: 34px;
-	height: 34px;
+	width: 30px;
+	height: 30px;
 	flex-shrink: 0;
 	box-sizing: border-box;
 	border-radius: 9px;
-	background: var(--icon-bg);
-	border: 1px solid var(--border-c);
+	border: 1px solid transparent;
 	display: grid;
 	place-items: center;
 	color: var(--accent);
 }
-.qbd-module-card__icon svg { width: 19px; height: 19px; }
-/* Pastille cliquable = raccourci « changer l'icône » (clic direct sur la carte,
-   demande Ahmed 2026-07-19) : indice visuel au survol, sans entrer dans le module. */
+.qbd-module-card__icon svg { width: 22px; height: 22px; }
+/* La pastille n'a pas disparu : elle est devenue une AFFORDANCE. Au repos
+   l'icône est nue, au survol le fond et le liseré reviennent dire « ceci se
+   clique » — le clic change l'icône sans entrer dans le dossier (demande
+   Ahmed 2026-07-19). Sans ce retour, la cible n'aurait plus AUCUN indice :
+   c'est le fond permanent qui le donnait jusqu'ici. */
 .qbd-module-card__icon--editable {
 	cursor: pointer;
 	transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
 }
 .qbd-module-card__icon--editable:hover {
-	background: color-mix(in oklab, var(--accent) 34%, var(--card-mix-base));
-	border-color: var(--accent);
+	background: var(--icon-bg);
+	border-color: var(--border-c);
 }
 .qbd-module-card__icon--editable:active { transform: scale(0.94); }
 .qbd-module-card__titles {

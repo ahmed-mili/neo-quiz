@@ -65,6 +65,9 @@ jobs:
       - name: Installer bootstrapper invariants
         run: npm run check:installer
 
+      - name: Changelog
+        run: npm run check:changelog
+
       # Mêmes étapes que release.yml, sans publication : une casse de build
       # (loader manquant, import cassé) se voit au push, pas au moment du tag.
       - name: Build

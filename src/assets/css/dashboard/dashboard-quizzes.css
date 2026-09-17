@@ -333,7 +333,6 @@
 	--card-bg: var(--qbd-glass-bg);
 	--card-mix-base: #181d2b;
 	--tile-bg:     color-mix(in oklab, var(--accent) 12%, transparent);
-	--icon-bg:     color-mix(in oklab, var(--accent) 22%, var(--card-mix-base));
 	--border-c:    color-mix(in oklab, var(--accent) 55%, #232939);
 	--border-soft: color-mix(in oklab, var(--accent) 25%, #262d3f);
 	--glow:        color-mix(in oklab, var(--accent) 45%, transparent);
@@ -379,36 +378,40 @@
    elle, le glyphe et le titre se lisent comme un seul objet, et la grille
    rejoint la page d'un dossier ouvert, dont le titre porte son icône sans
    pastille depuis toujours (`.qbd-quizzes-title-icon`).
-   19 px deviennent 22 : un glyphe seul pèse moins qu'un glyphe encadré, et
-   garder l'ancienne taille aurait fait MAIGRIR l'en-tête au lieu de l'alléger.
-   La boîte, elle, reste plus large que le glyphe — c'est la place que la
-   pastille reprend au survol. */
+
+   LA BOÎTE FAIT EXACTEMENT LA TAILLE DU GLYPHE. Tant qu'elle était plus large
+   (30 px pour 22), le glyphe se centrait dedans et commençait cinq pixels
+   après la marge de la carte : il paraissait rentré, alors que « N quiz »
+   dessous démarrait, lui, sur la marge. La pastille masquait ce décalage en
+   occupant justement ces cinq pixels.
+
+   `margin-top` NÉGATIF, et c'est un demi-écart, pas un nombre choisi au
+   hasard : le glyphe est plus haut que la ligne du titre (22 contre 18,75), il
+   pendrait sous elle sans cette reprise. Il s'aligne ainsi sur la PREMIÈRE
+   ligne, et non sur le bloc titre + UE — qui le ferait descendre d'une
+   demi-ligne dès qu'un module porte une unité d'enseignement. */
 .qbd-module-card__icon {
-	width: 30px;
-	height: 30px;
+	width: 22px;
+	height: 22px;
 	flex-shrink: 0;
 	box-sizing: border-box;
-	border-radius: 9px;
-	border: 1px solid transparent;
+	margin-top: -2px;
 	display: grid;
 	place-items: center;
 	color: var(--accent);
 }
 .qbd-module-card__icon svg { width: 22px; height: 22px; }
-/* La pastille n'a pas disparu : elle est devenue une AFFORDANCE. Au repos
-   l'icône est nue, au survol le fond et le liseré reviennent dire « ceci se
-   clique » — le clic change l'icône sans entrer dans le dossier (demande
-   Ahmed 2026-07-19). Sans ce retour, la cible n'aurait plus AUCUN indice :
-   c'est le fond permanent qui le donnait jusqu'ici. */
+/* Au survol, l'icône GROSSIT, et rien d'autre (Ahmed, 2026-09-17) : le fond
+   qui revenait disait la même chose en rajoutant une surface. `transform` ne
+   pousse rien autour de lui, donc le titre ne bouge pas d'un pixel pendant que
+   le glyphe enfle. Le clic REDESCEND sans revenir sous la taille de repos :
+   c'est une pression, pas un retrait. */
 .qbd-module-card__icon--editable {
 	cursor: pointer;
-	transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+	transition: transform 0.12s ease;
 }
-.qbd-module-card__icon--editable:hover {
-	background: var(--icon-bg);
-	border-color: var(--border-c);
-}
-.qbd-module-card__icon--editable:active { transform: scale(0.94); }
+.qbd-module-card__icon--editable:hover { transform: scale(1.2); }
+.qbd-module-card__icon--editable:active { transform: scale(1.05); }
 .qbd-module-card__titles {
 	display: flex;
 	flex-direction: column;

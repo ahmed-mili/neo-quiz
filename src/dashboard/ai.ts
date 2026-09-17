@@ -154,9 +154,6 @@ interface HintOptions {
 	type?: string;
 	icon?: string;
 	text: string;
-	code?: string;
-	/** Langage Prism du bloc code (« powershell », « bash »…). */
-	lang?: string;
 	action?: HintAction;
 }
 
@@ -461,16 +458,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	}
 
 	/* Les icônes des encadrés, posées APRÈS le rendu : le HTML pur ne sait pas
-	   dessiner un Lucide, et un snippet du vault (tâche 11) peut imposer le
-	   sien par `--callout-icon: lucide-<nom>` — lu ici, comme Obsidian le fait. */
+	   dessiner un Lucide ; `data-icon` vient de la table fixe du rendu
+	   (`ICONES_CALLOUT` dans `markdown-preview.ts`). */
 	function poserIconesCallouts(corps: HTMLElement): void {
 		for (const el of Array.from(corps.querySelectorAll<HTMLElement>(".callout"))) {
 			const icone = el.querySelector<HTMLElement>(".callout-icon");
 			if (!icone) continue;
-			const declare = getComputedStyle(el).getPropertyValue("--callout-icon").trim();
-			const nom = declare.startsWith("lucide-") ? declare.slice(7) : (icone.dataset.icon || "pencil");
 			icone.replaceChildren();
-			host.ui.setIcon(icone, nom);
+			host.ui.setIcon(icone, icone.dataset.icon || "pencil");
 		}
 	}
 
@@ -1407,16 +1402,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 
 	/* Hint contextuel sous la rangée modèle : icône + texte
 	   + action optionnelle (lien externe, réglages, commande).
-	   Grille : [icône | texte | action] et, s'il y a une commande, un
-	   bloc code sur sa PROPRE ligne (pleine largeur sous le texte et le
-	   bouton) — une commande d'installation ne doit jamais se casser en
-	   deux morceaux dans une colonne étroite. */
+	   Grille : [icône | texte | action]. */
 	function renderHint(zone: HTMLElement | null, opts: HintOptions | null): void {
 		if (!zone || !zone.isConnected) return;
 		zone.replaceChildren();
 		if (!opts) return;
-		const hint = ajouter(zone, "div", "qbd-ai-hint qbd-ai-hint--" + (opts.type || "info")
-				+ (opts.code ? " qbd-ai-hint--has-code" : ""));
+		const hint = ajouter(zone, "div", "qbd-ai-hint qbd-ai-hint--" + (opts.type || "info"));
 		const icon = ajouter(hint, "span", "qbd-ai-hint-icon");
 		host.ui.setIcon(icon, opts.icon || (opts.type === "err" ? "alert-circle" : "info"));
 		const body = ajouter(hint, "div", "qbd-ai-hint-body");
@@ -1431,19 +1422,6 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			ajouter(btn, "span", undefined, opts.action.label);
 			btn.addEventListener("click", opts.action.onClick);
 		}
-		if (opts.code) renderHintCode(hint, opts.code, opts.lang || "bash");
-	}
-
-	/* Bloc commande = un BLOC, pas un énoncé : c'est l'hôte qui sait le rendre
-	   en vrai bloc de code (sous Obsidian, le moteur Markdown de l'app —
-	   coloration Prism, style de bloc de l'utilisateur, d'où markdown-rendered
-	   ET markdown-preview-view, les deux racines que ces CSS ciblent, et le
-	   bouton « copier » du post-processeur natif). Sans `renderCodeBlock`, un
-	   `<pre><code>` nu porte le même texte — `textContent`, jamais du HTML. */
-	function renderHintCode(hint: HTMLElement, code: string, lang: string): void {
-		const box = ajouter(hint, "div", "qbd-ai-hint-code markdown-rendered markdown-preview-view");
-		if (deps.renderCodeBlock) { deps.renderCodeBlock(box, code, lang); return; }
-		ajouter(ajouter(box, "pre"), "code", "language-" + lang, code);
 	}
 
 	/* Détections async : statut de chaque provider (trigger + menu du

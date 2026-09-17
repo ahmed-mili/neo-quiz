@@ -13,6 +13,7 @@
    fournisseur dans les réglages, « Continuer » ferme). La sonde est coupée
    à la fermeture ET à la détection : jamais un minuteur orphelin.
 ══════════════════════════════════════════════════════════ */
+import { LOG_PREFIX } from "../branding";
 import { ajouter } from "../dom";
 import { currentHost, requireHost } from "../host/current";
 import { t } from "../i18n";
@@ -91,7 +92,19 @@ export function openInstallModal(deps: InstallModalDeps): void {
 				ajouter(c, "p", "qbd-install-auto-hint", t("ai.install.autoHint"));
 				auto.addEventListener("click", async () => {
 					auto.disabled = true;
-					const verdict = await host.process!.installerCli(OUTILS[deps.provider]);
+					/* Un rejet du pont (outil hors liste blanche, panne de l'IPC) laissait
+					   jusqu'ici le bouton inactif sans un mot : on le traite comme le
+					   verdict « indisponible ». */
+					let verdict: "lance" | "annule" | "indisponible";
+					try {
+						verdict = await host.process!.installerCli(OUTILS[deps.provider]);
+					} catch (e) {
+						console.warn(LOG_PREFIX, "installation impossible:", e);
+						auto.disabled = false;
+						host.ui.notice(t("ai.install.terminalFailed"));
+						manuelOuvert?.();
+						return;
+					}
 					if (verdict === "annule") { auto.disabled = false; return; }
 					if (verdict === "indisponible") {
 						auto.disabled = false;

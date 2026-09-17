@@ -74,8 +74,7 @@ function proprietes(lignes: string[]): string {
 }
 
 /* Les icônes d'Obsidian par type (docs « Callouts › Supported types »). Un
-   type inconnu prend `pencil`, comme là-bas ; un snippet du vault peut le
-   remplacer par `--callout-icon: lucide-…`, relu par la page après le rendu. */
+   type inconnu prend `pencil`, comme là-bas. */
 const ICONES_CALLOUT: Record<string, string> = {
 	note: "pencil", abstract: "clipboard-list", summary: "clipboard-list", tldr: "clipboard-list",
 	info: "info", todo: "check-circle-2", tip: "flame", hint: "flame", important: "flame",
@@ -85,11 +84,15 @@ const ICONES_CALLOUT: Record<string, string> = {
 };
 
 /** Un encadré (callout), au DOM d'Obsidian : `.callout[data-callout]`, sa
-    barre de titre avec icône, son contenu. C'est ce DOM précis (tâche 11)
-    qu'un snippet du vault d'Ahmed sait déjà styler. */
+    barre de titre avec icône, son contenu — repris tel quel pour que le style
+    de l'app reproduise fidèlement celui d'un callout Obsidian. */
 function callout(type: string, titre: string, corpsHtml: string): string {
 	const t = type.toLowerCase();
-	return `<div class="callout" data-callout="${esc(t)}"><div class="callout-title"><div class="callout-icon" data-icon="${ICONES_CALLOUT[t] ?? "pencil"}"></div><div class="callout-title-inner">${titre}</div></div><div class="callout-content">${corpsHtml}</div></div>`;
+	// `Object.hasOwn` n'existe qu'en ES2022 (cible ES2020 ici) : même garde que
+	// `text-only.ts`, via `hasOwnProperty.call` — un type nommé comme un membre
+	// hérité (`constructor`, `toString`) ne doit jamais retourner ce membre.
+	const icone = Object.prototype.hasOwnProperty.call(ICONES_CALLOUT, t) ? ICONES_CALLOUT[t] : "pencil";
+	return `<div class="callout" data-callout="${esc(t)}"><div class="callout-title"><div class="callout-icon" data-icon="${icone}"></div><div class="callout-title-inner">${titre}</div></div><div class="callout-content">${corpsHtml}</div></div>`;
 }
 
 interface Item { indent: number; ordered: boolean; html: string }

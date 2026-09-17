@@ -43,6 +43,7 @@ await withSrcModule("src/markdown-preview.ts", async ({ renderMarkdownPreview })
 		'<div class="callout" data-callout="cours"><div class="callout-title"><div class="callout-icon" data-icon="pencil"></div><div class="callout-title-inner">Cours</div></div><div class="callout-content"><ul><li><a class="mdp-link" href="https://x.y/cm1.pdf" target="_blank" rel="noopener">CM1</a></li></ul></div></div>');
 	r.check("un type connu porte l'icône d'Obsidian", md("> [!warning]\n> x").includes('data-icon="alert-triangle"'), true);
 	r.check("un encadré sans titre prend son type, capitalisé", md("> [!warning]\n> Attention").includes('<div class="callout-title-inner">Warning</div>'), true);
+	r.check("un type d'encadré nommé comme un membre du prototype garde l'icône par défaut", md("> [!constructor]\n> x").includes('data-icon="pencil"'), true);
 	r.check("un lien vers un fichier que l'aperçu ne peut pas ouvrir rend son TEXTE seul",
 		md("[TP1 — Prise en main](TP1.pdf) · [x](../a b.md)"), "<p>TP1 — Prise en main · x</p>");
 	r.check("une image locale rend son texte alternatif, sans le point d'exclamation", md("![schéma](img.png)"), "<p>schéma</p>");

@@ -14,6 +14,7 @@ release notes.
 ## [Unreleased]
 
 ### Changed
+- The installer download is 273 MB lighter: `NeoQuiz-X.Y.Z.exe` was stored uncompressed (371 MB) and is now compressed (97 MB). It self-extracts in a few seconds on first launch instead of not at all.
 - Releases are Windows only from now on: the Linux job is asleep (kept commented in the workflow), and the download page's Linux tile points at 1.2.0, the last release with Linux packages.
 
 ## [1.2.4] - 2026-09-17

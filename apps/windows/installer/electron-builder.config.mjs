@@ -8,10 +8,17 @@ export default async function () {
 		appId: "com.ahmed.neoquiz.installer",
 		productName: "Neo Quiz Installer",
 		executableName: "neo-quiz-installer",
-		/* Le portable s'auto-extrait à chaque lancement. `store` évite la
-		   décompression LZMA coûteuse : l'exe est plus gros, mais la première
-		   fenêtre peut apparaître plus vite. */
-		compression: "store",
+		/* Le portable s'auto-extrait à chaque lancement, et `store` rendait
+		   cette extraction gratuite au prix d'un exe de 371 Mo — presque trois
+		   fois l'installeur de 132 Mo qu'il ne fait que TÉLÉCHARGER. MESURÉ sur
+		   le runner (2026-09-17, deux répétitions `workflow_dispatch`) :
+		   `normal` le ramène à 97 Mo, pour 1 min 45 de packaging au lieu de
+		   14 s ; `maximum` ne gagne que 3 Ko de plus et coûte 23 s — inutile de
+		   le réessayer. Les 273 Mo économisés valent une demi-minute de
+		   téléchargement en moins à CHAQUE installation, contre quelques
+		   secondes d'extraction une seule fois, et autant à la CI, où l'envoi
+		   des paquets domine tout le reste. */
+		compression: "normal",
 		extraMetadata: {
 			main: "dist-bootstrapper/main.cjs",
 			author: { name: "Ahmed Mili" },

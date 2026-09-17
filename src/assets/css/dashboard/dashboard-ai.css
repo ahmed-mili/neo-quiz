@@ -1320,11 +1320,15 @@
 	max-width: calc(100vw - 32px);
 }
 
+/* Une seule ligne : le chemin (`.qbd-ai-preview-meta-path`) prend le reste de
+   la largeur et se tronque plutôt que de passer à la ligne, sans quoi le
+   bouton « Propriétés » (`margin-left: auto`) se retrouverait sur sa propre
+   ligne dès qu'un chemin est un peu long. */
 .qbd-ai-preview-meta {
 	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
+	min-width: 0;
 	margin: -6px 0 14px;
 	font-size: 12px;
 	color: var(--text-faint);
@@ -1334,13 +1338,31 @@
 	opacity: 0.6;
 }
 
+/* Le chemin ne déborde plus : il prend le reste de la ligne, tronqué par le
+   DÉBUT pour garder le nom du fichier visible (le `direction: rtl` inverse le
+   sens de troncature de l'ellipse ; `unicode-bidi: plaintext` empêche un
+   chemin qui commence par une lettre latine de s'afficher à l'envers). */
 .qbd-ai-preview-meta-path {
-	max-width: 100%;
+	flex: 1;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	direction: rtl;
+	text-align: left;
+	unicode-bidi: plaintext;
 	font-family: var(--font-monospace, monospace);
 	font-size: 11px;
+}
+
+.qbd-ai-preview-props {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.qbd-ai-preview-props[aria-pressed="true"] {
+	color: var(--interactive-accent);
 }
 
 /* ── L'aperçu d'une NOTE, rendue (markdown-preview.ts) : la typographie
@@ -1397,25 +1419,25 @@
 	color: var(--text-muted);
 }
 
-/* L'encadré : le gabarit des callouts d'Ahmed — bloc plat, barre d'accent à
-   gauche, coins arrondis, titre gras coloré. Une teinte par grande famille ;
-   les autres types prennent l'accent. */
-.mdp-callout {
-	--mdp-callout: var(--interactive-accent);
-	margin: 0 0 0.9em;
-	padding: 10px 14px;
-	border-left: 3px solid var(--mdp-callout);
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--mdp-callout) 10%, transparent);
-}
-.mdp-callout[data-type="warning"], .mdp-callout[data-type="attention"], .mdp-callout[data-type="caution"] { --mdp-callout: #f59e0b; }
-.mdp-callout[data-type="danger"], .mdp-callout[data-type="error"], .mdp-callout[data-type="bug"], .mdp-callout[data-type="fail"], .mdp-callout[data-type="failure"] { --mdp-callout: #ef4466; }
-.mdp-callout[data-type="success"], .mdp-callout[data-type="check"], .mdp-callout[data-type="done"], .mdp-callout[data-type="tip"], .mdp-callout[data-type="hint"] { --mdp-callout: #10b981; }
-.mdp-callout[data-type="question"], .mdp-callout[data-type="help"], .mdp-callout[data-type="faq"] { --mdp-callout: #f59e0b; }
-.mdp-callout[data-type="quote"], .mdp-callout[data-type="cite"] { --mdp-callout: #8b8b8b; }
-.mdp-callout[data-type="example"] { --mdp-callout: #8b5cf6; }
-.mdp-callout-title { font-weight: 700; color: var(--mdp-callout); margin-bottom: 4px; }
-.mdp-callout-body > :last-child { margin-bottom: 0; }
+/* Les encadrés, au DOM et aux variables d'Obsidian (`--callout-color` en
+   triplet rgb, `--callout-icon`) : c'est ce qui permet aux snippets d'un
+   vault de s'appliquer tels quels (tâche 11). Couleurs des types natifs
+   copiées d'app.css d'Obsidian. */
+.qbd-ai-preview-md .callout { --callout-color: 8, 109, 221; margin: 1em 0; padding: 0; border-radius: 8px; background-color: rgba(var(--callout-color), 0.1); mix-blend-mode: normal; overflow: hidden; }
+.qbd-ai-preview-md .callout-title { display: flex; align-items: center; gap: 6px; padding: 8px 12px; color: rgb(var(--callout-color)); font-weight: 600; }
+.qbd-ai-preview-md .callout-icon { display: inline-flex; flex-shrink: 0; }
+.qbd-ai-preview-md .callout-icon svg { width: 16px; height: 16px; }
+.qbd-ai-preview-md .callout-content { padding: 0 12px 8px; }
+.qbd-ai-preview-md .callout-content > :first-child { margin-top: 0; }
+.qbd-ai-preview-md .callout[data-callout="abstract"], .qbd-ai-preview-md .callout[data-callout="summary"], .qbd-ai-preview-md .callout[data-callout="tldr"],
+.qbd-ai-preview-md .callout[data-callout="tip"], .qbd-ai-preview-md .callout[data-callout="hint"], .qbd-ai-preview-md .callout[data-callout="important"] { --callout-color: 0, 191, 188; }
+.qbd-ai-preview-md .callout[data-callout="success"], .qbd-ai-preview-md .callout[data-callout="check"], .qbd-ai-preview-md .callout[data-callout="done"] { --callout-color: 8, 185, 78; }
+.qbd-ai-preview-md .callout[data-callout="question"], .qbd-ai-preview-md .callout[data-callout="help"], .qbd-ai-preview-md .callout[data-callout="faq"],
+.qbd-ai-preview-md .callout[data-callout="warning"], .qbd-ai-preview-md .callout[data-callout="caution"], .qbd-ai-preview-md .callout[data-callout="attention"] { --callout-color: 236, 117, 0; }
+.qbd-ai-preview-md .callout[data-callout="failure"], .qbd-ai-preview-md .callout[data-callout="fail"], .qbd-ai-preview-md .callout[data-callout="missing"],
+.qbd-ai-preview-md .callout[data-callout="danger"], .qbd-ai-preview-md .callout[data-callout="error"], .qbd-ai-preview-md .callout[data-callout="bug"] { --callout-color: 233, 49, 71; }
+.qbd-ai-preview-md .callout[data-callout="example"] { --callout-color: 120, 82, 238; }
+.qbd-ai-preview-md .callout[data-callout="quote"], .qbd-ai-preview-md .callout[data-callout="cite"] { --callout-color: 158, 158, 158; }
 
 .qbd-ai-preview-md table.mdp-table {
 	border-collapse: collapse;
@@ -1444,7 +1466,9 @@
 
 .mdp-link { color: var(--interactive-accent); text-decoration: none; }
 .mdp-link:hover { text-decoration: underline; }
-.mdp-wikilink { color: var(--interactive-accent); }
+/* Un wikilink n'est plus un lien (il n'ouvre rien depuis cette page) : le
+   texte reste dans le ton du paragraphe, pas dans l'accent d'un vrai lien. */
+.mdp-wikilink { color: inherit; }
 .mdp-embed {
 	display: inline-block;
 	padding: 1px 7px;
@@ -1454,7 +1478,9 @@
 	font-size: 0.9em;
 }
 
-/* Les propriétés en tête de note, comme le bloc « Propriétés » d'Obsidian. */
+/* Les propriétés en tête de note, comme le bloc « Propriétés » d'Obsidian —
+   MASQUÉES par défaut (`[hidden]`, posé par `renderMarkdownPreview`) ; le
+   bouton de la page retire l'attribut. */
 .mdp-frontmatter {
 	margin: 0 0 14px;
 	padding: 8px 12px;
@@ -1463,10 +1489,11 @@
 	background: color-mix(in srgb, var(--background-primary) 70%, transparent);
 	font-size: 12.5px;
 }
-.mdp-prop { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 2px 0; }
+.mdp-prop { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 3px 0; align-items: baseline; }
 .mdp-prop-key { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mdp-prop-value { color: var(--text-normal); overflow-wrap: anywhere; }
-.mdp-prop--item .mdp-prop-value::before { content: "– "; color: var(--text-faint); }
+.mdp-prop-value { display: flex; flex-wrap: wrap; gap: 4px; color: var(--text-normal); overflow-wrap: anywhere; }
+/* Les pastilles d'une liste YAML (`tags`, …). */
+.mdp-pill { padding: 1px 8px; border-radius: 999px; background: var(--background-modifier-hover); font-size: 11.5px; }
 
 /* ── Le PDF : la carte d'aperçu de claude.ai, RELEVÉE AU STYLE CALCULÉ dans
    son DOM le 2026-09-17, et non d'après une capture — une capture ne donne ni

@@ -18,6 +18,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.preview.renderFailed": "Ce PDF n'a pas pu être dessiné",
 	"ai.preview.open": "Ouvrir",
 	"ai.preview.openFailed": "Impossible d'ouvrir {name}",
+	"ai.preview.props": "Propriétés",
 	"ai.composer.quizOptions": "Options du quiz",
 	"ai.composer.generate": "Générer le quiz",
 	"ai.composer.stop": "Arrêter",

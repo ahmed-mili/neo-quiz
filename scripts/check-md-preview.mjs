@@ -38,11 +38,15 @@ await withSrcModule("src/markdown-preview.ts", async ({ renderMarkdownPreview })
 	r.check("les cases à cocher, faite et à faire",
 		md("- [x] fait\n- [ ] à faire"),
 		'<ul><li><span class="mdp-task is-done"><span class="mdp-task-box"></span>fait</span></li><li><span class="mdp-task"><span class="mdp-task-box"></span>à faire</span></li></ul>');
-	r.check("un encadré typé, avec son titre et son corps rendu",
+	r.check("un encadré prend le DOM d'Obsidian (callout, data-callout, icône, titre, contenu)",
 		md("> [!cours] Cours\n> - [CM1](https://x.y/cm1.pdf)"),
-		'<div class="mdp-callout" data-type="cours"><div class="mdp-callout-title">Cours</div><div class="mdp-callout-body"><ul><li><a class="mdp-link" href="https://x.y/cm1.pdf" target="_blank" rel="noopener">CM1</a></li></ul></div></div>');
-	r.check("un encadré sans titre prend son type, capitalisé",
-		md("> [!warning]\n> Attention").includes('<div class="mdp-callout-title">Warning</div>'), true);
+		'<div class="callout" data-callout="cours"><div class="callout-title"><div class="callout-icon" data-icon="pencil"></div><div class="callout-title-inner">Cours</div></div><div class="callout-content"><ul><li><a class="mdp-link" href="https://x.y/cm1.pdf" target="_blank" rel="noopener">CM1</a></li></ul></div></div>');
+	r.check("un type connu porte l'icône d'Obsidian", md("> [!warning]\n> x").includes('data-icon="alert-triangle"'), true);
+	r.check("un encadré sans titre prend son type, capitalisé", md("> [!warning]\n> Attention").includes('<div class="callout-title-inner">Warning</div>'), true);
+	r.check("un lien vers un fichier que l'aperçu ne peut pas ouvrir rend son TEXTE seul",
+		md("[TP1 — Prise en main](TP1.pdf) · [x](../a b.md)"), "<p>TP1 — Prise en main · x</p>");
+	r.check("une image locale rend son texte alternatif, sans le point d'exclamation", md("![schéma](img.png)"), "<p>schéma</p>");
+	r.check("un wikilink reste un texte (plus de crochets, pas de lien)", md("[[XTI301 - Python|le cours]]"), '<p><span class="mdp-wikilink">le cours</span></p>');
 	r.check("une citation ordinaire", md("> une phrase"), "<blockquote><p>une phrase</p></blockquote>");
 	r.check("un bloc de code est LITTÉRAL — pas d'emphase, pas de titre dedans",
 		md("```py\n# pas un titre\n**pas gras**\n```"),
@@ -50,9 +54,9 @@ await withSrcModule("src/markdown-preview.ts", async ({ renderMarkdownPreview })
 	r.check("un tableau", md("| a | b |\n|---|---|\n| 1 | 2 |"),
 		'<table class="mdp-table"><thead><tr><th>a</th><th>b</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>');
 	r.check("une règle", md("avant\n\n---\n\naprès"), "<p>avant</p><hr><p>après</p>");
-	r.check("les propriétés en tête, clé et valeur, listes comprises",
-		md("---\ntitle: XTI301\ntags:\n  - efrei\n---\n# Titre"),
-		'<div class="mdp-frontmatter"><div class="mdp-prop"><span class="mdp-prop-key">title</span><span class="mdp-prop-value">XTI301</span></div><div class="mdp-prop"><span class="mdp-prop-key">tags</span><span class="mdp-prop-value"></span></div><div class="mdp-prop mdp-prop--item"><span class="mdp-prop-key"></span><span class="mdp-prop-value">efrei</span></div></div><h1>Titre</h1>');
+	r.check("les propriétés : masquées par défaut, une liste YAML en pastilles sous sa clé",
+		md("---\ntitle: XTI301\ntags:\n  - efrei\n  - python\n---\n# Titre"),
+		'<div class="mdp-frontmatter" hidden><div class="mdp-prop"><span class="mdp-prop-key">title</span><span class="mdp-prop-value">XTI301</span></div><div class="mdp-prop"><span class="mdp-prop-key">tags</span><span class="mdp-prop-value"><span class="mdp-pill">efrei</span><span class="mdp-pill">python</span></span></div></div><h1>Titre</h1>');
 	r.check("un `---` qui n'est PAS en tête est une règle, pas des propriétés",
 		md("texte\n---\nsuite").includes("<hr>"), true);
 

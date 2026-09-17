@@ -20,6 +20,7 @@ export const EN_AI = {
 	"ai.preview.renderFailed": "This PDF could not be drawn",
 	"ai.preview.open": "Open",
 	"ai.preview.openFailed": "Could not open {name}",
+	"ai.preview.props": "Properties",
 	"ai.composer.quizOptions": "Quiz options",
 	"ai.composer.generate": "Generate quiz",
 	"ai.composer.stop": "Stop",

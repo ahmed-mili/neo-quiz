@@ -433,9 +433,40 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				   `$…$` gardées par l'inline sont posées ensuite par l'hôte. */
 				const corps = ajouter(c, "div", "qbd-ai-preview-md markdown-preview-view");
 				corps.innerHTML = renderMarkdownPreview(note.content);
+
+				/* Les propriétés sont masquées par défaut ; ce bouton les montre.
+				   L'état n'est pas persisté : c'est un aperçu. */
+				const props = corps.querySelector<HTMLElement>(".mdp-frontmatter");
+				if (props) {
+					const btn = ajouter(meta, "button", "qbd-ai-preview-props");
+					btn.type = "button";
+					host.ui.setIcon(ajouter(btn, "span", "qbd-btn-icon qbd-btn-icon--sm"), "list");
+					ajouter(btn, "span", undefined, t("ai.preview.props"));
+					btn.setAttribute("aria-pressed", "false");
+					btn.addEventListener("click", () => {
+						props.hidden = !props.hidden;
+						btn.setAttribute("aria-pressed", String(!props.hidden));
+					});
+				}
+				poserIconesCallouts(corps);
+
 				void mathifyElement(corps);
 			},
 		});
+	}
+
+	/* Les icônes des encadrés, posées APRÈS le rendu : le HTML pur ne sait pas
+	   dessiner un Lucide, et un snippet du vault (tâche 11) peut imposer le
+	   sien par `--callout-icon: lucide-<nom>` — lu ici, comme Obsidian le fait. */
+	function poserIconesCallouts(corps: HTMLElement): void {
+		for (const el of Array.from(corps.querySelectorAll<HTMLElement>(".callout"))) {
+			const icone = el.querySelector<HTMLElement>(".callout-icon");
+			if (!icone) continue;
+			const declare = getComputedStyle(el).getPropertyValue("--callout-icon").trim();
+			const nom = declare.startsWith("lucide-") ? declare.slice(7) : (icone.dataset.icon || "pencil");
+			icone.replaceChildren();
+			host.ui.setIcon(icone, nom);
+		}
 	}
 
 	/** Le PDF : la pile de feuilles (première page dessinée à 270 px), la

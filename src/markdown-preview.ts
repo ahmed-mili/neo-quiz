@@ -32,6 +32,13 @@ const LIEN_MD = /\[([^\]]+)\]\((https?:\/\/[^)\s]+|mailto:[^)\s]+|obsidian:\/\/[
 const WIKILINK = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g;
 const EMBED = /!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
 const IMAGE_MD = /!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g;
+/* Tout lien qui n'a pas été absorbé par `LIEN_MD` ou `IMAGE_MD` ci-dessus :
+   fichier relatif, chemin local, image locale. L'aperçu ne peut ouvrir aucun
+   de ces cas (pas de vault, pas de disque) ; il rend le TEXTE du lien seul —
+   des crochets bruts se liraient mal, et un lien mort serait un mensonge. Le
+   `!` optionnel avale l'image locale AVEC sa syntaxe : `![schéma](img.png)`
+   rend « schéma », jamais « !schéma ». */
+const LIEN_AUTRE = /!?\[([^\]]+)\]\(([^)]+)\)/g;
 
 function inline(texte: string): string {
 	let html = renderInlineText(texte);
@@ -39,24 +46,50 @@ function inline(texte: string): string {
 	html = html.replace(IMAGE_MD, (_m, alt: string, url: string) => `<a class="mdp-link" href="${url}" target="_blank" rel="noopener">${alt || url}</a>`);
 	html = html.replace(WIKILINK, (_m, cible: string, alias: string | undefined) => `<span class="mdp-wikilink">${(alias ?? cible).trim()}</span>`);
 	html = html.replace(LIEN_MD, (_m, texteLien: string, url: string) => `<a class="mdp-link" href="${url}" target="_blank" rel="noopener">${texteLien}</a>`);
+	html = html.replace(LIEN_AUTRE, (_m, texteLien: string) => texteLien);
 	return html;
 }
 
 /** Le bloc de propriétés en tête (`---` … `---`), rendu ligne à ligne :
-    `clé: valeur`, et les listes YAML (`- x`) sous leur clé. Sans analyser le
-    YAML — ce n'est pas un lecteur de configuration, c'est une vitrine. */
+    `clé: valeur`, et les listes YAML (`- x`) en pastilles sous leur clé. Sans
+    analyser le YAML — ce n'est pas un lecteur de configuration, c'est une
+    vitrine. */
 function proprietes(lignes: string[]): string {
-	const rangees: string[] = [];
+	const rangees: { cle: string; valeur: string; items: string[] }[] = [];
 	for (const l of lignes) {
 		const kv = l.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-		if (kv) {
-			rangees.push(`<div class="mdp-prop"><span class="mdp-prop-key">${esc(kv[1])}</span><span class="mdp-prop-value">${esc(kv[2])}</span></div>`);
-			continue;
-		}
+		if (kv) { rangees.push({ cle: kv[1], valeur: kv[2], items: [] }); continue; }
 		const item = l.match(/^\s+-\s+(.*)$/);
-		if (item) rangees.push(`<div class="mdp-prop mdp-prop--item"><span class="mdp-prop-key"></span><span class="mdp-prop-value">${esc(item[1])}</span></div>`);
+		if (item && rangees.length) rangees[rangees.length - 1].items.push(item[1]);
 	}
-	return `<div class="mdp-frontmatter">${rangees.join("")}</div>`;
+	const html = rangees.map(r => {
+		const valeur = r.items.length
+			? r.items.map(i => `<span class="mdp-pill">${esc(i)}</span>`).join("")
+			: esc(r.valeur);
+		return `<div class="mdp-prop"><span class="mdp-prop-key">${esc(r.cle)}</span><span class="mdp-prop-value">${valeur}</span></div>`;
+	}).join("");
+	// MASQUÉES par défaut (demande Ahmed 2026-09-17) : la page pose un bouton
+	// qui retire `hidden`.
+	return `<div class="mdp-frontmatter" hidden>${html}</div>`;
+}
+
+/* Les icônes d'Obsidian par type (docs « Callouts › Supported types »). Un
+   type inconnu prend `pencil`, comme là-bas ; un snippet du vault peut le
+   remplacer par `--callout-icon: lucide-…`, relu par la page après le rendu. */
+const ICONES_CALLOUT: Record<string, string> = {
+	note: "pencil", abstract: "clipboard-list", summary: "clipboard-list", tldr: "clipboard-list",
+	info: "info", todo: "check-circle-2", tip: "flame", hint: "flame", important: "flame",
+	success: "check", check: "check", done: "check", question: "help-circle", help: "help-circle", faq: "help-circle",
+	warning: "alert-triangle", caution: "alert-triangle", attention: "alert-triangle",
+	failure: "x", fail: "x", missing: "x", danger: "zap", error: "zap", bug: "bug", example: "list", quote: "quote", cite: "quote",
+};
+
+/** Un encadré (callout), au DOM d'Obsidian : `.callout[data-callout]`, sa
+    barre de titre avec icône, son contenu. C'est ce DOM précis (tâche 11)
+    qu'un snippet du vault d'Ahmed sait déjà styler. */
+function callout(type: string, titre: string, corpsHtml: string): string {
+	const t = type.toLowerCase();
+	return `<div class="callout" data-callout="${esc(t)}"><div class="callout-title"><div class="callout-icon" data-icon="${ICONES_CALLOUT[t] ?? "pencil"}"></div><div class="callout-title-inner">${titre}</div></div><div class="callout-content">${corpsHtml}</div></div>`;
 }
 
 interface Item { indent: number; ordered: boolean; html: string }
@@ -138,11 +171,11 @@ export function renderMarkdownPreview(texte: string): string {
 			viderParagraphe();
 			const corps: string[] = [];
 			while (i < lignes.length && lignes[i].trim().startsWith(">")) { corps.push(lignes[i].trim().replace(/^>\s?/, "")); i++; }
-			const callout = corps[0]?.match(/^\[!([\w-]+)\]([+-]?)\s*(.*)$/);
-			if (callout) {
-				const type = callout[1].toLowerCase();
-				const titreHtml = callout[3] ? inline(callout[3]) : esc(type.charAt(0).toUpperCase() + type.slice(1));
-				out.push(`<div class="mdp-callout" data-type="${esc(type)}"><div class="mdp-callout-title">${titreHtml}</div><div class="mdp-callout-body">${renderMarkdownPreview(corps.slice(1).join("\n"))}</div></div>`);
+			const matchCallout = corps[0]?.match(/^\[!([\w-]+)\]([+-]?)\s*(.*)$/);
+			if (matchCallout) {
+				const type = matchCallout[1].toLowerCase();
+				const titreHtml = matchCallout[3] ? inline(matchCallout[3]) : esc(type.charAt(0).toUpperCase() + type.slice(1));
+				out.push(callout(type, titreHtml, renderMarkdownPreview(corps.slice(1).join("\n"))));
 			} else {
 				out.push(`<blockquote>${renderMarkdownPreview(corps.join("\n"))}</blockquote>`);
 			}

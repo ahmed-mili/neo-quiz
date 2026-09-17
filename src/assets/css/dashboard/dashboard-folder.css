@@ -188,15 +188,37 @@
 	outline-offset: -2px;
 }
 
+/* LA BOÎTE D'ICÔNE EST CARRÉE ET DE TAILLE FIXE, pour toutes les rangées et
+   pas seulement pour celles qui portent une vignette : une liste dont les
+   rangées changent de hauteur selon le type du fichier se lit comme une liste
+   cassée. Le glyphe garde ses 16 px au centre, la vignette remplit les 28. */
 .qbd-folder-item-icon {
-	display: inline-flex;
+	display: inline-grid;
+	place-items: center;
 	flex-shrink: 0;
+	width: 28px;
+	height: 28px;
 	color: var(--text-muted);
 }
 
 .qbd-folder-item-icon svg {
 	width: 16px;
 	height: 16px;
+}
+
+/* La vignette : `cover` et non `contain`, parce qu'une capture d'écran en 16:9
+   réduite à un carré en `contain` n'est plus qu'un trait. On montre le centre
+   de l'image, quitte à la rogner — c'est un repère, l'image entière est à un
+   clic. Le damier sous elle fait voir la transparence d'un PNG au lieu de la
+   laisser se confondre avec la rangée. */
+.qbd-folder-item-thumb {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	border-radius: 6px;
+	background:
+		repeating-conic-gradient(color-mix(in srgb, var(--text-normal) 10%, transparent) 0% 25%, transparent 0% 50%)
+		0 0 / 8px 8px;
 }
 
 .qbd-folder-item-name {
@@ -333,4 +355,31 @@
 			"foot";
 	}
 	.qbd-folder-section--vide .qbd-folder-section-foot { justify-content: flex-start; }
+}
+
+/* ── LE MODAL D'UNE IMAGE ──
+   Le panneau épouse l'image : `width: fit-content` et le plancher de
+   `:where(.modal)` (420 px) levé, sans quoi une capture étroite flotterait au
+   milieu d'une boîte trop large. L'image, elle, est bornée par la FENÊTRE et
+   non par le panneau : 82 vh de haut moins la place du titre, 78 vw de large.
+   C'est le titre qui dit lequel des trois « Pasted image … » on regarde, donc
+   il reste, et la hauteur maximale en tient compte. */
+.qbd-image-modal {
+	width: fit-content;
+	min-width: 0;
+	max-width: calc(100vw - 48px);
+}
+
+.qbd-image-modal-img {
+	display: block;
+	max-width: min(78vw, 1200px);
+	max-height: calc(82vh - 90px);
+	width: auto;
+	height: auto;
+	border-radius: 8px;
+	/* Le damier, comme dans la rangée : un PNG transparent ne doit pas se
+	   fondre dans le fond du panneau et paraître rogné. */
+	background:
+		repeating-conic-gradient(color-mix(in srgb, var(--text-normal) 10%, transparent) 0% 25%, transparent 0% 50%)
+		0 0 / 16px 16px;
 }

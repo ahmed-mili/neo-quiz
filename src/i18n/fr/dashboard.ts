@@ -137,6 +137,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.quizzes.menuShare": "Partager",
 	"dashboard.quizzes.menuRename": "Renommer",
 	"dashboard.quizzes.menuCopyPath": "Copier le chemin",
+	"dashboard.quizzes.menuOpenFolder": "Ouvrir le dossier",
 	"dashboard.quizzes.menuArchive": "Archiver",
 	"dashboard.quizzes.menuUnarchive": "Désarchiver",
 	"dashboard.quizzes.menuDelete": "Supprimer le quiz",

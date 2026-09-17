@@ -382,6 +382,30 @@ export function buildModuleCardMenu(ctx: DashboardShellCtx, rerender: () => void
 			// de la note de correspondance, jugée non fonctionnelle.
 			onClick: () => { openModuleEditModal(ctx, g, map, rerender); },
 		});
+		/* LE DOSSIER, vu du système : l'ouvrir dans l'explorateur et copier
+		   son chemin. Tout tient à `g.path` — un groupe DÉCLARÉ sans quiz ni
+		   dossier n'en a pas, et deux entrées qui ne mèneraient nulle part
+		   valent moins que leur absence (même règle que Partager). */
+		if (g.path && ctx.openPath) items.push({
+			icon: "folder-open",
+			label: t("dashboard.quizzes.menuOpenFolder"),
+			onClick: () => {
+				void ctx.openPath?.(g.path as string).then(ok => {
+					if (!ok) host.ui.notice(t("dashboard.folder.openFailed", { name: g.name }));
+				});
+			},
+		});
+		if (g.path && ctx.absolutePath && ctx.copyText) items.push({
+			icon: "copy",
+			label: t("dashboard.quizzes.menuCopyPath"),
+			onClick: () => {
+				const absolu = ctx.absolutePath?.(g.path as string);
+				if (!absolu) { host.ui.notice(t("dashboard.quizzes.pathCopyFailed")); return; }
+				void ctx.copyText?.(absolu).then(ok => {
+					host.ui.notice(t(ok ? "dashboard.quizzes.pathCopied" : "dashboard.quizzes.pathCopyFailed"));
+				});
+			},
+		});
 		items.push({
 			icon: "archive",
 			label: t(archived ? "dashboard.quizzes.menuUnarchive" : "dashboard.quizzes.menuArchive"),

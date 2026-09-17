@@ -50,3 +50,12 @@ export function fileIcon(name: string): string {
 	const ext = point > 0 ? name.slice(point + 1).toLowerCase() : "";
 	return PAR_EXTENSION[ext] ?? "file";
 }
+
+
+/** Ce fichier est-il une image que le rendu sait AFFICHER ? Lu dans la
+    même table que l'icône : une seconde liste divergerait au premier
+    format ajouté, et une rangée montrerait une vignette vide là où elle
+    promettait une image. */
+export function estImage(name: string): boolean {
+	return fileIcon(name) === "image";
+}

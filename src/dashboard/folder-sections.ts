@@ -7,7 +7,7 @@ import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import { freeNotePath } from "./folder-create";
 import { ajouterLien, lireContenuDossier, nomSansExtension, retirerLien, titreDepuisUrl, urlValide } from "./folder-contents";
 import { openConfirmModal } from "../editor/modals";
-import { fileIcon } from "./file-icons";
+import { estImage, fileIcon } from "./file-icons";
 import type { LienDossier } from "./folder-contents";
 
 /* ══════════════════════════════════════════════════════════
@@ -47,7 +47,8 @@ export function renderFolderSections(parent: HTMLElement, deps: FolderSectionsDe
 			onDrop: (fichiers) => void ajouterDesFichiers(deps, Promise.resolve(fichiers)),
 			items: contenu.documents.map(e => ({
 				icon: fileIcon(e.name), label: nomSansExtension(e.name), meta: extensionAffichee(e.name),
-				onOpen: () => void ouvrirFichier(deps, e),
+				thumb: urlImage(e),
+				onOpen: () => void ouvrirDocument(deps, e),
 				onDelete: () => void confirmerSuppressionFichier(deps, e),
 			})),
 		});
@@ -83,7 +84,10 @@ interface SectionSpec {
 	action: { icon: string; label: TransKey; onClick: () => void };
 	/** Des fichiers lâchés sur le panneau. Absent = le panneau ne reçoit rien. */
 	onDrop?: (fichiers: File[]) => void;
-	items: { icon: string; label: string; meta: string; onOpen: () => void; onDelete: () => void }[];
+	/** `thumb` : l'URL d'une VIGNETTE, qui prend la place de l'icône. Une
+	    image se reconnaît à ce qu'elle montre, pas à un glyphe partagé par
+	    tous les fichiers de son format. */
+	items: { icon: string; label: string; meta: string; thumb?: string | null; onOpen: () => void; onDelete: () => void }[];
 }
 
 function renderSection(parent: HTMLElement, deps: FolderSectionsDeps, spec: SectionSpec): void {
@@ -114,7 +118,20 @@ function renderSection(parent: HTMLElement, deps: FolderSectionsDeps, spec: Sect
 			const item = ajouter(liste, "div", "qbd-folder-item");
 			const ouvrir = ajouter(item, "button", "qbd-folder-item-open");
 			ouvrir.type = "button";
-			host.ui.setIcon(ajouter(ouvrir, "span", "qbd-folder-item-icon"), it.icon);
+			/* La vignette REMPLACE l'icône, elle ne s'y ajoute pas : deux
+			   marques pour un fichier feraient une rangée bavarde. Une image
+			   qui ne se charge pas (fichier disparu entre le listage et le
+			   rendu) rend la main au glyphe plutôt que de laisser un trou. */
+			const boite = ajouter(ouvrir, "span", "qbd-folder-item-icon");
+			if (it.thumb) {
+				const vignette = ajouter(boite, "img", "qbd-folder-item-thumb");
+				vignette.src = it.thumb;
+				vignette.alt = "";
+				vignette.draggable = false;
+				vignette.addEventListener("error", () => { boite.replaceChildren(); host.ui.setIcon(boite, it.icon); });
+			} else {
+				host.ui.setIcon(boite, it.icon);
+			}
 			// `textContent` (via `ajouter`) : ces noms viennent du disque.
 			ajouter(ouvrir, "span", "qbd-folder-item-name", it.label);
 			ajouter(ouvrir, "span", "qbd-folder-item-meta", it.meta);
@@ -184,6 +201,37 @@ function choisirFichiers(): Promise<File[]> {
 		input.multiple = true;
 		input.addEventListener("change", () => resolve(Array.from(input.files ?? [])));
 		input.click();
+	});
+}
+
+/** L'URL d'affichage d'une image du dossier, ou `null` pour tout le reste.
+    Par le CONTRAT (`links.resourceUrl`) : sous l'application, c'est le
+    protocole `app://neo-res/`, borné au périmètre par le processus
+    principal comme les canaux de fichiers. L'index fait autorité — un
+    fichier qu'il ne connaît pas encore rend `null`, et la rangée garde son
+    glyphe. */
+function urlImage(e: DirEntry): string | null {
+	if (!estImage(e.name)) return null;
+	const host = currentHost();
+	return host.links.resourceUrl(host.fs.getFile(e.path) ?? e.path);
+}
+
+/** L'image s'ouvre DANS l'application, centrée dans un modal (Ahmed,
+    2026-09-17) ; tout le reste part à l'application du système. Le repli
+    compte : une image que l'index ne résout pas n'a pas d'URL, et mieux
+    vaut la visionneuse du système qu'un modal vide. */
+async function ouvrirDocument(deps: FolderSectionsDeps, e: DirEntry): Promise<void> {
+	const url = urlImage(e);
+	if (!url) { await ouvrirFichier(deps, e); return; }
+	requireHost("modals").open({
+		className: "qbd-image-modal",
+		title: e.name,
+		onOpen: (m) => {
+			const img = ajouter(m.contentEl, "img", "qbd-image-modal-img");
+			img.src = url;
+			img.alt = e.name;
+			img.draggable = false;
+		},
 	});
 }
 

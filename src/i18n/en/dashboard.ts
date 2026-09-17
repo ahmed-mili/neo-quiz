@@ -162,6 +162,7 @@ export const EN_DASHBOARD = {
 	"dashboard.quizzes.menuShare": "Share",
 	"dashboard.quizzes.menuRename": "Rename",
 	"dashboard.quizzes.menuCopyPath": "Copy path",
+	"dashboard.quizzes.menuOpenFolder": "Open folder",
 	"dashboard.quizzes.menuArchive": "Archive",
 	"dashboard.quizzes.menuUnarchive": "Unarchive",
 	"dashboard.quizzes.menuDelete": "Delete quiz",

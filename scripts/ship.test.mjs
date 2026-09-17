@@ -17,32 +17,24 @@ import {
 	versionCommitArgs,
 	tagArgs,
 	pushArgs,
+	versionDepuisChangelog,
 } from "./ship.mjs";
 
 test("sans rien, la livraison répare", () => {
 	assert.deepEqual(readArguments([]), {
-		request: "patch",
+		request: null,
 		message: undefined,
 		watch: false,
 		target: "app",
 	});
 });
 
-test("un seul mot est le message, pas un niveau", () => {
-	assert.deepEqual(readArguments(["Fix collapse ghost pixels"]), {
-		request: "patch",
-		message: "Fix collapse ghost pixels",
-		watch: false,
-		target: "app",
-	});
-});
-
 test("le niveau précède le message", () => {
-	assert.deepEqual(readArguments(["minor", "Add ordering questions"]), {
+	assert.deepEqual(readArguments(["--plugin", "minor", "Add ordering questions"]), {
 		request: "minor",
 		message: "Add ordering questions",
 		watch: false,
-		target: "app",
+		target: "plugin",
 	});
 });
 
@@ -65,23 +57,23 @@ test("un numéro avec suffixe -beta tient aussi lieu de niveau", () => {
 });
 
 test("un niveau peut venir seul, quand l'arbre est déjà propre", () => {
-	assert.deepEqual(readArguments(["major"]), {
+	assert.deepEqual(readArguments(["--plugin", "major"]), {
 		request: "major",
 		message: undefined,
 		watch: false,
-		target: "app",
+		target: "plugin",
 	});
 });
 
 test("le drapeau de suivi se glisse où il veut", () => {
-	assert.deepEqual(readArguments(["--watch", "minor", "Add a view"]), {
+	assert.deepEqual(readArguments(["--plugin", "--watch", "minor", "Add a view"]), {
 		request: "minor",
 		message: "Add a view",
 		watch: true,
-		target: "app",
+		target: "plugin",
 	});
 	assert.deepEqual(readArguments(["Fix a leak", "--watch"]), {
-		request: "patch",
+		request: null,
 		message: "Fix a leak",
 		watch: true,
 		target: "app",
@@ -94,6 +86,43 @@ test("refuse un mot de plus, plutôt que d'en perdre un", () => {
 
 test("refuse un drapeau inconnu", () => {
 	assert.throws(() => readArguments(["--force", "Fix a leak"]), /--force/);
+});
+
+const UNRELEASED_ADDED = "# C\n\n## [Unreleased]\n\n### Added\n- x\n\n## [1.1.0] - 2026-09-17\n";
+const UNRELEASED_FIXED = "# C\n\n## [Unreleased]\n\n### Fixed\n- x\n\n## [1.1.0] - 2026-09-17\n";
+const UNRELEASED_VIDE = "# C\n\n## [Unreleased]\n\n## [1.1.0] - 2026-09-17\n";
+
+test("pour l'app, aucun niveau tapé : la requête est nulle, le CHANGELOG décide", () => {
+	assert.deepEqual(readArguments(["Fix collapse ghost pixels"]), {
+		request: null, message: "Fix collapse ghost pixels", watch: false, target: "app",
+	});
+});
+
+test("pour l'app, un niveau tapé est refusé et renvoie au CHANGELOG", () => {
+	assert.throws(() => readArguments(["minor", "msg"]), /CHANGELOG/);
+});
+
+test("pour le greffon, le niveau tapé reste la règle", () => {
+	assert.deepEqual(readArguments(["--plugin", "minor"]), {
+		request: "minor", message: undefined, watch: false, target: "plugin",
+	});
+});
+
+test("le CHANGELOG déduit minor d'une entrée Added", () => {
+	assert.deepEqual(versionDepuisChangelog(UNRELEASED_ADDED, "1.1.0", null), { version: "1.2.0", niveau: "minor" });
+});
+
+test("le CHANGELOG déduit patch d'une entrée Fixed seule", () => {
+	assert.deepEqual(versionDepuisChangelog(UNRELEASED_FIXED, "1.1.0", null), { version: "1.1.1", niveau: "patch" });
+});
+
+test("un numéro explicite est admis s'il vaut au moins le niveau déduit", () => {
+	assert.deepEqual(versionDepuisChangelog(UNRELEASED_FIXED, "1.1.0", "1.2.0"), { version: "1.2.0", niveau: "patch" });
+	assert.throws(() => versionDepuisChangelog(UNRELEASED_ADDED, "1.1.0", "1.1.1"), /Added/);
+});
+
+test("une section Unreleased vide ne se livre pas", () => {
+	assert.throws(() => versionDepuisChangelog(UNRELEASED_VIDE, "1.1.0", null), /Unreleased/);
 });
 
 test("un arbre sale sans message ne part pas", () => {
@@ -134,7 +163,7 @@ test("sans vault réel présent, seules les vérifications rapides tournent", ()
 	const { checks, skippedVaults } = checksToRun([]);
 	assert.deepEqual(
 		checks.map((c) => c.label),
-		["typecheck", "check:md", "check:export"]
+		["typecheck", "check:changelog", "check:md", "check:export"]
 	);
 	assert.equal(skippedVaults, true);
 });
@@ -143,7 +172,7 @@ test("un vault présent ajoute check:markers et audit-vaults, avec son chemin", 
 	const { checks, skippedVaults } = checksToRun(["C:/obsidian-vaults/Personal"]);
 	assert.deepEqual(
 		checks.map((c) => c.label),
-		["typecheck", "check:md", "check:export", "check:markers", "audit-vaults"]
+		["typecheck", "check:changelog", "check:md", "check:export", "check:markers", "audit-vaults"]
 	);
 	assert.equal(skippedVaults, false);
 	const auditVaults = checks.find((c) => c.label === "audit-vaults");
@@ -153,11 +182,12 @@ test("un vault présent ajoute check:markers et audit-vaults, avec son chemin", 
 	]);
 });
 
-test("le typecheck passe toujours en premier, avant tout ce qui touche un vault", () => {
+test("le typecheck passe toujours en premier, check:changelog juste après", () => {
 	// Le moins cher d'abord : un typecheck cassé n'a pas à attendre un aller-
 	// retour sur 67 quiz pour être signalé.
 	const { checks } = checksToRun(["C:/obsidian-vaults/Personal"]);
 	assert.equal(checks[0].label, "typecheck");
+	assert.equal(checks[1].label, "check:changelog");
 });
 
 // FINDING 1 — npm est un .cmd sur Windows, pas un exécutable direct.

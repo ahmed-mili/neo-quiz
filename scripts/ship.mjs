@@ -1,12 +1,10 @@
 /*
  * Livre une version d'un seul geste :
  *
- *   git ship "Fix collapse ghost pixels"   le travail, puis 2.4.0-beta → 2.4.1-beta
- *   git ship minor "Add ordering questions" le travail, puis 2.4.1-beta → 2.5.0-beta
- *   git ship 3.0.0 "Sortie de bêta"         le numéro exact, quand il le faut
+ *   git ship "Fix collapse ghost pixels"   le travail, puis le numéro que CHANGELOG.md impose
+ *   git ship 1.2.0 "Sortie"                 un numéro explicite, s'il vaut au moins ce niveau
  *   git ship                                l'arbre est déjà propre : bump seul
- *   git ship --watch "Fix a leak"           et reste devant la CI
- *   git ship --plugin patch                 livre le plugin explicitement
+ *   git ship --plugin minor                 le greffon garde le niveau tapé
  *
  * L'alias se pose une fois :
  *
@@ -41,10 +39,12 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createInterface } from "node:readline/promises";
 
-import { LEVELS, isVersion, resolveVersion, setVersion } from "./set-version.mjs";
+import { LEVELS, isVersion, resolveVersion, setVersion, currentVersion, nextVersion } from "./set-version.mjs";
+import { FICHIER, lireUnreleased, deduireNiveau, niveauEntre, rang, figer } from "./changelog.mjs";
 
 const repositoryRoot = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -80,8 +80,16 @@ export function readArguments(args) {
 		words.push(argument);
 	}
 
-	let request = "patch";
-	if (words.length > 0 && (LEVELS.includes(words[0]) || isVersion(words[0]))) {
+	let request = target === "plugin" ? "patch" : null;
+	if (words.length > 0 && LEVELS.includes(words[0])) {
+		if (target !== "plugin") {
+			throw new Error(
+				`Pour l'application, le niveau ne se tape plus : il se déduit de la section [Unreleased] de ${FICHIER}. ` +
+					"Écris ce que la version change sous ### Added, ### Changed ou ### Fixed, puis `git ship \"Message\"`."
+			);
+		}
+		request = words.shift();
+	} else if (words.length > 0 && isVersion(words[0])) {
 		request = words.shift();
 	}
 
@@ -95,6 +103,37 @@ export function readArguments(args) {
 	}
 
 	return { request, message, watch, target };
+}
+
+/**
+ * Le numéro de la prochaine version de l'APPLICATION, lu dans le CHANGELOG.
+ * `demandee` (un numéro explicite) est admise si elle vaut AU MOINS le niveau
+ * que la section annonce : livrer 1.1.1 avec une entrée « Added » serait le
+ * mensonge exact que le système interdit.
+ */
+export function versionDepuisChangelog(texte, courante, demandee) {
+	const lu = lireUnreleased(texte);
+	const niveau = lu ? deduireNiveau(lu.sections) : null;
+	if (!niveau) {
+		throw new Error(
+			`Rien dans la section [Unreleased] de ${FICHIER} : écris ce que cette version change ` +
+				"(### Breaking, ### Added, ### Changed, ### Fixed) avant de la livrer."
+		);
+	}
+	if (!demandee) return { version: nextVersion(courante, niveau), niveau };
+	const saut = niveauEntre(courante, demandee);
+	if (!saut || rang(saut) < rang(niveau)) {
+		const remplies = sectionsNonVides(lu.sections).join(", ");
+		throw new Error(
+			`${demandee} ne peut pas suivre ${courante} : la section [Unreleased] contient ${remplies}, ` +
+				`ce qui impose au moins un niveau ${niveau} (${nextVersion(courante, niveau)}).`
+		);
+	}
+	return { version: demandee, niveau };
+}
+
+function sectionsNonVides(sections) {
+	return Object.entries(sections).filter(([, l]) => l.length).map(([s]) => s);
 }
 
 /**
@@ -180,6 +219,7 @@ export const REAL_VAULTS = [
 export function checksToRun(existingVaults = REAL_VAULTS.filter(existsSync)) {
 	const checks = [
 		{ label: "typecheck", command: resolveCommand("npm"), args: ["run", "check"] },
+		{ label: "check:changelog", command: resolveCommand("npm"), args: ["run", "check:changelog"] },
 		{ label: "check:md", command: resolveCommand("npm"), args: ["run", "check:md"] },
 		{ label: "check:export", command: resolveCommand("npm"), args: ["run", "check:export"] },
 	];
@@ -444,7 +484,14 @@ async function ship(args) {
 	const dirty = porcelain.trim() !== "";
 	const commitWork = worksToCommit(message, dirty);
 
-	const version = await resolveVersion(request, target);
+	let version;
+	let changelog = null;
+	if (target === "app") {
+		changelog = await readFile(path.join(repositoryRoot, FICHIER), "utf8");
+		({ version } = versionDepuisChangelog(changelog, await currentVersion("app"), request));
+	} else {
+		version = await resolveVersion(request, target);
+	}
 	guard(version, target);
 
 	runChecks();
@@ -476,6 +523,12 @@ async function ship(args) {
 	console.log(`\nVersion ${version} :`);
 	for (const relativePath of await setVersion(version, target)) {
 		console.log(`  ${relativePath}`);
+	}
+
+	if (changelog !== null) {
+		const date = new Date().toISOString().slice(0, 10);
+		await writeFile(path.join(repositoryRoot, FICHIER), figer(changelog, version, date), "utf8");
+		console.log(`  ${FICHIER}`);
 	}
 
 	console.log("");

@@ -118,6 +118,25 @@ jobs:
             echo "tag=$tag" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      # Les NOTES de la release viennent de CHANGELOG.md (tâche 2 du chantier
+      # « utilisable par n'importe qui ») : une version de l'application sans
+      # section dans le fichier ÉCHOUE ICI, avant qu'une release n'existe.
+      # Le greffon n'a pas de changelog : corps vide.
+      - name: Release notes
+        shell: bash
+        run: |
+          if [ "${{ steps.version.outputs.product }}" = "app" ]; then
+            node scripts/changelog.mjs extract "${{ steps.version.outputs.version }}" > RELEASE_NOTES.md
+          else
+            : > RELEASE_NOTES.md
+          fi
+          cat RELEASE_NOTES.md
+
       # La release existe avant les builds pour recevoir leurs assets, mais
       # reste NON latest. `/releases/latest` est consommé par le bootstrapper :
       # il ne doit jamais pointer vers une release dont le NSIS ou le
@@ -129,6 +148,7 @@ jobs:
           tag_name: "${{ steps.version.outputs.tag }}"
           name: "${{ steps.version.outputs.tag }}"
           target_commitish: ${{ github.sha }}
+          body_path: RELEASE_NOTES.md
           # Pré-version dès que le tag porte un suffixe semver (v2.0.0-beta,
           # -rc.1, -alpha…) : c'est la définition même de semver, donc une
           # future v2.1.0 sans suffixe sortira en release normale sans qu'on

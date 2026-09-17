@@ -200,9 +200,14 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   vaults). `npm run app:dev` / `app:build` — l'application Windows.
 - **Release** : deux produits indépendants, deux commandes `git ship` (alias posé
   une fois, cf. `scripts/ship.mjs`) :
-  - `git ship [major|minor|patch|X.Y.Z] "Message"` — l'application par défaut,
-    bumpe `apps/windows/package.json` (+ lockfile synchronisé), tag `desktop-vX.Y.Z`,
-    release GitHub **latest**.
+  - `git ship "Message"` — l'application par défaut. **Le niveau ne se tape
+    plus** : il se DÉDUIT de la section `## [Unreleased]` de `CHANGELOG.md`
+    (`### Breaking` → major, `### Added`/`### Changed` → minor, `### Fixed`
+    seul → patch ; vide → refus). Un numéro explicite `X.Y.Z` est admis s'il
+    vaut au moins ce niveau. La section est figée en `## [X.Y.Z] - date` dans
+    le commit « Version X.Y.Z », et `release.yml` la publie comme notes de la
+    release. Chaque tâche qui change quelque chose de visible écrit sa ligne
+    sous `[Unreleased]` dans son propre commit.
   - `git ship --plugin [major|minor|patch|X.Y.Z] "Message"` — le greffon,
     bumpe `src/assets/manifest.json`, tag NU `X.Y.Z` (sans préfixe depuis la
     tâche 3 du chantier « greffon lecteur » — c'est le numéro que lit

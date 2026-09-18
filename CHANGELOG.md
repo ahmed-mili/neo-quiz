@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-18
+
 ### Changed
 - The install window carries the provider's logo, in its brand colour, next to the title, and says less: the sentence under the button repeated word for word what the Windows confirmation says two seconds later, and the four manual steps are down to one line each.
 

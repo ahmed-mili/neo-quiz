@@ -2013,6 +2013,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   qui relancerait une génération que l'application n'a jamais faite. */
 		if (errorAction === "reopen" && attenteWebSite) {
 			const reopenBtn = ajouter(errorEl, "button", "qbd-btn qbd-btn--ghost qbd-ai-error-retry", t("ai.web.reopen", { site: attenteWebSite }));
+			reopenBtn.type = "button";
 			reopenBtn.addEventListener("click", () => { relancerApresErreur(); });
 			return;
 		}
@@ -2545,6 +2546,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   la sonde passe elle-même par ici, et couper deux fois ne coûte
 		   rien. */
 		couperSondeConnexion();
+		/* Changer de fournisseur PENDANT une attente web (canal CLI choisi puis
+		   envoyé) ne l'arrête pas d'elle-même : sans cet appel, sa sonde et ses
+		   écouteurs `document` (Esc, collage) continueraient de tourner sous la
+		   génération CLI qui vient de partir. */
+		arreterAttenteWeb();
 		if (aiProviders.estCanalWeb(settings().aiProvider || "")) {
 			await ouvrirSite(msg, container);
 			return;
@@ -2672,7 +2678,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		/* Non câblé (chatgpt.com, perplexity.ai tant qu'ils ne sont pas
 		   mesurés) : la notice, et la demande revient au composer. */
 		if (!canal || !canal.web) {
-			host.ui.notice(t("ai.channel.notWiredYet"));
+			host.ui.notice(t("ai.channel.notWiredYet", { site }));
 			restoreComposerMessage();
 			return;
 		}
@@ -2695,12 +2701,27 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (!(await host.shell.openUrl(ouverture.url))) { echecOuverture(t("ai.channel.openFailed"), container); return; }
 		arreterAttenteWeb();
 		/* Écouteurs de la phase : Esc annule ; un collage hors du composer est
-		   la réponse (le composer, lui, sert à écrire une nouvelle demande). */
-		const surTouche = (e: KeyboardEvent): void => { if (e.key === "Escape") { e.preventDefault(); annulerAttenteWeb(); } };
+		   la réponse (le composer, lui, sert à écrire une nouvelle demande).
+		   Posés sur `document` pour jusqu'à 30 minutes (ECHEANCE_MS) — le temps
+		   que l'utilisateur peut passer sur une AUTRE vue du tableau de bord
+		   (éditeur d'un autre quiz, recherche…) pendant que la veille tourne.
+		   Chacun se garde donc d'agir si la carte d'attente n'est PLUS à
+		   l'écran : sinon un Esc qui ferme une modale ailleurs annulait cette
+		   attente, et un Ctrl+V dans un champ de la page courante se voyait
+		   avalé et peint en « pas un quiz » par-dessus la vue qu'on regardait. */
+		const carteAttenteVisible = (): boolean => !!containerRef?.querySelector(".qbd-ai-web-card");
+		const surTouche = (e: KeyboardEvent): void => {
+			if (!carteAttenteVisible()) return;
+			if (e.key === "Escape") { e.preventDefault(); annulerAttenteWeb(); }
+		};
 		const surCollage = (e: ClipboardEvent): void => {
-			if (phase !== "web") return;
+			if (phase !== "web" || !carteAttenteVisible()) return;
 			const cible = e.target as HTMLElement | null;
-			if (cible && cible.closest(".qbd-ai-composer")) return;
+			/* Toute cible ÉDITABLE garde son collage normal — pas seulement le
+			   composer : un champ de recherche, un textarea, un champ portalé
+			   (menu, modale…). Ce n'est que hors de tout champ que le collage
+			   est interprété comme la réponse du site. */
+			if (cible && cible.closest("input, textarea, [contenteditable=''], [contenteditable='true'], .qbd-ai-composer")) return;
 			const colle = e.clipboardData?.getData("text/plain") || "";
 			if (!colle.trim()) return;
 			e.preventDefault();
@@ -2753,6 +2774,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	async function recevoirReponse(texte: string): Promise<void> {
 		if (phase !== "web" || disposed) return;
 		arreterAttenteWeb();
+		/* La livraison peut arriver pendant que l'utilisateur est sur une AUTRE
+		   vue (`host.collage` a reçu le texte côté principal pendant la veille,
+		   sans que la page « Générer » soit à l'écran) : `render(containerRef)`
+		   plus bas repeindrait alors la vue courante par-dessus. On revient
+		   d'abord sur « Générer » — le chemin de succès d'une génération CLI le
+		   fait déjà pour la page détail, ceci est son équivalent en entrée. */
+		if (!containerRef?.querySelector(".qbd-ai-web-card")) deps.navigate("ai");
 		try {
 			generatedQuestions = parseReponseQuiz(texte);
 			if (generatedQuestions.length === 0) throw new Error(t("ai.err.notAnArray"));

@@ -22,7 +22,12 @@ await withSrcModule(["src/host/current.ts", "src/dashboard/ai-client.ts"], async
 		const p = client.composerPrompts("Le droit constitutionnel", { count: 7, type: "Choix unique", source: "text" });
 		r.check("le prompt système porte le nombre demandé", p.systemPrompt.includes("Generate exactly 7 quiz questions"), true);
 		r.check("le prompt système porte le type demandé", p.systemPrompt.includes("single-choice questions (exactly one correct answer)"), true);
-		r.check("le prompt système se termine par la phrase finale du CLI", p.systemPrompt.trimEnd().endsWith(client.PHRASE_FINALE_CLI), true);
+		/* LITTÉRAL, pas `client.PHRASE_FINALE_CLI` : une constante comparée à
+		   elle-même ne rougit jamais. Le jour où la phrase finale du CLI change
+		   VOLONTAIREMENT, ce littéral est l'alarme — et se met à jour avec elle. */
+		const PHRASE_FINALE_CLI_ATTENDUE = "Reply ONLY with the JSON5 array, with no explanation and no formatting.";
+		r.check("le prompt système se termine par la phrase finale du CLI", p.systemPrompt.trimEnd().endsWith(PHRASE_FINALE_CLI_ATTENDUE), true);
+		r.check("PHRASE_FINALE_CLI vaut la phrase finale du CLI", client.PHRASE_FINALE_CLI, PHRASE_FINALE_CLI_ATTENDUE);
 		r.check("une source « text » ouvre le prompt utilisateur sur le texte fourni",
 			p.userPrompt.startsWith("Generate a quiz based on the following text"), true);
 		r.check("la demande est dans le prompt utilisateur", p.userPrompt.includes("Le droit constitutionnel"), true);

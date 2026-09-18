@@ -605,7 +605,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   la même attente, chacune consommant le presse-papier de l'autre. La
 	   table retient donc, par id de sonde, le minuteur ET si elle est encore
 	   vivante — `annuler` la retire tout de suite (avant même la fin de la
-	   lecture), et le `finally` ne rappelle `fn` que s'il trouve encore son id
+	   lecture), et la résolution ne rappelle `fn` que si elle trouve encore son id
 	   dedans. */
 	let prochaineSondeId = 1;
 	const sondesVivantes = new Map<number, ReturnType<typeof setTimeout>>();
@@ -619,8 +619,12 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			planifier: (fn, ms) => {
 				const id = prochaineSondeId++;
 				const minuteur = setTimeout(() => {
-					clipboard.readText().then(t => { dernierTexteCopie = t; }).catch(() => {}).finally(() => {
-						if (sondesVivantes.delete(id)) fn();
+					clipboard.readText().catch(() => "").then(t => {
+						if (!sondesVivantes.delete(id)) return;
+						// Affecter et consommer dans la MÊME microtâche : une
+						// annulation ne peut plus laisser le cache orphelin.
+						dernierTexteCopie = t;
+						try { fn(); } finally { dernierTexteCopie = ""; }
 					});
 				}, ms);
 				sondesVivantes.set(id, minuteur);

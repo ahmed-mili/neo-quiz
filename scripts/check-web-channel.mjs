@@ -110,3 +110,38 @@ await withSrcModule(
 
 	r2.done();
 });
+
+/* Exécute les fonctions réelles de la closure pour les refus d'ouverture.
+   Les dépendances DOM/CLI ne sont pas appelées sur ces chemins. */
+const { readFileSync } = await import("node:fs");
+const { runInNewContext } = await import("node:vm");
+const { transform } = await import("esbuild");
+const sourcePage = readFileSync("src/dashboard/ai.ts", "utf8");
+const noms = ["startGeneration", "ouvrirSite", "arreterAttenteWeb", "takeComposerMessage", "dropSentMessage", "restoreComposerMessage", "composerIsEmpty"];
+const fonctions = noms.map(nom => {
+	const debut = sourcePage.search(new RegExp(`\\t(?:async )?function ${nom}\\(`));
+	const fin = sourcePage.indexOf("\n\t}", debut);
+	if (debut < 0 || fin < 0) throw new Error(`Fonction introuvable : ${nom}`);
+	return sourcePage.slice(debut, fin + 3);
+});
+const codePage = (await transform(fonctions.join("\n"), { loader: "ts" })).code;
+const refus = makeReporter("Canal web : refus pendant une attente");
+for (const avecImage of [false, true]) {
+	const contexte = {
+		phase: "web", demarrage: false, composerText: "Nouvelle demande", composerCaret: null,
+		noteAttachments: [], images: avecImage ? [{ url: "blob:test" }] : [],
+		sentMessage: { text: "Demande précédente", images: [], notes: [] }, sentAnimPending: false,
+		arrets: 0, retraits: 0, rendus: [],
+		attachPromptPaths: async () => {}, couperSondeConnexion: () => {},
+		settings: () => ({ aiProvider: avecImage ? "claude-web" : "chatgpt-web" }),
+		aiProviders: { estCanalWeb: () => true, getCanal: () => ({ label: "site", web: avecImage ? {} : undefined }) },
+		host: { ui: { notice: () => {} } }, t: cle => cle,
+	};
+	contexte.attenteWeb = { arreter: () => contexte.arrets++, retirer: () => contexte.retraits++ };
+	contexte.render = () => contexte.rendus.push(contexte.phase);
+	await runInNewContext(codePage + "; startGeneration({})", contexte);
+	refus.check(`${avecImage ? "image refusée" : "site non câblé"} : attente arrêtée, demande restaurée et écran idle`,
+		[contexte.phase, contexte.attenteWeb, contexte.composerText, contexte.images.length, contexte.arrets, contexte.retraits, contexte.rendus],
+		["idle", null, "Nouvelle demande", avecImage ? 1 : 0, 1, 1, ["idle"]]);
+}
+refus.done();

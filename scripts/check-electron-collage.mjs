@@ -126,3 +126,64 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", ({ creerAttente,
 
 	r.done();
 });
+
+/* Le câblage réel importe Electron : on isole son bloc, sans le recopier.
+   La lecture différée expose l'annulation en vol et entre microtâches. */
+const { readFileSync } = await import("node:fs");
+const { runInNewContext } = await import("node:vm");
+const { transform } = await import("esbuild");
+const sourcePont = readFileSync("apps/windows/electron/canaux.ts", "utf8");
+const debutPont = sourcePont.indexOf('let dernierTexteCopie = "";');
+const finPont = sourcePont.indexOf("ipcMain.handle(CANAUX.collageAttendre", debutPont);
+if (debutPont < 0 || finPont < 0) throw new Error("Bloc de veille introuvable");
+const codePont = (await transform(sourcePont.slice(debutPont, finPont), { loader: "ts" })).code;
+await withSrcModule("apps/windows/electron/attente-collage.ts", async ({ creerAttente }) => {
+	const r = makeReporter("Pont collage asynchrone");
+	function scene() {
+		const temps = fauxTemps();
+		const lectures = [];
+		const livres = [];
+		return runInNewContext(codePont + `;({ attente, temps, lectures, livres, cacheVide: () => dernierTexteCopie === "" })`, {
+			creerAttente, temps, lectures, livres,
+			setTimeout: temps.horloge.planifier, clearTimeout: temps.horloge.annuler,
+			Date: { now: temps.horloge.maintenant },
+			clipboard: { readText: () => new Promise((resolve, reject) => lectures.push({ resolve, reject })) },
+			deps: { envoyer: (_canal, texte) => livres.push(texte), fenetreCourante: () => null },
+			CANAUX: { collageTexte: "texte" },
+		});
+	}
+	const viderMicrotaches = () => new Promise(resolve => setImmediate(resolve));
+	for (const entreMicrotaches of [false, true]) {
+		const s = scene();
+		s.attente.demarrer("premier1234");
+		s.temps.tic(500);
+		if (!entreMicrotaches) s.attente.arreter();
+		s.lectures[0].resolve("texte privé sans jeton");
+		if (entreMicrotaches) { await Promise.resolve(); s.attente.arreter(); }
+		await viderMicrotaches();
+		r.check(`annulation ${entreMicrotaches ? "entre microtâches" : "pendant readText"} : rien retenu ni relancé`,
+			[s.cacheVide(), s.temps.enAttente(), s.livres.length], [true, 0, 0]);
+	}
+	{
+		const s = scene();
+		s.attente.demarrer("premier1234"); s.temps.tic(500);
+		s.attente.demarrer("second12345"); s.temps.tic(500);
+		s.lectures[1].resolve("// neo-quiz second12345");
+		await viderMicrotaches();
+		s.lectures[0].resolve("texte privé de l'ancienne lecture");
+		await viderMicrotaches();
+		r.check("ancienne lecture résolue après livraison : cache vide, une seule livraison",
+			[s.cacheVide(), s.temps.enAttente(), s.livres.length], [true, 0, 1]);
+	}
+	{
+		const s = scene();
+		s.attente.demarrer("premier1234"); s.temps.tic(500);
+		s.lectures[0].reject(new Error("indisponible"));
+		await viderMicrotaches();
+		r.check("lecture refusée : une seule nouvelle sonde et aucun cache", [s.temps.enAttente(), s.cacheVide()], [1, true]);
+		s.temps.tic(500); s.lectures[1].resolve("// neo-quiz premier1234");
+		await viderMicrotaches();
+		r.check("lecture suivante valide : livrée puis oubliée", [s.livres.length, s.cacheVide(), s.temps.enAttente()], [1, true, 0]);
+	}
+	r.done();
+});

@@ -2680,6 +2680,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (!canal || !canal.web) {
 			host.ui.notice(t("ai.channel.notWiredYet", { site }));
 			restoreComposerMessage();
+			phase = "idle";
+			render(container);
 			return;
 		}
 		/* Ni une adresse ni un presse-papier texte ne transportent une image :
@@ -2688,6 +2690,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (msg.images.length > 0) {
 			host.ui.notice(t("ai.channel.noImages"));
 			restoreComposerMessage();
+			phase = "idle";
+			render(container);
 			return;
 		}
 		const { source, prompt } = composerDemande(msg);

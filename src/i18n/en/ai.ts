@@ -24,6 +24,7 @@ export const EN_AI = {
 	"ai.composer.quizOptions": "Quiz options",
 	"ai.composer.generate": "Generate quiz",
 	"ai.composer.stop": "Stop",
+	"ai.composer.open": "Open",
 	"ai.add.filesTip": "Add files or images ({hotkey})",
 	/* Picker « @ » : aucune entrée pour le token tapé. */
 	"ai.mention.noMatch": "No matching file",
@@ -76,6 +77,11 @@ export const EN_AI = {
 	"ai.provider.claudeSub": "Pro / Max account",
 	"ai.provider.codexSub": "Codex CLI · ChatGPT subscription",
 	"ai.provider.ollamaSub": "Local and cloud",
+
+	/* ── Canaux (le second niveau du menu : par quelle voie on parle a la marque) ── */
+	"ai.channel.cliSub": "On your machine",
+	"ai.channel.webSub": "In your browser",
+	"ai.channel.notWiredYet": "Design preview: web channels are not wired up yet.",
 
 	/* ── Statuts (pastille + sous-titre du menu fournisseur) ── */
 	"ai.status.claudeOk": "Claude Code v{version}",

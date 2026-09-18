@@ -231,8 +231,10 @@ await withSrcModule(["src/host/current.ts", "src/dashboard/ai-client.ts"], async
 		r.check("un tableau dans une fence, avec de la prose autour et le commentaire du jeton",
 			client.parseReponseQuiz(fence).length, 1);
 		const latex = `[{ title: "F", prompt: "Simplifie $\\frac{2}{4}$", type: "text", answer: "$\\frac{1}{2}$" }]`;
+		/* Le modèle écrit `$\frac$` (un backslash) ; la réparation le double dans
+		   le SOURCE, et JSON5 rend un seul backslash dans la VALEUR. */
 		r.check("le LaTeX à backslash simple est réparé, pas détruit",
-			client.parseReponseQuiz(latex)[0].answer, "$\\\\frac{1}{2}$");
+			client.parseReponseQuiz(latex)[0].answer, "$\\frac{1}{2}$");
 		let e1 = null;
 		try { client.parseReponseQuiz("Je ne peux pas générer de quiz sur ce sujet."); } catch (e) { e1 = e.message; }
 		r.check("une phrase sans quiz : erreur « pas un quiz », avec l'aperçu", typeof e1 === "string" && e1.includes("Je ne peux pas"), true);

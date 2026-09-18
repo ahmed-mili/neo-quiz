@@ -901,6 +901,40 @@
 	height: 18px;
 }
 
+/* ── Canal WEB : le bouton n'envoie pas, il OUVRE ──
+   Déclaré APRÈS .qbd-ai-composer-send (même spécificité, l'ordre tranche) :
+   sinon la largeur fixe de 34px rognerait le libellé. Deux gestes différents
+   méritent deux boutons différents — la flèche seule promettrait une
+   génération qui ne part pas d'ici. */
+.qbd-ai-composer-send--wide {
+	width: auto;
+	padding: 0 13px;
+	gap: 7px;
+}
+
+.qbd-ai-composer-send-label {
+	font-size: 13px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+/* Le contrôle du milieu sur un canal web : « Claude · claude.ai ». Pas de
+   modèle à choisir (c'est le site qui décide, avec le compte de
+   l'utilisateur), donc la marque en gras et le canal atténué à sa suite. */
+.qbd-channel-trigger .qbd-select-label {
+	gap: 5px;
+}
+
+.qbd-channel-trigger-sep {
+	color: var(--text-faint);
+}
+
+.qbd-channel-trigger-canal {
+	font-size: 12.5px;
+	font-weight: 500;
+	color: var(--text-muted);
+}
+
 @keyframes qbd-send-in {
 	from { opacity: 0; transform: scale(0.7); }
 	to   { opacity: 1; transform: scale(1); }

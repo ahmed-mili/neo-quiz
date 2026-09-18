@@ -418,8 +418,43 @@
 
 /* Lignes « Effort » / « Plus de modèles » surlignées quand leur flyout est ouvert */
 .qbd-effort-row.is-open,
-.qbd-more-row.is-open {
+.qbd-more-row.is-open,
+.qbd-brand-row.is-open {
 	background: var(--background-modifier-hover) !important;
+}
+
+/* ── Menu fournisseur à DEUX niveaux (la marque, puis le canal) ──
+   Une marque à canal unique se choisit d'un clic ; une marque à plusieurs
+   canaux porte un chevron et ouvre son flyout au survol, comme la ligne
+   « Effort » du menu de modèles. Le flyout est plus étroit que le menu : il
+   ne répète pas le logo, puisqu'il appartient déjà à une marque. */
+.qbd-provider-menu {
+	min-width: 250px;
+}
+
+.qbd-channel-flyout {
+	min-width: 228px;
+}
+
+/* Le corps de l'option est en flex:1 et pousse déjà le chevron à droite ;
+   reste à le recentrer sur les deux lignes (libellé + sous-titre). */
+.qbd-brand-row {
+	position: relative;
+}
+
+.qbd-brand-row .qbd-model-menu-row-chevron {
+	align-self: center;
+}
+
+/* La marque EN USAGE, quand elle a plusieurs canaux : pas de coche (à droite,
+   elle se battait avec le chevron du second niveau, deux glyphes de sens
+   différents au même endroit), c'est le CHEVRON qui passe à l'accent. Une
+   barre sur le bord a été essayée à l'écran le 2026-09-18, en quatre
+   variantes, et écartée : le chevron bleu suffisait. Une marque à canal
+   unique n'a pas de chevron et garde sa coche, comme tous les menus de
+   l'app. */
+.qbd-brand-row.is-active .qbd-model-menu-row-chevron {
+	color: var(--interactive-accent);
 }
 
 /* Flyout « Plus de modèles » : réutilise la surface .qbd-select-menu, liste le

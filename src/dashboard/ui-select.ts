@@ -697,6 +697,254 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 	return { close: closeMenu };
 }
 
+/* ── openProviderMenu ─────────────────────────────────────── */
+
+/** Un canal dans le menu : une façon de parler à la marque. */
+export interface ProviderChannelOption {
+	value: string;
+	label: string;
+	sub?: string;
+	/** Visible, mais pas sélectionnable (CLI absent) → `onDisabledClick`. */
+	disabled?: boolean;
+	/** Pastille d'état, seulement quand ça ne va pas : "warn" | "err". */
+	dot?: string | null;
+}
+
+/** Une marque dans le menu : un logo, un nom, et un ou plusieurs canaux. */
+export interface ProviderBrandOption {
+	value: string;
+	label: string;
+	logo: string;
+	channels: ProviderChannelOption[];
+}
+
+export interface OpenProviderMenuOptions {
+	brands: ProviderBrandOption[];
+	/** L'identifiant du CANAL courant (le réglage `aiProvider`). */
+	current: string;
+	/** Pose le logo de marque dans un élément (l'appelant connaît ses SVG). */
+	renderLogo: (el: HTMLElement, logo: string) => void;
+	onPick?: (channelValue: string) => void;
+	onDisabledClick?: (channelValue: string) => void;
+}
+
+/** Comme `MenuHandle`, plus de quoi redessiner sans refermer : les statuts des
+    CLI arrivent en asynchrone, souvent pendant que le menu est ouvert. */
+export interface ProviderMenuHandle extends MenuHandle {
+	refresh(): void;
+}
+
+/*
+ * openProviderMenu(anchorEl, { brands, current, renderLogo, onPick })
+ * — le menu des fournisseurs à DEUX niveaux : une ligne par marque, et pour
+ * une marque à plusieurs canaux un flyout latéral (même patron que la ligne
+ * « Effort » du menu de modèles). Une marque à canal unique se choisit d'un
+ * seul clic : un second niveau qui n'offre aucun choix serait un détour.
+ */
+export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOptions): ProviderMenuHandle {
+	if (toggleCloseForAnchor(anchorEl)) return { close() {}, refresh() {} };
+	closeAllSelects();
+
+	const menuEl = ajouter(document.body, "div", "qbd-select-menu qbd-provider-menu");
+	menuEl.setAttribute("role", "menu");
+	let flyout: HTMLDivElement | null = null;
+	let flyoutBrand = "";
+	let closeTimer = 0;
+
+	/** La marque qui porte le canal courant, pour la coche et le sous-titre. */
+	function brandOf(channelValue: string): ProviderBrandOption | undefined {
+		return opts.brands.find(b => b.channels.some(c => c.value === channelValue));
+	}
+
+	function channelOf(b: ProviderBrandOption): ProviderChannelOption {
+		return b.channels.find(c => c.value === opts.current) || b.channels[0];
+	}
+
+	function reposition(): void {
+		const rect = anchorEl.getBoundingClientRect();
+		menuEl.style.left = rect.left + "px";
+		menuEl.style.visibility = "hidden";
+		menuEl.style.top = "0px";
+		const menuRect = menuEl.getBoundingClientRect();
+		const below = rect.bottom + 4;
+		const above = rect.top - 4 - menuRect.height;
+		menuEl.style.top = (below + menuRect.height <= window.innerHeight - 8 || above < 8 ? below : above) + "px";
+		let left = rect.left;
+		if (menuRect.width + left > window.innerWidth - 8) {
+			left = Math.max(8, window.innerWidth - 8 - menuRect.width);
+		}
+		menuEl.style.left = left + "px";
+		menuEl.style.visibility = "";
+	}
+
+	/* Une ligne de canal, dans le flyout. Même forme que l'option de marque
+	   (libellé gras + sous-titre), sans logo : le flyout appartient déjà à
+	   une marque, répéter son glyphe à chaque ligne n'apprendrait rien. */
+	function appendChannel(parent: HTMLElement, c: ProviderChannelOption): void {
+		const active = c.value === opts.current && !c.disabled;
+		const btn = ajouter(parent, "button", "qbd-select-option qbd-channel-option" + (active ? " is-active" : ""));
+		btn.type = "button";
+		btn.setAttribute("role", "menuitemradio");
+		btn.setAttribute("aria-checked", active ? "true" : "false");
+		if (c.disabled) btn.setAttribute("aria-disabled", "true");
+		const check = ajouter(btn, "span", "qbd-select-check");
+		if (active) currentHost().ui.setIcon(check, "check");
+		const body = ajouter(btn, "div", "qbd-provider-option-body");
+		ajouter(body, "span", "qbd-select-option-label", c.label);
+		if (c.sub) ajouter(body, "span", "qbd-provider-option-sub", c.sub);
+		if (c.dot === "warn" || c.dot === "err") ajouter(btn, "span", "qbd-status-dot qbd-status-dot--" + c.dot);
+		btn.addEventListener("click", () => {
+			closeMenu();
+			if (c.disabled) { opts.onDisabledClick?.(c.value); return; }
+			if (c.value !== opts.current) opts.onPick?.(c.value);
+		});
+	}
+
+	function cancelClose(): void {
+		if (closeTimer) { clearTimeout(closeTimer); closeTimer = 0; }
+	}
+
+	function scheduleClose(): void {
+		cancelClose();
+		closeTimer = window.setTimeout(closeFlyout, 140);
+	}
+
+	function closeFlyout(): void {
+		cancelClose();
+		if (flyout) { flyout.remove(); flyout = null; }
+		flyoutBrand = "";
+		menuEl.querySelectorAll(".qbd-brand-row.is-open").forEach(el => el.classList.remove("is-open"));
+	}
+
+	function openFlyout(row: HTMLElement, b: ProviderBrandOption): void {
+		if (flyout && flyoutBrand === b.value) return;
+		closeFlyout();
+		flyoutBrand = b.value;
+		row.classList.add("is-open");
+		const fly = ajouter(document.body, "div", "qbd-select-menu qbd-channel-flyout");
+		flyout = fly;
+		fly.setAttribute("role", "menu");
+		for (const c of b.channels) appendChannel(fly, c);
+
+		// À droite du menu, rabattu à gauche s'il n'y a pas la place. Haut du
+		// flyout aligné sur le haut de sa ligne : les canaux descendent depuis
+		// la marque à laquelle ils appartiennent.
+		const rowR = row.getBoundingClientRect();
+		const menuR = menuEl.getBoundingClientRect();
+		fly.style.visibility = "hidden";
+		fly.style.top = "0px";
+		fly.style.left = "0px";
+		const fr = fly.getBoundingClientRect();
+		let left = menuR.right + 4;
+		if (left + fr.width > window.innerWidth - 8) left = menuR.left - 4 - fr.width;
+		left = Math.max(8, left);
+		const top = Math.min(Math.max(8, rowR.top), window.innerHeight - fr.height - 8);
+		fly.style.left = left + "px";
+		fly.style.top = top + "px";
+		fly.style.visibility = "";
+
+		fly.addEventListener("mouseenter", cancelClose);
+		fly.addEventListener("mouseleave", scheduleClose);
+	}
+
+	function renderMain(): void {
+		menuEl.replaceChildren();
+		const brandCourante = brandOf(opts.current);
+		for (const b of opts.brands) {
+			const canal = channelOf(b);
+			const multiple = b.channels.length > 1;
+			const active = brandCourante?.value === b.value;
+			/* La marque en usage : une coche SEULEMENT si elle n'a qu'un canal.
+			   Avec un second niveau, la coche se collait au chevron — deux
+			   glyphes de sens différents au même endroit (vu à l'écran le
+			   2026-09-18) — et c'est le chevron passé à l'accent qui la remplace
+			   (CSS de `.is-active`). Dans le flyout, la coche est sur le CANAL :
+			   c'est lui qui est choisi, pas la marque. */
+			const row = ajouter(menuEl, "button", "qbd-select-option qbd-brand-row" + (active ? " is-active" : ""));
+			row.type = "button";
+			row.setAttribute("role", multiple ? "menuitem" : "menuitemradio");
+			if (!multiple) {
+				row.setAttribute("aria-checked", active ? "true" : "false");
+				const check = ajouter(row, "span", "qbd-select-check");
+				if (active) currentHost().ui.setIcon(check, "check");
+			}
+			const logo = ajouter(row, "span", "qbd-provider-logo qbd-provider-logo--" + b.logo);
+			opts.renderLogo(logo, b.logo);
+			const body = ajouter(row, "div", "qbd-provider-option-body");
+			ajouter(body, "span", "qbd-select-option-label", b.label);
+			/* Le sous-titre dit le canal EN USAGE pour cette marque, pas la
+			   marque elle-même : c'est la seule chose qui change entre deux
+			   lignes du même logo, et donc la seule qui vaille la place. */
+			ajouter(body, "span", "qbd-provider-option-sub", canal ? (canal.sub || canal.label) : "");
+			const st = canal && !multiple ? canal.dot : null;
+			if (st === "warn" || st === "err") ajouter(row, "span", "qbd-status-dot qbd-status-dot--" + st);
+			if (multiple) {
+				const chev = ajouter(row, "span", "qbd-model-menu-row-chevron");
+				currentHost().ui.setIcon(chev, "chevron-right");
+				row.addEventListener("mouseenter", () => { cancelClose(); openFlyout(row, b); });
+				row.addEventListener("mouseleave", scheduleClose);
+				// Le clic ouvre aussi : au doigt et au clavier, il n'y a pas de survol.
+				row.addEventListener("click", () => { cancelClose(); openFlyout(row, b); });
+			} else {
+				row.addEventListener("mouseenter", closeFlyout);
+				row.addEventListener("click", () => {
+					const c = b.channels[0];
+					closeMenu();
+					if (c.disabled) { opts.onDisabledClick?.(c.value); return; }
+					if (c.value !== opts.current) opts.onPick?.(c.value);
+				});
+			}
+		}
+	}
+
+	function closeMenu(): void {
+		closeFlyout();
+		menuEl.remove();
+		openMenus.delete(closeMenu);
+		document.removeEventListener("mousedown", onDocDown, true);
+		document.removeEventListener("keydown", onKeyDown, true);
+		window.removeEventListener("scroll", onScroll, true);
+		window.removeEventListener("resize", closeMenu);
+	}
+
+	function onDocDown(e: MouseEvent): void {
+		const t = e.target as Node | null;
+		if (!t) return;
+		if (anchorEl.contains(t) || menuEl.contains(t) || (flyout && flyout.contains(t))) return;
+		closeMenu();
+	}
+
+	function onKeyDown(e: KeyboardEvent): void {
+		if (e.key !== "Escape") return;
+		if (flyout) closeFlyout();
+		else closeMenu();
+	}
+
+	function onScroll(e: Event): void {
+		const t = e.target as Node | null;
+		if (!t) return;
+		if (menuEl.contains(t) || (flyout && flyout.contains(t))) return;
+		closeMenu();
+	}
+
+	renderMain();
+	reposition();
+
+	openMenus.set(closeMenu, anchorEl);
+	document.addEventListener("mousedown", onDocDown, true);
+	document.addEventListener("keydown", onKeyDown, true);
+	window.addEventListener("scroll", onScroll, true);
+	window.addEventListener("resize", closeMenu);
+
+	return {
+		close: closeMenu,
+		/* Un statut arrivé après l'ouverture redessine les lignes en place. Le
+		   flyout ouvert est refermé : ses lignes viennent d'être détruites, le
+		   garder en vie le laisserait pointer un bouton qui n'existe plus. */
+		refresh() { closeFlyout(); renderMain(); reposition(); }
+	};
+}
+
 /* ── openEffortSlider ─────────────────────────────────────── */
 
 export interface EffortSliderFast {

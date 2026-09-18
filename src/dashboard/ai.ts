@@ -13,11 +13,11 @@ import type { AiSettingsHost } from "./ai-settings-host";
 import { GENERATED_MODULE_ICON } from "./module-icons";
 import { GENERATED_MODULE_ACCENT } from "./module-color";
 import { createAiClient } from "./ai-client";
-import { createSelect, closeAllSelects, openModelMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
+import { closeAllSelects, openModelMenu, openProviderMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
 import { badgeDeFichier } from "./file-icons";
 import { renderMarkdownPreview } from "../markdown-preview";
 import { mathifyElement } from "../engine/mathjax";
-import type { SelectHandle, SelectOption } from "./ui-select";
+import type { ProviderBrandOption, ProviderMenuHandle } from "./ui-select";
 import { formatHotkey, eventToHotkey } from "../hotkey-format";
 import { findQuizModeConfigIndex } from "../quiz-utils";
 import { attachMentionPicker } from "./mention-picker";
@@ -114,10 +114,13 @@ interface SentMessage {
 	images: ComposerImage[];
 }
 
-/** Option du sélecteur de fournisseur (logo + sous-titre). */
-interface ProviderSelectOption extends SelectOption {
-	logo: string;
-	sub: string;
+/** Le contrôle fournisseur : son bouton (un logo seul dans le pied du
+    composer) et de quoi redessiner le menu ouvert quand un statut de CLI
+    arrive après coup. Ce n'est plus un `createSelect` depuis que le menu a
+    DEUX niveaux (marque, puis canal) : voir `openProviderMenu`. */
+interface ProviderControl {
+	el: HTMLElement;
+	refreshMenu(): void;
 }
 
 /** Élément de la liste Ollama (décorée pour le menu). */
@@ -144,7 +147,7 @@ interface ProviderStatusEntry {
 
 /** Arguments (fixés par le render) de refreshProviderStatuses. */
 interface RefreshArgs {
-	providerSelect: SelectHandle<ProviderSelectOption> | null;
+	providerSelect: ProviderControl | null;
 	hintZone: HTMLElement | null;
 	provider: string;
 	currentModel: string;
@@ -636,67 +639,71 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			? (settings().aiModel || aiProviders.getProvider(provider).defaultModel)
 			: "";
 
-		let providerSelect: SelectHandle<ProviderSelectOption> | null = null;
+		let providerSelect: ProviderControl | null = null;
+		/* Ouvre le menu des marques. Posé par buildProviderControl, appelé
+		   aussi par le contrôle du milieu quand le canal est un SITE : il n'y
+		   a alors pas de modèle à choisir, et le seul réglage atteignable
+		   depuis ce bouton est le canal lui-même. */
+		let ouvrirMenuFournisseur: (() => void) | null = null;
 		const buildProviderControl = (parent: HTMLElement): void => {
-			const sel = createSelect<ProviderSelectOption>(parent, {
-				value: provider || undefined,
-				options: optionsFournisseurs(),
-				renderTrigger: (el, o) => {
-					if (!o) {
-						// Aucun fournisseur : slot vide, le tooltip guide.
-						const ic = ajouter(el, "span", "qbd-provider-logo");
-						host.ui.setIcon(ic, "circle-dashed");
-						return;
-					}
-					const logo = ajouter(el, "span", "qbd-provider-logo qbd-provider-logo--" + o.logo);
-					aiProviders.setBrandLogo(logo, o.logo);
-				},
-				renderOption: (el, o) => {
-					const logo = ajouter(el, "span", "qbd-provider-logo qbd-provider-logo--" + o.logo);
-					aiProviders.setBrandLogo(logo, o.logo);
-					const body = ajouter(el, "div", "qbd-provider-option-body");
-					ajouter(body, "span", "qbd-select-option-label", o.label);
-					const st = providerStatus[o.value];
-					ajouter(body, "span", "qbd-provider-option-sub", st ? st.text : o.sub);
-					// Pastille SEULEMENT quand quelque chose ne va pas (demande
-					// d'Ahmed, 2026-09-17) : orange « ça marcherait, mais le
-					// serveur est arrêté », rouge « absent ». Un fournisseur qui
-					// répond n'en porte pas — sa version dans le sous-titre le dit
-					// déjà, et une pastille verte collée à la coche de l'option
-					// choisie n'apprenait rien. Idem pendant la détection : le dot
-					// pulsant se serait posé au même endroit pour une seconde.
-					if (st && (st.dot === "warn" || st.dot === "err")) {
-						ajouter(el, "span", "qbd-status-dot qbd-status-dot--" + st.dot);
-					}
-				},
-				onChange: async (id) => {
-					await saveSettings({ aiProvider: id, aiModel: aiProviders.getProvider(id).defaultModel });
-					render(container);
-				},
-				// Une option DÉSACTIVÉE (fournisseur absent) ne se sélectionne pas :
-				// elle ouvre son modal d'installation, avec le même rafraîchissement
-				// que le bouton du hint.
-				onDisabledClick: (id) => ouvrirModalInstallation(id as InstallProvider, () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true })),
+			const btn = ajouter(parent, "button", "qbd-select qbd-provider-trigger-logo");
+			btn.type = "button";
+			const p = provider ? aiProviders.getProvider(provider) : null;
+			if (p) {
+				const logo = ajouter(btn, "span", "qbd-provider-logo qbd-provider-logo--" + p.logo);
+				aiProviders.setBrandLogo(logo, p.logo);
+			} else {
+				// Aucun fournisseur : slot vide, le tooltip guide.
+				const ic = ajouter(btn, "span", "qbd-provider-logo");
+				host.ui.setIcon(ic, "circle-dashed");
+			}
+
+			let menu: ProviderMenuHandle | null = null;
+			const ouvrir = (): void => {
 				// Re-vérifie les CLI à CHAQUE ouverture du menu (force = sans TTL) :
 				// après un « claude/codex update », la version affichée se met à
 				// jour toute seule, le menu ouvert est redessiné à l'arrivée des
 				// résultats (setStatus → refreshMenu).
-				onOpen: () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true })
-			});
-			providerSelect = sel;
-			sel.el.classList.add("qbd-provider-trigger-logo");
-			// Tooltip : nom + statut, relus à chaque survol (les détections
-			// async peuvent arriver après le rendu).
+				refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true });
+				menu = openProviderMenu(btn, {
+					brands: optionsMarques(),
+					current: provider,
+					renderLogo: (el, logo) => aiProviders.setBrandLogo(el, logo),
+					onPick: (id) => {
+						void saveSettings({ aiProvider: id, aiModel: aiProviders.getProvider(id).defaultModel })
+							.then(() => render(container));
+					},
+					// Un canal DÉSACTIVÉ (CLI absent) ne se sélectionne pas : il
+					// ouvre son modal d'installation, avec le même rafraîchissement
+					// que le bouton du hint.
+					onDisabledClick: (id) => ouvrirModalInstallation(id as InstallProvider, () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true }))
+				});
+			};
+			btn.addEventListener("click", ouvrir);
+			ouvrirMenuFournisseur = ouvrir;
+			providerSelect = {
+				el: btn,
+				/* `menu` survit à la fermeture (le handle n'a pas de rappel de
+				   fermeture) : on ne redessine que si un menu est réellement
+				   dans le document, sinon on repositionnerait un menu détaché. */
+				refreshMenu: () => { if (document.querySelector(".qbd-provider-menu")) menu?.refresh(); }
+			};
+
+			// Tooltip : marque, canal et statut, relus à chaque survol (les
+			// détections async peuvent arriver après le rendu).
 			let tip: HTMLElement | null = null;
 			const hide = () => { if (tip) { tip.remove(); tip = null; } };
-			sel.el.addEventListener("mouseenter", () => {
+			btn.addEventListener("mouseenter", () => {
 				if (tip) return;
 				tip = ajouter(document.body, "div", "qbd-hover-tip");
-				const p = aiProviders.PROVIDERS.find(x => x.id === (settings().aiProvider || ""));
-				ajouter(tip, "div", "qbd-hover-tip-title", p ? p.name : t("ai.provider.choose"));
-				const st = p && providerStatus[p.id];
-				if (st) ajouter(tip, "div", "qbd-hover-tip-body", st.text);
-				const r = sel.el.getBoundingClientRect();
+				const actuel = settings().aiProvider || "";
+				const marque = aiProviders.getMarque(actuel);
+				const canal = aiProviders.getCanal(actuel);
+				ajouter(tip, "div", "qbd-hover-tip-title", marque ? marque.name : t("ai.provider.choose"));
+				const st = actuel ? providerStatus[actuel] : null;
+				const corps = st ? st.text : (canal ? canal.label : "");
+				if (corps) ajouter(tip, "div", "qbd-hover-tip-body", corps);
+				const r = btn.getBoundingClientRect();
 				tip.style.visibility = "hidden";
 				const tr = tip.getBoundingClientRect();
 				const left = Math.min(Math.max(8, r.left + r.width / 2 - tr.width / 2), window.innerWidth - tr.width - 8);
@@ -706,8 +713,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				tip.style.top = top + "px";
 				tip.style.visibility = "";
 			});
-			sel.el.addEventListener("mouseleave", hide);
-			sel.el.addEventListener("click", hide);
+			btn.addEventListener("mouseleave", hide);
+			btn.addEventListener("click", hide);
 		};
 
 		// Le contrôle Modèle + effort vit désormais dans le pied du composer
@@ -860,6 +867,24 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 						}
 					});
 				});
+			};
+		} else if (aiProviders.estCanalWeb(provider)) {
+			/* Un SITE n'a pas de modèle à choisir : c'est lui qui décide, avec le
+			   compte de l'utilisateur. Le contrôle du milieu dit donc la MARQUE et
+			   le CANAL (« Claude · claude.ai ») et rouvre le menu des marques —
+			   le seul réglage qu'on puisse encore toucher d'ici. */
+			buildModelControl = (parent: HTMLElement): void => {
+				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger qbd-channel-trigger");
+				trigger.type = "button";
+				const label = ajouter(trigger, "span", "qbd-select-label");
+				const marque = aiProviders.getMarque(provider);
+				const canal = aiProviders.getCanal(provider);
+				ajouter(label, "span", "qbd-model-trigger-name", marque ? marque.name : provider);
+				ajouter(label, "span", "qbd-channel-trigger-sep", "·");
+				ajouter(label, "span", "qbd-channel-trigger-canal", canal ? canal.label : "");
+				const chev = ajouter(trigger, "span", "qbd-select-chevron");
+				host.ui.setIcon(chev, "chevron-down");
+				trigger.addEventListener("click", () => ouvrirMenuFournisseur?.());
 			};
 		} else if (provider) {
 			// Ollama partage le MÊME contrôle modèle+effort que Claude/Codex
@@ -1214,6 +1239,17 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			ajouter(sendIcon, "div", "qbd-ai-stop-square");
 			attachStopTip(sendBtn);
 			sendBtn.addEventListener("click", () => { if (activeClient) activeClient.abort(); });
+		} else if (aiProviders.estCanalWeb(provider)) {
+			/* Sur un canal web, le bouton n'ENVOIE pas : il OUVRE le site, avec
+			   la question déjà écrite. Deux gestes différents méritent deux
+			   boutons différents — d'où le libellé, là où la flèche seule
+			   promettrait une génération qui ne part pas d'ici.
+			   TÂCHE EN COURS : le design d'abord, le câblage ensuite. Le clic
+			   le dit au lieu de ne rien faire, ce qui passerait pour une panne. */
+			sendBtn.classList.add("qbd-ai-composer-send--wide");
+			host.ui.setIcon(sendIcon, "external-link");
+			ajouter(sendBtn, "span", "qbd-ai-composer-send-label", t("ai.composer.open"));
+			sendBtn.addEventListener("click", () => host.ui.notice(t("ai.channel.notWiredYet")));
 		} else {
 			sendBtn.setAttribute("aria-label", t("ai.composer.generate"));
 			host.ui.setIcon(sendIcon, "arrow-up");
@@ -1375,10 +1411,26 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   que le menu est déjà construit devient bien non sélectionnable. Extraite
 	   ici pour ne calculer qu'UNE fois la règle (« err » → désactivé), appelée
 	   par buildProviderControl comme par setStatus. */
-	function optionsFournisseurs(): ProviderSelectOption[] {
-		return aiProviders.PROVIDERS.map(p => ({
-			value: p.id, label: p.name, logo: p.logo, sub: p.sub,
-			disabled: providerStatus[p.id]?.dot === "err",
+	/* Les MARQUES du menu, chacune avec ses canaux. Le sous-titre d'un canal
+	   est son STATUT quand on en a un (« Claude Code CLI 2.1.4 » en dit plus
+	   que « Sur ta machine ») et son libellé générique sinon — un site n'a
+	   rien à détecter, il n'aura donc jamais de statut. */
+	function optionsMarques(): ProviderBrandOption[] {
+		return aiProviders.MARQUES.map(m => ({
+			value: m.id,
+			label: m.name,
+			logo: m.logo,
+			channels: m.canaux.map(c => ({
+				value: c.id,
+				label: c.label,
+				sub: providerStatus[c.id]?.text || c.sub,
+				disabled: providerStatus[c.id]?.dot === "err",
+				// Pastille SEULEMENT quand quelque chose ne va pas (demande
+				// d'Ahmed, 2026-09-17) : orange « ça marcherait, mais le serveur
+				// est arrêté », rouge « absent ». Un fournisseur qui répond n'en
+				// porte pas — sa version dans le sous-titre le dit déjà.
+				dot: providerStatus[c.id]?.dot ?? null
+			}))
 		}));
 	}
 
@@ -1395,7 +1447,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (id === active) renderHint(zone, opts);
 	}
 
-	function setStatus(id: string, providerSelect: SelectHandle<ProviderSelectOption> | null, dot: string, text: string): void {
+	function setStatus(id: string, providerSelect: ProviderControl | null, dot: string, text: string): void {
 		providerStatus[id] = { dot, text };
 		// Un fournisseur ABSENT ne se sélectionne pas — mais un `aiProvider`
 		// persisté n'était jamais revalidé : les réglages survivent à une
@@ -1406,14 +1458,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			void saveSettings({ aiProvider: "", aiModel: "" }).then(() => render(containerRef));
 			return;
 		}
-		// Redessine le trigger (dot de statut du fournisseur choisi) et les
-		// options du menu s'il est ouvert (versions re-détectées à l'ouverture,
-		// et `disabled` recalculé : un fournisseur peut passer en erreur — ou en
-		// sortir — pendant que le menu est déjà construit).
-		if (providerSelect && providerSelect.el.isConnected) {
-			providerSelect.setOptions(optionsFournisseurs(), settings().aiProvider || undefined);
-			if (providerSelect.refreshMenu) providerSelect.refreshMenu();
-		}
+		// Redessine les options du menu s'il est ouvert (versions re-détectées à
+		// l'ouverture, et `disabled` recalculé : un fournisseur peut passer en
+		// erreur — ou en sortir — pendant que le menu est déjà construit).
+		if (providerSelect && providerSelect.el.isConnected) providerSelect.refreshMenu();
 	}
 
 	/* Le modal d'un fournisseur absent — ouvert depuis l'option du menu (qui

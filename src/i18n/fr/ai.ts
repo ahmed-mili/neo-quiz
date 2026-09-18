@@ -22,6 +22,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.composer.quizOptions": "Options du quiz",
 	"ai.composer.generate": "Générer le quiz",
 	"ai.composer.stop": "Arrêter",
+	"ai.composer.open": "Ouvrir",
 	"ai.add.filesTip": "Ajouter des fichiers ou des images ({hotkey})",
 	"ai.mention.noMatch": "Aucun fichier correspondant",
 	"ai.mention.truncated": "Trop de fichiers dans {roots} — la recherche peut être incomplète",
@@ -61,6 +62,11 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.provider.claudeSub": "Compte Pro / Max",
 	"ai.provider.codexSub": "Codex CLI · Abonnement ChatGPT",
 	"ai.provider.ollamaSub": "Local et cloud",
+
+	/* ── Canaux (le second niveau du menu : par quelle voie on parle a la marque) ── */
+	"ai.channel.cliSub": "Sur ta machine",
+	"ai.channel.webSub": "Dans ton navigateur",
+	"ai.channel.notWiredYet": "Aperçu du design : les canaux web ne sont pas encore câblés.",
 
 	/* ── Statuts (pastille + sous-titre du menu fournisseur) ── */
 	"ai.status.claudeOk": "Claude Code v{version}",

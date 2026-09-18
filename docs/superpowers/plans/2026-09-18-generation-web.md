@@ -1170,7 +1170,7 @@ Spec §2 (images), §3, §4, §5. Tout dans `src/dashboard/ai.ts`, plus le CSS e
 	"ai.web.title": "Copy the answer from {site}",
 	"ai.web.auto": "As soon as it's copied, the quiz is created here on its own.",
 	"ai.web.manual": "Paste the answer here with Ctrl+V.",
-	"ai.web.banner": "{site} shows a warning about prompts that come from a link: that's expected, just send it.",
+	"ai.web.callout": "{site} will show this warning above your question. It appears because the question arrives through a link rather than the keyboard: {site} shows it for any prompt that comes from a link. Here the link comes from Neo Quiz and the question is yours. Send it as usual.",
 	"ai.web.copied": "The prompt is in your clipboard: paste it into {site} first, then send.",
 	"ai.web.reopen": "Reopen {site}",
 	"ai.web.cancel": "Cancel",
@@ -1185,7 +1185,7 @@ Spec §2 (images), §3, §4, §5. Tout dans `src/dashboard/ai.ts`, plus le CSS e
 	"ai.web.title": "Copie la réponse de {site}",
 	"ai.web.auto": "Dès qu'elle est copiée, le quiz se crée ici tout seul.",
 	"ai.web.manual": "Colle la réponse ici avec Ctrl+V.",
-	"ai.web.banner": "{site} affiche un avertissement sur les invites venues d'un lien : c'est normal, envoie.",
+	"ai.web.callout": "{site} affichera cet avertissement au-dessus de ta question. Il apparaît parce que la question arrive par un lien et non par le clavier : {site} le montre pour toute invite venue d'un lien. Ici, le lien vient de Neo Quiz et la question est la tienne. Envoie comme d'habitude.",
 	"ai.web.copied": "Le prompt est dans ton presse-papier : colle-le d'abord dans {site}, puis envoie.",
 	"ai.web.reopen": "Rouvrir {site}",
 	"ai.web.cancel": "Annuler",
@@ -1365,7 +1365,13 @@ La bulle « envoyé » : la condition `if (sentMessage && (phase === "loading" |
 		/* Le presse-papier d'abord, quand la question n'a pas tenu dans
 		   l'adresse : il faut coller là-bas AVANT d'envoyer. */
 		if (attenteWeb.ouverture.mode === "presse-papier") ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t("ai.web.copied", { site }));
-		ajouter(carte, "p", "qbd-ai-web-line", t("ai.web.banner", { site }));
+		/* Le callout reproduit le bandeau que claude.ai affichera (fond rouge
+		   sombre, icône d'alerte, texte rouge clair) : l'utilisateur le
+		   reconnaît quand il le voit là-bas, et sait déjà pourquoi il est là
+		   (demande d'Ahmed, 2026-09-18). */
+		const callout = ajouter(carte, "div", "qbd-ai-web-callout");
+		host.ui.setIcon(ajouter(callout, "span", "qbd-ai-web-callout-icon"), "triangle-alert");
+		ajouter(callout, "p", "qbd-ai-web-callout-text", t("ai.web.callout", { site }));
 		ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--strong", host.collage ? t("ai.web.auto") : t("ai.web.manual"));
 		const actions = ajouter(carte, "div", "qbd-ai-web-actions");
 		const reopen = ajouter(actions, "button", "qbd-btn qbd-btn--ghost", t("ai.web.reopen", { site }));
@@ -1431,6 +1437,41 @@ Dans `src/assets/css/dashboard/dashboard-ai.css`, ajouter `.qbd-ai-stage--web` �
 	gap: 10px;
 	margin-top: 6px;
 }
+
+/* Le callout au style du bandeau de claude.ai (relevé à l'écran le
+   2026-09-18) : fond rouge sombre translucide, bordure rouge, icône
+   d'alerte à gauche, texte rouge clair. Les couleurs viennent de
+   --color-red pour suivre le thème, pas du rouge exact de claude.ai. */
+.qbd-ai-web-callout {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	max-width: 52ch;
+	padding: 11px 14px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--color-red) 12%, transparent);
+	border: 1px solid color-mix(in srgb, var(--color-red) 40%, transparent);
+	text-align: left;
+}
+
+.qbd-ai-web-callout-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	margin-top: 2px;
+	color: var(--color-red);
+}
+
+.qbd-ai-web-callout-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+.qbd-ai-web-callout-text {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: color-mix(in srgb, var(--color-red) 80%, var(--text-normal));
+}
 ```
 
 Regarder `.qbd-ai-preview-loading` pour savoir s'il est en `display: flex; flex-direction: column; align-items: center` (sinon le poser sur `.qbd-ai-web-card`).
@@ -1444,7 +1485,7 @@ Expected: tout en 0.
 
 Run: `npm run app:dev` (ou laisser tourner celui qui l'est). Dans « Générer », canal Claude · claude.ai :
 
-1. Une demande courte (« Crée un quiz de 3 questions sur la Révolution française ») → « Ouvrir » : claude.ai s'ouvre avec le texte entier dans le champ, le bandeau rouge, la carte d'attente dans l'app avec « le quiz se crée ici tout seul ». Envoyer sur claude.ai. Quand la réponse arrive, cliquer « Copier » sur le bloc de code. Attendu : la fenêtre clignote dans la barre des tâches ; en revenant, la page du quiz enregistré est ouverte, sans aucun clic.
+1. Une demande courte (« Crée un quiz de 3 questions sur la Révolution française ») → « Ouvrir » : claude.ai s'ouvre avec le texte entier dans le champ, le bandeau rouge, la carte d'attente dans l'app avec le callout rouge (même allure que le bandeau de claude.ai) et « le quiz se crée ici tout seul ». Envoyer sur claude.ai. Quand la réponse arrive, cliquer « Copier » sur le bloc de code. Attendu : la fenêtre clignote dans la barre des tâches ; en revenant, la page du quiz enregistré est ouverte, sans aucun clic.
 2. Une demande avec deux notes jointes lourdes (au-delà d'`URL_MAX` une fois encodées) → la carte dit d'abord « colle-le dans claude.ai » ; claude.ai s'ouvre nu ; Ctrl+V dans son champ ; le reste comme en 1.
 3. Pendant l'attente, copier un texte quelconque (une phrase) : rien ne se passe dans l'app. Puis coller cette phrase dans la page (clic hors du composer, Ctrl+V) : l'écran d'erreur « pas un quiz » avec le bouton « Rouvrir claude.ai » ; le cliquer rouvre le site avec la question.
 4. Pendant l'attente, Esc : la demande revient dans le composer, pièces jointes comprises.

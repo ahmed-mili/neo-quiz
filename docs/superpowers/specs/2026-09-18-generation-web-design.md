@@ -230,10 +230,15 @@ carte :
 - titre « Copie la réponse de claude.ai » (le nom du site vient du canal),
   et une ligne qui dit ce qui va se passer : « dès qu'elle est copiée, le
   quiz se crée ici tout seul » ;
-- une ligne d'aide qui prévient du bandeau rouge de claude.ai (« claude.ai
-  affiche un avertissement sur les invites venues d'un lien : c'est normal,
-  envoie ») et, en mode presse-papier, dit d'abord que le texte est copié et
-  qu'il faut le coller là-bas ;
+- **un callout au style exact du bandeau de claude.ai** (fond rouge sombre,
+  bordure rouge, icône d'alerte à gauche, texte rouge clair), demandé par
+  Ahmed le 2026-09-18 pour que l'utilisateur reconnaisse le bandeau quand il
+  le verra. Trois à quatre phrases, pas plus : il va s'afficher ; il apparaît
+  parce que la question arrive par un lien et non par le clavier, et
+  claude.ai le montre pour toute invite venue d'un lien ; ici le lien vient
+  de Neo Quiz et la question est la sienne ; envoie comme d'habitude. En
+  mode presse-papier, une ligne dit d'abord que le texte est copié et qu'il
+  faut le coller là-bas ;
 - deux boutons fantômes : « Rouvrir claude.ai » (rejoue l'ouverture avec
   un jeton neuf) et « Annuler » (retour à `idle`, la demande revient dans
   le composer, comme l'annulation d'une génération).
@@ -373,8 +378,8 @@ comparaison, oubli.
 
 - i18n, dans les deux dictionnaires : le titre de la carte (« Copie la
   réponse de {site} ») et sa ligne « le quiz se crée ici tout seul », sa
-  variante sans veille (« colle la réponse ici avec Ctrl+V »), l'aide sur le
-  bandeau rouge, l'aide « texte copié, colle-le là-bas », les boutons
+  variante sans veille (« colle la réponse ici avec Ctrl+V »), le callout
+  sur le bandeau rouge, l'aide « texte copié, colle-le là-bas », les boutons
   « Rouvrir {site} » et « Annuler », la notice `noImages`, l'erreur
   `copyFailed`, l'action d'erreur « Rouvrir {site} ».
 - `CHANGELOG.md`, sous `[Unreleased]`, `### Added` : « Générer par claude.ai,

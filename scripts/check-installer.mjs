@@ -280,7 +280,13 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 
 	const dossier = "C:\\Program Files\\Neo Quiz";
 	const args = argumentsNsis(dossier);
-	r.check("NSIS : le mode machine est explicite", args[0], "/allusers");
+	/* PAR UTILISATEUR depuis le 2026-09-18, et le commutateur DOIT être
+	   explicite : `assistedInstaller.nsh` choisit sinon son mode d'après le
+	   REGISTRE, et une installation machine trouvée dans `HKLM` le ferait
+	   repartir en mode machine — donc en UAC — malgré `perMachine: false`.
+	   C'est tout l'objet de la bascule : plus d'élévation, ni à l'installation
+	   ni à chaque mise à jour. */
+	r.check("NSIS : le mode utilisateur est explicite", args[0], "/currentuser");
 	r.check("NSIS : le mode silencieux est explicite", args.includes("/S"), true);
 	r.check("NSIS : /D reste le dernier argument", args.at(-1), `/D=${dossier}`);
 
@@ -429,14 +435,25 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 		],
 		[false, true, true, true, true, true, true, true, true]);
 
-	r.check("démarrage : le bootstrapper évite les deux extractions coûteuses",
+	/* LE BOOTSTRAPPER EST COMPRESSÉ depuis le 2026-09-17 (`82c0c42`), et ce cas
+	   disait encore le contraire — la CI en rougissait sans que personne ne le
+	   lise. `compression: "store"` évitait l'auto-extraction du portable, au
+	   prix d'un exe de 371 Mo pour un programme qui ne fait que TÉLÉCHARGER
+	   l'installeur de 132 Mo. Mesuré sur le runner : `normal` donne 97 Mo, et
+	   ce qui se paie une fois en extraction s'économise à chaque installation
+	   et à chaque envoi de release.
+	   Ce qui reste vrai, et que ce cas garde : la SECONDE extraction, elle, est
+	   toujours évitée — le principal lit `process.execPath` et ne repasse pas
+	   par `PORTABLE_EXECUTABLE_FILE`. */
+	r.check("démarrage : le bootstrapper est compressé et évite la seconde extraction",
 		[
+			configBootstrapper.includes('compression: "normal"'),
 			configBootstrapper.includes('compression: "store"'),
 			principalInstallateur.includes('const executable = process.execPath;'),
 			// Le code, pas le commentaire qui explique pourquoi on ne le relit plus.
 			principalInstallateur.includes("process.env.PORTABLE_EXECUTABLE_FILE"),
 		],
-		[true, true, false]);
+		[true, false, true, false]);
 
 	/* La langue de l'installeur est celle de WINDOWS (`app.getLocale()`), la
 	   même déduction que l'application en mode « auto ». Plus de langue « dans

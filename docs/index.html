@@ -277,6 +277,22 @@
 	   taille) : c'est l'invitation à choisir une release. Seules les cartes
 	   qui ont une version sélectionnable le montrent (pas Obsidian). */
 
+	.carte-meta.selectionnable {
+		cursor: pointer;
+	}
+	.carte-meta.selectionnable:hover,
+	.carte-meta.selectionnable:focus-visible {
+		border-color: var(--bordure);
+		background: color-mix(in srgb, var(--fond) 60%, transparent);
+		outline: none;
+	}
+	.carte-meta.selectionnable:hover .carte-version,
+	.carte-meta.selectionnable:hover .carte-taille,
+	.carte-meta.selectionnable:focus-visible .carte-version,
+	.carte-meta.selectionnable:focus-visible .carte-taille {
+		color: var(--texte);
+	}
+
 	.carte-version {
 		font-size: 13px;
 		color: var(--texte-attenue);
@@ -417,9 +433,46 @@
 
 	/* Dropdown menu of published versions. */
 
+	.menu-versions {
+		position: absolute;
+		top: 100%;
+		left: 50%;
+		transform: translateX(-50%);
+		margin-top: 6px;
+		width: 200px;
+		max-height: 240px;
+		overflow-y: auto;
+		border: 1px solid var(--bordure);
+		border-radius: 12px;
+		background: var(--fond-secondaire);
+		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+		z-index: 20;
+		text-align: left;
+		padding: 6px;
+	}
 
+	.menu-versions[hidden] { display: none; }
 
+	.menu-versions .item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 8px 10px;
+		border-radius: 8px;
+		font-size: 13px;
+		cursor: pointer;
+	}
 
+	.menu-versions .item:hover,
+	.menu-versions .item:focus-visible {
+		background: color-mix(in srgb, var(--accent) 20%, transparent);
+	}
+
+	.menu-versions .marque {
+		font-size: 11px;
+		color: var(--texte-attenue);
+	}
 
 	/* ===== Warnings ===== */
 
@@ -573,6 +626,7 @@
 					<span class="carte-version" id="version-windows">…</span>
 					<span class="carte-taille" id="taille-windows"></span>
 				</span>
+				<div class="menu-versions" id="menu-windows" hidden></div>
 			</a>
 
 			<!-- Android : à venir. Pas de lien tant qu'il n'y a rien à télécharger. -->
@@ -720,6 +774,23 @@
 		// pattern, never by a fixed name, so the page never carries a version.
 		var MOTIF_INSTALLEUR_WINDOWS = /^NeoQuiz-\d+\.\d+\.\d+\.exe$/i;
 
+		// L'installeur COMPLET, `neo-quiz-setup-X.Y.Z.exe` : le seul asset qui installe
+		// exactement SA version. Le bootstrapper ci-dessus, lui, lit toujours
+		// `releases/latest/download/latest.yml` (apps/windows/installer/noyau.ts) :
+		// quelle que soit sa propre version, il installe la DERNIÈRE. D'où la règle
+		// du menu de versions : le bootstrapper pour la dernière release,
+		// l'installeur complet pour toutes les autres. Proposer une ancienne
+		// version qui mène au bootstrapper annoncerait un choix que l'exécutable
+		// n'honore pas — c'est ce mensonge qui avait fait retirer le sélecteur le
+		// 2026-09-16 (16e1f21), pas le sélecteur lui-même.
+		var MOTIF_SETUP_WINDOWS = /^neo-quiz-setup-\d+\.\d+\.\d+\.exe$/i;
+
+		// Le dépôt publie DEUX familles de releases sur le même flux :
+		// `desktop-vX.Y.Z` pour l'application, `X.Y.Z` nu pour le greffon Obsidian.
+		// Sans ce filtre, le menu proposerait les releases du greffon, qui ne
+		// portent aucun installeur Windows.
+		var MOTIF_TAG_APP = /^desktop-v\d+\.\d+\.\d+$/;
+
 		// `cible`: an exact asset name, an extension (".appimage") or a RegExp.
 		function trouverActif(assets, cible) {
 			if (cible instanceof RegExp) {
@@ -781,6 +852,7 @@
 				afficherVersion("windows", donnees, MOTIF_INSTALLEUR_WINDOWS, null);
 				var carteWindows = document.getElementById("carte-windows");
 				if (actifWindows && carteWindows) carteWindows.setAttribute("href", actifWindows.browser_download_url);
+				activerSelecteurVersion();
 
 				// Rien à réécrire pour Linux : ses liens sont figés sur
 				// desktop-v1.2.0 dans le HTML (builds en sommeil).
@@ -818,6 +890,129 @@
 				var el = document.getElementById("version-obsidian");
 				if (el) el.textContent = "";
 			});
+
+		// Makes the tile's version clickable: a menu of the ten latest published
+		// releases. Picking one DOWNLOADS NOTHING: it only updates the displayed
+		// version, its size, and the tile's href.
+		function activerSelecteurVersion() {
+			// Le CADRE entier (version et taille) est le bouton : le clic marche
+			// partout dedans, et le survol éclaire les deux textes.
+			var bouton = document.getElementById("meta-windows");
+			var menu = document.getElementById("menu-windows");
+			var carte = document.getElementById("carte-windows");
+			if (!bouton || !menu || !carte) return;
+
+			bouton.classList.add("selectionnable");
+			bouton.setAttribute("tabindex", "0");
+			bouton.setAttribute("role", "button");
+			bouton.setAttribute("aria-haspopup", "true");
+
+			var releasesChargees = null;
+
+			function fermerMenu() {
+				menu.hidden = true;
+			}
+
+			function remplirMenu(releases) {
+				menu.innerHTML = "";
+				var duDepot = (releases || []).filter(function (release) {
+					return MOTIF_TAG_APP.test(String(release.tag_name || ""));
+				});
+				// La plus récente sert le bootstrapper. Si `latest.json` n'a rien dit,
+				// la première de la liste (triée par date, décroissante) fait foi.
+				var tagDernier = latestChargee
+					? String(latestChargee.tag_name || "")
+					: (duDepot[0] ? String(duDepot[0].tag_name || "") : "");
+				duDepot.slice(0, 10).forEach(function (release) {
+					var estDerniere = String(release.tag_name || "") === tagDernier;
+					var motif = estDerniere ? MOTIF_INSTALLEUR_WINDOWS : MOTIF_SETUP_WINDOWS;
+					var actif = trouverActif(release.assets, motif);
+					if (!actif) return;
+					var version = String(release.tag_name || "").replace(/^(desktop-)?v/, "");
+					if (!version) return;
+					var item = document.createElement("div");
+					item.className = "item";
+					item.tabIndex = 0;
+					item.setAttribute("role", "menuitem");
+
+					var libelle = document.createElement("span");
+					libelle.textContent = "v" + version;
+					item.appendChild(libelle);
+
+					// `suffixe` marque la TUILE une fois le choix fait : elle n'affiche
+					// plus la dernière version. Dans le MENU, seule une préversion mérite
+					// une pastille — écrire « older » sur les neuf lignes qui suivent
+					// la première n'apprend rien à personne.
+					var suffixe = estDerniere ? null : (release.prerelease ? "beta" : "older");
+					if (release.prerelease) {
+						var marque = document.createElement("span");
+						marque.className = "marque";
+						marque.textContent = "beta";
+						item.appendChild(marque);
+					}
+
+					function choisir(e) {
+						e.preventDefault();
+						e.stopPropagation();
+						fermerMenu();
+						afficherVersion("windows", release, motif, suffixe);
+						carte.setAttribute("href", actif.browser_download_url);
+					}
+
+					item.addEventListener("click", choisir);
+					item.addEventListener("keydown", function (e) {
+						if (e.key === "Enter" || e.key === " ") choisir(e);
+					});
+
+					menu.appendChild(item);
+				});
+			}
+
+			function ouvrirMenu() {
+				if (releasesChargees) {
+					remplirMenu(releasesChargees);
+					menu.hidden = false;
+					return;
+				}
+				// La liste complète n'existe que côté API : `latest.json` ne décrit que
+				// la dernière release. L'appel n'a lieu qu'AU CLIC, jamais au chargement :
+				// le quota anonyme de GitHub (60 appels par heure et par adresse) ne se
+				// dépense que pour qui veut vraiment choisir.
+				fetch("https://api.github.com/repos/" + DEPOT + "/releases")
+					.then(function (reponse) {
+						if (!reponse.ok) throw new Error("not ok");
+						return reponse.json();
+					})
+					.then(function (releases) {
+						releasesChargees = releases;
+						remplirMenu(releases);
+						menu.hidden = false;
+					})
+					.catch(function () {
+						// List unavailable: clicking the version simply does nothing,
+						// the tile stays a link to the latest release.
+					});
+			}
+
+			function basculerMenu(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if (menu.hidden) ouvrirMenu();
+				else fermerMenu();
+			}
+
+			bouton.addEventListener("click", basculerMenu);
+			bouton.addEventListener("keydown", function (e) {
+				if (e.key === "Enter" || e.key === " ") basculerMenu(e);
+			});
+
+			document.addEventListener("click", function (e) {
+				if (!carte.contains(e.target)) fermerMenu();
+			});
+			document.addEventListener("keydown", function (e) {
+				if (e.key === "Escape") fermerMenu();
+			});
+		}
 
 		// Obsidian card: the copy button of the PowerShell command.
 		function copierTexte(texte, bouton) {

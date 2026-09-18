@@ -114,6 +114,9 @@ let miseAJour: MiseAJour | null = null;
 let fermetureArmee = false;
 let fermetureEnCours = false;
 let gardeFermeture: NodeJS.Timeout | null = null;
+/** Arrête l'attente d'une réponse copiée (voir `canaux.ts`) ; posée par
+    `enregistrerCanaux`, appelée à la fermeture de la fenêtre. */
+let arreterAttente: (() => void) | null = null;
 
 /** Les réglages, ou une erreur NOMMÉE — voir `DependancesCanaux`. */
 function reglagesOuErreur(): Reglages {
@@ -406,8 +409,12 @@ function creerFenetre(): void {
 		fenetre?.webContents.send(CANAUX.fermeture);
 	});
 
+	// Le clignotement posé par l'attente d'une réponse copiée s'éteint dès qu'on revient.
+	fenetre.on("focus", () => fenetre?.flashFrame(false));
+
 	fenetre.on("closed", () => {
 		fenetre = null;
+		arreterAttente?.();
 	});
 
 	void charger(fenetre).catch(e => console.error(LOG_PREFIX, "chargement du rendu impossible:", e));
@@ -626,7 +633,7 @@ if (!app.requestSingleInstanceLock()) {
 				if (fenetre && !fenetre.isDestroyed()) fenetre.webContents.send(CANAUX.miseAJourEtat, etat);
 			},
 		});
-		enregistrerCanaux({
+		const canaux = enregistrerCanaux({
 			perimetre,
 			reglagesOuErreur,
 			/* LU À CHAQUE APPEL, jamais capturé : l'utilisateur peut changer ce
@@ -668,6 +675,7 @@ if (!app.requestSingleInstanceLock()) {
 				outilsDev: () => fenetre?.webContents.toggleDevTools(),
 			},
 		});
+		arreterAttente = canaux.arreterAttente;
 		creerFenetre();
 		// APRÈS la fenêtre : une erreur réseau au démarrage ne doit rien
 		// retarder. Sans argument — la mise à jour automatique ne se règle

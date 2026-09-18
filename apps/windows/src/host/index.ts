@@ -34,6 +34,7 @@ import { createWindowsPlatform } from "./platform";
 import { createWindowsPdf } from "./pdf";
 import { createWindowsProcess } from "./process";
 import { createWindowsUi } from "./ui";
+import { createWindowsCollage } from "./collage";
 
 export { createWindowsIndex } from "./fs";
 export type { MiroirDisque, WindowsIndex } from "./fs";
@@ -154,5 +155,8 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		   exactement ce que le contrat promettait. Le greffon lecteur, lui, ne
 		   porte plus ce membre (il ne génère plus). */
 		pdf: createWindowsPdf(),
+		/* L'attente d'une réponse copiée (spec 2026-09-18, §4) : un passe-plat
+		   vers le pont, comme `process` et `net`. */
+		collage: createWindowsCollage(pont),
 	};
 }

@@ -558,6 +558,21 @@ export interface Pont {
 		verifier(): Promise<void>;
 		installer(): Promise<void>;
 	};
+
+	/**
+	 * L'ATTENTE D'UNE RÉPONSE COPIÉE (génération par un site). Le rendu
+	 * donne un JETON et reçoit AU PLUS un texte : celui qui le porte. Le
+	 * principal sonde le presse-papier (voir `attente-collage.ts` : un texte
+	 * sans jeton est comparé puis oublié, jamais transmis) et arrête de
+	 * lui-même à la première livraison, sur `arreter`, ou après trente
+	 * minutes. Poussé comme `miseAJour.surEtat`.
+	 */
+	collage: {
+		/** `false` si le jeton est refusé (trop court, mal formé). */
+		attendre(jeton: string): Promise<boolean>;
+		arreter(): Promise<void>;
+		surTexte(rappel: (texte: string) => void): () => void;
+	};
 }
 
 /**
@@ -634,6 +649,11 @@ export const CANAUX = {
 	miseAJourEtat: "neo:mise-a-jour/etat",
 	miseAJourVerifier: "neo:mise-a-jour/verifier",
 	miseAJourInstaller: "neo:mise-a-jour/installer",
+	collageAttendre: "neo:collage/attendre",
+	collageArreter: "neo:collage/arreter",
+	/** POUSSÉ par le principal (`webContents.send`), comme `evenement` et
+	    `miseAJourEtat`. */
+	collageTexte: "neo:collage/texte",
 } as const;
 
 /** La clé des RÉGLAGES IA de l'application (`neo.reglages`) : les MÊMES

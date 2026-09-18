@@ -2025,3 +2025,27 @@ await withSrcModule("apps/windows/src/host/process.ts", async ({ createWindowsPr
 	}
 	r.done();
 });
+
+await withSrcModule("apps/windows/src/host/collage.ts", async ({ createWindowsCollage }) => {
+	const r = makeReporter("Hôte Windows — collage (l'attente vue du rendu)");
+	const journal = [];
+	let rappelPont = null;
+	const pont = () => ({
+		collage: {
+			attendre: async j => { journal.push(["attendre", j]); return true; },
+			arreter: async () => { journal.push(["arreter"]); },
+			surTexte: rappel => { rappelPont = rappel; return () => { rappelPont = null; journal.push(["off"]); }; },
+		},
+	});
+	const collage = createWindowsCollage(pont);
+	const recus = [];
+	const arreter = collage.attendre("k7f2q9abcd", t => recus.push(t));
+	r.check("attendre : s'abonne au texte PUIS demande l'attente au principal, avec le jeton",
+		journal, [["attendre", "k7f2q9abcd"]]);
+	rappelPont?.("// neo-quiz k7f2q9abcd");
+	rappelPont?.("// neo-quiz k7f2q9abcd encore");
+	r.check("le rappel du rendu n'est appelé qu'une fois, et l'abonnement est retiré", [recus, journal.some(l => l[0] === "off")], [["// neo-quiz k7f2q9abcd"], true]);
+	arreter();
+	r.check("la fonction rendue arrête l'attente côté principal", journal.some(l => l[0] === "arreter"), true);
+	r.done();
+});

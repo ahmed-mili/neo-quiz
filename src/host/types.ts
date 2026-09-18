@@ -713,6 +713,18 @@ export interface HostPdf {
 	renderPages?(data: Uint8Array, opts: { width: number; max?: number }): Promise<{ pages: string[]; total: number }>;
 }
 
+/**
+ * L'attente d'une réponse COPIÉE, pendant une génération par un site (spec
+ * 2026-09-18, §4). Le principal sonde le presse-papier et ne livre que le
+ * texte qui porte le jeton ; le rendu ne lit rien lui-même. Membre OPTIONNEL :
+ * absent sous le greffon, la page attend alors un collage manuel.
+ */
+export interface HostCollage {
+	/** Démarre l'attente ; la fonction rendue l'arrête. Une nouvelle attente
+	    remplace la précédente. `surTexte` est appelé AU PLUS une fois. */
+	attendre(jeton: string, surTexte: (texte: string) => void): () => void;
+}
+
 export interface Host {
 	fs: HostFs;
 	links: HostLinks;
@@ -730,4 +742,6 @@ export interface Host {
 	process?: HostProcess;
 	/** Absent quand l'hôte n'a pas de moteur PDF — voir `HostPdf`. */
 	pdf?: HostPdf;
+	/** Absent sous le greffon — voir `HostCollage`. */
+	collage?: HostCollage;
 }

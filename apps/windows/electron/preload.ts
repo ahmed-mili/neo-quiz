@@ -166,6 +166,16 @@ const pont: Pont = {
 		verifier: () => ipcRenderer.invoke(CANAUX.miseAJourVerifier),
 		installer: () => ipcRenderer.invoke(CANAUX.miseAJourInstaller),
 	},
+
+	collage: {
+		attendre: jeton => ipcRenderer.invoke(CANAUX.collageAttendre, jeton),
+		arreter: () => ipcRenderer.invoke(CANAUX.collageArreter),
+		surTexte(rappel) {
+			const ecouteur = (_e: unknown, texte: string): void => rappel(texte);
+			ipcRenderer.on(CANAUX.collageTexte, ecouteur);
+			return () => { ipcRenderer.off(CANAUX.collageTexte, ecouteur); };
+		},
+	},
 };
 
 contextBridge.exposeInMainWorld("neo", pont);

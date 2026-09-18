@@ -60,6 +60,7 @@ import type { Reglages } from "./reglages";
 import { autoriserHote, fetchBorne } from "./reseau";
 import { extensionRefusee } from "./ressources";
 import { vaultsObsidian } from "./vaults";
+import { creerAttente, jetonValide } from "./attente-collage";
 
 /** Ce que les canaux demandent à `main.ts`. */
 export interface DependancesCanaux {
@@ -262,7 +263,15 @@ async function verifierDossierDefaut(perimetre: Perimetre, valeur: unknown): Pro
 	}
 }
 
-export function enregistrerCanaux(deps: DependancesCanaux): void {
+/** Ce que `enregistrerCanaux` rend à `main.ts` : de quoi arrêter l'attente
+    d'une réponse copiée à la fermeture de la fenêtre (voir `fenetre.on("closed", ...)`
+    dans `main.ts`), pour ne pas laisser une sonde tourner sans personne pour
+    la recevoir. */
+export interface ResultatCanaux {
+	arreterAttente(): void;
+}
+
+export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	const { perimetre, reglagesOuErreur, dossierDefaut, poserDossierDefaut } = deps;
 	/* L'état du DISQUE vu par ce processus : les racines déclarées, l'index et
 	   son surveillant. Il vit ici, pas dans `main.ts` : la fenêtre n'a pas à le
@@ -569,6 +578,36 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 		app.quit();
 	});
 
+	/* L'attente d'une réponse copiée (canal web). UNE attente pour l'unique
+	   fenêtre de l'application ; le noyau (`attente-collage.ts`) tient les
+	   règles, ici seulement les branchements : le vrai presse-papier, les
+	   vrais timers, la livraison par `deps.envoyer` (donc `webContents.send`),
+	   et le clignotement dans la barre des tâches (`flashFrame(true)`, éteint
+	   au prochain focus dans `main.ts`) plutôt qu'un vol de focus, que Windows
+	   refuse et que l'utilisateur qui lit encore la réponse ne voudrait pas. */
+	/* `clipboard.readText()` est ASYNCHRONE depuis Electron 44 (l'ancienne API
+	   synchrone a disparu du typage) alors que le noyau lit `lire()` de façon
+	   SYNCHRONE, à chaque tour. Le pont : `planifier` rafraîchit le cache AVANT
+	   d'appeler le tour suivant, `lire` ne fait que le relire — aucune
+	   modification du noyau pur pour un détail de plateforme. */
+	let dernierTexteCopie = "";
+	const attente = creerAttente({
+		lire: () => dernierTexteCopie,
+		horloge: {
+			planifier: (fn, ms) => setTimeout(() => {
+				clipboard.readText().then(t => { dernierTexteCopie = t; }).catch(() => {}).finally(fn);
+			}, ms) as unknown as number,
+			annuler: id => clearTimeout(id),
+			maintenant: () => Date.now(),
+		},
+		livrer: texte => {
+			deps.envoyer(CANAUX.collageTexte, texte);
+			deps.fenetreCourante()?.flashFrame(true);
+		},
+	});
+	ipcMain.handle(CANAUX.collageAttendre, (_e, jeton: unknown) => jetonValide(jeton) && attente.demarrer(jeton));
+	ipcMain.handle(CANAUX.collageArreter, () => { attente.arreter(); });
+
 	ipcMain.handle(CANAUX.vaultsObsidian, async () => {
 		/* Les vaults qu'Obsidian déclare LUI-MÊME entrent au périmètre : l'écran
 		   d'accueil les propose d'un clic, sans passer par le sélecteur natif,
@@ -814,4 +853,6 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	ipcMain.handle(CANAUX.miseAJourInstaller, () => {
 		if (deps.miseAJour.armerInstallation()) deps.fermerPourInstaller();
 	});
+
+	return { arreterAttente: () => attente.arreter() };
 }

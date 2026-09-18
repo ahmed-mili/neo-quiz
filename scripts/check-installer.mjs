@@ -549,24 +549,31 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 		   `16e1f21`). Ce qui reste interdit, et ce que ce cas garde, c'est le
 		   FAUX choix : un bootstrapper publié AVANT l'épinglage lit
 		   `releases/latest/download/latest.yml` en dur et installe la DERNIÈRE
-		   version quelle que soit la sienne. Le menu ne peut le servir que pour
-		   la dernière release ou pour une release épinglée ; toute autre doit
-		   mener à l'installeur complet, le seul asset qui installe vraiment sa
-		   version. Le plancher est FIGÉ dans la page faute de source lisible, et
-		   doit rester celui de la release qui a introduit `urlLatestYml` : plus
-		   bas, la page servirait un bootstrapper figé sur `latest` pour une
-		   ancienne version — le mensonge de départ. Et le menu ne liste que les
-		   tags de l'APPLICATION : les releases du greffon (`X.Y.Z` nu) partagent
-		   le même flux et ne portent aucun installeur Windows. */
-		r.check(`site ${langue} : le choix de version ne promet que ce que l'asset tient`,
+		   version quelle que soit la sienne. Le menu ne liste que la dernière
+		   release et les releases épinglées, et ne sert JAMAIS un autre asset
+		   que le bootstrapper : servir le NSIS brut (`neo-quiz-setup-X.Y.Z.exe`,
+		   sans fenêtre, sous un autre nom) pour les anciennes a été essayé et
+		   refusé par Ahmed le jour même — ces versions sortent du menu. Le
+		   plancher est FIGÉ dans la page faute de source lisible, et doit rester
+		   celui de la release qui a introduit `urlLatestYml` : plus bas, la page
+		   servirait un bootstrapper figé sur `latest` pour une ancienne version
+		   — le mensonge de départ. Et le menu ne liste que les tags de
+		   l'APPLICATION : les releases du greffon (`X.Y.Z` nu) partagent le même
+		   flux et ne portent aucun installeur Windows. */
+		r.check(`site ${langue} : le menu ne propose que des versions dont le bootstrapper tient parole`,
 			[
 				site.includes("activerSelecteurVersion();"),
-				site.includes("var MOTIF_SETUP_WINDOWS = /^neo-quiz-setup-\\d+\\.\\d+\\.\\d+\\.exe$/i;"),
 				site.includes('var PREMIERE_VERSION_EPINGLEE = "1.6.0";'),
-				site.includes("var motif = (estDerniere || bootstrapperEpingle(version)) ? MOTIF_INSTALLEUR_WINDOWS : MOTIF_SETUP_WINDOWS;"),
+				site.includes("return String(release.tag_name || \"\") === tagDernier || bootstrapperEpingle(version);"),
+				site.includes("var actif = trouverActif(release.assets, MOTIF_INSTALLEUR_WINDOWS);"),
 				site.includes("var MOTIF_TAG_APP = /^desktop-v\\d+\\.\\d+\\.\\d+$/;"),
+				// Le NSIS brut ne revient pas dans le menu : aucun MOTIF ni LITTÉRAL
+				// qui le désigne — pas le nom entre accents graves dans le commentaire
+				// qui explique l'interdit (le script de la page n'écrit ses chaînes
+				// qu'entre guillemets).
+				/\/\^neo-quiz-setup-|["']neo-quiz-setup-/.test(site),
 			],
-			[true, true, true, true, true]);
+			[true, true, true, true, true, false]);
 		r.check(`site ${langue} : le pied de page mène aux deux pages légales`,
 			[site.includes('href="terms.html"'), site.includes('href="privacy.html"')], [true, true]);
 		r.check(`site ${langue} : un clic sur une langue est mémorisé comme un CHOIX`,

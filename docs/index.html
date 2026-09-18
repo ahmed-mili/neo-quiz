@@ -510,9 +510,9 @@
 		white-space: nowrap;
 	}
 
-	/* The size of what each row actually downloads: the 97 MB bootstrapper for the
-	   latest release, the 132 MB full installer for any other. It is the only
-	   thing that tells the two apart before you click. */
+	/* The size of the installer each row downloads. Every row is the same kind of
+	   file now (the install window), but its size still moves from one release
+	   to the next: 1.0.3 shipped at 389 MB, 1.5.0 at 97. */
 	.menu-versions .poids {
 		font-size: 11.5px;
 		color: var(--texte-attenue);
@@ -833,27 +833,22 @@
 		// pattern, never by a fixed name, so the page never carries a version.
 		var MOTIF_INSTALLEUR_WINDOWS = /^NeoQuiz-\d+\.\d+\.\d+\.exe$/i;
 
-		// L'installeur COMPLET, `neo-quiz-setup-X.Y.Z.exe` : le NSIS brut, sans la
-		// fenêtre d'installation, sous son nom interne. Il n'est servi que pour
-		// les releases publiées AVANT l'épinglage (ci-dessous) : leur bootstrapper
-		// lit `releases/latest/download/latest.yml` en dur et installerait la
-		// DERNIÈRE version quelle que soit la sienne. Proposer une de ces versions
-		// par son bootstrapper annoncerait un choix que l'exécutable n'honore pas —
-		// c'est ce mensonge qui avait fait retirer le sélecteur le 2026-09-16
-		// (16e1f21), pas le sélecteur lui-même.
-		var MOTIF_SETUP_WINDOWS = /^neo-quiz-setup-\d+\.\d+\.\d+\.exe$/i;
-
-		// Depuis cette version, `NeoQuiz-X.Y.Z.exe` installe X.Y.Z : il lit le
-		// `latest.yml` de SA release (`urlLatestYml`, apps/windows/installer/noyau.ts).
-		// Le menu peut donc le servir pour elle et pour toute version publiée
-		// depuis — la fenêtre d'installation, un seul nom de fichier. Les
-		// bootstrappers d'avant sont publiés, donc figés à jamais sur `latest`.
-		// FIGÉ ICI faute de source lisible : rien dans une release ne dit si son
-		// bootstrapper est épinglé. C'est le numéro que `git ship` donnera au
-		// commit qui l'introduit (une entrée Changed au CHANGELOG force au moins
-		// une mineure). Le jour où les dix versions du menu sont toutes
-		// postérieures, cette constante, `bootstrapperEpingle` et
-		// `MOTIF_SETUP_WINDOWS` peuvent partir ensemble.
+		// LE MENU NE LISTE QUE CE QU'IL PEUT SERVIR PAR LE BOOTSTRAPPER — la fenêtre
+		// d'installation, un seul nom de fichier. Depuis cette version,
+		// `NeoQuiz-X.Y.Z.exe` installe X.Y.Z : il lit le `latest.yml` de SA release
+		// (`urlLatestYml`, apps/windows/installer/noyau.ts). Les bootstrappers
+		// d'avant sont publiés, donc figés à jamais sur `latest` : un exe nommé
+		// 1.4.0 installe la 1.5.0. Proposer une de ces versions annoncerait un
+		// choix que l'exécutable n'honore pas — c'est ce mensonge qui avait fait
+		// retirer le sélecteur le 2026-09-16 (16e1f21) — et la servir par le NSIS
+		// brut (`neo-quiz-setup-X.Y.Z.exe`, sans fenêtre, sous un autre nom) a été
+		// essayé et refusé par Ahmed le 2026-09-18 : ces versions SORTENT du menu.
+		// Il n'a donc qu'une ligne tant que la première release épinglée n'est pas
+		// publiée, puis une de plus par release. FIGÉ ICI faute de source lisible :
+		// rien dans une release ne dit si son bootstrapper est épinglé. C'est le
+		// numéro que `git ship` donnera au commit qui l'introduit (une entrée
+		// Changed au CHANGELOG force au moins une mineure). Le jour où dix releases
+		// épinglées existent, la constante et `bootstrapperEpingle` peuvent partir.
 		var PREMIERE_VERSION_EPINGLEE = "1.6.0";
 
 		function bootstrapperEpingle(version) {
@@ -1011,15 +1006,18 @@
 				var tagDernier = latestChargee
 					? String(latestChargee.tag_name || "")
 					: (duDepot[0] ? String(duDepot[0].tag_name || "") : "");
-				duDepot.slice(0, 10).forEach(function (release) {
+				// La dernière release est toujours honnête (épinglée ou non, `latest`
+				// c'est elle) ; une release épinglée aussi ; les autres ne sont pas
+				// proposées — voir `PREMIERE_VERSION_EPINGLEE`.
+				var honnetes = duDepot.filter(function (release) {
+					var version = String(release.tag_name || "").replace(/^(desktop-)?v/, "");
+					return String(release.tag_name || "") === tagDernier || bootstrapperEpingle(version);
+				});
+				honnetes.slice(0, 10).forEach(function (release) {
 					var version = String(release.tag_name || "").replace(/^(desktop-)?v/, "");
 					if (!version) return;
 					var estDerniere = String(release.tag_name || "") === tagDernier;
-					// La dernière release sert toujours son bootstrapper (épinglé ou non,
-					// `latest` c'est elle) ; une release épinglée aussi ; les autres, le
-					// seul asset qui installe vraiment leur version.
-					var motif = (estDerniere || bootstrapperEpingle(version)) ? MOTIF_INSTALLEUR_WINDOWS : MOTIF_SETUP_WINDOWS;
-					var actif = trouverActif(release.assets, motif);
+					var actif = trouverActif(release.assets, MOTIF_INSTALLEUR_WINDOWS);
 					if (!actif) return;
 					var estCourante = String(release.tag_name || "") === (tagChoisi || tagDernier);
 					var item = document.createElement("div");
@@ -1063,7 +1061,7 @@
 						e.stopPropagation();
 						fermerMenu();
 						tagChoisi = String(release.tag_name || "");
-						afficherVersion("windows", release, motif, suffixe);
+						afficherVersion("windows", release, MOTIF_INSTALLEUR_WINDOWS, suffixe);
 						carte.setAttribute("href", actif.browser_download_url);
 					}
 

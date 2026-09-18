@@ -14,7 +14,7 @@ release notes.
 ## [Unreleased]
 
 ### Changed
-- `NeoQuiz-X.Y.Z.exe` now installs the version its name says. Until now every installer read the latest release, so an older one you had kept would silently install the newest version. From this release on, the download page can hand out the installer window for any version you pick from its menu; versions published before it still come as the plain setup wizard.
+- `NeoQuiz-X.Y.Z.exe` now installs the version its name says. Until now every installer read the latest release, so an older one you had kept would silently install the newest version. From this release on, the download page lets you pick any version from a menu on the Windows tile, and every pick gives you the same installer window; versions published before this one are not offered, because their installer would not keep its word.
 
 ## [1.5.0] - 2026-09-18
 

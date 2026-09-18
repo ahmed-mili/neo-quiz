@@ -195,6 +195,219 @@ function courseAbandon<T>(promesse: Promise<T>, signal: AbortSignal): Promise<T>
 	});
 }
 
+/** La phrase qui clôt le prompt système d'un CLI. EXPORTÉE parce que le
+    canal web la remplace par sa consigne de forme (`texteWeb`, ai-web.ts) :
+    une copie divergerait en silence. */
+export const PHRASE_FINALE_CLI = "Reply ONLY with the JSON5 array, with no explanation and no formatting.";
+
+/**
+ * Les deux prompts d'une génération, PURS : le même texte pour un CLI, pour
+ * Ollama et pour un site. Sortis de `generateInner` le 2026-09-18 pour que
+ * la page « Générer » les compose elle-même quand le canal est un site.
+ * ANGLAIS, et INDÉPENDANTS de la langue de l'UI (voir la règle LANGUAGE dans
+ * le prompt) ; `type` est la VALEUR canonique (cf. TYPE_VALUES dans ai.ts).
+ */
+export function composerPrompts(prompt: string, options: GenerateOptions = {}): { systemPrompt: string; userPrompt: string } {
+	const { count = 5, type = "Mixte", source = "topic" } = options;
+
+	// ── Prompts : ANGLAIS, et INDÉPENDANTS de la langue de l'UI ──
+	// Le prompt ne dicte PAS la langue du quiz : il impose au modèle de
+	// suivre celle de la DEMANDE (règle LANGUAGE ci-dessous). Un prompt
+	// français produisait des quiz français même pour un sujet demandé en
+	// anglais ou en arabe. Les libellés du composer (« Mixte »…) ne sont pas
+	// traduits ici non plus : `type` est la VALEUR canonique (cf. TYPE_VALUES
+	// dans ai.ts), pas le libellé affiché.
+	const typeInstruction = type === "Mixte"
+		? "a mix of single-choice, multiple-choice and free-text questions"
+		: type === "Choix unique"
+		? "single-choice questions (exactly one correct answer)"
+		: type === "Choix multiple"
+		? "multiple-choice questions (several correct answers)"
+		: type === "Compréhension"
+		// Le type qui manquait : un vrai sujet d'examen a une partie
+		// compréhension, où UN document porte plusieurs questions. Le
+		// contrat est explicite (un seul groupe, id partagé, aucune
+		// question hors document) parce que les modèles produisent sinon
+		// un support par question — ce qui n'est plus de la compréhension.
+		? `COMPREHENSION questions, ALL of them based on ONE source document that you write yourself.
+	Write a substantial passage (250-450 words: an article extract, a case study, a scenario, a piece of code — whatever suits the topic) and put it in the "passage" field of the FIRST question, together with "passageId": "doc1" and a "passageTitle" naming the document.
+	EVERY other question repeats ONLY "passageId": "doc1" (no "passage", no "passageTitle" — the engine shares the document automatically).
+	The questions must be ANSWERABLE FROM THE DOCUMENT ALONE and test understanding — main idea, inference, meaning in context, cause and effect, the author's intent, what can or cannot be concluded — NOT recall of outside knowledge. Mix single-choice, multiple-choice and free-text among them`
+		: "free-text questions";
+
+	const systemPrompt = `You are a quiz generator. Generate exactly ${count} quiz questions as a JSON5 array. Each question must have:
+	- title: short question title
+	- prompt: full question text
+	- options: array of options (for single/multiple choice, 3-5 options)
+	- correctIndex: index of the correct answer (single choice)
+	- correctIndices: array of indices of the correct answers (multiple choice)
+	- multiSelect: true for multiple choice
+	- type: "text" for free text, omitted otherwise
+	- answer: expected answer (free text)
+	- mathInput: true for a text question whose answer is a mathematical expression (the learner answers in a visual EQUATION EDITOR)
+	- answerTemplate: a LaTeX template pre-filled in the answer field of a mathInput question, with \\\\placeholder{} for each blank to fill (e.g. 'x = \\\\placeholder{}' ; two solutions: 'x_1 = \\\\placeholder{},\\\\; x_2 = \\\\placeholder{}'). RULES for mathInput: the question text NEVER gives answer-format instructions (no "as a fraction", "comma-separated", "e.g. 1/2") — the equation editor makes all of that pointless; prefer an answerTemplate that guides instead; acceptedAnswers are the COMPLETE content of the field once the template is filled, in LaTeX (e.g. 'x_1 = \\\\frac{1}{2},\\\\; x_2 = 3'), and add variants where relevant (solutions in reverse order)
+	- lesson: a short lesson paragraph teaching the concept before the question (optional but recommended for educational quizzes)
+	- cloze: a FILL-IN-THE-BLANK text. Put the whole sentence or paragraph in this field and wrap each blank in DOUBLE BRACES, with accepted variants separated by "|": "The capital of France is {{Paris}} and its currency is {{the euro|euro}}." Use double BRACES, never double brackets — double brackets are Obsidian's internal-link syntax and would be rewritten before the quiz is read. Keep "prompt" as the instruction ("Complete the text below"). 2 to 5 blanks per question, each on a key term, never on a word the sentence already gives away
+	- numeric / tolerance / tolerancePercent / unit: for a free-text question whose answer is a NUMBER. Set "numeric": true and the answer is compared as a value, not as a string, so "3.14", "3,14" and "3.140" all pass. Add "tolerance" (absolute margin) or "tolerancePercent" (relative margin) whenever the expected answer is a measurement or a rounded result, and "unit" (e.g. "m/s") when one is expected — the learner may write it or omit it. ALWAYS prefer this over a plain text answer for any question that asks "how much", "how many" or a computed value
+	- ordering / slots / possibilities / correctOrder: a question where the learner puts items in the RIGHT ORDER. Set "ordering": true, "slots" naming each position (e.g. ['1st','2nd','3rd','4th']), "possibilities" listing the items in a DELIBERATELY WRONG order, and "correctOrder" giving, for each slot in turn, the INDEX of the item of "possibilities" that belongs there. Use it for a chronology, a protocol exchange, the steps of a procedure or a calculation
+	- matching / rows / choices / correctMap: a question where the learner PAIRS two columns. Set "matching": true, "rows" (the left column: terms, devices, codes…), "choices" (the right column: definitions, roles…, listed in a different order from the rows) and "correctMap" giving, for each row in turn, the INDEX of its matching entry in "choices". Use it to oppose notions that are easily confused
+	- passage / passageId / passageTitle: a SOURCE DOCUMENT to read before answering (comprehension). "passage" holds the full text, "passageTitle" names it, and "passageId" is a shared key: every question carrying the SAME passageId shows the SAME document, so write the text ONCE on the first question of the group and give the others only their passageId. Use this whenever several questions probe one text, case, scenario or code sample
+
+	LANGUAGE — THIS IS A HARD RULE: write ALL the content you produce (title, prompt, options, answer, lesson, explain) in THE SAME LANGUAGE AS THE USER REQUEST BELOW. If the request is in French, write the quiz in French; in Arabic, in Arabic; in English, in English. When the request provides source material (a text, a note, images), follow the language of that material. NEVER translate the content into English just because these instructions are in English. The FIELD NAMES (title, prompt, options…) and the JSON5 structure always stay exactly as specified above, in English.
+
+	MATHEMATICS: every mathematical expression (formula, function, equation, integral, fraction, exponent, Greek letter…) MUST be written in LaTeX delimited by dollar signs, as in Obsidian: $f(x) = x^3$ inline, $$\\int_0^2 2x\\,dx$$ for a display formula. Never pseudo-notation such as f(x) = x^3 or ∫ from 0 to 2 outside the dollars. This applies to title, prompt, options, answer, lesson and explain. IMPORTANT: inside JSON5 strings, DOUBLE every backslash — for LaTeX (write '$\\\\frac{a}{b}$' to get \\frac) as well as Windows paths (write 'C:\\\\Users\\\\dev') — a single backslash would be destroyed by the parser.
+
+	The last element of the array may be a mode configuration object (with no prompt field):
+	  - { mode: "exam", examDurationMinutes: 10, examAutoSubmit: true, examShowTimer: true } for a timed exam mode
+	  - { mode: "lesson", examDurationMinutes: 10, examAutoSubmit: true, examShowTimer: true } for a lesson mode leading into an exam
+	  - { mode: "lesson" } for a lesson mode without exam
+	  - { examMode: true } as a shorthand for mode: "exam"
+
+	NO TOOLS, NO FILE ACCESS — READ THIS BEFORE ANYTHING ELSE: you are running without any tool. You cannot read, open, fetch, write or create a file, a note or a folder, and you must never try: an attempted tool call is not a quiz, and the whole generation fails. The user request below may name files, paths or notes to "read first", or ask you to "create a note" somewhere. Every source it names that actually exists has ALREADY been read for you and its full content is inlined below, between "--- <file name> ---" markers. So: treat those paths as mere labels for the text you already have, ignore every instruction to read, open, create, modify or save anything, and never mention this limitation in your answer. Your ONLY output is the JSON5 array.
+
+	QUANTITY: generate exactly ${count} questions — this number wins over any other count, range or list of themes stated in the user request below. If the request asks for more themes than ${count} questions, cover the most important ones; never exceed ${count}.
+
+	Generate ${typeInstruction}. ${PHRASE_FINALE_CLI}`;
+
+	const userPrompt = source === "topic"
+		? `Generate a quiz about the following topic (keep the quiz in the language of this topic):\n\n${prompt}`
+		: source === "text"
+		? `Generate a quiz based on the following text (keep the quiz in the language of this text):\n\n${prompt}`
+		: `Generate a quiz based on the provided images (keep the quiz in the language of the images and of this request): ${prompt}`;
+
+	return { systemPrompt, userPrompt };
+}
+
+/* Répare le LaTeX à backslash simple qu'un modèle écrit malgré la consigne
+   JSON5 (ex. `$\frac{1}{2}$`) : `\f` deviendrait un form feed, `\t` un
+   tab, AVALE le backslash des séquences inconnues (\int → int) et JETTE
+   une SyntaxError sur \x/\u non-hex ($\xi$, \underline) : LaTeX détruit
+   AVANT le parse, irréparable après (baselines gemma4 + review
+   multi-angles 2026-07-11). Réparation SCOPÉE AUX SEGMENTS MATH de la
+   chaîne brute : dans $...$ / $$...$$ TOUT backslash simple est du LaTeX
+   (aucun échappement JSON n'y est légitime) → doublé, paires déjà
+   correctes préservées ; hors segments, RIEN n'est touché (\n, \t, \"
+   restent des échappements voulus — un placeholder « col1\tcol2 » garde
+   sa tabulation, et \right/\neq/\xi ne peuvent plus être corrompus
+   puisqu'ils vivent dans les dollars). */
+function repairLatexBackslashes(source: string): string {
+	// Segments : $$...$$ d'abord (sauts de ligne possibles), puis
+	// $...$ inline (mêmes gardes anti-dollar-monétaire que le rendu :
+	// collé au contenu des deux côtés, pas de \n).
+	const mathFixed = source.replace(/\$\$[^$]+?\$\$|\$(?!\s)[^$\n]*?[^$\s]\$/g, (seg: string) =>
+		// L'alternative (\\\\) consomme les paires correctes en
+		// premier — sans elle le 2e backslash de « \\frac » (modèle
+		// qui échappe bien) produirait « \\\frac » → form feed.
+		seg.replace(/(\\\\)|\\([a-zA-Z,;! ])/g,
+			(m: string, pair: string | undefined, ch: string | undefined) => pair ? pair : "\\\\" + ch));
+	// Hors math : SEULS les \x/\u NON suivis d'hexa valide sont
+	// doublés — un \xGG/\uGGGG invalide fait JETER JSON5.parse
+	// (SyntaxError), donc ce doublement ne peut jamais casser un
+	// échappement légitime. Sauve les chemins Windows des quiz cmd
+	// (« cd C:\utils », « C:\x64 ») : sans ça, génération perdue.
+	// (\t/\n dans « C:\temp\new » restent indécidables — le prompt
+	// système exige désormais les backslashes doublés partout.)
+	return mathFixed
+		.replace(/(\\\\)|\\x(?![0-9a-fA-F]{2})/g, (m: string, pair: string | undefined) => pair ? pair : "\\\\x")
+		.replace(/(\\\\)|\\u(?![0-9a-fA-F]{4})/g, (m: string, pair: string | undefined) => pair ? pair : "\\\\u");
+}
+
+function parseOllamaResponse(content: string): unknown[] {
+	let cleaned = content.trim();
+
+	// Try to extract JSON from markdown code blocks
+	const jsonMatch = cleaned.match(/```(?:json5?|json)?\s*\n?([\s\S]*?)\n?```/);
+	if (jsonMatch) {
+		cleaned = jsonMatch[1].trim();
+	}
+	cleaned = repairLatexBackslashes(cleaned);
+
+	// Ollama with format: structured JSON wraps the array in an object
+	// e.g. { "questions": [...] }
+	try {
+		const parsed: unknown = JSON5.parse(cleaned);
+
+		// If it's an object with a "questions" key, extract the array
+		if (parsed && !Array.isArray(parsed) && Array.isArray((parsed as { questions?: unknown }).questions)) {
+			return (parsed as { questions: unknown[] }).questions;
+		}
+
+		if (Array.isArray(parsed)) {
+			return parsed;
+		}
+
+		throw new Error("Format inattendu");
+	} catch (err) {
+		// Try the generic parser as fallback
+		return parseReponseQuiz(content);
+	}
+}
+
+/** Lit une réponse copiée depuis un CLI, Ollama ou un site : fence markdown,
+ * prose autour, LaTeX à backslash simple réparé, et distingue « pas un
+ * quiz » (erreur nommée) de « quiz mal formé » (erreur du parseur, avec
+ * position). Renommée `parseQuizResponse` → `parseReponseQuiz` et sortie de
+ * la closure de `createAiClient` le 2026-09-18 : la page « Générer » la lit
+ * aussi pour le canal web. */
+export function parseReponseQuiz(content: string): unknown[] {
+	let cleaned = content.trim();
+
+	const jsonMatch = cleaned.match(/```(?:json5?|json)?\s*\n?([\s\S]*?)\n?```/);
+	if (jsonMatch) {
+		cleaned = jsonMatch[1].trim();
+	}
+	cleaned = repairLatexBackslashes(cleaned);
+
+	let parsed: unknown;
+	try {
+		parsed = JSON5.parse(cleaned);
+	} catch (err) {
+		/* Un quiz MAL FORMÉ garde l'erreur du parseur : elle situe le défaut
+		   (ligne, colonne), ce qu'aucune paraphrase ne ferait mieux. Une
+		   réponse qui n'est pas un quiz du tout, elle, mérite qu'on dise ce
+		   qu'elle est — sinon l'utilisateur reçoit « invalid character '\'
+		   at 1:2 » pour une phrase en français (vécu le 2026-07-30). Le
+		   discriminant est la présence de champs de question, pas le premier
+		   caractère : de la prose peut commencer par « [ » (lien markdown,
+		   ponctuation échappée). */
+		const looksLikeQuiz = /["']?(prompt|title|options|correctIndex|answer)["']?\s*:/.test(cleaned);
+		if (looksLikeQuiz) throw err;
+		throw nonQuizResponseError(content);
+	}
+
+	if (!Array.isArray(parsed)) {
+		throw new Error(t("ai.err.notAnArray"));
+	}
+
+	return parsed;
+}
+
+/* Le modèle a répondu autre chose qu'un quiz : nommer QUOI, et surtout
+   pourquoi, quand la cause est structurelle.
+   Cas vécu (2026-07-30) : une demande qui suppose l'accès aux fichiers
+   (« lis ce PDF », « d'après cette note ») — le CLI est lancé SANS aucun
+   outil, le modèle tente quand même un appel, et sa tentative ressort
+   sérialisée en texte. Rien n'est réparable côté parseur : ce qu'il faut
+   dire, c'est que le générateur ne voit que le composer, et que les sources
+   se JOIGNENT (le plugin sait lire notes, .md, .txt et PDF). */
+function nonQuizResponseError(content: string): Error {
+	const text = content.trim();
+	/* SEULE la tentative d'outil sérialisée dans la RÉPONSE prouve le mur
+	   de l'accès fichiers. La seconde signature d'origine — « la DEMANDE
+	   cite des chemins » — a été retirée le 2026-07-31 : depuis que
+	   prompt-paths.ts joint automatiquement les chemins cités, un chemin
+	   dans la demande n'implique plus rien, et cette heuristique
+	   REBAPTISAIT en « pas d'accès aux fichiers » tout échec de parsing
+	   (sources pourtant jointes, chips à l'écran), en masquant la seule
+	   chose utile au diagnostic : ce que le modèle a réellement répondu.
+	   Faute de preuve, on montre donc la réponse. */
+	if (/application\/vnd\.ant\.toolu|\btool_use\b/i.test(text)) {
+		return new Error(t("ai.err.noFileAccess"));
+	}
+	console.warn("[quiz-blocks] réponse non-quiz (" + text.length + " car.) :", text.slice(0, 2000));
+	return new Error(t("ai.err.notQuiz", { preview: text.replace(/\s+/g, " ").slice(0, 160) }));
+}
+
 export function createAiClient(settings: AiSettingsHost): AiClient {
 	// ── Annulation (bouton stop / Esc) ──
 	// Chaque appel CLI/HTTP enregistre sa fonction d'arrêt ici ; abort()
@@ -301,7 +514,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 	}
 
 	async function generateInner(prompt: string, options: GenerateOptions = {}): Promise<unknown[]> {
-		const { count = 5, type = "Mixte", source = "topic", images = [] } = options;
+		const { images = [] } = options;
 		lastRequestText = prompt;
 		const provider = settings.get().aiProvider || "claude-code";
 		// Le défaut vient du registry, JAMAIS d'une copie locale : une seconde
@@ -319,70 +532,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 			model = resolveCodexModel(model);
 		}
 
-		// ── Prompts : ANGLAIS, et INDÉPENDANTS de la langue de l'UI ──
-		// Le prompt ne dicte PAS la langue du quiz : il impose au modèle de
-		// suivre celle de la DEMANDE (règle LANGUAGE ci-dessous). Un prompt
-		// français produisait des quiz français même pour un sujet demandé en
-		// anglais ou en arabe. Les libellés du composer (« Mixte »…) ne sont pas
-		// traduits ici non plus : `type` est la VALEUR canonique (cf. TYPE_VALUES
-		// dans ai.ts), pas le libellé affiché.
-		const typeInstruction = type === "Mixte"
-			? "a mix of single-choice, multiple-choice and free-text questions"
-			: type === "Choix unique"
-			? "single-choice questions (exactly one correct answer)"
-			: type === "Choix multiple"
-			? "multiple-choice questions (several correct answers)"
-			: type === "Compréhension"
-			// Le type qui manquait : un vrai sujet d'examen a une partie
-			// compréhension, où UN document porte plusieurs questions. Le
-			// contrat est explicite (un seul groupe, id partagé, aucune
-			// question hors document) parce que les modèles produisent sinon
-			// un support par question — ce qui n'est plus de la compréhension.
-			? `COMPREHENSION questions, ALL of them based on ONE source document that you write yourself.
-	Write a substantial passage (250-450 words: an article extract, a case study, a scenario, a piece of code — whatever suits the topic) and put it in the "passage" field of the FIRST question, together with "passageId": "doc1" and a "passageTitle" naming the document.
-	EVERY other question repeats ONLY "passageId": "doc1" (no "passage", no "passageTitle" — the engine shares the document automatically).
-	The questions must be ANSWERABLE FROM THE DOCUMENT ALONE and test understanding — main idea, inference, meaning in context, cause and effect, the author's intent, what can or cannot be concluded — NOT recall of outside knowledge. Mix single-choice, multiple-choice and free-text among them`
-			: "free-text questions";
-
-		const systemPrompt = `You are a quiz generator. Generate exactly ${count} quiz questions as a JSON5 array. Each question must have:
-	- title: short question title
-	- prompt: full question text
-	- options: array of options (for single/multiple choice, 3-5 options)
-	- correctIndex: index of the correct answer (single choice)
-	- correctIndices: array of indices of the correct answers (multiple choice)
-	- multiSelect: true for multiple choice
-	- type: "text" for free text, omitted otherwise
-	- answer: expected answer (free text)
-	- mathInput: true for a text question whose answer is a mathematical expression (the learner answers in a visual EQUATION EDITOR)
-	- answerTemplate: a LaTeX template pre-filled in the answer field of a mathInput question, with \\\\placeholder{} for each blank to fill (e.g. 'x = \\\\placeholder{}' ; two solutions: 'x_1 = \\\\placeholder{},\\\\; x_2 = \\\\placeholder{}'). RULES for mathInput: the question text NEVER gives answer-format instructions (no "as a fraction", "comma-separated", "e.g. 1/2") — the equation editor makes all of that pointless; prefer an answerTemplate that guides instead; acceptedAnswers are the COMPLETE content of the field once the template is filled, in LaTeX (e.g. 'x_1 = \\\\frac{1}{2},\\\\; x_2 = 3'), and add variants where relevant (solutions in reverse order)
-	- lesson: a short lesson paragraph teaching the concept before the question (optional but recommended for educational quizzes)
-	- cloze: a FILL-IN-THE-BLANK text. Put the whole sentence or paragraph in this field and wrap each blank in DOUBLE BRACES, with accepted variants separated by "|": "The capital of France is {{Paris}} and its currency is {{the euro|euro}}." Use double BRACES, never double brackets — double brackets are Obsidian's internal-link syntax and would be rewritten before the quiz is read. Keep "prompt" as the instruction ("Complete the text below"). 2 to 5 blanks per question, each on a key term, never on a word the sentence already gives away
-	- numeric / tolerance / tolerancePercent / unit: for a free-text question whose answer is a NUMBER. Set "numeric": true and the answer is compared as a value, not as a string, so "3.14", "3,14" and "3.140" all pass. Add "tolerance" (absolute margin) or "tolerancePercent" (relative margin) whenever the expected answer is a measurement or a rounded result, and "unit" (e.g. "m/s") when one is expected — the learner may write it or omit it. ALWAYS prefer this over a plain text answer for any question that asks "how much", "how many" or a computed value
-	- ordering / slots / possibilities / correctOrder: a question where the learner puts items in the RIGHT ORDER. Set "ordering": true, "slots" naming each position (e.g. ['1st','2nd','3rd','4th']), "possibilities" listing the items in a DELIBERATELY WRONG order, and "correctOrder" giving, for each slot in turn, the INDEX of the item of "possibilities" that belongs there. Use it for a chronology, a protocol exchange, the steps of a procedure or a calculation
-	- matching / rows / choices / correctMap: a question where the learner PAIRS two columns. Set "matching": true, "rows" (the left column: terms, devices, codes…), "choices" (the right column: definitions, roles…, listed in a different order from the rows) and "correctMap" giving, for each row in turn, the INDEX of its matching entry in "choices". Use it to oppose notions that are easily confused
-	- passage / passageId / passageTitle: a SOURCE DOCUMENT to read before answering (comprehension). "passage" holds the full text, "passageTitle" names it, and "passageId" is a shared key: every question carrying the SAME passageId shows the SAME document, so write the text ONCE on the first question of the group and give the others only their passageId. Use this whenever several questions probe one text, case, scenario or code sample
-
-	LANGUAGE — THIS IS A HARD RULE: write ALL the content you produce (title, prompt, options, answer, lesson, explain) in THE SAME LANGUAGE AS THE USER REQUEST BELOW. If the request is in French, write the quiz in French; in Arabic, in Arabic; in English, in English. When the request provides source material (a text, a note, images), follow the language of that material. NEVER translate the content into English just because these instructions are in English. The FIELD NAMES (title, prompt, options…) and the JSON5 structure always stay exactly as specified above, in English.
-
-	MATHEMATICS: every mathematical expression (formula, function, equation, integral, fraction, exponent, Greek letter…) MUST be written in LaTeX delimited by dollar signs, as in Obsidian: $f(x) = x^3$ inline, $$\\int_0^2 2x\\,dx$$ for a display formula. Never pseudo-notation such as f(x) = x^3 or ∫ from 0 to 2 outside the dollars. This applies to title, prompt, options, answer, lesson and explain. IMPORTANT: inside JSON5 strings, DOUBLE every backslash — for LaTeX (write '$\\\\frac{a}{b}$' to get \\frac) as well as Windows paths (write 'C:\\\\Users\\\\dev') — a single backslash would be destroyed by the parser.
-
-	The last element of the array may be a mode configuration object (with no prompt field):
-	  - { mode: "exam", examDurationMinutes: 10, examAutoSubmit: true, examShowTimer: true } for a timed exam mode
-	  - { mode: "lesson", examDurationMinutes: 10, examAutoSubmit: true, examShowTimer: true } for a lesson mode leading into an exam
-	  - { mode: "lesson" } for a lesson mode without exam
-	  - { examMode: true } as a shorthand for mode: "exam"
-
-	NO TOOLS, NO FILE ACCESS — READ THIS BEFORE ANYTHING ELSE: you are running without any tool. You cannot read, open, fetch, write or create a file, a note or a folder, and you must never try: an attempted tool call is not a quiz, and the whole generation fails. The user request below may name files, paths or notes to "read first", or ask you to "create a note" somewhere. Every source it names that actually exists has ALREADY been read for you and its full content is inlined below, between "--- <file name> ---" markers. So: treat those paths as mere labels for the text you already have, ignore every instruction to read, open, create, modify or save anything, and never mention this limitation in your answer. Your ONLY output is the JSON5 array.
-
-	QUANTITY: generate exactly ${count} questions — this number wins over any other count, range or list of themes stated in the user request below. If the request asks for more themes than ${count} questions, cover the most important ones; never exceed ${count}.
-
-	Generate ${typeInstruction}. Reply ONLY with the JSON5 array, with no explanation and no formatting.`;
-
-		const userPrompt = source === "topic"
-			? `Generate a quiz about the following topic (keep the quiz in the language of this topic):\n\n${prompt}`
-			: source === "text"
-			? `Generate a quiz based on the following text (keep the quiz in the language of this text):\n\n${prompt}`
-			: `Generate a quiz based on the provided images (keep the quiz in the language of the images and of this request): ${prompt}`;
+		const { systemPrompt, userPrompt } = composerPrompts(prompt, options);
 
 		if (provider === "ollama") {
 			// Un seul endpoint local : sert les modèles locaux ET cloud (:cloud).
@@ -544,7 +694,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 		}
 
 		console.log("[quiz-blocks] Claude Code success - response length:", content.length);
-		return parseQuizResponse(content);
+		return parseReponseQuiz(content);
 	}
 
 	/* ── ChatGPT via le CLI Codex (abonnement ChatGPT) ──
@@ -630,7 +780,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 			throw new Error(t("ai.err.codexEmpty"));
 		}
 		console.log("[quiz-blocks] Codex success - response length:", raw.length);
-		return parseQuizResponse(raw);
+		return parseReponseQuiz(raw);
 	}
 
 	/* Events `codex exec --json` : une ligne = un objet. Deux seulement nous
@@ -883,131 +1033,6 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 
 		console.log("[quiz-blocks] Ollama response length:", content.length);
 		return parseOllamaResponse(content);
-	}
-
-	/* Les modèles écrivent le LaTeX avec des backslashes SIMPLES dans les
-	   chaînes JSON5 ($\frac$, $\int$) — or JSON5 transforme \f en form
-	   feed, \t en tab, AVALE le backslash des séquences inconnues
-	   (\int → int) et JETTE une SyntaxError sur \x/\u non-hex ($\xi$,
-	   \underline) : LaTeX détruit AVANT le parse, irréparable après
-	   (baselines gemma4 + review multi-angles 2026-07-11). Réparation
-	   SCOPÉE AUX SEGMENTS MATH de la chaîne brute : dans $...$ / $$...$$
-	   TOUT backslash simple est du LaTeX (aucun échappement JSON n'y est
-	   légitime) → doublé, paires déjà correctes préservées ; hors
-	   segments, RIEN n'est touché (\n, \t, \" restent des échappements
-	   voulus — un placeholder « col1\tcol2 » garde sa tabulation, et
-	   \right/\neq/\xi ne peuvent plus être corrompus puisqu'ils vivent
-	   dans les dollars). */
-	function repairLatexBackslashes(source: string): string {
-		// Segments : $$...$$ d'abord (sauts de ligne possibles), puis
-		// $...$ inline (mêmes gardes anti-dollar-monétaire que le rendu :
-		// collé au contenu des deux côtés, pas de \n).
-		const mathFixed = source.replace(/\$\$[^$]+?\$\$|\$(?!\s)[^$\n]*?[^$\s]\$/g, (seg: string) =>
-			// L'alternative (\\\\) consomme les paires correctes en
-			// premier — sans elle le 2e backslash de « \\frac » (modèle
-			// qui échappe bien) produirait « \\\frac » → form feed.
-			seg.replace(/(\\\\)|\\([a-zA-Z,;! ])/g,
-				(m: string, pair: string | undefined, ch: string | undefined) => pair ? pair : "\\\\" + ch));
-		// Hors math : SEULS les \x/\u NON suivis d'hexa valide sont
-		// doublés — un \xGG/\uGGGG invalide fait JETER JSON5.parse
-		// (SyntaxError), donc ce doublement ne peut jamais casser un
-		// échappement légitime. Sauve les chemins Windows des quiz cmd
-		// (« cd C:\utils », « C:\x64 ») : sans ça, génération perdue.
-		// (\t/\n dans « C:\temp\new » restent indécidables — le prompt
-		// système exige désormais les backslashes doublés partout.)
-		return mathFixed
-			.replace(/(\\\\)|\\x(?![0-9a-fA-F]{2})/g, (m: string, pair: string | undefined) => pair ? pair : "\\\\x")
-			.replace(/(\\\\)|\\u(?![0-9a-fA-F]{4})/g, (m: string, pair: string | undefined) => pair ? pair : "\\\\u");
-	}
-
-	function parseOllamaResponse(content: string): unknown[] {
-		let cleaned = content.trim();
-
-		// Try to extract JSON from markdown code blocks
-		const jsonMatch = cleaned.match(/```(?:json5?|json)?\s*\n?([\s\S]*?)\n?```/);
-		if (jsonMatch) {
-			cleaned = jsonMatch[1].trim();
-		}
-		cleaned = repairLatexBackslashes(cleaned);
-
-		// Ollama with format: structured JSON wraps the array in an object
-		// e.g. { "questions": [...] }
-		try {
-			const parsed: unknown = JSON5.parse(cleaned);
-
-			// If it's an object with a "questions" key, extract the array
-			if (parsed && !Array.isArray(parsed) && Array.isArray((parsed as { questions?: unknown }).questions)) {
-				return (parsed as { questions: unknown[] }).questions;
-			}
-
-			if (Array.isArray(parsed)) {
-				return parsed;
-			}
-
-			throw new Error("Format inattendu");
-		} catch (err) {
-			// Try the generic parser as fallback
-			return parseQuizResponse(content);
-		}
-	}
-
-	function parseQuizResponse(content: string): unknown[] {
-		let cleaned = content.trim();
-
-		const jsonMatch = cleaned.match(/```(?:json5?|json)?\s*\n?([\s\S]*?)\n?```/);
-		if (jsonMatch) {
-			cleaned = jsonMatch[1].trim();
-		}
-		cleaned = repairLatexBackslashes(cleaned);
-
-		let parsed: unknown;
-		try {
-			parsed = JSON5.parse(cleaned);
-		} catch (err) {
-			/* Un quiz MAL FORMÉ garde l'erreur du parseur : elle situe le défaut
-			   (ligne, colonne), ce qu'aucune paraphrase ne ferait mieux. Une
-			   réponse qui n'est pas un quiz du tout, elle, mérite qu'on dise ce
-			   qu'elle est — sinon l'utilisateur reçoit « invalid character '\'
-			   at 1:2 » pour une phrase en français (vécu le 2026-07-30). Le
-			   discriminant est la présence de champs de question, pas le premier
-			   caractère : de la prose peut commencer par « [ » (lien markdown,
-			   ponctuation échappée). */
-			const looksLikeQuiz = /["']?(prompt|title|options|correctIndex|answer)["']?\s*:/.test(cleaned);
-			if (looksLikeQuiz) throw err;
-			throw nonQuizResponseError(content);
-		}
-
-		if (!Array.isArray(parsed)) {
-			throw new Error(t("ai.err.notAnArray"));
-		}
-
-		return parsed;
-	}
-
-	/* Le modèle a répondu autre chose qu'un quiz : nommer QUOI, et surtout
-	   pourquoi, quand la cause est structurelle.
-	   Cas vécu (2026-07-30) : une demande qui suppose l'accès aux fichiers
-	   (« lis ce PDF », « d'après cette note ») — le CLI est lancé SANS aucun
-	   outil, le modèle tente quand même un appel, et sa tentative ressort
-	   sérialisée en texte. Rien n'est réparable côté parseur : ce qu'il faut
-	   dire, c'est que le générateur ne voit que le composer, et que les sources
-	   se JOIGNENT (le plugin sait lire notes, .md, .txt et PDF). */
-	function nonQuizResponseError(content: string): Error {
-		const text = content.trim();
-		/* SEULE la tentative d'outil sérialisée dans la RÉPONSE prouve le mur
-		   de l'accès fichiers. La seconde signature d'origine — « la DEMANDE
-		   cite des chemins » — a été retirée le 2026-07-31 : depuis que
-		   prompt-paths.ts joint automatiquement les chemins cités, un chemin
-		   dans la demande n'implique plus rien, et cette heuristique
-		   REBAPTISAIT en « pas d'accès aux fichiers » tout échec de parsing
-		   (sources pourtant jointes, chips à l'écran), en masquant la seule
-		   chose utile au diagnostic : ce que le modèle a réellement répondu.
-		   Faute de preuve, on montre donc la réponse. */
-		if (/application\/vnd\.ant\.toolu|\btool_use\b/i.test(text)) {
-			return new Error(t("ai.err.noFileAccess"));
-		}
-		console.warn("[quiz-blocks] réponse non-quiz (" + text.length + " car.) :", text.slice(0, 2000));
-		return new Error(t("ai.err.notQuiz", { preview: text.replace(/\s+/g, " ").slice(0, 160) }));
 	}
 
 	return {

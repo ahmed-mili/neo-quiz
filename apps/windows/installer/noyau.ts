@@ -13,9 +13,9 @@
     télécharge jamais ailleurs, quoi que dise un fichier. */
 const DEPOT_RELEASES = "https://github.com/ahmed-mili/neo-quiz/releases";
 
-/** La description de la dernière release applicative : le `latest.yml`
-    qu'electron-builder écrit et qu'electron-updater lit, atteint par la
-    redirection `releases/latest/download/…` de github.com.
+/** Le `latest.yml` de la dernière release, par la redirection
+    `releases/latest/download/…` de github.com. Ce n'est plus la lecture
+    NORMALE du bootstrapper (voir `urlLatestYml`), seulement son repli.
 
     JAMAIS `api.github.com/…/releases/latest` : sans jeton, l'API REST est
     plafonnée à 60 requêtes par heure et par adresse IP, partagées entre tous
@@ -26,6 +26,34 @@ const DEPOT_RELEASES = "https://github.com/ahmed-mili/neo-quiz/releases";
     redirection de github.com, elle, n'a pas ce plafond : c'est par elle que
     chaque application electron-updater du monde trouve sa mise à jour. */
 export const URL_LATEST_YML = `${DEPOT_RELEASES}/latest/download/latest.yml`;
+
+/** Une version publiable, `X.Y.Z` et rien d'autre. Tout ce qui s'en écarte
+    vaut `null` : la version entre dans une URL, et un segment comme `..`
+    ou `/` venu d'un `package.json` trafiqué ne doit jamais s'y retrouver. */
+export function versionEpinglee(version: unknown): string | null {
+	const texte = String(version ?? "");
+	return /^\d+\.\d+\.\d+$/.test(texte) ? texte : null;
+}
+
+/** La description de la release DONT CE BOOTSTRAPPER EST ISSU — pas la
+    dernière. Jusqu'à la 1.5.0, `NeoQuiz-X.Y.Z.exe` lisait `latest` : un exe
+    nommé 1.4.0 installait la 1.5.0. Surprise pour qui l'avait gardé, et
+    surtout ce qui interdisait à la page de téléchargement de le servir pour
+    une ancienne version — elle devait donner le NSIS brut, sans la fenêtre
+    d'installation, sous un autre nom. Épinglé, il fait ce que son nom dit,
+    et la page peut le servir pour chaque version publiée depuis.
+
+    Chaque release porte son `latest.yml` (electron-builder l'écrit à chaque
+    build, `release.yml` l'attache) : l'adresse existe toujours pour une
+    version publiée. Une version qui n'est PAS `X.Y.Z` — la répétition
+    `0.0.0-repetition` de la CI, ou un `package.json` abîmé — retombe sur
+    `latest` plutôt que de composer une URL avec ce qu'on lui donne. */
+export function urlLatestYml(version: unknown): string {
+	const epinglee = versionEpinglee(version);
+	return epinglee
+		? `${DEPOT_RELEASES}/download/desktop-v${epinglee}/latest.yml`
+		: URL_LATEST_YML;
+}
 
 export interface PaquetInstallable {
 	version: string;

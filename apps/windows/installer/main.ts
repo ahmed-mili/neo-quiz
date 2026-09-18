@@ -16,7 +16,7 @@ import { spawn } from "node:child_process";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { setLanguage, t } from "../../../src/i18n";
 import { PRODUCT_NAME } from "../../../src/branding";
-import { langueDepuisLocale, NOM_EXECUTABLE, resoudrePaquet, URL_LATEST_YML, type LangueInstallateur, type PaquetInstallable } from "./noyau";
+import { langueDepuisLocale, NOM_EXECUTABLE, resoudrePaquet, urlLatestYml, type LangueInstallateur, type PaquetInstallable } from "./noyau";
 import {
 	CANAUX_INSTALLATEUR,
 	type ChargeTravailleur,
@@ -155,13 +155,14 @@ function dossierValide(dossier: string): boolean {
 	return parse(normalise).root !== normalise;
 }
 
-/** Le `latest.yml` de la release courante, par la redirection
-    `releases/latest/download/` de github.com — la même lecture que
-    l'auto-updater de l'application, et SANS le quota de 60 requêtes par heure
-    et par IP de l'API REST (voir `URL_LATEST_YML`). `fetch` suit lui-même les
-    deux redirections (release, puis stockage des assets). */
+/** Le `latest.yml` de la release dont ce bootstrapper est issu
+    (`urlLatestYml`, `installer/noyau.ts`), lu par github.com et non par
+    l'API REST : SANS le quota de 60 requêtes par heure et par IP (voir
+    `URL_LATEST_YML`). `app.getVersion()` est la version d'apps/windows/
+    package.json, celle que porte le nom du fichier. `fetch` suit lui-même
+    la redirection vers le stockage des assets. */
 async function chargerPaquet(): Promise<PaquetInstallable> {
-	const reponse = await fetch(URL_LATEST_YML, {
+	const reponse = await fetch(urlLatestYml(app.getVersion()), {
 		headers: { "User-Agent": USER_AGENT },
 	});
 	if (!reponse.ok) throw new Error("release indisponible");

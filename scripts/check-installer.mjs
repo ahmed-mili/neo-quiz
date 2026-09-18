@@ -37,7 +37,7 @@ const renduApplication = readFileSync(resolve(racine, "apps/windows/src/main.ts"
 
 const noyauInstallateur = readFileSync(resolve(racine, "apps/windows/installer/noyau.ts"), "utf8");
 
-await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquetInstallable, progressionInstallation, suivre, suiviInitial, argumentsNsis, langueDepuisLocale, urlLegale, URL_LATEST_YML }) => {
+await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquetInstallable, progressionInstallation, suivre, suiviInitial, argumentsNsis, langueDepuisLocale, urlLegale, URL_LATEST_YML, urlLatestYml, versionEpinglee }) => {
 	const r = makeReporter("Installateur — bootstrapper");
 	/* Un PNG peut avoir un en-tête valide tout en affichant des pixels abîmés.
 	   Décompresser les IDAT vérifie aussi leur somme de contrôle zlib. */
@@ -65,17 +65,39 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 	   de 60 appels par heure et par adresse IP : le bootstrapper 1.0.16 la
 	   lisait et s'ouvrait sur « n'a pas pu être préparée » chez quiconque
 	   partageait son IP avec 60 lancements dans l'heure — Ahmed le premier, le
-	   soir des douze releases. La redirection `releases/latest/download/` de
+	   soir des douze releases. La redirection `releases/…/download/` de
 	   github.com n'a pas ce plafond, et `latest.yml` est le fichier
 	   qu'electron-updater lit déjà. Casser l'un des trois fichiers → rouge. */
-	r.check("source : le bootstrapper lit latest.yml par la redirection releases/latest",
+	r.check("source : le repli reste latest.yml par la redirection releases/latest",
 		URL_LATEST_YML, "https://github.com/ahmed-mili/neo-quiz/releases/latest/download/latest.yml");
+	/* ÉPINGLÉ depuis la 1.5.0 : `NeoQuiz-X.Y.Z.exe` lit le `latest.yml` de SA
+	   release, pas de la dernière. Un exe nommé 1.4.0 qui installait la 1.5.0
+	   était une surprise, et c'est ce qui interdisait à la page de
+	   téléchargement de le servir pour une ancienne version. */
+	r.check("source : un bootstrapper X.Y.Z lit le latest.yml de la release desktop-vX.Y.Z",
+		urlLatestYml("1.6.0"), "https://github.com/ahmed-mili/neo-quiz/releases/download/desktop-v1.6.0/latest.yml");
+	/* La version ENTRE DANS L'URL. Elle vient d'`app.getVersion()`, donc du
+	   `package.json` embarqué — un fichier qu'un exe trafiqué peut porter.
+	   Tout ce qui n'est pas `X.Y.Z` retombe sur `latest` : jamais un segment
+	   composé avec ce qu'on nous donne. La répétition de la CI
+	   (`0.0.0-repetition`) prend le même chemin, et c'est voulu : aucune
+	   release ne porte ce numéro. */
+	r.check("source : une version qui n'est pas X.Y.Z ne compose aucune URL et retombe sur latest",
+		["0.0.0-repetition", "../../evil", "1.6.0/../../x", "", undefined, null, "v1.6.0", "1.6"].map(urlLatestYml),
+		Array(8).fill("https://github.com/ahmed-mili/neo-quiz/releases/latest/download/latest.yml"));
+	r.check("source : versionEpinglee ne laisse passer que X.Y.Z",
+		[versionEpinglee("1.6.0"), versionEpinglee("10.20.30"), versionEpinglee("1.6.0-beta"), versionEpinglee(" 1.6.0")],
+		["1.6.0", "10.20.30", null, null]);
 	// Un LITTÉRAL d'URL, pas le mot dans un commentaire qui explique l'interdit.
 	r.check("source : aucun fichier du bootstrapper n'interroge api.github.com (60 req/h/IP)",
 		[noyauInstallateur, principalInstallateur, travailleurInstallateur].map(f => /["'`]https:\/\/api\.github\.com/.test(f)),
 		[false, false, false]);
-	r.check("source : le principal charge bien URL_LATEST_YML",
-		principalInstallateur.includes("await fetch(URL_LATEST_YML"), true);
+	/* Le principal doit passer SA version, pas relire la constante de repli :
+	   sinon l'épinglage existe dans le noyau et ne sert à personne. */
+	r.check("source : le principal lit l'URL épinglée sur sa propre version",
+		[principalInstallateur.includes("await fetch(urlLatestYml(app.getVersion())"),
+			principalInstallateur.includes("await fetch(URL_LATEST_YML")],
+		[true, false]);
 
 	/* Le `latest.yml` d'electron-builder, tel que publié pour desktop-v1.0.16
 	   (le vrai fichier, empreinte comprise) : le sous-ensemble YAML que le
@@ -525,21 +547,26 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 			[true, true, true]);
 		/* Le choix de version est REVENU le 2026-09-18 (il n'existait plus depuis
 		   `16e1f21`). Ce qui reste interdit, et ce que ce cas garde, c'est le
-		   FAUX choix : le bootstrapper lit toujours
-		   `releases/latest/download/latest.yml`, donc il installe la DERNIÈRE
-		   version quelle que soit la sienne. Seule la dernière release peut le
-		   servir ; toute autre doit mener à l'installeur complet, le seul asset
-		   qui installe vraiment sa version. Et le menu ne liste que les tags de
-		   l'APPLICATION : les releases du greffon (`X.Y.Z` nu) partagent le même
-		   flux et ne portent aucun installeur Windows. */
+		   FAUX choix : un bootstrapper publié AVANT l'épinglage lit
+		   `releases/latest/download/latest.yml` en dur et installe la DERNIÈRE
+		   version quelle que soit la sienne. Le menu ne peut le servir que pour
+		   la dernière release ou pour une release épinglée ; toute autre doit
+		   mener à l'installeur complet, le seul asset qui installe vraiment sa
+		   version. Le plancher est FIGÉ dans la page faute de source lisible, et
+		   doit rester celui de la release qui a introduit `urlLatestYml` : plus
+		   bas, la page servirait un bootstrapper figé sur `latest` pour une
+		   ancienne version — le mensonge de départ. Et le menu ne liste que les
+		   tags de l'APPLICATION : les releases du greffon (`X.Y.Z` nu) partagent
+		   le même flux et ne portent aucun installeur Windows. */
 		r.check(`site ${langue} : le choix de version ne promet que ce que l'asset tient`,
 			[
 				site.includes("activerSelecteurVersion();"),
 				site.includes("var MOTIF_SETUP_WINDOWS = /^neo-quiz-setup-\\d+\\.\\d+\\.\\d+\\.exe$/i;"),
-				site.includes("var motif = estDerniere ? MOTIF_INSTALLEUR_WINDOWS : MOTIF_SETUP_WINDOWS;"),
+				site.includes('var PREMIERE_VERSION_EPINGLEE = "1.6.0";'),
+				site.includes("var motif = (estDerniere || bootstrapperEpingle(version)) ? MOTIF_INSTALLEUR_WINDOWS : MOTIF_SETUP_WINDOWS;"),
 				site.includes("var MOTIF_TAG_APP = /^desktop-v\\d+\\.\\d+\\.\\d+$/;"),
 			],
-			[true, true, true, true]);
+			[true, true, true, true, true]);
 		r.check(`site ${langue} : le pied de page mène aux deux pages légales`,
 			[site.includes('href="terms.html"'), site.includes('href="privacy.html"')], [true, true]);
 		r.check(`site ${langue} : un clic sur une langue est mémorisé comme un CHOIX`,

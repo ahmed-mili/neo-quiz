@@ -364,6 +364,11 @@ export interface HostShell {
 	    n'a pas d'explorateur : ce n'est PAS une erreur, l'appelant enchaîne
 	    sur l'ouverture externe. */
 	revealInHost(file: HostFile): Promise<boolean>;
+	/** Ouvre une adresse `https:` dans le navigateur de l'utilisateur. `false`
+	    si l'hôte a refusé (autre schéma, adresse illisible). Jamais un chemin
+	    de fichier : c'est `openExternal`. Sert au canal web de la page
+	    « Générer » (spec 2026-09-18). */
+	openUrl(url: string): Promise<boolean>;
 }
 
 export interface HostPlatform {

@@ -551,12 +551,16 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 	   délai de garde qui laisse le rendu vider ses écritures en attente — la
 	   dernière frappe d'un quiz ouvert serait perdue à chaque changement de
 	   langue. */
-	/* Le presse-papiers : du TEXTE, et rien d'autre. Une chaîne, et bornée —
-	   le principal ne fait pas plus confiance au rendu ici qu'ailleurs, et un
-	   chemin de fichier tient largement dans huit kilo-octets. Aucune
-	   LECTURE n'est exposée : `clipboard.readText` n'a pas de canal. */
+	/* Le presse-papiers : du TEXTE, et rien d'autre. Une chaîne, et bornée :
+	   le principal ne fait pas plus confiance au rendu ici qu'ailleurs. La
+	   borne était de 8 Ko (« un chemin de fichier tient largement dedans ») ;
+	   elle vaut 512 Ko depuis le canal web (2026-09-18) : quand la question
+	   ne tient pas dans une adresse, c'est le prompt entier, notes jointes
+	   comprises, qui part par ici. Aucune LECTURE n'est exposée AU RENDU :
+	   `clipboard.readText` n'a pas de canal ; la veille du canal web lit
+	   côté principal, sous jeton (voir `attente-collage.ts`). */
 	ipcMain.handle(CANAUX.systemeCopierTexte, (_e, texte: unknown) => {
-		if (typeof texte !== "string" || texte.length > 8192) throw new Error("copie refusée : le presse-papiers ne prend qu'un texte borné");
+		if (typeof texte !== "string" || texte.length > 524288) throw new Error("copie refusée : le presse-papiers ne prend qu'un texte borné");
 		clipboard.writeText(texte);
 	});
 

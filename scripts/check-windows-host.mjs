@@ -858,6 +858,21 @@ function installerPont(fichiers = {}, perimetre = null) {
 	r.done();
 }
 
+/* `openUrl` : la garde est PARTAGÉE (`src/host/url.ts`, chargeable) et
+   l'appel à `window.open` est STATIQUE (index.ts ne se charge pas hors de
+   la fenêtre, voir le bloc précédent). */
+await withSrcModule("src/host/url.ts", ({ estUrlHttps }) => {
+	const r = makeReporter("Hôte Windows — openUrl");
+	r.check("https admis", estUrlHttps("https://claude.ai/new?q=a%20b"), true);
+	r.check("http, file, javascript, obsidian, vide, illisible refusés",
+		["http://claude.ai/", "file:///C:/x", "javascript:alert(1)", "obsidian://open", "", "pas une url"].map(estUrlHttps),
+		[false, false, false, false, false, false]);
+	const source = readFileSync("apps/windows/src/host/index.ts", "utf-8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+	r.check("index.ts garde par estUrlHttps puis ouvre par window.open en _blank noopener",
+		/if \(!estUrlHttps\(url\)\) return false;\s*window\.open\(url, "_blank", "noopener"\);\s*return true;/.test(source), true);
+	r.done();
+});
+
 await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs }) => {
 	const r = makeReporter("Hôte Windows — process, octets et corbeille");
 	const pont = installerPont({

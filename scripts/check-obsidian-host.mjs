@@ -170,7 +170,7 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		watcher: ["onChange", "onRenameDir"],
 		ui: ["notice", "setIcon"],
 		math: ["ready", "render", "flush"],
-		shell: ["openExternal", "revealInHost"],
+		shell: ["openExternal", "revealInHost", "openUrl"],
 		/* PLUS de `pdf` : membre optionnel du contrat (`HostPdf`) que le greffon
 		   lecteur ne fournit plus depuis la tâche 2 (2026-09-13) — son seul
 		   consommateur, la page « Générer », est parti avec le tableau de bord.
@@ -211,6 +211,24 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 	r.check("openExternal d'une chaîne rend false sans appeler openWithDefaultApp",
 		[await hostAvecOuvertureTruquee.shell.openExternal("C:/Users/x/Downloads/choisi.pdf"), openWithDefaultAppAppele],
 		[false, false]);
+
+	/* `openUrl` : une adresse `https:` part à `window.open` (Obsidian la remet
+	   au navigateur) ; tout autre schéma est refusé AVANT, avec un `false`
+	   net. Le bouchon n'a pas de `window.open` : on en pose un qui journalise. */
+	{
+		const appels = [];
+		const ancien = globalThis.window?.open;
+		globalThis.window = globalThis.window || {};
+		globalThis.window.open = (url, cible, options) => { appels.push([url, cible, options]); return null; };
+		const h = createObsidianHost(fausseApp(fichiers), { manifest: {} });
+		r.check("openUrl ouvre une adresse https dans un nouvel onglet, sans opener",
+			[await h.shell.openUrl("https://claude.ai/new?q=x"), appels],
+			[true, [["https://claude.ai/new?q=x", "_blank", "noopener"]]]);
+		r.check("openUrl refuse http: et file: sans appeler window.open",
+			[await h.shell.openUrl("http://claude.ai/"), await h.shell.openUrl("file:///C:/x.html"), appels.length],
+			[false, false, 1]);
+		globalThis.window.open = ancien;
+	}
 
 	/* La regex de cards.ts décide quelles URL sont DÉJÀ résolues. Un préfixe
 	   oublié fait réécrire une URL bonne — et le défaut n'apparaîtrait que

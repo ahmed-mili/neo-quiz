@@ -20,6 +20,7 @@
 
 import { LOG_PREFIX } from "../../../../src/branding";
 import type { Host } from "../../../../src/host/types";
+import { estUrlHttps } from "../../../../src/host/url";
 import { pont } from "./pont";
 import { createWindowsFs, createWindowsWatcher } from "./fs";
 import type { MiroirDisque } from "./fs";
@@ -88,6 +89,15 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		   l'appelant, pas glissée ici sous le même nom.) */
 		async revealInHost() {
 			return false;
+		},
+		/* `window.open` et non un canal IPC : le principal intercepte toute
+		   fenêtre demandée par la page (`setWindowOpenHandler`, main.ts) et remet
+		   au navigateur ce qui est du `https?:`, le filtre qui existe déjà pour
+		   les liens d'un quiz partagé. Aucun chemin de plus vers `shell`. */
+		async openUrl(url) {
+			if (!estUrlHttps(url)) return false;
+			window.open(url, "_blank", "noopener");
+			return true;
 		},
 	};
 

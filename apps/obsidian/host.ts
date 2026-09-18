@@ -27,6 +27,7 @@
 import { Notice, Platform, setIcon, getIconIds, loadMathJax, renderMath, finishRenderMath } from "obsidian";
 import type { App, DataAdapter, EventRef, TAbstractFile, TFile, View, WorkspaceLeaf } from "obsidian";
 import type { Host, HostFile, HostFileEvent, HostRoot } from "../../src/host/types";
+import { estUrlHttps } from "../../src/host/url";
 import { REVIEW_DIR, REVIEW_LOG_NAME } from "../../src/review/paths";
 
 /** Shell Electron minimal (surface réellement consommée : shell.openPath). */
@@ -615,6 +616,15 @@ export function createObsidianHost(
 				console.warn("[Quiz] revealInFolder a échoué:", e);
 			}
 			return false;
+		},
+		/* `window.open` et non un canal IPC : le principal intercepte toute
+		   fenêtre demandée par la page (`setWindowOpenHandler`, main.ts) et remet
+		   au navigateur ce qui est du `https?:`, le filtre qui existe déjà pour
+		   les liens d'un quiz partagé. Aucun chemin de plus vers `shell`. */
+		async openUrl(url) {
+			if (!estUrlHttps(url)) return false;
+			window.open(url, "_blank", "noopener");
+			return true;
 		},
 	};
 

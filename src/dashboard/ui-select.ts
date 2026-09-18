@@ -879,6 +879,10 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 			const st = canal && !multiple ? canal.dot : null;
 			if (st === "warn" || st === "err") ajouter(row, "span", "qbd-status-dot qbd-status-dot--" + st);
 			if (multiple) {
+				// Cette ligne OUVRE un sous-menu (le flyout des canaux) au lieu de
+				// choisir directement : la sémantique d'accessibilité standard pour
+				// un item de menu qui en révèle un second.
+				row.setAttribute("aria-haspopup", "menu");
 				const chev = ajouter(row, "span", "qbd-model-menu-row-chevron");
 				currentHost().ui.setIcon(chev, "chevron-right");
 				row.addEventListener("mouseenter", () => { cancelClose(); openFlyout(row, b); });

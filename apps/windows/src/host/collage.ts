@@ -1,5 +1,6 @@
 import type { HostCollage } from "../../../../src/host/types";
 import type { Pont } from "../../electron/pont";
+import { LOG_PREFIX } from "../../../../src/branding";
 
 /**
  * `HostCollage` sur le pont : le rendu donne le jeton et attend AU PLUS un
@@ -15,7 +16,13 @@ export function createWindowsCollage(pont: () => Pont): HostCollage {
 				off?.(); off = null;
 				surTexte(texte);
 			});
-			void pont().collage.attendre(jeton);
+			/* `false` = le jeton a été refusé côté principal (`jetonValide`) :
+			   ça ne devrait jamais arriver (la page en tire dix caractères
+			   conformes), donc un silence ici masquerait un vrai bug plutôt
+			   qu'un cas normal. */
+			void pont().collage.attendre(jeton).then(ok => {
+				if (!ok) console.warn(LOG_PREFIX, "attente refusée par le principal:", jeton);
+			});
 			return () => {
 				off?.(); off = null;
 				void pont().collage.arreter();

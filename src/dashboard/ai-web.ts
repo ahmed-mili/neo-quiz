@@ -5,6 +5,8 @@
    Spec : docs/superpowers/specs/2026-09-18-generation-web-design.md
 ══════════════════════════════════════════════════════════ */
 
+import { PHRASE_FINALE_CLI } from "./ai-client";
+
 /** La plus longue URL qu'on ose passer au navigateur.
     MESURÉE le 2026-09-18 par `npm run report:url-max` : ShellExecute admet
     32644 caractères sur cette machine (le serveur de claude.ai en accepte
@@ -12,8 +14,6 @@
     avec une marge : le navigateur ajoute ses propres arguments devant
     l'URL. Au-delà, le texte part par le presse-papier (`preparerOuverture`). */
 export const URL_MAX = 31600;
-
-import { PHRASE_FINALE_CLI } from "./ai-client";
 
 /** Comment un site s'ouvre avec la question déjà écrite. */
 export interface OuvertureWeb {
@@ -43,10 +43,20 @@ function consigneDeForme(jeton: string): string {
 		+ jeton + "` followed by the JSON5 array. No text before or after the block.";
 }
 
+/** La phrase du paragraphe « NO TOOLS » qui contredit la consigne de forme du
+    canal web : le CLI n'a qu'une sortie possible (le tableau JSON5 nu), un
+    site en a une autre (un bloc de code avec le jeton en première ligne). La
+    laisser telle quelle donnerait au modèle deux instructions de sortie
+    contradictoires dans le même prompt. */
+const PHRASE_SORTIE_CLI = "Your ONLY output is the JSON5 array.";
+const PHRASE_SORTIE_WEB = "Your ONLY output is the code block described below.";
+
 /** Le texte complet qui part à un site : les deux prompts, la consigne de
     forme à la place de la phrase finale du CLI. */
 export function texteWeb(prompts: { systemPrompt: string; userPrompt: string }, jeton: string): string {
-	const systeme = prompts.systemPrompt.replace(PHRASE_FINALE_CLI, consigneDeForme(jeton));
+	const systeme = prompts.systemPrompt
+		.replace(PHRASE_FINALE_CLI, consigneDeForme(jeton))
+		.replace(PHRASE_SORTIE_CLI, PHRASE_SORTIE_WEB);
 	return systeme + "\n\n" + prompts.userPrompt;
 }
 

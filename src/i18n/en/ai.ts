@@ -78,10 +78,10 @@ export const EN_AI = {
 	"ai.provider.codexSub": "Codex CLI · ChatGPT subscription",
 	"ai.provider.ollamaSub": "Local and cloud",
 
-	/* ── Canaux (le second niveau du menu : par quelle voie on parle a la marque) ── */
+	/* ── Canaux (le second niveau du menu : par quelle voie on parle à la marque) ── */
 	"ai.channel.cliSub": "On your machine",
 	"ai.channel.webSub": "In your browser",
-	"ai.channel.notWiredYet": "Design preview: web channels are not wired up yet.",
+	"ai.channel.notWiredYet": "Design preview: {site} is not wired up yet.",
 	"ai.channel.noImages": "Images can't be sent to a website. Remove them, or pick a CLI channel.",
 	"ai.channel.copyFailed": "The prompt could not be copied to the clipboard.",
 	"ai.channel.openFailed": "The browser could not be opened.",

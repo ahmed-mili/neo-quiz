@@ -74,6 +74,13 @@ await withSrcModule(
 		r2.check("il demande un bloc de code json5", texte.includes("```json5"), true);
 		r2.check("la phrase finale du CLI n'y est plus", texte.includes(client.PHRASE_FINALE_CLI), false);
 		r2.check("les deux prompts y sont, dans l'ordre", texte.indexOf("You are a quiz generator") < texte.indexOf("Generate a quiz about the following topic"), true);
+		/* La phrase « Your ONLY output is the JSON5 array. » du paragraphe NO
+		   TOOLS contredirait la consigne de forme (un bloc de code) — elle ne
+		   doit plus être dans le texte WEB, jamais dans le texte CLI. */
+		r2.check("la phrase de sortie du CLI (JSON5 array) n'est plus dans le texte web",
+			texte.includes("Your ONLY output is the JSON5 array."), false);
+		r2.check("le texte CLI garde cette phrase intacte (identique octet pour octet)",
+			client.PHRASE_FINALE_CLI !== "" && prompts.systemPrompt.includes("Your ONLY output is the JSON5 array."), true);
 	}
 
 	/* ── nouveauJeton ── */

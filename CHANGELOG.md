@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-18
+
 ### Fixed
 - Installing a CLI automatically now runs *exactly* the command the dialog shows you. For Codex the two had drifted apart, and the one the terminal ran could fail (`OSArchitecture` not found) on a machine where the printed one installed fine.
 

@@ -111,6 +111,18 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", ({ creerAttente,
 		s.attente.demarrer("k7f2q9abcd");
 		r.check("une seule sonde à la fois", s.temps.enAttente(), 1);
 	}
+	{
+		const s = scene();
+		let tentatives = 0;
+		const attenteFailing = creerAttente({
+			lire: () => { tentatives++; if (tentatives <= 2) throw new Error("clipboard unavailable"); return "// neo-quiz k7f2q9abcd"; },
+			horloge: s.temps.horloge,
+			livrer: t => s.livres.push(t),
+		});
+		attenteFailing.demarrer("k7f2q9abcd");
+		s.temps.tic(CADENCE_MS * 3);
+		r.check("un presse-papier qui lève ne tue pas l'attente : la sonde réessaie au tour suivant", [s.livres.length, attenteFailing.enCours()], [1, false]);
+	}
 
 	r.done();
 });

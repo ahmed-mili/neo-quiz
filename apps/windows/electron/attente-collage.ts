@@ -50,7 +50,13 @@ export function creerAttente(deps: { lire(): string; horloge: Horloge; livrer(te
 		sonde = null;
 		if (jeton === null) return;
 		if (deps.horloge.maintenant() - debut >= ECHEANCE_MS) { arreter(); return; }
-		const texte = deps.lire();
+		let texte: string;
+		try { texte = deps.lire(); } catch {
+			/* Le presse-papier peut être indisponible sur certaines plates-formes.
+			   L'exception ne tue pas l'attente : la sonde réessaie au tour suivant. */
+			sonde = deps.horloge.planifier(tour, CADENCE_MS);
+			return;
+		}
 		if (texte.includes(jeton)) {
 			/* Arrêter AVANT de livrer : si `livrer` relance une attente, elle ne
 			   doit pas être écrasée par l'arrêt de celle-ci. */

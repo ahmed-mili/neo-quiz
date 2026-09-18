@@ -177,11 +177,20 @@ export function openInstallModal(deps: InstallModalDeps): void {
 			const bloc = ajouter(li2, "div", "qbd-install-code markdown-rendered markdown-preview-view");
 			if (deps.renderCodeBlock) deps.renderCodeBlock(bloc, cmd.code, cmd.lang);
 			else colorerCommande(ajouter(ajouter(bloc, "pre"), "code", "language-" + cmd.lang), cmd.code);
-			const copier = ajouter(li2, "button", "qbd-btn qbd-install-copy");
+			/* DANS le bloc, en haut à droite, et révélé au survol : le geste
+			   d'Obsidian et de tous les blocs de code qu'on connaît. Sous le
+			   bloc, il chevauchait son icône et son libellé débordait — une
+			   largeur d'`inline-block` trop courte pour son contenu. Ici il est
+			   positionné, donc sa taille ne contraint plus rien. */
+			const copier = ajouter(bloc, "button", "qbd-btn qbd-install-copy");
 			copier.type = "button";
 			const copierIcone = ajouter(copier, "span", "qbd-btn-icon qbd-btn-icon--sm");
 			host.ui.setIcon(copierIcone, "copy");
-			ajouter(copier, "span", undefined, t("ai.install.copy"));
+			/* L ICONE SEULE : le mot doublait un pictogramme que tout le monde
+			   connaît, dans un coin où la place est comptée. Le libellé survit HORS
+			   ECRAN — un bouton sans nom accessible est muet pour un lecteur
+			   d écran — et c est lui qui dit « Copié » après le clic. */
+			const copierTexte = ajouter(copier, "span", "qbd-sr-only", t("ai.install.copy"));
 			copier.addEventListener("click", async () => {
 				/* Par l'hôte dès qu'il sait copier : dans la fenêtre de l'app,
 				   `navigator.clipboard` est refusé par le principal et échouerait
@@ -190,9 +199,20 @@ export function openInstallModal(deps: InstallModalDeps): void {
 					? await deps.copyText(cmd.code)
 					: await navigator.clipboard.writeText(cmd.code).then(() => true, () => false);
 				if (!ok) return;
+				/* La confirmation porte sur les DEUX : l'icône seule changeait
+				   pendant que le mot « Copier » restait, ce qui se lit comme une
+				   invitation à recliquer. Le bouton reste visible tant qu'elle
+				   dure (`data-copie`), même si la souris a quitté le bloc. */
 				copierIcone.replaceChildren();
 				host.ui.setIcon(copierIcone, "check");
-				window.setTimeout(() => { copierIcone.replaceChildren(); host.ui.setIcon(copierIcone, "copy"); }, 1500);
+				copierTexte.textContent = t("ai.install.copied");
+				copier.dataset.copie = "1";
+				window.setTimeout(() => {
+					copierIcone.replaceChildren();
+					host.ui.setIcon(copierIcone, "copy");
+					copierTexte.textContent = t("ai.install.copy");
+					delete copier.dataset.copie;
+				}, 1500);
 			});
 			ajouter(etapes, "li", undefined, t(`ai.install.step3.${deps.provider}`));
 			ajouter(etapes, "li", undefined, t("ai.install.step4"));

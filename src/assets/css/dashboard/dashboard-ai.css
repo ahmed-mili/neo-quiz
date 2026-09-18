@@ -1470,23 +1470,91 @@
 .qbd-install-check { color: var(--color-green, #4ade80); display: inline-flex; }
 .qbd-install-check svg { width: 16px; height: 16px; }
 .qbd-install-continue { margin-left: auto; }
-.qbd-install-steps { margin: 6px 0 0; padding-left: 20px; line-height: 1.5; }
-.qbd-install-steps li { margin: 0 0 8px; }
-.qbd-install-code { margin: 6px 0; }
-.qbd-install-code pre { margin: 0; padding: 8px 10px; border-radius: 8px; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
-.qbd-install-copy {
-	margin-top: 6px;
-	height: 28px;
-	padding: 0 10px;
-	gap: 6px;
+/* ── LA VOIE MANUELLE ──
+   Sa ligne repliable reprend les classes de l'arbre des quiz
+   (`qbd-quizzes-node-*`), qui les met en `flex` DANS cet arbre seulement.
+   Posée ici sans cette mise en page, la tête retombait en `inline-block` :
+   `gap` et `align-items` étaient ignorés, le chevron s'étirait sur 110 px de
+   haut et le libellé tombait dessous. Les deux règles ci-dessous lui rendent
+   sa ligne. */
+.qbd-install-manual-row .qbd-quizzes-node-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 6px 4px;
+	border-radius: 8px;
+	color: var(--text-muted);
+	font-size: 13px;
+	/* La MAIN, parce que rien d'autre ne dit que cette ligne se clique : elle
+	   n'a ni l'aspect d'un bouton ni de soulignement, et le chevron seul est
+	   trop discret. Les boutons du modal l'ont par le thème ; ces deux-là ne
+	   l'avaient pas, et étaient donc les seuls éléments cliquables du modal
+	   sur lesquels le curseur ne changeait pas. */
+	cursor: pointer;
+}
+.qbd-install-manual-row .qbd-quizzes-node-head:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.qbd-install-manual-row .qbd-quizzes-node-chevron { flex: 0 0 auto; width: 16px; height: 16px; display: inline-flex; }
+.qbd-install-manual-row .qbd-quizzes-node-chevron svg { width: 16px; height: 16px; }
+
+.qbd-install-steps { margin: 10px 0 0; padding-left: 22px; line-height: 1.6; }
+.qbd-install-steps li { margin: 0 0 12px; }
+.qbd-install-steps li:last-child { margin-bottom: 4px; }
+
+/* ── LE BLOC DE COMMANDE ──
+   Le bouton « Copier » vit DEDANS, en haut à droite, et se révèle au survol :
+   le geste d'Obsidian. Sous le bloc, il chevauchait son icône et son libellé
+   débordait de sa largeur.
+   `word-break: break-all` coupait la commande en plein mot
+   (« …/code » puis « x/install.ps1 ») : elle se casse maintenant aux espaces,
+   et la partie entre guillemets reste d'un seul tenant. */
+.qbd-install-code { position: relative; margin: 8px 0 0; }
+.qbd-install-code pre {
+	margin: 0;
+	padding: 10px 12px;
+	border-radius: 8px;
 	font-size: 12px;
-	border-radius: 7px;
-	background: transparent;
+	line-height: 1.55;
+	white-space: pre-wrap;
+	word-break: normal;
+	overflow-wrap: break-word;
+}
+.qbd-install-copy {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	/* CARRÉ, à la taille de son icône : le bouton ne porte plus de mot (le
+	   libellé vit hors écran, pour les lecteurs d'écran). */
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 6px;
+	cursor: pointer;
+	background: var(--background-secondary);
 	border: 1px solid var(--background-modifier-border);
 	color: var(--text-muted);
 	box-shadow: none;
+	opacity: 0;
+	transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
 }
-.qbd-install-copy:hover { color: var(--text-normal); border-color: var(--interactive-accent); background: var(--background-modifier-hover); }
+/* Révélé au survol du bloc, au focus clavier, et tant que la confirmation
+   « Copié » dure — sinon elle disparaîtrait avec la souris, juste au moment
+   où elle a quelque chose à dire. */
+.qbd-install-code:hover .qbd-install-copy,
+.qbd-install-copy:focus-visible,
+.qbd-install-copy[data-copie] { opacity: 1; }
+/* Sans souris (tactile, futur hôte Android), rien ne le révélerait : il reste
+   visible en permanence plutôt qu'introuvable. */
+@media (hover: none) {
+	.qbd-install-copy { opacity: 1; }
+}
+.qbd-install-copy:hover { color: var(--text-normal); border-color: var(--interactive-accent); }
+.qbd-install-copy[data-copie] { color: var(--color-green, #4ade80); border-color: var(--color-green, #4ade80); }
+.qbd-install-copy .qbd-btn-icon { margin: 0; }
+.qbd-install-copy svg { width: 14px; height: 14px; }
 .qbd-install-code code { font-family: var(--font-monospace, ui-monospace, monospace); color: var(--text-normal); }
 .qbd-install-code .qbd-tok-cmd { color: var(--color-purple, #c084fc); font-weight: 600; }
 .qbd-install-code .qbd-tok-flag { color: var(--color-cyan, #67e8f9); }

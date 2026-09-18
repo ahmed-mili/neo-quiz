@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Fixed
+- The "Install manually" section of the install window is readable again: its heading is back on one line (the chevron used to stretch over the label), the command no longer breaks in the middle of a word, and the copy button sits inside the code block, appearing on hover like in Obsidian, instead of overlapping its own label below the block. The collapsible heading and the copy button now show a hand cursor.
+
 ### Changed
 - Neo Quiz installs for your account, in `%LOCALAPPDATA%\Programs\Neo Quiz`, instead of `Program Files`. Windows no longer asks for administrator rights: not when you install it, and above all not on every update, which now applies with a click and a restart.
 

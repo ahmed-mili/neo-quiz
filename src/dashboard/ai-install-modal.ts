@@ -14,6 +14,7 @@
    à la fermeture ET à la détection : jamais un minuteur orphelin.
 ══════════════════════════════════════════════════════════ */
 import { LOG_PREFIX } from "../branding";
+import { getProvider, setBrandLogo } from "./ai-providers";
 import { commandeInstallation } from "../cli-install-cmd";
 import { ajouter } from "../dom";
 import { currentHost, requireHost } from "../host/current";
@@ -88,9 +89,18 @@ export function openInstallModal(deps: InstallModalDeps): void {
 	let sonde: number | null = null;
 	const couperSonde = (): void => { if (sonde !== null) { window.clearInterval(sonde); sonde = null; } };
 
+	/* Le LOGO DE MARQUE dans la ligne du titre (2026-09-18) : coloré, sans
+	   pastille ni contour. Le fournisseur et sa couleur viennent du catalogue
+	   partagé (`ai-providers.ts`), le même que celui du menu — une seconde
+	   table aurait fini par en diverger. */
+	const marque = getProvider(deps.provider);
 	requireHost("modals").open({
 		className: "qbd-install-modal",
 		title: t(`ai.install.title.${deps.provider}`),
+		titleIcon: (el) => {
+			setBrandLogo(el, marque.logo);
+			el.style.color = marque.couleur;
+		},
 		onOpen: (m) => {
 			const c = m.contentEl;
 			m.panelEl.dataset.state = "initial";
@@ -105,8 +115,14 @@ export function openInstallModal(deps: InstallModalDeps): void {
 				const auto = ajouter(c, "button", "qbd-btn--create qbd-install-auto");
 				auto.type = "button";
 				host.ui.setIcon(ajouter(auto, "span", "qbd-btn-icon"), "download");
+				/* PLUS de phrase sous le bouton (2026-09-18) : la confirmation
+				   NATIVE que l'hôte ouvre juste après disait déjà les deux
+				   mêmes choses — « Neo Quiz va ouvrir PowerShell et y lancer
+				   l'installation officielle de X » et « vous verrez tout ce que
+				   fait l'installateur » (`app.installCli.message` et
+				   `.detail`). La lire deux fois à deux secondes d'intervalle ne
+				   rassurait pas, ça encombrait. */
 				ajouter(auto, "span", undefined, t("ai.install.auto"));
-				ajouter(c, "p", "qbd-install-auto-hint", t("ai.install.autoHint"));
 				auto.addEventListener("click", async () => {
 					auto.disabled = true;
 					/* Un rejet du pont (outil hors liste blanche, panne de l'IPC) laissait

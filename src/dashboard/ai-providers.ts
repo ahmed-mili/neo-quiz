@@ -32,6 +32,22 @@ export interface Provider {
 	name: string;
 	sub: string;
 	logo: string;
+	/**
+	 * La couleur du logo de marque, là où il est montré SEUL et en grand assez
+	 * pour la porter — le titre du modal d'installation, aujourd'hui.
+	 *
+	 * Elle ne vaut pas partout : dans le menu des fournisseurs et dans le pied
+	 * du composer, les logos suivent la couleur du texte, parce qu'ils y
+	 * voisinent des libellés et des états. Un appelant qui n'en veut pas ne la
+	 * lit pas.
+	 *
+	 * Seul l'orange de Claude est une couleur de MARQUE au sens strict
+	 * (Anthropic la publie). ChatGPT et Ollama ont des logos monochromes : le
+	 * vert est la couleur historique d'OpenAI, et Ollama garde un blanc cassé
+	 * faute de couleur propre. C'est écrit ici pour qu'on ne les prenne pas
+	 * un jour pour des valeurs officielles.
+	 */
+	couleur: string;
 	desktopOnly: boolean;
 	defaultModel: string;
 	defaultEffort: string;
@@ -107,6 +123,7 @@ export const PROVIDERS: Provider[] = [
 		name: "Claude",
 		get sub() { return t("ai.provider.claudeSub"); },
 		logo: "claude",
+		couleur: "#D97757",
 		desktopOnly: true,
 		defaultModel: "opus",
 		defaultEffort: "high"
@@ -119,6 +136,7 @@ export const PROVIDERS: Provider[] = [
 		// le mauvais outil (vécu Ahmed 2026-07-12).
 		get sub() { return t("ai.provider.codexSub"); },
 		logo: "openai",
+		couleur: "#10A37F",
 		desktopOnly: true,
 		defaultModel: "gpt-5.6-terra",
 		defaultEffort: "medium"
@@ -128,6 +146,7 @@ export const PROVIDERS: Provider[] = [
 		name: "Ollama",
 		get sub() { return t("ai.provider.ollamaSub"); },
 		logo: "ollama",
+		couleur: "#E7E9EE",
 		desktopOnly: false,
 		defaultModel: "glm-5.3:cloud",
 		defaultEffort: "high"

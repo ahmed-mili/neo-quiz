@@ -69,7 +69,12 @@ function ouvrir(spec: HostModalSpec): HostModalHandle {
 	fermeture.setAttribute("aria-label", t("engine.hint.close"));
 	poserIcone(fermeture, "x");
 
-	const titre = ajouter(panneau, "div", "modal-title", spec.title);
+	const titre = ajouter(panneau, "div", "modal-title");
+	/* La marque D'ABORD, le texte ensuite : c'est l'ordre de lecture, et c'est
+	   aussi celui du DOM — une aide technique lit le titre sans rien de plus,
+	   l'élément de marque étant vide de texte. */
+	if (spec.title && spec.titleIcon) spec.titleIcon(ajouter(titre, "span", "modal-title-icon"));
+	if (spec.title) ajouter(titre, "span", "modal-title-text", spec.title);
 	/* `aria-labelledby` SEULEMENT quand il y a un titre : le désigner sans
 	   titre nommerait la boîte de dialogue par la chaîne VIDE, ce qui est pire
 	   que de ne pas la nommer — une aide technique annoncerait « dialogue »

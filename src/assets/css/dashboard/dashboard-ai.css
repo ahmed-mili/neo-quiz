@@ -1454,13 +1454,11 @@
 /* ── Le modal d'un fournisseur absent (spec 2026-09-17, § 3b) ── */
 .qbd-install-modal { width: 520px; max-width: calc(100vw - 32px); }
 .qbd-install-what { margin: 0 0 14px; color: var(--text-muted); line-height: 1.5; }
-.qbd-install-auto { width: 100%; justify-content: center; }
-.qbd-install-auto-hint { margin: 8px 0 16px; font-size: 12px; color: var(--text-faint); line-height: 1.45; }
+.qbd-install-auto { width: 100%; justify-content: center; margin-bottom: 14px; }
 .qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; }
 .qbd-install-state:not(:empty) { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: var(--background-modifier-hover); }
 .qbd-install-modal[data-state="en-cours"] .qbd-install-auto,
-.qbd-install-modal[data-state="detecte"] .qbd-install-auto,
-.qbd-install-modal[data-state="detecte"] .qbd-install-auto-hint { display: none; }
+.qbd-install-modal[data-state="detecte"] .qbd-install-auto { display: none; }
 .qbd-install-spinner {
 	width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%;
 	border: 2px solid var(--text-faint); border-top-color: var(--interactive-accent);

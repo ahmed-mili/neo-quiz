@@ -652,6 +652,18 @@ export interface HostModalSpec {
 	    ne les choisit pas. */
 	className?: string;
 	title?: string;
+	/**
+	 * Remplit une marque posée AVANT le titre, sur sa ligne. Sert au logo du
+	 * fournisseur dans le modal d'installation ; ignoré s'il n'y a pas de
+	 * titre.
+	 *
+	 * UN RAPPEL, ET NON UNE CHAÎNE DE HTML : le contrat ne fait jamais voyager
+	 * du balisage. L'appelant dessine ce qu'il veut dans l'élément qu'on lui
+	 * donne, l'hôte ne fournit que l'emplacement, et aucune des quatre portes
+	 * du sanitizer (`CLAUDE.md`, « Texte et HTML d'un quiz ») n'est contournée
+	 * — un `titleHtml` en aurait ouvert une cinquième pour rien.
+	 */
+	titleIcon?(el: HTMLElement): void;
 	/** Construit le contenu. Appelé une fois, après attachement — un appelant
 	    qui mesure un élément doit pouvoir le faire ici. */
 	onOpen(handle: HostModalHandle): void;

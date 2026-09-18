@@ -210,8 +210,12 @@ Le DÉTAIL — le défaut réel que chaque contrôle empêche — vit dans
   étape et le pourcentage que le noyau publierait. C'est lui qui a montré que
   NSIS n'écrit dans le dossier d'installation que 6 à 12 % de la durée (d'où le
   capteur de `progressionInstallation`), et que le désinstalleur DÉPLACE
-  l'ancienne version dans le dossier temporaire avant de l'effacer. Exige une
-  console ÉLEVÉE : le NSIS d'electron-builder est `requireAdministrator`.
+  l'ancienne version dans le dossier temporaire avant de l'effacer. N'exige
+  PLUS de console élevée depuis la bascule par utilisateur (2026-09-18,
+  `nsis.perMachine` à faux) : le NSIS demandait `requireAdministrator` tant
+  qu'il visait `Program Files`, et c'est cette élévation — celle du manifeste,
+  pas une élévation de l'application — qui rendait l'UAC visible à chaque mise
+  à jour.
 - `node scripts/audit-vaults.mjs "<vault>" […]` — **avant une release**, ou après
   toute retouche de `convertParsedToInternal` / `exportAll`. Aller-retour lecture →
   écriture → lecture sur de vrais vaults : le bloc réécrit se relit, et aucun champ

@@ -46,6 +46,7 @@ function sha512Base64(chemin) {
 const racine = fileURLToPath(new URL("..", import.meta.url));
 const appWindows = `${racine}apps/windows/`;
 const uninstallerNsis = readFileSync(`${appWindows}installer/uninstaller.nsh`, "utf8");
+const noyauInstalleur = readFileSync(`${appWindows}installer/noyau.ts`, "utf8");
 
 const r = makeReporter("Empaquetage — configuration résolue");
 
@@ -111,6 +112,24 @@ r.check("files exclut node_modules et les sourcemaps",
 	[config.files.includes("!node_modules/**"), config.files.includes("!dist-electron/**/*.map")],
 	[true, true]);
 r.check("la désinstallation garde les données", config.nsis?.deleteAppDataOnUninstall, false);
+/* L'INSTALLATION EST PAR UTILISATEUR, ET CE CAS EXISTE POUR QU'ELLE LE RESTE.
+
+   `perMachine: true` définit `INSTALL_MODE_PER_ALL_USERS` chez
+   electron-builder, qui met `RequestExecutionLevel admin` dans le MANIFESTE de
+   l'installeur : Windows élève avant que NSIS ne démarre, et l'invite UAC
+   revient à CHAQUE mise à jour — celles-ci relancent le même installeur. C'est
+   le défaut corrigé le 2026-09-18, et il ne se voit nulle part ailleurs : le
+   paquet se construit, se signe et s'installe exactement pareil. Seul
+   l'utilisateur le voit, une fenêtre à la fois.
+
+   Le commutateur du bootstrapper va avec (`/currentuser`,
+   `installer/noyau.ts`) : sans lui, une installation trouvée dans `HKLM`
+   ferait repartir NSIS en mode machine, donc en UAC, malgré cette clé. */
+r.check("l'installation reste par utilisateur (pas d'élévation à chaque mise à jour)",
+	config.nsis?.perMachine, false);
+r.check("le bootstrapper lance l'installeur en mode utilisateur",
+	{ currentuser: noyauInstalleur.includes('"/currentuser"'), allusers: noyauInstalleur.includes('"/allusers"') },
+	{ currentuser: true, allusers: false });
 r.check("désinstallation : fenêtre native minimale avec seulement la progression réelle",
 	[
 		config.nsis?.oneClick,
@@ -132,7 +151,7 @@ r.check("désinstallation : fenêtre native minimale avec seulement la progressi
 		uninstallerNsis.includes("NeoQuizAnimerSpinner"),
 		uninstallerNsis.includes('"STR:$R2%"'),
 	],
-	[false, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false]);
+	[false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false]);
 r.check("author.name est celui attendu par winget et SignPath", config.extraMetadata?.author?.name, "Ahmed Mili");
 r.check("publisherName n'est posé qu'une fois le CN du certificat connu",
 	config.win?.signtoolOptions?.publisherName ?? null, PUBLISHER_ATTENDU);

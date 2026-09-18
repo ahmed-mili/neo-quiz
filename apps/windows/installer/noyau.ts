@@ -363,11 +363,19 @@ export function progressionInstallation(
 export const NOM_EXECUTABLE = "neo-quiz.exe";
 
 /** Arguments de l'installeur assisté d'electron-builder en mode silencieux.
-    `/allusers` force le même mode machine que l'utilisateur choisissait dans
-    l'ancienne page NSIS. `/D=` est spécial chez NSIS : electron-builder
-    26.0.19 le lit comme TOUT ce qui suit, donc il doit rester le dernier. */
+
+    `/currentuser` (et non plus `/allusers`, 2026-09-18) : l'installation vit
+    dans le profil de l'utilisateur, ce qui supprime l'invite UAC — à
+    l'installation comme à CHAQUE mise à jour, qui relance le même installeur.
+    Voir `electron-builder.config.mjs`, `nsis.perMachine`, pour ce que ce choix
+    implique. Le commutateur est lu par `assistedInstaller.nsh` et l'emporte sur
+    ce que le registre contient : sans lui, une installation machine trouvée
+    dans `HKLM` ferait repartir NSIS en mode machine, donc en UAC.
+
+    `/D=` est spécial chez NSIS : electron-builder 26.0.19 le lit comme TOUT ce
+    qui suit, donc il doit rester le dernier. */
 export function argumentsNsis(dossier: string): string[] {
-	return ["/allusers", "/S", `/D=${dossier}`];
+	return ["/currentuser", "/S", `/D=${dossier}`];
 }
 
 /* ─────────── la langue de l'installeur ───────────

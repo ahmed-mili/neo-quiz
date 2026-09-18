@@ -13,6 +13,11 @@ release notes.
 
 ## [Unreleased]
 
+### Changed
+- Neo Quiz installs for your account, in `%LOCALAPPDATA%\Programs\Neo Quiz`, instead of `Program Files`. Windows no longer asks for administrator rights: not when you install it, and above all not on every update, which now applies with a click and a restart.
+
+**Uninstall your current version once before installing this one.** Windows picks the install mode from what it finds in the registry, so an existing "for all users" install keeps asking for elevation whatever this version does. Your settings and your open folders are kept.
+
 ## [1.3.0] - 2026-09-18
 
 ### Fixed

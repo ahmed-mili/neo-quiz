@@ -181,11 +181,33 @@ export default async function () {
 			packageCategory: "education",
 		},
 		nsis: {
-			/* Le bootstrapper installe toujours dans Program Files avec /allusers.
-			   L'expliciter ici évite au désinstalleur une page de choix de portée :
-			   il arrive directement sur sa petite fenêtre de progression. */
+			/* PAR UTILISATEUR, ET C'EST TOUTE LA RAISON DE CETTE LIGNE (2026-09-18).
+
+			   `perMachine: true` définit `INSTALL_MODE_PER_ALL_USERS` chez
+			   electron-builder, qui met `RequestExecutionLevel admin` dans le
+			   MANIFESTE de l'installeur : Windows élève avant même que NSIS ne
+			   démarre, et l'utilisateur voyait donc l'UAC à CHAQUE mise à jour —
+			   celles-ci relancent le même installeur. Aucune signature ne supprime
+			   cette invite : elle tient au fait d'écrire dans `Program Files`.
+
+			   À `false`, le manifeste demande `user`, l'application vit dans
+			   `%LOCALAPPDATA%\\Programs\\Neo Quiz` et une mise à jour s'applique
+			   sans un prompt. Le choix est le même que celui de VS Code et de
+			   Discord ; il coûte que l'application n'est plus installée pour tous
+			   les comptes de la machine, ce que personne n'a jamais demandé ici.
+
+			   CE QUE `false` NE FAIT PAS, et il faut le savoir avant de lire le
+			   code d'installation : le mode n'est PAS figé par cette clé. Il est
+			   choisi au lancement (`assistedInstaller.nsh`) d'après le REGISTRE —
+			   une installation trouvée dans `HKLM` fait repartir en mode machine,
+			   même dans cette build. Une machine déjà installée « pour tous » doit
+			   donc être désinstallée UNE fois pour que la bascule prenne effet ;
+			   c'est écrit dans les notes de la version qui l'a introduite.
+
+			   `oneClick: false` reste : le bootstrapper lance NSIS en silence, et
+			   seul le désinstalleur visible doit être compact. */
 			oneClick: false,
-			perMachine: true,
+			perMachine: false,
 			allowToChangeInstallationDirectory: true,
 			/* L'installation garde le wizard NSIS parce que le bootstrapper le
 			   lance en silence ; seul le désinstalleur visible doit être compact. */

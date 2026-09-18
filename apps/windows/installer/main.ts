@@ -111,11 +111,17 @@ async function espaceDisponible(dossier: string): Promise<number> {
 }
 
 function dossierDefaut(): string {
-	/* Une installation machine doit partir du dossier système destiné aux
-	   programmes. Les variables Windows sont préférées au littéral pour
-	   respecter une installation déplacée de Program Files. */
-	const programmes = process.env.ProgramW6432 ?? process.env.ProgramFiles ?? "C:\\Program Files";
-	return join(programmes, PRODUCT_NAME);
+	/* `%LOCALAPPDATA%\Programs` (et non plus `Program Files`, 2026-09-18) :
+	   c'est l'emplacement d'une installation PAR UTILISATEUR, le seul où écrire
+	   ne demande pas l'élévation — ni maintenant, ni à chaque mise à jour. Même
+	   dossier que VS Code et Discord. La raison complète est dans
+	   `electron-builder.config.mjs`, `nsis.perMachine`.
+
+	   La variable d'environnement est préférée au littéral pour respecter un
+	   profil déplacé ; le repli reste le chemin conventionnel, et non
+	   `Program Files`, qui ramènerait l'UAC par la porte de derrière. */
+	const local = process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? "C:\\Users\\Default", "AppData", "Local");
+	return join(local, "Programs", PRODUCT_NAME);
 }
 
 /** Neo Quiz est-il DÉJÀ installé dans ce dossier ?

@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-18
+
 ### Added
 - Generate with claude.ai, from the provider menu: the site opens with your question already typed in, you send it and copy the answer, and the quiz is created in Neo Quiz on its own. The menu now lists one line per brand (Claude, ChatGPT, Perplexity, Ollama) and lets you pick the channel, the CLI on your machine or the website, on a second level. chatgpt.com and perplexity.ai are listed but not wired up yet.
 

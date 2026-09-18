@@ -597,6 +597,18 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   qui survivrait à son tour garderait en mémoire ce que l'utilisateur a
 	   copié ENSUITE, pour tout autre usage, jusqu'à la prochaine sonde. */
 	let dernierTexteCopie = "";
+	/* `clipboard.readText()` est ASYNCHRONE (voir le commentaire plus haut) :
+	   un `clearTimeout` n'a PLUS AUCUN EFFET une fois le minuteur écoulé et la
+	   lecture en vol — `annuler` arrivant alors (l'utilisateur clique
+	   « Rouvrir ») laisse la lecture en cours se terminer et rappeler `fn`,
+	   qui replanifie un tour : DEUX boucles tournent ensuite côte à côte sur
+	   la même attente, chacune consommant le presse-papier de l'autre. La
+	   table retient donc, par id de sonde, le minuteur ET si elle est encore
+	   vivante — `annuler` la retire tout de suite (avant même la fin de la
+	   lecture), et le `finally` ne rappelle `fn` que s'il trouve encore son id
+	   dedans. */
+	let prochaineSondeId = 1;
+	const sondesVivantes = new Map<number, ReturnType<typeof setTimeout>>();
 	const attente = creerAttente({
 		lire: () => {
 			const t = dernierTexteCopie;
@@ -604,10 +616,22 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			return t;
 		},
 		horloge: {
-			planifier: (fn, ms) => setTimeout(() => {
-				clipboard.readText().then(t => { dernierTexteCopie = t; }).catch(() => {}).finally(fn);
-			}, ms) as unknown as number,
-			annuler: id => clearTimeout(id),
+			planifier: (fn, ms) => {
+				const id = prochaineSondeId++;
+				const minuteur = setTimeout(() => {
+					clipboard.readText().then(t => { dernierTexteCopie = t; }).catch(() => {}).finally(() => {
+						if (sondesVivantes.delete(id)) fn();
+					});
+				}, ms);
+				sondesVivantes.set(id, minuteur);
+				return id;
+			},
+			annuler: id => {
+				const minuteur = sondesVivantes.get(id);
+				if (minuteur === undefined) return;
+				clearTimeout(minuteur);
+				sondesVivantes.delete(id);
+			},
 			maintenant: () => Date.now(),
 		},
 		livrer: texte => {

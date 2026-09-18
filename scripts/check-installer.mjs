@@ -523,8 +523,23 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 				site.includes('afficherVersion("windows", donnees, MOTIF_INSTALLEUR_WINDOWS, null)'),
 			],
 			[true, true, true]);
-		r.check(`site ${langue} : Windows n'offre pas un faux choix de versions`,
-			site.includes('activerSelecteurVersion("windows"'), false);
+		/* Le choix de version est REVENU le 2026-09-18 (il n'existait plus depuis
+		   `16e1f21`). Ce qui reste interdit, et ce que ce cas garde, c'est le
+		   FAUX choix : le bootstrapper lit toujours
+		   `releases/latest/download/latest.yml`, donc il installe la DERNIÈRE
+		   version quelle que soit la sienne. Seule la dernière release peut le
+		   servir ; toute autre doit mener à l'installeur complet, le seul asset
+		   qui installe vraiment sa version. Et le menu ne liste que les tags de
+		   l'APPLICATION : les releases du greffon (`X.Y.Z` nu) partagent le même
+		   flux et ne portent aucun installeur Windows. */
+		r.check(`site ${langue} : le choix de version ne promet que ce que l'asset tient`,
+			[
+				site.includes("activerSelecteurVersion();"),
+				site.includes("var MOTIF_SETUP_WINDOWS = /^neo-quiz-setup-\\d+\\.\\d+\\.\\d+\\.exe$/i;"),
+				site.includes("var motif = estDerniere ? MOTIF_INSTALLEUR_WINDOWS : MOTIF_SETUP_WINDOWS;"),
+				site.includes("var MOTIF_TAG_APP = /^desktop-v\\d+\\.\\d+\\.\\d+$/;"),
+			],
+			[true, true, true, true]);
 		r.check(`site ${langue} : le pied de page mène aux deux pages légales`,
 			[site.includes('href="terms.html"'), site.includes('href="privacy.html"')], [true, true]);
 		r.check(`site ${langue} : un clic sur une langue est mémorisé comme un CHOIX`,

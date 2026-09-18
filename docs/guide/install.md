@@ -24,7 +24,7 @@ Updates then arrive on their own through BRAT. Manually: BRAT settings, *Add Bet
 
 ### Code signing policy
 
-The Windows installer is currently unsigned. A free certificate has been requested from [SignPath Foundation](https://signpath.org); once granted, this section will read: "Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org)".
+The Windows installer is not code-signed. Windows SmartScreen therefore shows "Windows protected your PC" the first time you run it; the updates that follow arrive from inside the app and carry no such warning.
 
 - Committers, reviewers and approvers: [Ahmed Mili](https://github.com/ahmed-mili), the sole maintainer. Every release is built by GitHub Actions from a tagged commit of this repository and approved by him.
 - Privacy: this program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. AI generation talks only to the local CLI or Ollama server you configure; the Ollama model catalogue is fetched from ollama.com when you open the model list.

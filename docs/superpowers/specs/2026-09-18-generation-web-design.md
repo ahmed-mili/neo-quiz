@@ -46,10 +46,27 @@ parcours :
 
 Et deux faits du code : le canal de copie du principal refuse au-delà de
 8192 caractères (`canaux.ts`, `systemeCopierTexte`), et **aucune lecture du
-presse-papier n'est exposée**, délibérément (`pont.ts`, `copierTexte` :
-autoriser `clipboard-read` dans la fenêtre donnerait à la page le droit de
-lire ce que l'utilisateur copie ailleurs). Le retour se fait donc par un
-`paste`, jamais par une relecture programmée.
+presse-papier n'est exposée au rendu**, délibérément (`pont.ts`,
+`copierTexte` : autoriser `clipboard-read` dans la fenêtre donnerait à la
+page le droit de lire ce que l'utilisateur copie ailleurs). Ce document ne
+revient pas sur cette règle : c'est le PRINCIPAL qui lira, sous les
+conditions du §4, et le rendu ne recevra jamais que la réponse attendue.
+
+**Le compte des gestes gouverne le reste** (demande d'Ahmed : le moins de
+clics possible). Deux clics ne bougent pas sans piloter le site, ce qu'on
+s'interdit : « Envoyer » sur claude.ai (le site n'envoie pas de lui-même,
+et son bandeau rouge existe pour ça) et « Copier » la réponse. Tout ce qui
+reste à gagner est après la copie : l'utilisateur ne doit ni revenir dans
+l'application par lui-même, ni coller, ni confirmer. Le parcours cible est
+donc **Ouvrir, Envoyer, Copier**, et l'application fait le reste. Deux
+choses rendent ça possible, et elles viennent du fait que le prompt est le
+nôtre : la réponse est demandée dans un **bloc de code** (sur claude.ai, un
+bloc de code a son propre bouton Copier, un clic, toujours au même
+endroit), et elle commence par un **jeton** tiré à l'ouverture, qui permet
+au principal de la reconnaître sans rien lire d'autre. Le téléchargement
+d'un fichier a été envisagé et écarté : même compte de clics au mieux, mais
+il suppose que le site produise un artefact, ce que lui seul décide, et il
+ouvrirait le périmètre du pont au dossier Téléchargements.
 
 ## 1. Le registre : une marque, des canaux (déjà en place)
 
@@ -92,12 +109,36 @@ export function composerPrompts(prompt: string, options: GenerateOptions): { sys
 ```
 
 appelée par `generateInner` (rien ne change pour les CLI : c'est le même
-texte, déplacé) et par la page pour un canal web. **Le texte d'un site est
-exactement celui de Claude Code sans images** : `systemPrompt + "\n\n" +
-userPrompt`. Le nombre de questions, le type et le contenu des notes jointes
-y sont déjà ; le dossier de destination reste côté application (c'est là
-que le quiz est enregistré au retour, §5). Rien de plus à faire entrer dans
-le texte.
+texte, déplacé) et par la page pour un canal web. Le nombre de questions, le
+type et le contenu des notes jointes y sont déjà ; le dossier de destination
+reste côté application (c'est là que le quiz est enregistré au retour, §5).
+
+**Le texte d'un site** est celui de Claude Code sans images, plus une
+consigne de FORME que seul un site reçoit, produite par une seconde fonction
+pure :
+
+```ts
+/** Le texte complet qui part à un site : les deux prompts, puis la consigne
+    de forme (bloc de code, jeton en première ligne). Le CLI ne la reçoit
+    pas : il n'a pas de bouton Copier, et son parseur lit la sortie brute. */
+export function texteWeb(prompts: { systemPrompt: string; userPrompt: string }, jeton: string): string
+```
+
+La consigne, en anglais comme le reste du prompt (elle s'adresse au modèle,
+pas à l'utilisateur) : répondre par UN SEUL bloc de code ` ```json5 `, dont
+la première ligne est le commentaire `// neo-quiz <jeton>`, suivi du tableau
+et de rien d'autre ; aucun texte avant ni après le bloc. Le commentaire est
+du JSON5 valide : `parseReponseQuiz` (§5) l'avale sans changement, et la
+fence est déjà retirée par son expression régulière. La consigne REMPLACE
+la dernière phrase du prompt système (« Reply ONLY with the JSON5 array,
+with no explanation and no formatting ») pour un site ; elle est retirée du
+texte par `texteWeb` pour ne pas dire une chose et son contraire.
+
+**Le jeton** : dix caractères de `[a-z0-9]`, tirés par la page à chaque
+ouverture (`crypto.getRandomValues`), portés par la phase d'attente. Il sert
+à une seule chose : reconnaître LA réponse attendue dans le presse-papier
+(§4). Un jeton neuf par ouverture : rouvrir le site en tire un autre, et
+l'attente ne reconnaît que le dernier.
 
 **Les images ne passent pas.** Ni une adresse ni un presse-papier texte ne
 transportent une image. Si le composer en contient au moment d'ouvrir, rien
@@ -140,6 +181,27 @@ d'appeler `window.open` : le filtre du principal le refuserait aussi, mais
 une garde côté contrat donne un `false` net au lieu d'un avertissement dans
 la console.
 
+### 3 bis. Le contrat d'attente
+
+Un membre OPTIONNEL du contrat d'hôte, à côté de `process` et `pdf` :
+
+```ts
+/** L'attente d'une réponse copiée, pendant une génération par un site. Le
+    principal sonde le presse-papier et ne livre que le texte qui porte le
+    jeton (voir la spec du 2026-09-18, §4). Absent sous le greffon : la page
+    attend alors un collage manuel. */
+export interface HostCollage {
+	/** Démarre l'attente ; la fonction rendue l'arrête. Une nouvelle attente
+	    remplace la précédente. `surTexte` est appelé AU PLUS une fois. */
+	attendre(jeton: string, surTexte: (texte: string) => void): () => void;
+}
+```
+
+Sous l'application, `apps/windows/src/host/collage.ts` l'implémente sur
+`window.neo.collage` (`attendre(jeton)`, `arreter()`, `surTexte(rappel)`),
+ajouté au `Pont` et au preload sur le patron de `miseAJour`. Le principal
+tient l'attente dans `canaux.ts` avec le noyau pur du §4.
+
 **Copier** : `deps.copyText` existe déjà (le modal d'installation copie une
 commande). Sa borne côté principal passe de 8192 à **524 288 caractères**
 (512 Ko) : toujours une borne, mais qui laisse passer un prompt système de
@@ -165,27 +227,55 @@ bulle), il regarde le canal :
 « envoyé » en haut (comme en `loading`), puis à la place du loader une
 carte :
 
-- titre « Colle la réponse de claude.ai » (le nom du site vient du canal) ;
-- une zone de collage : un `<textarea>` au placeholder « Colle ici, ou
-  Ctrl+V n'importe où sur la page », qui prend le focus à l'entrée de la
-  phase ;
+- titre « Copie la réponse de claude.ai » (le nom du site vient du canal),
+  et une ligne qui dit ce qui va se passer : « dès qu'elle est copiée, le
+  quiz se crée ici tout seul » ;
 - une ligne d'aide qui prévient du bandeau rouge de claude.ai (« claude.ai
   affiche un avertissement sur les invites venues d'un lien : c'est normal,
-  envoie ») et, en mode presse-papier, dit que le texte est copié et qu'il
-  faut le coller là-bas d'abord ;
-- deux boutons fantômes : « Rouvrir claude.ai » (rejoue l'ouverture, même
-  texte) et « Annuler » (retour à `idle`, la demande revient dans le
-  composer, comme l'annulation d'une génération).
+  envoie ») et, en mode presse-papier, dit d'abord que le texte est copié et
+  qu'il faut le coller là-bas ;
+- deux boutons fantômes : « Rouvrir claude.ai » (rejoue l'ouverture avec
+  un jeton neuf) et « Annuler » (retour à `idle`, la demande revient dans
+  le composer, comme l'annulation d'une génération).
 
-Le composer reste en bas, vide, comme pendant une génération.
+Le composer reste en bas, vide, comme pendant une génération. Pas de zone
+de collage : le collage manuel reste possible (ci-dessous) mais n'est plus
+le chemin nominal, et un champ qui l'appelle ferait croire qu'il est
+obligatoire.
 
-**Le collage** : un écouteur `paste` sur `document` (capture), posé à
-l'entrée de la phase et retiré à sa sortie et dans `dispose`. Il ne traite
-que le texte (`clipboardData.getData("text/plain")`) et **ignore un collage
-dont la cible est le composer** : y coller, c'est écrire une nouvelle
-demande, pas répondre. Tout autre collage (le textarea de la carte, ou la
-page elle-même quand aucun champ n'a le focus) est la réponse. Esc annule,
-comme pendant une génération.
+**La veille, par le principal.** À l'entrée de la phase, la page appelle
+`host.collage.attendre(jeton, surTexte)` (contrat, §3 bis) ; l'hôte Windows
+le remet au principal, qui **sonde le presse-papier toutes les 500 ms**
+(`clipboard.readText()`) tant que l'attente dure. Règles, toutes dans un
+noyau PUR (`apps/windows/electron/attente-collage.ts`, éprouvé par
+`check:electron-collage`) :
+
+- le jeton doit faire au moins huit caractères de `[a-z0-9]`, sinon
+  l'attente est REFUSÉE : un jeton vide ferait reconnaître n'importe quoi ;
+- un texte est livré si et seulement s'il **contient le jeton** ; tout
+  autre contenu est oublié sur place, sans journal, sans transmission ;
+- une seule livraison : dès qu'un texte est livré, l'attente s'arrête ;
+- l'attente s'arrête aussi sur `arreter()` (Annuler, Esc, `dispose`, un
+  nouveau `attendre` qui la remplace) et **après trente minutes**, pour ne
+  jamais laisser une sonde tourner sans que personne n'attende ;
+- deux attentes ne coexistent pas : une nouvelle remplace l'ancienne.
+
+À la livraison, le principal pousse le texte au rendu (`webContents.send`,
+même patron que `miseAJour.surEtat`) et **fait clignoter la fenêtre dans la
+barre des tâches** (`flashFrame(true)`, éteint au prochain `focus`), sans
+la ramener de force : Windows refuse le vol de focus, et un utilisateur
+qui lit encore la réponse ne veut pas être interrompu. Sous le greffon,
+`host.collage` est absent : la page attend alors un collage manuel, et la
+carte le dit (« colle la réponse ici avec Ctrl+V »).
+
+**Le collage manuel reste** comme second chemin (la fenêtre déjà sous les
+yeux, ou un hôte sans veille) : un écouteur `paste` sur `document`
+(capture), posé à l'entrée de la phase et retiré à sa sortie et dans
+`dispose`. Il ne traite que le texte (`clipboardData.getData("text/plain")`)
+et **ignore un collage dont la cible est le composer** : y coller, c'est
+écrire une nouvelle demande, pas répondre. Il n'exige pas le jeton (un
+collage est un geste volontaire, il vaut consentement). Esc annule, comme
+pendant une génération.
 
 ## 5. Le retour : du texte collé au quiz enregistré
 
@@ -197,10 +287,13 @@ parseur, avec sa position) d'une réponse qui n'est pas un quiz
 (`nonQuizResponseError`, qui montre ce que le modèle a dit). `generateInner`
 continue de l'appeler.
 
-Réussite : `generatedQuestions = parseReponseQuiz(texte)`, puis **la même
-suite que la génération** : `generationId++`, `phase = "result"`,
-`saveGeneratedQuiz()`. `lastUsage` reste `null` : un site ne publie rien, et
-on n'estime jamais un compteur absent.
+Le texte arrive par l'un des deux chemins du §4 (la veille du principal,
+ou un collage manuel) et suit ensuite **un seul chemin**, `recevoirReponse
+(texte)`, qui arrête l'attente, puis : `generatedQuestions =
+parseReponseQuiz(texte)`, et **la même suite que la génération** :
+`generationId++`, `phase = "result"`, `saveGeneratedQuiz()`. `lastUsage`
+reste `null` : un site ne publie rien, et on n'estime jamais un compteur
+absent.
 
 Échec : `phase = "error"`, `errorMessage` = le message du parseur, et
 **l'action de l'écran d'erreur est « Rouvrir claude.ai »**, pas
@@ -220,14 +313,25 @@ l'enregistrement. Le sanitizer, l'écriture du bloc (`detail-io.ts`) : rien.
 
 ## 7. Sécurité
 
-Aucun canal IPC nouveau. `openUrl` passe par le filtre existant du principal
-(`https?:` seulement, remis au navigateur, jamais une navigation de la
-fenêtre). Le texte de la question, notes comprises, part au site **par le
-navigateur de l'utilisateur, dans son onglet, avec son compte** : c'est le
-but, et c'est lui qui clique pour envoyer. Le presse-papier n'est écrit que
-sur un clic, avec ce que l'utilisateur vient de composer, et jamais lu par
-l'application : le `paste` ne voit que ce qu'il colle volontairement. La
+`openUrl` passe par le filtre existant du principal (`https?:` seulement,
+remis au navigateur, jamais une navigation de la fenêtre) : aucun canal
+IPC pour ouvrir. Le texte de la question, notes comprises, part au site
+**par le navigateur de l'utilisateur, dans son onglet, avec son compte** :
+c'est le but, et c'est lui qui clique pour envoyer. Le presse-papier n'est
+écrit que sur un clic, avec ce que l'utilisateur vient de composer. La
 borne de copie reste une borne.
+
+La lecture du presse-papier est le point neuf, et voici pourquoi elle ne
+rouvre pas ce que le pont a fermé : le RENDU ne lit toujours rien
+(`clipboard-read` reste refusé à la page) ; c'est le principal qui lit,
+seulement pendant une attente que l'utilisateur a ouverte lui-même en
+cliquant « Ouvrir », bornée dans le temps et arrêtée au premier résultat ;
+et ce qu'il lit ne quitte jamais le principal tant qu'il ne porte pas le
+jeton de CETTE attente, un secret de dix caractères que seul le prompt
+envoyé porte. Un rendu compromis peut ouvrir une attente, mais n'obtient
+que ce que l'utilisateur copie en réponse à ce prompt-là. Le contenu
+non reconnu n'est ni journalisé ni conservé : `readText` à chaque tour,
+comparaison, oubli.
 
 ## 8. Contrôles
 
@@ -245,8 +349,18 @@ borne de copie reste une borne.
     `userPrompt` commence par « Generate a quiz based on the following
     text » — les mêmes chaînes que le CLI reçoit, puisque c'est la même
     fonction ;
+  - `texteWeb` : le texte contient le jeton dans `// neo-quiz <jeton>`,
+    demande un bloc ```` ```json5 ````, et ne contient PLUS « no
+    explanation and no formatting » ;
   - `estCanalCable` : vrai pour `claude-web`, faux pour `chatgpt-web`.
   Chaque cas s'éprouve par discriminance : casser la règle, voir rougir.
+- `npm run check:electron-collage` (nouveau, sur le modèle de
+  `check-electron-index.mjs`) : le noyau pur de l'attente avec un faux
+  presse-papier et un faux temps : jeton trop court refusé ; texte sans
+  jeton jamais livré, même répété ; texte avec jeton livré UNE fois puis
+  attente arrêtée (la sonde ne relit plus) ; `arreter()` coupe ; trente
+  minutes coupent ; une seconde attente remplace la première (le texte de
+  la première n'est plus livré).
 - `check:obsidian-host`, `check:windows-host` : le cas `openUrl` (refuse
   `http:` et `file:`, accepte `https:`).
 - `check:ai-providers` : reste vert (le registre gagne un membre optionnel).
@@ -257,10 +371,12 @@ borne de copie reste une borne.
 
 ## 9. Ce qui accompagne le code
 
-- i18n, dans les deux dictionnaires : le titre et le placeholder de la carte,
-  l'aide sur le bandeau rouge, l'aide « texte copié », les boutons
-  « Rouvrir {site} » et « Annuler », la notice `noImages`, l'action
-  d'erreur.
+- i18n, dans les deux dictionnaires : le titre de la carte (« Copie la
+  réponse de {site} ») et sa ligne « le quiz se crée ici tout seul », sa
+  variante sans veille (« colle la réponse ici avec Ctrl+V »), l'aide sur le
+  bandeau rouge, l'aide « texte copié, colle-le là-bas », les boutons
+  « Rouvrir {site} » et « Annuler », la notice `noImages`, l'erreur
+  `copyFailed`, l'action d'erreur « Rouvrir {site} ».
 - `CHANGELOG.md`, sous `[Unreleased]`, `### Added` : « Générer par claude.ai,
   depuis le menu des fournisseurs : le site s'ouvre avec la question déjà
   écrite, la réponse se colle dans l'application. »
@@ -275,7 +391,7 @@ borne de copie reste une borne.
   (préremplissage, envoi automatique ou non, borne), en posant son membre
   `web`.
 - **Les images par un site** : refusées, pas contournées.
-- **La relecture automatique du presse-papier au retour** : refusée par le
-  pont, pour de bonnes raisons ; le `paste` fait le travail.
+- **La détection d'un fichier téléchargé** : envisagée, écartée pour
+  cette version (§0) ; elle pourrait rejoindre la même attente plus tard.
 - **Le modèle par l'URL** (`?model=`) : non prouvé ; le site garde son
   modèle par défaut, et le contrôle du milieu ne propose pas de modèle.

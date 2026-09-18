@@ -295,6 +295,35 @@ export function scriptInstallation(tool: Outil, titre: string, messageFin: strin
 	return lignes.join("\n");
 }
 
+/**
+ * Le script PowerShell qui CONNECTE le compte d'un outil déjà installé.
+ * PURE, jumelle de `scriptInstallation` — et volontairement plus courte :
+ * rien n'est téléchargé, rien n'est exécuté depuis le réseau, on lance un
+ * exécutable qui est déjà là.
+ *
+ * `null` pour Ollama, qui n'a pas de compte : l'appelant en fait
+ * « indisponible » plutôt qu'une fenêtre ouverte sur rien.
+ *
+ * LE PATH EST QUAND MÊME RECHARGÉ, alors qu'on n'installe rien : la fenêtre
+ * hérite du `PATH` du processus Electron, figé à SON démarrage. Un CLI
+ * installé pendant la session de l'application (par le bouton d'installation,
+ * juste avant) n'y figure donc pas, et le terminal se serait ouvert sur un
+ * « terme non reconnu » alors que l'outil existe.
+ */
+export function scriptConnexion(tool: Outil, titre: string, messageFin: string): string | null {
+	if (tool === "ollama") return null;
+	return [
+		"$host.UI.RawUI.WindowTitle = " + citerPs(titre),
+		RECHARGER_PATH,
+		/* `claude auth login` et non `claude` puis `/login` : la recette
+		   d'installation passe par le REPL parce qu'elle y enchaîne après
+		   l'installation, mais pour une connexion seule la sous-commande fait
+		   le travail sans que l'utilisateur ait à taper quoi que ce soit. */
+		tool === "claude" ? "claude auth login" : "codex login",
+		"Write-Host " + citerPs(messageFin),
+	].join("\n");
+}
+
 export function encoderCommande(script: string): string {
 	return Buffer.from(script, "utf16le").toString("base64");
 }

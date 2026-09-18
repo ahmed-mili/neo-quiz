@@ -897,6 +897,66 @@ export async function checkCodex(force?: boolean): Promise<CodexStatus> {
 	return result;
 }
 
+/* ─────────── LE COMPTE EST-IL CONNECTÉ ? ───────────
+
+   Jumelles des sondes ci-dessus, et volontairement SANS CACHE : elles ne
+   servent qu'à une chose, surveiller toutes les trois secondes une connexion
+   que l'utilisateur est en train de faire dans un terminal. Un TTL de 60 s y
+   ferait attendre une minute devant un « En attente… » alors que c'est fait.
+
+   Les deux commandes sont NON INTERACTIVES (vérifié le 2026-09-18 :
+   `codex login status` → « Logged in using ChatGPT », `claude auth status` →
+   du JSON) et passent par la porte existante, `HostProcess.run` : aucun
+   nouveau canal, aucun nouveau droit.
+
+   TOUT REJET VAUT « PAS CONNECTÉ », comme pour les sondes d'installation :
+   l'outil peut avoir disparu entre-temps, l'hôte peut ne pas savoir lancer de
+   CLI. Ni l'un ni l'autre n'est « connecté », et c'est la seule chose que
+   l'appelant demande. */
+
+const SONDE_CONNEXION_MS = 10000;
+
+/** Codex : `codex login status` sort 0 quand un compte est connecté, non nul
+    sinon. Le TEXTE n'est pas lu — il change avec la version du CLI, le code
+    de sortie non. */
+export async function checkCodexLogin(): Promise<boolean> {
+	if (!currentHost().platform.isDesktopApp) return false;
+	return requireHost("process")
+		.run({ tool: "codex", args: ["login", "status"], stdin: "", timeoutMs: SONDE_CONNEXION_MS })
+		.then(res => res.code === 0)
+		.catch(() => false);
+}
+
+/** Claude : `claude auth status` sort du JSON dont on ne lit QUE `loggedIn`.
+    Le reste de cet objet porte l'adresse e-mail et l'identifiant
+    d'organisation du compte : il n'est ni conservé, ni journalisé, ni rendu à
+    l'appelant. Le code de sortie ne suffit pas — il vaut 0 pour « voici mon
+    statut », y compris quand ce statut est « déconnecté ». */
+export async function checkClaudeLogin(): Promise<boolean> {
+	if (!currentHost().platform.isDesktopApp) return false;
+	return requireHost("process")
+		.run({ tool: "claude", args: ["auth", "status"], stdin: "", timeoutMs: SONDE_CONNEXION_MS })
+		.then(res => {
+			if (res.code !== 0) return false;
+			try {
+				const json: unknown = JSON.parse(res.stdout || "");
+				return !!json && typeof json === "object" && (json as { loggedIn?: unknown }).loggedIn === true;
+			} catch {
+				/* Une sortie qui n'est pas du JSON (version plus ancienne du CLI,
+				   bannière, mise à jour automatique qui s'annonce sur stdout) ne
+				   prouve pas la connexion : la seule preuve est le drapeau. */
+				return false;
+			}
+		})
+		.catch(() => false);
+}
+
+/** La sonde de connexion d'un outil, ou `null` pour ceux qui n'ont pas de
+    compte (Ollama). Un seul point d'appel pour la page « Générer ». */
+export function sondeConnexion(tool: "claude" | "codex"): () => Promise<boolean> {
+	return tool === "claude" ? checkClaudeLogin : checkCodexLogin;
+}
+
 let ollamaCache: { at: number; url: string; result: OllamaStatus } | null = null;
 
 /* Serveur Ollama joignable ? → { ok, models?, reason? }

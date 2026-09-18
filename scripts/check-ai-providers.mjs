@@ -34,7 +34,7 @@ import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
     rend ce que le cas lui a préparé. Tout le reste du contrat est là sous sa
     forme minimale — un faux hôte PARTIEL meurt sur un TypeError le jour où un
     appelant y touche, et une mort en route masque les groupes suivants. */
-function fauxHote({ reponses = {}, caches = {} } = {}) {
+function fauxHote({ reponses = {}, caches = {}, runs = {} } = {}) {
 	const journal = [];
 	return {
 		journal,
@@ -65,7 +65,17 @@ function fauxHote({ reponses = {}, caches = {} } = {}) {
 				},
 			},
 			process: {
-				run: async () => { const e = new Error("pas de CLI ici"); e.name = "indisponible"; throw e; },
+				/* `runs` : ce que le CLI RÉPOND, par « outil + arguments ». Sans
+				   entrée, le rejet `indisponible` d'origine — l'hôte qui ne sait
+				   pas lancer de CLI reste le défaut de ce faux. */
+				async run(spec) {
+					const cle = [spec.tool, ...(spec.args || [])].join(" ");
+					journal.push(["run", cle]);
+					const rep = runs[cle];
+					if (rep === undefined) { const e = new Error("pas de CLI ici"); e.name = "indisponible"; throw e; }
+					if (rep instanceof Error) throw rep;
+					return { stdout: rep.stdout ?? "", stderr: rep.stderr ?? "", code: rep.code ?? 0 };
+				},
 				async lireCache(outil) {
 					journal.push(["lireCache", outil]);
 					return caches[outil] ?? null;
@@ -202,6 +212,79 @@ await withSrcModule(
 			r.check("le badge de Fable suit le forfait PASSÉ, et reste absent quand l'appelant ne le connaît pas",
 				{ max: !!fableDe({ name: "Max" })?.badge, pro: !!fableDe({ name: "Pro" })?.badge, inconnu: fableDe(undefined)?.badge, equipe: fableDe({ name: "Team" })?.badge },
 				{ max: true, pro: true, inconnu: undefined, equipe: undefined });
+		}
+
+		/* ── LES SONDES DE CONNEXION (tranche « se connecter depuis l'échec ») ──
+
+		   CE QU'ELLES EMPÊCHENT. La page « Générer » ouvre un terminal sur
+		   `codex login` / `claude auth login` puis ATTEND, en boucle, que le
+		   compte apparaisse. Trois façons dont cette attente échouerait sans
+		   bruit, et c'est ce groupe qui les tient :
+
+		   — `claude auth status` SORT EN 0 même déconnecté (c'est un rapport de
+		     statut, pas un test) : juger sur le code de sortie relancerait la
+		     génération sur un compte absent, et l'utilisateur relirait le même
+		     échec sans comprendre ;
+		   — une sortie qui n'est pas du JSON (bannière de mise à jour, version
+		     plus ancienne du CLI) ne prouve RIEN : la prendre pour un succès
+		     ferait la même chose ;
+		   — un CACHE ferait attendre jusqu'à une minute devant « En attente de la
+		     connexion » alors que c'est fait. Les sondes d'INSTALLATION en ont un
+		     (60 s) ; celles-ci ne doivent pas. */
+		{
+			const { journal, hote } = fauxHote({
+				runs: {
+					"codex login status": { code: 0, stdout: "Logged in using ChatGPT" },
+					"claude auth status": { code: 0, stdout: JSON.stringify({ loggedIn: true, email: "x@y.z" }) },
+				},
+			});
+			installHost(hote);
+			r.check("codex : `codex login status` en 0 vaut connecté",
+				{ ok: await providers.checkCodexLogin(), appel: journal.filter(l => l[0] === "run").map(l => l[1]) },
+				{ ok: true, appel: ["codex login status"] });
+			r.check("claude : `auth status` et le drapeau `loggedIn` du JSON",
+				await providers.checkClaudeLogin(), true);
+			/* Deux appels de suite doivent RELANCER le CLI : c'est toute la
+			   différence avec `checkCodex`, qui cache 60 s. */
+			await providers.checkCodexLogin();
+			r.check("aucun cache : chaque sonde relance le CLI",
+				journal.filter(l => l[1] === "codex login status").length, 2);
+		}
+		{
+			const { hote } = fauxHote({
+				runs: {
+					"codex login status": { code: 1, stderr: "Not logged in" },
+					"claude auth status": { code: 0, stdout: JSON.stringify({ loggedIn: false }) },
+				},
+			});
+			installHost(hote);
+			r.check("un compte absent n'est pas connecté, des deux côtés",
+				{ codex: await providers.checkCodexLogin(), claude: await providers.checkClaudeLogin() },
+				{ codex: false, claude: false });
+		}
+		{
+			/* Le cas qui a décidé de lire le JSON plutôt que le code de sortie. */
+			const { hote } = fauxHote({ runs: { "claude auth status": { code: 0, stdout: "Checking for updates…" } } });
+			installHost(hote);
+			r.check("claude : une sortie qui n'est pas du JSON ne prouve pas la connexion, même en code 0",
+				await providers.checkClaudeLogin(), false);
+		}
+		{
+			/* Un outil disparu entre-temps, un hôte sans CLI : ni l'un ni l'autre
+			   n'est « connecté ». Le rejet ne doit pas remonter jusqu'à la page,
+			   qui repeindrait une erreur par-dessus la carte d'attente. */
+			const { hote } = fauxHote({});
+			installHost(hote);
+			r.check("tout rejet de l'hôte vaut « pas connecté », jamais une exception",
+				{ codex: await providers.checkCodexLogin(), claude: await providers.checkClaudeLogin() },
+				{ codex: false, claude: false });
+		}
+		{
+			const { journal, hote } = fauxHote({ runs: { "claude auth status": { code: 0, stdout: '{"loggedIn":true}' } } });
+			installHost(hote);
+			r.check("sondeConnexion(outil) rend bien la sonde de CET outil",
+				{ ok: await providers.sondeConnexion("claude")(), appel: journal.filter(l => l[0] === "run").map(l => l[1]) },
+				{ ok: true, appel: ["claude auth status"] });
 		}
 
 		r.done();

@@ -91,5 +91,8 @@ export function createWindowsProcess(): HostProcess {
 		installerCli(tool) {
 			return pont().processus.installer(tool);
 		},
+		connecterCli(tool) {
+			return pont().processus.connecter(tool);
+		},
 	};
 }

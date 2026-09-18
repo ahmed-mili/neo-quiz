@@ -82,4 +82,5 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.installCli.run": "Ouvrir PowerShell et installer",
 	"app.installCli.cancel": "Annuler",
 	"app.installCli.done": "{name} est installé. Vous pouvez fermer cette fenêtre et revenir dans Neo Quiz.",
+	"app.connectCli.done": "{name} est connecté. Vous pouvez fermer cette fenêtre et revenir dans Neo Quiz.",
 };

@@ -122,4 +122,5 @@ export const EN_APP = {
 	"app.installCli.run": "Open PowerShell and install",
 	"app.installCli.cancel": "Cancel",
 	"app.installCli.done": "{name} is set up. You can close this window and go back to Neo Quiz.",
+	"app.connectCli.done": "{name} is connected. You can close this window and go back to Neo Quiz.",
 } as const;

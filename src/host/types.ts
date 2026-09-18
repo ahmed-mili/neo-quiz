@@ -519,6 +519,22 @@ export interface HostProcess {
 	    `indisponible` : l'hôte ne sait pas ouvrir de terminal (hors Windows)
 	    ou le lancement a échoué. */
 	installerCli(tool: CliTool): Promise<"lance" | "annule" | "indisponible">;
+	/** Ouvre un terminal VISIBLE qui CONNECTE le compte d'un outil DÉJÀ
+	    installé (`codex login`, `claude auth login`). Mêmes verdicts
+	    qu'`installerCli`, et même règle : le rendu n'envoie qu'un NOM, jugé
+	    par l'hôte ; la recette vit chez lui.
+
+	    POURQUOI UN MEMBRE À PART et non un drapeau d'`installerCli` : les deux
+	    recettes n'ont ni la même surface ni le même risque. Installer TÉLÉCHARGE
+	    puis EXÉCUTE un script distant (`irm … | iex`), ce que l'hôte fait
+	    précéder d'une confirmation native ; connecter ne lance qu'un exécutable
+	    déjà présent et déjà sur la liste blanche. Les fondre demanderait à
+	    l'appelant de savoir laquelle des deux il déclenche, et c'est
+	    précisément ce que le nom de la méthode doit dire.
+
+	    `ollama` n'a pas de compte : l'hôte rend `indisponible` plutôt que
+	    d'ouvrir un terminal sur rien. */
+	connecterCli(tool: CliTool): Promise<"lance" | "annule" | "indisponible">;
 }
 
 /**

@@ -472,6 +472,14 @@ export interface Pont {
 		    traduite là-bas (comme pour l'hôte Ollama des réglages) : un rendu
 		    compromis ne peut ni la formuler ni y répondre. */
 		installer(tool: Outil): Promise<"lance" | "annule" | "indisponible">;
+		/** Ouvre un terminal VISIBLE qui connecte le compte d'un outil DÉJÀ
+		    installé : `HostProcess.connecterCli` vu du rendu. Même porte et
+		    même jugement du nom qu'`installer`, mais SANS confirmation native :
+		    rien n'est téléchargé ni exécuté depuis le réseau, seul part un
+		    exécutable qui est déjà sur la liste blanche. Ce qu'un rendu
+		    compromis obtiendrait ici, c'est une fenêtre de connexion ouverte
+		    sous les yeux de l'utilisateur, pas un script distant. */
+		connecter(tool: Outil): Promise<"lance" | "annule" | "indisponible">;
 	};
 
 	fenetre: {
@@ -621,6 +629,7 @@ export const CANAUX = {
 	processusOllamaInstalle: "neo:process/ollama-installe",
 	processusDemarrerOllama: "neo:process/demarrer-ollama",
 	processusInstaller: "neo:process/installer",
+	processusConnecter: "neo:process/connecter",
 	miseAJourEtatLire: "neo:mise-a-jour/etat-lire",
 	miseAJourEtat: "neo:mise-a-jour/etat",
 	miseAJourVerifier: "neo:mise-a-jour/verifier",

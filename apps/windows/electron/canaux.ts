@@ -51,7 +51,7 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, erreurCli, estOutilAutorise, lancerTerminal, lireCache, ollamaInstalle, run, scriptInstallation } from "./process";
+import { demarrerOllama, erreurCli, estOutilAutorise, lancerTerminal, lireCache, ollamaInstalle, run, scriptConnexion, scriptInstallation } from "./process";
 import type { Outil } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
@@ -680,6 +680,28 @@ export function enregistrerCanaux(deps: DependancesCanaux): void {
 		if (response !== 0) return "annule";
 		const titre = PRODUCT_NAME + " - " + name;
 		return lancerTerminal(titre, scriptInstallation(tool, titre, t("app.installCli.done", { name }))) ? "lance" : "indisponible";
+	});
+
+	/* ─── CONNECTER UN CLI ───
+	   Même porte, même jugement du nom, et SANS confirmation native : cet
+	   appel ne télécharge rien et n'exécute aucun script distant — il lance
+	   `codex login` / `claude auth login`, un exécutable déjà présent et déjà
+	   sur la liste blanche. La confirmation d'`installer` garde un `irm | iex` ;
+	   la recopier ici ferait payer à l'utilisateur, pour une fenêtre de
+	   connexion qu'il vient lui-même de demander, le prix d'un risque qui n'est
+	   pas là. `scriptConnexion` rend `null` pour Ollama, qui n'a pas de
+	   compte : « indisponible » plutôt qu'un terminal ouvert sur rien. */
+	ipcMain.handle(CANAUX.processusConnecter, async (_e, tool: unknown): Promise<"lance" | "annule" | "indisponible"> => {
+		if (!estOutilAutorise(tool)) {
+			console.warn(LOG_PREFIX, "connexion refusée, outil hors liste:", tool);
+			throw erreurCli("refuse", "outil hors liste : " + String(tool));
+		}
+		if (process.platform !== "win32") return "indisponible";
+		const name = NOMS_OUTILS[tool];
+		const titre = PRODUCT_NAME + " - " + name;
+		const script = scriptConnexion(tool, titre, t("app.connectCli.done", { name }));
+		if (script === null) return "indisponible";
+		return lancerTerminal(titre, script) ? "lance" : "indisponible";
 	});
 
 	/* ─── LANCER UN CLI ───

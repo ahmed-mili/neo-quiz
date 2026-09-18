@@ -112,6 +112,16 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.install.continue": "Continuer",
 	"ai.install.terminalFailed": "PowerShell n'a pas pu être ouvert. Suivez les étapes manuelles ci-dessous.",
 
+	/* ── Connexion du compte, depuis l'écran d'échec de génération ── */
+	"ai.login.button": "Se connecter",
+	"ai.login.reason.codex": "Votre compte ChatGPT n'est pas encore connecté.",
+	"ai.login.reason.claude": "Votre compte Claude n'est pas encore connecté.",
+	"ai.login.waiting": "En attente de la connexion",
+	"ai.login.hint": "Terminez la connexion dans la fenêtre de terminal qui vient de s'ouvrir. Neo Quiz la détecte tout seul.",
+	"ai.login.cancel": "Annuler",
+	"ai.login.detected": "Compte connecté. Nouvelle tentative…",
+	"ai.login.terminalFailed": "PowerShell n'a pas pu être ouvert. Connectez-vous depuis un terminal, puis réessayez.",
+
 	/* ── Modèles : accroche courte (à droite du nom) et description ── */
 	"ai.modelHint.mostPowerful": "le plus puissant",
 	"ai.modelHint.recommended": "recommandé",

@@ -22,7 +22,7 @@ import { formatHotkey, eventToHotkey } from "../hotkey-format";
 import { findQuizModeConfigIndex } from "../quiz-utils";
 import { attachMentionPicker } from "./mention-picker";
 import type { MentionPickerHandle } from "./mention-picker";
-import type { AiClient, ImagePayload } from "./ai-client";
+import type { AiClient, ImagePayload, LoginRequiredError } from "./ai-client";
 import { formatTokens, formatCost, formatDuration, totalTokens, tightestRow, usageRowLabel, providerPublishesPlan } from "./usage-format";
 import type { AiUsage, AiUsageEntry, PlanUsage } from "./usage-format";
 import { scanPromptPaths, MAX_PROMPT_PATHS } from "./prompt-paths";
@@ -47,7 +47,18 @@ import type { InstallProvider } from "./ai-install-modal";
    Providers, logos et modèles : voir ai-providers.ts.
 ══════════════════════════════════════════════════════════ */
 
-type Phase = "idle" | "loading" | "result" | "error";
+/* `connexion` : l'échec vient d'un compte non connecté, l'utilisateur a
+   cliqué « Se connecter », un terminal est ouvert et la page ATTEND que la
+   sonde voie le compte arriver. Un état à part et non un drapeau sur
+   `error` : le composer, la bulle de la demande et le bouton d'envoi s'y
+   comportent comme pendant une génération (rien à renvoyer tant que ça
+   tourne), et c'est la phase qui le dit partout d'un seul mot. */
+type Phase = "idle" | "loading" | "result" | "error" | "connexion";
+
+/** Le pas de la sonde de connexion, le même que celui du modal
+    d'installation : trois secondes, assez court pour que la détection semble
+    immédiate, assez long pour ne pas lancer un CLI en boucle serrée. */
+const SONDE_CONNEXION_MS = 3000;
 
 /** Origine d'une pièce jointe texte : note/fichier du VAULT (chemin relatif
     connu), fichier hors vault résolu via le picker « @ » (chemin absolu
@@ -283,6 +294,24 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    annulable : sans ça il continuait de tourner (et de redessiner la page)
 	    après la fermeture de la vue. */
 	let ollamaPoll: number | null = null;
+	/** L'outil que l'échec courant demande de connecter (`besoinConnexion` de
+	    `ai-client.ts`), ou `null` quand l'erreur est d'une autre nature. C'est
+	    lui qui décide du bouton de la carte d'erreur. */
+	let errorLogin: "claude" | "codex" | null = null;
+	/** Sondage « le compte est-il connecté ? », pour la même raison que
+	    `ollamaPoll` : sans être retenu, il survivrait à la fermeture de la vue
+	    et repeindrait un conteneur détaché. Coupé à la détection, à
+	    l'annulation et au démontage. */
+	let loginPoll: number | null = null;
+	/** Le délai d'une seconde entre « compte détecté » et la relance, retenu
+	    pour la même raison : sans lui, fermer la vue pendant ce battement
+	    relancerait une génération dans une page qui n'existe plus. */
+	let loginTimer: number | null = null;
+	/** La sonde vient de voir le compte connecté : la carte d'attente passe à
+	    la coche, et la relance suit une seconde plus tard. Une VARIABLE et non
+	    une écriture directe dans le DOM — un re-render (redimensionnement,
+	    changement de réglage) effacerait la coche sans elle. */
+	let connexionVue = false;
 	/** La vue a été fermée : plus rien ne doit repeindre ni démarrer. Un
 	    `abort()` posé pendant l'encodage des images n'a encore aucun processus
 	    à tuer — c'est ce drapeau qui arrête la génération à l'étape suivante. */
@@ -584,7 +613,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// (bulle qui monte / champ vide) qui fait « sentir » l'envoi. En
 		// résultat, la page du quiz occupe l'écran et porte son propre
 		// en-tête — une bulle de plus n'y ajouterait que du bruit.
-		if (sentMessage && (phase === "loading" || phase === "error")) renderSentMessage(stage);
+		if (sentMessage && (phase === "loading" || phase === "error" || phase === "connexion")) renderSentMessage(stage);
 
 		// Zone du loader de génération : AU-DESSUS du composer (demande
 		// 2026-07-10 — le loader préfigure le résultat, qui vit en haut).
@@ -595,6 +624,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   composer : on lisait la demande, puis un champ vide, puis seulement
 		   l'échec. */
 		const errorZone = phase === "error" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
+		const connexionZone = phase === "connexion" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
 
 		// ── Fournisseur : bouton LOGO SEUL dans le pied du composer (la
 		// carte « Modèle IA » est supprimée) — le menu garde logos, statut
@@ -1302,6 +1332,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// le composer, ou l'éditeur embarqué dans la zone résultat. ──
 		if (phase === "loading") renderLoading(loadingZone!);
 		else if (phase === "error") renderError(errorZone!);
+		else if (phase === "connexion") renderConnexion(connexionZone!);
 		else if (phase === "result") renderResult(resultZone!);
 
 		// Onglet ouvert → saisie immédiate sans clic (demande 2026-07-10).
@@ -1895,16 +1926,126 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		const errorIcon = ajouter(errorEl, "div", "qbd-ai-error-icon");
 		host.ui.setIcon(errorIcon, "alert-triangle");
 		ajouter(errorEl, "p", "qbd-ai-error-title", t("ai.error.title"));
-		ajouter(errorEl, "p", "qbd-ai-error-msg", errorMessage);
+
+		/* UN compte non connecté n'est pas une panne : réessayer donnerait le
+		   même échec, puisque rien n'a changé entre les deux clics. Le bouton
+		   devient donc l'action qui MANQUE — ouvrir la connexion — et ne
+		   redevient « Réessayer » que si l'hôte ne sait pas ouvrir de terminal
+		   (le greffon n'a plus de `process` du tout). */
+		const tool = errorLogin;
+		const offreConnexion = !!tool && !!host.process;
+		/* Le message d'échec porte l'INSTRUCTION (« dans un terminal, lancez
+		   codex login ») tant que l'utilisateur doit la suivre lui-même. Dès
+		   que le bouton la remplace, la garder dirait de faire à la main ce
+		   qu'un clic fait — vu à l'écran le 2026-09-18, les deux ensemble. */
+		ajouter(errorEl, "p", "qbd-ai-error-msg",
+			offreConnexion ? t(`ai.login.reason.${tool as "claude" | "codex"}`) : errorMessage);
+
+		if (tool && offreConnexion) {
+			const loginBtn = ajouter(errorEl, "button", "qbd-btn qbd-btn--ghost qbd-ai-error-retry");
+			loginBtn.type = "button";
+			host.ui.setIcon(ajouter(loginBtn, "span", "qbd-btn-icon qbd-btn-icon--sm"), "log-in");
+			ajouter(loginBtn, "span", undefined, t("ai.login.button"));
+			loginBtn.addEventListener("click", () => { void demarrerConnexion(tool, loginBtn); });
+			return;
+		}
 
 		const retryBtn = ajouter(errorEl, "button", "qbd-btn qbd-btn--ghost qbd-ai-error-retry", t("ai.error.retry"));
 		// Réessayer = RENVOYER la même demande (référence claude.ai), pas la
 		// rendre au composer : le passage par restore/take garde un seul
 		// chemin d'envoi (startGeneration reprend le message tel quel).
-		retryBtn.addEventListener("click", () => {
-			if (!sentMessage) { phase = "idle"; render(containerRef); return; }
-			restoreComposerMessage();
-			void startGeneration(containerRef);
+		retryBtn.addEventListener("click", () => { relancerApresErreur(); });
+	}
+
+	/** Le seul chemin de relance après un échec, partagé par « Réessayer » et
+	    par la détection de connexion : renvoyer la MÊME demande, jamais la
+	    rendre au composer (`restore`/`take` garde un unique chemin d'envoi). */
+	function relancerApresErreur(): void {
+		if (!sentMessage) { phase = "idle"; render(containerRef); return; }
+		restoreComposerMessage();
+		void startGeneration(containerRef);
+	}
+
+	function couperSondeConnexion(): void {
+		if (loginPoll !== null) { window.clearInterval(loginPoll); loginPoll = null; }
+		if (loginTimer !== null) { window.clearTimeout(loginTimer); loginTimer = null; }
+	}
+
+	/**
+	 * Le clic sur « Se connecter » : l'hôte ouvre un terminal sur la recette de
+	 * connexion, puis la page attend que la sonde voie le compte.
+	 *
+	 * Les trois verdicts de l'hôte sont traités, y compris le rejet du pont
+	 * (outil hors liste blanche, panne d'IPC) : sans ça, un bouton désactivé
+	 * restait muet, exactement le défaut corrigé dans le modal d'installation.
+	 */
+	async function demarrerConnexion(tool: "claude" | "codex", bouton: HTMLButtonElement): Promise<void> {
+		bouton.disabled = true;
+		let verdict: "lance" | "annule" | "indisponible";
+		try {
+			verdict = await requireHost("process").connecterCli(tool);
+		} catch (e) {
+			console.warn(LOG_PREFIX, "connexion impossible:", e);
+			bouton.disabled = false;
+			host.ui.notice(t("ai.login.terminalFailed"));
+			return;
+		}
+		if (verdict !== "lance") {
+			bouton.disabled = false;
+			// `annule` = l'utilisateur a dit non : la carte d'erreur reste telle
+			// quelle, sans message de plus.
+			if (verdict === "indisponible") host.ui.notice(t("ai.login.terminalFailed"));
+			return;
+		}
+		couperSondeConnexion();
+		connexionVue = false;
+		phase = "connexion";
+		render(containerRef);
+		const sonde = aiProviders.sondeConnexion(tool);
+		loginPoll = window.setInterval(() => {
+			void sonde().then(connecte => {
+				// `loginPoll === null` : l'utilisateur a annulé pendant que la
+				// sonde tournait — son résultat ne doit plus rien déclencher.
+				if (!connecte || loginPoll === null || disposed) return;
+				couperSondeConnexion();
+				connexionVue = true;
+				render(containerRef);
+				/* La seconde d'attente est ce qui rend la détection LISIBLE :
+				   sans elle, la coche et le loader de génération se
+				   remplaceraient dans la même image, et on ne verrait jamais que
+				   l'application a constaté la connexion. */
+				loginTimer = window.setTimeout(() => {
+					loginTimer = null;
+					if (disposed) return;
+					relancerApresErreur();
+				}, 1000);
+			});
+		}, SONDE_CONNEXION_MS);
+	}
+
+	/** La carte d'attente : spinner tant que le compte n'est pas vu, coche
+	    quand il l'est. Mêmes classes que le modal d'installation — c'est la
+	    même promesse faite à l'utilisateur (« continuez là-bas, je regarde
+	    ici »), elle doit se présenter pareil. */
+	function renderConnexion(parent: HTMLElement): void {
+		const el = ajouter(parent, "div", "qbd-ai-preview-loading qbd-ai-login-wait");
+		// Le balayage de la carte s'arrête sur `ok` (CSS) : c'est lui, plus que
+		// la coche, qui dit que l'attente est finie.
+		el.dataset.etat = connexionVue ? "ok" : "attente";
+		if (connexionVue) {
+			host.ui.setIcon(ajouter(el, "span", "qbd-install-check"), "check");
+			ajouter(el, "p", "qbd-ai-loading-title", t("ai.login.detected"));
+			return;
+		}
+		ajouter(el, "span", "qbd-install-spinner");
+		ajouter(el, "p", "qbd-ai-loading-title", t("ai.login.waiting"));
+		ajouter(el, "p", "qbd-ai-login-hint", t("ai.login.hint"));
+		const annuler = ajouter(el, "button", "qbd-btn qbd-btn--ghost", t("ai.login.cancel"));
+		annuler.type = "button";
+		annuler.addEventListener("click", () => {
+			couperSondeConnexion();
+			phase = "error";
+			render(containerRef);
 		});
 	}
 
@@ -2119,8 +2260,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	/** Remet la page « Générer » à neuf SANS la redessiner — pour l'appelant
 	    qui va de toute façon quitter la vue (insertion dans une note). */
 	function resetGeneration(): void {
+		couperSondeConnexion();
 		phase = "idle";
 		signalerGeneration(false);
+		errorLogin = null;
 		generatedQuestions = [];
 		generatedDraft = null;
 		dropSentMessage();
@@ -2260,9 +2403,17 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// Tout ce qui suit lit `msg`, jamais l'état du composer — qui n'est
 		// plus la demande en vol dès cette ligne.
 		const msg = takeComposerMessage();
+		/* Une génération qui part reprend la main sur l'attente de connexion.
+		   Sans ça, l'utilisateur qui se lasse et renvoie une demande pendant que
+		   la sonde tourne voyait, à la détection, son composer RÉÉCRIT par la
+		   demande précédente au milieu de la génération en cours. La relance de
+		   la sonde passe elle-même par ici, et couper deux fois ne coûte
+		   rien. */
+		couperSondeConnexion();
 		phase = "loading";
 		signalerGeneration(true);
 		errorMessage = "";
+		errorLogin = null;
 		render(container);
 
 		/* Le client lit les réglages par le MÊME hôte que la page : celui qui
@@ -2362,6 +2513,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				return;
 			}
 			errorMessage = e.message || t("ai.error.checkSettings");
+			errorLogin = (e as LoginRequiredError).besoinConnexion || null;
 			generatedQuestions = [];
 		}
 
@@ -2450,6 +2602,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		activeClient?.abort();
 		activeClient = null;
 		if (ollamaPoll) { window.clearInterval(ollamaPoll); ollamaPoll = null; }
+		couperSondeConnexion();
 		closeAllSelects();
 		if (composerResizeObserver) { composerResizeObserver.disconnect(); composerResizeObserver = null; }
 		if (__focusRecheck) { window.removeEventListener("focus", __focusRecheck); __focusRecheck = null; }

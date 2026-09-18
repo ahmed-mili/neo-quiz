@@ -152,6 +152,23 @@ function userError(message: string): UserFacingError {
 	return e;
 }
 
+/** Une erreur dont la CAUSE est un compte non connecté, et qui le dit
+    autrement que par son texte : `besoinConnexion` nomme l'outil à connecter.
+    C'est ce drapeau, jamais le message, que la page « Générer » lit pour
+    remplacer « Réessayer » par « Se connecter ». */
+export type LoginRequiredError = Error & { besoinConnexion?: "claude" | "codex" };
+
+/* POURQUOI UN DRAPEAU ET PAS UNE COMPARAISON DE MESSAGE : le message est
+   TRADUIT (`ai.err.codexNotLoggedIn`). Le comparer marcherait en anglais et
+   plus en français, et le bouton de connexion disparaîtrait dans une langue
+   sans qu'aucun contrôle ne rougisse. Même raison que `userFacing`
+   ci-dessus. */
+function erreurConnexion(tool: "claude" | "codex", message: string): LoginRequiredError {
+	const e = new Error(message) as LoginRequiredError;
+	e.besoinConnexion = tool;
+	return e;
+}
+
 /**
  * Une promesse RÉSEAU, qui rend la main dès l'abandon.
  *
@@ -442,7 +459,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 				return new Error(t("ai.err.claudeTimeout", { minutes: CLI_TIMEOUT_MIN }));
 			}
 			if (detail.includes("login") || detail.includes("api key") || detail.includes("authentication") || detail.includes("credential")) {
-				return new Error(t("ai.err.claudeNotLoggedIn"));
+				return erreurConnexion("claude", t("ai.err.claudeNotLoggedIn"));
 			}
 			return new Error(t("ai.err.claudeCode", { detail: (e.stderr || e.message).trim().slice(0, 300) }));
 		};
@@ -513,7 +530,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 			const msg = String(data.result || t("ai.err.unknown"));
 			const msgLower = msg.toLowerCase();
 			if (msgLower.includes("login") || msgLower.includes("api key") || msgLower.includes("credential")) {
-				throw new Error(t("ai.err.claudeNotLoggedIn"));
+				throw erreurConnexion("claude", t("ai.err.claudeNotLoggedIn"));
 			}
 			if (msgLower.includes("rate limit") || msgLower.includes("usage limit")) {
 				throw new Error(t("ai.err.claudeRateLimit"));
@@ -581,7 +598,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 				return new Error(t("ai.err.codexTimeout", { minutes: CLI_TIMEOUT_MIN }));
 			}
 			if (detail.includes("not logged in") || detail.includes("login") || detail.includes("unauthorized") || detail.includes("401") || detail.includes("credential") || detail.includes("authenticat")) {
-				return new Error(t("ai.err.codexNotLoggedIn"));
+				return erreurConnexion("codex", t("ai.err.codexNotLoggedIn"));
 			}
 			if (detail.includes("usage limit") || detail.includes("rate limit") || detail.includes("quota")) {
 				return new Error(t("ai.err.codexRateLimit"));

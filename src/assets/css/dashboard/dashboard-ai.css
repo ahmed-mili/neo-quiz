@@ -2125,6 +2125,27 @@
 	to   { transform: translateX(400%); }
 }
 
+/* ── L'ATTENTE DE CONNEXION ──
+   La MÊME carte que le loader de génération (c'est la même promesse : « ça
+   travaille, restez là »), avec le spinner et la coche du modal
+   d'installation — l'utilisateur a déjà vu ce couple quand il a installé le
+   CLI, et le revoir lui dit que l'application surveille de la même façon.
+   Le balayage s'ARRÊTE à la détection : c'est ce qui fait la différence entre
+   « j'attends » et « j'ai vu », plus encore que la coche. */
+.qbd-ai-login-wait[data-etat="ok"]::before { animation: none; opacity: 0; }
+
+.qbd-ai-login-wait .qbd-install-spinner { width: 28px; height: 28px; border-width: 3px; }
+.qbd-ai-login-wait .qbd-install-check svg { width: 28px; height: 28px; }
+
+.qbd-ai-login-hint {
+	margin: -8px 0 0;
+	max-width: 42ch;
+	text-align: center;
+	font-size: 13px;
+	line-height: 1.45;
+	color: var(--text-muted);
+}
+
 .qbd-ai-loading-icon {
 	width: 52px;
 	height: 52px;

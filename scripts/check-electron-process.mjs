@@ -52,7 +52,7 @@ async function cas(r, nom, fn) {
 
 await withSrcModule("apps/windows/electron/process.ts", async ({
 	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, emplacementsOllama, encoderCommande,
-	estOutilAutorise, lireCache, scriptInstallation,
+	estOutilAutorise, lireCache, scriptConnexion, scriptInstallation,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -194,6 +194,46 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 			const b64 = encoderCommande(script);
 			r.check("encoderCommande : base64 d'UTF-16LE, aller-retour exact", Buffer.from(b64, "base64").toString("utf16le"), script);
 			r.check("encoderCommande : rien d'autre que du base64", /^[A-Za-z0-9+/=]+$/.test(b64), true);
+
+			/* ── LA RECETTE DE CONNEXION ──
+
+			   CE QU'ELLE EMPÊCHE. `codex login` et `claude auth login` lancent un
+			   exécutable DÉJÀ installé ; y laisser traîner le `irm … | iex` de
+			   l'installation ferait retélécharger un script distant à chaque clic
+			   sur « Se connecter » — une capacité que ce bouton n'a jamais eu à
+			   demander, et que l'utilisateur n'a pas confirmée (le canal de
+			   connexion, lui, n'ouvre pas de boîte native : voir `canaux.ts`). */
+			{
+				const cxCodex = scriptConnexion("codex", "Neo Quiz - Codex CLI", "fini");
+				r.check("connexion codex : titre en première ligne, `codex login`, et RIEN de distant",
+					{
+						titre: cxCodex.startsWith("$host.UI.RawUI.WindowTitle = 'Neo Quiz - Codex CLI'"),
+						login: cxCodex.includes("\ncodex login"),
+						distant: /irm |iex|winget/.test(cxCodex),
+					},
+					{ titre: true, login: true, distant: false });
+
+				const cxClaude = scriptConnexion("claude", "Neo Quiz - Claude Code", "fini");
+				r.check("connexion claude : `claude auth login`, la sous-commande, jamais le REPL",
+					{ login: cxClaude.includes("\nclaude auth login"), distant: /irm |iex/.test(cxClaude) },
+					{ login: true, distant: false });
+
+				/* Le PATH est rechargé AVANT la commande, alors que rien ne
+				   s'installe : la fenêtre hérite du PATH d'Electron, figé au
+				   démarrage de l'application. Un CLI installé pendant la session
+				   (bouton d'installation, juste avant) n'y figure pas, et le
+				   terminal se serait ouvert sur « terme non reconnu ». */
+				r.check("connexion : le PATH est rechargé avant la commande",
+					cxCodex.indexOf("GetEnvironmentVariable('Path','User')") < cxCodex.indexOf("\ncodex login"), true);
+
+				/* Ollama n'a pas de compte : ouvrir un terminal sur rien serait
+				   pire que de dire « indisponible » — l'utilisateur regarderait
+				   une fenêtre qui ne lui demande rien. */
+				r.check("connexion ollama : null, jamais un terminal sur rien", scriptConnexion("ollama", "t", "x"), null);
+
+				r.check("connexion : le message de fin est cité pour PowerShell",
+					scriptConnexion("codex", "t", "c'est fini").includes("Write-Host 'c''est fini'"), true);
+			}
 
 			const args = argumentsTerminal("Neo Quiz", script);
 			r.check("argumentsTerminal : ShellExecute (Start-Process), -EncodedCommand, jamais le script en clair",

@@ -584,15 +584,25 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   vrais timers, la livraison par `deps.envoyer` (donc `webContents.send`),
 	   et le clignotement dans la barre des tâches (`flashFrame(true)`, éteint
 	   au prochain focus dans `main.ts`) plutôt qu'un vol de focus, que Windows
-	   refuse et que l'utilisateur qui lit encore la réponse ne voudrait pas. */
-	/* `clipboard.readText()` est ASYNCHRONE depuis Electron 44 (l'ancienne API
+	   refuse et que l'utilisateur qui lit encore la réponse ne voudrait pas.
+
+	   `clipboard.readText()` est ASYNCHRONE depuis Electron 44 (l'ancienne API
 	   synchrone a disparu du typage) alors que le noyau lit `lire()` de façon
-	   SYNCHRONE, à chaque tour. Le pont : `planifier` rafraîchit le cache AVANT
-	   d'appeler le tour suivant, `lire` ne fait que le relire — aucune
-	   modification du noyau pur pour un détail de plateforme. */
+	   SYNCHRONE, à chaque tour : `planifier` rafraîchit le cache AVANT d'appeler
+	   le tour suivant, `lire` ne fait que le CONSOMMER (le relire, puis le
+	   remettre à `""`) — aucune modification du noyau pur pour un détail de
+	   plateforme. La consommation est nécessaire, pas seulement suffisante : le
+	   noyau ne lit qu'UNE FOIS par tour, juste après le rafraîchissement, sur
+	   tous les chemins (comparé puis oublié, arrêté, livré, ou échu) — un cache
+	   qui survivrait à son tour garderait en mémoire ce que l'utilisateur a
+	   copié ENSUITE, pour tout autre usage, jusqu'à la prochaine sonde. */
 	let dernierTexteCopie = "";
 	const attente = creerAttente({
-		lire: () => dernierTexteCopie,
+		lire: () => {
+			const t = dernierTexteCopie;
+			dernierTexteCopie = "";
+			return t;
+		},
 		horloge: {
 			planifier: (fn, ms) => setTimeout(() => {
 				clipboard.readText().then(t => { dernierTexteCopie = t; }).catch(() => {}).finally(fn);

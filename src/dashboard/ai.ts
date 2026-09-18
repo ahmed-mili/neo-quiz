@@ -6,6 +6,9 @@ import { currentHost, requireHost } from "../host/current";
 import { ajouter } from "../dom";
 import { LOG_PREFIX } from "../branding";
 import * as aiProviders from "./ai-providers";
+import { composerPrompts, parseReponseQuiz } from "./ai-client";
+import { nouveauJeton, texteWeb, preparerOuverture, URL_MAX } from "./ai-web";
+import type { ResultatOuverture } from "./ai-web";
 import type { Scanner, QuizIndexEntry } from "./scanner";
 import type { StatsStore } from "./stats-store";
 import { aiSettingsDefaults } from "./ai-settings-host";
@@ -53,7 +56,7 @@ import type { InstallProvider } from "./ai-install-modal";
    `error` : le composer, la bulle de la demande et le bouton d'envoi s'y
    comportent comme pendant une génération (rien à renvoyer tant que ça
    tourne), et c'est la phase qui le dit partout d'un seul mot. */
-type Phase = "idle" | "loading" | "result" | "error" | "connexion";
+type Phase = "idle" | "loading" | "result" | "error" | "connexion" | "web";
 
 /** Le pas de la sonde de connexion, le même que celui du modal
     d'installation : trois secondes, assez court pour que la détection semble
@@ -301,6 +304,18 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    `ai-client.ts`), ou `null` quand l'erreur est d'une autre nature. C'est
 	    lui qui décide du bouton de la carte d'erreur. */
 	let errorLogin: "claude" | "codex" | null = null;
+	/* L'attente d'une réponse copiée (canal web, spec 2026-09-18). Non nulle
+	   en phase « web » seulement : le jeton de CETTE ouverture, ce qui a été
+	   ouvert (adresse ou presse-papier), la fonction qui arrête la veille du
+	   principal (null sous un hôte sans `collage`), et les écouteurs à retirer. */
+	let attenteWeb: { jeton: string; ouverture: ResultatOuverture; site: string; arreter: (() => void) | null; retirer: () => void } | null = null;
+	/** Le site de la dernière ouverture, gardé au-delà de `attenteWeb` (remis à
+	    null avant l'écran d'erreur) : c'est lui que « Rouvrir {site} » affiche. */
+	let attenteWebSite = "";
+	/** L'action de l'écran d'erreur : « Rouvrir <site> » quand la réponse
+	    copiée n'était pas un quiz (réessayer relancerait une génération que
+	    l'application n'a jamais faite). */
+	let errorAction: "reopen" | null = null;
 	/** Sondage « le compte est-il connecté ? », pour la même raison que
 	    `ollamaPoll` : sans être retenu, il survivrait à la fermeture de la vue
 	    et repeindrait un conteneur détaché. Coupé à la détection, à
@@ -616,7 +631,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// (bulle qui monte / champ vide) qui fait « sentir » l'envoi. En
 		// résultat, la page du quiz occupe l'écran et porte son propre
 		// en-tête — une bulle de plus n'y ajouterait que du bruit.
-		if (sentMessage && (phase === "loading" || phase === "error" || phase === "connexion")) renderSentMessage(stage);
+		if (sentMessage && (phase === "loading" || phase === "error" || phase === "connexion" || phase === "web")) renderSentMessage(stage);
 
 		// Zone du loader de génération : AU-DESSUS du composer (demande
 		// 2026-07-10 — le loader préfigure le résultat, qui vit en haut).
@@ -628,6 +643,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   l'échec. */
 		const errorZone = phase === "error" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
 		const connexionZone = phase === "connexion" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
+		const webZone = phase === "web" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
 
 		// ── Fournisseur : bouton LOGO SEUL dans le pied du composer (la
 		// carte « Modèle IA » est supprimée) — le menu garde logos, statut
@@ -1243,13 +1259,15 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			/* Sur un canal web, le bouton n'ENVOIE pas : il OUVRE le site, avec
 			   la question déjà écrite. Deux gestes différents méritent deux
 			   boutons différents — d'où le libellé, là où la flèche seule
-			   promettrait une génération qui ne part pas d'ici.
-			   TÂCHE EN COURS : le design d'abord, le câblage ensuite. Le clic
-			   le dit au lieu de ne rien faire, ce qui passerait pour une panne. */
+			   promettrait une génération qui ne part pas d'ici. `startGeneration`
+			   bifurque vers `ouvrirSite`, qui dit « non câblé » pour les canaux
+			   web sans adresse mesurée (chatgpt.com, perplexity.ai). */
 			sendBtn.classList.add("qbd-ai-composer-send--wide");
 			host.ui.setIcon(sendIcon, "external-link");
 			ajouter(sendBtn, "span", "qbd-ai-composer-send-label", t("ai.composer.open"));
-			sendBtn.addEventListener("click", () => host.ui.notice(t("ai.channel.notWiredYet")));
+			sendBtn.addEventListener("click", () => {
+				if (canGenerate()) startGeneration(containerRef);
+			});
 		} else {
 			sendBtn.setAttribute("aria-label", t("ai.composer.generate"));
 			host.ui.setIcon(sendIcon, "arrow-up");
@@ -1369,6 +1387,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (phase === "loading") renderLoading(loadingZone!);
 		else if (phase === "error") renderError(errorZone!);
 		else if (phase === "connexion") renderConnexion(connexionZone!);
+		else if (phase === "web") renderWeb(webZone!);
 		else if (phase === "result") renderResult(resultZone!);
 
 		// Onglet ouvert → saisie immédiate sans clic (demande 2026-07-10).
@@ -1989,6 +2008,15 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		ajouter(errorEl, "p", "qbd-ai-error-msg",
 			offreConnexion ? t(`ai.login.reason.${tool as "claude" | "codex"}`) : errorMessage);
 
+		/* La réponse copiée n'était pas un quiz : rouvrir le site (avec un
+		   jeton neuf) est la seule action qui a du sens, pas « Réessayer »,
+		   qui relancerait une génération que l'application n'a jamais faite. */
+		if (errorAction === "reopen" && attenteWebSite) {
+			const reopenBtn = ajouter(errorEl, "button", "qbd-btn qbd-btn--ghost qbd-ai-error-retry", t("ai.web.reopen", { site: attenteWebSite }));
+			reopenBtn.addEventListener("click", () => { relancerApresErreur(); });
+			return;
+		}
+
 		if (tool && offreConnexion) {
 			const loginBtn = ajouter(errorEl, "button", "qbd-btn qbd-btn--ghost qbd-ai-error-retry");
 			loginBtn.type = "button";
@@ -2095,6 +2123,39 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			phase = "error";
 			render(containerRef);
 		});
+	}
+
+	/** La carte d'attente du canal web : le titre nomme le site, le callout
+	    reproduit son bandeau d'avertissement, la ligne forte dit ce qui va se
+	    passer (veille automatique ou collage manuel selon l'hôte). */
+	function renderWeb(parent: HTMLElement): void {
+		if (!attenteWeb) return;
+		const site = attenteWeb.site;
+		const carte = ajouter(parent, "div", "qbd-ai-preview-loading qbd-ai-web-card");
+		const iconWrap = ajouter(carte, "div", "qbd-ai-loading-icon");
+		host.ui.setIcon(iconWrap, "clipboard-copy");
+		ajouter(carte, "p", "qbd-ai-loading-title", t("ai.web.title", { site }));
+		/* Le presse-papier d'abord, quand la question n'a pas tenu dans
+		   l'adresse : il faut coller là-bas AVANT d'envoyer. */
+		if (attenteWeb.ouverture.mode === "presse-papier") ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t("ai.web.copied", { site }));
+		/* Le callout reproduit le bandeau que claude.ai affichera (fond rouge
+		   sombre, icône d'alerte, texte rouge clair) : l'utilisateur le
+		   reconnaît quand il le voit là-bas, et sait déjà pourquoi il est là
+		   (demande d'Ahmed, 2026-09-18). */
+		const callout = ajouter(carte, "div", "qbd-ai-web-callout");
+		host.ui.setIcon(ajouter(callout, "span", "qbd-ai-web-callout-icon"), "triangle-alert");
+		ajouter(callout, "p", "qbd-ai-web-callout-text", t("ai.web.callout", { site }));
+		ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--strong", host.collage ? t("ai.web.auto") : t("ai.web.manual"));
+		const actions = ajouter(carte, "div", "qbd-ai-web-actions");
+		const reopen = ajouter(actions, "button", "qbd-btn qbd-btn--ghost", t("ai.web.reopen", { site }));
+		reopen.type = "button";
+		/* Rouvrir = rejouer l'ouverture, avec un jeton neuf : le même chemin
+		   que « Réessayer » (restore puis startGeneration), qui repasse par
+		   ouvrirSite. */
+		reopen.addEventListener("click", () => { arreterAttenteWeb(); relancerApresErreur(); });
+		const cancel = ajouter(actions, "button", "qbd-btn qbd-btn--ghost", t("ai.web.cancel"));
+		cancel.type = "button";
+		cancel.addEventListener("click", annulerAttenteWeb);
 	}
 
 	/** Ouvre l'écran d'usage en lui passant la dernière lecture connue (il ne
@@ -2309,6 +2370,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    qui va de toute façon quitter la vue (insertion dans une note). */
 	function resetGeneration(): void {
 		couperSondeConnexion();
+		arreterAttenteWeb();
+		errorAction = null;
+		attenteWebSite = "";
 		phase = "idle";
 		signalerGeneration(false);
 		errorLogin = null;
@@ -2424,6 +2488,29 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	/** Une génération est-elle DÉJÀ partie ? Posé avant le moindre `await`. */
 	let demarrage = false;
 
+	/* Source et prompt déduits du contenu du composer, partagés par le
+	   chemin CLI (startGeneration) et le chemin web (ouvrirSite) : même
+	   demande, deux façons de la porter à un modèle. */
+	function composerDemande(msg: SentMessage): { source: "image" | "text" | "topic"; prompt: string } {
+		// Source déduite du contenu du composer :
+		// images → vision ; notes/fichiers attachés → texte source ;
+		// sinon sujet. Chaque source texte est délimitée par son nom
+		// (l'IA distingue les documents d'un envoi multi-notes).
+		const source = msg.images.length > 0 ? "image" : msg.notes.length > 0 ? "text" : "topic";
+		const notesBlock = msg.notes
+			.map(n => (msg.notes.length > 1 ? "--- " + n.name + " ---\n" : "") + n.content)
+			.join("\n\n");
+		// Repli quand des images sont envoyées SANS consigne : instruction au
+		// modèle (pas de l'UI) → anglais, et surtout « dans leur langue »,
+		// sinon des images françaises donneraient un quiz anglais.
+		const prompt = source === "image"
+			? (msg.text.trim() || "Analyze the provided images and build the quiz in their language")
+			: source === "text"
+			? (msg.text.trim() ? msg.text.trim() + "\n\n" : "") + notesBlock
+			: msg.text.trim();
+		return { source, prompt };
+	}
+
 	async function startGeneration(container: HTMLElement | null): Promise<void> {
 		/* VERROU d'abord, et de façon synchrone : `phase = "loading"` n'était
 		   posé qu'après l'attente ci-dessous, et Entrée ou un second clic
@@ -2458,6 +2545,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   la sonde passe elle-même par ici, et couper deux fois ne coûte
 		   rien. */
 		couperSondeConnexion();
+		if (aiProviders.estCanalWeb(settings().aiProvider || "")) {
+			await ouvrirSite(msg, container);
+			return;
+		}
 		phase = "loading";
 		signalerGeneration(true);
 		errorMessage = "";
@@ -2476,22 +2567,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 
 		try {
 
-			// Source déduite du contenu du composer :
-			// images → vision ; notes/fichiers attachés → texte source ;
-			// sinon sujet. Chaque source texte est délimitée par son nom
-			// (l'IA distingue les documents d'un envoi multi-notes).
-			const source = msg.images.length > 0 ? "image" : msg.notes.length > 0 ? "text" : "topic";
-			const notesBlock = msg.notes
-				.map(n => (msg.notes.length > 1 ? "--- " + n.name + " ---\n" : "") + n.content)
-				.join("\n\n");
-			// Repli quand des images sont envoyées SANS consigne : instruction au
-			// modèle (pas de l'UI) → anglais, et surtout « dans leur langue »,
-			// sinon des images françaises donneraient un quiz anglais.
-			const prompt = source === "image"
-				? (msg.text.trim() || "Analyze the provided images and build the quiz in their language")
-				: source === "text"
-				? (msg.text.trim() ? msg.text.trim() + "\n\n" : "") + notesBlock
-				: msg.text.trim();
+			const { source, prompt } = composerDemande(msg);
 
 			// Convert image files to base64 for vision API
 			let imageData: ImagePayload[] = [];
@@ -2584,6 +2660,119 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (!navigated) render(container);
 	}
 
+	/**
+	 * Le canal web : le site s'ouvre avec la question, l'application attend la
+	 * réponse copiée. Trois gestes pour l'utilisateur (Ouvrir, Envoyer,
+	 * Copier), et rien à confirmer ici : c'est la contrainte de la spec.
+	 */
+	async function ouvrirSite(msg: SentMessage, container: HTMLElement | null): Promise<void> {
+		const canalId = settings().aiProvider || "";
+		const canal = aiProviders.getCanal(canalId);
+		const site = canal ? canal.label : canalId;
+		/* Non câblé (chatgpt.com, perplexity.ai tant qu'ils ne sont pas
+		   mesurés) : la notice, et la demande revient au composer. */
+		if (!canal || !canal.web) {
+			host.ui.notice(t("ai.channel.notWiredYet"));
+			restoreComposerMessage();
+			return;
+		}
+		/* Ni une adresse ni un presse-papier texte ne transportent une image :
+		   rien ne part, le composer garde tout. Même patron que le PDF refusé
+		   dans l'application. */
+		if (msg.images.length > 0) {
+			host.ui.notice(t("ai.channel.noImages"));
+			restoreComposerMessage();
+			return;
+		}
+		const { source, prompt } = composerDemande(msg);
+		const jeton = nouveauJeton();
+		const texte = texteWeb(composerPrompts(prompt, { count: questionCount, type: questionType, source }), jeton);
+		const ouverture = preparerOuverture(texte, canal.web, URL_MAX);
+		if (ouverture.mode === "presse-papier") {
+			const ok = deps.copyText ? await deps.copyText(ouverture.texte) : false;
+			if (!ok) { echecOuverture(t("ai.channel.copyFailed"), container); return; }
+		}
+		if (!(await host.shell.openUrl(ouverture.url))) { echecOuverture(t("ai.channel.openFailed"), container); return; }
+		arreterAttenteWeb();
+		/* Écouteurs de la phase : Esc annule ; un collage hors du composer est
+		   la réponse (le composer, lui, sert à écrire une nouvelle demande). */
+		const surTouche = (e: KeyboardEvent): void => { if (e.key === "Escape") { e.preventDefault(); annulerAttenteWeb(); } };
+		const surCollage = (e: ClipboardEvent): void => {
+			if (phase !== "web") return;
+			const cible = e.target as HTMLElement | null;
+			if (cible && cible.closest(".qbd-ai-composer")) return;
+			const colle = e.clipboardData?.getData("text/plain") || "";
+			if (!colle.trim()) return;
+			e.preventDefault();
+			void recevoirReponse(colle);
+		};
+		document.addEventListener("keydown", surTouche);
+		document.addEventListener("paste", surCollage, true);
+		attenteWeb = {
+			jeton, ouverture, site,
+			arreter: host.collage ? host.collage.attendre(jeton, texteRecu => void recevoirReponse(texteRecu)) : null,
+			retirer: () => { document.removeEventListener("keydown", surTouche); document.removeEventListener("paste", surCollage, true); },
+		};
+		attenteWebSite = site;
+		errorMessage = "";
+		errorLogin = null;
+		errorAction = null;
+		phase = "web";
+		render(container);
+	}
+
+	function echecOuverture(message: string, container: HTMLElement | null): void {
+		errorMessage = message;
+		errorLogin = null;
+		errorAction = null;
+		phase = "error";
+		render(container);
+	}
+
+	/** Arrête la veille et retire les écouteurs ; ne touche pas à la phase. */
+	function arreterAttenteWeb(): void {
+		if (!attenteWeb) return;
+		attenteWeb.arreter?.();
+		attenteWeb.retirer();
+		attenteWeb = null;
+	}
+
+	/** Annuler = défaire l'ouverture : la demande revient dans le composer. */
+	function annulerAttenteWeb(): void {
+		arreterAttenteWeb();
+		restoreComposerMessage();
+		phase = "idle";
+		render(containerRef);
+	}
+
+	/**
+	 * LE SEUL chemin par lequel une réponse copiée devient un quiz, qu'elle
+	 * vienne de la veille du principal ou d'un collage manuel. Ensuite, la
+	 * même suite qu'une génération : la page du quiz enregistré.
+	 */
+	async function recevoirReponse(texte: string): Promise<void> {
+		if (phase !== "web" || disposed) return;
+		arreterAttenteWeb();
+		try {
+			generatedQuestions = parseReponseQuiz(texte);
+			if (generatedQuestions.length === 0) throw new Error(t("ai.err.notAnArray"));
+		} catch (err) {
+			errorMessage = (err as Error).message || t("ai.error.checkSettings");
+			errorLogin = null;
+			errorAction = "reopen";
+			generatedQuestions = [];
+			phase = "error";
+			render(containerRef);
+			return;
+		}
+		lastUsage = null;
+		generationId++;
+		generatedDraft = null;
+		phase = "result";
+		const navigated = await saveGeneratedQuiz();
+		if (!navigated) render(containerRef);
+	}
+
 	/* Insère le quiz dans la note choisie via le picker (« Insérer dans une
 	   note »). L'état ÉDITÉ de l'éditeur embarqué prime sur les questions
 	   générées brutes (les retouches faites dans l'éditeur sont insérées). */
@@ -2651,6 +2840,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		activeClient = null;
 		if (ollamaPoll) { window.clearInterval(ollamaPoll); ollamaPoll = null; }
 		couperSondeConnexion();
+		arreterAttenteWeb();
 		closeAllSelects();
 		if (composerResizeObserver) { composerResizeObserver.disconnect(); composerResizeObserver = null; }
 		if (__focusRecheck) { window.removeEventListener("focus", __focusRecheck); __focusRecheck = null; }

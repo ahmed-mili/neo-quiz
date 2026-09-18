@@ -82,6 +82,16 @@ export const EN_AI = {
 	"ai.channel.cliSub": "On your machine",
 	"ai.channel.webSub": "In your browser",
 	"ai.channel.notWiredYet": "Design preview: web channels are not wired up yet.",
+	"ai.channel.noImages": "Images can't be sent to a website. Remove them, or pick a CLI channel.",
+	"ai.channel.copyFailed": "The prompt could not be copied to the clipboard.",
+	"ai.channel.openFailed": "The browser could not be opened.",
+	"ai.web.title": "Copy the answer from {site}",
+	"ai.web.auto": "As soon as it's copied, the quiz is created here on its own.",
+	"ai.web.manual": "Paste the answer here with Ctrl+V.",
+	"ai.web.callout": "{site} will show this warning above your question. It appears because the question arrives through a link rather than the keyboard: {site} shows it for any prompt that comes from a link. Here the link comes from Neo Quiz and the question is yours. Send it as usual.",
+	"ai.web.copied": "The prompt is in your clipboard: paste it into {site} first, then send.",
+	"ai.web.reopen": "Reopen {site}",
+	"ai.web.cancel": "Cancel",
 
 	/* ── Statuts (pastille + sous-titre du menu fournisseur) ── */
 	"ai.status.claudeOk": "Claude Code v{version}",

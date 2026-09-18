@@ -67,6 +67,16 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.channel.cliSub": "Sur ta machine",
 	"ai.channel.webSub": "Dans ton navigateur",
 	"ai.channel.notWiredYet": "Aperçu du design : les canaux web ne sont pas encore câblés.",
+	"ai.channel.noImages": "Les images ne peuvent pas être envoyées à un site. Retire-les, ou choisis un canal CLI.",
+	"ai.channel.copyFailed": "Le prompt n'a pas pu être copié dans le presse-papier.",
+	"ai.channel.openFailed": "Le navigateur n'a pas pu être ouvert.",
+	"ai.web.title": "Copie la réponse de {site}",
+	"ai.web.auto": "Dès qu'elle est copiée, le quiz se crée ici tout seul.",
+	"ai.web.manual": "Colle la réponse ici avec Ctrl+V.",
+	"ai.web.callout": "{site} affichera cet avertissement au-dessus de ta question. Il apparaît parce que la question arrive par un lien et non par le clavier : {site} le montre pour toute invite venue d'un lien. Ici, le lien vient de Neo Quiz et la question est la tienne. Envoie comme d'habitude.",
+	"ai.web.copied": "Le prompt est dans ton presse-papier : colle-le d'abord dans {site}, puis envoie.",
+	"ai.web.reopen": "Rouvrir {site}",
+	"ai.web.cancel": "Annuler",
 
 	/* ── Statuts (pastille + sous-titre du menu fournisseur) ── */
 	"ai.status.claudeOk": "Claude Code v{version}",

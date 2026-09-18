@@ -17,7 +17,8 @@
 
 .qbd-ai-stage--idle,
 .qbd-ai-stage--loading,
-.qbd-ai-stage--error {
+.qbd-ai-stage--error,
+.qbd-ai-stage--web {
 	align-items: center;
 	text-align: center;
 	/* Référence claude.ai REMESURÉE (2026-07-16) : centré horizontalement
@@ -30,14 +31,16 @@
 
 .qbd-ai-stage--idle::before,
 .qbd-ai-stage--loading::before,
-.qbd-ai-stage--error::before {
+.qbd-ai-stage--error::before,
+.qbd-ai-stage--web::before {
 	content: "";
 	flex: 0.44 0 0;
 }
 
 .qbd-ai-stage--idle::after,
 .qbd-ai-stage--loading::after,
-.qbd-ai-stage--error::after {
+.qbd-ai-stage--error::after,
+.qbd-ai-stage--web::after {
 	content: "";
 	flex: 1 0 0;
 }
@@ -58,7 +61,8 @@
    version compacte. */
 .qbd-ai-stage--idle .qbd-ai-composer,
 .qbd-ai-stage--loading .qbd-ai-composer,
-.qbd-ai-stage--error .qbd-ai-composer {
+.qbd-ai-stage--error .qbd-ai-composer,
+.qbd-ai-stage--web .qbd-ai-composer {
 	margin-top: 18px;
 	padding: 24px 24px 18px;
 	border-radius: 22px;
@@ -66,7 +70,8 @@
 
 .qbd-ai-stage--idle .qbd-ai-composer-input,
 .qbd-ai-stage--loading .qbd-ai-composer-input,
-.qbd-ai-stage--error .qbd-ai-composer-input {
+.qbd-ai-stage--error .qbd-ai-composer-input,
+.qbd-ai-stage--web .qbd-ai-composer-input {
 	/* 58px : compense les +2px de la barre agrandie (contrôles 30→34)
 	   pour garder le composer aux 142px validés. */
 	min-height: 58px;
@@ -2210,6 +2215,74 @@
 	position: relative;
 	overflow: hidden;
 	min-height: 260px;
+}
+
+/* ── La carte d'attente du canal web ──
+   Même surface que le loader (elle vit au même endroit, au-dessus du
+   composer) : un titre, deux ou trois lignes, deux boutons fantômes. La
+   ligne forte est celle qui dit ce qui va se passer (« le quiz se crée ici
+   tout seul »). */
+.qbd-ai-web-card {
+	gap: 8px;
+}
+
+.qbd-ai-web-line {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	text-align: center;
+	max-width: 46ch;
+}
+
+.qbd-ai-web-line--strong {
+	color: var(--text-normal);
+	font-weight: 500;
+}
+
+.qbd-ai-web-line--first {
+	color: var(--text-normal);
+}
+
+.qbd-ai-web-actions {
+	display: flex;
+	gap: 10px;
+	margin-top: 6px;
+}
+
+/* Le callout au style du bandeau de claude.ai (relevé à l'écran le
+   2026-09-18) : fond rouge sombre translucide, bordure rouge, icône
+   d'alerte à gauche, texte rouge clair. Les couleurs viennent de
+   --color-red pour suivre le thème, pas du rouge exact de claude.ai. */
+.qbd-ai-web-callout {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	max-width: 52ch;
+	padding: 11px 14px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--color-red) 12%, transparent);
+	border: 1px solid color-mix(in srgb, var(--color-red) 40%, transparent);
+	text-align: left;
+}
+
+.qbd-ai-web-callout-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	margin-top: 2px;
+	color: var(--color-red);
+}
+
+.qbd-ai-web-callout-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+.qbd-ai-web-callout-text {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: color-mix(in srgb, var(--color-red) 80%, var(--text-normal));
 }
 
 .qbd-ai-preview-loading::before {

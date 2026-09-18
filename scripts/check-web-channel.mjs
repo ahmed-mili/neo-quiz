@@ -14,7 +14,9 @@
  */
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
-await withSrcModule(["src/host/current.ts", "src/dashboard/ai-client.ts"], async (_current, client) => {
+await withSrcModule(
+	["src/host/current.ts", "src/dashboard/ai-client.ts", "src/dashboard/ai-web.ts", "src/dashboard/ai-providers.ts"],
+	async (_current, client, web, providers) => {
 	const r = makeReporter("Canal web — prompts et parseur");
 
 	/* ── composerPrompts : les mêmes chaînes que le CLI ── */
@@ -61,4 +63,43 @@ await withSrcModule(["src/host/current.ts", "src/dashboard/ai-client.ts"], async
 	}
 
 	r.done();
+
+	const r2 = makeReporter("Canal web — texte, jeton, ouverture, câblage");
+
+	/* ── texteWeb : la consigne de forme remplace la phrase du CLI ── */
+	{
+		const prompts = client.composerPrompts("Sujet", { count: 3 });
+		const texte = web.texteWeb(prompts, "k7f2q9abcd");
+		r2.check("le texte porte le jeton en commentaire de première ligne du bloc", texte.includes("// neo-quiz k7f2q9abcd"), true);
+		r2.check("il demande un bloc de code json5", texte.includes("```json5"), true);
+		r2.check("la phrase finale du CLI n'y est plus", texte.includes(client.PHRASE_FINALE_CLI), false);
+		r2.check("les deux prompts y sont, dans l'ordre", texte.indexOf("You are a quiz generator") < texte.indexOf("Generate a quiz about the following topic"), true);
+	}
+
+	/* ── nouveauJeton ── */
+	{
+		const a = web.nouveauJeton(), b = web.nouveauJeton();
+		r2.check("dix caractères de [a-z0-9]", /^[a-z0-9]{10}$/.test(a), true);
+		r2.check("deux tirages diffèrent", a === b, false);
+	}
+
+	/* ── preparerOuverture ── */
+	{
+		const site = { nouvelle: "https://claude.ai/new", parametre: "q" };
+		const court = web.preparerOuverture("Bonjour à tous", site, 200);
+		r2.check("sous la borne : l'adresse porte le texte encodé",
+			court, { mode: "url", url: "https://claude.ai/new?q=Bonjour%20%C3%A0%20tous" });
+		const long = web.preparerOuverture("x".repeat(500), site, 200);
+		r2.check("au-delà : le presse-papier, l'adresse nue, le texte intact",
+			[long.mode, long.url, long.texte.length], ["presse-papier", "https://claude.ai/new", 500]);
+		const exact = web.preparerOuverture("abc", site, "https://claude.ai/new?q=abc".length);
+		r2.check("la borne exacte passe encore par l'adresse", exact.mode, "url");
+	}
+
+	/* ── estCanalCable ── */
+	r2.check("claude.ai est câblé", providers.estCanalCable("claude-web"), true);
+	r2.check("chatgpt.com ne l'est pas encore", providers.estCanalCable("chatgpt-web"), false);
+	r2.check("un CLI n'est pas un canal web câblé", providers.estCanalCable("claude-code"), false);
+
+	r2.done();
 });

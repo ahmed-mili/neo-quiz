@@ -1,6 +1,7 @@
 import { currentHost, requireHost } from "../host/current";
 import { t, currentLang } from "../i18n";
 import type { Lang } from "../i18n";
+import type { OuvertureWeb } from "./ai-web";
 /* PLUS D'IMPORT d'`ai-usage.ts` (tâche 6 de la tranche 5) : ce module lisait
    le forfait Claude par `readClaudePlan`, qui ouvre le trousseau du CLI avec
    `fs` derrière `Platform` d'Obsidian — un import qui faisait entrer Obsidian
@@ -214,6 +215,11 @@ export interface Canal {
 	label: string;
 	sub: string;
 	type: TypeCanal;
+	/** Comment ouvrir le site avec la question déjà écrite. ABSENT : le canal
+	    n'est pas câblé, le bouton le dit (« aperçu du design »). Posé quand le
+	    site a été MESURÉ (claude.ai le 2026-09-18 : `/new?q=` préremplit sans
+	    envoyer). */
+	web?: OuvertureWeb;
 }
 
 export interface Marque {
@@ -231,7 +237,7 @@ export const MARQUES: Marque[] = [
 		logo: "claude",
 		canaux: [
 			{ id: "claude-code", label: "Claude Code CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli" },
-			{ id: "claude-web", label: "claude.ai", get sub() { return t("ai.channel.webSub"); }, type: "web" }
+			{ id: "claude-web", label: "claude.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://claude.ai/new", parametre: "q" } }
 		]
 	},
 	{
@@ -280,6 +286,11 @@ export function getCanal(canalId: string): Canal | undefined {
     l'utilisateur et non par un processus que l'application lance. */
 export function estCanalWeb(canalId: string): boolean {
 	return getCanal(canalId)?.type === "web";
+}
+
+/** Vrai quand le site sait s'ouvrir avec la question : `web` est posé. */
+export function estCanalCable(canalId: string): boolean {
+	return !!getCanal(canalId)?.web;
 }
 
 /* ── Modèles par provider ── */

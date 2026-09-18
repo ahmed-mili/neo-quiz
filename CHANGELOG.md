@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-18
+
 ### Fixed
 - The "Install manually" section of the install window is readable again: its heading is back on one line (the chevron used to stretch over the label), the command no longer breaks in the middle of a word, and the copy button sits inside the code block, appearing on hover like in Obsidian, instead of overlapping its own label below the block. The collapsible heading and the copy button now show a hand cursor.
 

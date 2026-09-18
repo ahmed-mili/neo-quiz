@@ -415,45 +415,104 @@
 
 	/* Menu déroulant des versions publiées. */
 
+	/* Même matière que `.langue-menu` et que les cartes : verre à 55 % et
+	   flou de 18 px. Il était en `var(--fond-secondaire)` OPAQUE, seul bloc plat
+	   d'une page en verre — il se lisait comme une boîte posée à côté de la
+	   tuile, pas comme son prolongement. Et `width: 100%` lui donne la largeur
+	   de la carte (le bloc conteneur est sa boîte de padding) : un TIROIR de la
+	   tuile, bord à bord, au lieu d'un panneau de 200 px plus étroit qu'elle. */
 	.menu-versions {
 		position: absolute;
 		top: 100%;
 		left: 50%;
 		transform: translateX(-50%);
 		margin-top: 6px;
-		width: 200px;
-		max-height: 240px;
+		width: 100%;
+		max-height: 262px;
 		overflow-y: auto;
+		overscroll-behavior: contain;
 		border: 1px solid var(--bordure);
 		border-radius: 12px;
-		background: var(--fond-secondaire);
+		background: color-mix(in srgb, var(--fond-secondaire) 55%, transparent);
+		backdrop-filter: blur(18px);
+		-webkit-backdrop-filter: blur(18px);
 		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
 		z-index: 20;
 		text-align: left;
 		padding: 6px;
+		/* La barre native est CLAIRE sur Windows : une colonne blanche au bord
+		   d'un panneau sombre, la seule de la page. `scrollbar-width` couvre
+		   Firefox et Chromium ; là où elle s'applique, les règles
+		   `::-webkit-scrollbar` sont ignorées — elles ne se disputent pas, et
+		   servent Safari, qui ne connaît que celles-là. */
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in srgb, var(--texte-attenue) 40%, transparent) transparent;
 	}
+
+	.menu-versions::-webkit-scrollbar { width: 10px; }
+	.menu-versions::-webkit-scrollbar-track { background: transparent; }
+	.menu-versions::-webkit-scrollbar-thumb {
+		background-color: color-mix(in srgb, var(--texte-attenue) 40%, transparent);
+		border-radius: 999px;
+		/* Une bordure transparente rognée sur le contenu : le pouce paraît fin
+		   sans que la zone de saisie, elle, le devienne. */
+		border: 3px solid transparent;
+		background-clip: content-box;
+	}
+
+	.menu-versions::-webkit-scrollbar-thumb:hover { background-color: var(--texte-attenue); }
 
 	.menu-versions[hidden] { display: none; }
 
+	/* Trois colonnes, pas un `space-between` : la colonne de coche est réservée
+	   même vide, sinon le numéro de la ligne cochée se décalerait de 22 px et
+	   la liste ne s'alignerait plus. */
 	.menu-versions .item {
-		display: flex;
+		display: grid;
+		grid-template-columns: 14px 1fr auto;
 		align-items: center;
-		justify-content: space-between;
 		gap: 8px;
-		padding: 8px 10px;
+		padding: 7px 9px;
 		border-radius: 8px;
 		font-size: 13px;
+		color: var(--texte);
 		cursor: pointer;
 	}
 
 	.menu-versions .item:hover,
 	.menu-versions .item:focus-visible {
 		background: color-mix(in srgb, var(--accent) 20%, transparent);
+		outline: none;
+	}
+
+	.menu-versions .fin {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		white-space: nowrap;
+	}
+
+	/* Le poids de ce que chaque ligne télécharge vraiment : le bootstrapper de 97 Mo
+	   pour la dernière release, l'installeur complet de 132 Mo pour toute autre.
+	   C'est la seule chose qui les distingue avant le clic. */
+	.menu-versions .poids {
+		font-size: 11.5px;
+		color: var(--texte-attenue);
 	}
 
 	.menu-versions .marque {
 		font-size: 11px;
 		color: var(--texte-attenue);
+	}
+
+	.menu-versions .coche {
+		width: 14px;
+		height: 14px;
+		stroke: var(--accent);
+		fill: none;
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
 	}
 
 	/* ===== Avertissements ===== */
@@ -773,6 +832,10 @@
 		// portent aucun installeur Windows.
 		var MOTIF_TAG_APP = /^desktop-v\d+\.\d+\.\d+$/;
 
+		// La même coche que le menu de langue, au même trait : deux menus sur une
+		// page ne peuvent pas marquer leur ligne courante autrement.
+		var COCHE_MENU = '<svg class="coche" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"></path></svg>';
+
 		// `cible` : un nom d'asset exact, une extension (".appimage") ou une RegExp.
 		function trouverActif(assets, cible) {
 			if (cible instanceof RegExp) {
@@ -897,6 +960,10 @@
 			bouton.setAttribute("aria-haspopup", "true");
 
 			var releasesChargees = null;
+			// Le tag que la TUILE affiche en ce moment, pour cocher sa ligne à la
+			// réouverture. Sans elle, dix lignes identiques et rien qui dise laquelle
+			// on regarde.
+			var tagChoisi = null;
 
 			function fermerMenu() {
 				menu.hidden = true;
@@ -919,14 +986,23 @@
 					if (!actif) return;
 					var version = String(release.tag_name || "").replace(/^(desktop-)?v/, "");
 					if (!version) return;
+					var estCourante = String(release.tag_name || "") === (tagChoisi || tagDernier);
 					var item = document.createElement("div");
 					item.className = "item";
 					item.tabIndex = 0;
 					item.setAttribute("role", "menuitem");
+					if (estCourante) item.setAttribute("aria-current", "true");
+
+					var coche = document.createElement("span");
+					if (estCourante) coche.innerHTML = COCHE_MENU;
+					item.appendChild(coche);
 
 					var libelle = document.createElement("span");
 					libelle.textContent = "v" + version;
 					item.appendChild(libelle);
+
+					var fin = document.createElement("span");
+					fin.className = "fin";
 
 					// `suffixe` marque la TUILE une fois le choix fait : elle n'affiche
 					// plus la dernière version. Dans le MENU, seule une préversion mérite
@@ -937,13 +1013,21 @@
 						var marque = document.createElement("span");
 						marque.className = "marque";
 						marque.textContent = "bêta";
-						item.appendChild(marque);
+						fin.appendChild(marque);
 					}
+
+					// Le poids dit AVANT le clic lequel des deux assets on prend.
+					var poids = document.createElement("span");
+					poids.className = "poids";
+					poids.textContent = formaterTaille(actif.size);
+					fin.appendChild(poids);
+					item.appendChild(fin);
 
 					function choisir(e) {
 						e.preventDefault();
 						e.stopPropagation();
 						fermerMenu();
+						tagChoisi = String(release.tag_name || "");
 						afficherVersion("windows", release, motif, suffixe);
 						carte.setAttribute("href", actif.browser_download_url);
 					}
@@ -957,10 +1041,19 @@
 				});
 			}
 
+			// Huit lignes sur dix tiennent dans la coupe : la ligne cochée peut être
+			// dessous. Elle ne se déroule qu'une fois le menu VISIBLE — un élément
+			// caché n'a pas de mise en page, et `scrollIntoView` n'y ferait rien.
+			function revelerCochee() {
+				var cochee = menu.querySelector('.item[aria-current="true"]');
+				if (cochee) cochee.scrollIntoView({ block: "nearest" });
+			}
+
 			function ouvrirMenu() {
 				if (releasesChargees) {
 					remplirMenu(releasesChargees);
 					menu.hidden = false;
+					revelerCochee();
 					return;
 				}
 				// La liste complète n'existe que côté API : `latest.json` ne décrit que
@@ -976,6 +1069,7 @@
 						releasesChargees = releases;
 						remplirMenu(releases);
 						menu.hidden = false;
+						revelerCochee();
 					})
 					.catch(function () {
 						// Liste indisponible : cliquer la version ne fait simplement rien,

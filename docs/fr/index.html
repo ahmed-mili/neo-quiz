@@ -571,9 +571,16 @@
 			</div>
 
 			<!-- Linux -->
+			<!-- Les liens Linux sont FIGES sur desktop-v1.2.0, la derniere release
+			     qui porte des paquets Linux : les builds Linux sont en sommeil
+			     depuis le 2026-09-17 (voir release.yml). Viser
+			     releases/latest/download/ rendait un 404 des qu une version
+			     Windows seule est devenue latest — et la version affichee,
+			     lue de latest.json, annoncait une version Linux qui n existe
+			     pas. La page anglaise a ete corrigee le 2026-09-17 (16fe994),
+			     celle-ci l a ete le 2026-09-18 : elle avait ete oubliee. -->
 			<a class="carte" id="carte-linux"
-				href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz.AppImage"
-				data-releases-ext=".appimage">
+				href="https://github.com/ahmed-mili/neo-quiz/releases/download/desktop-v1.2.0/neo-quiz.AppImage">
 				<span class="carte-icone">
 					<!-- Le Tux OFFICIEL en couleurs, de Larry Ewing (lewing@isc.tamu.edu),
 					     fait avec The GIMP ; fichier Tux.svg de Wikimedia Commons. La
@@ -582,8 +589,7 @@
 				</span>
 				<span class="carte-nom">Linux</span>
 				<span class="carte-meta" id="meta-linux">
-					<span class="carte-version" id="version-linux">…</span>
-					<span class="carte-taille" id="taille-linux"></span>
+					<span class="carte-version" id="version-linux">1.2.0</span>
 				</span>
 			</a>
 
@@ -627,19 +633,19 @@
 			<div class="etape">
 				<h3>AppImage — x86_64</h3>
 				<p>La plupart des PC. Rien à installer : rendez le fichier exécutable et lancez-le.</p>
-				<a class="bouton-etape bouton-etape--accent" id="linux-appimage-x64" href="https://github.com/ahmed-mili/neo-quiz/releases/latest/download/neo-quiz.AppImage">Télécharger l'AppImage</a>
+				<a class="bouton-etape bouton-etape--accent" id="linux-appimage-x64" href="https://github.com/ahmed-mili/neo-quiz/releases/download/desktop-v1.2.0/neo-quiz-1.2.0-x86_64.AppImage">Télécharger l'AppImage</a>
 			</div>
 			<div class="etape">
 				<h3>AppImage — ARM64</h3>
 				<p>Raspberry Pi, portables ARM.</p>
-				<a class="bouton-etape" id="linux-appimage-arm64" href="https://github.com/ahmed-mili/neo-quiz/releases/latest">Télécharger pour ARM64</a>
+				<a class="bouton-etape" id="linux-appimage-arm64" href="https://github.com/ahmed-mili/neo-quiz/releases/download/desktop-v1.2.0/neo-quiz-1.2.0-arm64.AppImage">Télécharger pour ARM64</a>
 			</div>
 			<div class="etape">
 				<h3>.deb — amd64</h3>
 				<p>Debian, Ubuntu, Linux Mint. La mise à jour demande votre mot de passe, comme tout paquet.</p>
-				<a class="bouton-etape" id="linux-deb" href="https://github.com/ahmed-mili/neo-quiz/releases/latest">Télécharger le .deb</a>
+				<a class="bouton-etape" id="linux-deb" href="https://github.com/ahmed-mili/neo-quiz/releases/download/desktop-v1.2.0/neo-quiz-1.2.0-amd64.deb">Télécharger le .deb</a>
 			</div>
-			<p class="modale-note">Les mises à jour arrivent ensuite d'elles-mêmes, depuis l'application.</p>
+			<p class="modale-note">Ce sont les paquets 1.2.0, la dernière build Linux. Les versions suivantes sont Windows seulement pour l'instant.</p>
 		</div>
 	</div>
 	<div class="modale" id="modale-obsidian" hidden>
@@ -761,24 +767,17 @@
 				afficherVersion("windows", donnees, MOTIF_INSTALLEUR_WINDOWS, null);
 				var carteWindows = document.getElementById("carte-windows");
 				if (actifWindows && carteWindows) carteWindows.setAttribute("href", actifWindows.browser_download_url);
-				afficherVersion("linux", donnees, "-x86_64.appimage", null);
-				// Les trois formats Linux, nommés par leur SUFFIXE exact : depuis
-				// que l'architecture entre dans le nom, ".appimage" seul en
-				// désignerait deux et en prendrait une au hasard. Le sélecteur de
-				// version a été retiré pour Linux pour la même raison — et parce
-				// que la tuile ouvre désormais une modale au lieu de télécharger.
-				[["linux-appimage-x64", "-x86_64.appimage"],
-					["linux-appimage-arm64", "-arm64.appimage"],
-					["linux-deb", ".deb"]].forEach(function (paire) {
-					var el = document.getElementById(paire[0]);
-					var actif = trouverActif(donnees.assets, paire[1]);
-					if (el && actif) el.setAttribute("href", actif.browser_download_url);
-				});
+
+				// Rien à réécrire pour Linux : ses liens sont figés sur
+				// desktop-v1.2.0 dans le HTML (builds en sommeil depuis le
+				// 2026-09-17). Les réécrire depuis `latest.json`, qui décrit la
+				// dernière release WINDOWS, affichait une version Linux qui
+				// n'existe pas et renvoyait vers un 404.
 			})
 			.catch(function () {
 				// Textes « … » restent visibles ; on les efface plutôt que de
 				// mentir sur une version qu'on n'a pas pu vérifier.
-				["version-windows", "version-linux"].forEach(function (id) {
+				["version-windows"].forEach(function (id) {
 					var el = document.getElementById(id);
 					if (el) el.textContent = "";
 				});

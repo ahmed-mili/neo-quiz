@@ -50,6 +50,7 @@ async function cas(r, nom, fn) {
 	}
 }
 
+await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
 	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, emplacementsOllama, encoderCommande,
 	estOutilAutorise, lireCache, scriptConnexion, scriptInstallation,
@@ -179,16 +180,41 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 			const claude = scriptInstallation("claude", "Neo Quiz - Claude Code", "Vous pouvez fermer cette fenêtre.");
 			r.check("claude : le titre de la fenêtre est la première ligne du script",
 				claude.startsWith("$host.UI.RawUI.WindowTitle = 'Neo Quiz - Claude Code'"), true);
-			r.check("claude : le script installe depuis claude.ai", claude.includes("irm https://claude.ai/install.ps1 | iex"), true);
 			r.check("claude : le PATH de la session est rechargé avant de lancer claude",
 				claude.indexOf("GetEnvironmentVariable('Path','User')") > 0 && claude.indexOf("GetEnvironmentVariable('Path','User')") < claude.lastIndexOf("\nclaude"), true);
 			r.check("claude : le script finit par la connexion du compte", /\nclaude\s*$/.test(claude.replace(/\nWrite-Host[^\n]*$/, "")), true);
 			const codex = scriptInstallation("codex", "Neo Quiz - Codex CLI", "x");
-			r.check("codex : installe depuis chatgpt.com puis codex login", codex.includes("irm https://chatgpt.com/codex/install.ps1 | iex") && codex.includes("\ncodex login"), true);
-			const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", "x");
-			r.check("ollama : winget, paquet officiel, accords acceptés", ollama.includes("winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements"), true);
+			r.check("codex : le script finit par la connexion du compte", codex.includes("\ncodex login"), true);
 			r.check("le message de fin est cité pour PowerShell (une apostrophe est doublée)",
 				scriptInstallation("ollama", "Neo Quiz - Ollama", "c'est fini").includes("Write-Host 'c''est fini'"), true);
+
+			/* ── CE QUI EST MONTRÉ EST CE QUI PART ──
+
+			   CE QUE CE CAS EMPÊCHE, et il est né d'un défaut réel. La commande
+			   d'installation était écrite DEUX fois : dans le modal qui l'affiche
+			   et ici, dans le script que le terminal exécute. Les deux copies ont
+			   divergé sans que rien ne le dise — pour Codex, le modal montrait la
+			   forme officielle `powershell -ExecutionPolicy ByPass -c "irm … | iex"`
+			   quand le terminal lançait `irm … | iex` nu. Dans la VM où Ahmed
+			   éprouve l'application, la première s'installait et la seconde mourait
+			   sur « La propriété "OSArchitecture" est introuvable » (2026-09-18).
+			   Les deux textes étaient justes chacun de son côté : aucun contrôle
+			   portant sur l'un des deux ne pouvait voir le défaut. Celui-ci les
+			   COMPARE. */
+			for (const outil of ["claude", "codex", "ollama"]) {
+				const script = scriptInstallation(outil, "t", "fin");
+				const affichee = commandeInstallation(outil, true).code;
+				const lancee = commandeInstallationLancee(outil, true);
+				r.check(outil + " : la ligne exécutée est celle que le modal affiche",
+					{ dansLeScript: script.includes(lancee), commencePar: lancee.startsWith(affichee) },
+					{ dansLeScript: true, commencePar: true });
+			}
+			/* L'écart d'Ollama est le SEUL admis, et il est borné : deux drapeaux
+			   d'accord non interactif, rien d'autre. Sans eux, la fenêtre reste
+			   bloquée sur une invite que personne n'a demandée. */
+			r.check("l'écart entre affiché et lancé est nul pour les deux CLI, et borné pour Ollama",
+				["claude", "codex", "ollama"].map(o => commandeInstallationLancee(o, true).slice(commandeInstallation(o, true).code.length)),
+				["", "", " --accept-source-agreements --accept-package-agreements"]);
 
 			const script = "Write-Host 'é | $x'";
 			const b64 = encoderCommande(script);
@@ -434,6 +460,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		rmSync(racine, { recursive: true, force: true });
 	}
 	r.done();
+});
 });
 
 /**

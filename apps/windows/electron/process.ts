@@ -61,6 +61,9 @@ import type { FichierJoint } from "../../../src/host/jetons";
    deux règles pour un même appel du code partagé. */
 import { extensionsExecutables, ligneCmd, porteSautDeLigne } from "../../../src/host/cli-args";
 import { LOG_PREFIX } from "../../../src/branding";
+/* LA COMMANDE D'INSTALLATION, source unique partagée avec le modal qui
+   l'affiche (voir son en-tête). Pure : aucun Node, donc lisible des deux côtés. */
+import { commandeInstallationLancee } from "../../../src/cli-install-cmd";
 
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
@@ -284,13 +287,27 @@ function citerPs(texte: string): string {
  * fois que `argumentsTerminal` ne le cite plus sur la ligne de commande.
  */
 export function scriptInstallation(tool: Outil, titre: string, messageFin: string): string {
-	const lignes: string[] = ["$host.UI.RawUI.WindowTitle = " + citerPs(titre)];
+	/* LA LIGNE D'INSTALLATION EST CELLE QUE LE MODAL AFFICHE, au caractère près
+	   (`src/cli-install-cmd.ts`, partagé). Elle était RECOPIÉE ici, et les deux
+	   copies avaient divergé : pour Codex, le modal montrait la forme
+	   officielle `powershell -ExecutionPolicy ByPass -c "irm … | iex"` — un
+	   sous-processus — quand cette fonction lançait `irm … | iex` NU dans la
+	   session de la fenêtre. Dans la VM où Ahmed éprouve l'application, la
+	   première s'installait et la seconde mourait sur « La propriété
+	   "OSArchitecture" est introuvable » (2026-09-18). Ce qui est montré est
+	   maintenant ce qui part ; `npm run check:electron-process` le tient. */
+	const lignes: string[] = [
+		"$host.UI.RawUI.WindowTitle = " + citerPs(titre),
+		commandeInstallationLancee(tool, true),
+	];
+	/* Le PATH n'est rechargé — et le compte connecté — que pour les deux CLI :
+	   Ollama n'a pas de compte, et c'est son application qui démarre. */
 	if (tool === "claude") {
-		lignes.push("irm https://claude.ai/install.ps1 | iex", RECHARGER_PATH, "Write-Host " + citerPs(messageFin), "claude");
+		lignes.push(RECHARGER_PATH, "Write-Host " + citerPs(messageFin), "claude");
 	} else if (tool === "codex") {
-		lignes.push("irm https://chatgpt.com/codex/install.ps1 | iex", RECHARGER_PATH, "Write-Host " + citerPs(messageFin), "codex login");
+		lignes.push(RECHARGER_PATH, "Write-Host " + citerPs(messageFin), "codex login");
 	} else {
-		lignes.push("winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements", "Write-Host " + citerPs(messageFin));
+		lignes.push("Write-Host " + citerPs(messageFin));
 	}
 	return lignes.join("\n");
 }

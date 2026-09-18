@@ -14,6 +14,7 @@
    à la fermeture ET à la détection : jamais un minuteur orphelin.
 ══════════════════════════════════════════════════════════ */
 import { LOG_PREFIX } from "../branding";
+import { commandeInstallation } from "../cli-install-cmd";
 import { ajouter } from "../dom";
 import { currentHost, requireHost } from "../host/current";
 import { t } from "../i18n";
@@ -42,12 +43,10 @@ const DOCS: Record<InstallProvider, string> = {
 };
 const SONDE_MS = 3000;
 
-/* Commande d'installation par fournisseur, formes officielles vérifiées le
-   2026-07-14 (déménagée depuis `ai.ts` : le hint ne montre plus de commande,
-   seul ce modal le fait) :
-   - Claude Code : installateur natif (code.claude.com/docs/en/setup) ;
-   - Codex CLI : installateur officiel (learn.chatgpt.com/docs/codex/cli) ;
-   - Ollama : winget (paquet officiel Ollama.Ollama) sur Windows. */
+/* La commande elle-même vit dans `src/cli-install-cmd.ts`, PARTAGÉE avec le
+   processus principal qui l'exécute : ce qui est montré ici est littéralement
+   ce que le bouton « Installer automatiquement » lance. Voir l'en-tête de ce
+   module pour ce que la divergence d'avant a coûté. */
 /* Coloration d'une ligne de shell SANS colorateur embarqué : les commandes
    du modal sont trois lignes connues (irm, curl, winget), pas du code
    arbitraire — une grammaire à quatre jetons suffit (chaîne "…", drapeau
@@ -79,19 +78,7 @@ export function colorerCommande(code: HTMLElement, ligne: string): void {
 }
 
 export function installCmd(provider: InstallProvider, isWindows: boolean): { code: string; lang: string } {
-	if (provider === "claude-code") {
-		return isWindows
-			? { code: "irm https://claude.ai/install.ps1 | iex", lang: "powershell" }
-			: { code: "curl -fsSL https://claude.ai/install.sh | bash", lang: "bash" };
-	}
-	if (provider === "codex") {
-		return isWindows
-			? { code: 'powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"', lang: "powershell" }
-			: { code: "curl -fsSL https://chatgpt.com/codex/install.sh | sh", lang: "bash" };
-	}
-	return isWindows
-		? { code: "winget install --id Ollama.Ollama -e", lang: "powershell" }
-		: { code: "curl -fsSL https://ollama.com/install.sh | sh", lang: "bash" };
+	return commandeInstallation(OUTILS[provider], isWindows);
 }
 
 export function openInstallModal(deps: InstallModalDeps): void {

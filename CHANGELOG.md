@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Fixed
+- Installing a CLI automatically now runs *exactly* the command the dialog shows you. For Codex the two had drifted apart, and the one the terminal ran could fail (`OSArchitecture` not found) on a machine where the printed one installed fine.
+
 ### Added
 - When a generation fails because the CLI account is not signed in, the error card now offers **Sign in** instead of *Try again*: Neo Quiz opens a terminal on `codex login` (or `claude auth login`), waits while you sign in, shows you the moment it detects the account, and sends your request again by itself.
 

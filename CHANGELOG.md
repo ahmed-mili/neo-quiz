@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-19
+
 ### Added
 - The AI now names the quiz it generates: the file takes the title the model chose ("Python : types, listes et exceptions") instead of the first line of your request. If the model gives no title, the request is used as before.
 

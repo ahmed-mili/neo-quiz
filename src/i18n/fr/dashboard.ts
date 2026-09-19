@@ -248,6 +248,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 
 	/* ── ui-select ── */
 	"dashboard.select.placeholder": "Sélectionner…",
+	"dashboard.select.install": "Installer",
 	"dashboard.select.findModel": "Rechercher un modèle…",
 	"dashboard.select.noModel": "Aucun modèle",
 	"dashboard.select.effort": "Effort",

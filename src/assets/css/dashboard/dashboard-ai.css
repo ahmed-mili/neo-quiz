@@ -529,6 +529,35 @@
 	align-self: center;
 }
 
+/* « Installer » à la place de la pastille rouge d'un fournisseur absent : une
+   pilule d'accent, qui s'éclaire au survol de la LIGNE (c'est la ligne qui
+   reçoit le clic, voir `appendStatut` dans ui-select.ts). */
+.qbd-select-option .qbd-provider-install {
+	margin-left: auto;
+	align-self: center;
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 3px 10px 3px 8px;
+	border-radius: 999px;
+	border: 1px solid color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+	color: var(--interactive-accent);
+	font-size: 11.5px;
+	font-weight: 600;
+	line-height: 1.4;
+	white-space: nowrap;
+	transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.qbd-select-option:hover .qbd-provider-install {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+.qbd-provider-install-icon { display: inline-flex; }
+.qbd-provider-install-icon svg { width: 12px; height: 12px; }
+
 /* Options du fournisseur (2 lignes) : plus d'air, façon Notion Calendar */
 .qbd-select-option:has(.qbd-provider-option-body) {
 	padding-top: 11px;

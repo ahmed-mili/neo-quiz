@@ -790,6 +790,22 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		menuEl.style.visibility = "";
 	}
 
+	/* Le statut à droite d'une ligne. ABSENT (`err`) : plus de pastille rouge —
+	   le sous-titre « Non installé » le dit déjà (Ahmed, 2026-09-19) — mais un
+	   bouton « Installer », qui ouvre le modal d'installation (automatique ou
+	   manuelle). Ce n'est qu'un VISUEL : la ligne entière est déjà un bouton
+	   qui appelle `onDisabledClick`, et un <button> dans un <button> n'est pas
+	   du HTML valide. Serveur arrêté (`warn`) : la pastille orange reste. */
+	function appendStatut(row: HTMLElement, dot: string | null | undefined): void {
+		if (dot === "err") {
+			const pill = ajouter(row, "span", "qbd-provider-install");
+			currentHost().ui.setIcon(ajouter(pill, "span", "qbd-provider-install-icon"), "download");
+			ajouter(pill, "span", undefined, t("dashboard.select.install"));
+		} else if (dot === "warn") {
+			ajouter(row, "span", "qbd-status-dot qbd-status-dot--warn");
+		}
+	}
+
 	/* Une ligne de canal, dans le flyout. Même forme que l'option de marque
 	   (libellé gras + sous-titre), sans logo : le flyout appartient déjà à
 	   une marque, répéter son glyphe à chaque ligne n'apprendrait rien. */
@@ -805,7 +821,7 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		const body = ajouter(btn, "div", "qbd-provider-option-body");
 		ajouter(body, "span", "qbd-select-option-label", c.label);
 		if (c.sub) ajouter(body, "span", "qbd-provider-option-sub", c.sub);
-		if (c.dot === "warn" || c.dot === "err") ajouter(btn, "span", "qbd-status-dot qbd-status-dot--" + c.dot);
+		appendStatut(btn, c.dot);
 		btn.addEventListener("click", () => {
 			closeMenu();
 			if (c.disabled) { opts.onDisabledClick?.(c.value); return; }
@@ -890,7 +906,7 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 			   lignes du même logo, et donc la seule qui vaille la place. */
 			ajouter(body, "span", "qbd-provider-option-sub", canal ? (canal.sub || canal.label) : "");
 			const st = canal && !multiple ? canal.dot : null;
-			if (st === "warn" || st === "err") ajouter(row, "span", "qbd-status-dot qbd-status-dot--" + st);
+			appendStatut(row, st);
 			if (multiple) {
 				// Cette ligne OUVRE un sous-menu (le flyout des canaux) au lieu de
 				// choisir directement : la sémantique d'accessibilité standard pour

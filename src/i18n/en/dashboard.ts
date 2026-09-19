@@ -276,6 +276,7 @@ export const EN_DASHBOARD = {
 
 	/* ── ui-select (dropdown, menus, slider d'effort, sélecteur de note) ── */
 	"dashboard.select.placeholder": "Select…",
+	"dashboard.select.install": "Install",
 	"dashboard.select.findModel": "Find model…",
 	"dashboard.select.noModel": "No models",
 	"dashboard.select.effort": "Effort",

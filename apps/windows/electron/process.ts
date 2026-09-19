@@ -519,17 +519,27 @@ export function scriptRestaurerNavigateur(p: PlacementFenetre): string {
    comme elle l'était avant qu'on la déplace »). */
 let placementNavigateur: PlacementFenetre | null = null;
 
-export function restaurerNavigateur(): void {
+/** NE REND LA MAIN QU'UNE FOIS LE NAVIGATEUR REMIS (trois secondes au plus) :
+    une fenêtre rendue agrandie prend le premier plan, et Neo Quiz doit le
+    reprendre APRÈS, pas avant (Ahmed, 2026-09-19 : « ensuite, Neo Quiz au
+    premier plan avec le focus »). */
+export function restaurerNavigateur(): Promise<void> {
 	const p = placementNavigateur;
 	placementNavigateur = null;
-	if (!p || process.platform !== "win32") return;
-	try {
-		const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptRestaurerNavigateur(p))], { stdio: "ignore", windowsHide: true });
-		enfant.on("error", e => { console.warn(LOG_PREFIX, "restauration du navigateur impossible:", e); });
-		enfant.unref();
-	} catch (e) {
-		console.warn(LOG_PREFIX, "restauration du navigateur impossible:", e);
-	}
+	if (!p || process.platform !== "win32") return Promise.resolve();
+	return new Promise(resolve => {
+		let rendu = false;
+		const fin = (): void => { if (!rendu) { rendu = true; resolve(); } };
+		try {
+			const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptRestaurerNavigateur(p))], { stdio: "ignore", windowsHide: true });
+			enfant.on("error", e => { console.warn(LOG_PREFIX, "restauration du navigateur impossible:", e); fin(); });
+			enfant.on("exit", fin);
+		} catch (e) {
+			console.warn(LOG_PREFIX, "restauration du navigateur impossible:", e);
+			fin();
+		}
+		setTimeout(fin, 3000);
+	});
 }
 
 /**

@@ -791,9 +791,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   (`restaurerNavigateur`, process.ts ; Ahmed, 2026-09-19) et passe
 	   derrière du seul fait que Neo Quiz revient devant. */
 	ipcMain.handle(CANAUX.depotTerminer, async () => {
-		/* Le navigateur d'abord, à sa place d'avant ; Neo Quiz revient devant
-		   ensuite. */
-		restaurerNavigateur();
+		/* Le navigateur d'abord, à sa place d'avant — ATTENDU : rendu agrandi,
+		   il prend le premier plan, et Neo Quiz doit le reprendre après. */
+		await restaurerNavigateur();
 		const fenetre = deps.fenetreCourante();
 		if (fenetre && !fenetre.isDestroyed() && dispositionAvant) {
 			const avant = dispositionAvant;

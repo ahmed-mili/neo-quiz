@@ -2836,11 +2836,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			const provider = settings().aiProvider || "";
 			// Le modèle RÉELLEMENT utilisé si le client l'a publié (repli du
 			// fournisseur quand aiModel est vide) ; sinon le réglage tel quel.
-			const model = lastUsage?.model || settings().aiModel || "";
+			/* Sur un SITE, le modèle et l'effort sont les siens, inconnus d'ici :
+			   `model` porte le site, pas de ligne `effort`. */
+			const canalWeb = aiProviders.estCanalWeb(provider);
+			const model = canalWeb ? provider : (lastUsage?.model || settings().aiModel || "");
 			const frontmatter = ecrireFrontmatterNeoQuiz({
 				provider,
 				model,
-				effort: provider !== "ollama" ? settings().aiEffort : undefined,
+				effort: provider !== "ollama" && !canalWeb ? settings().aiEffort : undefined,
 				generatedAt: new Date().toISOString(),
 			});
 			await host.fs.write(path, frontmatter + exportAllWithFence(draft.questions, draft.examOptions) + "\n");

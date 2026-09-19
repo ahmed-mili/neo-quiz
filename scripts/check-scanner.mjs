@@ -169,6 +169,8 @@ await withSrcModule("src/quiz-frontmatter.ts", async ({ lireFrontmatterNeoQuiz, 
 	r.check("… mais pas avec du texte dessous", neContientQueLeFrontmatterNeoQuiz(seulement + "Mes notes\n"), false);
 	r.check("… ni avec une autre clé de frontmatter (tags de l'utilisateur)", neContientQueLeFrontmatterNeoQuiz(seulement.replace("neo-quiz:", "tags: [cours]\nneo-quiz:")), false);
 	r.check("… ni sans frontmatter neo-quiz du tout", neContientQueLeFrontmatterNeoQuiz("---\ntags: [a]\n---\n"), false);
+	r.check("vide aussi quand model est vide (claude.ai) : la clé suffit",
+		neContientQueLeFrontmatterNeoQuiz("---\nneo-quiz:\n  provider: claude-web\n  model: \n  effort: high\n  generatedAt: 2026-09-19T20:50:55.373Z\n---\n\n"), true);
 
 	r.check("une note sans frontmatter rend null",
 		lireFrontmatterNeoQuiz("```quiz-blocks\n[]\n```"), null);

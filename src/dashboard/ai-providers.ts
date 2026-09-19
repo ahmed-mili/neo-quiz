@@ -957,12 +957,24 @@ export function dedupeOllamaLatest<T extends { value: string }>(list: T[]): T[] 
    deviné « <famille>:cloud »), dernière version par famille. Le prix n'est PAS
    récupéré (détecté au 403). Lève en cas d'échec réseau. Renvoie [{value,label}]. */
 export async function fetchOllamaCloudCatalog(): Promise<OllamaCatalogEntry[]> {
-	/* Le nom `fetchJson` dit l'usage courant, pas une contrainte : le contrat
-	   rend le corps BRUT (`body`), et c'est du HTML ici — la page de recherche
-	   d'ollama.com, dont on extrait les noms de familles. */
-	const resp = await requireHost("net").fetchJson({ url: "https://ollama.com/search?c=cloud" });
+	/* `https://ollama.com/api/tags` : le catalogue des modèles cloud, en JSON
+	   (`{ models: [{ name, modified_at, size }] }`, vingt entrées le
+	   2026-09-19). Jusqu'à cette date le module lisait le HTML de la page de
+	   recherche et y cherchait `x-test-search-response-title` ; ce marqueur a
+	   disparu du site, et la fonction rendait le repli embarqué sans un mot.
+	   Un corps qui n'est pas du JSON, ou sans `models`, LÈVE : l'appelant garde
+	   son cache ou son repli, mais ne prend pas un catalogue vide pour vrai. */
+	const resp = await requireHost("net").fetchJson({ url: "https://ollama.com/api/tags" });
 	if (!resp || resp.status !== 200 || !resp.body) throw new Error("catalog fetch " + (resp && resp.status));
-	const families = [...new Set([...resp.body.matchAll(/x-test-search-response-title>([a-z0-9.\-]+)/gi)].map(m => m[1]))];
+	const data = corpsJson(resp.body) as { models?: Array<{ name?: unknown }> } | null;
+	if (!data || !Array.isArray(data.models)) throw new Error("catalog body is not the Ollama tags JSON");
+	/* La FAMILLE seule (« deepseek-v4-pro:0813 » → « deepseek-v4-pro ») : le
+	   tag exact d'ollama.com n'est pas celui du cloud (« :cloud » / « -cloud »),
+	   et la suite de la fonction compose « <famille>:cloud » pour les familles
+	   neuves — comme avant, à partir du nom de la fiche. */
+	const families = [...new Set(data.models
+		.map(m => typeof m.name === "string" ? m.name.split(":")[0].toLowerCase() : "")
+		.filter(f => /^[a-z0-9.\-]+$/.test(f)))];
 	// Version max du repli par modèle → les familles déjà couvertes gardent leur
 	// TAG EXACT embarqué (dont les tailles gpt-oss 120b/20b, non devinables) ; on
 	// n'ajoute une famille découverte que si elle est STRICTEMENT plus récente
@@ -1128,6 +1140,100 @@ export async function checkOllama(url?: string, force?: boolean): Promise<Ollama
 	const result = await checkOllamaLive(base);
 	ollamaCache = { at: Date.now(), url: base, result };
 	return result;
+}
+
+/* ── LE COMPTE OLLAMA, PAR LE DÉMON ──
+   Mesuré le 2026-09-19 (Ollama 0.34.2, `WhoamiHandler` de server/routes.go) :
+   `POST /api/me` répond 200 `{ plan, name, email, … }` quand le démon est
+   connecté à un compte ollama.com, et 401 `{ error: "unauthorized",
+   signin_url }` sinon. L'adresse porte la clé publique du démon : l'ouvrir
+   dans le navigateur et approuver connecte le démon — c'est ce que fait
+   `ollama signin`, sans le terminal. Les modèles cloud (toute la sélection par
+   défaut) en ont besoin ; jusqu'ici l'utilisateur ne l'apprenait qu'au premier
+   envoi, par une erreur qui lui disait de taper une commande.
+
+   SEUL `plan` EST LU. `email`, `name`, `avatarurl` ne sont ni conservés, ni
+   journalisés, ni rendus : même règle que `checkClaudeLogin`.
+
+   `signin_url` N'EST ADMISE QUE SUR `https://ollama.com` : c'est une adresse
+   que la page va OUVRIR dans le navigateur, et un démon usurpé (un service
+   qui occupe le port 11434) ne doit pas pouvoir y mettre n'importe quoi. */
+export type CompteOllama =
+	| { connecte: true; plan: string }
+	| { connecte: false; signinUrl: string | null };
+
+export async function checkOllamaCompte(url?: string): Promise<CompteOllama> {
+	const base = (url || "http://localhost:11434").replace(/\/+$/, "");
+	const resp = await requireHost("net").fetchJson({ url: base + "/api/me", method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+	const absent: CompteOllama = { connecte: false, signinUrl: null };
+	if (!resp) return absent;
+	const data = corpsJson(resp.body) as { plan?: unknown; signin_url?: unknown } | null;
+	if (resp.status === 200 && data && typeof data.plan === "string") return { connecte: true, plan: data.plan };
+	if (resp.status === 401 && data && typeof data.signin_url === "string") {
+		try {
+			const u = new URL(data.signin_url);
+			if (u.protocol === "https:" && u.hostname === "ollama.com") return { connecte: false, signinUrl: data.signin_url };
+		} catch (e) { /* illisible : sans adresse */ }
+	}
+	return absent;
+}
+
+/* ── LE PLAN REQUIS D'UN MODÈLE CLOUD : DEUX SOURCES, JAMAIS UNE LISTE ──
+   Ollama ne publie pas la liste des modèles compris dans le plan gratuit (la
+   page de prix dit « starter models » sans les nommer ; la page des réglages
+   les liste, derrière la connexion). Ce qui existe : `required_plan` dans les
+   recommandations (cinq modèles, ce que l'application Ollama elle-même
+   affiche), et le 402 qu'un modèle hors plan rend à la génération. La page
+   combine les deux et n'écrit AUCUN modèle en dur — une liste embarquée
+   pourrirait sans qu'une erreur le dise (décision d'Ahmed, 2026-09-19). */
+
+export const OLLAMA_UPGRADE_URL = "https://ollama.com/upgrade";
+
+/** `required_plan` par tag, lu sur le DÉMON (`/api/experimental/
+    model-recommendations`, qui met en cache celui d'ollama.com). Best effort :
+    tout échec vaut `{}`. */
+export async function fetchOllamaPlansRequis(url?: string): Promise<Record<string, string>> {
+	const base = (url || "http://localhost:11434").replace(/\/+$/, "");
+	const resp = await requireHost("net").fetchJson({ url: base + "/api/experimental/model-recommendations" }).catch(() => null);
+	if (!resp || resp.status !== 200) return {};
+	const data = corpsJson(resp.body) as { recommendations?: Array<{ model?: unknown; required_plan?: unknown }> } | null;
+	const plans: Record<string, string> = {};
+	for (const rec of (data && Array.isArray(data.recommendations)) ? data.recommendations : []) {
+		if (typeof rec.model === "string" && typeof rec.required_plan === "string" && rec.required_plan) plans[rec.model] = rec.required_plan;
+	}
+	return plans;
+}
+
+/** Le plan requis d'un modèle, ou `null` si aucune source ne le sait. Les
+    recommandations priment : elles viennent d'Ollama, l'appris d'une réponse
+    d'erreur interprétée. */
+export function planRequisPour(tag: string, sources: { recommandations: Record<string, string>; appris: Record<string, string> }): string | null {
+	return sources.recommandations[tag] || sources.appris[tag] || null;
+}
+
+const ORDRE_PLANS = ["free", "pro", "max", "team"];
+
+/** Le modèle est-il AU-DESSUS du plan du compte ? `null` (on ne sait pas) n'est
+    pas hors plan : le badge informe, le 402 tranche. Un plan requis INCONNU
+    vaut « au-dessus de free » : un compte gratuit le voit, un compte payant
+    non — c'est le sens le plus probable d'un nom de plan qu'on ne connaît pas. */
+export function modeleHorsPlan(planCompte: string, planRequis: string | null): boolean {
+	if (planRequis === null) return false;
+	const requis = ORDRE_PLANS.indexOf(planRequis);
+	const compte = ORDRE_PLANS.indexOf(planCompte);
+	if (requis < 0) return compte <= 0;
+	if (compte < 0) return true;
+	return requis > compte;
+}
+
+/** Un modèle hors plan : le 402 (mesuré le 2026-09-19 : « this model is not
+    included in your free usage, add usage credits … or upgrade for included
+    usage »), ou son message si le statut a changé. Distinct d'un défaut de
+    connexion (401/403 « sign in »). */
+export function erreurOllamaHorsPlan(status: number, message: string): boolean {
+	if (status === 402) return true;
+	const m = message.toLowerCase();
+	return m.includes("not included in your") || m.includes("upgrade for included usage");
 }
 
 /** Le corps d'une réponse, décodé SANS jamais lever : un serveur qui répond

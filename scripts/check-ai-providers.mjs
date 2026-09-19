@@ -92,38 +92,37 @@ await withSrcModule(
 	async ({ installHost }, providers) => {
 		const r = makeReporter("Fournisseurs IA");
 
-		/* ── LE CATALOGUE CLOUD VIENT DE `net.fetchJson` ──
-		   Le corps rendu est du HTML (la page de recherche d'ollama.com) : le nom
-		   `fetchJson` dit l'usage courant, pas une contrainte, et c'est écrit sur
-		   le module. Une famille STRICTEMENT plus récente que le repli embarqué
-		   entre au catalogue ; une famille déjà couverte garde son TAG EXACT
-		   (les tailles `gpt-oss` ne sont pas devinables). */
+		/* ── LE CATALOGUE CLOUD VIENT DE `ollama.com/api/tags`, en JSON ──
+		   Jusqu'au 2026-09-19 le module cherchait un marqueur dans le HTML de la
+		   page de recherche (`x-test-search-response-title`). Ce marqueur a
+		   disparu du site : la fonction n'extrayait plus AUCUNE famille et rendait
+		   le repli embarqué, sans erreur, depuis une date inconnue — le défaut
+		   exact que ce script existe pour voir. `/api/tags` est le catalogue
+		   lui-même, structuré ; un corps qui n'est pas du JSON lève. */
 		{
-			const html = [
-				"x-test-search-response-title>gpt-oss</span>",
-				"x-test-search-response-title>zzz-nouveau</span>",
-			].join("\n");
-			const { journal, hote } = fauxHote({ reponses: { "ollama.com/search": { status: 200, body: html } } });
+			const json = JSON.stringify({ models: [
+				{ name: "gpt-oss:120b", modified_at: "2025-08-05T00:00:00Z", size: 1 },
+				{ name: "zzz-nouveau", modified_at: "2026-09-01T00:00:00Z", size: 1 },
+				{ name: "deepseek-v4-pro:0813", modified_at: "2026-08-13T00:00:00Z", size: 1 },
+			] });
+			const { journal, hote } = fauxHote({ reponses: { "ollama.com/api/tags": { status: 200, body: json } } });
 			installHost(hote);
-			/* Le rejet devient une VALEUR (`[]`) : une rupture qui ferait lever
-			   ici tuerait le groupe entier au lieu de rougir sur son cas. */
 			const catalogue = await providers.fetchOllamaCloudCatalog().catch(() => []);
-			r.check("le catalogue cloud est demandé à l'hôte, à l'URL de recherche d'ollama.com",
-				journal.filter(l => l[0] === "fetchJson"), [["fetchJson", "https://ollama.com/search?c=cloud", "GET"]]);
+			r.check("le catalogue cloud est demandé à l'hôte, à /api/tags d'ollama.com",
+				journal.filter(l => l[0] === "fetchJson"), [["fetchJson", "https://ollama.com/api/tags", "GET"]]);
 			r.check("une famille inconnue découverte en ligne entre au catalogue, en « <famille>:cloud »",
 				catalogue.some(m => m.value === "zzz-nouveau:cloud"), true);
 			r.check("une famille DÉJÀ couverte garde le tag exact du repli, jamais un tag deviné",
 				{ devine: catalogue.some(m => m.value === "gpt-oss:cloud"), exact: catalogue.some(m => /^gpt-oss:\d+b-cloud$/.test(m.value)) },
 				{ devine: false, exact: true });
+			r.check("le suffixe de tag d'ollama.com (« :0813 ») ne devient pas une famille à part",
+				catalogue.filter(m => m.value.startsWith("deepseek-v4-pro")).length, 1);
 		}
 		{
-			/* Échec réseau : le module LÈVE (l'appelant garde son repli). Un
-			   catalogue rendu silencieusement vide effacerait la liste de modèles. */
-			const { hote } = fauxHote({ reponses: {} });
+			const { hote } = fauxHote({ reponses: { "ollama.com/api/tags": { status: 200, body: "<!doctype html><title>Cloud models</title>" } } });
 			installHost(hote);
-			let leve = null;
-			try { await providers.fetchOllamaCloudCatalog(); } catch (e) { leve = String(e.message); }
-			r.check("un échec réseau sur le catalogue LÈVE, jamais un catalogue vide", leve !== null, true);
+			const verdict = await providers.fetchOllamaCloudCatalog().then(() => "valeur", () => "leve");
+			r.check("un 200 qui n'est pas du JSON LÈVE (l'appelant garde son cache) au lieu de rendre un catalogue vide", verdict, "leve");
 		}
 
 		/* ── `/api/tags` ILLISIBLE (200 HTML) = HORS LIGNE ── */
@@ -171,6 +170,84 @@ await withSrcModule(
 			installHost(hote);
 			r.check("un /api/version muet ne coûte que la version",
 				await providers.checkOllama("http://localhost:11434", true), { ok: true, models: [], version: undefined });
+		}
+
+		/* ── LE COMPTE OLLAMA PAR `/api/me` ──
+		   Mesuré le 2026-09-19 (Ollama 0.34.2) : 200 `{ plan, name, email… }`
+		   connecté, 401 `{ error: "unauthorized", signin_url }` sinon. Seul
+		   `plan` est lu ; l'adresse e-mail ne sort jamais de cette fonction. */
+		{
+			const { journal, hote } = fauxHote({ reponses: { "/api/me": { status: 200, body: JSON.stringify({ id: "x", email: "a@b.c", name: "A", plan: "free" }) } } });
+			installHost(hote);
+			const compte = await providers.checkOllamaCompte("http://localhost:11434/");
+			r.check("/api/me est demandé en POST, sur l'URL réglée sans barre finale",
+				journal.filter(l => l[0] === "fetchJson"), [["fetchJson", "http://localhost:11434/api/me", "POST"]]);
+			r.check("200 avec plan → connecté, le plan, et RIEN d'autre", compte, { connecte: true, plan: "free" });
+		}
+		{
+			const { hote } = fauxHote({ reponses: { "/api/me": { status: 401, body: JSON.stringify({ error: "unauthorized", signin_url: "https://ollama.com/connect?name=x&key=y" }) } } });
+			installHost(hote);
+			r.check("401 avec signin_url sur ollama.com → pas connecté, l'adresse à ouvrir",
+				await providers.checkOllamaCompte(), { connecte: false, signinUrl: "https://ollama.com/connect?name=x&key=y" });
+		}
+		{
+			const { hote } = fauxHote({ reponses: { "/api/me": { status: 401, body: JSON.stringify({ error: "unauthorized", signin_url: "https://attaquant.example/connect" }) } } });
+			installHost(hote);
+			r.check("401 avec une signin_url HORS d'ollama.com → l'adresse est refusée (on n'ouvre pas n'importe quoi)",
+				await providers.checkOllamaCompte(), { connecte: false, signinUrl: null });
+		}
+		{
+			const { hote } = fauxHote({ reponses: { "/api/me": { status: 200, body: "<html>portail</html>" } } });
+			installHost(hote);
+			r.check("200 sans JSON → pas connecté, sans adresse", await providers.checkOllamaCompte(), { connecte: false, signinUrl: null });
+		}
+		{
+			const { hote } = fauxHote({ reponses: {} });
+			installHost(hote);
+			r.check("démon injoignable (null) → pas connecté, sans adresse", await providers.checkOllamaCompte(), { connecte: false, signinUrl: null });
+		}
+
+		/* ── LE PLAN REQUIS D'UN MODÈLE : deux sources, jamais une liste ──
+		   `required_plan` des recommandations (cinq modèles, ce qu'utilise l'app
+		   Ollama elle-même) et les 402 APPRIS à la génération. Aucune liste de
+		   modèles gratuits n'est écrite dans le code : elle pourrirait sans
+		   erreur (décision d'Ahmed, 2026-09-19). */
+		{
+			const recs = JSON.stringify({ recommendations: [
+				{ model: "glm-5.3:cloud", required_plan: "pro" },
+				{ model: "gemma4:31b-cloud", required_plan: "free" },
+				{ model: "gemma4:26b" },
+			] });
+			const { journal, hote } = fauxHote({ reponses: { "/api/experimental/model-recommendations": { status: 200, body: recs } } });
+			installHost(hote);
+			const plans = await providers.fetchOllamaPlansRequis("http://localhost:11434");
+			r.check("les recommandations sont lues sur le DÉMON (qui met ollama.com en cache), en GET",
+				journal.filter(l => l[0] === "fetchJson"), [["fetchJson", "http://localhost:11434/api/experimental/model-recommendations", "GET"]]);
+			r.check("seules les entrées qui portent required_plan sont retenues", plans, { "glm-5.3:cloud": "pro", "gemma4:31b-cloud": "free" });
+		}
+		{
+			const { hote } = fauxHote({ reponses: {} });
+			installHost(hote);
+			r.check("recommandations injoignables → {} (best effort, jamais une exception)", await providers.fetchOllamaPlansRequis(), {});
+		}
+		{
+			const sources = { recommandations: { "glm-5.3:cloud": "pro" }, appris: { "kimi-k3:cloud": "pro", "glm-5.3:cloud": "max" } };
+			r.check("planRequisPour : les recommandations priment sur l'appris, l'appris couvre le reste, null sinon",
+				["glm-5.3:cloud", "kimi-k3:cloud", "gpt-oss:120b-cloud"].map(t => providers.planRequisPour(t, sources)), ["pro", "pro", null]);
+			r.check("modeleHorsPlan : free < pro < max < team ; null = on ne sait pas = pas hors plan",
+				[
+					providers.modeleHorsPlan("free", "pro"), providers.modeleHorsPlan("pro", "pro"), providers.modeleHorsPlan("max", "pro"),
+					providers.modeleHorsPlan("free", "free"), providers.modeleHorsPlan("free", null), providers.modeleHorsPlan("free", "inconnu"), providers.modeleHorsPlan("pro", "inconnu"),
+				],
+				[true, false, false, false, false, true, false]);
+			r.check("erreurOllamaHorsPlan : le 402 nu, ou le message mesuré, jamais un 403 « sign in »",
+				[
+					providers.erreurOllamaHorsPlan(402, ""),
+					providers.erreurOllamaHorsPlan(400, "this model is not included in your free usage, add usage credits to pay as you go: https://ollama.com/settings or upgrade for included usage: https://ollama.com/upgrade"),
+					providers.erreurOllamaHorsPlan(403, "please sign in"),
+					providers.erreurOllamaHorsPlan(500, "boom"),
+				],
+				[true, true, false, false]);
 		}
 
 		/* ── `refreshCliCaches` REMPLIT L'INSTANTANÉ QUE LES LECTEURS LISENT ──

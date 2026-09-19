@@ -43,6 +43,15 @@ export interface AiSettings {
 	// (plugin.ts DEFAULT_SETTINGS) ; les helpers ollama la traitent comme « unset ».
 	aiOllamaModels?: string[] | null;
 	aiOllamaCatalog?: OllamaCatalogEntry[] | null;
+	/** Plan requis APPRIS par un 402 à la génération, par tag de modèle cloud
+	    (« kimi-k3:cloud » → « pro »). Vidé quand le plan du compte change. */
+	aiOllamaPlansAppris?: Record<string, string>;
+	/** Le dernier plan vu par `/api/me` (« free », « pro »…) ; "" = inconnu. */
+	aiOllamaPlanCompte?: string;
+	/** Les canaux web dont l'utilisateur a coché « Ne plus afficher » sur le
+	    modal d'avertissement (« claude-web »). Un tableau : chaque site aura
+	    peut-être le sien. */
+	aiWebAvertissementMasque?: string[];
 	/** Journal des générations IA (dashboard/ai-usage.ts). */
 	aiUsageLog?: AiUsageEntry[];
 	/** Lecture opt-in de l'usage de l'abonnement du fournisseur. */

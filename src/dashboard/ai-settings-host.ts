@@ -42,7 +42,8 @@ export interface AiSettingsHost {
  */
 export function aiSettingsDefaults(): Required<Pick<AiSettings,
 	"aiProvider" | "aiModel" | "aiEffort" | "aiCodexFast" | "aiOllamaUrl" | "aiOllamaCloudKey"
-	| "aiOllamaModels" | "aiOllamaCatalog" | "aiUsageLog" | "aiUsageLimitsEnabled"
+	| "aiOllamaModels" | "aiOllamaCatalog" | "aiOllamaPlansAppris" | "aiOllamaPlanCompte"
+	| "aiWebAvertissementMasque" | "aiUsageLog" | "aiUsageLimitsEnabled"
 	| "aiMentionExtraFolders" | "aiOutputFolder">> & { hotkeyAddFiles: Hotkey } {
 	return {
 		// Aucun fournisseur par défaut : le choix reste la première étape.
@@ -59,6 +60,11 @@ export function aiSettingsDefaults(): Required<Pick<AiSettings,
 		aiOllamaModels: null,
 		// Cache du catalogue cloud récupéré de ollama.com. null → repli embarqué.
 		aiOllamaCatalog: null,
+		// Rien d'appris tant qu'aucun 402 n'est arrivé ; plan inconnu.
+		aiOllamaPlansAppris: {},
+		aiOllamaPlanCompte: "",
+		// Le modal d'avertissement d'un site s'affiche tant qu'on ne l'a pas masqué.
+		aiWebAvertissementMasque: [],
 		// Journal d'usage : purement informatif, borné à 300 entrées (ai-usage.ts).
 		aiUsageLog: [],
 		// Désactivé par défaut : lire les quotas du compte suppose d'ouvrir le

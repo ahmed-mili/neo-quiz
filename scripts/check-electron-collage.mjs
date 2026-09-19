@@ -44,7 +44,7 @@ function fauxTemps() {
 	};
 }
 
-await withSrcModule("apps/windows/electron/attente-collage.ts", ({ creerAttente, jetonValide, CADENCE_MS, ECHEANCE_MS }) => {
+await withSrcModule("apps/windows/electron/attente-collage.ts", ({ creerAttente, ressembleAReponse, jetonValide, CADENCE_MS, ECHEANCE_MS }) => {
 	const r = makeReporter("Attente d'une réponse copiée");
 
 	r.check("un jeton de huit caractères [a-z0-9] ou plus est valide", ["k7f2q9ab", "k7f2q9abcd"].map(jetonValide), [true, true]);
@@ -115,12 +115,29 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", ({ creerAttente,
 		const s = scene();
 		s.attente.demarrer("premier1234");
 		s.attente.demarrer("second12345");
-		s.poser("// neo-quiz premier1234");
+		s.poser("réponse quelconque premier1234");
 		s.temps.tic(CADENCE_MS * 3);
 		r.check("une nouvelle attente remplace la première : son jeton ne livre plus", [s.livres, s.attente.enCours()], [[], true]);
 		s.poser("// neo-quiz second12345");
 		s.temps.tic(CADENCE_MS);
 		r.check("et le jeton de la seconde livre", s.livres.length, 1);
+	}
+	{
+		/* Un modèle qui RÉÉCRIT le jeton (Haiku 4.5, 2026-09-19) : la forme
+		   `// neo-quiz …` suffit. Mais pas ce qui était déjà dans le
+		   presse-papier au départ (la réponse d'une génération d'avant). */
+		const s = scene();
+		s.poser("// neo-quiz ancien12345\n[{ prompt: \"vieux\" }]");
+		s.attente.demarrer("k7f2q9abcd");
+		s.temps.tic(CADENCE_MS * 3);
+		r.check("la réponse déjà présente au départ n'est pas livrée, même à la bonne forme", [s.livres, s.attente.enCours()], [[], true]);
+		s.poser("```json5\n// neo-quiz xti301tp1_types_lists\n[{ prompt: \"x\" }]\n```");
+		s.temps.tic(CADENCE_MS);
+		r.check("un jeton réécrit par le modèle est livré quand même (la forme fait foi)", [s.livres.length, s.attente.enCours()], [1, false]);
+		r.check("ressembleAReponse : forme reconnue, prose refusée", [
+			ressembleAReponse("// neo-quiz k7f2q9abcd\n[]"), ressembleAReponse("```json5\n// NEO-QUIZ abc\n[]"),
+			ressembleAReponse("Voici :\n// neo-quiz abc"), ressembleAReponse("mot de passe: hunter2"),
+		], [true, true, false, false]);
 	}
 	{
 		const s = scene();

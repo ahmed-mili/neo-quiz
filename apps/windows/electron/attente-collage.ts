@@ -5,9 +5,15 @@
  * Aucun `electron`, aucun `setTimeout` : le presse-papier (`lire`) et le temps
  * (`horloge`) sont des ENTRÉES, pour que `check:electron-collage` éprouve ce
  * qui ne doit jamais fuir. La règle qui rend cette lecture acceptable : un
- * texte n'est LIVRÉ que s'il porte le jeton de l'attente en cours ; tout le
- * reste est comparé puis oublié, sans journal. Le câblage réel (clipboard,
- * timers, webContents.send, flashFrame) est dans canaux.ts.
+ * texte n'est LIVRÉ que s'il porte le jeton de l'attente en cours, OU s'il a
+ * la FORME d'une réponse de Neo Quiz (`// neo-quiz …` en tête) — un modèle
+ * modeste réécrit le jeton (Haiku 4.5 a rendu `// neo-quiz xti301tp1_…`, vu
+ * par Ahmed le 2026-09-19), et « ça doit marcher avec tous les modèles ».
+ * Tout le reste est comparé puis oublié, sans journal. Ce qui était DÉJÀ dans
+ * le presse-papier au départ de l'attente n'est jamais la réponse : ni le
+ * prompt que l'application y a mis, ni la réponse d'une génération
+ * précédente. Le câblage réel (clipboard, timers, webContents.send,
+ * flashFrame) est dans canaux.ts.
  */
 
 /** Cadence de la sonde. Un demi-seconde : le geste « Copier » sur le site
@@ -21,6 +27,19 @@ export const ECHEANCE_MS = 30 * 60 * 1000;
     reconnaître n'importe quel texte. La page en tire dix. */
 export function jetonValide(jeton: unknown): jeton is string {
 	return typeof jeton === "string" && /^[a-z0-9]{8,}$/.test(jeton);
+}
+
+/** Le texte a-t-il la forme d'une réponse de Neo Quiz ? Sa première ligne
+    non vide — la fence ouvrante mise à part — est le commentaire
+    `// neo-quiz …`, quel que soit ce qui suit : le jeton exact, ou ce qu'un
+    modèle en a fait. */
+export function ressembleAReponse(texte: string): boolean {
+	for (const ligne of texte.split("\n")) {
+		const l = ligne.trim();
+		if (!l || l.startsWith("```")) continue;
+		return /^\/\/\s*neo-quiz\b/i.test(l);
+	}
+	return false;
 }
 
 export interface Horloge {
@@ -44,14 +63,16 @@ export interface Attente {
 
 export function creerAttente(deps: { lire(): string; horloge: Horloge; livrer(texte: string): void }): Attente {
 	let jeton: string | null = null;
-	let ignorer: string | null = null;
+	/** Les textes à ne jamais livrer : celui que l'application a copié, et
+	    celui qui était déjà dans le presse-papier au départ. */
+	let ignorer: string[] = [];
 	let debut = 0;
 	let sonde: number | null = null;
 
 	function arreter(): void {
 		if (sonde !== null) { deps.horloge.annuler(sonde); sonde = null; }
 		jeton = null;
-		ignorer = null;
+		ignorer = [];
 	}
 
 	function tour(): void {
@@ -65,9 +86,10 @@ export function creerAttente(deps: { lire(): string; horloge: Horloge; livrer(te
 			sonde = deps.horloge.planifier(tour, CADENCE_MS);
 			return;
 		}
-		/* Le prompt copié par l'application porte le jeton : ce n'est pas la
-		   réponse. Comparé puis oublié, comme tout le reste. */
-		if (texte.includes(jeton) && texte !== ignorer) {
+		/* Le prompt copié par l'application porte le jeton, et une réponse
+		   d'avant peut porter la forme : ni l'un ni l'autre n'est la réponse.
+		   Comparé puis oublié, comme tout le reste. */
+		if ((texte.includes(jeton) || ressembleAReponse(texte)) && !ignorer.includes(texte)) {
 			/* Arrêter AVANT de livrer : si `livrer` relance une attente, elle ne
 			   doit pas être écrasée par l'arrêt de celle-ci. */
 			arreter();
@@ -82,7 +104,10 @@ export function creerAttente(deps: { lire(): string; horloge: Horloge; livrer(te
 			if (!jetonValide(j)) return false;
 			arreter();
 			jeton = j;
-			ignorer = typeof aIgnorer === "string" && aIgnorer ? aIgnorer : null;
+			ignorer = typeof aIgnorer === "string" && aIgnorer ? [aIgnorer] : [];
+			/* Ce qui est déjà là n'est pas ce qu'on attend. Un presse-papier
+			   indisponible ne bloque pas le départ : la sonde le relira. */
+			try { const deja = deps.lire(); if (deja) ignorer.push(deja); } catch { /* relu au premier tour */ }
 			debut = deps.horloge.maintenant();
 			sonde = deps.horloge.planifier(tour, CADENCE_MS);
 			return true;

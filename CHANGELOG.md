@@ -30,6 +30,7 @@ release notes.
 - Images now work with claude.ai too: they are dragged along with the other files. In the composer, an image is a card of the same size as a document's, next to it, and clicking it opens a preview.
 
 ### Fixed
+- An answer copied from claude.ai is now recognised even when the model rewrote the token on its first line (Haiku did): a text starting with "// neo-quiz" is taken as the answer. What was already in the clipboard when the wait started (the prompt, an earlier answer) still never is.
 - A quiz whose question shows a code block (a Python snippet, for instance) was rejected as "text instead of a quiz": the code block inside the question was mistaken for the block around the whole answer.
 - A long file name no longer hides its extension: it is cut in the middle ("GNU dd…let.md") in the files to drag onto claude.ai.
 - The outline of the composer no longer changes as the mouse moves: hovering and clicking give the same outline, and it only goes away when you click elsewhere on the page, not when you open one of its menus.

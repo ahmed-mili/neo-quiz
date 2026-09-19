@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-19
+
 ### Changed
 - Every dialog in Neo Quiz now looks and moves like a Windows 11 dialog: a light dark backdrop without blur, and the dialog settles into place from slightly larger instead of sliding up. The quiz hint window follows the same style.
 - "Waiting for sign-in" now appears in a centered dialog; closing it cancels the wait.

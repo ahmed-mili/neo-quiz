@@ -17,6 +17,7 @@ release notes.
 - The AI now names the quiz it generates: the file takes the title the model chose ("Python : types, listes et exceptions") instead of the first line of your request. If the model gives no title, the request is used as before.
 
 ### Changed
+- The AI only generates fill-in-the-blank questions for a language quiz (vocabulary, grammar, a passage in the language being learned), where that format actually appears in exams; never for science, programming, law or other subjects. Existing quizzes are unchanged.
 - Confirmation dialogs ("Delete quiz", "Delete module", "Delete question") follow the standard destructive-confirmation layout: a red icon in a tinted disc, the title and message beside it, "Cancel" and a red "Delete" on the right, with hover, press and keyboard-focus states.
 - Deleting a quiz can be undone with Ctrl+Z (the "Quiz deleted" message says so): the note comes back as it was, with its statistics. A note that changed in between is left alone. Works for a whole module too.
 - When you copy the answer from claude.ai, the waiting dialog turns into "Answer received" with a check mark and the name of the quiz being created, then closes on the quiz page, which slides in. Before, the quiz page replaced the dialog in the same frame.
@@ -32,6 +33,7 @@ release notes.
 - Images now work with claude.ai too: they are dragged along with the other files. In the composer, an image is a card of the same size as a document's, next to it, and clicking it opens a preview.
 
 ### Fixed
+- A fill-in-the-blank question whose statement repeated the text with its {{blanks}} no longer shows it twice: only the instruction stays above the blanks.
 - Deleting a generated quiz now moves its note to the recycle bin: the note was left behind with only the technical header Neo Quiz had written, still listed as a quiz, and deleting it again said "no block found". Such a leftover note is now removed too.
 - The format name "quiz-blocks" no longer appears in the app's messages: "No quiz found in this note", "already contains a quiz".
 - An answer copied from claude.ai is now recognised even when the model rewrote or dropped the token on its first line (Haiku did both): any copied JSON5 array of questions is taken as the answer. Only what you copy after clicking Open counts: what was already in the clipboard at that moment (the prompt, the answer of an earlier generation) is never taken, so an old answer no longer creates a quiz before you have even sent the request.

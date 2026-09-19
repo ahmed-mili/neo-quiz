@@ -132,7 +132,15 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 			return ctx.sanitize.replaceObsidianEmbedsInHtml(promptHtml);
 		}
 		if (q.prompt) {
-			return ctx.sanitize.renderTextWithEmbeds(q.prompt);
+			/* Un texte à trous dont l'énoncé RÉPÈTE le gabarit (un modèle a mis
+			   la phrase et ses `{{…}}` dans `prompt` en plus de `cloze`, vu le
+			   2026-09-19) : le texte s'affichait deux fois, brut au-dessus des
+			   trous. Les paragraphes qui portent un trou sont retirés de
+			   l'énoncé ; il ne reste que la consigne. */
+			const prompt = (q as { cloze?: unknown }).cloze !== undefined && q.prompt.includes("{{")
+				? q.prompt.split(/\n{2,}/).filter(p => !p.includes("{{")).join("\n\n").trim()
+				: q.prompt;
+			return prompt ? ctx.sanitize.renderTextWithEmbeds(prompt) : "";
 		}
 		return "";
 	}

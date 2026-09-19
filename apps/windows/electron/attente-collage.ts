@@ -29,17 +29,20 @@ export function jetonValide(jeton: unknown): jeton is string {
 	return typeof jeton === "string" && /^[a-z0-9]{8,}$/.test(jeton);
 }
 
-/** Le texte a-t-il la forme d'une réponse de Neo Quiz ? Sa première ligne
-    non vide — la fence ouvrante mise à part — est le commentaire
-    `// neo-quiz …`, quel que soit ce qui suit : le jeton exact, ou ce qu'un
-    modèle en a fait. */
+/** Le texte a-t-il la forme d'une réponse de Neo Quiz ? Fences et
+    commentaires de tête mis à part (`// neo-quiz …`, `// title: …`, ou
+    rien du tout : Haiku 4.5 a rendu les deux, puis ni l'un ni l'autre), ce
+    qui reste est un TABLEAU dont un élément porte un champ `prompt` — la
+    seule chose que tous les modèles produisent. Le mot de passe copié en
+    passant n'a ni crochet ni `prompt:`. */
 export function ressembleAReponse(texte: string): boolean {
+	let corps = "";
 	for (const ligne of texte.split("\n")) {
 		const l = ligne.trim();
-		if (!l || l.startsWith("```")) continue;
-		return /^\/\/\s*neo-quiz\b/i.test(l);
+		if (!corps && (!l || l.startsWith("```") || l.startsWith("//"))) continue;
+		corps += ligne + "\n";
 	}
-	return false;
+	return corps.trimStart().startsWith("[") && /["']?prompt["']?\s*:/.test(corps);
 }
 
 export interface Horloge {

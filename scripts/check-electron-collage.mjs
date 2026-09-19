@@ -118,7 +118,7 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", ({ creerAttente,
 		s.poser("réponse quelconque premier1234");
 		s.temps.tic(CADENCE_MS * 3);
 		r.check("une nouvelle attente remplace la première : son jeton ne livre plus", [s.livres, s.attente.enCours()], [[], true]);
-		s.poser("// neo-quiz second12345");
+		s.poser("// neo-quiz second12345\n[{ prompt: \"x\" }]");
 		s.temps.tic(CADENCE_MS);
 		r.check("et le jeton de la seconde livre", s.livres.length, 1);
 	}
@@ -135,9 +135,12 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", ({ creerAttente,
 		s.temps.tic(CADENCE_MS);
 		r.check("un jeton réécrit par le modèle est livré quand même (la forme fait foi)", [s.livres.length, s.attente.enCours()], [1, false]);
 		r.check("ressembleAReponse : forme reconnue, prose refusée", [
-			ressembleAReponse("// neo-quiz k7f2q9abcd\n[]"), ressembleAReponse("```json5\n// NEO-QUIZ abc\n[]"),
-			ressembleAReponse("Voici :\n// neo-quiz abc"), ressembleAReponse("mot de passe: hunter2"),
-		], [true, true, false, false]);
+			ressembleAReponse("// neo-quiz k7f2q9abcd\n[{ prompt: 'a' }]"), ressembleAReponse("```json5\n// NEO-QUIZ abc\n[{ prompt: 'a' }]\n```"),
+			/* Haiku, 2026-09-19 : ni jeton ni neo-quiz, `// title:` seul, une ligne vide, puis le tableau. */
+			ressembleAReponse("// title: Python - Types\n\n[\n  {\n    title: \"T\",\n    prompt: \"Q\",\n  }\n]"),
+			ressembleAReponse("[{ title: 'x', prompt: 'y' }]"),
+			ressembleAReponse("Voici :\n// neo-quiz abc\n[{ prompt: 'a' }]"), ressembleAReponse("mot de passe: hunter2"), ressembleAReponse("[1, 2, 3]"),
+		], [true, true, true, true, false, false, false]);
 	}
 	{
 		const s = scene();

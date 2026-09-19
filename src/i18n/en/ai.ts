@@ -117,7 +117,7 @@ export const EN_AI = {
 	"ai.hint.claudeNotInstalled": "Claude Code is not installed.",
 	"ai.hint.installClaude": "Install Claude Code",
 	"ai.hint.codexDesktopOnly": "Generating with ChatGPT (Codex CLI) is available on desktop only.",
-	"ai.hint.codexNotInstalled": "The Codex CLI is not installed.",
+	"ai.hint.codexNotInstalled": "Codex CLI is not installed.",
 	"ai.hint.installCodex": "Install Codex CLI",
 	// Ni « installed », ni la version, ni ce qui se passera ensuite : le statut du
 	// fournisseur donne déjà la version, et les modèles qui apparaissent se voient
@@ -129,7 +129,7 @@ export const EN_AI = {
 
 	/* ── Le modal d'un fournisseur absent (spec « utilisable par n'importe qui », § 3b) ── */
 	"ai.install.title.claude-code": "Claude Code is not installed",
-	"ai.install.title.codex": "The Codex CLI is not installed",
+	"ai.install.title.codex": "Codex CLI is not installed",
 	"ai.install.title.ollama": "Ollama is not installed",
 	"ai.install.what.claude-code": "Anthropic's command-line tool. Neo Quiz generates quizzes with your Claude account.",
 	"ai.install.what.codex": "OpenAI's command-line tool, used with a ChatGPT subscription. Not the Codex desktop app.",

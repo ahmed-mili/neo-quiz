@@ -427,3 +427,4 @@ vérifier à l'écran sur la liste par défaut (sept lignes, une cochée).
 - 2026-09-19 : neuf points du callout `[!bug]` repris ; enquête (`/api/me`,
   402, catalogue mort) ; deux décisions d'Ahmed (terminal visible qui se
   ferme seul ; `required_plan` + 402 appris) ; design validé en discussion.
+- 2026-09-19 : plan exécuté, T1 d684d26 · T2 29ef690 + 96fbdde · T3 bbfaffd · T4 bd4e770 · T5 583df96 · T6 dc7397f · T7 (ce commit). Revues par sous-agent sur T1-T3, puis enchaînement sans revue à la demande d'Ahmed ; épreuve à l'écran dans la VM à venir.

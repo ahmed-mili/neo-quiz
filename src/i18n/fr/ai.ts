@@ -99,7 +99,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.hint.claudeNotInstalled": "Claude Code n'est pas installé.",
 	"ai.hint.installClaude": "Installer Claude Code",
 	"ai.hint.codexDesktopOnly": "La génération via ChatGPT (Codex CLI) est disponible sur desktop uniquement.",
-	"ai.hint.codexNotInstalled": "Le Codex CLI n'est pas installé.",
+	"ai.hint.codexNotInstalled": "Codex CLI n'est pas installé.",
 	"ai.hint.installCodex": "Installer Codex CLI",
 	"ai.hint.ollamaServerOff": "Ollama est installé mais son serveur ne tourne pas.",
 	"ai.hint.startOllama": "Démarrer Ollama",
@@ -108,7 +108,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 
 	/* ── Le modal d'un fournisseur absent (spec « utilisable par n'importe qui », § 3b) ── */
 	"ai.install.title.claude-code": "Claude Code n'est pas installé",
-	"ai.install.title.codex": "Le Codex CLI n'est pas installé",
+	"ai.install.title.codex": "Codex CLI n'est pas installé",
 	"ai.install.title.ollama": "Ollama n'est pas installé",
 	"ai.install.what.claude-code": "L'outil en ligne de commande d'Anthropic. Neo Quiz génère les quiz avec votre compte Claude.",
 	"ai.install.what.codex": "L'outil en ligne de commande d'OpenAI, avec un abonnement ChatGPT. Ce n'est pas l'application Codex.",

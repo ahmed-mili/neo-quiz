@@ -1168,6 +1168,8 @@ export async function checkOllamaCompte(url?: string): Promise<CompteOllama> {
 	const absent: CompteOllama = { connecte: false, signinUrl: null };
 	if (!resp) return absent;
 	const data = corpsJson(resp.body) as { plan?: unknown; signin_url?: unknown } | null;
+	// Un `plan` VIDE reste connecté : le 200 prouve la connexion, un plan
+	// inconnu n'empêche que le badge (qui exige un plan lu) de s'afficher.
 	if (resp.status === 200 && data && typeof data.plan === "string") return { connecte: true, plan: data.plan };
 	if (resp.status === 401 && data && typeof data.signin_url === "string") {
 		try {
@@ -1194,7 +1196,7 @@ export const OLLAMA_UPGRADE_URL = "https://ollama.com/upgrade";
     tout échec vaut `{}`. */
 export async function fetchOllamaPlansRequis(url?: string): Promise<Record<string, string>> {
 	const base = (url || "http://localhost:11434").replace(/\/+$/, "");
-	const resp = await requireHost("net").fetchJson({ url: base + "/api/experimental/model-recommendations" }).catch(() => null);
+	const resp = await requireHost("net").fetchJson({ url: base + "/api/experimental/model-recommendations" });
 	if (!resp || resp.status !== 200) return {};
 	const data = corpsJson(resp.body) as { recommendations?: Array<{ model?: unknown; required_plan?: unknown }> } | null;
 	const plans: Record<string, string> = {};

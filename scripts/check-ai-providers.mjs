@@ -185,6 +185,13 @@ await withSrcModule(
 			r.check("200 avec plan → connecté, le plan, et RIEN d'autre", compte, { connecte: true, plan: "free" });
 		}
 		{
+			/* Le 200 PROUVE la connexion, indépendamment du plan : un plan vide
+			   ne fera afficher aucun badge (la page exige un plan connu pour ça). */
+			const { hote } = fauxHote({ reponses: { "/api/me": { status: 200, body: JSON.stringify({ plan: "" }) } } });
+			installHost(hote);
+			r.check("200 avec plan VIDE → connecté quand même, plan vide", await providers.checkOllamaCompte(), { connecte: true, plan: "" });
+		}
+		{
 			const { hote } = fauxHote({ reponses: { "/api/me": { status: 401, body: JSON.stringify({ error: "unauthorized", signin_url: "https://ollama.com/connect?name=x&key=y" }) } } });
 			installHost(hote);
 			r.check("401 avec signin_url sur ollama.com → pas connecté, l'adresse à ouvrir",

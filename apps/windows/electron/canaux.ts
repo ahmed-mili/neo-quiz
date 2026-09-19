@@ -50,7 +50,7 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, disposerPourSite, iconeDeType, erreurCli, estOutilAutorise, lancerTerminal, lireCache, ollamaInstalle, run, scriptConnexion, scriptInstallation } from "./process";
+import { demarrerOllama, disposerPourSite, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, ollamaInstalle, run, scriptConnexion, scriptInstallation } from "./process";
 import type { Outil } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
@@ -787,9 +787,13 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   (Ahmed, 2026-09-19 : « dès que l'on copie, les fenêtres ouvertes avant
 	   se mettent en arrière-plan et Neo Quiz se met au centre »). La taille
 	   d'avant est rendue, centrée sur l'écran courant ; agrandie avant,
-	   agrandie après. Le navigateur n'est pas touché : il passe derrière du
-	   seul fait que Neo Quiz revient devant. */
+	   agrandie après. Le navigateur retrouve lui aussi sa place d'avant
+	   (`restaurerNavigateur`, process.ts ; Ahmed, 2026-09-19) et passe
+	   derrière du seul fait que Neo Quiz revient devant. */
 	ipcMain.handle(CANAUX.depotTerminer, async () => {
+		/* Le navigateur d'abord, à sa place d'avant ; Neo Quiz revient devant
+		   ensuite. */
+		restaurerNavigateur();
 		const fenetre = deps.fenetreCourante();
 		if (fenetre && !fenetre.isDestroyed() && dispositionAvant) {
 			const avant = dispositionAvant;

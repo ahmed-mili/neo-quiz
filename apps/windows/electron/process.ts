@@ -435,7 +435,9 @@ export function scriptDisposerPourSite(hwndNeo: number): string {
 		"[DllImport(\"user32.dll\")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);",
 		"[DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr h, out RECT r);",
 		"[DllImport(\"dwmapi.dll\")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int cb);",
+		"[DllImport(\"user32.dll\")] public static extern bool GetWindowPlacement(IntPtr h, ref WP p);",
 		"public struct RECT { public int L, T, R, B; }",
+		"public struct WP { public int Length, Flags, ShowCmd, MinX, MinY, MaxX, MaxY, L, T, R, B; }",
 		"'@",
 		"Add-Type -AssemblyName System.Windows.Forms",
 		"function Poser($h, $x, $y, $cx, $cy) {",
@@ -463,8 +465,71 @@ export function scriptDisposerPourSite(hwndNeo: number): string {
 		"  $proc = Get-Process -Name $nomExe -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1",
 		"  if ($proc) { $hNav = $proc.MainWindowHandle }",
 		"}",
-		"if ($hNav -ne [IntPtr]::Zero) { Poser $hNav $aire.Left $aire.Top $moitie $aire.Height }",
+		/* L'EMPLACEMENT D'AVANT du navigateur, écrit sur la sortie AVANT de le
+		   poser : le principal le retient et le lui rend à la fin de l'attente
+		   (`restaurerNavigateur`) — agrandi ou non, et son rectangle normal. */
+		"if ($hNav -ne [IntPtr]::Zero) {",
+		"  $p = New-Object NQ.Win+WP; $p.Length = 44",
+		"  if ([NQ.Win]::GetWindowPlacement($hNav, [ref]$p)) { [Console]::Out.WriteLine('avant ' + [int64]$hNav + ' ' + $p.ShowCmd + ' ' + $p.L + ' ' + $p.T + ' ' + $p.R + ' ' + $p.B); [Console]::Out.Flush() }",
+		"  Poser $hNav $aire.Left $aire.Top $moitie $aire.Height",
+		"}",
 	].join("\n");
+}
+
+/** L'emplacement d'un navigateur avant qu'on le pose (`WINDOWPLACEMENT`). */
+export interface PlacementFenetre {
+	hwnd: number;
+	/** `SW_SHOWMAXIMIZED` (3) si elle était agrandie, sinon `SW_SHOWNORMAL` (1). */
+	showCmd: number;
+	l: number; t: number; r: number; b: number;
+}
+
+/** Lit une ligne « avant <hwnd> <showCmd> <l> <t> <r> <b> » du script de
+    disposition ; `null` pour tout le reste. Une fenêtre réduite (2) est
+    rendue normale : on l'avait restaurée pour la poser. */
+export function lirePlacement(ligne: string): PlacementFenetre | null {
+	const m = ligne.trim().match(/^avant (\d+) (\d+) (-?\d+) (-?\d+) (-?\d+) (-?\d+)$/);
+	if (!m) return null;
+	const showCmd = Number(m[2]);
+	return { hwnd: Number(m[1]), showCmd: showCmd === 3 ? 3 : 1, l: Number(m[3]), t: Number(m[4]), r: Number(m[5]), b: Number(m[6]) };
+}
+
+/** Rend au navigateur son emplacement d'avant, s'il existe encore
+    (`IsWindow`). `SetWindowPlacement` remet d'un coup l'état (agrandie ou
+    non) ET le rectangle normal ; `SetWindowPos` seul aurait laissé une
+    fenêtre agrandie « normale » aux dimensions de l'écran. */
+export function scriptRestaurerNavigateur(p: PlacementFenetre): string {
+	return [
+		"Add-Type -Name Win -Namespace NQ -MemberDefinition @'",
+		"[DllImport(\"user32.dll\")] public static extern bool IsWindow(IntPtr h);",
+		"[DllImport(\"user32.dll\")] public static extern bool SetWindowPlacement(IntPtr h, ref WP p);",
+		"public struct WP { public int Length, Flags, ShowCmd, MinX, MinY, MaxX, MaxY, L, T, R, B; }",
+		"'@",
+		"$h = [IntPtr]" + String(Math.floor(p.hwnd)),
+		"if ([NQ.Win]::IsWindow($h)) {",
+		"  $p = New-Object NQ.Win+WP; $p.Length = 44; $p.ShowCmd = " + String(p.showCmd) + "; $p.MinX = -1; $p.MinY = -1; $p.MaxX = -1; $p.MaxY = -1",
+		"  $p.L = " + String(p.l) + "; $p.T = " + String(p.t) + "; $p.R = " + String(p.r) + "; $p.B = " + String(p.b),
+		"  [NQ.Win]::SetWindowPlacement($h, [ref]$p) | Out-Null",
+		"}",
+	].join("\n");
+}
+
+/* Le placement du navigateur de la DERNIÈRE disposition, à lui rendre à la
+   fin (Ahmed, 2026-09-19 : « il faut que la fenêtre du navigateur se remette
+   comme elle l'était avant qu'on la déplace »). */
+let placementNavigateur: PlacementFenetre | null = null;
+
+export function restaurerNavigateur(): void {
+	const p = placementNavigateur;
+	placementNavigateur = null;
+	if (!p || process.platform !== "win32") return;
+	try {
+		const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptRestaurerNavigateur(p))], { stdio: "ignore", windowsHide: true });
+		enfant.on("error", e => { console.warn(LOG_PREFIX, "restauration du navigateur impossible:", e); });
+		enfant.unref();
+	} catch (e) {
+		console.warn(LOG_PREFIX, "restauration du navigateur impossible:", e);
+	}
 }
 
 /**
@@ -478,8 +543,15 @@ export function disposerPourSite(hwndNeo: number): Promise<void> {
 		let rendu = false;
 		const fin = (): void => { if (!rendu) { rendu = true; resolve(); } };
 		try {
+			placementNavigateur = null;
 			const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptDisposerPourSite(hwndNeo))], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
-			enfant.stdout.on("data", (d: Buffer) => { if (d.toString("utf8").includes("pret")) fin(); });
+			enfant.stdout.on("data", (d: Buffer) => {
+				const texte = d.toString("utf8");
+				if (texte.includes("pret")) fin();
+				/* La ligne « avant … » arrive APRÈS « pret », quand le navigateur
+				   est apparu : la sortie reste écoutée jusqu'à la fin du script. */
+				for (const ligne of texte.split(/\r?\n/)) { const p = lirePlacement(ligne); if (p) placementNavigateur = p; }
+			});
 			enfant.on("error", e => { console.warn(LOG_PREFIX, "disposition des fenêtres impossible:", e); fin(); });
 			enfant.on("exit", fin);
 			enfant.unref();

@@ -53,7 +53,7 @@ async function cas(r, nom, fn) {
 await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
 	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande,
-	estOutilAutorise, lireCache, scriptConnexion, scriptInstallation,
+	estOutilAutorise, lireCache, lirePlacement, scriptConnexion, scriptDisposerPourSite, scriptInstallation, scriptRestaurerNavigateur,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -485,6 +485,21 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 
 	} finally {
 		rmSync(racine, { recursive: true, force: true });
+	}
+
+	/* ── La disposition des fenêtres : l'emplacement d'avant du navigateur
+	   est écrit AVANT de le poser, puis relu et rendu (Ahmed, 2026-09-19). ── */
+	{
+		const disposition = scriptDisposerPourSite(1234);
+		r.check("le script écrit « avant … » avant de poser le navigateur",
+			disposition.indexOf("WriteLine('avant '") > 0 && disposition.indexOf("WriteLine('avant '") < disposition.lastIndexOf("Poser $hNav"), true);
+		r.check("« avant » : hwnd, showCmd, rectangle normal ; agrandie (3) reste agrandie",
+			lirePlacement("avant 725604 3 100 100 1000 700"), { hwnd: 725604, showCmd: 3, l: 100, t: 100, r: 1000, b: 700 });
+		r.check("réduite (2) est rendue normale (1) : on l'avait restaurée pour la poser", lirePlacement("avant 5 2 0 0 10 10\r").showCmd, 1);
+		r.check("toute autre ligne : null", [lirePlacement("pret"), lirePlacement("avant x"), lirePlacement("")], [null, null, null]);
+		const restauration = scriptRestaurerNavigateur({ hwnd: 725604, showCmd: 3, l: 100, t: 100, r: 1000, b: 700 });
+		r.check("la restauration passe par SetWindowPlacement, sur la fenêtre si elle existe encore",
+			[restauration.includes("IsWindow($h)"), restauration.includes("SetWindowPlacement"), restauration.includes("$p.ShowCmd = 3"), restauration.includes("$p.R = 1000")], [true, true, true, true]);
 	}
 	r.done();
 });

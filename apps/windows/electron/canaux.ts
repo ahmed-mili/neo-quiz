@@ -760,7 +760,12 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
 		if (response !== 0) return "annule";
 		const titre = PRODUCT_NAME + " - " + name;
-		return lancerTerminal(titre, scriptInstallation(tool, titre, t("app.installCli.done", { name }))) ? "lance" : "indisponible";
+		const messages = {
+			succes: t("app.installCli.done", { name }),
+			echec: t("app.connectCli.failed", { name }),
+			echecInstallation: t("app.installCli.failed", { name }),
+		};
+		return lancerTerminal(titre, scriptInstallation(tool, titre, messages)) ? "lance" : "indisponible";
 	});
 
 	/* ─── CONNECTER UN CLI ───
@@ -770,8 +775,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   sur la liste blanche. La confirmation d'`installer` garde un `irm | iex` ;
 	   la recopier ici ferait payer à l'utilisateur, pour une fenêtre de
 	   connexion qu'il vient lui-même de demander, le prix d'un risque qui n'est
-	   pas là. `scriptConnexion` rend `null` pour Ollama, qui n'a pas de
-	   compte : « indisponible » plutôt qu'un terminal ouvert sur rien. */
+	   pas là. `scriptConnexion` rend `null` pour Ollama, dont le compte se
+	   connecte par le navigateur (`/api/me` rend l'adresse, voir
+	   `ai-providers.ts`). */
 	ipcMain.handle(CANAUX.processusConnecter, async (_e, tool: unknown): Promise<"lance" | "annule" | "indisponible"> => {
 		if (!estOutilAutorise(tool)) {
 			console.warn(LOG_PREFIX, "connexion refusée, outil hors liste:", tool);
@@ -780,7 +786,10 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		if (process.platform !== "win32") return "indisponible";
 		const name = NOMS_OUTILS[tool];
 		const titre = PRODUCT_NAME + " - " + name;
-		const script = scriptConnexion(tool, titre, t("app.connectCli.done", { name }));
+		const script = scriptConnexion(tool, titre, {
+			succes: t("app.connectCli.done", { name }),
+			echec: t("app.connectCli.failed", { name }),
+		});
 		if (script === null) return "indisponible";
 		return lancerTerminal(titre, script) ? "lance" : "indisponible";
 	});

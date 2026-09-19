@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Fixed
+- The PowerShell window that installs or signs in to Claude Code or Codex now finds the tool it just installed (it looks in the same folders Neo Quiz does), only says "connected" when the sign-in actually succeeded, and closes by itself two seconds later. When something fails, the window stays open with the error instead of a false success message.
+
 ## [1.6.0] - 2026-09-18
 
 ### Added

@@ -78,9 +78,11 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 
 	"app.installCli.title": "Installer {name} ?",
 	"app.installCli.message": "Neo Quiz va ouvrir PowerShell et y lancer l'installation officielle de {name}.",
-	"app.installCli.detail": "Source : {source}. Vous verrez tout ce que fait l'installateur. Fermez la fenêtre PowerShell quand c'est terminé.",
+	"app.installCli.detail": "Source : {source}. Vous verrez tout ce que fait l'installateur. La fenêtre se ferme d'elle-même quand c'est terminé.",
 	"app.installCli.run": "Ouvrir PowerShell et installer",
 	"app.installCli.cancel": "Annuler",
-	"app.installCli.done": "{name} est installé. Vous pouvez fermer cette fenêtre et revenir dans Neo Quiz.",
-	"app.connectCli.done": "{name} est connecté. Vous pouvez fermer cette fenêtre et revenir dans Neo Quiz.",
+	"app.installCli.done": "{name} est installé. Retour dans Neo Quiz…",
+	"app.installCli.failed": "L'installation de {name} a échoué. Fermez cette fenêtre et réessayez depuis Neo Quiz, ou suivez-y les étapes manuelles.",
+	"app.connectCli.done": "{name} est connecté. Retour dans Neo Quiz…",
+	"app.connectCli.failed": "La connexion à {name} a échoué. Fermez cette fenêtre et réessayez depuis Neo Quiz.",
 };

@@ -118,9 +118,11 @@ export const EN_APP = {
 	/* ── Installer un CLI depuis l'app : la confirmation NATIVE du principal ── */
 	"app.installCli.title": "Install {name}?",
 	"app.installCli.message": "Neo Quiz will open PowerShell and run the official {name} installer there.",
-	"app.installCli.detail": "Source: {source}. You will see everything the installer does. Close the PowerShell window when it is finished.",
+	"app.installCli.detail": "Source: {source}. You will see everything the installer does. The window closes by itself when it is done.",
 	"app.installCli.run": "Open PowerShell and install",
 	"app.installCli.cancel": "Cancel",
-	"app.installCli.done": "{name} is set up. You can close this window and go back to Neo Quiz.",
-	"app.connectCli.done": "{name} is connected. You can close this window and go back to Neo Quiz.",
+	"app.installCli.done": "{name} is set up. Back to Neo Quiz…",
+	"app.installCli.failed": "Installing {name} failed. Close this window and try again from Neo Quiz, or follow the manual steps there.",
+	"app.connectCli.done": "{name} is connected. Back to Neo Quiz…",
+	"app.connectCli.failed": "Signing in to {name} failed. Close this window and try again from Neo Quiz.",
 } as const;

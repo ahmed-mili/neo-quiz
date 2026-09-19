@@ -241,8 +241,9 @@ export async function demarrerOllama(env: NodeJS.ProcessEnv = process.env): Prom
    « Utilisable par n'importe qui » (spec du 2026-09-17, § 3c) : l'utilisateur
    ne sait pas ce qu'est PowerShell et ne collera pas une commande. L'app
    ouvre donc le terminal ELLE-MÊME, avec la recette OFFICIELLE de chaque
-   outil, et le laisse ouvert pour qu'on voie l'installateur travailler puis
-   la connexion du compte se faire au même endroit.
+   outil ; la fenêtre montre l'installateur travailler puis la connexion, et
+   se ferme seule quand tout a réussi ; elle reste ouverte sur un message
+   rouge quand quelque chose a échoué.
 
    LA RECETTE VIT ICI, jamais dans le rendu : `canaux.ts` ne reçoit qu'un nom
    d'outil, jugé par `estOutilAutorise` avant tout. `-EncodedCommand` porte
@@ -272,12 +273,62 @@ export async function demarrerOllama(env: NodeJS.ProcessEnv = process.env): Prom
    PowerShell déjà ouverte ne le voit pas (lu dans install.ps1).
 ══════════════════════════════════════════════════════════ */
 
-const RECHARGER_PATH = "$env:Path = [Environment]::GetEnvironmentVariable('Path','User') + ';' + [Environment]::GetEnvironmentVariable('Path','Machine')";
-
 /** Une chaîne littérale PowerShell entre apostrophes (la seule forme qui
     n'interpole rien) : l'apostrophe se double. */
 function citerPs(texte: string): string {
 	return "'" + texte.replace(/'/g, "''") + "'";
+}
+
+/** Les trois textes que la fenêtre peut afficher, traduits par `canaux.ts`
+    sur la langue de l'application. `echecInstallation` n'a de sens que pour
+    `scriptInstallation` ; `scriptConnexion` l'ignore. */
+export interface MessagesTerminal {
+	succes: string;
+	echec: string;
+	echecInstallation?: string;
+}
+
+/**
+ * La ligne qui recharge `$env:Path` : le registre (utilisateur puis machine),
+ * PUIS les dossiers de `dossiersCli` — les mêmes que ceux avec lesquels
+ * l'application a détecté l'outil. Sans la seconde moitié, un CLI que l'app
+ * voit peut rester invisible de la fenêtre (voir `dossiersCli`).
+ */
+function rechargerPath(env: NodeJS.ProcessEnv): string {
+	const dossiers = dossiersCli(env).map(citerPs).join(",");
+	return "$env:Path = [Environment]::GetEnvironmentVariable('Path','User') + ';' + [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + (@(" + dossiers + ") -join ';')";
+}
+
+/** La commande qui connecte le compte d'un CLI, ou `null` pour Ollama, qui n'a
+    pas de compte à connecter par un terminal (son compte passe par le
+    navigateur : `/api/me` rend l'adresse, voir `ai-providers.ts`). */
+function commandeConnexion(tool: Outil): string | null {
+	/* `claude auth login` et non le REPL `claude` : la sous-commande rend un
+	   CODE DE SORTIE, le REPL non — et c'est sur ce code que la fenêtre décide
+	   d'afficher le succès ou l'échec. Jusqu'au 2026-09-19 l'installation
+	   enchaînait sur le REPL et affichait « connecté » quoi qu'il arrive. */
+	if (tool === "claude") return "claude auth login";
+	if (tool === "codex") return "codex login";
+	return null;
+}
+
+/**
+ * La fin commune des deux scripts : le succès n'est affiché que si la
+ * connexion a rendu 0, et la fenêtre se ferme alors seule (plus de `-NoExit`
+ * dans `argumentsTerminal` : le script décide). Un échec affiche son message
+ * en rouge et RETIENT la fenêtre jusqu'à Entrée — c'est le seul moment où
+ * l'utilisateur a quelque chose à lire.
+ */
+function issue(messages: MessagesTerminal): string[] {
+	return [
+		"if ($LASTEXITCODE -eq 0) {",
+		"  Write-Host " + citerPs(messages.succes) + " -ForegroundColor Green",
+		"  Start-Sleep -Seconds 2",
+		"} else {",
+		"  Write-Host " + citerPs(messages.echec) + " -ForegroundColor Red",
+		"  Read-Host | Out-Null",
+		"}",
+	];
 }
 
 /**
@@ -285,30 +336,31 @@ function citerPs(texte: string): string {
  * compte. PURE. `titre` en est la PREMIÈRE ligne (`$host.UI.RawUI.
  * WindowTitle`) : c'est la seule façon de le porter jusqu'à la fenêtre une
  * fois que `argumentsTerminal` ne le cite plus sur la ligne de commande.
+ *
+ * LA LIGNE D'INSTALLATION EST CELLE QUE LE MODAL AFFICHE
+ * (`src/cli-install-cmd.ts`, partagé), aux deux écarts près que ce module
+ * documente et que `npm run check:electron-process` fige. Un installateur qui
+ * rend un code non nul arrête le script sur son message : on n'enchaîne pas
+ * la connexion d'un outil qui n'est pas là.
  */
-export function scriptInstallation(tool: Outil, titre: string, messageFin: string): string {
-	/* LA LIGNE D'INSTALLATION EST CELLE QUE LE MODAL AFFICHE, au caractère près
-	   (`src/cli-install-cmd.ts`, partagé). Elle était RECOPIÉE ici, et les deux
-	   copies avaient divergé : pour Codex, le modal montrait la forme
-	   officielle `powershell -ExecutionPolicy ByPass -c "irm … | iex"` — un
-	   sous-processus — quand cette fonction lançait `irm … | iex` NU dans la
-	   session de la fenêtre. Dans la VM où Ahmed éprouve l'application, la
-	   première s'installait et la seconde mourait sur « La propriété
-	   "OSArchitecture" est introuvable » (2026-09-18). Ce qui est montré est
-	   maintenant ce qui part ; `npm run check:electron-process` le tient. */
+export function scriptInstallation(tool: Outil, titre: string, messages: MessagesTerminal, env: NodeJS.ProcessEnv = process.env): string {
 	const lignes: string[] = [
 		"$host.UI.RawUI.WindowTitle = " + citerPs(titre),
 		commandeInstallationLancee(tool, true),
+		"if ($LASTEXITCODE -ne 0) {",
+		"  Write-Host " + citerPs(messages.echecInstallation || messages.echec) + " -ForegroundColor Red",
+		"  Read-Host | Out-Null",
+		"  exit 1",
+		"}",
 	];
-	/* Le PATH n'est rechargé — et le compte connecté — que pour les deux CLI :
-	   Ollama n'a pas de compte, et c'est son application qui démarre. */
-	if (tool === "claude") {
-		lignes.push(RECHARGER_PATH, "Write-Host " + citerPs(messageFin), "claude");
-	} else if (tool === "codex") {
-		lignes.push(RECHARGER_PATH, "Write-Host " + citerPs(messageFin), "codex login");
-	} else {
-		lignes.push("Write-Host " + citerPs(messageFin));
+	const connexion = commandeConnexion(tool);
+	if (connexion === null) {
+		/* Ollama : pas de compte par terminal, c'est son application qui
+		   démarre. Le message, deux secondes, et la fenêtre se ferme. */
+		lignes.push("Write-Host " + citerPs(messages.succes) + " -ForegroundColor Green", "Start-Sleep -Seconds 2");
+		return lignes.join("\n");
 	}
+	lignes.push(rechargerPath(env), connexion, ...issue(messages));
 	return lignes.join("\n");
 }
 
@@ -318,26 +370,21 @@ export function scriptInstallation(tool: Outil, titre: string, messageFin: strin
  * rien n'est téléchargé, rien n'est exécuté depuis le réseau, on lance un
  * exécutable qui est déjà là.
  *
- * `null` pour Ollama, qui n'a pas de compte : l'appelant en fait
+ * `null` pour Ollama, qui n'a pas de compte par terminal : l'appelant en fait
  * « indisponible » plutôt qu'une fenêtre ouverte sur rien.
  *
  * LE PATH EST QUAND MÊME RECHARGÉ, alors qu'on n'installe rien : la fenêtre
  * hérite du `PATH` du processus Electron, figé à SON démarrage. Un CLI
- * installé pendant la session de l'application (par le bouton d'installation,
- * juste avant) n'y figure donc pas, et le terminal se serait ouvert sur un
- * « terme non reconnu » alors que l'outil existe.
+ * installé pendant la session de l'application n'y figure pas.
  */
-export function scriptConnexion(tool: Outil, titre: string, messageFin: string): string | null {
-	if (tool === "ollama") return null;
+export function scriptConnexion(tool: Outil, titre: string, messages: MessagesTerminal, env: NodeJS.ProcessEnv = process.env): string | null {
+	const connexion = commandeConnexion(tool);
+	if (connexion === null) return null;
 	return [
 		"$host.UI.RawUI.WindowTitle = " + citerPs(titre),
-		RECHARGER_PATH,
-		/* `claude auth login` et non `claude` puis `/login` : la recette
-		   d'installation passe par le REPL parce qu'elle y enchaîne après
-		   l'installation, mais pour une connexion seule la sous-commande fait
-		   le travail sans que l'utilisateur ait à taper quoi que ce soit. */
-		tool === "claude" ? "claude auth login" : "codex login",
-		"Write-Host " + citerPs(messageFin),
+		rechargerPath(env),
+		connexion,
+		...issue(messages),
 	].join("\n");
 }
 
@@ -355,9 +402,12 @@ export function argumentsTerminal(titre: string, script: string): string[] {
 	   défaut de l'utilisateur, Windows Terminal compris. Le titre passe par le
 	   SCRIPT (`$host.UI.RawUI.WindowTitle`), pas par la ligne de commande : il
 	   n'a donc pas à être cité ici. Le base64 ne contient que [A-Za-z0-9+/=],
-	   donc aucune apostrophe ne peut refermer la liste d'arguments. */
+	   donc aucune apostrophe ne peut refermer la liste d'arguments. SANS
+	   `-NoExit` : jusqu'au 2026-09-19 la fenêtre restait toujours ouverte,
+	   « installé » ou pas — c'est maintenant le script lui-même qui décide de
+	   se fermer (succès) ou de rester (échec, `Read-Host` dans `issue`). */
 	return ["-NoProfile", "-Command",
-		`Start-Process powershell.exe -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-EncodedCommand','${encoderCommande(script)}'`];
+		`Start-Process powershell.exe -ArgumentList '-ExecutionPolicy','Bypass','-EncodedCommand','${encoderCommande(script)}'`];
 }
 
 export function lancerTerminal(titre: string, script: string): boolean {
@@ -511,35 +561,43 @@ export function estOutilAutorise(tool: unknown): tool is Outil {
  * du REGISTRE (Codex CLI officiel) n'atteint jamais un processus déjà lancé.
  * Sans ces entrées, « installé mais pas détecté » tant que l'application n'est
  * pas redémarrée (vécu Ahmed 2026-07-12 sous Obsidian, même cause ici).
- * Chemins vérifiés DANS les scripts d'installation d'OpenAI :
- * `install.ps1` → `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` ; `install.sh` →
- * `~/.local/bin` ; npm → `%APPDATA%\npm` ; `CODEX_INSTALL_DIR` est l'override
- * que les deux honorent.
  *
  * C'est la sonde automatique ; le réglage « chemin de l'exécutable » est le
  * dernier recours, pour la machine dont l'installation n'est à aucun de ces
  * endroits.
  */
-export function environnementEnfant(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+
+/**
+ * LES DOSSIERS OÙ LES CLI S'INSTALLENT — une seule liste, PURE.
+ *
+ * Elle sert deux fois, et c'est tout l'intérêt : `environnementEnfant` l'ajoute
+ * au PATH avec lequel l'application SONDE et LANCE les CLI, et les scripts du
+ * terminal (`scriptInstallation`, `scriptConnexion`) l'ajoutent au PATH de la
+ * fenêtre PowerShell. Jusqu'au 2026-09-19 le terminal ne rechargeait que le
+ * PATH du REGISTRE : quand `install.ps1` de Claude n'y écrivait pas
+ * `~/.local/bin` (VM d'Ahmed, 2026-09-18), l'application disait « installé »
+ * et la fenêtre « terme non reconnu ». Deux lectures du même disque qui
+ * divergeaient sans qu'aucun contrôle ne le voie ; maintenant c'est une.
+ *
+ * `~/.local/bin` : `install.ps1` de Claude Code et `install.sh` de Codex ;
+ * `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` : `install.ps1` de Codex ;
+ * `%APPDATA%\npm` : les installations npm ; `CODEX_INSTALL_DIR` : l'override
+ * que Codex honore ; `Programs\Ollama` : l'installateur Windows d'Ollama (CLI
+ * `ollama.exe` au même endroit) ; puis les gestionnaires que les deux CLI
+ * empruntent aussi (ajoutés le 2026-09-17, quand les champs « chemin de
+ * l'exécutable » des Réglages ont été retirés). Un dossier absent ne coûte
+ * rien : la résolution le saute sans erreur.
+ */
+export function dossiersCli(env: NodeJS.ProcessEnv = process.env): string[] {
 	const home = dossierPersonnel(env);
-	const extra: string[] = [
+	return [
 		join(home, ".local", "bin"),
 		"/opt/homebrew/bin",
 		"/usr/local/bin",
 		env.APPDATA ? join(env.APPDATA, "npm") : null,
 		env.LOCALAPPDATA ? join(env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin") : null,
 		env.CODEX_INSTALL_DIR || null,
-		// Installateur Windows d'Ollama (CLI `ollama.exe` au même endroit).
 		env.LOCALAPPDATA ? join(env.LOCALAPPDATA, "Programs", "Ollama") : null,
-		/* ── LES GESTIONNAIRES QUE LES DEUX CLI EMPRUNTENT AUSSI ──
-		   Ajoutés le 2026-09-17, quand les deux champs « chemin de
-		   l'exécutable » des Réglages ont été retirés : la sonde devait
-		   couvrir ce que ces champs rattrapaient à la main.
-		   `~/.claude/local` est l'installation LOCALE de Claude Code
-		   (`claude migrate-installer`, qui sort le CLI de npm global) ; les
-		   autres sont les dossiers de binaires des gestionnaires de paquets
-		   qui servent à installer ces mêmes CLI. Un dossier absent ne coûte
-		   rien : la résolution le saute sans erreur. */
 		join(home, ".claude", "local"),
 		join(home, ".bun", "bin"),
 		join(home, ".yarn", "bin"),
@@ -547,8 +605,11 @@ export function environnementEnfant(env: NodeJS.ProcessEnv = process.env): NodeJ
 		join(home, "scoop", "shims"),
 		env.LOCALAPPDATA ? join(env.LOCALAPPDATA, "pnpm") : null,
 	].filter((p): p is string => Boolean(p));
+}
+
+export function environnementEnfant(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
 	const courant = env.PATH || "";
-	const fusion = courant + delimiter + extra.filter(p => !courant.includes(p)).join(delimiter);
+	const fusion = courant + delimiter + dossiersCli(env).filter(p => !courant.includes(p)).join(delimiter);
 	return Object.assign({}, env, { PATH: fusion, Path: fusion });
 }
 

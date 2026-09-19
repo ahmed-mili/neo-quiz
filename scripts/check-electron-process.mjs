@@ -52,7 +52,7 @@ async function cas(r, nom, fn) {
 
 await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
-	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, emplacementsOllama, encoderCommande,
+	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande,
 	estOutilAutorise, lireCache, scriptConnexion, scriptInstallation,
 }) => {
 	const r = makeReporter("Électron — les CLI");
@@ -176,101 +176,114 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		   une vraie, hébergée par le terminal par défaut de l'utilisateur. Le titre
 		   passe donc par le SCRIPT (`$host.UI.RawUI.WindowTitle`), pas par la ligne
 		   de commande. */
+		/* ── LE TERMINAL DIT VRAI ET SE FERME SEUL (2026-09-19) ──
+
+		   CE QUE CES CAS EMPÊCHENT, vu dans la VM le 2026-09-18 : le script rechargeait
+		   le PATH du REGISTRE, alors que l'application détecte les CLI par un PATH
+		   ÉTENDU (`~/.local/bin`, où `install.ps1` pose `claude.exe`). Quand
+		   l'installateur n'écrit pas ce dossier dans le PATH utilisateur, l'app disait
+		   « installé » et le terminal « terme non reconnu » — puis affichait quand
+		   même « Claude Code est connecté », parce que le `Write-Host` suivait la
+		   commande sans condition. */
+		const msgs = { succes: "c'est fini", echec: "raté", echecInstallation: "install ratée" };
+		const envDossiers = { USERPROFILE: "C:\\U\\x", HOME: "C:\\U\\x", LOCALAPPDATA: "C:\\U\\x\\AppData\\Local", APPDATA: "C:\\U\\x\\AppData\\Roaming" };
 		{
-			const claude = scriptInstallation("claude", "Neo Quiz - Claude Code", "Vous pouvez fermer cette fenêtre.");
-			r.check("claude : le titre de la fenêtre est la première ligne du script",
-				claude.startsWith("$host.UI.RawUI.WindowTitle = 'Neo Quiz - Claude Code'"), true);
-			r.check("claude : le PATH de la session est rechargé avant de lancer claude",
-				claude.indexOf("GetEnvironmentVariable('Path','User')") > 0 && claude.indexOf("GetEnvironmentVariable('Path','User')") < claude.lastIndexOf("\nclaude"), true);
-			r.check("claude : le script finit par la connexion du compte", /\nclaude\s*$/.test(claude.replace(/\nWrite-Host[^\n]*$/, "")), true);
-			const codex = scriptInstallation("codex", "Neo Quiz - Codex CLI", "x");
-			r.check("codex : le script finit par la connexion du compte", codex.includes("\ncodex login"), true);
-			r.check("le message de fin est cité pour PowerShell (une apostrophe est doublée)",
-				scriptInstallation("ollama", "Neo Quiz - Ollama", "c'est fini").includes("Write-Host 'c''est fini'"), true);
+			const dossiers = dossiersCli(envDossiers);
+			r.check("dossiersCli : les dossiers des installateurs officiels y sont",
+				{
+					local: dossiers.includes("C:\\U\\x\\.local\\bin"),
+					codex: dossiers.includes("C:\\U\\x\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin"),
+					npm: dossiers.includes("C:\\U\\x\\AppData\\Roaming\\npm"),
+				},
+				{ local: true, codex: true, npm: true });
+			for (const outil of ["claude", "codex"]) {
+				/* `envDossiers`, le MÊME faux environnement que celui dont `dossiers`
+				   (ci-dessus) est dérivé : sans lui, le script serait composé avec le
+				   vrai `process.env` de la machine qui lance ce contrôle, et le cas
+				   suivant ne pourrait jamais retrouver dedans les chemins fabriqués. */
+				const inst = scriptInstallation(outil, "Neo Quiz - " + outil, msgs, envDossiers);
+				const cx = scriptConnexion(outil, "Neo Quiz - " + outil, msgs, envDossiers);
+				for (const [nom, script] of [["installation", inst], ["connexion", cx]]) {
+					r.check(outil + " " + nom + " : le titre de la fenêtre est la première ligne",
+						script.startsWith("$host.UI.RawUI.WindowTitle = 'Neo Quiz - " + outil + "'"), true);
+					r.check(outil + " " + nom + " : le PATH reçoit le registre ET chaque dossier des CLI",
+						{
+							registre: script.includes("GetEnvironmentVariable('Path','User')"),
+							dossiers: dossiers.every(d => script.includes(d.replace(/'/g, "''"))),
+						},
+						{ registre: true, dossiers: true });
+					const login = outil === "claude" ? "claude auth login" : "codex login";
+					r.check(outil + " " + nom + " : la connexion est la sous-commande, jamais le REPL",
+						{ login: script.includes("\n" + login + "\n"), repl: /\nclaude\s*\n/.test(script) }, { login: true, repl: false });
+					r.check(outil + " " + nom + " : le PATH est rechargé AVANT la connexion",
+						script.indexOf("GetEnvironmentVariable('Path','User')") < script.indexOf("\n" + login), true);
+					/* Le message de succès n'est atteint que si la connexion a rendu 0 ;
+					   l'échec est dans l'autre branche et RETIENT la fenêtre (Read-Host). */
+					const iSucces = script.indexOf("Write-Host 'c''est fini'");
+					const iEchec = script.indexOf("Write-Host 'raté'");
+					const iIf = script.indexOf("if ($LASTEXITCODE -eq 0)");
+					const iElse = script.indexOf("} else {");
+					r.check(outil + " " + nom + " : le succès est conditionné au code de sortie de la connexion",
+						{ ordre: iIf > 0 && iIf < iSucces && iSucces < iElse && iElse < iEchec, apresLogin: iIf > script.indexOf("\n" + login) },
+						{ ordre: true, apresLogin: true });
+					r.check(outil + " " + nom + " : succès → la fenêtre se ferme seule après deux secondes ; échec → elle reste",
+						{ sleep: script.slice(iSucces, iElse).includes("Start-Sleep -Seconds 2"), reste: script.slice(iEchec).includes("Read-Host") },
+						{ sleep: true, reste: true });
+				}
+				/* L'installation qui échoue n'enchaîne pas la connexion : le test de
+				   son code de sortie précède la ligne de connexion. */
+				const iInstall = inst.indexOf(commandeInstallationLancee(outil, true));
+				const iGarde = inst.indexOf("if ($LASTEXITCODE -ne 0)");
+				r.check(outil + " installation : un installateur qui échoue arrête le script avec son message, avant la connexion",
+					{ ordre: iInstall > 0 && iGarde > iInstall && iGarde < inst.indexOf("\n" + (outil === "claude" ? "claude auth login" : "codex login")), message: inst.slice(iGarde).includes("Write-Host 'install ratée'") },
+					{ ordre: true, message: true });
+			}
+			const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", msgs);
+			r.check("ollama installation : ni connexion ni REPL, le message puis la fin",
+				{ login: /login|\nclaude|\ncodex/.test(ollama), succes: ollama.includes("Write-Host 'c''est fini'") }, { login: false, succes: true });
+			r.check("connexion ollama : null, jamais un terminal sur rien", scriptConnexion("ollama", "t", msgs), null);
 
-			/* ── CE QUI EST MONTRÉ EST CE QUI PART ──
-
-			   CE QUE CE CAS EMPÊCHE, et il est né d'un défaut réel. La commande
-			   d'installation était écrite DEUX fois : dans le modal qui l'affiche
-			   et ici, dans le script que le terminal exécute. Les deux copies ont
-			   divergé sans que rien ne le dise — pour Codex, le modal montrait la
-			   forme officielle `powershell -ExecutionPolicy ByPass -c "irm … | iex"`
-			   quand le terminal lançait `irm … | iex` nu. Dans la VM où Ahmed
-			   éprouve l'application, la première s'installait et la seconde mourait
-			   sur « La propriété "OSArchitecture" est introuvable » (2026-09-18).
-			   Les deux textes étaient justes chacun de son côté : aucun contrôle
-			   portant sur l'un des deux ne pouvait voir le défaut. Celui-ci les
-			   COMPARE. */
+			/* ── CE QUI EST MONTRÉ EST CE QUI PART, avec DEUX écarts écrits ──
+			   Ollama : deux drapeaux d'accord non interactif. Claude : la ligne
+			   affichée tourne dans un SOUS-PROCESSUS, parce que `install.ps1` fait
+			   `exit 1` sur chaque échec et qu'un `exit` dans un `irm | iex` lancé dans
+			   la session ferme la fenêtre entière, sans un mot — le code de sortie
+			   n'existerait pas, et la branche « échec » du script ne serait jamais
+			   atteinte. Codex l'a déjà, sous sa forme officielle. */
 			for (const outil of ["claude", "codex", "ollama"]) {
-				const script = scriptInstallation(outil, "t", "fin");
+				const script = scriptInstallation(outil, "t", msgs);
 				const affichee = commandeInstallation(outil, true).code;
 				const lancee = commandeInstallationLancee(outil, true);
-				r.check(outil + " : la ligne exécutée est celle que le modal affiche",
-					{ dansLeScript: script.includes(lancee), commencePar: lancee.startsWith(affichee) },
-					{ dansLeScript: true, commencePar: true });
+				r.check(outil + " : la ligne lancée CONTIENT la ligne affichée, et le script la contient",
+					{ dansLeScript: script.includes(lancee), contient: lancee.includes(affichee) }, { dansLeScript: true, contient: true });
 			}
-			/* L'écart d'Ollama est le SEUL admis, et il est borné : deux drapeaux
-			   d'accord non interactif, rien d'autre. Sans eux, la fenêtre reste
-			   bloquée sur une invite que personne n'a demandée. */
-			r.check("l'écart entre affiché et lancé est nul pour les deux CLI, et borné pour Ollama",
-				["claude", "codex", "ollama"].map(o => commandeInstallationLancee(o, true).slice(commandeInstallation(o, true).code.length)),
-				["", "", " --accept-source-agreements --accept-package-agreements"]);
+			r.check("les écarts entre affiché et lancé sont exactement les deux admis",
+				{
+					claude: commandeInstallationLancee("claude", true),
+					codex: commandeInstallationLancee("codex", true) === commandeInstallation("codex", true).code,
+					ollama: commandeInstallationLancee("ollama", true).slice(commandeInstallation("ollama", true).code.length),
+				},
+				{
+					claude: 'powershell -ExecutionPolicy Bypass -c "irm https://claude.ai/install.ps1 | iex"',
+					codex: true,
+					ollama: " --accept-source-agreements --accept-package-agreements",
+				});
+			r.check("hors Windows, la ligne lancée de Claude reste celle affichée (bash n'a pas ce problème)",
+				commandeInstallationLancee("claude", false), commandeInstallation("claude", false).code);
 
 			const script = "Write-Host 'é | $x'";
 			const b64 = encoderCommande(script);
 			r.check("encoderCommande : base64 d'UTF-16LE, aller-retour exact", Buffer.from(b64, "base64").toString("utf16le"), script);
 			r.check("encoderCommande : rien d'autre que du base64", /^[A-Za-z0-9+/=]+$/.test(b64), true);
-
-			/* ── LA RECETTE DE CONNEXION ──
-
-			   CE QU'ELLE EMPÊCHE. `codex login` et `claude auth login` lancent un
-			   exécutable DÉJÀ installé ; y laisser traîner le `irm … | iex` de
-			   l'installation ferait retélécharger un script distant à chaque clic
-			   sur « Se connecter » — une capacité que ce bouton n'a jamais eu à
-			   demander, et que l'utilisateur n'a pas confirmée (le canal de
-			   connexion, lui, n'ouvre pas de boîte native : voir `canaux.ts`). */
-			{
-				const cxCodex = scriptConnexion("codex", "Neo Quiz - Codex CLI", "fini");
-				r.check("connexion codex : titre en première ligne, `codex login`, et RIEN de distant",
-					{
-						titre: cxCodex.startsWith("$host.UI.RawUI.WindowTitle = 'Neo Quiz - Codex CLI'"),
-						login: cxCodex.includes("\ncodex login"),
-						distant: /irm |iex|winget/.test(cxCodex),
-					},
-					{ titre: true, login: true, distant: false });
-
-				const cxClaude = scriptConnexion("claude", "Neo Quiz - Claude Code", "fini");
-				r.check("connexion claude : `claude auth login`, la sous-commande, jamais le REPL",
-					{ login: cxClaude.includes("\nclaude auth login"), distant: /irm |iex/.test(cxClaude) },
-					{ login: true, distant: false });
-
-				/* Le PATH est rechargé AVANT la commande, alors que rien ne
-				   s'installe : la fenêtre hérite du PATH d'Electron, figé au
-				   démarrage de l'application. Un CLI installé pendant la session
-				   (bouton d'installation, juste avant) n'y figure pas, et le
-				   terminal se serait ouvert sur « terme non reconnu ». */
-				r.check("connexion : le PATH est rechargé avant la commande",
-					cxCodex.indexOf("GetEnvironmentVariable('Path','User')") < cxCodex.indexOf("\ncodex login"), true);
-
-				/* Ollama n'a pas de compte : ouvrir un terminal sur rien serait
-				   pire que de dire « indisponible » — l'utilisateur regarderait
-				   une fenêtre qui ne lui demande rien. */
-				r.check("connexion ollama : null, jamais un terminal sur rien", scriptConnexion("ollama", "t", "x"), null);
-
-				r.check("connexion : le message de fin est cité pour PowerShell",
-					scriptConnexion("codex", "t", "c'est fini").includes("Write-Host 'c''est fini'"), true);
-			}
-
 			const args = argumentsTerminal("Neo Quiz", script);
-			r.check("argumentsTerminal : ShellExecute (Start-Process), -EncodedCommand, jamais le script en clair",
+			r.check("argumentsTerminal : Start-Process, -EncodedCommand, SANS -NoExit (le script décide de rester), jamais le script en clair",
 				{
 					debut: args.slice(0, 2),
-					troisieme: args[2].includes(
-						"Start-Process powershell.exe -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-EncodedCommand','" + b64,
-					),
+					troisieme: args[2].includes("Start-Process powershell.exe -ArgumentList '-ExecutionPolicy','Bypass','-EncodedCommand','" + b64),
+					noExit: args[2].includes("-NoExit"),
 					clair: args[2].includes("Write-Host"),
 				},
-				{ debut: ["-NoProfile", "-Command"], troisieme: true, clair: false });
+				{ debut: ["-NoProfile", "-Command"], troisieme: true, noExit: false, clair: false });
 		}
 
 		/* ── LES PIÈCES JOINTES, ET LE DOSSIER QUI LES PORTE ──

@@ -57,23 +57,33 @@ export function commandeInstallation(outil: OutilInstallable, windows: boolean):
 
 /**
  * La commande telle que le TERMINAL la lance. Identique à celle qui est
- * affichée pour Claude et Codex — c'est tout l'intérêt de ce module — et
- * elle ne s'en écarte que pour Ollama, d'un écart écrit ici et éprouvé par
+ * affichée pour Codex — c'est tout l'intérêt de ce module — et elle ne s'en
+ * écarte que de deux façons, chacune écrite ici et éprouvée par
  * `npm run check:electron-process`.
  *
- * L'ÉCART D'OLLAMA, et pourquoi il ne se résorbe pas. `winget` demande deux
- * accords (source et paquet) à sa PREMIÈRE utilisation, par une invite à
- * laquelle il faut répondre. Un utilisateur qui tape la commande lui-même la
- * voit et répond ; la fenêtre que le bouton ouvre, elle, resterait bloquée sur
- * une question que personne n'a demandée, et l'installation n'irait pas au
- * bout. Les deux drapeaux sont donc ajoutés ICI et pas dans le texte affiché,
- * qui doit rester la ligne courte et lisible que la documentation d'Ollama
- * publie.
+ * L'ÉCART D'OLLAMA. `winget` demande deux accords (source et paquet) à sa
+ * PREMIÈRE utilisation, par une invite à laquelle il faut répondre. Un
+ * utilisateur qui tape la commande lui-même la voit et répond ; la fenêtre que
+ * le bouton ouvre, elle, resterait bloquée sur une question que personne n'a
+ * demandée. Les deux drapeaux sont ajoutés ICI et pas dans le texte affiché.
+ *
+ * L'ÉCART DE CLAUDE (2026-09-19). `install.ps1` fait `exit 1` sur chaque
+ * échec (téléchargement, somme de contrôle, `claude install`). Lancé par
+ * `irm | iex` DANS la session de la fenêtre, cet `exit` ferme la fenêtre
+ * entière, sans un mot — et le script de `process.ts` n'a plus de code de
+ * sortie à tester, donc plus de message d'échec à montrer. Dans un
+ * SOUS-PROCESSUS, l'`exit` ne tue que lui et devient `$LASTEXITCODE`. C'est
+ * la forme officielle de Codex, celle qui s'est installée dans la VM d'Ahmed
+ * là où la forme nue mourait. La ligne AFFICHÉE reste la ligne courte de la
+ * documentation : celui qui la tape voit lui-même sa fenêtre.
  */
 export function commandeInstallationLancee(outil: OutilInstallable, windows: boolean): string {
 	const { code } = commandeInstallation(outil, windows);
 	if (outil === "ollama" && windows) {
 		return code + " --accept-source-agreements --accept-package-agreements";
+	}
+	if (outil === "claude" && windows) {
+		return 'powershell -ExecutionPolicy Bypass -c "' + code + '"';
 	}
 	return code;
 }

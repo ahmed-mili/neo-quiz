@@ -346,6 +346,14 @@ function issue(messages: MessagesTerminal): string[] {
 export function scriptInstallation(tool: Outil, titre: string, messages: MessagesTerminal, env: NodeJS.ProcessEnv = process.env): string {
 	const lignes: string[] = [
 		"$host.UI.RawUI.WindowTitle = " + citerPs(titre),
+		/* `install.ps1` de Codex finit par « Start Codex now? [y/N] » et
+		   attendait qu'on tape n puis Entrée (vu dans la VM le 2026-09-19),
+		   alors que la connexion suit juste après. `CODEX_NON_INTERACTIVE`
+		   est la variable que ce script lit pour répondre « non » à toutes
+		   ses questions (`Prompt-YesNo`, lu dans install.ps1 le 2026-09-19).
+		   Posée dans la SESSION, elle est héritée par le sous-processus
+		   PowerShell qui exécute l'installateur. */
+		...(tool === "codex" ? ["$env:CODEX_NON_INTERACTIVE = '1'"] : []),
 		commandeInstallationLancee(tool, true),
 		"if ($LASTEXITCODE -ne 0) {",
 		"  Write-Host " + citerPs(messages.echecInstallation || messages.echec) + " -ForegroundColor Red",

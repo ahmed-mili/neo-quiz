@@ -238,7 +238,21 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 					{ ordre: iInstall > 0 && iGarde > iInstall && iGarde < inst.indexOf("\n" + (outil === "claude" ? "claude auth login" : "codex login")), message: inst.slice(iGarde).includes("Write-Host 'install ratée'") },
 					{ ordre: true, message: true });
 			}
-			const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", msgs);
+			/* L'installateur de Codex demande « Start Codex now? [y/N] » à la fin et
+	   bloquait la fenêtre sur cette question (VM, 2026-09-19) :
+	   `CODEX_NON_INTERACTIVE` doit être posé AVANT la ligne d'installation,
+	   et seulement pour Codex. */
+	{
+		const codexInst = scriptInstallation("codex", "t", msgs, envDossiers);
+		const iVar = codexInst.indexOf("$env:CODEX_NON_INTERACTIVE = '1'");
+		r.check("codex installation : CODEX_NON_INTERACTIVE posé avant l'installateur, et pas ailleurs",
+			{
+				avant: iVar > 0 && iVar < codexInst.indexOf(commandeInstallationLancee("codex", true)),
+				claude: scriptInstallation("claude", "t", msgs, envDossiers).includes("CODEX_NON_INTERACTIVE"),
+			},
+			{ avant: true, claude: false });
+	}
+	const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", msgs);
 			r.check("ollama installation : ni connexion ni REPL, le message puis la fin",
 				{ login: /login|\nclaude|\ncodex/.test(ollama), succes: ollama.includes("Write-Host 'c''est fini'") }, { login: false, succes: true });
 			r.check("connexion ollama : null, jamais un terminal sur rien", scriptConnexion("ollama", "t", msgs), null);

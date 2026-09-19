@@ -164,6 +164,9 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	/* ── Badge d'accès à Fable (déduit du forfait lu dans le trousseau du CLI) ── */
 	"ai.badge.included": "Inclus",
 	"ai.badge.usageCredits": "Crédits d'utilisation",
+	/* Modèle Ollama cloud hors du plan gratuit (recommandations du démon ou
+	   402 déjà essuyé) : badge dans la liste ET sur le trigger du menu. */
+	"ai.badge.pro": "Pro",
 
 	/* ── Niveaux d'effort (sous-titres seulement) ── */
 	"ai.effort.ultracodeSub": "xhigh + workflows",

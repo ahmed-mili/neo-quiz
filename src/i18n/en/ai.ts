@@ -185,6 +185,9 @@ export const EN_AI = {
 	/* ── Badge d'accès à Fable (déduit du forfait lu dans le trousseau du CLI) ── */
 	"ai.badge.included": "Included",
 	"ai.badge.usageCredits": "Usage credits",
+	/* Modèle Ollama cloud hors du plan gratuit (recommandations du démon ou
+	   402 déjà essuyé) : badge dans la liste ET sur le trigger du menu. */
+	"ai.badge.pro": "Pro",
 
 	/* ── Niveaux d'effort : seuls les sous-titres sont traduits (low, medium,
 	   high… sont le vocabulaire des CLI, identique dans toutes les langues). ── */

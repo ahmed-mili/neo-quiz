@@ -308,6 +308,24 @@
 	flex-direction: column;
 	gap: 2px;
 	min-width: 0;
+	flex: 1;
+}
+
+/* « Mettre à niveau » d'un modèle Ollama hors plan : un lien discret à droite
+   de la ligne, avant l'icône. La ligne reste sélectionnable — le badge
+   informe, le 402 tranche. */
+.qbd-model-option-upgrade {
+	flex-shrink: 0;
+	margin-left: 12px;
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--interactive-accent);
+	white-space: nowrap;
+}
+.qbd-model-option-upgrade:hover,
+.qbd-model-option-upgrade:focus-visible {
+	text-decoration: underline;
+	outline: none;
 }
 
 .qbd-model-option-top {

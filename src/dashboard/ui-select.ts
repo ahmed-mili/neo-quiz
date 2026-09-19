@@ -364,6 +364,9 @@ export interface ModelOption {
 	badge?: string;
 	/** Icône Lucide calée à droite (Ollama : cloud / download / rien). */
 	icon?: string | null;
+	/** Un lien à droite de la ligne (« Mettre à niveau » d'un modèle Ollama
+	    hors plan) : il s'active sans fermer le menu ni choisir le modèle. */
+	upgrade?: { label: string; onClick(): void };
 }
 
 export interface OpenModelMenuOptions {
@@ -434,19 +437,29 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		btn.type = "button";
 		btn.setAttribute("role", "menuitemradio");
 		btn.setAttribute("aria-checked", active ? "true" : "false");
-		const check = ajouter(btn, "span", "qbd-select-check");
-		if (active) currentHost().ui.setIcon(check, "check");
 		const body = ajouter(btn, "div", "qbd-model-option-body");
 		const top = ajouter(body, "div", "qbd-model-option-top");
 		ajouter(top, "span", "qbd-select-option-label", m.label);
 		if (m.badge) ajouter(top, "span", "qbd-model-option-badge", m.badge);
 		if (m.desc) ajouter(body, "span", "qbd-model-option-desc", m.desc);
+		if (m.upgrade) {
+			/* Un <span role=link> et non un <button> : un bouton dans un bouton
+			   n'est pas du HTML valide. Le clic est arrêté avant la ligne. */
+			const up = ajouter(btn, "span", "qbd-model-option-upgrade", m.upgrade.label);
+			up.setAttribute("role", "link");
+			up.tabIndex = 0;
+			const agir = (ev: Event): void => { ev.stopPropagation(); ev.preventDefault(); m.upgrade!.onClick(); };
+			up.addEventListener("click", agir);
+			up.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") agir(ev); });
+		}
 		// Icône à droite (Ollama : nuage = cloud, téléchargement = local non
 		// installé, rien = local installé), calée à droite comme l'app Ollama.
 		if (m.icon) {
 			const ic = ajouter(btn, "span", "qbd-model-option-icon");
 			currentHost().ui.setIcon(ic, m.icon);
 		}
+		const check = ajouter(btn, "span", "qbd-select-check");
+		if (active) currentHost().ui.setIcon(check, "check");
 		btn.addEventListener("click", () => {
 			const changed = m.value !== opts.currentModel;
 			opts.currentModel = m.value;

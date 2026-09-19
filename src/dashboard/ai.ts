@@ -138,6 +138,7 @@ interface OllamaListItem {
 	thinking: boolean;
 	installed: boolean;
 	icon: string | null;
+	horsPlan: boolean;
 }
 
 /** État partagé du contrôle Ollama (liste + refresh). */
@@ -343,6 +344,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	/** L'adresse de connexion rendue par `/api/me` d'Ollama (401), à ouvrir
 	    dans le navigateur au clic sur « Se connecter ». `null` = inconnue. */
 	let ollamaSigninUrl: string | null = null;
+	/* `required_plan` des recommandations du démon, lu avec les statuts
+	   (force = à l'ouverture du menu). `{}` tant que rien n'a répondu. Hors de
+	   `render()` : `buildOllamaList` (fermeture dans `render`) le LIT et
+	   `refreshProviderStatuses` (fonction séparée, appelée depuis `render`)
+	   l'ÉCRIT — les deux doivent voir la même variable au fil des re-renders. */
+	let plansRecommandes: Record<string, string> = {};
 	/** La vue a été fermée : plus rien ne doit repeindre ni démarrer. Un
 	    `abort()` posé pendant l'encodage des images n'a encore aucun processus
 	    à tuer — c'est ce drapeau qui arrête la génération à l'étape suivante. */
@@ -775,10 +782,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			(detected || []).forEach(m => byNorm.set(m.name.replace(/:latest$/, ""), m));
 			const isInstalled = (v: string) => byNorm.has(v.replace(/:latest$/, ""));
 			const iconFor = (cloud: boolean, installed: boolean): string | null => cloud ? "cloud" : (installed ? null : "download");
+			const planCompte = settings().aiOllamaPlanCompte || "";
+			const horsPlan = (meta: aiProviders.OllamaModelMeta): boolean => meta.cloud && !!planCompte && aiProviders.modeleHorsPlan(
+				planCompte, aiProviders.planRequisPour(meta.value, { recommandations: plansRecommandes, appris: settings().aiOllamaPlansAppris || {} }));
 			const decorate = (meta: aiProviders.OllamaModelMeta): OllamaListItem => {
 				const installed = meta.cloud ? true : isInstalled(meta.value);
 				return { value: meta.value, label: meta.label, cloud: meta.cloud,
-					thinking: meta.thinking !== false, installed, icon: iconFor(meta.cloud, installed) };
+					thinking: meta.thinking !== false, installed, icon: iconFor(meta.cloud, installed), horsPlan: horsPlan(meta) };
 			};
 			const catalog = settings().aiOllamaCatalog;
 			const list = aiProviders.resolveOllamaSelection(settings().aiOllamaModels, catalog).map(decorate);
@@ -787,7 +797,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				const norm = m.name.replace(/:latest$/, "");
 				if (list.some(o => o.value === m.name || o.value.replace(/:latest$/, "") === norm)) return;
 				list.push({ value: m.name, label: m.name.replace(":latest", ""), cloud: false,
-					installed: true, thinking: (m.capabilities || []).includes("thinking"), icon: null });
+					installed: true, thinking: (m.capabilities || []).includes("thinking"), icon: null, horsPlan: false });
 			});
 			// Modèle courant hors liste → placé en tête.
 			const cur = settings().aiModel || currentModel;
@@ -950,6 +960,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					if (cur && cur.thinking) {
 						ajouter(trigLabel, "span", "qbd-model-trigger-effort", aiProviders.getEffortLabel(aiProviders.resolveEffort(provider, settings().aiEffort), provider));
 					}
+					if (cur && cur.horsPlan) ajouter(trigLabel, "span", "qbd-model-option-badge", t("ai.badge.pro"));
 				};
 				refreshTrigger();
 				ctl.refreshTrigger = refreshTrigger;
@@ -960,7 +971,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					refreshTrigger();
 					const cur = curOpt();
 					openModelMenu(trigger, {
-						models: ctl.options,
+						models: ctl.options.map(o => ({
+							...o,
+							badge: o.horsPlan ? t("ai.badge.pro") : undefined,
+							upgrade: o.horsPlan ? { label: t("ai.upgrade.button"), onClick: () => { void host.shell.openUrl(aiProviders.OLLAMA_UPGRADE_URL); } } : undefined,
+						})),
 						searchable: true,
 						currentModel: settings().aiModel || currentModel,
 						efforts: (cur && cur.thinking) ? efforts : [],
@@ -1702,6 +1717,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				// `verifierCompte` juste après.
 				if (providerHint["ollama"]?.icon !== "log-in") setHint("ollama", hintZone, provider, null);
 				if (provider !== "ollama") return;
+				// Recommandations `required_plan` du démon, lues avec les statuts
+				// (force = à l'ouverture du menu) : c'est ce que `buildOllamaList`
+				// croise avec `aiOllamaPlanCompte` pour décider du badge « Pro ».
+				plansRecommandes = await aiProviders.fetchOllamaPlansRequis(ollamaUrl);
 				// Reconstruit les options (sélection + locaux réellement installés,
 				// avec capability thinking) et rafraîchit le libellé du contrôle.
 				if (ollamaCtl) {
@@ -2174,6 +2193,15 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (bouton) bouton.disabled = true;
 		let verdict: "lance" | "annule" | "indisponible";
 		if (tool === "ollama") {
+			// `ollamaSigninUrl` n'est rafraîchie que par `verifierCompte` (sonde
+			// périodique). Si la carte d'ERREUR Ollama s'affiche sans sonde
+			// préalable (401 direct à la génération), elle vaut encore `null` :
+			// sonder une dernière fois avant de renoncer, sinon le bouton répond
+			// « indisponible » alors qu'une adresse de connexion existe bel et bien.
+			if (!ollamaSigninUrl) {
+				const c = await aiProviders.checkOllamaCompte(settings().aiOllamaUrl);
+				if (!c.connecte && c.signinUrl) ollamaSigninUrl = c.signinUrl;
+			}
 			verdict = ollamaSigninUrl && await host.shell.openUrl(ollamaSigninUrl) ? "lance" : "indisponible";
 		} else {
 			try {

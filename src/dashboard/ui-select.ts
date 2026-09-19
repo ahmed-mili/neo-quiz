@@ -792,18 +792,40 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 
 	/* Le statut à droite d'une ligne. ABSENT (`err`) : plus de pastille rouge —
 	   le sous-titre « Non installé » le dit déjà (Ahmed, 2026-09-19) — mais un
-	   bouton « Installer », qui ouvre le modal d'installation (automatique ou
-	   manuelle). Ce n'est qu'un VISUEL : la ligne entière est déjà un bouton
-	   qui appelle `onDisabledClick`, et un <button> dans un <button> n'est pas
-	   du HTML valide. Serveur arrêté (`warn`) : la pastille orange reste. */
-	function appendStatut(row: HTMLElement, dot: string | null | undefined): void {
+	   VRAI bouton « Installer », le SEUL endroit qui ouvre le modal
+	   d'installation (automatique ou manuelle) : cliquer ailleurs sur la ligne
+	   ne fait rien (Ahmed, 2026-09-19 : « c'est plus logique et cohérent »).
+	   La ligne d'un fournisseur absent est donc un <div> et non un <button>
+	   (voir `creerLigne`) : un <button> dans un <button> n'est pas du HTML
+	   valide. Serveur arrêté (`warn`) : la pastille orange reste. */
+	function appendStatut(row: HTMLElement, dot: string | null | undefined, value: string): void {
 		if (dot === "err") {
-			const pill = ajouter(row, "span", "qbd-provider-install");
-			currentHost().ui.setIcon(ajouter(pill, "span", "qbd-provider-install-icon"), "download");
-			ajouter(pill, "span", undefined, t("dashboard.select.install"));
+			const bouton = ajouter(row, "button", "qbd-provider-install");
+			bouton.type = "button";
+			currentHost().ui.setIcon(ajouter(bouton, "span", "qbd-provider-install-icon"), "download");
+			ajouter(bouton, "span", undefined, t("dashboard.select.install"));
+			bouton.addEventListener("click", (e) => {
+				e.stopPropagation();
+				closeMenu();
+				opts.onDisabledClick?.(value);
+			});
 		} else if (dot === "warn") {
 			ajouter(row, "span", "qbd-status-dot qbd-status-dot--warn");
 		}
+	}
+
+	/* Une ligne de menu : un <button> si elle se choisit, un <div> inerte si
+	   c'est un fournisseur absent (son bouton « Installer » est la seule
+	   action, voir `appendStatut`). */
+	function creerLigne(parent: HTMLElement, cls: string, inerte: boolean): HTMLElement {
+		if (inerte) {
+			const div = ajouter(parent, "div", cls + " qbd-select-option--inerte");
+			div.setAttribute("aria-disabled", "true");
+			return div;
+		}
+		const btn = ajouter(parent, "button", cls);
+		btn.type = "button";
+		return btn;
 	}
 
 	/* Une ligne de canal, dans le flyout. Même forme que l'option de marque
@@ -811,8 +833,7 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 	   une marque, répéter son glyphe à chaque ligne n'apprendrait rien. */
 	function appendChannel(parent: HTMLElement, c: ProviderChannelOption): void {
 		const active = c.value === opts.current && !c.disabled;
-		const btn = ajouter(parent, "button", "qbd-select-option qbd-channel-option" + (active ? " is-active" : ""));
-		btn.type = "button";
+		const btn = creerLigne(parent, "qbd-select-option qbd-channel-option" + (active ? " is-active" : ""), !!c.disabled);
 		btn.setAttribute("role", "menuitemradio");
 		btn.setAttribute("aria-checked", active ? "true" : "false");
 		if (c.disabled) btn.setAttribute("aria-disabled", "true");
@@ -821,10 +842,10 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		const body = ajouter(btn, "div", "qbd-provider-option-body");
 		ajouter(body, "span", "qbd-select-option-label", c.label);
 		if (c.sub) ajouter(body, "span", "qbd-provider-option-sub", c.sub);
-		appendStatut(btn, c.dot);
+		appendStatut(btn, c.dot, c.value);
+		if (c.disabled) return;
 		btn.addEventListener("click", () => {
 			closeMenu();
-			if (c.disabled) { opts.onDisabledClick?.(c.value); return; }
 			if (c.value !== opts.current) opts.onPick?.(c.value);
 		});
 	}
@@ -889,8 +910,8 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 			   2026-09-18) — et c'est le chevron passé à l'accent qui la remplace
 			   (CSS de `.is-active`). Dans le flyout, la coche est sur le CANAL :
 			   c'est lui qui est choisi, pas la marque. */
-			const row = ajouter(menuEl, "button", "qbd-select-option qbd-brand-row" + (active ? " is-active" : ""));
-			row.type = "button";
+			const absent = !multiple && !!b.channels[0]?.disabled;
+			const row = creerLigne(menuEl, "qbd-select-option qbd-brand-row" + (active ? " is-active" : ""), absent);
 			row.setAttribute("role", multiple ? "menuitem" : "menuitemradio");
 			if (!multiple) {
 				row.setAttribute("aria-checked", active ? "true" : "false");
@@ -906,7 +927,7 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 			   lignes du même logo, et donc la seule qui vaille la place. */
 			ajouter(body, "span", "qbd-provider-option-sub", canal ? (canal.sub || canal.label) : "");
 			const st = canal && !multiple ? canal.dot : null;
-			appendStatut(row, st);
+			appendStatut(row, st, canal ? canal.value : "");
 			if (multiple) {
 				// Cette ligne OUVRE un sous-menu (le flyout des canaux) au lieu de
 				// choisir directement : la sémantique d'accessibilité standard pour
@@ -920,10 +941,9 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 				row.addEventListener("click", () => { cancelClose(); openFlyout(row, b); });
 			} else {
 				row.addEventListener("mouseenter", closeFlyout);
-				row.addEventListener("click", () => {
+				if (!absent) row.addEventListener("click", () => {
 					const c = b.channels[0];
 					closeMenu();
-					if (c.disabled) { opts.onDisabledClick?.(c.value); return; }
 					if (c.value !== opts.current) opts.onPick?.(c.value);
 				});
 			}

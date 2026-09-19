@@ -538,10 +538,14 @@
 	align-self: center;
 }
 
-/* « Installer » à la place de la pastille rouge d'un fournisseur absent : une
-   pilule d'accent, qui s'éclaire au survol de la LIGNE (c'est la ligne qui
-   reçoit le clic, voir `appendStatut` dans ui-select.ts). */
+/* « Installer » à la place de la pastille rouge d'un fournisseur absent : un
+   vrai bouton, le seul cliquable de la ligne (voir `appendStatut` dans
+   ui-select.ts). Il ne s'éclaire qu'à SON survol — éclairé au survol de la
+   ligne, il semblait survolé alors qu'il ne l'était pas (Ahmed, 2026-09-19). */
 .qbd-select-option .qbd-provider-install {
+	appearance: none;
+	cursor: pointer;
+	font-family: inherit;
 	margin-left: auto;
 	align-self: center;
 	flex-shrink: 0;
@@ -559,12 +563,18 @@
 	white-space: nowrap;
 	transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
-.qbd-select-option:hover .qbd-provider-install {
+.qbd-select-option .qbd-provider-install:hover,
+.qbd-select-option .qbd-provider-install:focus-visible {
 	background: var(--interactive-accent);
 	border-color: var(--interactive-accent);
 	color: var(--text-on-accent);
 }
+.qbd-select-option .qbd-provider-install:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
 .qbd-provider-install-icon { display: inline-flex; }
+/* La ligne d'un fournisseur absent n'est pas une option qu'on choisit : ni
+   main au survol, ni fond qui s'allume. */
+.qbd-select-option.qbd-select-option--inerte { cursor: default; }
+.qbd-select-option.qbd-select-option--inerte:hover { background: transparent; }
 .qbd-provider-install-icon svg { width: 12px; height: 12px; }
 
 /* Options du fournisseur (2 lignes) : plus d'air, façon Notion Calendar */

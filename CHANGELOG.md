@@ -14,6 +14,7 @@ release notes.
 ## [Unreleased]
 
 ### Fixed
+- In the provider menu, only the "Install" button opens the install dialog, and it lights up only when you hover it, not the whole line.
 - The "Waiting for sign-in" screen is centered like the rest of the Generate page, instead of stuck to the left. Once the account is connected it says "Account connected." and no longer "Sending your request again…" when there was no request to send.
 
 ## [1.8.0] - 2026-09-19

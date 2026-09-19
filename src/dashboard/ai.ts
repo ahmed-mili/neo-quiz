@@ -1567,10 +1567,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// ── État de la scène : loader AU-DESSUS du composer, erreur sous
 		// le composer, ou l'éditeur embarqué dans la zone résultat. ──
 		if (phase === "result") renderResult(resultZone!);
-		syncWebModal();
-		syncLoginModal();
-		syncLoadingModal();
-		syncErrorModal();
+		synchroniserModales();
 
 		// Onglet ouvert → saisie immédiate sans clic (demande 2026-07-10).
 		// Pas en phase résultat : le focus serait volé à l'éditeur embarqué
@@ -2597,6 +2594,15 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	 * erreur). Appelée à la fin de chaque `render`, c'est le seul endroit qui
 	 * l'ouvre ou la ferme — un `render` de plus ne rouvre rien.
 	 */
+	/** Ouvre ou ferme chaque modale de phase selon `phase`. Appelée partout où
+	    `phase` change sans que la page soit re-rendue. */
+	function synchroniserModales(): void {
+		syncWebModal();
+		syncLoginModal();
+		syncLoadingModal();
+		syncErrorModal();
+	}
+
 	function syncWebModal(): void {
 		if (phase === "web" && !webModal && attenteWeb) {
 			webModal = requireHost("modals").open({
@@ -2946,6 +2952,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// elles resteraient allouées jusqu'à la fermeture d'Obsidian.
 		for (const img of images) URL.revokeObjectURL(img.url);
 		images = [];
+		/* Les modales de phase suivent `phase`, mais ne se synchronisaient qu'à
+		   la fin de `render` — et le succès d'une génération NAVIGUE vers le
+		   quiz enregistré sans re-rendre la page : la modale d'attente restait
+		   ouverte par-dessus le quiz créé (vu par Ahmed le 2026-09-19). */
+		synchroniserModales();
 	}
 
 	function updateGenerateBtn(btn: HTMLButtonElement | null): void {

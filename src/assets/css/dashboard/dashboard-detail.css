@@ -1096,3 +1096,30 @@
 .qbd-qz-field--rich .qb-field-label:empty {
 	display: none;
 }
+
+/* ══════════════════════════════════════════════════════════
+   TRANSITION D'ENTRÉE — même grammaire que l'accueil et « Mes quiz »
+   (keyframes qbd-folder-hero-in / qbd-folder-card-in, dashboard-quizzes.css),
+   posée SEULEMENT quand la page arrive d'une génération (`animateEntry`,
+   detail.ts ; Ahmed, 2026-09-19 : pas à chaque ouverture depuis « Mes
+   quiz »). `.qbd-qz-enter` tombe dès l'animation finie (view-enter.ts) ;
+   `backwards`, jamais `both` : `npm run check:view-enter` y veille.
+   ══════════════════════════════════════════════════════════ */
+.qbd-qz-enter .qbd-qz-header,
+.qbd-qz-enter .qbd-qz-stats {
+	animation: qbd-folder-hero-in 0.35s ease backwards;
+}
+.qbd-qz-enter .qbd-qz-stats { animation-delay: 60ms; }
+.qbd-qz-enter .qbd-qz-list,
+.qbd-qz-enter .qbd-qz-main {
+	animation: qbd-folder-card-in 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+	animation-delay: 120ms;
+}
+.qbd-qz-enter .qbd-qz-main { animation-delay: 180ms; }
+
+@media (prefers-reduced-motion: reduce) {
+	.qbd-qz-enter .qbd-qz-header,
+	.qbd-qz-enter .qbd-qz-stats,
+	.qbd-qz-enter .qbd-qz-list,
+	.qbd-qz-enter .qbd-qz-main { animation: none; }
+}

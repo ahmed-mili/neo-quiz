@@ -63,9 +63,18 @@ export interface GenerateOptions {
 	images?: ImagePayload[];
 }
 
+/** Une réponse LUE : les questions, et le titre que le modèle a choisi
+    pour le quiz (`// title:` en tête du tableau ; `title` de l'objet pour
+    Ollama). `titre` absent quand le modèle n'en a pas donné : le nom du
+    fichier retombe alors sur la demande. */
+export interface ReponseQuiz {
+	questions: unknown[];
+	titre?: string;
+}
+
 /** Client IA — retour de createAiClient(plugin). */
 export interface AiClient {
-	generate(prompt: string, options?: GenerateOptions): Promise<unknown[]>;
+	generate(prompt: string, options?: GenerateOptions): Promise<ReponseQuiz>;
 	abort(): void;
 	/** Consommation de la DERNIÈRE génération réussie ; null si le fournisseur
 	    n'a rien publié (cf. ai-usage.ts : on n'estime jamais un compteur absent). */
@@ -274,6 +283,8 @@ export function composerPrompts(prompt: string, options: GenerateOptions = {}): 
 	- matching / rows / choices / correctMap: a question where the learner PAIRS two columns. Set "matching": true, "rows" (the left column: terms, devices, codes…), "choices" (the right column: definitions, roles…, listed in a different order from the rows) and "correctMap" giving, for each row in turn, the INDEX of its matching entry in "choices". Use it to oppose notions that are easily confused
 	- passage / passageId / passageTitle: a SOURCE DOCUMENT to read before answering (comprehension). "passage" holds the full text, "passageTitle" names it, and "passageId" is a shared key: every question carrying the SAME passageId shows the SAME document, so write the text ONCE on the first question of the group and give the others only their passageId. Use this whenever several questions probe one text, case, scenario or code sample
 
+	QUIZ TITLE: the very first line of the array, right after the opening bracket, is a JSON5 line comment giving the quiz a name: '// title: <name>'. The name is what a student would write on the cover of that quiz: 3 to 8 words naming its subject and scope (e.g. "Python : types, listes et exceptions"), in the language of the content, WITHOUT the word "quiz" and without a trailing period. Exactly one such line, nowhere else.
+
 	LANGUAGE — THIS IS A HARD RULE: write ALL the content you produce (title, prompt, options, answer, lesson, explain) in THE SAME LANGUAGE AS THE USER REQUEST BELOW. If the request is in French, write the quiz in French; in Arabic, in Arabic; in English, in English. When the request provides source material (a text, a note, images), follow the language of that material. NEVER translate the content into English just because these instructions are in English. The FIELD NAMES (title, prompt, options…) and the JSON5 structure always stay exactly as specified above, in English.
 
 	MATHEMATICS: every mathematical expression (formula, function, equation, integral, fraction, exponent, Greek letter…) MUST be written in LaTeX delimited by dollar signs, as in Obsidian: $f(x) = x^3$ inline, $$\\int_0^2 2x\\,dx$$ for a display formula. Never pseudo-notation such as f(x) = x^3 or ∫ from 0 to 2 outside the dollars. This applies to title, prompt, options, answer, lesson and explain. IMPORTANT: inside JSON5 strings, DOUBLE every backslash — for LaTeX (write '$\\\\frac{a}{b}$' to get \\frac) as well as Windows paths (write 'C:\\\\Users\\\\dev') — a single backslash would be destroyed by the parser.
@@ -333,7 +344,7 @@ function repairLatexBackslashes(source: string): string {
 		.replace(/(\\\\)|\\u(?![0-9a-fA-F]{4})/g, (m: string, pair: string | undefined) => pair ? pair : "\\\\u");
 }
 
-function parseOllamaResponse(content: string): unknown[] {
+function parseOllamaResponse(content: string): ReponseQuiz {
 	let cleaned = content.trim();
 
 	// Try to extract JSON from markdown code blocks
@@ -344,17 +355,18 @@ function parseOllamaResponse(content: string): unknown[] {
 	cleaned = repairLatexBackslashes(cleaned);
 
 	// Ollama with format: structured JSON wraps the array in an object
-	// e.g. { "questions": [...] }
+	// e.g. { "title": "…", "questions": [...] }
 	try {
 		const parsed: unknown = JSON5.parse(cleaned);
 
 		// If it's an object with a "questions" key, extract the array
 		if (parsed && !Array.isArray(parsed) && Array.isArray((parsed as { questions?: unknown }).questions)) {
-			return (parsed as { questions: unknown[] }).questions;
+			const obj = parsed as { questions: unknown[]; title?: unknown };
+			return { questions: obj.questions, titre: nettoyerTitre(typeof obj.title === "string" ? obj.title : "") };
 		}
 
 		if (Array.isArray(parsed)) {
-			return parsed;
+			return { questions: parsed, titre: titreEnCommentaire(cleaned) };
 		}
 
 		throw new Error("Format inattendu");
@@ -364,13 +376,42 @@ function parseOllamaResponse(content: string): unknown[] {
 	}
 }
 
+/** Le titre que le modèle a écrit en commentaire de tête (`// title: …`),
+    ou `undefined`. Il doit précéder la PREMIÈRE question : seuls des
+    commentaires (le jeton du canal web) et le crochet ouvrant peuvent le
+    devancer. Un `// title:` plus loin serait le texte d'une question. */
+function titreEnCommentaire(json5: string): string | undefined {
+	for (const ligne of json5.split("\n")) {
+		const l = ligne.trim();
+		if (!l || l === "[") continue;
+		if (!l.startsWith("//")) return undefined;
+		const m = l.match(/^\/\/\s*title\s*:\s*(.+?)\s*$/i);
+		if (m) return nettoyerTitre(m[1]);
+	}
+	return undefined;
+}
+
+/** Un titre bon pour un nom de fichier : guillemets d'enrobage retirés,
+    caractères interdits par Windows remplacés, point final ôté, borné à 80
+    caractères sur un mot entier ; `undefined` s'il n'en reste rien. */
+export function nettoyerTitre(brut: string): string | undefined {
+	let titre = brut.trim().replace(/^["'«“]+|["'»”]+$/g, "").trim();
+	titre = titre.replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ").replace(/\s+/g, " ").replace(/[.\s]+$/, "").trim();
+	if (titre.length > 80) {
+		const coupe = titre.slice(0, 80);
+		const espace = coupe.lastIndexOf(" ");
+		titre = (espace > 40 ? coupe.slice(0, espace) : coupe).replace(/[\s:,;–-]+$/, "");
+	}
+	return titre || undefined;
+}
+
 /** Lit une réponse copiée depuis un CLI, Ollama ou un site : fence markdown,
  * prose autour, LaTeX à backslash simple réparé, et distingue « pas un
  * quiz » (erreur nommée) de « quiz mal formé » (erreur du parseur, avec
  * position). Renommée `parseQuizResponse` → `parseReponseQuiz` et sortie de
  * la closure de `createAiClient` le 2026-09-18 : la page « Générer » la lit
  * aussi pour le canal web. */
-export function parseReponseQuiz(content: string): unknown[] {
+export function parseReponseQuiz(content: string): ReponseQuiz {
 	let cleaned = content.trim();
 
 	const jsonMatch = cleaned.match(/```(?:json5?|json)?\s*\n?([\s\S]*?)\n?```/);
@@ -400,7 +441,7 @@ export function parseReponseQuiz(content: string): unknown[] {
 		throw new Error(t("ai.err.notAnArray"));
 	}
 
-	return parsed;
+	return { questions: parsed, titre: titreEnCommentaire(cleaned) };
 }
 
 /* Le modèle a répondu autre chose qu'un quiz : nommer QUOI, et surtout
@@ -494,7 +535,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 		});
 	}
 
-	async function generate(prompt: string, options: GenerateOptions = {}): Promise<unknown[]> {
+	async function generate(prompt: string, options: GenerateOptions = {}): Promise<ReponseQuiz> {
 		aborted = false;
 		pendingUsage = null;
 		lastUsage = null;
@@ -507,7 +548,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 		await refreshCliCaches();
 		const startedAt = Date.now();
 		try {
-			const questions = await generateInner(prompt, options);
+			const reponse = await generateInner(prompt, options);
 			const u = takePendingUsage();
 			if (u) {
 				lastUsage = {
@@ -521,7 +562,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 					sessionId: u.sessionId
 				};
 			}
-			return questions;
+			return reponse;
 		} catch (err) {
 			if (aborted) {
 				const e = new Error("Génération annulée") as Error & { aborted?: boolean };
@@ -534,7 +575,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 		}
 	}
 
-	async function generateInner(prompt: string, options: GenerateOptions = {}): Promise<unknown[]> {
+	async function generateInner(prompt: string, options: GenerateOptions = {}): Promise<ReponseQuiz> {
 		const { images = [] } = options;
 		lastRequestText = prompt;
 		const provider = settings.get().aiProvider || "claude-code";
@@ -584,7 +625,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 	   Aucune clé API : réutilise la session du CLI connecté au
 	   compte Pro/Max/Team/Enterprise. Prompt complet par stdin
 	   (aucun échappement d'argument), sortie --output-format json. */
-	async function callClaudeCode(model: string, systemPrompt: string, userPrompt: string, images: ImagePayload[] = []): Promise<unknown[]> {
+	async function callClaudeCode(model: string, systemPrompt: string, userPrompt: string, images: ImagePayload[] = []): Promise<ReponseQuiz> {
 		if (!currentHost().platform.isDesktopApp) {
 			throw new Error(t("ai.hint.claudeDesktopOnly"));
 		}
@@ -723,7 +764,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 	   effort de raisonnement via -c model_reasoning_effort=…, réponse finale
 	   écrite dans un fichier (-o) pour un parsing propre. Sandbox read-only et
 	   --ignore-user-config isolent la génération (pas de MCP/hooks perso). */
-	async function callCodex(model: string, systemPrompt: string, userPrompt: string, images: ImagePayload[] = [], effort = "medium", fast = false): Promise<unknown[]> {
+	async function callCodex(model: string, systemPrompt: string, userPrompt: string, images: ImagePayload[] = [], effort = "medium", fast = false): Promise<ReponseQuiz> {
 		if (!currentHost().platform.isDesktopApp) {
 			// Même libellé que le hint du composer (« Codex CLI » explicite).
 			throw new Error(t("ai.hint.codexDesktopOnly"));
@@ -858,7 +899,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 		return parts.join("\n");
 	}
 
-	async function callOllama(model: string, systemPrompt: string, userPrompt: string, ollamaUrl?: string, authHeaders?: Record<string, string>, images: ImagePayload[] = [], effort: string | null = null): Promise<unknown[]> {
+	async function callOllama(model: string, systemPrompt: string, userPrompt: string, ollamaUrl?: string, authHeaders?: Record<string, string>, images: ImagePayload[] = [], effort: string | null = null): Promise<ReponseQuiz> {
 		if (!ollamaUrl) {
 			ollamaUrl = (settings.get().aiOllamaUrl || "http://localhost:11434").replace(/\/+$/, "");
 		}
@@ -964,6 +1005,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 					format: {
 						type: "object",
 						properties: {
+							title: { type: "string" },
 							questions: {
 								type: "array",
 								items: {

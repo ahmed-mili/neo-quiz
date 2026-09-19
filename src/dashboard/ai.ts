@@ -336,6 +336,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	/** Le site de la dernière ouverture, gardé au-delà de `attenteWeb` (remis à
 	    null avant l'écran d'erreur) : c'est lui que « Rouvrir {site} » affiche. */
 	let attenteWebSite = "";
+	/** Le corps de la modale d'attente ouverte, pour la redessiner en « reçu ». */
+	let webModalCorps: HTMLElement | null = null;
 	/* La carte d'attente du canal web vit dans une MODALE centrée depuis le
 	   2026-09-19 (demande d'Ahmed : la carte pleine largeur au-dessus du
 	   composer prenait trop de place). La fermer — Échap, le fond, la croix —
@@ -451,6 +453,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	let generatedDraft: { genId: number; draft: QuizDraft } | null = null;
 	let generationId = 0;
 	let generatedQuestions: unknown[] = [];
+	/** Le titre que le modèle a donné au quiz (`ReponseQuiz.titre`) ; c'est
+	    le nom du fichier quand il existe, la demande sinon. */
+	let generatedTitre: string | undefined;
+	/* La réponse copiée VIENT D'ARRIVER : la modale d'attente le dit sur
+	   place (coche, « Réponse reçue », le nom du quiz) pendant que le quiz
+	   s'enregistre, avant de se fermer sur sa page. Sans cet état, la page
+	   du quiz remplaçait la modale dans la même image (Ahmed, 2026-09-19). */
+	let reponseRecue: { titre?: string } | null = null;
 	let errorMessage = "";
 	let containerRef: HTMLElement | null = null;
 	/* Ce que la DERNIÈRE génération a consommé — null quand le fournisseur ne
@@ -2556,17 +2566,26 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	}
 
 	function syncWebModal(): void {
+		/* En « reçu », la modale est déjà ouverte et se redessine sur place ;
+		   `phase` est encore "web" jusqu'à la navigation. */
+		if (phase === "web" && webModal && reponseRecue && webModalCorps) {
+			webModalCorps.replaceChildren();
+			renderWeb(webModalCorps);
+			return;
+		}
 		if (phase === "web" && !webModal && attenteWeb) {
 			webModal = requireHost("modals").open({
 				/* Plus large quand il y a des fichiers : ils tiennent sur UNE rangée
 				   (retour Ahmed 2026-09-19, cinq fichiers sur trois lignes). */
 				className: "qbd-web-wait-modal" + (attenteWeb.aGlisser.length > 0 && host.depot ? " qbd-web-wait-modal--files" : ""),
 				onOpen: (m) => {
+					webModalCorps = m.contentEl;
 					renderWeb(m.contentEl);
 					poserCroixAnnuler(m);
 				},
 				onClose: () => {
 					webModal = null;
+					webModalCorps = null;
 					const interne = webModalFermetureInterne;
 					webModalFermetureInterne = false;
 					/* Fermée par l'utilisateur (Échap, fond, croix) pendant
@@ -2585,6 +2604,19 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    alors que rien ne tourne), une seule phrase qui dit les DEUX gestes
 	    dans l'ordre (envoyer, puis copier), et Rouvrir. */
 	function renderWeb(parent: HTMLElement): void {
+		/* REÇU : la même carte, coche à la place du presse-papier (ses ondes
+		   s'arrêtent), le nom du quiz, et rien d'autre — ni fichiers ni
+		   « Rouvrir », il n'y a plus rien à faire. La modale se ferme d'elle-
+		   même sur la page du quiz (`recevoirReponse`). */
+		if (reponseRecue) {
+			const carte = ajouter(parent, "div", "qbd-ai-web-card qbd-ai-web-card--recu");
+			const iconWrap = ajouter(carte, "div", "qbd-ai-loading-icon qbd-web-wait-icon");
+			iconWrap.dataset.etat = "ok";
+			host.ui.setIcon(iconWrap, "check");
+			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.received"));
+			ajouter(carte, "p", "qbd-ai-web-line", reponseRecue.titre ? t("ai.web.creatingNamed", { name: reponseRecue.titre }) : t("ai.web.creating"));
+			return;
+		}
 		if (!attenteWeb) return;
 		const site = attenteWeb.site;
 		const carte = ajouter(parent, "div", "qbd-ai-web-card");
@@ -2776,7 +2808,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		return options;
 	}
 
-	async function saveGeneratedQuiz(): Promise<boolean> {
+	/** Enregistre le quiz généré et ouvre sa page. Avec `differerNavigation`,
+	    rend la navigation à faire au lieu de la faire : l'appelant choisit
+	    quand la page du quiz remplace ce qui est à l'écran. `false` si rien
+	    n'a pu être enregistré (notice déjà affichée). */
+	async function saveGeneratedQuiz(options: { differerNavigation?: boolean } = {}): Promise<false | (() => void)> {
 		const root = host.paths.defaultRoot();
 
 		try {
@@ -2788,10 +2824,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			   seconde fois de la racine par défaut. */
 			const folder = destination || host.paths.contractPath(root.id, settings().aiOutputFolder || aiSettingsDefaults().aiOutputFolder);
 			await ensureFolder(folder);
-			// Le même titre que la page affiche, sans les points de suspension
-			// qu'il ajoute à une demande coupée : ils n'ont rien à faire dans
-			// un nom de fichier.
-			const title = generatedTitle().replace(/…$/, "");
+			// Le nom : celui que le MODÈLE a donné au quiz (il a lu les sources
+			// et écrit les questions), sinon la demande — le même titre que la
+			// page affiche, sans les points de suspension qu'il ajoute à une
+			// demande coupée : ils n'ont rien à faire dans un nom de fichier.
+			const title = generatedTitre || generatedTitle().replace(/…$/, "");
 			const name = title !== t("ai.result.untitled")
 				? title
 				: t("dashboard.quizzes.newQuizDefaultName");
@@ -2812,9 +2849,15 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			if (file) await deps.scanner.scanFile(file);
 			const entry = deps.scanner.getQuiz(path);
 			if (entry) {
-				resetGeneration();
-				deps.navigate("detail", { quiz: entry });
-				return true;
+				/* La page du quiz ENTRE avec une animation quand elle vient d'une
+				   génération (`entree: "generation"`), pas quand on l'ouvre
+				   depuis « Mes quiz » (Ahmed, 2026-09-19). */
+				const naviguer = (): void => {
+					resetGeneration();
+					deps.navigate("detail", { quiz: entry, entree: "generation" });
+				};
+				if (!options.differerNavigation) naviguer();
+				return naviguer;
 			}
 		} catch (err) {
 			// La cause reste interne ; la Notice traduite évite l'échec silencieux.
@@ -2900,6 +2943,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		signalerGeneration(false);
 		errorLogin = null;
 		generatedQuestions = [];
+		generatedTitre = undefined;
 		generatedDraft = null;
 		dropSentMessage();
 		composerText = "";
@@ -3164,12 +3208,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				return;
 			}
 
-			generatedQuestions = await client.generate(prompt, {
+			const reponse = await client.generate(prompt, {
 				count: questionCount,
 				type: questionType,
 				source,
 				images: imageData
 			});
+			generatedQuestions = reponse.questions;
+			generatedTitre = reponse.titre;
 
 			/* Coût de CE qui vient d'être produit. Le journal et la lecture des
 			   quotas sont accessoires : ils ne doivent jamais faire échouer une
@@ -3225,7 +3271,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			phase = "result";
 			// Le succès visible est directement la page de la note enregistrée :
 			// elle affiche déjà « Lancer », sans clic intermédiaire sur Enregistrer.
-			navigated = await saveGeneratedQuiz();
+			navigated = !!(await saveGeneratedQuiz());
 		} else {
 			phase = "error";
 		}
@@ -3401,7 +3447,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   fait déjà pour la page détail, ceci est son équivalent en entrée. */
 		if (!containerRef?.isConnected) deps.navigate("ai");
 		try {
-			generatedQuestions = parseReponseQuiz(texte);
+			const reponse = parseReponseQuiz(texte);
+			generatedQuestions = reponse.questions;
+			generatedTitre = reponse.titre;
 			if (generatedQuestions.length === 0) throw new Error(t("ai.err.notAnArray"));
 		} catch (err) {
 			errorMessage = (err as Error).message || t("ai.error.checkSettings");
@@ -3415,9 +3463,24 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		lastUsage = null;
 		generationId++;
 		generatedDraft = null;
+		/* LA RÉCEPTION SE VOIT : la modale reste ouverte et passe à « reçu »
+		   (coche, nom du quiz) ; l'enregistrement se fait pendant ce temps, et
+		   la modale ne se ferme qu'après la seconde qui rend l'état lisible
+		   — la même seconde que la détection de connexion. Neo Quiz revient
+		   devant pour qu'on la voie : l'utilisateur vient de copier dans le
+		   navigateur. */
+		reponseRecue = { titre: generatedTitre };
+		void host.ui.premierPlan?.().catch(() => { /* la page reste juste derrière */ });
+		render(containerRef);
+		const [navigated] = await Promise.all([
+			saveGeneratedQuiz({ differerNavigation: true }),
+			new Promise<void>(resolve => window.setTimeout(resolve, 1000)),
+		]);
+		reponseRecue = null;
+		if (disposed) return;
+		if (navigated) { navigated(); return; }
 		phase = "result";
-		const navigated = await saveGeneratedQuiz();
-		if (!navigated) render(containerRef);
+		render(containerRef);
 	}
 
 	/* Insère le quiz dans la note choisie via le picker (« Insérer dans une

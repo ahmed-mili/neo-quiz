@@ -1,5 +1,6 @@
 import { currentHost } from "../host/current";
 import { ajouter } from "../dom";
+import { markViewEnter } from "./view-enter";
 import { t } from "../i18n";
 import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
@@ -73,6 +74,11 @@ export interface QuizPageSpec {
 	    question est vierge, la relire n'apprendrait rien. Ne vaut qu'à la
 	    PREMIÈRE ouverture de cette clé — ensuite l'utilisateur décide. */
 	startEditing?: boolean;
+	/** ENTRER avec une animation (en-tête, puis la liste et le panneau) :
+	    pour un quiz qui vient d'être généré, dont la page remplace la modale
+	    d'attente. Ne vaut qu'au PREMIER rendu, comme `startEditing` : un
+	    repeint interne (frappe, question suivante) ne rejoue rien. */
+	animateEntry?: boolean;
 	/** La question à afficher AU PREMIER RENDU de cette clé (bornée). Pour
 	    l'hôte qui rouvre là où on s'était arrêté ; le greffon ne la passe
 	    pas. Ne vaut qu'à la première ouverture de la clé, comme `startEditing`. */
@@ -122,7 +128,7 @@ export interface QuizPageHandlers {
     membre de plus sur le ctx aurait forcé la fenêtre à fabriquer une fausse
     vue. C'est le même découpage que `QuizPageSpec.onBack`/`isStale`, dont
     ces champs sont la projection exacte. */
-export type DetailHostSpec = Pick<QuizPageSpec, "onBack" | "isStale" | "startEditing" | "initialQuestion" | "onQuestionChange">;
+export type DetailHostSpec = Pick<QuizPageSpec, "onBack" | "isStale" | "startEditing" | "animateEntry" | "initialQuestion" | "onQuestionChange">;
 
 export interface DetailHandlers {
 	render(container: HTMLElement, quiz: QuizIndexEntry, host: DetailHostSpec): void;
@@ -161,6 +167,7 @@ export function createDetailHandlers(ctx: DashboardShellCtx): DetailHandlers {
 				},
 				isStale: host.isStale,
 				startEditing: host.startEditing,
+				animateEntry: host.animateEntry,
 				initialQuestion: host.initialQuestion,
 				onQuestionChange: host.onQuestionChange,
 			});
@@ -280,8 +287,11 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			spec.startEditing = false;
 			editing = true;
 		}
+		const entering = !!spec.animateEntry;
+		spec.animateEntry = false;
 
 		const page = ajouter(container, "div", "qbd-qz");
+		markViewEnter(page, entering, "qbd-qz-enter");
 		renderHeader(page, spec);
 		renderStats(page, spec);
 

@@ -112,6 +112,10 @@ export interface DashboardPageSettings {
 export interface NavigateData {
 	quiz?: QuizIndexEntry;
 	edit?: boolean;
+	/** D'où l'on arrive sur la page du quiz : `"generation"` quand le quiz
+	    vient d'être créé — elle entre alors avec une animation ; rien depuis
+	    « Mes quiz » (Ahmed, 2026-09-19 : seulement depuis une génération). */
+	entree?: "generation";
 	/** « Créer avec l'IA » DEPUIS UN DOSSIER (2026-09-17) : la page « Générer »
 	    arrive avec la destination réglée sur ce dossier et ses sources déjà
 	    jointes — les documents et les notes du dossier, en chemins du contrat,

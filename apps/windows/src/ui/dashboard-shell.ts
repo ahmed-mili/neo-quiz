@@ -505,6 +505,8 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	    appartient ensuite à l'utilisateur (`pendingEdit` du greffon). Locale
 	    au montage : elle est toujours consommée dans le même tour. */
 	let editionEnAttente = false;
+	/** D'où l'on arrive sur la page du quiz (`NavigateData.entree`), consommé au rendu. */
+	let entreeDetail: "generation" | undefined;
 
 	/** Redessine la page COURANTE. Appelée à la navigation (entrée réelle) et
 	    par le scanner (simple rafraîchissement) — dans les deux cas le calcul
@@ -542,8 +544,11 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 				// de la session précédente.
 				const initial = questionInitiale;
 				questionInitiale = undefined;
+				const entreeAnimee = entreeDetail === "generation";
+				entreeDetail = undefined;
 				detail.render(contentEl, quiz, {
 					startEditing: edit,
+					animateEntry: entreeAnimee,
 					onBack: () => {
 						naviguer(cible);
 						// Retour vers « Mes quiz » : le DOSSIER du quiz, pas la
@@ -595,6 +600,7 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 			if (!data?.quiz) return;
 			quizSelectionne = data.quiz;
 			editionEnAttente = !!data.edit;
+			entreeDetail = data.entree;
 			if (vueCourante !== "detail") vuePrecedente = vueCourante;
 			vueCourante = "detail";
 			// Aucun bouton du rail ne porte "detail" : `setActive` éteint donc

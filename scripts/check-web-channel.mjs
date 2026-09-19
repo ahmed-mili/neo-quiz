@@ -44,15 +44,27 @@ await withSrcModule(
 	/* ── parseReponseQuiz : une réponse copiée, dans tous ses états ── */
 	{
 		const brut = `[{ title: "Q1", prompt: "Combien font 2+2 ?", options: ["3", "4"], correctIndex: 1 }]`;
-		r.check("un tableau nu", client.parseReponseQuiz(brut).length, 1);
+		r.check("un tableau nu", client.parseReponseQuiz(brut).questions.length, 1);
+		r.check("… sans titre : `titre` absent, le nom viendra de la demande", client.parseReponseQuiz(brut).titre, undefined);
 		const fence = "Voici le quiz demandé :\n\n```json5\n// neo-quiz k7f2q9abcd\n" + brut + "\n```\n\nBon courage !";
 		r.check("un tableau dans une fence, avec de la prose autour et le commentaire du jeton",
-			client.parseReponseQuiz(fence).length, 1);
+			client.parseReponseQuiz(fence).questions.length, 1);
+		/* Le titre choisi par le modèle : `// title:` en tête du tableau, y
+		   compris derrière le jeton du canal web. Il est nettoyé pour un nom
+		   de fichier ; un `// title:` plus loin dans le tableau est ignoré. */
+		const titre = "```json5\n// neo-quiz k7f2q9abcd\n[\n// title: Python : types, listes et exceptions.\n" + brut.slice(1) + "\n```";
+		r.check("le titre en commentaire de tête, derrière le jeton, sans son point final",
+			client.parseReponseQuiz(titre).titre, "Python types, listes et exceptions");
+		const titreLoin = "[\n" + brut.slice(1, -1) + ",\n// title: pas celui-là\n{ title: \"Q2\", prompt: \"P\" }]";
+		r.check("un « title: » loin dans le tableau n'est pas le titre", client.parseReponseQuiz(titreLoin).titre, undefined);
+		r.check("nettoyerTitre : guillemets, caractères interdits, point final",
+			client.nettoyerTitre(' "Réseaux : couche 2/3 ?" '), "Réseaux couche 2 3");
+		r.check("nettoyerTitre : rien ne reste → undefined", client.nettoyerTitre(" ... "), undefined);
 		const latex = `[{ title: "F", prompt: "Simplifie $\\frac{2}{4}$", type: "text", answer: "$\\frac{1}{2}$" }]`;
 		/* Le modèle écrit `$\frac$` (un backslash) ; la réparation le double dans
 		   le SOURCE, et JSON5 rend un seul backslash dans la VALEUR. */
 		r.check("le LaTeX à backslash simple est réparé, pas détruit",
-			client.parseReponseQuiz(latex)[0].answer, "$\\frac{1}{2}$");
+			client.parseReponseQuiz(latex).questions[0].answer, "$\\frac{1}{2}$");
 		let e1 = null;
 		try { client.parseReponseQuiz("Je ne peux pas générer de quiz sur ce sujet."); } catch (e) { e1 = e.message; }
 		r.check("une phrase sans quiz : erreur « pas un quiz », avec l'aperçu", typeof e1 === "string" && e1.includes("Je ne peux pas"), true);

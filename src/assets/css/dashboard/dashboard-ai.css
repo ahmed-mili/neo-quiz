@@ -2491,6 +2491,45 @@
 	.qbd-ai-web-card .qbd-web-wait-icon::after { animation: none; }
 }
 
+/* REÇU : la réponse copiée vient d'arriver. Les ondes s'arrêtent, la tuile
+   passe au vert de la coche (celui de « Compte connecté ») et la coche y
+   entre en grandissant ; le texte suit, en fondu. La modale se ferme
+   d'elle-même une seconde plus tard sur la page du quiz (`recevoirReponse`,
+   ai.ts) : l'état existe pour être LU, pas pour être agi. */
+.qbd-ai-web-card .qbd-web-wait-icon[data-etat="ok"] {
+	color: var(--color-green, #4ade80);
+	border-color: color-mix(in srgb, var(--color-green, #4ade80) 45%, transparent);
+	background: color-mix(in srgb, var(--color-green, #4ade80) 12%, transparent);
+	animation: qbd-web-recu-tuile 0.3s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+}
+.qbd-ai-web-card .qbd-web-wait-icon[data-etat="ok"]::before,
+.qbd-ai-web-card .qbd-web-wait-icon[data-etat="ok"]::after { animation: none; opacity: 0; }
+.qbd-ai-web-card .qbd-web-wait-icon[data-etat="ok"] svg {
+	animation: qbd-web-recu-coche 0.35s cubic-bezier(0.2, 0.7, 0.3, 1) 0.1s backwards;
+}
+.qbd-ai-web-card--recu .qbd-web-wait-title,
+.qbd-ai-web-card--recu .qbd-ai-web-line {
+	animation: qbd-web-recu-texte 0.3s ease 0.15s backwards;
+}
+@keyframes qbd-web-recu-tuile {
+	from { transform: scale(0.92); }
+	to { transform: scale(1); }
+}
+@keyframes qbd-web-recu-coche {
+	from { transform: scale(0.4); opacity: 0; }
+	to { transform: scale(1); opacity: 1; }
+}
+@keyframes qbd-web-recu-texte {
+	from { opacity: 0; transform: translateY(4px); }
+	to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.qbd-ai-web-card .qbd-web-wait-icon[data-etat="ok"],
+	.qbd-ai-web-card .qbd-web-wait-icon[data-etat="ok"] svg,
+	.qbd-ai-web-card--recu .qbd-web-wait-title,
+	.qbd-ai-web-card--recu .qbd-ai-web-line { animation: none; }
+}
+
 
 .qbd-ai-web-line {
 	margin: 0;

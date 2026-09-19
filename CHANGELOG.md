@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-19
+
 ### Changed
 - In the provider menu, a provider that is not installed shows an "Install" button instead of a red dot. It opens the install dialog, where you can install automatically or follow the manual steps.
 

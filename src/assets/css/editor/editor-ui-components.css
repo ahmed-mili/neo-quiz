@@ -165,123 +165,169 @@
 .qb-type-modal-sub { font-size: 0.75em; color: var(--text-muted); margin-bottom: 0.625em; }
 
 /* ─── Confirm Modal ─── */
+/* ══════════════════════════════════════════════════════════
+   LA CONFIRMATION — le patron de référence des actions destructives
+   (Tailwind UI « Deactivate account », repris par GitHub et Linear ; Ahmed,
+   2026-09-19). Une icône dans un DISQUE teinté à gauche, le titre et le
+   message à côté, les boutons à droite à leur largeur naturelle : « Annuler »
+   neutre, le primaire plein — rouge quand il détruit. Le panneau reste celui
+   de toutes les modales (l'effet Windows 11) ; seul le contenu change.
+   ══════════════════════════════════════════════════════════ */
 .qb-confirm-modal {
-	padding: 1.5em;
-	min-width: 300px;
+	width: 440px;
+	max-width: calc(100vw - 32px);
+}
+.qb-confirm-modal .modal-title:empty { display: none; }
+
+.qb-confirm-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 16px;
+	margin-right: 28px; /* la place de la croix */
 }
 
+/* Le disque : 40 px, la teinte de l'action à 12 %, l'icône à 20 px dans la
+   même couleur ; il ENTRE en grandissant, une fois, avec le panneau. */
+.qb-confirm-icon {
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+	color: var(--interactive-accent);
+	animation: qb-confirm-icon-in 0.3s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+}
+.qb-confirm-modal--danger .qb-confirm-icon {
+	background: rgba(239, 68, 102, 0.12);
+	color: #ef4466;
+}
+.qb-confirm-icon svg { width: 20px; height: 20px; }
+@keyframes qb-confirm-icon-in {
+	from { transform: scale(0.7); opacity: 0; }
+	to { transform: scale(1); opacity: 1; }
+}
+
+.qb-confirm-text { min-width: 0; padding-top: 8px; }
+
 .qb-confirm-title {
-	font-size: 1.1em;
-	font-weight: 700;
-	margin-bottom: 0.75em;
+	margin: 0 0 6px;
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 1.3;
 	color: var(--text-normal);
 }
 
 .qb-confirm-message {
-	font-size: 0.9em;
+	margin: 0;
+	font-size: 13.5px;
 	color: var(--text-muted);
-	margin-bottom: 1.5em;
-	line-height: 1.5;
+	line-height: 1.55;
 }
 
 /* La ligne de détail (date de modification du fichier à effacer) : sous le
    message, plus petite et plus discrète — une information, pas un second
-   avertissement. Le message porte déjà sa marge basse ; on la reprend ici. */
+   avertissement. */
 .qb-confirm-message + .qb-confirm-details {
-	margin: -1.1em 0 1.5em;
-	font-size: 0.8em;
+	margin: 6px 0 0;
+	font-size: 12px;
 	color: var(--text-faint);
 	font-variant-numeric: tabular-nums;
 }
 
 .qb-confirm-buttons {
 	display: flex;
-	gap: 8px;
+	gap: 10px;
+	justify-content: flex-end;
 	margin-top: 24px;
 }
 
-/* ── Les deux boutons d'une confirmation : ceux du ContentDialog de
-   Windows 11 (Ahmed, 2026-09-19 : « c'est bizarre ce style-là », pour des
-   pilules à ombre portée). Largeur ÉGALE, le pied de la boîte rempli ;
-   32 px, coins de 4 px, aucune ombre ni levée au survol. Le secondaire
-   (Annuler) est un fond subtil avec liseré, qui s'éclaircit d'un cran au
-   survol et s'assombrit à l'appui ; le primaire est plein : accent, ou
-   ROUGE quand il détruit (`.qb-btn-danger`), 90 % au survol et 80 % à
-   l'appui comme le bouton accent de WinUI. Deux surfaces qui confirment une
-   suppression ne peuvent pas avoir chacune leur habillage (retour du
-   2026-09-17 : « Annuler » et « Supprimer » indiscernables). ── */
+/* ── Les boutons, et leurs ÉTATS (Ahmed, 2026-09-19 : « et aussi les
+   effets au survol, clic ») : 36 px, coins de 8 px, 14 px demi-gras.
+   Repos → survol : le fond s'éclaircit (Annuler) ou le rouge remonte d'un
+   cran avec un halo (Supprimer) ; appui : le bouton se tasse (0,97) et le
+   fond s'assombrit ; clavier : anneau de focus de la couleur du bouton. ── */
 .qb-confirm-buttons .qb-btn {
-	flex: 1 1 0;
-	justify-content: center;
-	height: 32px;
-	padding: 0 12px;
-	border-radius: 4px;
+	height: 36px;
+	padding: 0 16px;
+	border-radius: 8px;
 	font-size: 14px;
-	font-weight: 400;
+	font-weight: 600;
+	line-height: 1;
 	color: var(--text-normal);
 	background: color-mix(in srgb, var(--text-normal) 6%, transparent);
-	border: 1px solid color-mix(in srgb, var(--text-normal) 7%, transparent);
+	border: 1px solid color-mix(in srgb, var(--text-normal) 10%, transparent);
 	box-shadow: none;
 	transform: none;
-	transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+	transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease,
+		box-shadow 0.12s ease, transform 0.08s ease;
 }
-
 .qb-confirm-buttons .qb-btn:hover {
-	background: color-mix(in srgb, var(--text-normal) 8%, transparent);
-	border-color: color-mix(in srgb, var(--text-normal) 7%, transparent);
+	background: color-mix(in srgb, var(--text-normal) 10%, transparent);
+	border-color: color-mix(in srgb, var(--text-normal) 16%, transparent);
 	transform: none;
 	box-shadow: none;
 }
-
 .qb-confirm-buttons .qb-btn:active {
-	background: color-mix(in srgb, var(--text-normal) 3%, transparent);
-	color: var(--text-muted);
-	transform: none;
+	background: color-mix(in srgb, var(--text-normal) 4%, transparent);
+	transform: scale(0.97);
 	box-shadow: none;
 }
-
 .qb-confirm-buttons .qb-btn:focus-visible {
-	outline: 2px solid var(--text-normal);
-	outline-offset: 1px;
+	outline: none;
+	box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px color-mix(in srgb, var(--text-normal) 35%, transparent);
 }
 
 /* Le primaire non destructif (« Réinitialiser les stats », un déplacement) :
    l'accent plein. */
 .qb-confirm-buttons .qb-btn:last-child:not(.qb-btn-danger) {
 	background: var(--interactive-accent);
-	border-color: color-mix(in srgb, #000 10%, transparent);
+	border-color: transparent;
 	color: var(--text-on-accent, #fff);
-	font-weight: 600;
 }
 .qb-confirm-buttons .qb-btn:last-child:not(.qb-btn-danger):hover {
-	background: color-mix(in srgb, var(--interactive-accent) 90%, transparent);
+	background: var(--interactive-accent-hover, var(--interactive-accent));
+	box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--interactive-accent) 60%, transparent);
 	filter: none;
 }
 .qb-confirm-buttons .qb-btn:last-child:not(.qb-btn-danger):active {
-	background: color-mix(in srgb, var(--interactive-accent) 80%, transparent);
-	color: color-mix(in srgb, var(--text-on-accent, #fff) 70%, transparent);
+	background: color-mix(in srgb, var(--interactive-accent) 85%, #000);
+	box-shadow: none;
+	transform: scale(0.97);
+}
+.qb-confirm-buttons .qb-btn:last-child:not(.qb-btn-danger):focus-visible {
+	box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--interactive-accent);
 }
 
 /* Le primaire DESTRUCTIF : rouge plein, blanc dessus. Le rouge de la palette
    des dossiers (`MODULE_PALETTE`), pas un rouge de plus. */
 .qb-confirm-buttons .qb-btn-danger {
 	background: #ef4466;
-	border-color: color-mix(in srgb, #000 10%, transparent);
+	border-color: transparent;
 	color: #fff;
-	font-weight: 600;
 }
 .qb-confirm-buttons .qb-btn-danger:hover {
-	background: color-mix(in srgb, #ef4466 90%, transparent);
-	border-color: color-mix(in srgb, #000 10%, transparent);
+	background: #f25a79;
+	border-color: transparent;
 	color: #fff;
+	box-shadow: 0 4px 14px -4px rgba(239, 68, 102, 0.6);
 	filter: none;
 }
 .qb-confirm-buttons .qb-btn-danger:active {
-	background: color-mix(in srgb, #ef4466 80%, transparent);
-	color: rgba(255, 255, 255, 0.7);
+	background: #d63a58;
+	box-shadow: none;
+	transform: scale(0.97);
 }
 .qb-confirm-buttons .qb-btn-danger:focus-visible {
-	outline-color: #ef4466;
+	box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px #ef4466;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.qb-confirm-icon { animation: none; }
+	.qb-confirm-buttons .qb-btn:active,
+	.qb-confirm-buttons .qb-btn:last-child:not(.qb-btn-danger):active,
+	.qb-confirm-buttons .qb-btn-danger:active { transform: none; }
 }
 
 .qb-type-grid {

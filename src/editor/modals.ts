@@ -39,15 +39,13 @@ function _htmlToText(html: string): string {
 /* ════════════════════════════════════════════════════════
    CONFIRM MODAL
 
-   NI `className` NI `title` dans la spec, et c'est délibéré des deux côtés :
-
-   — le PANNEAU n'a jamais porté de classe ; c'est pour ces deux modales que
-     `apps/windows/src/assets/modal.css` porte son plancher `min-width`. Lui
-     en poser une « pour faire propre » changerait leur largeur ;
-   — le titre est un `<h2>` DANS le corps, ciblé par `.qb-confirm-title` et
-     `.qb-type-modal h2` (editor-ui-components.css). Le passer en `spec.title`
-     l'enverrait dans le `titleEl` de l'hôte, hors du corps — donc hors de
-     portée de son CSS.
+   La MÊME disposition que `openConfirm` (dashboard/quiz-menu.ts), le patron
+   de référence des confirmations destructives (Tailwind UI ; Ahmed,
+   2026-09-19) : l'icône dans un disque rouge à gauche, le titre et le
+   message à côté, les boutons à droite. Le panneau porte `qb-confirm-modal`
+   (largeur fixée par le CSS) ; le titre est un `<h2>` DANS le corps, pas le
+   `titleEl` de l'hôte, qui vivrait hors de la disposition. Deux surfaces qui
+   confirment une suppression ne peuvent pas avoir chacune leur habillage.
    ════════════════════════════════════════════════════════ */
 
 /**
@@ -69,15 +67,18 @@ export function openConfirmModal(
 ): void {
 	let confirmed = false;
 	requireHost("modals").open({
+		className: "qb-confirm-modal qb-confirm-modal--danger",
 		onOpen: (m) => {
 			const c = m.contentEl;
-			c.classList.add("qb-confirm-modal");
 
 			// t() est déjà résolu par l'appelant (au clic, donc au rendu) : ces
 			// quatre libellés arrivent en paramètres, jamais d'une constante.
-			ajouter(c, "h2", "qb-confirm-title", title);
-			ajouter(c, "p", "qb-confirm-message", message);
-			if (details) ajouter(c, "p", "qb-confirm-details", details);
+			const entete = ajouter(c, "div", "qb-confirm-head");
+			currentHost().ui.setIcon(ajouter(entete, "div", "qb-confirm-icon"), "trash-2");
+			const texte = ajouter(entete, "div", "qb-confirm-text");
+			ajouter(texte, "h2", "qb-confirm-title", title);
+			ajouter(texte, "p", "qb-confirm-message", message);
+			if (details) ajouter(texte, "p", "qb-confirm-details", details);
 
 			const btnRow = ajouter(c, "div", "qb-confirm-buttons");
 

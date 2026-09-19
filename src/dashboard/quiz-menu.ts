@@ -74,10 +74,20 @@ interface ConfirmSpec {
  */
 function openConfirm(spec: ConfirmSpec, onConfirm: () => void): void {
 	requireHost("modals").open({
-		title: spec.title,
+		/* Pas de titre d'hôte : la disposition est celle des confirmations
+		   destructives de référence (Tailwind UI, reprise par GitHub et
+		   Linear ; Ahmed, 2026-09-19 : « le meilleur modal pour ça ») — une
+		   icône dans un disque teinté à gauche, le titre et le message à
+		   côté, les boutons à droite. Le titre est donc DANS le corps. */
+		className: "qb-confirm-modal" + (spec.warning ? " qb-confirm-modal--danger" : ""),
 		onOpen: (m) => {
 			const c = m.contentEl;
-			ajouter(c, "p", "qb-confirm-message", spec.body);
+			const entete = ajouter(c, "div", "qb-confirm-head");
+			const disque = ajouter(entete, "div", "qb-confirm-icon");
+			currentHost().ui.setIcon(disque, spec.warning ? "trash-2" : "alert-circle");
+			const texte = ajouter(entete, "div", "qb-confirm-text");
+			ajouter(texte, "h2", "qb-confirm-title", spec.title);
+			ajouter(texte, "p", "qb-confirm-message", spec.body);
 			const row = ajouter(c, "div", "qb-confirm-buttons");
 			const cancel = ajouter(row, "button", "qb-btn", t("editor.action.cancel"));
 			cancel.addEventListener("click", () => m.close());

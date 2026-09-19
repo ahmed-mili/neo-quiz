@@ -17,7 +17,7 @@ release notes.
 - The AI now names the quiz it generates: the file takes the title the model chose ("Python : types, listes et exceptions") instead of the first line of your request. If the model gives no title, the request is used as before.
 
 ### Changed
-- Confirmation dialogs ("Delete quiz", "Delete module") have the buttons of a Windows 11 dialog: two equal buttons filling the footer, flat, with the destructive one in red.
+- Confirmation dialogs ("Delete quiz", "Delete module", "Delete question") follow the standard destructive-confirmation layout: a red icon in a tinted disc, the title and message beside it, "Cancel" and a red "Delete" on the right, with hover, press and keyboard-focus states.
 - Deleting a quiz can be undone with Ctrl+Z (the "Quiz deleted" message says so): the note comes back as it was, with its statistics. A note that changed in between is left alone. Works for a whole module too.
 - When you copy the answer from claude.ai, the waiting dialog turns into "Answer received" with a check mark and the name of the quiz being created, then closes on the quiz page, which slides in. Before, the quiz page replaced the dialog in the same frame.
 - The update indicator in the rail now works like Neo Calendar's: while the new version downloads, a small blue pill above Settings shows the percentage; once it is ready, the pill becomes the update icon and "Update" appears under it on hover (and once, on its own, when the download finishes). Clicking installs and shows "Installing…".

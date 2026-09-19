@@ -131,6 +131,15 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", ({ creerAttente,
 		s.attente.demarrer("k7f2q9abcd");
 		s.temps.tic(CADENCE_MS * 3);
 		r.check("la réponse déjà présente au départ n'est pas livrée, même à la bonne forme", [s.livres, s.attente.enCours()], [[], true]);
+		r.check("la référence est lue à 0 ms : une copie faite dans la demi-seconde qui suit compte", (() => {
+			const s2 = scene();
+			s2.poser("// neo-quiz ancien12345\n[{ prompt: \"vieux\" }]");
+			s2.attente.demarrer("k7f2q9abcd");
+			s2.temps.tic(0);
+			s2.poser("[{ prompt: \"copié 200 ms après Ouvrir\" }]");
+			s2.temps.tic(CADENCE_MS);
+			return s2.livres.length;
+		})(), 1);
 		s.poser("```json5\n// neo-quiz xti301tp1_types_lists\n[{ prompt: \"x\" }]\n```");
 		s.temps.tic(CADENCE_MS);
 		r.check("un jeton réécrit par le modèle est livré quand même (la forme fait foi)", [s.livres.length, s.attente.enCours()], [1, false]);
@@ -151,12 +160,13 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", ({ creerAttente,
 		const s = scene();
 		let tentatives = 0;
 		const attenteFailing = creerAttente({
-			lire: () => { tentatives++; if (tentatives <= 2) throw new Error("clipboard unavailable"); return "// neo-quiz k7f2q9abcd"; },
+			/* Deux lectures qui lèvent, puis la référence (ce qui était là), puis la réponse. */
+			lire: () => { tentatives++; if (tentatives <= 2) throw new Error("clipboard unavailable"); return tentatives === 3 ? "déjà là" : "// neo-quiz k7f2q9abcd"; },
 			horloge: s.temps.horloge,
 			livrer: t => s.livres.push(t),
 		});
 		attenteFailing.demarrer("k7f2q9abcd");
-		s.temps.tic(CADENCE_MS * 3);
+		s.temps.tic(CADENCE_MS * 4);
 		r.check("un presse-papier qui lève ne tue pas l'attente : la sonde réessaie au tour suivant", [s.livres.length, attenteFailing.enCours()], [1, false]);
 	}
 
@@ -192,7 +202,7 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", async ({ creerAt
 	for (const entreMicrotaches of [false, true]) {
 		const s = scene();
 		s.attente.demarrer("premier1234");
-		s.temps.tic(500);
+		s.temps.tic(0);
 		if (!entreMicrotaches) s.attente.arreter();
 		s.lectures[0].resolve("texte privé sans jeton");
 		if (entreMicrotaches) { await Promise.resolve(); s.attente.arreter(); }
@@ -202,9 +212,12 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", async ({ creerAt
 	}
 	{
 		const s = scene();
-		s.attente.demarrer("premier1234"); s.temps.tic(500);
-		s.attente.demarrer("second12345"); s.temps.tic(500);
-		s.lectures[1].resolve("// neo-quiz second12345");
+		s.attente.demarrer("premier1234"); s.temps.tic(0);
+		s.attente.demarrer("second12345"); s.temps.tic(0);
+		s.lectures[1].resolve("ce qui était déjà là"); // la référence de la seconde
+		await viderMicrotaches();
+		s.temps.tic(500);
+		s.lectures[2].resolve("// neo-quiz second12345\n[{ prompt: \"x\" }]");
 		await viderMicrotaches();
 		s.lectures[0].resolve("texte privé de l'ancienne lecture");
 		await viderMicrotaches();
@@ -213,11 +226,11 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", async ({ creerAt
 	}
 	{
 		const s = scene();
-		s.attente.demarrer("premier1234"); s.temps.tic(500);
+		s.attente.demarrer("premier1234"); s.temps.tic(0);
 		s.lectures[0].reject(new Error("indisponible"));
 		await viderMicrotaches();
 		r.check("lecture refusée : une seule nouvelle sonde et aucun cache", [s.temps.enAttente(), s.cacheVide()], [1, true]);
-		s.temps.tic(500); s.lectures[1].resolve("// neo-quiz premier1234");
+		s.temps.tic(500); s.lectures[1].resolve("// neo-quiz premier1234\n[{ prompt: \"x\" }]");
 		await viderMicrotaches();
 		r.check("lecture suivante valide : livrée puis oubliée", [s.livres.length, s.cacheVide(), s.temps.enAttente()], [1, true, 0]);
 	}

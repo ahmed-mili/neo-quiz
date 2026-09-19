@@ -9,11 +9,17 @@
  * la FORME d'une réponse de Neo Quiz (`// neo-quiz …` en tête) — un modèle
  * modeste réécrit le jeton (Haiku 4.5 a rendu `// neo-quiz xti301tp1_…`, vu
  * par Ahmed le 2026-09-19), et « ça doit marcher avec tous les modèles ».
- * Tout le reste est comparé puis oublié, sans journal. Ce qui était DÉJÀ dans
- * le presse-papier au départ de l'attente n'est jamais la réponse : ni le
- * prompt que l'application y a mis, ni la réponse d'une génération
- * précédente. Le câblage réel (clipboard, timers, webContents.send,
- * flashFrame) est dans canaux.ts.
+ * Tout le reste est comparé puis oublié, sans journal.
+ *
+ * SEUL CE QUI EST COPIÉ APRÈS LE DÉPART COMPTE (Ahmed, 2026-09-19 : la
+ * réponse de la génération d'avant, encore dans le presse-papier, a créé un
+ * quiz avant même l'envoi). Windows n'horodate pas le presse-papier : la
+ * RÉFÉRENCE est ce que la première lecture y trouve, planifiée à 0 ms — à
+ * l'instant du clic sur Ouvrir, pas un tour plus tard — et ce texte-là n'est
+ * jamais livré, comme le prompt que l'application y a mis. Une référence
+ * prise de façon synchrone au départ ne marchait pas : le presse-papier
+ * d'Electron se lit de façon asynchrone, le cache était vide. Le câblage
+ * réel (clipboard, timers, webContents.send, flashFrame) est dans canaux.ts.
  */
 
 /** Cadence de la sonde. Un demi-seconde : le geste « Copier » sur le site
@@ -69,6 +75,8 @@ export function creerAttente(deps: { lire(): string; horloge: Horloge; livrer(te
 	/** Les textes à ne jamais livrer : celui que l'application a copié, et
 	    celui qui était déjà dans le presse-papier au départ. */
 	let ignorer: string[] = [];
+	/** La première lecture est la RÉFÉRENCE : elle ne livre jamais. */
+	let reference = true;
 	let debut = 0;
 	let sonde: number | null = null;
 
@@ -86,6 +94,12 @@ export function creerAttente(deps: { lire(): string; horloge: Horloge; livrer(te
 		try { texte = deps.lire(); } catch {
 			/* Le presse-papier peut être indisponible sur certaines plates-formes.
 			   L'exception ne tue pas l'attente : la sonde réessaie au tour suivant. */
+			sonde = deps.horloge.planifier(tour, CADENCE_MS);
+			return;
+		}
+		if (reference) {
+			reference = false;
+			if (texte) ignorer.push(texte);
 			sonde = deps.horloge.planifier(tour, CADENCE_MS);
 			return;
 		}
@@ -108,11 +122,10 @@ export function creerAttente(deps: { lire(): string; horloge: Horloge; livrer(te
 			arreter();
 			jeton = j;
 			ignorer = typeof aIgnorer === "string" && aIgnorer ? [aIgnorer] : [];
-			/* Ce qui est déjà là n'est pas ce qu'on attend. Un presse-papier
-			   indisponible ne bloque pas le départ : la sonde le relira. */
-			try { const deja = deps.lire(); if (deja) ignorer.push(deja); } catch { /* relu au premier tour */ }
+			reference = true;
 			debut = deps.horloge.maintenant();
-			sonde = deps.horloge.planifier(tour, CADENCE_MS);
+			/* La référence tout de suite, pas dans un demi-seconde. */
+			sonde = deps.horloge.planifier(tour, 0);
 			return true;
 		},
 		arreter,

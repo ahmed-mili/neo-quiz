@@ -1029,7 +1029,11 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 					const appris = { ...(settings.get().aiOllamaPlansAppris || {}) };
 					if (appris[model] !== "pro") {
 						appris[model] = "pro";
-						await settings.save({ aiOllamaPlansAppris: appris });
+						// Le cache appris n'est pas critique : un échec de sauvegarde (IPC,
+						// disque) ne doit pas empêcher `erreurPlan` d'être levée juste après,
+						// sinon le catch générique ci-dessous la remplacerait par « injoignable ».
+						try { await settings.save({ aiOllamaPlansAppris: appris }); }
+						catch (e) { console.warn("[quiz-blocks] plan appris non sauvé:", e); }
 					}
 					throw erreurPlan(t("ai.err.ollamaPlan", { model }));
 				}

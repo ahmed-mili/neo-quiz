@@ -58,6 +58,10 @@ import type { InstallProvider } from "./ai-install-modal";
    tourne), et c'est la phase qui le dit partout d'un seul mot. */
 type Phase = "idle" | "loading" | "result" | "error" | "connexion" | "web";
 
+/** Les trois outils qui ont un compte à connecter (pas les modèles locaux
+    Ollama, qui n'en ont pas besoin). */
+type OutilCompte = "claude" | "codex" | "ollama";
+
 /** Le pas de la sonde de connexion, le même que celui du modal
     d'installation : trois secondes, assez court pour que la détection semble
     immédiate, assez long pour ne pas lancer un CLI en boucle serrée. */
@@ -331,6 +335,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    une écriture directe dans le DOM — un re-render (redimensionnement,
 	    changement de réglage) effacerait la coche sans elle. */
 	let connexionVue = false;
+	/** D'où la carte d'attente a été ouverte : depuis la carte d'ERREUR (retour
+	    à `error` si on annule) ou depuis le HINT sous le composer (retour à
+	    `idle` : il n'y a pas d'erreur à remontrer, la demande n'est jamais
+	    partie). */
+	let connexionOrigine: "erreur" | "hint" = "erreur";
+	/** L'adresse de connexion rendue par `/api/me` d'Ollama (401), à ouvrir
+	    dans le navigateur au clic sur « Se connecter ». `null` = inconnue. */
+	let ollamaSigninUrl: string | null = null;
 	/** La vue a été fermée : plus rien ne doit repeindre ni démarrer. Un
 	    `abort()` posé pendant l'encodage des images n'a encore aucun processus
 	    à tuer — c'est ce drapeau qui arrête la génération à l'étape suivante. */
@@ -687,6 +699,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					current: provider,
 					renderLogo: (el, logo) => aiProviders.setBrandLogo(el, logo),
 					onPick: (id) => {
+						/* Changer de fournisseur pendant « En attente de la connexion »
+						   laissait la sonde tourner sur l'ancien outil et la carte à
+						   l'écran (vu le 2026-09-18). L'attente est celle d'un
+						   fournisseur : on la quitte avec lui. */
+						annulerConnexion();
 						void saveSettings({ aiProvider: id, aiModel: aiProviders.getProvider(id).defaultModel })
 							.then(() => render(container));
 					},
@@ -1375,7 +1392,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				__focusRecheck = null;
 				return;
 			}
-			if (!hintZone.querySelector(".qbd-ai-hint--err, .qbd-ai-hint--warn")) return;
+			const aCompte = ["claude-code", "codex", "ollama"].includes(settings().aiProvider || "");
+			if (!aCompte && !hintZone.querySelector(".qbd-ai-hint--err, .qbd-ai-hint--warn")) return;
 			refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true });
 		};
 		window.addEventListener("focus", __focusRecheck);
@@ -1467,6 +1485,56 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (id === active) renderHint(zone, opts);
 	}
 
+	/**
+	 * Le compte est-il connecté ? Appelée pour le fournisseur ACTIF seulement,
+	 * au rendu, au choix du fournisseur et au retour de focus (l'utilisateur
+	 * revient du navigateur ou du terminal). Pas connecté → le hint `warn` et
+	 * son bouton « Se connecter » ; connecté → rien. Le bouton Envoyer reste
+	 * actif : la sonde peut se tromper (CLI d'une version qui ne répond pas au
+	 * statut), et la carte d'erreur reste le filet. Le hint PRÉVIENT avant.
+	 *
+	 * Un hint d'ERREUR déjà posé (outil absent, serveur arrêté) prime : on ne
+	 * demande pas de se connecter à un outil qui n'est pas là.
+	 */
+	function verifierCompte(tool: OutilCompte, hintZone: HTMLElement | null, provider: string): void {
+		const id = tool === "claude" ? "claude-code" : tool;
+		if (provider !== id) return;
+		if (tool === "ollama" && !aiProviders.isOllamaCloudModel(settings().aiModel || "")) {
+			/* Un modèle local n'a pas besoin de compte : si le hint affiché est
+			   celui du compte, il tombe. */
+			if (providerHint[id]?.icon === "log-in") setHint(id, hintZone, provider, null);
+			return;
+		}
+		const sonde = tool === "ollama"
+			? aiProviders.checkOllamaCompte(settings().aiOllamaUrl).then(c => {
+				ollamaSigninUrl = c.connecte ? null : c.signinUrl;
+				// Le plan est appris par les 402 (ai-client.ts) ; un compte qui
+				// CHANGE (autre connexion, upgrade) rend cet appris obsolète.
+				if (c.connecte && c.plan !== settings().aiOllamaPlanCompte) {
+					void saveSettings({ aiOllamaPlanCompte: c.plan, aiOllamaPlansAppris: {} });
+				}
+				return c.connecte;
+			})
+			: aiProviders.sondeConnexion(tool)();
+		void sonde.then(connecte => {
+			if (disposed || (settings().aiProvider || "") !== id) return;
+			const courant = providerHint[id];
+			if (courant && courant.type === "err") return;
+			if (connecte) {
+				if (courant?.icon === "log-in") setHint(id, hintZone, provider, null);
+				return;
+			}
+			setHint(id, hintZone, provider, {
+				type: "warn", icon: "log-in",
+				text: t(`ai.login.reason.${tool}`),
+				action: {
+					label: t("ai.login.button"), icon: "log-in",
+					onClick: () => { void demarrerConnexion(tool, null, "hint"); },
+				},
+			});
+		});
+	}
+
 	function setStatus(id: string, providerSelect: ProviderControl | null, dot: string, text: string): void {
 		providerStatus[id] = { dot, text };
 		// Un fournisseur ABSENT ne se sélectionne pas — mais un `aiProvider`
@@ -1499,10 +1567,24 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				return res.ok ? { ok: true, version: "version" in res ? res.version : undefined } : { ok: false };
 			},
 			onDetected: async () => {
+				annulerConnexion();
 				if (settings().aiProvider === id) return;
 				await saveSettings({ aiProvider: id, aiModel: aiProviders.getProvider(id).defaultModel });
 			},
-			onClose: () => { rafraichir(); render(containerRef); },
+			onClose: (detecte) => {
+				rafraichir();
+				render(containerRef);
+				/* Après une installation AUTOMATIQUE, le terminal enchaîne déjà sur
+				   la connexion (process.ts) : la page passe directement en
+				   « En attente de la connexion », sans un clic de plus. Sauf pour
+				   Ollama, dont le compte passe par le navigateur : là, c'est le
+				   hint qui le propose (on n'ouvre pas un site sans un clic). */
+				if (!detecte || id === "ollama") return;
+				const tool: OutilCompte = id === "claude-code" ? "claude" : "codex";
+				void aiProviders.sondeConnexion(tool)().then(connecte => {
+					if (!connecte && !disposed && (settings().aiProvider || "") === id) attendreCompte(tool, "hint");
+				});
+			},
 			copyText: deps.copyText,
 			renderCodeBlock: deps.renderCodeBlock,
 		});
@@ -1552,6 +1634,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			}
 			if (res.ok) {
 				setHint("claude-code", hintZone, provider, null);
+				verifierCompte("claude", hintZone, provider);
 			} else if (res.reason === "mobile") {
 				setHint("claude-code", hintZone, provider, {
 					type: "warn", icon: "monitor",
@@ -1579,6 +1662,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			}
 			if (res.ok) {
 				setHint("codex", hintZone, provider, null);
+				verifierCompte("codex", hintZone, provider);
 			} else if (res.reason === "mobile") {
 				setHint("codex", hintZone, provider, {
 					type: "warn", icon: "monitor",
@@ -1613,7 +1697,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					? t(n > 1 ? "ai.status.ollamaLocalMany" : "ai.status.ollamaLocalOne", { count: n })
 					: t("ai.status.ollamaCloudReady");
 				setStatus("ollama", providerSelect, "ok", res.version ? t("ai.status.ollamaOk", { version: res.version }) : fallback);
-				setHint("ollama", hintZone, provider, null);
+				// Conditionné : sinon chaque re-détection (toutes les
+				// `CLAUDE_CODE_TTL`) effacerait le hint du compte posé par
+				// `verifierCompte` juste après.
+				if (providerHint["ollama"]?.icon !== "log-in") setHint("ollama", hintZone, provider, null);
 				if (provider !== "ollama") return;
 				// Reconstruit les options (sélection + locaux réellement installés,
 				// avec capability thinking) et rafraîchit le libellé du contrôle.
@@ -1622,6 +1709,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					ollamaCtl.options = buildOllamaList(res.models);
 					if (ollamaCtl.refreshTrigger) ollamaCtl.refreshTrigger();
 				}
+				verifierCompte("ollama", hintZone, provider);
 			} else {
 				// Le plugin DIAGNOSTIQUE lui-même (demande Ahmed : jamais
 				// de « Serveur non détecté » sec ni de « si Ollama n'est
@@ -2036,7 +2124,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			loginBtn.type = "button";
 			host.ui.setIcon(ajouter(loginBtn, "span", "qbd-btn-icon qbd-btn-icon--sm"), "log-in");
 			ajouter(loginBtn, "span", undefined, t("ai.login.button"));
-			loginBtn.addEventListener("click", () => { void demarrerConnexion(tool, loginBtn); });
+			loginBtn.addEventListener("click", () => { void demarrerConnexion(tool, loginBtn, "erreur"); });
 			return;
 		}
 
@@ -2061,46 +2149,61 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (loginTimer !== null) { window.clearTimeout(loginTimer); loginTimer = null; }
 	}
 
+	/** Annule l'attente : coupe la sonde, puis revient d'où l'on venait. Depuis
+	    la carte d'erreur, la demande envoyée est toujours là (`sentMessage`) et
+	    l'erreur se remontre ; depuis le hint, rien n'était parti. */
+	function annulerConnexion(): void {
+		couperSondeConnexion();
+		if (phase !== "connexion") return;
+		phase = connexionOrigine === "erreur" && sentMessage ? "error" : "idle";
+		render(containerRef);
+	}
+
 	/**
-	 * Le clic sur « Se connecter » : l'hôte ouvre un terminal sur la recette de
-	 * connexion, puis la page attend que la sonde voie le compte.
+	 * Le clic sur « Se connecter », depuis la carte d'erreur ou depuis le hint :
+	 * Claude et Codex → l'hôte ouvre un terminal sur la recette de connexion ;
+	 * Ollama → le navigateur s'ouvre sur l'adresse que `/api/me` a rendue
+	 * (c'est `ollama signin` sans le terminal). Puis la page attend que la
+	 * sonde voie le compte.
 	 *
 	 * Les trois verdicts de l'hôte sont traités, y compris le rejet du pont
 	 * (outil hors liste blanche, panne d'IPC) : sans ça, un bouton désactivé
 	 * restait muet, exactement le défaut corrigé dans le modal d'installation.
 	 */
-	async function demarrerConnexion(tool: "claude" | "codex" | "ollama", bouton: HTMLButtonElement): Promise<void> {
-		bouton.disabled = true;
+	async function demarrerConnexion(tool: OutilCompte, bouton: HTMLButtonElement | null, origine: "erreur" | "hint"): Promise<void> {
+		if (bouton) bouton.disabled = true;
 		let verdict: "lance" | "annule" | "indisponible";
 		if (tool === "ollama") {
-			// T4 : ouverture par le navigateur — provisoire, le temps que la
-			// tâche 4 câble le parcours de connexion Ollama.
-			verdict = "indisponible"; /* T4 : ouverture par le navigateur */
+			verdict = ollamaSigninUrl && await host.shell.openUrl(ollamaSigninUrl) ? "lance" : "indisponible";
 		} else {
 			try {
 				verdict = await requireHost("process").connecterCli(tool);
 			} catch (e) {
 				console.warn(LOG_PREFIX, "connexion impossible:", e);
-				bouton.disabled = false;
-				host.ui.notice(t("ai.login.terminalFailed"));
-				return;
+				verdict = "indisponible";
 			}
 		}
 		if (verdict !== "lance") {
-			bouton.disabled = false;
-			// `annule` = l'utilisateur a dit non : la carte d'erreur reste telle
-			// quelle, sans message de plus.
+			if (bouton) bouton.disabled = false;
+			// `annule` = l'utilisateur a dit non : rien de plus à dire.
 			if (verdict === "indisponible") host.ui.notice(t("ai.login.terminalFailed"));
 			return;
 		}
+		attendreCompte(tool, origine);
+	}
+
+	/** La carte d'attente et sa sonde, jusqu'à ce que le compte soit vu. Séparée
+	    de `demarrerConnexion` parce qu'après une installation automatique le
+	    terminal est DÉJÀ ouvert sur la connexion : on attend sans rien lancer. */
+	function attendreCompte(tool: OutilCompte, origine: "erreur" | "hint"): void {
 		couperSondeConnexion();
 		connexionVue = false;
+		connexionOrigine = origine;
 		phase = "connexion";
 		render(containerRef);
-		// `tool === "ollama"` s'est déjà arrêté plus haut (verdict toujours
-		// "indisponible" tant que T4 n'a pas câblé sa connexion) : ici, l'outil
-		// ne peut être que claude/codex.
-		const sonde = aiProviders.sondeConnexion(tool as "claude" | "codex");
+		const sonde = tool === "ollama"
+			? () => aiProviders.checkOllamaCompte(settings().aiOllamaUrl).then(c => c.connecte)
+			: aiProviders.sondeConnexion(tool);
 		loginPoll = window.setInterval(() => {
 			void sonde().then(connecte => {
 				// `loginPoll === null` : l'utilisateur a annulé pendant que la
@@ -2108,15 +2211,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				if (!connecte || loginPoll === null || disposed) return;
 				couperSondeConnexion();
 				connexionVue = true;
+				providerHint[settings().aiProvider || ""] = null;
 				render(containerRef);
 				/* La seconde d'attente est ce qui rend la détection LISIBLE :
-				   sans elle, la coche et le loader de génération se
-				   remplaceraient dans la même image, et on ne verrait jamais que
-				   l'application a constaté la connexion. */
+				   sans elle, la coche et ce qui suit se remplaceraient dans la
+				   même image. */
 				loginTimer = window.setTimeout(() => {
 					loginTimer = null;
 					if (disposed) return;
-					relancerApresErreur();
+					if (connexionOrigine === "erreur" && sentMessage) relancerApresErreur();
+					else { phase = "idle"; render(containerRef); }
 				}, 1000);
 			});
 		}, SONDE_CONNEXION_MS);
@@ -2138,14 +2242,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		}
 		ajouter(el, "span", "qbd-install-spinner");
 		ajouter(el, "p", "qbd-ai-loading-title", t("ai.login.waiting"));
-		ajouter(el, "p", "qbd-ai-login-hint", t("ai.login.hint"));
+		ajouter(el, "p", "qbd-ai-login-hint", settings().aiProvider === "ollama" ? t("ai.login.hintBrowser") : t("ai.login.hint"));
 		const annuler = ajouter(el, "button", "qbd-btn qbd-btn--ghost", t("ai.login.cancel"));
 		annuler.type = "button";
-		annuler.addEventListener("click", () => {
-			couperSondeConnexion();
-			phase = "error";
-			render(containerRef);
-		});
+		annuler.addEventListener("click", annulerConnexion);
 	}
 
 	/** La carte d'attente du canal web : le titre nomme le site, le callout

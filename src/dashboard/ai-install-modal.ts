@@ -29,8 +29,11 @@ export interface InstallModalDeps {
 	probe(): Promise<{ ok: true; version?: string } | { ok: false }>;
 	/** Appelé une fois sur détection : la page écrit le fournisseur dans les réglages. */
 	onDetected(): Promise<void>;
-	/** Appelé à la fermeture, quel que soit l'état : la page rafraîchit statuts et hints. */
-	onClose(): void;
+	/** Appelé à la fermeture, quel que soit l'état : la page rafraîchit statuts et
+	    hints. `detecte` dit si la fermeture suit une DÉTECTION (le terminal a
+	    fini) plutôt qu'un abandon — la page s'en sert pour enchaîner sur la
+	    connexion sans attendre un clic de plus. */
+	onClose(detecte: boolean): void;
 	copyText?(texte: string): Promise<boolean>;
 	renderCodeBlock?(host: HTMLElement, code: string, lang: string): void;
 }
@@ -88,6 +91,9 @@ export function openInstallModal(deps: InstallModalDeps): void {
 	const win = host.platform.isWindows;
 	let sonde: number | null = null;
 	const couperSonde = (): void => { if (sonde !== null) { window.clearInterval(sonde); sonde = null; } };
+	// Posé à `true` UNIQUEMENT à la détection réelle (pas à une fermeture
+	// prématurée par la croix) : c'est ce que `onClose` transmet à la page.
+	let detecte = false;
 
 	/* Le LOGO DE MARQUE dans la ligne du titre (2026-09-18) : coloré, sans
 	   pastille ni contour. Le fournisseur et sa couleur viennent du catalogue
@@ -154,6 +160,7 @@ export function openInstallModal(deps: InstallModalDeps): void {
 							if (!res.ok || sonde === null) return;
 							couperSonde();
 							await deps.onDetected();
+							detecte = true;
 							m.panelEl.dataset.state = "detecte";
 							etat.replaceChildren();
 							host.ui.setIcon(ajouter(etat, "span", "qbd-install-check"), "check");
@@ -240,7 +247,7 @@ export function openInstallModal(deps: InstallModalDeps): void {
 		},
 		onClose: () => {
 			couperSonde();
-			deps.onClose();
+			deps.onClose(detecte);
 		},
 	});
 }

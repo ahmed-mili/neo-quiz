@@ -156,6 +156,7 @@ export const EN_AI = {
 	"ai.login.reason.ollama": "Ollama is not connected to your account yet; cloud models need it.",
 	"ai.login.waiting": "Waiting for sign-in",
 	"ai.login.hint": "Finish signing in in the terminal window that just opened. Neo Quiz detects it by itself.",
+	"ai.login.hintBrowser": "Finish signing in in the browser tab that just opened. Neo Quiz detects it by itself.",
 	"ai.login.cancel": "Cancel",
 	"ai.login.detected": "Account connected. Sending your request again…",
 	"ai.login.terminalFailed": "PowerShell could not be opened. Sign in from a terminal, then try again.",

@@ -135,6 +135,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.login.reason.ollama": "Ollama n'est pas encore connecté à votre compte ; les modèles cloud en ont besoin.",
 	"ai.login.waiting": "En attente de la connexion",
 	"ai.login.hint": "Terminez la connexion dans la fenêtre de terminal qui vient de s'ouvrir. Neo Quiz la détecte tout seul.",
+	"ai.login.hintBrowser": "Terminez la connexion dans l'onglet du navigateur qui vient de s'ouvrir. Neo Quiz la détecte tout seul.",
 	"ai.login.cancel": "Annuler",
 	"ai.login.detected": "Compte connecté. Nouvelle tentative…",
 	"ai.login.terminalFailed": "PowerShell n'a pas pu être ouvert. Connectez-vous depuis un terminal, puis réessayez.",

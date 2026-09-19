@@ -344,14 +344,28 @@ function repairLatexBackslashes(source: string): string {
 		.replace(/(\\\\)|\\u(?![0-9a-fA-F]{4})/g, (m: string, pair: string | undefined) => pair ? pair : "\\\\u");
 }
 
-function parseOllamaResponse(content: string): ReponseQuiz {
-	let cleaned = content.trim();
-
-	// Try to extract JSON from markdown code blocks
-	const jsonMatch = cleaned.match(/```(?:json5?|json)?\s*\n?([\s\S]*?)\n?```/);
-	if (jsonMatch) {
-		cleaned = jsonMatch[1].trim();
+/** Le contenu du bloc de code qui ENVELOPPE la réponse, s'il y en a un ;
+    sinon la réponse telle quelle. Les fences se cherchent EN DÉBUT DE LIGNE
+    seulement, de la première ouvrante à la DERNIÈRE fermante : une question
+    de programmation porte un bloc ` ```python ` DANS son énoncé, et
+    l'ancienne expression `/```…```/` prenait ce bloc intérieur pour celui du
+    quiz — trois lignes de Python à parser, « pas un quiz » (vu par Ahmed le
+    2026-09-19). Un bloc intérieur ne commence jamais une ligne : il vit dans
+    une chaîne JSON5, sur la ligne de son champ, avec des `\n` littéraux. */
+function retirerFence(content: string): string {
+	const lignes = content.trim().split("\n");
+	const ouvre = lignes.findIndex(l => /^\s*```/.test(l));
+	if (ouvre < 0) return content.trim();
+	let ferme = -1;
+	for (let i = lignes.length - 1; i > ouvre; i--) {
+		if (/^\s*```\s*$/.test(lignes[i])) { ferme = i; break; }
 	}
+	if (ferme < 0) return content.trim();
+	return lignes.slice(ouvre + 1, ferme).join("\n").trim();
+}
+
+function parseOllamaResponse(content: string): ReponseQuiz {
+	let cleaned = retirerFence(content);
 	cleaned = repairLatexBackslashes(cleaned);
 
 	// Ollama with format: structured JSON wraps the array in an object
@@ -396,7 +410,10 @@ function titreEnCommentaire(json5: string): string | undefined {
     caractères sur un mot entier ; `undefined` s'il n'en reste rien. */
 export function nettoyerTitre(brut: string): string | undefined {
 	let titre = brut.trim().replace(/^["'«“]+|["'»”]+$/g, "").trim();
-	titre = titre.replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ").replace(/\s+/g, " ").replace(/[.\s]+$/, "").trim();
+	/* « Python : E/S » → « Python - E S » : les deux-points, fréquents dans
+	   un titre, deviennent un tiret ; les autres caractères interdits, une
+	   espace. */
+	titre = titre.replace(/\s*:\s*/g, " - ").replace(/[<>"/\\|?*\u0000-\u001f]/g, " ").replace(/\s+/g, " ").replace(/[.\s]+$/, "").trim();
 	if (titre.length > 80) {
 		const coupe = titre.slice(0, 80);
 		const espace = coupe.lastIndexOf(" ");
@@ -412,12 +429,7 @@ export function nettoyerTitre(brut: string): string | undefined {
  * la closure de `createAiClient` le 2026-09-18 : la page « Générer » la lit
  * aussi pour le canal web. */
 export function parseReponseQuiz(content: string): ReponseQuiz {
-	let cleaned = content.trim();
-
-	const jsonMatch = cleaned.match(/```(?:json5?|json)?\s*\n?([\s\S]*?)\n?```/);
-	if (jsonMatch) {
-		cleaned = jsonMatch[1].trim();
-	}
+	let cleaned = retirerFence(content);
 	cleaned = repairLatexBackslashes(cleaned);
 
 	let parsed: unknown;

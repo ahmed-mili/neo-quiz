@@ -54,12 +54,20 @@ await withSrcModule(
 		   de fichier ; un `// title:` plus loin dans le tableau est ignoré. */
 		const titre = "```json5\n// neo-quiz k7f2q9abcd\n[\n// title: Python : types, listes et exceptions.\n" + brut.slice(1) + "\n```";
 		r.check("le titre en commentaire de tête, derrière le jeton, sans son point final",
-			client.parseReponseQuiz(titre).titre, "Python types, listes et exceptions");
+			client.parseReponseQuiz(titre).titre, "Python - types, listes et exceptions");
 		const titreLoin = "[\n" + brut.slice(1, -1) + ",\n// title: pas celui-là\n{ title: \"Q2\", prompt: \"P\" }]";
 		r.check("un « title: » loin dans le tableau n'est pas le titre", client.parseReponseQuiz(titreLoin).titre, undefined);
 		r.check("nettoyerTitre : guillemets, caractères interdits, point final",
-			client.nettoyerTitre(' "Réseaux : couche 2/3 ?" '), "Réseaux couche 2 3");
+			client.nettoyerTitre(' "Réseaux : couche 2/3 ?" '), "Réseaux - couche 2 3");
 		r.check("nettoyerTitre : rien ne reste → undefined", client.nettoyerTitre(" ... "), undefined);
+		/* Copié depuis le bouton du bloc de code de claude.ai : PAS de fence
+		   autour, mais un bloc ```python DANS l'énoncé d'une question (vécu le
+		   2026-09-19 : « pas un quiz »). */
+		const python = '// neo-quiz 57da3fkubx\n[\n  // title: Programmation Python : E/S\n  { title: "print", prompt: "Que produit :\\n\\n```python\\na = 26\\nprint(a)\\n```", options: ["26", "27"], correctIndex: 0 }\n]';
+		const lu = client.parseReponseQuiz(python);
+		r.check("un bloc de code dans un énoncé n'est pas pris pour la fence du quiz", [lu.questions.length, lu.titre], [1, "Programmation Python - E S"]);
+		const pythonFence = "```json5\n" + python + "\n```";
+		r.check("… ni quand le tout est dans une fence", client.parseReponseQuiz(pythonFence).questions.length, 1);
 		const latex = `[{ title: "F", prompt: "Simplifie $\\frac{2}{4}$", type: "text", answer: "$\\frac{1}{2}$" }]`;
 		/* Le modèle écrit `$\frac$` (un backslash) ; la réparation le double dans
 		   le SOURCE, et JSON5 rend un seul backslash dans la VALEUR. */

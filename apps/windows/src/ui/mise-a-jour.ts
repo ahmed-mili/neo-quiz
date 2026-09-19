@@ -49,24 +49,95 @@ function abonner(rappel: (etat: EtatMiseAJour) => void): () => void {
 	return () => { abonnes.delete(rappel); };
 }
 
-/** Le bouton du rail : n'existe que lorsque la mise à jour est PRÊTE. Un
-    badge pendant le téléchargement n'aurait rien à cliquer. */
+/**
+ * LE CONTRÔLE DU RAIL — la mise à jour telle que Neo Calendar la montre
+ * (`src/ui/calendar/UpdateBadge.tsx`, `.nc-update-control`), portée au rail
+ * de Neo Quiz (demande d'Ahmed, 2026-09-19) : une CARTE à la couleur
+ * d'accent, la forme de l'élément actif du rail, et non une pilule.
+ *
+ * UN SEUL ÉLÉMENT du compteur au bouton, et c'est tout l'intérêt : pendant le
+ * téléchargement, la carte porte le pourcentage à la place de l'icône ; à la
+ * fin, le chiffre s'efface pendant que la flèche paraît, et le libellé
+ * « Mise à jour » s'ouvre SOUS elle —
+ * là où le rail met tous ses libellés (Ahmed, 2026-09-19 : Neo Calendar
+ * l'ouvre dans la pilule, mais son rail à lui n'a pas de libellés ; ici la
+ * pilule ouverte dépassait du rail). Deux éléments qui se relaient ne
+ * pouvaient rien animer : l'œil ne voyait qu'une coupure.
+ *
+ * Elle n'existe que pendant le téléchargement et une fois prête ; le reste du
+ * temps le rail n'a rien à dire. Sans pourcentage honnête (le serveur ne dit
+ * pas la taille), elle tourne (`is-tourne`) au lieu d'afficher un chiffre.
+ */
 export function monterBoutonRail(navEl: HTMLElement): () => void {
 	const footer = navEl.querySelector<HTMLElement>(".qbd-nav-footer");
 	if (!footer) return () => {};
 	let bouton: HTMLButtonElement | null = null;
-	return abonner(e => {
-		if (e.phase === "prete" && !bouton) {
-			bouton = document.createElement("button");
-			bouton.type = "button";
-			bouton.className = "qbd-nav-item nq-maj-bouton";
-			currentHost().ui.setIcon(ajouter(bouton, "span", "qbd-nav-icon"), "refresh-cw");
-			ajouter(bouton, "span", "qbd-nav-label", t("app.update.restart"));
-			bouton.addEventListener("click", () => { void pont().miseAJour.installer(); });
-			footer.prepend(bouton);
-		} else if (e.phase !== "prete" && bouton) {
-			bouton.remove();
-			bouton = null;
+	let pilule: HTMLElement | null = null;
+	let compteur: HTMLElement | null = null;
+	let libelle: HTMLElement | null = null;
+	let phasePrecedente: EtatMiseAJour["phase"] = "inactif";
+	let minuteurAnnonce: number | null = null;
+
+	const creer = (): void => {
+		bouton = document.createElement("button");
+		bouton.type = "button";
+		bouton.className = "qbd-nav-item nq-maj";
+		pilule = ajouter(bouton, "span", "nq-maj-pilule");
+		compteur = ajouter(pilule, "span", "nq-maj-compteur");
+		compteur.setAttribute("aria-hidden", "true");
+		currentHost().ui.setIcon(ajouter(pilule, "span", "nq-maj-icone"), "download");
+		libelle = ajouter(bouton, "span", "qbd-nav-label nq-maj-libelle", t("app.update.install"));
+		bouton.addEventListener("click", () => {
+			if (!bouton || bouton.disabled) return;
+			/* L'appui se VOIT (Ahmed, 2026-09-19) : la pilule s'enfonce, le
+			   chiffre cède la place à un spinner et le libellé dit ce qui se
+			   passe, jusqu'à ce que le principal ferme la fenêtre pour
+			   installer. Un second clic ne relance rien. */
+			bouton.disabled = true;
+			bouton.classList.add("is-installation");
+			if (libelle) libelle.textContent = t("app.update.installing");
+			void pont().miseAJour.installer();
+		});
+		footer.prepend(bouton);
+		/* L'arrivée : la pilule pousse depuis rien, le temps d'une image, puis
+		   la classe tombe et les transitions reprennent la main. */
+		bouton.classList.add("is-arrivee");
+		window.requestAnimationFrame(() => bouton?.classList.remove("is-arrivee"));
+	};
+	const retirer = (): void => {
+		if (minuteurAnnonce !== null) { window.clearTimeout(minuteurAnnonce); minuteurAnnonce = null; }
+		bouton?.remove();
+		bouton = null; pilule = null; compteur = null; libelle = null;
+	};
+
+	const desabonner = abonner(e => {
+		const visible = e.phase === "telechargement" || e.phase === "prete";
+		if (!visible) { retirer(); phasePrecedente = e.phase; return; }
+		if (!bouton) creer();
+		if (!bouton || !pilule || !compteur || !libelle) return;
+		const telecharge = e.phase === "telechargement";
+		const pourcent = typeof e.pourcent === "number" && e.pourcent >= 0 ? Math.min(100, Math.round(e.pourcent)) : null;
+		bouton.classList.toggle("is-telechargement", telecharge);
+		bouton.classList.toggle("is-prete", !telecharge);
+		pilule.classList.toggle("is-tourne", telecharge && pourcent === null);
+		/* Le dernier chiffre atteint reste en place, à l'opacité zéro, le
+		   temps du fondu : un texte vidé au moment où il devrait s'effacer ne
+		   s'efface pas, il disparaît. */
+		if (telecharge && pourcent !== null) compteur.textContent = pourcent + " %";
+		libelle.textContent = t("app.update.install");
+		bouton.disabled = telecharge;
+		bouton.setAttribute("aria-label", telecharge
+			? t("app.update.downloading") + (pourcent === null ? "" : " " + pourcent + " %")
+			: t("app.update.install") + (e.version ? " " + e.version : ""));
+		/* S'ouvrir une fois, à l'instant où la descente s'achève — pas au
+		   montage : une mise à jour déjà prête quand la fenêtre s'ouvre attend
+		   depuis un moment, elle n'a pas de nouvelle à donner. */
+		if (e.phase === "prete" && phasePrecedente === "telechargement") {
+			bouton.classList.add("is-annonce");
+			if (minuteurAnnonce !== null) window.clearTimeout(minuteurAnnonce);
+			minuteurAnnonce = window.setTimeout(() => { bouton?.classList.remove("is-annonce"); minuteurAnnonce = null; }, 4000);
 		}
+		phasePrecedente = e.phase;
 	});
+	return () => { desabonner(); retirer(); };
 }

@@ -13,6 +13,10 @@ release notes.
 
 ## [Unreleased]
 
+### Changed
+- The update indicator in the rail now works like Neo Calendar's: while the new version downloads, a small blue pill above Settings shows the percentage; once it is ready, the pill becomes the update icon and "Update" appears under it on hover (and once, on its own, when the download finishes). Clicking installs and shows "Installing…".
+- In the Ollama model menu, the selected model is marked by its cloud icon turning blue instead of a check mark, and paid models in "More models" can no longer be selected: clicking one opens Ollama's pricing page.
+
 ### Fixed
 - Generating with claude.ai from a long request (files attached, so the prompt travels through the clipboard) failed at once with "JSON5: invalid character 'Y'": Neo Quiz mistook the prompt it had just copied for the answer. It now ignores the text it copied itself and waits for the real answer.
 

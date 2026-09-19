@@ -368,7 +368,6 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    de page : le repli automatique d'un modèle courant devenu payant (voir
 	    `sonderPlansOllama`) ne doit jamais défaire un choix que l'utilisateur
 	    vient de faire lui-même. */
-	const modelesChoisisExplicitement = new Set<string>();
 	/** La vue a été fermée : plus rien ne doit repeindre ni démarrer. Un
 	    `abort()` posé pendant l'encodage des images n'a encore aucun processus
 	    à tuer — c'est ce drapeau qui arrête la génération à l'étape suivante. */
@@ -1027,7 +1026,6 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 						efforts: (cur && cur.thinking) ? efforts : [],
 						currentEffort: aiProviders.resolveEffort(provider, settings().aiEffort),
 						onPickModel: async (v) => {
-							modelesChoisisExplicitement.add(v);
 							await saveSettings({ aiModel: v });
 							refreshTrigger();
 						},
@@ -1602,10 +1600,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					args.ctl.options = args.buildList(args.ctl.detected);
 					args.ctl.refreshTrigger?.();
 				}
-				// Repli : le modèle COURANT vient d'être classé payant — sauf s'il a
-				// été choisi lui-même depuis « Plus de modèles » dans cette session,
-				// on ne le laisse pas silencieusement sur un modèle hors plan.
-				if (verdict === "payant" && args && tag === (settings().aiModel || "") && !modelesChoisisExplicitement.has(tag)) {
+				// Repli : le modèle COURANT vient d'être classé payant. Un modèle
+				// hors plan ne se choisit plus depuis le menu (sa ligne mène à la
+				// page des prix, Ahmed 2026-09-19) : on ne le laisse jamais réglé.
+				if (verdict === "payant" && args && tag === (settings().aiModel || "")) {
 					const repli = premierModeleInclus(args);
 					if (repli) await saveSettings({ aiModel: repli.value });
 				}

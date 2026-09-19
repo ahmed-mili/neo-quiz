@@ -443,14 +443,12 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		if (m.badge) ajouter(top, "span", "qbd-model-option-badge", m.badge);
 		if (m.desc) ajouter(body, "span", "qbd-model-option-desc", m.desc);
 		if (m.upgrade) {
-			/* Un <span role=link> et non un <button> : un bouton dans un bouton
-			   n'est pas du HTML valide. Le clic est arrêté avant la ligne. */
-			const up = ajouter(btn, "span", "qbd-model-option-upgrade", m.upgrade.label);
-			up.setAttribute("role", "link");
-			up.tabIndex = 0;
-			const agir = (ev: Event): void => { ev.stopPropagation(); ev.preventDefault(); m.upgrade!.onClick(); };
-			up.addEventListener("click", agir);
-			up.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") agir(ev); });
+			/* Un modèle HORS PLAN ne se choisit pas (Ahmed, 2026-09-19) : toute la
+			   ligne mène à la page des prix, et « Mettre à niveau » n'est qu'un
+			   texte qui le dit — plus un lien à part, plus de soulignement. Le
+			   modèle courant n'y perd rien : rien n'est écrit dans les réglages. */
+			btn.classList.add("qbd-select-option--upgrade");
+			ajouter(btn, "span", "qbd-model-option-upgrade", m.upgrade.label);
 		}
 		// Icône à droite (Ollama : nuage = cloud, téléchargement = local non
 		// installé, rien = local installé), calée à droite comme l'app Ollama.
@@ -458,12 +456,18 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 			const ic = ajouter(btn, "span", "qbd-model-option-icon");
 			currentHost().ui.setIcon(ic, m.icon);
 		}
-		const check = ajouter(btn, "span", "qbd-select-check");
-		if (active) currentHost().ui.setIcon(check, "check");
+		/* Dans le menu Ollama (`searchable`), pas de coche : c'est l'icône
+		   nuage qui passe en bleu sur le modèle courant (Ahmed, 2026-09-19) —
+		   la coche à côté du nuage faisait deux glyphes pour un seul état. */
+		if (!(opts.searchable && m.icon)) {
+			const check = ajouter(btn, "span", "qbd-select-check");
+			if (active) currentHost().ui.setIcon(check, "check");
+		}
 		btn.addEventListener("click", () => {
+			closeMenu();
+			if (m.upgrade) { m.upgrade.onClick(); return; }
 			const changed = m.value !== opts.currentModel;
 			opts.currentModel = m.value;
-			closeMenu();
 			if (changed && opts.onPickModel) opts.onPickModel(m.value);
 		});
 		return btn;

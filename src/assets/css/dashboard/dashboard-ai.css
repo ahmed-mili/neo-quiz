@@ -307,7 +307,10 @@
 	align-items: center;
 	color: var(--text-faint);
 	flex-shrink: 0;
+	transition: color 0.14s ease;
 }
+/* Le modèle courant du menu Ollama : l'icône en accent tient lieu de coche. */
+.qbd-model-menu--searchable .qbd-select-option.is-active .qbd-model-option-icon { color: var(--interactive-accent); }
 
 .qbd-model-option-icon svg {
 	width: 15px;

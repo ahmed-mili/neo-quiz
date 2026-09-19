@@ -322,11 +322,9 @@
 	color: var(--interactive-accent);
 	white-space: nowrap;
 }
-.qbd-model-option-upgrade:hover,
-.qbd-model-option-upgrade:focus-visible {
-	text-decoration: underline;
-	outline: none;
-}
+/* Pas de soulignement ni d'état propre : c'est la LIGNE qui se survole et
+   qui se clique (vers la page des prix). */
+.qbd-select-option--upgrade { cursor: pointer; }
 
 .qbd-model-option-top {
 	display: flex;

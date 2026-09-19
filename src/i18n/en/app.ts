@@ -41,6 +41,9 @@ export const EN_APP = {
 
 	/* ── Mise à jour automatique (application seulement) ── */
 	"app.update.restart": "Restart to update",
+	"app.update.downloading": "Downloading update",
+	"app.update.install": "Update",
+	"app.update.installing": "Installing…",
 
 	/* ── Barre de titre et menu d'application (application seulement) ── */
 	"app.titlebar.menu": "Application menu",

@@ -712,7 +712,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 						   fournisseur : on la quitte avec lui. */
 						annulerConnexion();
 						void saveSettings({ aiProvider: id, aiModel: aiProviders.getProvider(id).defaultModel })
-							.then(() => render(container));
+							.then(() => render(container))
+							.then(() => ouvrirAvertissementWeb(id));
 					},
 					// Un canal DÉSACTIVÉ (CLI absent) ne se sélectionne pas : il
 					// ouvre son modal d'installation, avec le même rafraîchissement
@@ -1605,6 +1606,47 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		});
 	}
 
+	/**
+	 * Le modal qui montre le bandeau que le site affichera, aux couleurs du
+	 * site, et dit pourquoi il est là. Ouvert au CHOIX du canal (demande
+	 * d'Ahmed, 2026-09-18 : « à la place [du callout dans la carte], on ne
+	 * devrait le voir que lorsque l'on sélectionne claude.ai »), et plus dans
+	 * la carte d'attente. « Ne plus afficher » est un tableau de canaux dans
+	 * les réglages : chaque site aura peut-être le sien.
+	 */
+	function ouvrirAvertissementWeb(canalId: string): void {
+		const canal = aiProviders.getCanal(canalId);
+		if (!canal || !canal.avertissement) return;
+		if ((settings().aiWebAvertissementMasque || []).includes(canalId)) return;
+		const site = canal.label;
+		let masquer = false;
+		requireHost("modals").open({
+			className: "qbd-web-warn-modal",
+			title: t("ai.web.warnTitle", { site }),
+			onOpen: (m) => {
+				const c = m.contentEl;
+				const callout = ajouter(c, "div", "qbd-web-warn-callout");
+				host.ui.setIcon(ajouter(callout, "span", "qbd-web-warn-callout-icon"), "triangle-alert");
+				ajouter(callout, "p", "qbd-web-warn-callout-text", t("ai.web.callout", { site }));
+				const row = ajouter(c, "label", "qbd-web-warn-dismiss");
+				const box = ajouter(row, "input") as HTMLInputElement;
+				box.type = "checkbox";
+				box.addEventListener("change", () => { masquer = box.checked; });
+				ajouter(row, "span", undefined, t("ai.web.warnDismiss"));
+				const actions = ajouter(c, "div", "qbd-web-warn-actions");
+				const ok = ajouter(actions, "button", "qbd-btn--create", t("ai.web.warnOk"));
+				ok.type = "button";
+				ok.addEventListener("click", () => m.close());
+			},
+			onClose: () => {
+				if (!masquer) return;
+				const liste = [...(settings().aiWebAvertissementMasque || [])];
+				if (!liste.includes(canalId)) liste.push(canalId);
+				void saveSettings({ aiWebAvertissementMasque: liste });
+			},
+		});
+	}
+
 	/* Hint contextuel sous la rangée modèle : icône + texte
 	   + action optionnelle (lien externe, réglages, commande).
 	   Grille : [icône | texte | action]. */
@@ -2276,9 +2318,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		annuler.addEventListener("click", annulerConnexion);
 	}
 
-	/** La carte d'attente du canal web : le titre nomme le site, le callout
-	    reproduit son bandeau d'avertissement, la ligne forte dit ce qui va se
-	    passer (veille automatique ou collage manuel selon l'hôte). */
+	/** La carte d'attente du canal web : le titre nomme le site, la ligne
+	    forte dit ce qui va se passer (veille automatique ou collage manuel
+	    selon l'hôte). Le bandeau d'avertissement du site n'est plus ici — il
+	    s'est déplacé dans un modal ouvert au CHOIX du canal, une fois
+	    (`ouvrirAvertissementWeb`, demande d'Ahmed, 2026-09-18). */
 	function renderWeb(parent: HTMLElement): void {
 		if (!attenteWeb) return;
 		const site = attenteWeb.site;
@@ -2289,13 +2333,6 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		/* Le presse-papier d'abord, quand la question n'a pas tenu dans
 		   l'adresse : il faut coller là-bas AVANT d'envoyer. */
 		if (attenteWeb.ouverture.mode === "presse-papier") ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t("ai.web.copied", { site }));
-		/* Le callout reproduit le bandeau que claude.ai affichera (fond rouge
-		   sombre, icône d'alerte, texte rouge clair) : l'utilisateur le
-		   reconnaît quand il le voit là-bas, et sait déjà pourquoi il est là
-		   (demande d'Ahmed, 2026-09-18). */
-		const callout = ajouter(carte, "div", "qbd-ai-web-callout");
-		host.ui.setIcon(ajouter(callout, "span", "qbd-ai-web-callout-icon"), "triangle-alert");
-		ajouter(callout, "p", "qbd-ai-web-callout-text", t("ai.web.callout", { site }));
 		ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--strong", host.collage ? t("ai.web.auto") : t("ai.web.manual"));
 		const actions = ajouter(carte, "div", "qbd-ai-web-actions");
 		const reopen = ajouter(actions, "button", "qbd-btn qbd-btn--ghost", t("ai.web.reopen", { site }));

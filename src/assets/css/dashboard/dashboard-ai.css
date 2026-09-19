@@ -2250,39 +2250,65 @@
 	margin-top: 6px;
 }
 
-/* Le callout au style du bandeau de claude.ai (relevé à l'écran le
-   2026-09-18) : fond rouge sombre translucide, bordure rouge, icône
-   d'alerte à gauche, texte rouge clair. Les couleurs viennent de
-   --color-red pour suivre le thème, pas du rouge exact de claude.ai. */
-.qbd-ai-web-callout {
+/* ── Le modal d'avertissement d'un site (claude.ai) ──
+   Les couleurs sont CELLES DU BANDEAU DE CLAUDE.AI, mesurées au pixel sur la
+   capture du 2026-09-18 (Pièces jointes/Pasted image 20260918225705.png) :
+   fond #3c0e0e, bordure #641919 sur 1 px, texte #d97272, icône #ec7e7e. Ce
+   n'est PAS le rouge du thème, et c'est voulu : l'utilisateur doit RECONNAÎTRE
+   le bandeau quand il le verra là-bas. Variables locales à ce bloc — elles ne
+   servent nulle part ailleurs et n'entrent pas dans le thème de l'app. */
+.qbd-web-warn-modal {
+	--qbd-web-warn-bg: #3c0e0e;
+	--qbd-web-warn-border: #641919;
+	--qbd-web-warn-text: #d97272;
+	--qbd-web-warn-icon: #ec7e7e;
+	max-width: 480px;
+}
+
+.qbd-web-warn-callout {
 	display: flex;
 	align-items: flex-start;
 	gap: 10px;
-	max-width: 52ch;
-	padding: 11px 14px;
+	padding: 12px 16px;
 	border-radius: 8px;
-	background: color-mix(in srgb, var(--color-red) 12%, transparent);
-	border: 1px solid color-mix(in srgb, var(--color-red) 40%, transparent);
+	background: var(--qbd-web-warn-bg);
+	border: 1px solid var(--qbd-web-warn-border);
 	text-align: left;
 }
 
-.qbd-ai-web-callout-icon {
+.qbd-web-warn-callout-icon {
 	display: inline-flex;
 	flex-shrink: 0;
 	margin-top: 2px;
-	color: var(--color-red);
+	color: var(--qbd-web-warn-icon);
 }
 
-.qbd-ai-web-callout-icon svg {
+.qbd-web-warn-callout-icon svg {
 	width: 16px;
 	height: 16px;
 }
 
-.qbd-ai-web-callout-text {
+.qbd-web-warn-callout-text {
 	margin: 0;
-	font-size: 12.5px;
+	font-size: 13px;
 	line-height: 1.5;
-	color: color-mix(in srgb, var(--color-red) 80%, var(--text-normal));
+	color: var(--qbd-web-warn-text);
+}
+
+.qbd-web-warn-dismiss {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 14px;
+	font-size: 12.5px;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.qbd-web-warn-actions {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 16px;
 }
 
 .qbd-ai-preview-loading::before {

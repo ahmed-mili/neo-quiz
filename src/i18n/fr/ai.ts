@@ -77,6 +77,9 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.web.copied": "Le prompt est dans votre presse-papier : collez-le d'abord dans {site}, puis envoyez.",
 	"ai.web.reopen": "Rouvrir {site}",
 	"ai.web.cancel": "Annuler",
+	"ai.web.warnTitle": "Avant d'ouvrir {site}",
+	"ai.web.warnDismiss": "Ne plus afficher",
+	"ai.web.warnOk": "Compris",
 
 	/* ── Statuts (pastille + sous-titre du menu fournisseur) ── */
 	"ai.status.claudeOk": "Claude Code v{version}",

@@ -92,6 +92,9 @@ export const EN_AI = {
 	"ai.web.copied": "The prompt is in your clipboard: paste it into {site} first, then send.",
 	"ai.web.reopen": "Reopen {site}",
 	"ai.web.cancel": "Cancel",
+	"ai.web.warnTitle": "Before opening {site}",
+	"ai.web.warnDismiss": "Don't show this again",
+	"ai.web.warnOk": "Got it",
 
 	/* ── Statuts (pastille + sous-titre du menu fournisseur) ── */
 	"ai.status.claudeOk": "Claude Code v{version}",

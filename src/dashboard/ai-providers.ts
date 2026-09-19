@@ -220,6 +220,11 @@ export interface Canal {
 	    site a été MESURÉ (claude.ai le 2026-09-18 : `/new?q=` préremplit sans
 	    envoyer). */
 	web?: OuvertureWeb;
+	/** Le site affiche un bandeau d'avertissement au-dessus d'une question
+	    arrivée par l'adresse (claude.ai, mesuré le 2026-09-18). La page ouvre
+	    alors un modal qui le montre et l'explique au CHOIX du canal, une fois,
+	    tant que l'utilisateur ne l'a pas masqué. */
+	avertissement?: true;
 }
 
 export interface Marque {
@@ -237,7 +242,7 @@ export const MARQUES: Marque[] = [
 		logo: "claude",
 		canaux: [
 			{ id: "claude-code", label: "Claude Code CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli" },
-			{ id: "claude-web", label: "claude.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://claude.ai/new", parametre: "q" } }
+			{ id: "claude-web", label: "claude.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://claude.ai/new", parametre: "q" }, avertissement: true }
 		]
 	},
 	{

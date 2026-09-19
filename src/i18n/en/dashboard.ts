@@ -170,10 +170,10 @@ export const EN_DASHBOARD = {
 	"dashboard.quizzes.restoredPartial": "Quiz restored — {count} could not be, the note has changed since",
 	"dashboard.quizzes.deletedPartial": "Quiz deleted — {count} could not be removed",
 	"dashboard.quizzes.deleteConfirmTitle": "Delete quiz",
-	"dashboard.quizzes.deleteConfirmBody": "Remove “{title}” and its stats from the note? This cannot be undone.",
+	"dashboard.quizzes.deleteConfirmBody": "Remove “{title}” and its stats from the note? You can undo with Ctrl+Z.",
 	"dashboard.quizzes.deleteConfirmCta": "Delete",
 	"dashboard.quizzes.menuDeleteModule": "Delete module quizzes",
-	"dashboard.quizzes.deleteModuleConfirmBody": "Remove the {count} quizzes of “{name}” and their stats? This cannot be undone.",
+	"dashboard.quizzes.deleteModuleConfirmBody": "Remove the {count} quizzes of “{name}” and their stats? You can undo with Ctrl+Z.",
 	/* « Déplacer vers… » (tranche 9, tâche 3) : n'apparaît que quand plusieurs
 	   racines sont ouvertes (l'application). L'historique de révision suit le
 	   dossier, jamais les wikilinks entrants — d'où l'avertissement. */

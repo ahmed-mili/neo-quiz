@@ -196,80 +196,90 @@
 
 .qb-confirm-buttons {
 	display: flex;
-	gap: 10px;
-	justify-content: flex-end;
-	margin-top: 4px;
+	gap: 8px;
+	margin-top: 24px;
 }
 
-/* ── Les deux boutons d'une confirmation (retour Ahmed 2026-09-17 : deux
-   boutons gris INDISCERNABLES, « Annuler » et « Supprimer » rendus pareil).
-   `.qb-btn` seul ne pose aucun fond : c'était le bouton par défaut du thème.
-   Ici, scoppé à la rangée pour ne pas toucher les autres `.qb-btn` de
-   l'éditeur : Annuler est le bouton SECONDAIRE de l'application (translucide,
-   liseré, liseré accent au survol — le même que les actions de panneau), et
-   le dernier bouton est le PRIMAIRE : accent plein, ou ROUGE plein quand il
-   détruit (`.qb-btn-danger`). On ne peut pas confondre ce qui efface avec
-   ce qui annule. ── */
+/* ── Les deux boutons d'une confirmation : ceux du ContentDialog de
+   Windows 11 (Ahmed, 2026-09-19 : « c'est bizarre ce style-là », pour des
+   pilules à ombre portée). Largeur ÉGALE, le pied de la boîte rempli ;
+   32 px, coins de 4 px, aucune ombre ni levée au survol. Le secondaire
+   (Annuler) est un fond subtil avec liseré, qui s'éclaircit d'un cran au
+   survol et s'assombrit à l'appui ; le primaire est plein : accent, ou
+   ROUGE quand il détruit (`.qb-btn-danger`), 90 % au survol et 80 % à
+   l'appui comme le bouton accent de WinUI. Deux surfaces qui confirment une
+   suppression ne peuvent pas avoir chacune leur habillage (retour du
+   2026-09-17 : « Annuler » et « Supprimer » indiscernables). ── */
 .qb-confirm-buttons .qb-btn {
-	height: 36px;
-	padding: 0 16px;
-	border-radius: 10px;
-	font-size: 13px;
-	font-weight: 600;
+	flex: 1 1 0;
+	justify-content: center;
+	height: 32px;
+	padding: 0 12px;
+	border-radius: 4px;
+	font-size: 14px;
+	font-weight: 400;
 	color: var(--text-normal);
-	background: color-mix(in srgb, var(--background-primary) 85%, transparent);
-	border: 1px solid var(--background-modifier-border);
+	background: color-mix(in srgb, var(--text-normal) 6%, transparent);
+	border: 1px solid color-mix(in srgb, var(--text-normal) 7%, transparent);
 	box-shadow: none;
-	transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease,
-		transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+	transform: none;
+	transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
 }
 
 .qb-confirm-buttons .qb-btn:hover {
-	border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
-	background: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary));
-	transform: translateY(-1px);
-	box-shadow: 0 3px 8px -4px rgba(0, 0, 0, 0.4);
+	background: color-mix(in srgb, var(--text-normal) 8%, transparent);
+	border-color: color-mix(in srgb, var(--text-normal) 7%, transparent);
+	transform: none;
+	box-shadow: none;
 }
 
 .qb-confirm-buttons .qb-btn:active {
-	transform: translateY(0);
+	background: color-mix(in srgb, var(--text-normal) 3%, transparent);
+	color: var(--text-muted);
+	transform: none;
 	box-shadow: none;
 }
 
 .qb-confirm-buttons .qb-btn:focus-visible {
-	outline: 2px solid var(--interactive-accent);
-	outline-offset: 2px;
+	outline: 2px solid var(--text-normal);
+	outline-offset: 1px;
 }
 
 /* Le primaire non destructif (« Réinitialiser les stats », un déplacement) :
    l'accent plein. */
 .qb-confirm-buttons .qb-btn:last-child:not(.qb-btn-danger) {
 	background: var(--interactive-accent);
-	border-color: transparent;
-	color: #fff;
+	border-color: color-mix(in srgb, #000 10%, transparent);
+	color: var(--text-on-accent, #fff);
+	font-weight: 600;
 }
-
 .qb-confirm-buttons .qb-btn:last-child:not(.qb-btn-danger):hover {
-	background: var(--interactive-accent);
-	border-color: transparent;
-	filter: brightness(1.12);
+	background: color-mix(in srgb, var(--interactive-accent) 90%, transparent);
+	filter: none;
+}
+.qb-confirm-buttons .qb-btn:last-child:not(.qb-btn-danger):active {
+	background: color-mix(in srgb, var(--interactive-accent) 80%, transparent);
+	color: color-mix(in srgb, var(--text-on-accent, #fff) 70%, transparent);
 }
 
 /* Le primaire DESTRUCTIF : rouge plein, blanc dessus. Le rouge de la palette
    des dossiers (`MODULE_PALETTE`), pas un rouge de plus. */
 .qb-confirm-buttons .qb-btn-danger {
 	background: #ef4466;
-	border-color: transparent;
+	border-color: color-mix(in srgb, #000 10%, transparent);
 	color: #fff;
+	font-weight: 600;
 }
-
 .qb-confirm-buttons .qb-btn-danger:hover {
-	background: #ef4466;
-	border-color: transparent;
+	background: color-mix(in srgb, #ef4466 90%, transparent);
+	border-color: color-mix(in srgb, #000 10%, transparent);
 	color: #fff;
-	filter: brightness(1.12);
+	filter: none;
 }
-
+.qb-confirm-buttons .qb-btn-danger:active {
+	background: color-mix(in srgb, #ef4466 80%, transparent);
+	color: rgba(255, 255, 255, 0.7);
+}
 .qb-confirm-buttons .qb-btn-danger:focus-visible {
 	outline-color: #ef4466;
 }

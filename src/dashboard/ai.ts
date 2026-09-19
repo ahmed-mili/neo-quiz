@@ -121,10 +121,11 @@ interface ComposerImage {
 	url: string;
 }
 
-/** Message PARTI — ce que le composer contenait au moment de l'envoi.
-    Le composer se vide à l'envoi (référence claude.ai) : sans cette copie,
-    la demande serait perdue de vue pendant la génération, et une annulation
-    n'aurait rien à rendre à l'utilisateur. */
+/** Message PARTI — ce que le composer contenait au moment de l'envoi. Le
+    composer, lui, GARDE la demande pendant tout l'envoi (Ahmed, 2026-09-19 :
+    derrière la modale d'étape, un champ vidé laissait croire la demande
+    effacée) ; cette copie est ce que la génération lit, indépendamment de
+    ce que le composer deviendrait. */
 interface SentMessage {
 	text: string;
 	notes: NoteAttachment[];
@@ -435,12 +436,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	function signalerGeneration(enCours: boolean): void {
 		document.documentElement.classList.toggle("qbd-generating", enCours);
 	}
-	/* Demande PARTIE (bulle façon claude.ai). Non nulle dès l'envoi, remise à
-	   null quand la demande retourne dans le composer (annulation) ou qu'on
-	   recommence à zéro. */
+	/* Demande PARTIE. Non nulle dès l'envoi, remise à null quand la demande
+	   est rendue au composer (annulation) ou qu'on recommence à zéro. */
 	let sentMessage: SentMessage | null = null;
-	/** L'entrée de la bulle reste à jouer (posée à l'envoi, consommée au rendu). */
-	let sentAnimPending = false;
 	// Client IA de la génération en cours — permet au bouton stop (et à
 	// la touche Esc) d'annuler réellement (kill du CLI / abort du fetch).
 	let activeClient: AiClient | null = null;
@@ -483,6 +481,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	};
 
 	function canGenerate(): boolean {
+		/* Une demande EN VOL (génération, attente du site, attente de
+		   connexion) ne repart pas : le composer la montre encore, et le clic
+		   comme Entrée passent par ici. */
+		if (phase === "loading" || phase === "web" || phase === "connexion") return false;
 		const providerId = settings().aiProvider || "";
 		if (!providerId) return false;
 		// Un fournisseur desktop-only (Claude Code CLI) est inutilisable sur
@@ -747,19 +749,6 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			ajouter(titleRow, "h2", "qbd-ai-title", t("ai.page.title"));
 		}
 
-		// ── La demande PARTIE, en bulle (référence claude.ai) ──
-		// Elle n'apparaît que si le composer s'est vidé : c'est ce couple
-		// (bulle qui monte / champ vide) qui fait « sentir » l'envoi. En
-		// résultat, la page du quiz occupe l'écran et porte son propre
-		// en-tête — une bulle de plus n'y ajouterait que du bruit.
-		/* La bulle de la demande envoyée n'existe que pour un fournisseur qui
-		   génère ICI (CLI, Ollama). Pour un site, la demande part sur le site,
-		   où elle est réellement envoyée : la bulle laissait croire à une
-		   conversation dans Neo Quiz, pendant l'attente comme après un « pas
-		   un quiz » (vu par Ahmed le 2026-09-19). `sentMessage` reste en
-		   mémoire : Annuler et Rouvrir s'en servent. */
-		const canalWeb = aiProviders.getCanal(settings().aiProvider || "")?.type === "web";
-		if (sentMessage && !canalWeb && (phase === "loading" || phase === "error" || phase === "connexion")) renderSentMessage(stage);
 
 		// Zone du loader de génération : AU-DESSUS du composer (demande
 		// 2026-07-10 — le loader préfigure le résultat, qui vit en haut).
@@ -2261,51 +2250,17 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (fileInputRef && fileInputRef.isConnected) fileInputRef.click();
 	}
 
-	/* ── Bulle de la demande envoyée (référence claude.ai) ──
-	   Lecture seule, alignée à droite : une fois partie, la demande ne se
-	   remodifie plus et ne se renvoie plus depuis là (retour Ahmed
-	   2026-07-31 — le composer qui gardait le texte donnait l'impression
-	   que rien n'était parti). Pour la reprendre : annuler la génération,
-	   elle retourne alors dans le composer. */
-	function renderSentMessage(parent: HTMLElement): void {
-		const msg = sentMessage;
-		if (!msg) return;
-		const bubble = ajouter(parent, "div", "qbd-ai-sent");
-		// L'entrée ne joue qu'au PREMIER rendu qui suit l'envoi : pendant la
-		// génération, la page se re-rend (statuts de fournisseur, quotas) et
-		// une bulle qui rebondit à chaque fois ferait clignoter la scène.
-		if (sentAnimPending) {
-			sentAnimPending = false;
-			bubble.classList.add("qbd-ai-sent--in");
-		}
-
-		if (msg.images.length > 0 || msg.notes.length > 0) {
-			const chips = ajouter(bubble, "div", "qbd-ai-sent-chips");
-			for (const img of msg.images) poserCarteImage(ajouter(chips, "div", "qbd-ai-note-chip"), img);
-			for (const note of msg.notes) {
-				const chip = ajouter(chips, "div", "qbd-ai-note-chip qbd-ai-note-chip--toggle");
-				poserCarte(chip, note);
-				chip.addEventListener("click", () => ouvrirApercu(note));
-			}
-		}
-
-		if (msg.text.trim()) ajouter(bubble, "div", "qbd-ai-sent-text", msg.text.trim());
-	}
-
-	/** Vide le composer au profit de la bulle « envoyé ». Les URL d'objet des
-	    images NE sont PAS révoquées : la bulle les affiche encore. */
+	/** Fige la demande qui part. Le composer la GARDE, affichée derrière la
+	    modale d'étape et le bouton d'envoi grisé (`updateGenerateBtn`) : il
+	    ne se vide qu'au succès (`resetGeneration`). Il y a quinze jours il
+	    se vidait pour qu'on « sente » l'envoi ; c'est désormais la modale qui
+	    le dit, et un champ vide derrière elle laissait croire la demande
+	    effacée (Ahmed, 2026-09-19). Les tableaux sont COPIÉS : la génération
+	    lit cette copie, jamais l'état du composer. */
 	function takeComposerMessage(): SentMessage {
-		// Une demande précédente encore affichée (erreur non réessayée) cède la
-		// place : ses vignettes ne seront plus jamais rendues, leurs URL d'objet
-		// se libèrent ici — sinon chaque envoi en fuiterait une de plus.
 		dropSentMessage();
-		const msg: SentMessage = { text: composerText, notes: noteAttachments, images };
-		composerText = "";
-		composerCaret = null;
-		noteAttachments = [];
-		images = [];
+		const msg: SentMessage = { text: composerText, notes: [...noteAttachments], images: [...images] };
 		sentMessage = msg;
-		sentAnimPending = true;
 		return msg;
 	}
 
@@ -2314,13 +2269,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		return !composerText.trim() && noteAttachments.length === 0 && images.length === 0;
 	}
 
-	/** Remet la demande partie dans le composer (annulation, réessai) et
-	    referme la bulle — le contraire exact de takeComposerMessage.
-
-	    Le composer reste utilisable pendant la génération : si une NOUVELLE
-	    demande y a été saisie entre-temps, elle prime. Rendre l'ancienne
-	    l'effacerait purement et simplement (et abandonnerait ses images sans
-	    les révoquer) ; l'ancienne est alors abandonnée, elle. */
+	/** Rend la demande partie au composer (annulation, réessai). Le composer
+	    l'a gardée : il n'y a rien à y remettre, sauf s'il a été vidé entre-
+	    temps — alors seulement la copie y retourne. Si une AUTRE demande y
+	    est, elle prime et la copie est abandonnée. */
 	function restoreComposerMessage(): void {
 		if (!sentMessage) return;
 		if (!composerIsEmpty()) { dropSentMessage(); return; }
@@ -2328,16 +2280,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		noteAttachments = sentMessage.notes;
 		images = sentMessage.images;
 		sentMessage = null;
-		sentAnimPending = false;
 	}
 
-	/** Abandonne la demande partie : c'est le seul endroit où les URL d'objet
-	    des images envoyées se révoquent (plus personne ne les affichera). */
+	/** Abandonne la demande partie et révoque les URL d'objet de ses images
+	    — sauf celles que le composer affiche encore : il partage les mêmes
+	    images tant qu'il garde la demande. */
 	function dropSentMessage(): void {
 		if (!sentMessage) return;
-		for (const img of sentMessage.images) URL.revokeObjectURL(img.url);
+		const affichees = new Set(images.map(img => img.url));
+		for (const img of sentMessage.images) if (!affichees.has(img.url)) URL.revokeObjectURL(img.url);
 		sentMessage = null;
-		sentAnimPending = false;
 	}
 
 	/* Loader de génération — l'ANIMATION VALIDÉE (balayage qbd-glide,
@@ -2972,6 +2924,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// bouton stop → toujours visible et cliquable.
 		const loading = phase === "loading";
 		const hasContent = !!(composerText.trim() || images.length > 0 || noteAttachments.length > 0);
+		/* En vol sur un site ou en attente de connexion, `canGenerate` est
+		   faux : le bouton reste visible (le composer garde la demande) mais
+		   grisé. */
 		const canGen = canGenerate();
 		btn.classList.toggle("is-visible", hasContent || loading);
 		btn.disabled = loading ? false : !canGen;

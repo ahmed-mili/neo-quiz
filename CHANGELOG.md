@@ -20,6 +20,7 @@ release notes.
 - When you generate with claude.ai, Neo Quiz moves to the right half of the screen and opens your browser on the left. When the answer arrives, Neo Quiz returns to its previous size, centered, in front.
 - Files attached to a claude.ai request are no longer pasted into the prompt as text. The waiting dialog shows them as stacks of pages that you drag onto claude.ai, all in one gesture, so a PDF arrives as a PDF. They sit on a single row of equal frames; hovering one fans out every stack and turns the other names blue, since they all leave together.
 - While you drag files onto claude.ai, the image under the cursor is a fanned stack with the file you grabbed on top and, as in File Explorer, the number of files in a blue badge.
+- While a request is being generated or waits for claude.ai, the composer keeps it (text and attachments) behind the dialog, with the send button greyed out, instead of emptying itself and showing the request in a bubble. It is cleared once the quiz is created.
 - On claude.ai, the provider button now reads "claude.ai" next to the Claude logo instead of "Claude · claude.ai".
 - The cross that cancels a generation or a wait turns red like the close button of a Windows 11 title bar, and its "Cancel" tooltip looks like a Windows 11 tooltip.
 - Images now work with claude.ai too: they are dragged along with the other files. In the composer, an image is a card of the same size as a document's, next to it, and clicking it opens a preview.

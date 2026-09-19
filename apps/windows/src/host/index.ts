@@ -135,7 +135,9 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		fs,
 		links: createWindowsLinks(carte, index),
 		watcher: createWindowsWatcher(index),
-		ui: createWindowsUi(),
+		/* `premierPlan` passe par le pont, que `ui.ts` n'importe pas (son
+		   harnais de contrôle le charge sans l'IPC) : il est greffé ici. */
+		ui: { ...createWindowsUi(), premierPlan: () => pont().fenetre.premierPlan() },
 		math: createWindowsMath(),
 		modals: createWindowsModals(),
 		net: createWindowsNet(),

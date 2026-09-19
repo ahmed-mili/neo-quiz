@@ -1648,6 +1648,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			if (disposed || (settings().aiProvider || "") !== id) return;
 			const courant = providerHint[id];
 			if (courant && courant.type === "err") return;
+			/* Une ATTENTE de connexion est en cours (terminal ou navigateur
+			   ouverts) : la carte d'attente le dit déjà. Poser en plus « pas
+			   connecté » sous le composer faisait lire un échec avant la réussite
+			   (vu avec Codex dans la VM, 2026-09-19). */
+			if (!connecte && (phase === "connexion" || loginPoll !== null)) return;
 			if (connecte) {
 				if (courant?.icon === "log-in") setHint(id, hintZone, provider, null);
 				return;
@@ -2383,6 +2388,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    terminal est DÉJÀ ouvert sur la connexion : on attend sans rien lancer. */
 	function attendreCompte(tool: OutilCompte, origine: "erreur" | "hint"): void {
 		couperSondeConnexion();
+		/* Le hint « pas connecté » a pu être posé juste AVANT l'attente (sonde
+		   du retour de modal) : il tombe ici, la carte d'attente le remplace. */
+		const idAttendu = tool === "claude" ? "claude-code" : tool;
+		if (providerHint[idAttendu]?.icon === "log-in") providerHint[idAttendu] = null;
 		connexionVue = false;
 		connexionOrigine = origine;
 		phase = "connexion";
@@ -2402,9 +2411,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				   pour s'en servir). S'il n'est pas le fournisseur choisi, il
 				   le devient ici, avec son modèle par défaut. */
 				const idOutil = tool === "claude" ? "claude-code" : tool;
+				providerHint[idOutil] = null;
 				if ((settings().aiProvider || "") !== idOutil) {
 					void saveSettings({ aiProvider: idOutil, aiModel: aiProviders.getProvider(idOutil).defaultModel });
 				}
+				/* L'utilisateur est dans le terminal ou le navigateur : Neo Quiz
+				   revient au PREMIER PLAN, prêt à générer (Ahmed, 2026-09-19). */
+				void host.ui.premierPlan?.().catch(() => { /* la page reste juste derrière */ });
 				providerHint[settings().aiProvider || ""] = null;
 				render(containerRef);
 				/* La seconde d'attente est ce qui rend la détection LISIBLE :

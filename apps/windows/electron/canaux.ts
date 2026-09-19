@@ -99,6 +99,7 @@ export interface DependancesCanaux {
 	fenetre: {
 		prete(): void;
 		reduire(): void;
+		premierPlan(): void;
 		agrandirOuRestaurer(): void;
 		fermer(): void;
 		pleinEcran(): void;
@@ -873,6 +874,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   borné ici : aucun chemin, aucune URL. */
 	ipcMain.handle(CANAUX.fenetrePrete, () => deps.fenetre.prete());
 	ipcMain.handle(CANAUX.fenetreReduire, () => deps.fenetre.reduire());
+	ipcMain.handle(CANAUX.fenetrePremierPlan, () => deps.fenetre.premierPlan());
 	ipcMain.handle(CANAUX.fenetreAgrandir, () => deps.fenetre.agrandirOuRestaurer());
 	ipcMain.handle(CANAUX.fenetreFermer, () => deps.fenetre.fermer());
 	ipcMain.handle(CANAUX.fenetrePleinEcran, () => deps.fenetre.pleinEcran());

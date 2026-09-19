@@ -658,6 +658,21 @@ if (!app.requestSingleInstanceLock()) {
 					fenetre.focus();
 				},
 				reduire: () => fenetre?.minimize(),
+				/* Windows refuse le premier plan à un processus qui n'a pas le
+				   focus (verrou de SetForegroundWindow) : `focus()` seul ne fait
+				   que clignoter dans la barre des tâches. Passer un instant en
+				   « toujours au-dessus » est le détour admis — la fenêtre monte,
+				   prend le focus, puis redevient une fenêtre ordinaire. */
+				premierPlan: () => {
+					if (!fenetre || fenetre.isDestroyed()) return;
+					if (fenetre.isMinimized()) fenetre.restore();
+					fenetre.show();
+					fenetre.setAlwaysOnTop(true);
+					fenetre.focus();
+					fenetre.moveTop();
+					fenetre.setAlwaysOnTop(false);
+					fenetre.flashFrame(false);
+				},
 				agrandirOuRestaurer: () => {
 					if (!fenetre) return;
 					if (fenetre.isMaximized()) fenetre.unmaximize();

@@ -342,6 +342,12 @@ export interface HostUi {
 	    la forme que le contrat emploie partout. Le sélecteur d'icônes les
 	    liste ; l'ordre n'a pas d'importance, il trie lui-même. */
 	iconNames(): string[];
+	/** Remet la fenêtre de l'application au PREMIER PLAN (restaurée si elle
+	    était réduite). OPTIONNEL : le greffon n'a pas de fenêtre à lui. Sert
+	    quand l'utilisateur revient d'un terminal ou d'un navigateur ouvert par
+	    l'application pour une étape qu'elle vient de voir aboutir (compte
+	    connecté) : il n'a pas à chercher la fenêtre dans la barre des tâches. */
+	premierPlan?(): Promise<void>;
 }
 
 export interface HostMath {

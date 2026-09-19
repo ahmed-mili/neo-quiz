@@ -135,6 +135,7 @@ const pont: Pont = {
 			await ipcRenderer.invoke(CANAUX.armerFermeture);
 		},
 		reduire: () => ipcRenderer.invoke(CANAUX.fenetreReduire),
+		premierPlan: () => ipcRenderer.invoke(CANAUX.fenetrePremierPlan),
 		agrandirOuRestaurer: () => ipcRenderer.invoke(CANAUX.fenetreAgrandir),
 		fermer: () => ipcRenderer.invoke(CANAUX.fenetreFermer),
 		pleinEcran: () => ipcRenderer.invoke(CANAUX.fenetrePleinEcran),

@@ -502,6 +502,8 @@ export interface Pont {
 		/** Ordres SANS ARGUMENT : la barre dessinée par le rendu (tâche 2) ne
 		    fait qu'exécuter, jamais décider. */
 		reduire(): Promise<void>;
+		/** Restaure et met la fenêtre au premier plan (voir `HostUi.premierPlan`). */
+		premierPlan(): Promise<void>;
 		agrandirOuRestaurer(): Promise<void>;
 		/** LE MÊME chemin que la croix native (`fenetre.close()` côté
 		    principal) : la fermeture attendue reste garantie, armement et
@@ -614,6 +616,7 @@ export const CANAUX = {
 	fermeture: "neo:fenetre/fermeture",
 	fermetureTerminee: "neo:fenetre/fermeture-terminee",
 	fenetreReduire: "neo:fenetre/reduire",
+	fenetrePremierPlan: "neo:fenetre/premier-plan",
 	fenetreAgrandir: "neo:fenetre/agrandir",
 	fenetreFermer: "neo:fenetre/fermer",
 	fenetrePleinEcran: "neo:fenetre/plein-ecran",

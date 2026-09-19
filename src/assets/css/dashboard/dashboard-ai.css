@@ -15,10 +15,15 @@
 	min-width: 0;
 }
 
+/* `connexion` manquait à ces listes depuis sa création : l'attente de
+   connexion tombait sur la mise en page par défaut, calée à gauche au lieu
+   de centrée (vu dans la VM le 2026-09-19). Toute phase qui n'est pas
+   `result` doit y figurer. */
 .qbd-ai-stage--idle,
 .qbd-ai-stage--loading,
 .qbd-ai-stage--error,
-.qbd-ai-stage--web {
+.qbd-ai-stage--web,
+.qbd-ai-stage--connexion {
 	align-items: center;
 	text-align: center;
 	/* Référence claude.ai REMESURÉE (2026-07-16) : centré horizontalement
@@ -32,7 +37,8 @@
 .qbd-ai-stage--idle::before,
 .qbd-ai-stage--loading::before,
 .qbd-ai-stage--error::before,
-.qbd-ai-stage--web::before {
+.qbd-ai-stage--web::before,
+.qbd-ai-stage--connexion::before {
 	content: "";
 	flex: 0.44 0 0;
 }
@@ -40,7 +46,8 @@
 .qbd-ai-stage--idle::after,
 .qbd-ai-stage--loading::after,
 .qbd-ai-stage--error::after,
-.qbd-ai-stage--web::after {
+.qbd-ai-stage--web::after,
+.qbd-ai-stage--connexion::after {
 	content: "";
 	flex: 1 0 0;
 }
@@ -62,7 +69,8 @@
 .qbd-ai-stage--idle .qbd-ai-composer,
 .qbd-ai-stage--loading .qbd-ai-composer,
 .qbd-ai-stage--error .qbd-ai-composer,
-.qbd-ai-stage--web .qbd-ai-composer {
+.qbd-ai-stage--web .qbd-ai-composer,
+.qbd-ai-stage--connexion .qbd-ai-composer {
 	margin-top: 18px;
 	padding: 24px 24px 18px;
 	border-radius: 22px;
@@ -71,7 +79,8 @@
 .qbd-ai-stage--idle .qbd-ai-composer-input,
 .qbd-ai-stage--loading .qbd-ai-composer-input,
 .qbd-ai-stage--error .qbd-ai-composer-input,
-.qbd-ai-stage--web .qbd-ai-composer-input {
+.qbd-ai-stage--web .qbd-ai-composer-input,
+.qbd-ai-stage--connexion .qbd-ai-composer-input {
 	/* 58px : compense les +2px de la barre agrandie (contrôles 30→34)
 	   pour garder le composer aux 142px validés. */
 	min-height: 58px;

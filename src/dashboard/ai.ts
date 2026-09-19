@@ -2444,7 +2444,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		el.dataset.etat = connexionVue ? "ok" : "attente";
 		if (connexionVue) {
 			host.ui.setIcon(ajouter(el, "span", "qbd-install-check"), "check");
-			ajouter(el, "p", "qbd-ai-loading-title", t("ai.login.detected"));
+			/* « Nouvelle tentative » seulement s'il y a une demande à renvoyer :
+			   venue du hint ou d'une installation, l'attente n'en a pas, et la
+			   page revient simplement au composer. */
+			ajouter(el, "p", "qbd-ai-loading-title", connexionOrigine === "erreur" && sentMessage ? t("ai.login.detected") : t("ai.login.connected"));
 			return;
 		}
 		ajouter(el, "span", "qbd-install-spinner");

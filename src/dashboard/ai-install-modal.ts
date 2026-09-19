@@ -167,9 +167,12 @@ export function openInstallModal(deps: InstallModalDeps): void {
 							ajouter(etat, "span", undefined, res.version
 								? t("ai.install.detected", { name, version: res.version })
 								: t("ai.install.detectedNoVersion", { name }));
-							const continuer = ajouter(etat, "button", "qbd-btn--create qbd-install-continue", t("ai.install.continue"));
-							continuer.type = "button";
-							continuer.addEventListener("click", () => m.close());
+							/* Le modal se ferme SEUL, une seconde et demie après la coche
+							   (demande d'Ahmed, 2026-09-19) : l'utilisateur l'a ouvert
+							   pour UTILISER cet outil, pas pour cliquer « Continuer ».
+							   La page reprend aussitôt — fournisseur choisi, puis
+							   attente de la connexion que le terminal demande déjà. */
+							window.setTimeout(() => m.close(), 1500);
 						});
 					}, SONDE_MS);
 				});

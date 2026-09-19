@@ -14,6 +14,7 @@ release notes.
 ## [Unreleased]
 
 ### Fixed
+- After "Install automatically", the dialog closes by itself once the tool is detected, and the tool you installed becomes the selected provider as soon as your account is connected. You install Claude Code, Codex or Ollama to use it: no extra click to pick it afterwards.
 - On a free Ollama account, the model menu now lists only the cloud models your account includes; paid ones move to "More models", with a Pro badge and an Upgrade link. Neo Quiz finds out which is which by asking Ollama for each model, without generating anything or using your included usage.
 
 ## [1.7.0] - 2026-09-19

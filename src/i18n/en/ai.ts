@@ -148,7 +148,6 @@ export const EN_AI = {
 	"ai.install.running": "Installing in PowerShell… Neo Quiz will detect it.",
 	"ai.install.detected": "{name} v{version} is installed.",
 	"ai.install.detectedNoVersion": "{name} is installed.",
-	"ai.install.continue": "Continue",
 	"ai.install.terminalFailed": "PowerShell could not be opened. Follow the manual steps below.",
 
 	/* ── Connexion du compte, depuis l'écran d'échec de génération ── */

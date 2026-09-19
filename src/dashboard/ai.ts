@@ -2397,6 +2397,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				if (!connecte || loginPoll === null || disposed) return;
 				couperSondeConnexion();
 				connexionVue = true;
+				/* Connecté : c'est CET outil qu'on voulait utiliser (demande
+				   d'Ahmed, 2026-09-19 — on installe et on connecte Claude Code
+				   pour s'en servir). S'il n'est pas le fournisseur choisi, il
+				   le devient ici, avec son modèle par défaut. */
+				const idOutil = tool === "claude" ? "claude-code" : tool;
+				if ((settings().aiProvider || "") !== idOutil) {
+					void saveSettings({ aiProvider: idOutil, aiModel: aiProviders.getProvider(idOutil).defaultModel });
+				}
 				providerHint[settings().aiProvider || ""] = null;
 				render(containerRef);
 				/* La seconde d'attente est ce qui rend la détection LISIBLE :

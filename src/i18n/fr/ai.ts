@@ -127,7 +127,6 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.install.running": "Installation dans PowerShell… Neo Quiz la détectera.",
 	"ai.install.detected": "{name} v{version} est installé.",
 	"ai.install.detectedNoVersion": "{name} est installé.",
-	"ai.install.continue": "Continuer",
 	"ai.install.terminalFailed": "PowerShell n'a pas pu être ouvert. Suivez les étapes manuelles ci-dessous.",
 
 	/* ── Connexion du compte, depuis l'écran d'échec de génération ── */

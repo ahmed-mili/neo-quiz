@@ -1506,7 +1506,6 @@
 @keyframes qbd-install-spin { to { transform: rotate(360deg); } }
 .qbd-install-check { color: var(--color-green, #4ade80); display: inline-flex; }
 .qbd-install-check svg { width: 16px; height: 16px; }
-.qbd-install-continue { margin-left: auto; }
 /* ── LA VOIE MANUELLE ──
    Sa ligne repliable reprend les classes de l'arbre des quiz
    (`qbd-quizzes-node-*`), qui les met en `flex` DANS cet arbre seulement.

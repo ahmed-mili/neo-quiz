@@ -25,7 +25,7 @@ import { formatHotkey, eventToHotkey } from "../hotkey-format";
 import { findQuizModeConfigIndex } from "../quiz-utils";
 import { attachMentionPicker } from "./mention-picker";
 import type { MentionPickerHandle } from "./mention-picker";
-import type { AiClient, ImagePayload, LoginRequiredError } from "./ai-client";
+import type { AiClient, ImagePayload, LoginRequiredError, UpgradeRequiredError } from "./ai-client";
 import { formatTokens, formatCost, formatDuration, totalTokens, tightestRow, usageRowLabel, providerPublishesPlan } from "./usage-format";
 import type { AiUsage, AiUsageEntry, PlanUsage } from "./usage-format";
 import { scanPromptPaths, MAX_PROMPT_PATHS } from "./prompt-paths";
@@ -303,7 +303,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	/** L'outil que l'échec courant demande de connecter (`besoinConnexion` de
 	    `ai-client.ts`), ou `null` quand l'erreur est d'une autre nature. C'est
 	    lui qui décide du bouton de la carte d'erreur. */
-	let errorLogin: "claude" | "codex" | null = null;
+	let errorLogin: "claude" | "codex" | "ollama" | null = null;
 	/* L'attente d'une réponse copiée (canal web, spec 2026-09-18). Non nulle
 	   en phase « web » seulement : le jeton de CETTE ouverture, ce qui a été
 	   ouvert (adresse ou presse-papier), la fonction qui arrête la veille du
@@ -314,8 +314,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	let attenteWebSite = "";
 	/** L'action de l'écran d'erreur : « Rouvrir <site> » quand la réponse
 	    copiée n'était pas un quiz (réessayer relancerait une génération que
-	    l'application n'a jamais faite). */
-	let errorAction: "reopen" | null = null;
+	    l'application n'a jamais faite) ; « upgrade » quand Ollama a répondu
+	    402 (modèle hors plan) — réessayer rendrait la même erreur. */
+	let errorAction: "reopen" | "upgrade" | null = null;
 	/** Sondage « le compte est-il connecté ? », pour la même raison que
 	    `ollamaPoll` : sans être retenu, il survivrait à la fermeture de la vue
 	    et repeindrait un conteneur détaché. Coupé à la détection, à
@@ -2000,13 +2001,15 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   redevient « Réessayer » que si l'hôte ne sait pas ouvrir de terminal
 		   (le greffon n'a plus de `process` du tout). */
 		const tool = errorLogin;
-		const offreConnexion = !!tool && !!host.process;
+		// Ollama se connecte par le navigateur (T4) : l'hôte n'a pas besoin de
+		// savoir lancer un terminal (`host.process`) pour proposer ce bouton.
+		const offreConnexion = !!tool && (tool === "ollama" || !!host.process);
 		/* Le message d'échec porte l'INSTRUCTION (« dans un terminal, lancez
 		   codex login ») tant que l'utilisateur doit la suivre lui-même. Dès
 		   que le bouton la remplace, la garder dirait de faire à la main ce
 		   qu'un clic fait — vu à l'écran le 2026-09-18, les deux ensemble. */
 		ajouter(errorEl, "p", "qbd-ai-error-msg",
-			offreConnexion ? t(`ai.login.reason.${tool as "claude" | "codex"}`) : errorMessage);
+			offreConnexion ? t(`ai.login.reason.${tool as "claude" | "codex" | "ollama"}`) : errorMessage);
 
 		/* La réponse copiée n'était pas un quiz : rouvrir le site (avec un
 		   jeton neuf) est la seule action qui a du sens, pas « Réessayer »,
@@ -2015,6 +2018,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			const reopenBtn = ajouter(errorEl, "button", "qbd-btn qbd-btn--ghost qbd-ai-error-retry", t("ai.web.reopen", { site: attenteWebSite }));
 			reopenBtn.type = "button";
 			reopenBtn.addEventListener("click", () => { relancerApresErreur(); });
+			return;
+		}
+
+		/* Hors plan : réessayer rendrait le même 402. La seule action qui a du
+		   sens est d'aller changer de plan — ou de choisir un autre modèle dans
+		   le menu, qui reste ouvert au-dessus. */
+		if (errorAction === "upgrade") {
+			const upBtn = ajouter(errorEl, "button", "qbd-btn qbd-btn--ghost qbd-ai-error-retry", t("ai.upgrade.button"));
+			upBtn.type = "button";
+			upBtn.addEventListener("click", () => { void host.shell.openUrl(aiProviders.OLLAMA_UPGRADE_URL); });
 			return;
 		}
 
@@ -2056,16 +2069,22 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	 * (outil hors liste blanche, panne d'IPC) : sans ça, un bouton désactivé
 	 * restait muet, exactement le défaut corrigé dans le modal d'installation.
 	 */
-	async function demarrerConnexion(tool: "claude" | "codex", bouton: HTMLButtonElement): Promise<void> {
+	async function demarrerConnexion(tool: "claude" | "codex" | "ollama", bouton: HTMLButtonElement): Promise<void> {
 		bouton.disabled = true;
 		let verdict: "lance" | "annule" | "indisponible";
-		try {
-			verdict = await requireHost("process").connecterCli(tool);
-		} catch (e) {
-			console.warn(LOG_PREFIX, "connexion impossible:", e);
-			bouton.disabled = false;
-			host.ui.notice(t("ai.login.terminalFailed"));
-			return;
+		if (tool === "ollama") {
+			// T4 : ouverture par le navigateur — provisoire, le temps que la
+			// tâche 4 câble le parcours de connexion Ollama.
+			verdict = "indisponible"; /* T4 : ouverture par le navigateur */
+		} else {
+			try {
+				verdict = await requireHost("process").connecterCli(tool);
+			} catch (e) {
+				console.warn(LOG_PREFIX, "connexion impossible:", e);
+				bouton.disabled = false;
+				host.ui.notice(t("ai.login.terminalFailed"));
+				return;
+			}
 		}
 		if (verdict !== "lance") {
 			bouton.disabled = false;
@@ -2078,7 +2097,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		connexionVue = false;
 		phase = "connexion";
 		render(containerRef);
-		const sonde = aiProviders.sondeConnexion(tool);
+		// `tool === "ollama"` s'est déjà arrêté plus haut (verdict toujours
+		// "indisponible" tant que T4 n'a pas câblé sa connexion) : ici, l'outil
+		// ne peut être que claude/codex.
+		const sonde = aiProviders.sondeConnexion(tool as "claude" | "codex");
 		loginPoll = window.setInterval(() => {
 			void sonde().then(connecte => {
 				// `loginPoll === null` : l'utilisateur a annulé pendant que la
@@ -2644,6 +2666,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			}
 			errorMessage = e.message || t("ai.error.checkSettings");
 			errorLogin = (e as LoginRequiredError).besoinConnexion || null;
+			errorAction = (e as UpgradeRequiredError).besoinPlan ? "upgrade" : null;
 			generatedQuestions = [];
 		}
 

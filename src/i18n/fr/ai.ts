@@ -132,11 +132,13 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.login.button": "Se connecter",
 	"ai.login.reason.codex": "Votre compte ChatGPT n'est pas encore connecté.",
 	"ai.login.reason.claude": "Votre compte Claude n'est pas encore connecté.",
+	"ai.login.reason.ollama": "Ollama n'est pas encore connecté à votre compte ; les modèles cloud en ont besoin.",
 	"ai.login.waiting": "En attente de la connexion",
 	"ai.login.hint": "Terminez la connexion dans la fenêtre de terminal qui vient de s'ouvrir. Neo Quiz la détecte tout seul.",
 	"ai.login.cancel": "Annuler",
 	"ai.login.detected": "Compte connecté. Nouvelle tentative…",
 	"ai.login.terminalFailed": "PowerShell n'a pas pu être ouvert. Connectez-vous depuis un terminal, puis réessayez.",
+	"ai.upgrade.button": "Mettre à niveau",
 
 	/* ── Modèles : accroche courte (à droite du nom) et description ── */
 	"ai.modelHint.mostPowerful": "le plus puissant",
@@ -221,7 +223,8 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.err.ollamaUnreachableShort": "Impossible de contacter Ollama sur {url}. Vérifiez que le serveur est démarré.",
 	"ai.err.ollamaOutOfMemory": "Mémoire insuffisante pour ce modèle{detail}.\nChoisissez un modèle plus petit dans la liste.",
 	"ai.err.ollamaSubscription": "Ce modèle nécessite un abonnement Ollama : https://ollama.com/upgrade",
-	"ai.err.ollamaSignin": "Modèle cloud Ollama : le daemon n'est pas connecté à votre compte.\nDans un terminal : ollama signin",
+	"ai.err.ollamaPlan": "{model} n'est pas compris dans votre compte Ollama gratuit. Ajoutez des crédits ou passez à un plan supérieur, ou choisissez un modèle gratuit.",
+	"ai.err.ollamaSignin": "Ollama n'est pas encore connecté à votre compte ; les modèles cloud en ont besoin.",
 	"ai.err.ollamaHttp": "Erreur Ollama ({status}) : {detail}",
 	"ai.err.ollama": "Erreur Ollama : {detail}",
 	"ai.err.ollamaEmpty": "Ollama n'a retourné aucune réponse. Vérifiez que le modèle est installé.",

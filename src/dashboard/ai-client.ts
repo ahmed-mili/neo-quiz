@@ -9,6 +9,7 @@ import {
 	getProvider,
 	isOllamaCloudModel,
 	refreshCliCaches,
+	erreurOllamaHorsPlan,
 } from "./ai-providers";
 import type { AiSettingsHost } from "./ai-settings-host";
 import type { AiUsage } from "./usage-format";
@@ -156,16 +157,36 @@ function userError(message: string): UserFacingError {
     autrement que par son texte : `besoinConnexion` nomme l'outil à connecter.
     C'est ce drapeau, jamais le message, que la page « Générer » lit pour
     remplacer « Réessayer » par « Se connecter ». */
-export type LoginRequiredError = Error & { besoinConnexion?: "claude" | "codex" };
+export type LoginRequiredError = Error & { besoinConnexion?: "claude" | "codex" | "ollama" };
+/** Une erreur dont la CAUSE est un plan insuffisant (Ollama 402) : la carte
+    d'erreur remplace « Réessayer » par « Mettre à niveau », parce que
+    réessayer rendrait le même 402. */
+export type UpgradeRequiredError = Error & { besoinPlan?: true };
 
 /* POURQUOI UN DRAPEAU ET PAS UNE COMPARAISON DE MESSAGE : le message est
    TRADUIT (`ai.err.codexNotLoggedIn`). Le comparer marcherait en anglais et
    plus en français, et le bouton de connexion disparaîtrait dans une langue
    sans qu'aucun contrôle ne rougisse. Même raison que `userFacing`
-   ci-dessus. */
-function erreurConnexion(tool: "claude" | "codex", message: string): LoginRequiredError {
-	const e = new Error(message) as LoginRequiredError;
+   ci-dessus. `userFacing` est posé ICI (et pas seulement sur `LoginRequiredError`)
+   parce que le bloc Ollama rejette cette erreur DANS le même `try` que son
+   catch générique (`if (e.userFacing) throw err`, sinon message générique
+   « Ollama injoignable ») : sans ce drapeau, un 401/403 perdrait son
+   `besoinConnexion` en traversant ce catch et retomberait sur le message
+   réseau générique au lieu de la carte « Se connecter ». */
+function erreurConnexion(tool: "claude" | "codex" | "ollama", message: string): LoginRequiredError & UserFacingError {
+	const e = new Error(message) as LoginRequiredError & UserFacingError;
 	e.besoinConnexion = tool;
+	e.userFacing = true;
+	return e;
+}
+
+/** Une erreur « plan insuffisant » (Ollama 402), déjà formulée pour
+    l'utilisateur : la carte d'erreur affiche le message tel quel et pose le
+    bouton « Mettre à niveau » plutôt que « Réessayer ». */
+function erreurPlan(message: string): UpgradeRequiredError & UserFacingError {
+	const e = new Error(message) as UpgradeRequiredError & UserFacingError;
+	e.besoinPlan = true;
+	e.userFacing = true;
 	return e;
 }
 
@@ -998,8 +1019,22 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 				if (errLower.includes("subscription") || errLower.includes("upgrade for access")) {
 					throw userError(t("ai.err.ollamaSubscription"));
 				}
+				/* Un modèle hors plan : 402 « this model is not included in your
+				   free usage … upgrade for included usage » (mesuré 2026-09-19).
+				   Jusqu'ici il tombait dans `ollamaHttp` générique. Le plan requis
+				   est APPRIS : la prochaine ouverture du menu marque ce modèle
+				   « Pro » avant même de cliquer (voir ai-providers.ts,
+				   planRequisPour). */
+				if (erreurOllamaHorsPlan(resp.status, errLower)) {
+					const appris = { ...(settings.get().aiOllamaPlansAppris || {}) };
+					if (appris[model] !== "pro") {
+						appris[model] = "pro";
+						await settings.save({ aiOllamaPlansAppris: appris });
+					}
+					throw erreurPlan(t("ai.err.ollamaPlan", { model }));
+				}
 				if (isCloud && (resp.status === 401 || resp.status === 403 || errLower.includes("sign in") || errLower.includes("signin") || errLower.includes("unauthorized") || errLower.includes("authenticat") || errLower.includes("api key"))) {
-					throw userError(t("ai.err.ollamaSignin"));
+					throw erreurConnexion("ollama", t("ai.err.ollamaSignin"));
 				}
 				throw userError(t("ai.err.ollamaHttp", { status: resp.status, detail: String(errMsg) }));
 			}

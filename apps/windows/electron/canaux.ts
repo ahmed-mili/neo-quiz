@@ -37,8 +37,7 @@
    réussi.
 ══════════════════════════════════════════════════════════ */
 
-import { app, clipboard, dialog, ipcMain, nativeImage, net, screen, shell } from "electron";
-import type { BrowserWindow } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, net, screen, shell } from "electron";
 import * as path from "node:path";
 // Le dossier par défaut CHOISI est créé ici s'il manque — voir son canal.
 import * as fsp from "node:fs/promises";
@@ -762,6 +761,21 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 				: await app.getFileIcon(porteur, { size: "large" }));
 			/* `files` l'emporte sur `file` quand il est donné ; `file` reste requis par le type. */
 			e.sender.startDrag(fichiers.length === 1 ? { file: fichiers[0], icon } : { file: fichiers[0], files: fichiers, icon });
+			/* `startDrag` ne rend la main qu'après le dépôt (boucle OLE de
+			   Windows). Pendant cette boucle Chromium ne voit plus la souris :
+			   la pile saisie gardait son `:hover` — éventail ouvert, « Glisser
+			   tout » affiché — alors que les fichiers étaient déjà sur le site
+			   (vu par Ahmed le 2026-09-19). On lui dit donc où est VRAIMENT la
+			   souris : sortie de la fenêtre, ou à sa position dedans. */
+			const fenetre = BrowserWindow.fromWebContents(e.sender);
+			if (fenetre && !fenetre.isDestroyed()) {
+				const curseur = screen.getCursorScreenPoint();
+				const zone = fenetre.getContentBounds();
+				const x = curseur.x - zone.x;
+				const y = curseur.y - zone.y;
+				const dedans = x >= 0 && y >= 0 && x < zone.width && y < zone.height;
+				e.sender.sendInputEvent({ type: dedans ? "mouseMove" : "mouseLeave", x, y });
+			}
 			return true;
 		} catch (err) {
 			console.warn(LOG_PREFIX, "glisser impossible:", fichiers, err);

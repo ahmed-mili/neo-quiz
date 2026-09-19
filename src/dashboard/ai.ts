@@ -1881,6 +1881,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					if (ollamaCtl.refreshTrigger) ollamaCtl.refreshTrigger();
 				}
 				verifierCompte("ollama", hintZone, provider, { ctl: ollamaCtl, buildList: buildOllamaList });
+				// Second point d'appel : le plan persiste d'une session à l'autre, et
+				// `verifierCompte` ne sonde pas quand le modèle COURANT est local (pas
+				// besoin de compte) — sans cette ligne, un compte free resterait sur un
+				// menu non trié tant qu'aucun modèle cloud n'a été choisi. Sans effet
+				// s'il n'y a plus rien à sonder (tout appris) ou si un passage tourne déjà.
+				if (settings().aiOllamaPlanCompte === "free") void sonderPlansOllama({ ctl: ollamaCtl, buildList: buildOllamaList });
 			} else {
 				// Le plugin DIAGNOSTIQUE lui-même (demande Ahmed : jamais
 				// de « Serveur non détecté » sec ni de « si Ollama n'est

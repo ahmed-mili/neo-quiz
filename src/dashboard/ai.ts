@@ -2638,7 +2638,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		const carte = ajouter(parent, "div", "qbd-ai-web-card");
 		const iconWrap = ajouter(carte, "div", "qbd-ai-loading-icon qbd-web-wait-icon");
 		host.ui.setIcon(iconWrap, "clipboard-list");
-		ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.title", { site }));
+		/* Avec des fichiers, le TITRE dit de les glisser, et la ligne dessous
+		   d'envoyer puis de copier (Ahmed, 2026-09-19 : glisser les fichiers
+		   est aussi important que le reste, et c'est le premier geste). */
+		const aGlisser = attenteWeb.aGlisser.length > 0 && !!host.depot;
+		const plusieurs = attenteWeb.aGlisser.length > 1;
+		const texteGlisser = t(plusieurs ? "ai.web.dropFilesMany" : "ai.web.dropFiles", { site });
+		ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", aGlisser ? texteGlisser : t("ai.web.title", { site }));
 		/* Le presse-papier d'abord, quand la question n'a pas tenu dans
 		   l'adresse : il faut coller là-bas AVANT d'envoyer. */
 		if (attenteWeb.ouverture.mode === "presse-papier") ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t("ai.web.copied", { site }));
@@ -2646,9 +2652,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   (`poserCarte`) : on les saisit et on les lâche sur le site à gauche,
 		   c'est le vrai fichier qui part (`host.depot.glisser`, pendant le
 		   `dragstart`, le seul moment où Chromium accepte un glisser natif). */
-		if (attenteWeb.aGlisser.length > 0 && host.depot) {
-			const plusieurs = attenteWeb.aGlisser.length > 1;
-			ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t(plusieurs ? "ai.web.dropFilesMany" : "ai.web.dropFiles", { site }));
+		if (aGlisser && host.depot) {
+			ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t("ai.web.title", { site }));
 			/* LES PILES — la même pile de feuilles que l'aperçu d'un PDF
 			   (`poserApercuPdf`, classes `qbd-ai-preview-*`), donc la même
 			   animation au survol (la page bascule, les feuilles s'éventaillent,

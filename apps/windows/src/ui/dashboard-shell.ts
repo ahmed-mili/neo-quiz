@@ -40,7 +40,7 @@ import { aiSettingsDefaults } from "../../../../src/dashboard/ai-settings-host";
 import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host";
 import { openIconPicker } from "../../../../src/dashboard/icon-picker";
 import { openCreateFolderModal, openCreateQuizModal } from "../../../../src/dashboard/folder-create";
-import { buildModuleCardMenu, buildQuizCardMenu } from "../../../../src/dashboard/quiz-menu";
+import { annulerDerniereSuppression, buildModuleCardMenu, buildQuizCardMenu } from "../../../../src/dashboard/quiz-menu";
 import { moduleIcon } from "../../../../src/dashboard/module-icons";
 import { moduleAccent } from "../../../../src/dashboard/module-color";
 import { createSelect, openActionMenu } from "../../../../src/dashboard/ui-select";
@@ -657,8 +657,22 @@ export function monterDashboard(root: HTMLElement, deps: MonterDashboardDeps): (
 	   avant le premier `await` ; seule l'écriture est attendue. Idempotent :
 	   un second appel rend une promesse déjà résolue. */
 	let demonte: Promise<void> | null = null;
+	/* Ctrl+Z hors d'un champ : annule la dernière suppression de quiz (Ahmed,
+	   2026-09-19). Dans un champ, c'est l'annulation de frappe du navigateur,
+	   qu'on ne touche pas. Un menu ou une modale ne l'interceptent pas non
+	   plus : supprimer, c'est déjà avoir refermé la confirmation. */
+	const surCtrlZ = (e: KeyboardEvent): void => {
+		if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey || e.key.toLowerCase() !== "z") return;
+		const cible = e.target;
+		if (cible instanceof HTMLElement && (cible.tagName === "INPUT" || cible.tagName === "TEXTAREA" || cible.isContentEditable)) return;
+		e.preventDefault();
+		void annulerDerniereSuppression(ctx).then(restaure => { if (restaure) peindre(); });
+	};
+	document.addEventListener("keydown", surCtrlZ);
+
 	return () => {
 		if (demonte) return demonte;
+		document.removeEventListener("keydown", surCtrlZ);
 		desabonner();
 		demonterMaj();
 		/* La page « Générer » aussi : une génération en vol, son écoute Échap

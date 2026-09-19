@@ -7,6 +7,7 @@ import type { ModuleGroup, ModuleMap } from "./quiz-modules";
 import { openModuleEditModal } from "./module-edit";
 import { openActionMenu, type ActionMenuItem } from "./ui-select";
 import { QUIZ_BLOCK_RE } from "../quiz-utils";
+import type { QuizStatRecord } from "./stats-store";
 import { neContientQueLeFrontmatterNeoQuiz } from "../quiz-frontmatter";
 import { isFolderArchived, setFolderArchived } from "./folder-archive";
 
@@ -152,6 +153,58 @@ function openRenameQuizModal(
 	});
 }
 
+/* ── Annuler la dernière suppression (Ctrl+Z, Ahmed 2026-09-19) ──
+   Ce qu'il faut pour remettre une note comme elle était : son contenu
+   d'AVANT, ce qu'on a écrit à la place (ou rien, si elle est partie à la
+   corbeille), et ses statistiques. Une seule opération retenue, la dernière
+   — un module entier en compte plusieurs. La corbeille garde sa copie : la
+   restauration réécrit le contenu au chemin d'origine, sans rien retirer de
+   la corbeille (aucun hôte n'expose « sortir de la corbeille »). */
+interface SuppressionAnnulable {
+	path: string;
+	avant: string;
+	/** Ce qui a été écrit à la place ; `null` si la note est à la corbeille. */
+	apres: string | null;
+	stats: QuizStatRecord | null;
+}
+let derniereSuppression: SuppressionAnnulable[] = [];
+
+/** Remet en place la dernière suppression. `false` s'il n'y a rien à
+    annuler ; une note modifiée depuis (ou recréée) n'est pas touchée. */
+export async function annulerDerniereSuppression(ctx: DashboardShellCtx): Promise<boolean> {
+	const lot = derniereSuppression;
+	if (lot.length === 0) return false;
+	derniereSuppression = [];
+	const fs = currentHost().fs;
+	let restaures = 0;
+	for (const s of lot) {
+		try {
+			let ok = false;
+			if (s.apres === null) {
+				/* Partie à la corbeille : le chemin doit être LIBRE. */
+				if (await fs.exists(s.path)) continue;
+				await fs.write(s.path, s.avant);
+				ok = true;
+			} else {
+				/* Le bloc seul retiré : compare-and-swap sur ce qu'on avait écrit. */
+				await fs.process(s.path, (content) => {
+					ok = content === s.apres;
+					return ok ? s.avant : content;
+				});
+			}
+			if (!ok) continue;
+			if (s.stats) ctx.statsStore?.restoreRecord(s.path, s.stats);
+			const file = fs.getFile(s.path);
+			if (file) await ctx.scanner.scanFile(file);
+			restaures++;
+		} catch (e) {
+			console.error("[quiz-blocks] restauration impossible :", s.path, e);
+		}
+	}
+	currentHost().ui.notice(t(restaures === lot.length ? "dashboard.quizzes.restored" : "dashboard.quizzes.restoredPartial", { count: lot.length - restaures }));
+	return restaures > 0;
+}
+
 async function deleteQuiz(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Promise<void> {
 	// `getFile` rend null pour un dossier comme pour un absent : la garde
 	// reste nécessaire, seule sa forme a changé (`instanceof TFile` avant).
@@ -161,6 +214,7 @@ async function deleteQuiz(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Promise
 	}
 	// La note peut ne plus contenir de bloc (supprimé ailleurs entre-temps) :
 	// annoncer « Quiz supprimé » serait alors faux.
+	derniereSuppression = [];
 	if (await deleteQuizCore(ctx, quiz)) currentHost().ui.notice(t("dashboard.quizzes.deleted"));
 	else currentHost().ui.notice(t("dashboard.detail.noBlockInNote"));
 }
@@ -178,8 +232,11 @@ async function deleteQuiz(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Promise
  */
 async function deleteQuizCore(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Promise<boolean> {
 	const fs = currentHost().fs;
+	const stats = ctx.statsStore?.getRecord(quiz.path) ?? null;
 	let videApresRetrait = false;
 	let avaitUnBloc = false;
+	/** Ce qu'on a écrit à la place du contenu d'origine (pour l'annulation). */
+	let ecrit: string | null = null;
 	/** Le contenu vu par le dernier passage du rappel — le témoin d'un
 	    éventuel `trash`. */
 	let vu = "";
@@ -194,6 +251,7 @@ async function deleteQuizCore(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Pro
 		videApresRetrait = remaining.trim().length === 0 || neContientQueLeFrontmatterNeoQuiz(remaining);
 		// Rien d'autre dans la note : on ne la vide pas pour la jeter juste
 		// après — on la laisse telle quelle et c'est la corbeille qui l'emporte.
+		ecrit = videApresRetrait ? null : remaining;
 		return videApresRetrait ? content : remaining;
 	});
 	/* Aucun bloc trouvé : la note a été vidée ailleurs entre-temps. On ne
@@ -207,6 +265,7 @@ async function deleteQuizCore(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Pro
 		if (neContientQueLeFrontmatterNeoQuiz(vu)) {
 			await fs.trash(quiz.path);
 			ctx.statsStore?.deleteRecord(quiz.path);
+			derniereSuppression.push({ path: quiz.path, avant: vu, apres: null, stats });
 			return true;
 		}
 		return false;
@@ -221,7 +280,8 @@ async function deleteQuizCore(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Pro
 		await fs.process(quiz.path, (content) => {
 			if (content !== vu) {
 				jetee = false;
-				return content.replace(QUIZ_BLOCK_RE, "");
+				ecrit = content.replace(QUIZ_BLOCK_RE, "");
+				return ecrit;
 			}
 			jetee = true;
 			return content;
@@ -237,6 +297,7 @@ async function deleteQuizCore(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Pro
 		if (jetee) await fs.trash(quiz.path);
 	}
 	ctx.statsStore?.deleteRecord(quiz.path);
+	derniereSuppression.push({ path: quiz.path, avant: vu, apres: ecrit, stats });
 	return true;
 }
 
@@ -247,6 +308,7 @@ async function deleteModuleQuizzes(ctx: DashboardShellCtx, group: ModuleGroup): 
 	   une exception remonter d'ici laissait le module A MOITIÉ supprimé avec
 	   une interface qui ne se redessinait même pas (revue codex 2026-07-31). */
 	let echecs = 0;
+	derniereSuppression = [];
 	for (const q of group.quizzes) {
 		// Fichier introuvable (ou dossier à ce chemin — `getFile` rend null
 		// dans les deux cas) : c'est un échec comme un autre, pas un silence.

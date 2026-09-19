@@ -39,6 +39,8 @@ export interface StatsStore {
 	getRecord(path: string): QuizStatRecord | null;
 	getAll(): Record<string, QuizStatRecord>;
 	deleteRecord(path: string): void;
+	/** Remet un enregistrement TEL QUEL (annulation d'une suppression). */
+	restoreRecord(path: string, record: QuizStatRecord): void;
 	formatRelativeTime(timestamp: number): string;
 	/**
 	 * Les stats suivent une note renommée. PUBLIQUE, et non plus un
@@ -109,6 +111,11 @@ export function createStatsStore(host: StatsStoreHost): StatsStore {
 		}
 	}
 
+	function restoreRecord(path: string, record: QuizStatRecord): void {
+		data[path] = { ...record };
+		scheduleSave();
+	}
+
 	/* ── Formater un timestamp en temps relatif ──
 	   Appelée AU RENDU par les vues : les libellés suivent donc la langue
 	   courante sans que le store ait à être reconstruit. */
@@ -171,6 +178,7 @@ export function createStatsStore(host: StatsStoreHost): StatsStore {
 		getRecord,
 		getAll,
 		deleteRecord,
+		restoreRecord,
 		formatRelativeTime,
 		renamed,
 		destroy

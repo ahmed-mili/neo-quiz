@@ -7,6 +7,7 @@ import type { ModuleGroup, ModuleMap } from "./quiz-modules";
 import { openModuleEditModal } from "./module-edit";
 import { openActionMenu, type ActionMenuItem } from "./ui-select";
 import { QUIZ_BLOCK_RE } from "../quiz-utils";
+import { neContientQueLeFrontmatterNeoQuiz } from "../quiz-frontmatter";
 import { isFolderArchived, setFolderArchived } from "./folder-archive";
 
 /* ══════════════════════════════════════════════════════════
@@ -188,7 +189,9 @@ async function deleteQuizCore(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Pro
 		avaitUnBloc = QUIZ_BLOCK_RE.test(content);
 		if (!avaitUnBloc) { videApresRetrait = false; return content; }
 		const remaining = content.replace(QUIZ_BLOCK_RE, "");
-		videApresRetrait = remaining.trim().length === 0;
+		/* Vide aussi quand il ne reste que le frontmatter `neo-quiz:` que
+		   l'application avait écrit : ce n'est pas le contenu de l'utilisateur. */
+		videApresRetrait = remaining.trim().length === 0 || neContientQueLeFrontmatterNeoQuiz(remaining);
 		// Rien d'autre dans la note : on ne la vide pas pour la jeter juste
 		// après — on la laisse telle quelle et c'est la corbeille qui l'emporte.
 		return videApresRetrait ? content : remaining;
@@ -197,7 +200,17 @@ async function deleteQuizCore(ctx: DashboardShellCtx, quiz: QuizIndexEntry): Pro
 	   touche ni au fichier ni aux statistiques — supprimer l'enregistrement
 	   d'un quiz qu'on n'a pas supprimé effacerait un historique de révision
 	   pour rien (revue codex 2026-07-31). */
-	if (!avaitUnBloc) return false;
+	if (!avaitUnBloc) {
+		/* Sauf la carcasse d'une suppression d'avant : le bloc parti, le
+		   frontmatter de l'application resté (c'est ce que faisait ce code
+		   jusqu'au 2026-09-19). Elle n'a rien de l'utilisateur : corbeille. */
+		if (neContientQueLeFrontmatterNeoQuiz(vu)) {
+			await fs.trash(quiz.path);
+			ctx.statsStore?.deleteRecord(quiz.path);
+			return true;
+		}
+		return false;
+	}
 	if (videApresRetrait) {
 		/* COMPARE-AND-SWAP avant la corbeille : entre le rappel et ici,
 		   quelqu'un a pu ajouter du texte à la note. La jeter emporterait ce

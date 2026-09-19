@@ -68,6 +68,26 @@ export function lireFrontmatterNeoQuiz(content: string): NeoQuizFrontmatter | nu
 }
 
 /**
+ * La note ne contient-elle RIEN d'autre qu'un frontmatter `neo-quiz:` ? C'est
+ * le cas d'une note générée dont on vient de retirer le bloc : le frontmatter
+ * est à l'application, pas à l'utilisateur, et une note qui n'a plus que lui
+ * n'a plus rien — elle part à la corbeille avec le quiz (vu par Ahmed le
+ * 2026-09-19 : la note restait, listée comme un quiz, et sa suppression
+ * disait « aucun bloc »). Un frontmatter qui porte d'AUTRES clés que
+ * `neo-quiz:` (tags, alias posés par l'utilisateur) n'est pas vide.
+ */
+export function neContientQueLeFrontmatterNeoQuiz(content: string): boolean {
+	if (!lireFrontmatterNeoQuiz(content)) return false;
+	const lines = content.split(/\r\n|\n/);
+	const fin = lines.indexOf("---", 1);
+	if (fin === -1) return false;
+	const bloc = lines.slice(1, fin);
+	const autresCles = bloc.some(l => l.trim() && !/^\s/.test(l) && l !== "neo-quiz:");
+	if (autresCles) return false;
+	return lines.slice(fin + 1).join("\n").trim().length === 0;
+}
+
+/**
  * Sérialise le frontmatter `neo-quiz:`, prêt à être préfixé au bloc quiz
  * exporté (`ecrireFrontmatterNeoQuiz(meta) + exportAllWithFence(...)`).
  * Se termine par une ligne vide : le bloc qui suit ne colle pas au `---`.

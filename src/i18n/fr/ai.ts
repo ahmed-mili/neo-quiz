@@ -202,7 +202,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.notice.pathsUnresolved": "Introuvable dans le vault ou les dossiers configurés : {files}",
 	"ai.notice.pathsAmbiguous": "{count} fichiers correspondent à « {file} » — précisez un chemin plus long.",
 	"ai.notice.pathsTooMany": "Seuls les {max} premiers fichiers cités dans votre demande ont été joints.",
-	"ai.notice.blockExists": "Un bloc quiz-blocks existe déjà dans « {name} ». Ouvrez l'éditeur pour le modifier.",
+	"ai.notice.blockExists": "« {name} » contient déjà un quiz. Ouvrez l'éditeur pour le modifier.",
 	"ai.notice.quizInserted": "Quiz inséré dans « {name} »",
 	"ai.notice.insertFailed": "Erreur lors de l'insertion",
 	"ai.notice.saveFailed": "Impossible d’enregistrer le quiz généré.",

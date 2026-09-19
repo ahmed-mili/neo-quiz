@@ -158,8 +158,17 @@ await withSrcModule("src/dashboard/scanner.ts", async ({ createScanner }) => {
 /* ── Frontmatter `neo-quiz:` (src/quiz-frontmatter.ts) ──
    Module pur : qui a généré le quiz (fournisseur, modèle, effort,
    horodatage), lu par le scanner depuis la tête de la note. */
-await withSrcModule("src/quiz-frontmatter.ts", async ({ lireFrontmatterNeoQuiz, ecrireFrontmatterNeoQuiz }) => {
+await withSrcModule("src/quiz-frontmatter.ts", async ({ lireFrontmatterNeoQuiz, ecrireFrontmatterNeoQuiz, neContientQueLeFrontmatterNeoQuiz }) => {
 	const r = makeReporter("Frontmatter neo-quiz");
+
+	/* La note générée dont on retire le bloc : il ne reste que le
+	   frontmatter de l'application — elle est VIDE (à la corbeille avec le
+	   quiz). Pas si l'utilisateur y a mis du texte ou d'autres clés. */
+	const seulement = ecrireFrontmatterNeoQuiz({ provider: "claude-web", model: "claude.ai", generatedAt: "2026-09-19T20:51:15Z" }) + "\n";
+	r.check("une note qui n'a plus que le frontmatter neo-quiz est vide", neContientQueLeFrontmatterNeoQuiz(seulement), true);
+	r.check("… mais pas avec du texte dessous", neContientQueLeFrontmatterNeoQuiz(seulement + "Mes notes\n"), false);
+	r.check("… ni avec une autre clé de frontmatter (tags de l'utilisateur)", neContientQueLeFrontmatterNeoQuiz(seulement.replace("neo-quiz:", "tags: [cours]\nneo-quiz:")), false);
+	r.check("… ni sans frontmatter neo-quiz du tout", neContientQueLeFrontmatterNeoQuiz("---\ntags: [a]\n---\n"), false);
 
 	r.check("une note sans frontmatter rend null",
 		lireFrontmatterNeoQuiz("```quiz-blocks\n[]\n```"), null);

@@ -230,7 +230,7 @@ export const EN_AI = {
 	"ai.notice.pathsUnresolved": "Not found in your vault or configured folders: {files}",
 	"ai.notice.pathsAmbiguous": "{count} files match “{file}” — write a longer path to pick one.",
 	"ai.notice.pathsTooMany": "Only the first {max} files named in your request were attached.",
-	"ai.notice.blockExists": "A quiz-blocks block already exists in “{name}”. Open the editor to change it.",
+	"ai.notice.blockExists": "“{name}” already contains a quiz. Open the editor to change it.",
 	"ai.notice.quizInserted": "Quiz inserted into “{name}”",
 	"ai.notice.insertFailed": "Insertion failed",
 	"ai.notice.saveFailed": "The generated quiz could not be saved.",

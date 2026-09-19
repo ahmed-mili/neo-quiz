@@ -7,7 +7,7 @@ export const EN_REVIEW = {
 	/* ── La page Réglages ── */
 	"review.settings.title": "Settings",
 	"review.settings.folders": "Quiz folders",
-	"review.settings.foldersHint": "Neo Quiz reads the quiz-blocks in these folders. Nothing is copied, nothing is moved.",
+	"review.settings.foldersHint": "Neo Quiz reads the quizzes in these folders. Nothing is copied, nothing is moved.",
 	"review.settings.addFolder": "Add a folder",
 	"review.settings.removeFolder": "Remove — the folder and its review history stay on disk, and it is not reopened",
 	/* Le mot compte : retirer un dossier de la liste ne touche NI aux notes,

@@ -30,6 +30,8 @@ release notes.
 - Images now work with claude.ai too: they are dragged along with the other files. In the composer, an image is a card of the same size as a document's, next to it, and clicking it opens a preview.
 
 ### Fixed
+- Deleting a generated quiz now moves its note to the recycle bin: the note was left behind with only the technical header Neo Quiz had written, still listed as a quiz, and deleting it again said "no block found". Such a leftover note is now removed too.
+- The format name "quiz-blocks" no longer appears in the app's messages: "No quiz found in this note", "already contains a quiz".
 - An answer copied from claude.ai is now recognised even when the model rewrote or dropped the token on its first line (Haiku did both): any copied JSON5 array of questions is taken as the answer. Only what you copy after clicking Open counts: what was already in the clipboard at that moment (the prompt, the answer of an earlier generation) is never taken, so an old answer no longer creates a quiz before you have even sent the request.
 - A quiz whose question shows a code block (a Python snippet, for instance) was rejected as "text instead of a quiz": the code block inside the question was mistaken for the block around the whole answer.
 - A long file name no longer hides its extension: it is cut in the middle ("GNU dd…let.md") in the files to drag onto claude.ai.

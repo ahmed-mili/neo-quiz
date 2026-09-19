@@ -209,9 +209,9 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.detail.statAttempts": "Tentatives",
 	"dashboard.detail.generatedBy": "Généré par {model} ({effort})",
 	"dashboard.detail.fileNotFound": "Fichier introuvable",
-	"dashboard.detail.noBlock": "Aucun bloc quiz-blocks trouvé",
+	"dashboard.detail.noBlock": "Aucun quiz trouvé",
 	"dashboard.detail.loadError": "Impossible de charger les questions",
-	"dashboard.detail.noBlockInNote": "Aucun bloc quiz-blocks trouvé dans cette note",
+	"dashboard.detail.noBlockInNote": "Aucun quiz trouvé dans cette note",
 
 	/* ── Page d'un quiz ── */
 	"dashboard.quiz.loading": "Chargement…",

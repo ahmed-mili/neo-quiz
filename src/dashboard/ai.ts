@@ -1,7 +1,7 @@
 import JSON5 from "json5";
 import type { EditorExamOptions } from "../types/editor-ctx";
 import type { AiPreset, DashboardViewName, NavigateData } from "../types/dashboard-ctx";
-import type { HostFile } from "../host/types";
+import type { HostFile, HostModalHandle } from "../host/types";
 import { currentHost, requireHost } from "../host/current";
 import { ajouter } from "../dom";
 import { LOG_PREFIX } from "../branding";
@@ -317,6 +317,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	/** Le site de la dernière ouverture, gardé au-delà de `attenteWeb` (remis à
 	    null avant l'écran d'erreur) : c'est lui que « Rouvrir {site} » affiche. */
 	let attenteWebSite = "";
+	/* La carte d'attente du canal web vit dans une MODALE centrée depuis le
+	   2026-09-19 (demande d'Ahmed : la carte pleine largeur au-dessus du
+	   composer prenait trop de place). La fermer — Échap, le fond, la croix —
+	   c'est annuler l'attente. `webModalFermetureInterne` distingue une
+	   fermeture demandée par la page (réponse reçue, annulation déjà faite)
+	   d'une fermeture par l'utilisateur, la seule qui doive annuler. */
+	let webModal: HostModalHandle | null = null;
+	let webModalFermetureInterne = false;
 	/** L'action de l'écran d'erreur : « Rouvrir <site> » quand la réponse
 	    copiée n'était pas un quiz (réessayer relancerait une génération que
 	    l'application n'a jamais faite) ; « upgrade » quand Ollama a répondu
@@ -651,7 +659,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// (bulle qui monte / champ vide) qui fait « sentir » l'envoi. En
 		// résultat, la page du quiz occupe l'écran et porte son propre
 		// en-tête — une bulle de plus n'y ajouterait que du bruit.
-		if (sentMessage && (phase === "loading" || phase === "error" || phase === "connexion" || phase === "web")) renderSentMessage(stage);
+		/* La bulle de la demande envoyée n'existe que pour un fournisseur qui
+		   génère ICI (CLI, Ollama). Pour un site, la demande part sur le site,
+		   où elle est réellement envoyée : la bulle laissait croire à une
+		   conversation dans Neo Quiz, pendant l'attente comme après un « pas
+		   un quiz » (vu par Ahmed le 2026-09-19). `sentMessage` reste en
+		   mémoire : Annuler et Rouvrir s'en servent. */
+		const canalWeb = aiProviders.getCanal(settings().aiProvider || "")?.type === "web";
+		if (sentMessage && !canalWeb && (phase === "loading" || phase === "error" || phase === "connexion")) renderSentMessage(stage);
 
 		// Zone du loader de génération : AU-DESSUS du composer (demande
 		// 2026-07-10 — le loader préfigure le résultat, qui vit en haut).
@@ -663,7 +678,6 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   l'échec. */
 		const errorZone = phase === "error" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
 		const connexionZone = phase === "connexion" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
-		const webZone = phase === "web" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
 
 		// ── Fournisseur : bouton LOGO SEUL dans le pied du composer (la
 		// carte « Modèle IA » est supprimée) — le menu garde logos, statut
@@ -1422,8 +1436,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (phase === "loading") renderLoading(loadingZone!);
 		else if (phase === "error") renderError(errorZone!);
 		else if (phase === "connexion") renderConnexion(connexionZone!);
-		else if (phase === "web") renderWeb(webZone!);
 		else if (phase === "result") renderResult(resultZone!);
+		syncWebModal();
 
 		// Onglet ouvert → saisie immédiate sans clic (demande 2026-07-10).
 		// Pas en phase résultat : le focus serait volé à l'éditeur embarqué
@@ -2318,32 +2332,70 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		annuler.addEventListener("click", annulerConnexion);
 	}
 
-	/** La carte d'attente du canal web : le titre nomme le site, la ligne
-	    forte dit ce qui va se passer (veille automatique ou collage manuel
-	    selon l'hôte). Le bandeau d'avertissement du site n'est plus ici — il
-	    s'est déplacé dans un modal ouvert au CHOIX du canal, une fois
-	    (`ouvrirAvertissementWeb`, demande d'Ahmed, 2026-09-18). */
+	/**
+	 * La modale d'attente du canal web suit la PHASE : ouverte tant que
+	 * `phase === "web"`, fermée dès qu'on en sort (réponse reçue, annulation,
+	 * erreur). Appelée à la fin de chaque `render`, c'est le seul endroit qui
+	 * l'ouvre ou la ferme — un `render` de plus ne rouvre rien.
+	 */
+	function syncWebModal(): void {
+		if (phase === "web" && !webModal && attenteWeb) {
+			webModal = requireHost("modals").open({
+				className: "qbd-web-wait-modal",
+				onOpen: (m) => {
+					renderWeb(m.contentEl);
+					/* La croix EST l'annulation (plus de bouton Annuler, demande
+					   d'Ahmed, 2026-09-19) : elle se signale comme telle au
+					   survol — rouge, et la bulle « Annuler » tout de suite
+					   dessous (CSS `.qbd-web-wait-close`). */
+					const croix = m.panelEl.querySelector<HTMLElement>(".modal-close-button");
+					if (croix) {
+						croix.classList.add("qbd-web-wait-close");
+						croix.dataset.tip = t("ai.web.cancel");
+						croix.setAttribute("aria-label", t("ai.web.cancel"));
+					}
+				},
+				onClose: () => {
+					webModal = null;
+					const interne = webModalFermetureInterne;
+					webModalFermetureInterne = false;
+					/* Fermée par l'utilisateur (Échap, fond, croix) pendant
+					   l'attente : c'est « Annuler ». */
+					if (!interne && phase === "web") annulerAttenteWeb();
+				},
+			});
+		} else if (phase !== "web" && webModal) {
+			webModalFermetureInterne = true;
+			webModal.close();
+		}
+	}
+
+	/** Le contenu de la modale d'attente : l'icône d'où partent des ondes
+	    (l'attente se lit là, pas dans un balayage qui dirait « ça génère »
+	    alors que rien ne tourne), une seule phrase qui dit les DEUX gestes
+	    dans l'ordre (envoyer, puis copier), et Rouvrir. */
 	function renderWeb(parent: HTMLElement): void {
 		if (!attenteWeb) return;
 		const site = attenteWeb.site;
-		const carte = ajouter(parent, "div", "qbd-ai-preview-loading qbd-ai-web-card");
-		const iconWrap = ajouter(carte, "div", "qbd-ai-loading-icon");
-		host.ui.setIcon(iconWrap, "clipboard-copy");
-		ajouter(carte, "p", "qbd-ai-loading-title", t("ai.web.title", { site }));
+		const carte = ajouter(parent, "div", "qbd-ai-web-card");
+		const iconWrap = ajouter(carte, "div", "qbd-ai-loading-icon qbd-web-wait-icon");
+		host.ui.setIcon(iconWrap, "clipboard-list");
+		ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.title", { site }));
 		/* Le presse-papier d'abord, quand la question n'a pas tenu dans
 		   l'adresse : il faut coller là-bas AVANT d'envoyer. */
 		if (attenteWeb.ouverture.mode === "presse-papier") ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t("ai.web.copied", { site }));
-		ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--strong", host.collage ? t("ai.web.auto") : t("ai.web.manual"));
+		/* UNE seule phrase à l'écran (demande d'Ahmed, 2026-09-19) : le titre dit
+		   déjà les deux gestes, et « le quiz se crée ici tout seul » est ce que
+		   l'utilisateur VERRA arriver. La ligne ne reste que là où il doit agir
+		   autrement : sans veille du presse-papier (collage manuel). */
+		if (!host.collage) ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--strong", t("ai.web.manual"));
 		const actions = ajouter(carte, "div", "qbd-ai-web-actions");
-		const reopen = ajouter(actions, "button", "qbd-btn qbd-btn--ghost", t("ai.web.reopen", { site }));
+		/* Une seule action : annuler, c'est la croix de la modale (ou Échap). */
+		const reopen = ajouter(actions, "button", "qbd-btn qbd-btn--primary");
 		reopen.type = "button";
-		/* Rouvrir = rejouer l'ouverture, avec un jeton neuf : le même chemin
-		   que « Réessayer » (restore puis startGeneration), qui repasse par
-		   ouvrirSite. */
-		reopen.addEventListener("click", () => { arreterAttenteWeb(); relancerApresErreur(); });
-		const cancel = ajouter(actions, "button", "qbd-btn qbd-btn--ghost", t("ai.web.cancel"));
-		cancel.type = "button";
-		cancel.addEventListener("click", annulerAttenteWeb);
+		host.ui.setIcon(ajouter(reopen, "span", "qbd-btn-icon qbd-btn-icon--sm"), "external-link");
+		ajouter(reopen, "span", undefined, t("ai.web.reopen", { site }));
+		reopen.addEventListener("click", rouvrirSite);
 	}
 
 	/** Ouvre l'écran d'usage en lui passant la dernière lecture connue (il ne
@@ -2901,7 +2953,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   l'écran : sinon un Esc qui ferme une modale ailleurs annulait cette
 		   attente, et un Ctrl+V dans un champ de la page courante se voyait
 		   avalé et peint en « pas un quiz » par-dessus la vue qu'on regardait. */
-		const carteAttenteVisible = (): boolean => !!containerRef?.querySelector(".qbd-ai-web-card");
+		const carteAttenteVisible = (): boolean => !!document.querySelector(".qbd-ai-web-card");
 		const surTouche = (e: KeyboardEvent): void => {
 			if (!carteAttenteVisible()) return;
 			if (e.key === "Escape") { e.preventDefault(); annulerAttenteWeb(); }
@@ -2942,6 +2994,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		render(container);
 	}
 
+	/** Rouvrir = rejouer l'ouverture, avec un jeton neuf : le même chemin que
+	    « Réessayer » (restore puis startGeneration), qui repasse par
+	    ouvrirSite. */
+	function rouvrirSite(): void {
+		arreterAttenteWeb();
+		relancerApresErreur();
+	}
+
 	/** Arrête la veille et retire les écouteurs ; ne touche pas à la phase. */
 	function arreterAttenteWeb(): void {
 		if (!attenteWeb) return;
@@ -2972,7 +3032,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   plus bas repeindrait alors la vue courante par-dessus. On revient
 		   d'abord sur « Générer » — le chemin de succès d'une génération CLI le
 		   fait déjà pour la page détail, ceci est son équivalent en entrée. */
-		if (!containerRef?.querySelector(".qbd-ai-web-card")) deps.navigate("ai");
+		if (!containerRef?.isConnected) deps.navigate("ai");
 		try {
 			generatedQuestions = parseReponseQuiz(texte);
 			if (generatedQuestions.length === 0) throw new Error(t("ai.err.notAnArray"));

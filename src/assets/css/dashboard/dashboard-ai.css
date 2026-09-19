@@ -2217,14 +2217,162 @@
 	min-height: 260px;
 }
 
-/* ── La carte d'attente du canal web ──
-   Même surface que le loader (elle vit au même endroit, au-dessus du
-   composer) : un titre, deux ou trois lignes, deux boutons fantômes. La
-   ligne forte est celle qui dit ce qui va se passer (« le quiz se crée ici
-   tout seul »). */
-.qbd-ai-web-card {
-	gap: 8px;
+/* ── La carte d'attente du canal web, dans une MODALE centrée ──
+   (2026-09-19, demande d'Ahmed : pleine largeur au-dessus du composer, la
+   carte prenait trop de place, et son balayage était celui de la GÉNÉRATION
+   alors que l'application ne fait qu'attendre.) L'attente se lit sur les
+   ondes de l'icône ; une seule phrase dit les deux gestes dans l'ordre ; un
+   seul bouton, Rouvrir. Fermer la modale (Échap, fond, croix) annule. */
+.qbd-web-wait-modal { width: 400px; min-width: 0; max-width: calc(100vw - 32px); }
+.qbd-web-wait-modal .modal-title:empty { display: none; }
+/* Aucun voile derrière cette modale (demande d'Ahmed, 2026-09-19) : la page
+   reste lisible telle quelle pendant qu'on attend. Le fond reste cliquable
+   pour fermer, il est seulement transparent. */
+.modal-container:has(> .qbd-web-wait-modal) .modal-bg { background: transparent; }
+
+/* La croix de cette modale ANNULE l'attente : son survol ne ressemble pas à
+   celui d'une croix ordinaire. Elle rougit, pivote d'un quart de tour, et la
+   bulle « Annuler » apparaît sous elle sans délai (aucune transition sur
+   l'opacité : une infobulle qui tarde, c'est une infobulle qu'on ne lit pas). */
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close {
+	transition: background 0.12s ease, color 0.12s ease;
 }
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close svg {
+	transition: transform 0.18s ease;
+}
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:hover,
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:focus-visible {
+	background: color-mix(in srgb, var(--color-red) 16%, transparent);
+	color: var(--color-red);
+}
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:hover svg,
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:focus-visible svg {
+	transform: rotate(90deg);
+}
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close::after {
+	content: attr(data-tip);
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	padding: 3px 9px;
+	border-radius: 6px;
+	border: 1px solid color-mix(in srgb, var(--color-red) 45%, transparent);
+	background: var(--background-primary);
+	color: var(--color-red);
+	font-size: 11.5px;
+	font-weight: 500;
+	line-height: 1.5;
+	white-space: nowrap;
+	pointer-events: none;
+	opacity: 0;
+}
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:hover::after,
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:focus-visible::after {
+	opacity: 1;
+}
+
+/* Les boutons : la modale est portalée au <body>, HORS de `.qbd-root`, donc
+   les règles `.qbd-root .qbd-btn…` de dashboard-components.css ne l'atteignent
+   pas. Les mêmes valeurs, redites ici pour ce seul panneau. */
+.qbd-web-wait-modal .qbd-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	height: 34px;
+	padding: 0 16px;
+	border-radius: var(--radius-m, 8px);
+	font-size: 12.5px;
+	font-weight: 500;
+	line-height: 1;
+	cursor: pointer;
+	border: 1px solid transparent;
+	font-family: var(--font-interface, inherit);
+	transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, transform 0.08s ease;
+}
+.qbd-web-wait-modal .qbd-btn:active { transform: scale(0.97); }
+.qbd-web-wait-modal .qbd-btn--ghost {
+	background: transparent;
+	color: var(--text-muted);
+	border-color: var(--background-modifier-border);
+}
+.qbd-web-wait-modal .qbd-btn--ghost:hover {
+	background: var(--background-modifier-hover);
+	border-color: var(--background-modifier-border-hover);
+	color: var(--text-normal);
+}
+.qbd-web-wait-modal .qbd-btn--primary {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
+	box-shadow: 0 1px 10px color-mix(in srgb, var(--interactive-accent) 30%, transparent);
+}
+.qbd-web-wait-modal .qbd-btn--primary:hover {
+	background: var(--interactive-accent-hover);
+	box-shadow: 0 2px 16px color-mix(in srgb, var(--interactive-accent) 40%, transparent);
+}
+.qbd-web-wait-modal .qbd-btn-icon svg { width: 14px; height: 14px; }
+
+.qbd-ai-web-card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	/* La hauteur vient des 30 px d'air autour de la tuile (voir les ondes
+	   plus bas), pas d'un minimum : la carte reste proportionnée à son
+	   contenu. */
+	min-height: 0;
+	padding: 4px 8px 10px;
+	box-sizing: border-box;
+	text-align: center;
+}
+
+/* Deux classes : `.qbd-ai-loading-icon`, déclarée PLUS BAS dans ce fichier,
+   imposait 52 px à la même spécificité et l'emportait par l'ordre — la tuile
+   restait petite et le pictogramme agrandi s'y décentrait. La grille centre
+   le SVG sur ses deux axes, `display: block` retire l'espace de ligne qu'un
+   SVG en ligne garde sous lui. */
+.qbd-ai-web-card .qbd-web-wait-icon {
+	display: grid;
+	place-items: center;
+	box-sizing: border-box;
+	width: 64px;
+	height: 64px;
+	padding: 0;
+	margin: 30px 0;
+	border-radius: 18px;
+	position: relative;
+}
+.qbd-ai-web-card .qbd-web-wait-icon svg { display: block; width: 30px; height: 30px; margin: 0; }
+.qbd-web-wait-title { max-width: 30ch; text-align: center; text-wrap: balance; line-height: 1.4; }
+
+/* L'ATTENTE : deux ondes partent de la tuile et s'effacent en grandissant
+   (« sonar », choisi à l'écran par Ahmed le 2026-09-19 parmi sept effets).
+   L'échelle (1,75 × 64 px) et les marges de la tuile sont calées ENSEMBLE :
+   une onde déborde de 24 px de chaque côté, la tuile garde 30 px d'air
+   au-dessus et au-dessous, pour que l'onde ne touche jamais le texte. */
+.qbd-ai-web-card .qbd-web-wait-icon::before,
+.qbd-ai-web-card .qbd-web-wait-icon::after {
+	content: "";
+	position: absolute;
+	inset: -1px;
+	border-radius: 18px;
+	border: 1.5px solid var(--interactive-accent);
+	opacity: 0;
+	pointer-events: none;
+	animation: qbd-web-sonar 3s ease-out infinite;
+}
+.qbd-ai-web-card .qbd-web-wait-icon::after { animation-delay: 1.5s; }
+@keyframes qbd-web-sonar {
+	0% { transform: scale(1); opacity: 0.55; }
+	100% { transform: scale(1.75); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.qbd-ai-web-card .qbd-web-wait-icon::before,
+	.qbd-ai-web-card .qbd-web-wait-icon::after { animation: none; }
+}
+
 
 .qbd-ai-web-line {
 	margin: 0;
@@ -2247,7 +2395,7 @@
 .qbd-ai-web-actions {
 	display: flex;
 	gap: 10px;
-	margin-top: 6px;
+	margin-top: 10px;
 }
 
 /* ── Le modal d'avertissement d'un site (claude.ai) ──
@@ -2298,11 +2446,58 @@
 .qbd-web-warn-dismiss {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 9px;
 	margin-top: 14px;
 	font-size: 12.5px;
 	color: var(--text-muted);
 	cursor: pointer;
+	user-select: none;
+}
+
+/* La case NATIVE de Chromium (gris plat, coins carrés) jurait avec le reste de
+   la fenêtre (vu par Ahmed le 2026-09-19) : `appearance: none` la remplace par
+   une case aux coins arrondis, bord discret, remplie de la couleur d'accent
+   quand elle est cochée, et une coche dessinée en CSS (deux côtés d'un carré
+   tourné) — pas d'image, pas d'icône Lucide dans un <input>. */
+.qbd-web-warn-dismiss input {
+	appearance: none;
+	-webkit-appearance: none;
+	position: relative;
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	margin: 0;
+	border-radius: 4px;
+	border: 1.5px solid var(--background-modifier-border-hover);
+	background: var(--background-primary);
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.qbd-web-warn-dismiss:hover input {
+	border-color: var(--text-muted);
+}
+
+.qbd-web-warn-dismiss input:checked {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+}
+
+.qbd-web-warn-dismiss input:checked::after {
+	content: "";
+	position: absolute;
+	left: 4.5px;
+	top: 1.5px;
+	width: 4px;
+	height: 8px;
+	border: solid var(--text-on-accent);
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+}
+
+.qbd-web-warn-dismiss input:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
 }
 
 .qbd-web-warn-actions {

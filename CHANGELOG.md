@@ -20,6 +20,7 @@ release notes.
 ### Changed
 - "The Codex CLI is not installed" reads "Codex CLI is not installed".
 - The note about the red warning that claude.ai shows above a question sent from Neo Quiz now appears once, in a dialog when you pick claude.ai in the provider menu, with a "Don't show this again" box, instead of on every waiting card. It uses claude.ai's own colors so you recognize the banner there.
+- While Neo Quiz waits for the answer from claude.ai, it now shows a small centered dialog instead of a full-width card: one sentence ("Send the prompt on claude.ai, then copy the answer"), a single "Reopen claude.ai" button, and waves around the icon instead of the generation shimmer, since nothing is being generated here. Closing the dialog cancels the wait; its close button turns red and says "Cancel" on hover. Your request no longer shows as a sent message bubble for a website, only for providers that generate inside Neo Quiz.
 
 ### Fixed
 - The PowerShell window that installs or signs in to Claude Code or Codex now finds the tool it just installed (it looks in the same folders Neo Quiz does), only says "connected" when the sign-in actually succeeded, and closes by itself two seconds later. When something fails, the window stays open with the error instead of a false success message.

@@ -569,8 +569,14 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   comprises, qui part par ici. Aucune LECTURE n'est exposée AU RENDU :
 	   `clipboard.readText` n'a pas de canal ; la veille du canal web lit
 	   côté principal, sous jeton (voir `attente-collage.ts`). */
+	/* Le dernier texte que l'APPLICATION a écrit dans le presse-papier : la
+	   veille du canal web ne doit jamais le prendre pour la réponse (il porte
+	   le jeton quand c'est le prompt). Retenu ici, côté principal, où la copie
+	   et la lecture se font toutes deux. */
+	let dernierTexteEcritParLapp = "";
 	ipcMain.handle(CANAUX.systemeCopierTexte, (_e, texte: unknown) => {
 		if (typeof texte !== "string" || texte.length > 524288) throw new Error("copie refusée : le presse-papiers ne prend qu'un texte borné");
+		dernierTexteEcritParLapp = texte;
 		clipboard.writeText(texte);
 	});
 
@@ -644,7 +650,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			deps.fenetreCourante()?.flashFrame(true);
 		},
 	});
-	ipcMain.handle(CANAUX.collageAttendre, (_e, jeton: unknown) => jetonValide(jeton) && attente.demarrer(jeton));
+	ipcMain.handle(CANAUX.collageAttendre, (_e, jeton: unknown) => jetonValide(jeton) && attente.demarrer(jeton, dernierTexteEcritParLapp));
 	ipcMain.handle(CANAUX.collageArreter, () => { attente.arreter(); });
 
 	ipcMain.handle(CANAUX.vaultsObsidian, async () => {

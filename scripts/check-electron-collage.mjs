@@ -80,6 +80,22 @@ await withSrcModule("apps/windows/electron/attente-collage.ts", ({ creerAttente,
 		r.check("elle ne relit plus, donc ne relivre pas", s.livres.length, 1);
 	}
 	{
+		/* LE PROMPT COPIÉ PAR L'APPLICATION porte le jeton (la consigne de
+		   forme le cite). Sans exclusion, la première sonde le livrait comme
+		   réponse et la page disait « pas un quiz » avant tout collage — vu
+		   par Ahmed le 2026-09-19 sur chaque génération avec fichiers joints,
+		   où le prompt passe par le presse-papier. */
+		const s = scene();
+		const prompt = "You are a quiz generator… whose FIRST line is exactly the comment `// neo-quiz k7f2q9abcd`…";
+		s.attente.demarrer("k7f2q9abcd", prompt);
+		s.poser(prompt);
+		s.temps.tic(CADENCE_MS * 5);
+		r.check("le texte que l'app a elle-même copié n'est jamais livré, même s'il porte le jeton", [s.livres, s.attente.enCours()], [[], true]);
+		s.poser("```json5\n// neo-quiz k7f2q9abcd\n[{ prompt: \"x\" }]\n```");
+		s.temps.tic(CADENCE_MS);
+		r.check("…et la vraie réponse, ensuite, l'est", [s.livres.length, s.attente.enCours()], [1, false]);
+	}
+	{
 		const s = scene();
 		s.attente.demarrer("k7f2q9abcd");
 		s.attente.arreter();

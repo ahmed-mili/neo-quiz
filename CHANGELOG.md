@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Fixed
+- Generating with claude.ai from a long request (files attached, so the prompt travels through the clipboard) failed at once with "JSON5: invalid character 'Y'": Neo Quiz mistook the prompt it had just copied for the answer. It now ignores the text it copied itself and waits for the real answer.
+
 ## [1.9.0] - 2026-09-19
 
 ### Changed

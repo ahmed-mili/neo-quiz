@@ -30,20 +30,28 @@ export interface Horloge {
 }
 
 export interface Attente {
-	/** `false` si le jeton est refusé. Remplace une attente en cours. */
-	demarrer(jeton: string): boolean;
+	/** `false` si le jeton est refusé. Remplace une attente en cours.
+	    `ignorer` : le texte que l'APPLICATION vient elle-même de mettre dans
+	    le presse-papier (le prompt, quand il ne tenait pas dans l'adresse) —
+	    il porte le jeton, et sans cette exclusion la première sonde le
+	    prenait pour la réponse et la page disait « pas un quiz » avant même
+	    que l'utilisateur ait collé quoi que ce soit sur le site (vu par Ahmed
+	    le 2026-09-19, sur toute génération avec des fichiers joints). */
+	demarrer(jeton: string, ignorer?: string): boolean;
 	arreter(): void;
 	enCours(): boolean;
 }
 
 export function creerAttente(deps: { lire(): string; horloge: Horloge; livrer(texte: string): void }): Attente {
 	let jeton: string | null = null;
+	let ignorer: string | null = null;
 	let debut = 0;
 	let sonde: number | null = null;
 
 	function arreter(): void {
 		if (sonde !== null) { deps.horloge.annuler(sonde); sonde = null; }
 		jeton = null;
+		ignorer = null;
 	}
 
 	function tour(): void {
@@ -57,7 +65,9 @@ export function creerAttente(deps: { lire(): string; horloge: Horloge; livrer(te
 			sonde = deps.horloge.planifier(tour, CADENCE_MS);
 			return;
 		}
-		if (texte.includes(jeton)) {
+		/* Le prompt copié par l'application porte le jeton : ce n'est pas la
+		   réponse. Comparé puis oublié, comme tout le reste. */
+		if (texte.includes(jeton) && texte !== ignorer) {
 			/* Arrêter AVANT de livrer : si `livrer` relance une attente, elle ne
 			   doit pas être écrasée par l'arrêt de celle-ci. */
 			arreter();
@@ -68,10 +78,11 @@ export function creerAttente(deps: { lire(): string; horloge: Horloge; livrer(te
 	}
 
 	return {
-		demarrer(j: string): boolean {
+		demarrer(j: string, aIgnorer?: string): boolean {
 			if (!jetonValide(j)) return false;
 			arreter();
 			jeton = j;
+			ignorer = typeof aIgnorer === "string" && aIgnorer ? aIgnorer : null;
 			debut = deps.horloge.maintenant();
 			sonde = deps.horloge.planifier(tour, CADENCE_MS);
 			return true;

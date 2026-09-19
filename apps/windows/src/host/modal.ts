@@ -130,7 +130,11 @@ function ouvrir(spec: HostModalSpec): HostModalHandle {
 		panneau.classList.add("qbd-closing");
 		conteneur.classList.add("qbd-closing"); // le fond .modal-bg suit
 		panneau.addEventListener("animationend", (e: AnimationEvent) => {
-			if (e.target === panneau) detacher();
+			/* La sortie de la fenêtre joue DEUX animations (`modal.css` : le
+			   fondu de 83 ms et l'échelle de 167 ms, relevés sur WinUI). La
+			   première finie détachait tout à 83 ms et coupait le fondu du fond
+			   en plein milieu : on attend la plus longue. */
+			if (e.target === panneau && e.animationName !== "nq-dialog-fondu-out") detacher();
 		});
 		window.setTimeout(detacher, SORTIE_MS);
 	}

@@ -13,6 +13,11 @@ release notes.
 
 ## [Unreleased]
 
+### Changed
+- Every dialog in Neo Quiz now looks and moves like a Windows 11 dialog: a light dark backdrop without blur, and the dialog settles into place from slightly larger instead of sliding up. The quiz hint window follows the same style.
+- "Waiting for sign-in" now appears in a centered dialog; closing it cancels the wait.
+- The "Install" button in the provider menu shows that it was pressed before the install dialog opens.
+
 ### Fixed
 - In the provider menu, only the "Install" button opens the install dialog, and it lights up only when you hover it, not the whole line.
 - The "Waiting for sign-in" screen is centered like the rest of the Generate page, instead of stuck to the left. Once the account is connected it says "Account connected." and no longer "Sending your request again…" when there was no request to send.

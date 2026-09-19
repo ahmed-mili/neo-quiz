@@ -806,8 +806,12 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 			ajouter(bouton, "span", undefined, t("dashboard.select.install"));
 			bouton.addEventListener("click", (e) => {
 				e.stopPropagation();
-				closeMenu();
-				opts.onDisabledClick?.(value);
+				/* L'appui se VOIT avant que le menu ne disparaisse (Ahmed,
+				   2026-09-19) : fermé dans la même image, le clic n'avait aucun
+				   retour. 160 ms, le temps de l'enfoncement (CSS `is-pressed`). */
+				bouton.classList.add("is-pressed");
+				bouton.disabled = true;
+				window.setTimeout(() => { closeMenu(); opts.onDisabledClick?.(value); }, 160);
 			});
 		} else if (dot === "warn") {
 			ajouter(row, "span", "qbd-status-dot qbd-status-dot--warn");

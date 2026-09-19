@@ -561,7 +561,7 @@
 	font-weight: 600;
 	line-height: 1.4;
 	white-space: nowrap;
-	transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+	transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, transform 0.1s ease, filter 0.1s ease;
 }
 .qbd-select-option .qbd-provider-install:hover,
 .qbd-select-option .qbd-provider-install:focus-visible {
@@ -570,6 +570,16 @@
 	color: var(--text-on-accent);
 }
 .qbd-select-option .qbd-provider-install:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+/* L'appui : le bouton s'enfonce et fonce d'un cran, puis le menu se ferme
+   (délai dans `appendStatut`). */
+.qbd-select-option .qbd-provider-install:active,
+.qbd-select-option .qbd-provider-install.is-pressed {
+	transform: scale(0.93);
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	filter: brightness(0.88);
+}
 .qbd-provider-install-icon { display: inline-flex; }
 /* La ligne d'un fournisseur absent n'est pas une option qu'on choisit : ni
    main au survol, ni fond qui s'allume. */
@@ -2272,10 +2282,27 @@
    seul bouton, Rouvrir. Fermer la modale (Échap, fond, croix) annule. */
 .qbd-web-wait-modal { width: 400px; min-width: 0; max-width: calc(100vw - 32px); }
 .qbd-web-wait-modal .modal-title:empty { display: none; }
-/* Aucun voile derrière cette modale (demande d'Ahmed, 2026-09-19) : la page
-   reste lisible telle quelle pendant qu'on attend. Le fond reste cliquable
-   pour fermer, il est seulement transparent. */
-.modal-container:has(> .qbd-web-wait-modal) .modal-bg { background: transparent; }
+/* La modale d'attente de CONNEXION reprend ce panneau : la carte y perd sa
+   surface et son balayage (la modale est déjà la surface, et rien ne
+   génère), elle garde le spinner puis la coche. */
+.qbd-web-wait-modal.qbd-login-wait-modal { width: 480px; }
+.qbd-login-wait-modal .qbd-ai-preview-loading {
+	min-height: 240px;
+	background: transparent;
+	border: none;
+	padding: 36px 16px 28px;
+	gap: 14px;
+}
+.qbd-login-wait-modal .qbd-ai-preview-loading::before { display: none; }
+.qbd-login-wait-modal .qbd-ai-login-wait .qbd-install-spinner { width: 40px; height: 40px; border-width: 3.5px; }
+.qbd-login-wait-modal .qbd-ai-login-wait .qbd-install-check svg { width: 40px; height: 40px; }
+.qbd-login-wait-modal .qbd-ai-loading-title { font-size: 16px; }
+.qbd-login-wait-modal .qbd-ai-login-hint { margin: 0; font-size: 13.5px; max-width: 40ch; }
+
+/* Le fond derrière ces deux modales est celui de TOUTES les modales de la
+   fenêtre (le « smoke » de Windows 11, `apps/windows/src/assets/modal.css`) :
+   une seule apparence pour toutes les boîtes de l'application (Ahmed,
+   2026-09-19). Aucune exception ici. */
 
 /* La croix de cette modale ANNULE l'attente : son survol ne ressemble pas à
    celui d'une croix ordinaire. Elle rougit, pivote d'un quart de tour, et la

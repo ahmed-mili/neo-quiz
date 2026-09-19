@@ -325,6 +325,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   d'une fermeture par l'utilisateur, la seule qui doive annuler. */
 	let webModal: HostModalHandle | null = null;
 	let webModalFermetureInterne = false;
+	/* L'attente de CONNEXION vit elle aussi dans une modale centrée (Ahmed,
+	   2026-09-19 : « c'est plus propre »), même patron que `webModal` : la
+	   fermer, c'est annuler. `loginModalCorps` est redessiné à chaque
+	   `render`, pour que la coche remplace le spinner sans rouvrir. */
+	let loginModal: HostModalHandle | null = null;
+	let loginModalCorps: HTMLElement | null = null;
+	let loginModalFermetureInterne = false;
 	/** L'action de l'écran d'erreur : « Rouvrir <site> » quand la réponse
 	    copiée n'était pas un quiz (réessayer relancerait une génération que
 	    l'application n'a jamais faite) ; « upgrade » quand Ollama a répondu
@@ -681,7 +688,6 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   composer : on lisait la demande, puis un champ vide, puis seulement
 		   l'échec. */
 		const errorZone = phase === "error" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
-		const connexionZone = phase === "connexion" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
 
 		// ── Fournisseur : bouton LOGO SEUL dans le pied du composer (la
 		// carte « Modèle IA » est supprimée) — le menu garde logos, statut
@@ -1461,9 +1467,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// le composer, ou l'éditeur embarqué dans la zone résultat. ──
 		if (phase === "loading") renderLoading(loadingZone!);
 		else if (phase === "error") renderError(errorZone!);
-		else if (phase === "connexion") renderConnexion(connexionZone!);
 		else if (phase === "result") renderResult(resultZone!);
 		syncWebModal();
+		syncLoginModal();
 
 		// Onglet ouvert → saisie immédiate sans clic (demande 2026-07-10).
 		// Pas en phase résultat : le focus serait volé à l'éditeur embarqué
@@ -2453,9 +2459,49 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		ajouter(el, "span", "qbd-install-spinner");
 		ajouter(el, "p", "qbd-ai-loading-title", t("ai.login.waiting"));
 		ajouter(el, "p", "qbd-ai-login-hint", settings().aiProvider === "ollama" ? t("ai.login.hintBrowser") : t("ai.login.hint"));
-		const annuler = ajouter(el, "button", "qbd-btn qbd-btn--ghost", t("ai.login.cancel"));
-		annuler.type = "button";
-		annuler.addEventListener("click", annulerConnexion);
+		/* Pas de bouton Annuler : c'est la croix de la modale (ou Échap). */
+	}
+
+	/** La croix d'une modale d'attente EST l'annulation (plus de bouton
+	    Annuler, demande d'Ahmed, 2026-09-19) : elle se signale comme telle au
+	    survol — rouge, et la bulle « Annuler » tout de suite dessous (CSS
+	    `.qbd-web-wait-close`). */
+	function poserCroixAnnuler(m: HostModalHandle): void {
+		const croix = m.panelEl.querySelector<HTMLElement>(".modal-close-button");
+		if (!croix) return;
+		croix.classList.add("qbd-web-wait-close");
+		croix.dataset.tip = t("ai.web.cancel");
+		croix.setAttribute("aria-label", t("ai.web.cancel"));
+	}
+
+	/** La modale d'attente de connexion suit la phase `connexion`, comme
+	    `syncWebModal` suit `web` ; son corps est redessiné à chaque passage. */
+	function syncLoginModal(): void {
+		if (phase === "connexion") {
+			if (!loginModal) {
+				loginModal = requireHost("modals").open({
+					className: "qbd-web-wait-modal qbd-login-wait-modal",
+					onOpen: (m) => {
+						loginModalCorps = m.contentEl;
+						poserCroixAnnuler(m);
+					},
+					onClose: () => {
+						loginModal = null;
+						loginModalCorps = null;
+						const interne = loginModalFermetureInterne;
+						loginModalFermetureInterne = false;
+						if (!interne && phase === "connexion") annulerConnexion();
+					},
+				});
+			}
+			if (loginModalCorps) {
+				loginModalCorps.replaceChildren();
+				renderConnexion(loginModalCorps);
+			}
+		} else if (loginModal) {
+			loginModalFermetureInterne = true;
+			loginModal.close();
+		}
 	}
 
 	/**
@@ -2470,16 +2516,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				className: "qbd-web-wait-modal",
 				onOpen: (m) => {
 					renderWeb(m.contentEl);
-					/* La croix EST l'annulation (plus de bouton Annuler, demande
-					   d'Ahmed, 2026-09-19) : elle se signale comme telle au
-					   survol — rouge, et la bulle « Annuler » tout de suite
-					   dessous (CSS `.qbd-web-wait-close`). */
-					const croix = m.panelEl.querySelector<HTMLElement>(".modal-close-button");
-					if (croix) {
-						croix.classList.add("qbd-web-wait-close");
-						croix.dataset.tip = t("ai.web.cancel");
-						croix.setAttribute("aria-label", t("ai.web.cancel"));
-					}
+					poserCroixAnnuler(m);
 				},
 				onClose: () => {
 					webModal = null;

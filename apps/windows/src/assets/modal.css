@@ -30,6 +30,30 @@
    règle de classe, d'où qu'elle vienne et quel que soit l'ordre, l'emporte.
    ========================================================= */
 
+/* L'APPARITION ET LA DISPARITION D'UN ContentDialog de Windows 11, relevées
+   dans le même fichier de WinUI (2026-09-19) : à l'ouverture, le panneau
+   passe de l'échelle 1,05 à 1 en 250 ms sur la courbe `0,0,0,1` (décélération
+   franche) pendant que son opacité monte en 83 ms ; à la fermeture, il
+   repart vers 1,05 en 167 ms et s'efface en 83 ms. Il ARRIVE vers
+   l'utilisateur et se range derrière lui — pas une remontée par le bas.
+   Remplace, dans la fenêtre seulement, l'animation du CSS partagé
+   (`components/modal-anim.css`, qui reste celle du greffon sous Obsidian) :
+   `.modal-container >` ajoute la spécificité qu'il faut pour l'emporter. */
+.modal-container > .modal.qbd-anim-modal {
+	animation: nq-dialog-echelle-in 250ms cubic-bezier(0, 0, 0, 1), nq-dialog-fondu-in 83ms linear;
+}
+.modal-container > .modal.qbd-anim-modal.qbd-closing {
+	animation: nq-dialog-echelle-out 167ms cubic-bezier(0, 0, 0, 1) forwards, nq-dialog-fondu-out 83ms linear forwards;
+}
+@keyframes nq-dialog-echelle-in { from { transform: scale(1.05); } to { transform: scale(1); } }
+@keyframes nq-dialog-fondu-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes nq-dialog-echelle-out { from { transform: scale(1); } to { transform: scale(1.05); } }
+@keyframes nq-dialog-fondu-out { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+	.modal-container > .modal.qbd-anim-modal,
+	.modal-container > .modal.qbd-anim-modal.qbd-closing { animation: none !important; }
+}
+
 .modal-container {
 	position: fixed;
 	inset: 0;
@@ -45,10 +69,13 @@
 .modal-bg {
 	position: absolute;
 	inset: 0;
-	/* DÉRIVÉ du fond le plus profond du thème, jamais un noir en dur : sur un
-	   thème clair, un noir à 70 % serait une tache. Même raisonnement que
-	   l'ombre des toasts. */
-	background: color-mix(in srgb, var(--background-primary-alt) 70%, transparent);
+	/* LE « SMOKE » DE WINDOWS 11 (demande d'Ahmed, 2026-09-19 : le meilleur
+	   effet, celui des applications Windows). Relevé dans le code de WinUI
+	   (microsoft-ui-xaml, `ContentDialog_themeresources.xaml` →
+	   `SmokeFillColorDefault` = #4D000000 dans les thèmes clair ET sombre) :
+	   un noir à 30 %, sans flou — c'est le fond de tous les ContentDialog,
+	   Réglages de Windows compris. */
+	background: rgb(0 0 0 / 0.3);
 }
 
 :where(.modal) {
@@ -200,4 +227,36 @@
    `.modal-content` qui défile. */
 .nq-fond-modal {
 	width: 460px;
+}
+
+
+/* ── LA MODALE D'INDICE DU MOTEUR (`src/engine/hint.ts`) ──
+   La seule boîte de l'application qui ne passe pas par l'hôte : le moteur de
+   quiz pose sa propre surcouche, partagée avec le greffon. Dans la FENÊTRE,
+   elle prend la même apparence que toutes les autres (Ahmed, 2026-09-19) :
+   le « smoke » sans flou, le panneau commun (fond, bord, rayon, ombre de
+   `:where(.modal)` plus haut) et l'arrivée de WinUI (1,05 → 1 en 250 ms sur
+   `0,0,0,1`, opacité en 83 ms). Sous Obsidian, `hint-modal.css` reste tel
+   quel. `body` en tête : une spécificité de plus que les règles partagées,
+   qui sont importées AVANT ce fichier mais à égalité de poids. */
+body .quiz-hint-modal-overlay,
+body .quiz-hint-modal-overlay.is-open {
+	background: rgb(0 0 0 / 0.3);
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+body .quiz-hint-modal {
+	border-radius: var(--radius-l);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	box-shadow: 0 18px 48px -12px color-mix(in srgb, var(--background-primary) 85%, transparent);
+	transform: scale(1.05);
+	transition: opacity 83ms linear, transform 250ms cubic-bezier(0, 0, 0, 1);
+}
+body .quiz-hint-modal-overlay.is-open .quiz-hint-modal {
+	transform: scale(1);
+	box-shadow: 0 18px 48px -12px color-mix(in srgb, var(--background-primary) 85%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+	body .quiz-hint-modal { transition: none; transform: none; }
 }

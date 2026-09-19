@@ -7,13 +7,19 @@
 
 import { PHRASE_FINALE_CLI } from "./ai-client";
 
-/** La plus longue URL qu'on ose passer au navigateur.
-    MESURÉE le 2026-09-18 par `npm run report:url-max` : ShellExecute admet
-    32644 caractères sur cette machine (le serveur de claude.ai en accepte
-    65 555, la ligne de commande Windows est la borne qui compte). Posée
-    avec une marge : le navigateur ajoute ses propres arguments devant
-    l'URL. Au-delà, le texte part par le presse-papier (`preparerOuverture`). */
-export const URL_MAX = 31600;
+/** La plus longue URL qu'on ose passer au navigateur : celle que le SERVEUR
+    de claude.ai accepte. MESURÉE le 2026-09-18 : HTTP 200 jusqu'à 65 555
+    octets de requête, 414 à partir de 66 155 ; posée avec une marge pour
+    l'en-tête. Au-delà, le texte part par le presse-papier
+    (`preparerOuverture`).
+
+    La ligne de commande de Windows (32 644 caractères, `report:url-max`)
+    N'EST PLUS la borne : l'hôte de l'application ouvre une adresse plus
+    longue par un fichier HTML de redirection (`ouvrirUrlLongue`,
+    `apps/windows/electron/main.ts`) — mesuré sur les cours d'Ahmed le
+    2026-09-19, un seul PDF (36 à 49 K encodés) faisait basculer vers le
+    presse-papier à cause de cette borne-là, pas de celle du serveur. */
+export const URL_MAX = 63000;
 
 /** Comment un site s'ouvre avec la question déjà écrite. */
 export interface OuvertureWeb {

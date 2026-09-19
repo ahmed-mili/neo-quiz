@@ -1,7 +1,7 @@
 import JSON5 from "json5";
 import type { EditorExamOptions } from "../types/editor-ctx";
 import type { AiPreset, DashboardViewName, NavigateData } from "../types/dashboard-ctx";
-import type { HostFile, HostModalHandle } from "../host/types";
+import type { HostFile, HostModalHandle, ImageDeGlisser } from "../host/types";
 import { currentHost, requireHost } from "../host/current";
 import { ajouter } from "../dom";
 import { LOG_PREFIX } from "../branding";
@@ -18,6 +18,7 @@ import { GENERATED_MODULE_ACCENT } from "./module-color";
 import { createAiClient } from "./ai-client";
 import { closeAllSelects, openModelMenu, openProviderMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
 import { badgeDeFichier } from "./file-icons";
+import { composerImageDeGlisser } from "./image-de-glisser";
 import { renderMarkdownPreview } from "../markdown-preview";
 import { mathifyElement } from "../engine/mathjax";
 import type { ProviderBrandOption, ProviderMenuHandle } from "./ui-select";
@@ -103,6 +104,15 @@ interface NoteAttachment {
 	    claude.ai, une carte de PDF montre sa page, pas son nom. Absent quand
 	    l'hôte ne dessine pas, ou pour une note. */
 	thumb?: string;
+}
+
+/** Une tuile de la modale d'attente du canal web : ce qui s'affiche, et le
+    fichier que l'hôte fera partir au glisser (`HostDepot.glisser`). */
+interface TuileDepot {
+	name: string;
+	/** La page d'un PDF ou l'image elle-même ; absent pour une note. */
+	thumb?: string;
+	cible: HostFile | string;
 }
 
 /** Image jointe (vignette + objet fichier). */
@@ -298,6 +308,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	// de la page à chaque render (cf. plus bas) et retiré ici comme dans
 	// `dispose` avant d'en reposer un nouveau — jamais deux à la fois.
 	let raccourciComposer: { retirer(): void } | null = null;
+	/* Le composer ACTIF (contour accent) : posé par un clic ou un focus
+	   DEDANS, retiré par un clic ou un focus AILLEURS dans la page — et par
+	   rien d'autre (Ahmed, 2026-09-19). `:focus-within` ne suffisait pas : le
+	   focus quitte le composer dès qu'un de ses boutons ouvre un menu (portalé
+	   au <body>), et le contour changeait au clic. Une variable et non la seule
+	   classe : `render` recrée le composer. */
+	let composerActif = false;
+	let veilleComposerActif: { retirer(): void } | null = null;
 	// Listener « focus fenêtre » du re-check des statuts CLI (remplacé à
 	// chaque render, retiré quand la zone de hint disparaît).
 	let __focusRecheck: (() => void) | null = null;
@@ -313,7 +331,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   en phase « web » seulement : le jeton de CETTE ouverture, ce qui a été
 	   ouvert (adresse ou presse-papier), la fonction qui arrête la veille du
 	   principal (null sous un hôte sans `collage`), et les écouteurs à retirer. */
-	let attenteWeb: { jeton: string; ouverture: ResultatOuverture; site: string; arreter: (() => void) | null; retirer: () => void } | null = null;
+	let attenteWeb: { jeton: string; ouverture: ResultatOuverture; site: string; aGlisser: TuileDepot[]; arreter: (() => void) | null; retirer: () => void } | null = null;
 	/** Le site de la dernière ouverture, gardé au-delà de `attenteWeb` (remis à
 	    null avant l'écran d'erreur) : c'est lui que « Rouvrir {site} » affiche. */
 	let attenteWebSite = "";
@@ -329,9 +347,40 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   2026-09-19 : « c'est plus propre »), même patron que `webModal` : la
 	   fermer, c'est annuler. `loginModalCorps` est redessiné à chaque
 	   `render`, pour que la coche remplace le spinner sans rouvrir. */
-	let loginModal: HostModalHandle | null = null;
-	let loginModalCorps: HTMLElement | null = null;
-	let loginModalFermetureInterne = false;
+	/**
+	 * UNE MODALE PAR PHASE, même mécanique pour toutes (Ahmed, 2026-09-19 :
+	 * « tout ce qui peut apparaître au-dessus de l'invite doit devenir une
+	 * modale centrée ») : ouverte tant que sa phase est active, son corps
+	 * redessiné à chaque `render`, fermée par la page dès qu'on sort de la
+	 * phase — et, fermée par l'UTILISATEUR (Échap, fond, croix), elle appelle
+	 * `annuler`. `interne` distingue les deux fermetures.
+	 */
+	function creerModalePhase(spec: { phase: Phase; className: string; rendre: (corps: HTMLElement) => void; annuler: () => void }): () => void {
+		let modale: HostModalHandle | null = null;
+		let corps: HTMLElement | null = null;
+		let interne = false;
+		return () => {
+			if (phase === spec.phase) {
+				if (!modale) {
+					modale = requireHost("modals").open({
+						className: spec.className,
+						onOpen: (m) => { corps = m.contentEl; poserCroixAnnuler(m); },
+						onClose: () => {
+							modale = null;
+							corps = null;
+							const parLaPage = interne;
+							interne = false;
+							if (!parLaPage && phase === spec.phase) spec.annuler();
+						},
+					});
+				}
+				if (corps) { corps.replaceChildren(); spec.rendre(corps); }
+			} else if (modale) {
+				interne = true;
+				modale.close();
+			}
+		};
+	}
 	/** L'action de l'écran d'erreur : « Rouvrir <site> » quand la réponse
 	    copiée n'était pas un quiz (réessayer relancerait une génération que
 	    l'application n'a jamais faite) ; « upgrade » quand Ollama a répondu
@@ -483,6 +532,40 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			}
 		}
 		ajouter(chip, "span", "qbd-ai-note-chip-badge", badgeDeFichier(note.name));
+	}
+
+	/** Le contenu d'une carte d'IMAGE : la photo remplit la carte, recadrée
+	    (référence claude.ai : une image jointe est un carré plein, sa forme
+	    n'est pas une information comme l'est celle d'une page). */
+	function poserCarteImage(chip: HTMLElement, image: ComposerImage): void {
+		chip.classList.add("qbd-ai-note-chip--thumb", "qbd-ai-note-chip--image");
+		chip.title = image.file.name;
+		const img = ajouter(chip, "img", "qbd-ai-note-chip-thumb");
+		img.src = image.url;
+		img.alt = image.file.name;
+		img.draggable = false;
+		/* Le clic OUVRE L'APERÇU, comme la carte d'un document ; la croix de
+		   retrait garde son rôle. */
+		chip.classList.add("qbd-ai-note-chip--toggle");
+		chip.addEventListener("click", (e) => {
+			if ((e.target as HTMLElement).closest(".qbd-ai-note-chip-remove")) return;
+			ouvrirApercuImage(image);
+		});
+	}
+
+	/** L'aperçu d'une image jointe : l'image entière, à sa taille, bornée par
+	    la fenêtre ; le nom en titre. */
+	function ouvrirApercuImage(image: ComposerImage): void {
+		requireHost("modals").open({
+			className: "qbd-ai-preview-modal qbd-ai-preview-modal--image",
+			title: image.file.name,
+			onOpen: (m) => {
+				const img = ajouter(m.contentEl, "img", "qbd-ai-preview-image");
+				img.src = image.url;
+				img.alt = image.file.name;
+				img.draggable = false;
+			},
+		});
 	}
 
 	/** L'aperçu d'une pièce jointe, dans une modale (référence claude.ai,
@@ -681,12 +764,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// Zone du loader de génération : AU-DESSUS du composer (demande
 		// 2026-07-10 — le loader préfigure le résultat, qui vit en haut).
 		// display: contents en CSS → la carte reste un enfant flex direct.
-		const loadingZone = phase === "loading" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
 		/* L'erreur se lit SOUS la demande, au-dessus du composer — comme la
 		   réponse qu'elle remplace. Rendue en dernier, elle passait sous le
 		   composer : on lisait la demande, puis un champ vide, puis seulement
 		   l'échec. */
-		const errorZone = phase === "error" ? ajouter(stage, "div", "qbd-ai-loading-zone") : null;
 
 		// ── Fournisseur : bouton LOGO SEUL dans le pied du composer (la
 		// carte « Modèle IA » est supprimée) — le menu garde logos, statut
@@ -953,18 +1034,17 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			};
 		} else if (aiProviders.estCanalWeb(provider)) {
 			/* Un SITE n'a pas de modèle à choisir : c'est lui qui décide, avec le
-			   compte de l'utilisateur. Le contrôle du milieu dit donc la MARQUE et
-			   le CANAL (« Claude · claude.ai ») et rouvre le menu des marques —
-			   le seul réglage qu'on puisse encore toucher d'ici. */
+			   compte de l'utilisateur. Le contrôle du milieu dit donc le SITE
+			   seul (« claude.ai »), là où un CLI dit son modèle, et rouvre le menu
+			   des marques — le seul réglage qu'on puisse encore toucher d'ici. La
+			   marque, c'est le logo juste à côté : « Claude · claude.ai » la
+			   disait deux fois (Ahmed, 2026-09-19). */
 			buildModelControl = (parent: HTMLElement): void => {
 				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger qbd-channel-trigger");
 				trigger.type = "button";
 				const label = ajouter(trigger, "span", "qbd-select-label");
-				const marque = aiProviders.getMarque(provider);
 				const canal = aiProviders.getCanal(provider);
-				ajouter(label, "span", "qbd-model-trigger-name", marque ? marque.name : provider);
-				ajouter(label, "span", "qbd-channel-trigger-sep", "·");
-				ajouter(label, "span", "qbd-channel-trigger-canal", canal ? canal.label : "");
+				ajouter(label, "span", "qbd-model-trigger-name", canal ? canal.label : provider);
 				const chev = ajouter(trigger, "span", "qbd-select-chevron");
 				host.ui.setIcon(chev, "chevron-down");
 				trigger.addEventListener("click", () => ouvrirMenuFournisseur?.());
@@ -1043,27 +1123,34 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		let generateBtnRef: HTMLButtonElement | null = null;
 
 		const composer = ajouter(formCol, "div", "qbd-ai-composer");
-
-		// Vignettes d'images : rangée à PART, au-dessus du champ — ~40px de
-		// haut, les mêler à une ligne de texte de 13,5px les déformerait.
-		// Seules les chips « notes » passent en superposition sur la 1ʳᵉ
-		// ligne du texte (cf. textZone ci-dessous).
-		if (images.length > 0) {
-			const imagesRow = ajouter(composer, "div", "qbd-ai-composer-attachments");
-			for (let i = 0; i < images.length; i++) {
-				const thumb = ajouter(imagesRow, "div", "qbd-ai-image-thumb");
-				const imgEl = ajouter(thumb, "img", "qbd-ai-image-thumb-img");
-				imgEl.src = images[i].url;
-				const removeBtn = ajouter(thumb, "button", "qbd-ai-image-remove");
-				host.ui.setIcon(removeBtn, "x");
-				const idx = i;
-				removeBtn.addEventListener("click", () => {
-					URL.revokeObjectURL(images[idx].url);
-					images.splice(idx, 1);
-					render(containerRef);
-				});
-			}
-		}
+		composer.classList.toggle("qbd-ai-composer--actif", composerActif);
+		const activer = (): void => {
+			composerActif = true;
+			composer.classList.add("qbd-ai-composer--actif");
+		};
+		composer.addEventListener("pointerdown", activer);
+		composer.addEventListener("focusin", activer);
+		/* AILLEURS = dans l'arbre de la page (le même enfant du <body> que le
+		   composer) mais hors du composer. Un menu ou une modale ouverts DEPUIS
+		   le composer vivent dans un autre enfant du <body> (portalés) : y
+		   cliquer ne le désactive pas. */
+		veilleComposerActif?.retirer();
+		const surAilleurs = (e: Event): void => {
+			if (!composerActif || !composer.isConnected) return;
+			const cible = e.target as Node | null;
+			if (!cible || composer.contains(cible)) return;
+			let haut: Node = cible;
+			while (haut.parentNode && haut.parentNode !== document.body) haut = haut.parentNode;
+			if (!haut.contains(composer)) return;
+			composerActif = false;
+			composer.classList.remove("qbd-ai-composer--actif");
+		};
+		document.addEventListener("pointerdown", surAilleurs, true);
+		document.addEventListener("focusin", surAilleurs, true);
+		veilleComposerActif = { retirer: () => {
+			document.removeEventListener("pointerdown", surAilleurs, true);
+			document.removeEventListener("focusin", surAilleurs, true);
+		} };
 
 		// Zone de texte : le textarea et la rangée de chips « notes »
 		// partagent ce conteneur (position relative). La rangée se
@@ -1077,8 +1164,24 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// normal) si elle est trop large pour laisser de la place au texte.
 		const textZone = ajouter(composer, "div", "qbd-ai-composer-textzone");
 		let chipsRow: HTMLElement | null = null;
-		if (noteAttachments.length > 0) {
+		if (images.length > 0 || noteAttachments.length > 0) {
 			chipsRow = ajouter(textZone, "div", "qbd-ai-composer-chips");
+			/* Les images sont des cartes de la MÊME rangée que les documents
+			   (retour Ahmed 2026-09-19, référence claude.ai : un JPG et un PDF
+			   côte à côte, même gabarit). Elles avaient leur propre rangée de
+			   vignettes de 56 px au-dessus : deux tailles, deux lignes. */
+			for (let i = 0; i < images.length; i++) {
+				const chip = ajouter(chipsRow, "div", "qbd-ai-note-chip");
+				poserCarteImage(chip, images[i]);
+				const chipRemove = ajouter(chip, "button", "qbd-ai-note-chip-remove");
+				host.ui.setIcon(chipRemove, "x");
+				const idx = i;
+				chipRemove.addEventListener("click", () => {
+					URL.revokeObjectURL(images[idx].url);
+					images.splice(idx, 1);
+					render(containerRef);
+				});
+			}
 			for (let i = 0; i < noteAttachments.length; i++) {
 				const note = noteAttachments[i];
 				/* Une CARTE, pas une pastille (retour Ahmed 2026-09-17, référence
@@ -1382,7 +1485,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// un clic hors des contrôles focus le champ, caret en fin de texte.
 		// mousedown natif du textarea préservé (positionnement du caret).
 		composer.addEventListener("mousedown", (e) => {
-			if ((e.target as HTMLElement).closest("button, textarea, .qbd-select, .qbd-ai-note-chip, .qbd-ai-image-thumb")) return;
+			if ((e.target as HTMLElement).closest("button, textarea, .qbd-select, .qbd-ai-note-chip")) return;
 			e.preventDefault(); // pas de blur/re-focus visible
 			const len = composerInput.value.length;
 			composerInput.focus();
@@ -1463,11 +1566,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 
 		// ── État de la scène : loader AU-DESSUS du composer, erreur sous
 		// le composer, ou l'éditeur embarqué dans la zone résultat. ──
-		if (phase === "loading") renderLoading(loadingZone!);
-		else if (phase === "error") renderError(errorZone!);
-		else if (phase === "result") renderResult(resultZone!);
+		if (phase === "result") renderResult(resultZone!);
 		syncWebModal();
 		syncLoginModal();
+		syncLoadingModal();
+		syncErrorModal();
 
 		// Onglet ouvert → saisie immédiate sans clic (demande 2026-07-10).
 		// Pas en phase résultat : le focus serait volé à l'éditeur embarqué
@@ -2179,16 +2282,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			bubble.classList.add("qbd-ai-sent--in");
 		}
 
-		if (msg.images.length > 0) {
-			const row = ajouter(bubble, "div", "qbd-ai-sent-images");
-			for (const img of msg.images) {
-				const thumb = ajouter(row, "div", "qbd-ai-image-thumb");
-				ajouter(thumb, "img", "qbd-ai-image-thumb-img").src = img.url;
-			}
-		}
-
-		if (msg.notes.length > 0) {
+		if (msg.images.length > 0 || msg.notes.length > 0) {
 			const chips = ajouter(bubble, "div", "qbd-ai-sent-chips");
+			for (const img of msg.images) poserCarteImage(ajouter(chips, "div", "qbd-ai-note-chip"), img);
 			for (const note of msg.notes) {
 				const chip = ajouter(chips, "div", "qbd-ai-note-chip qbd-ai-note-chip--toggle");
 				poserCarte(chip, note);
@@ -2468,39 +2564,32 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		const croix = m.panelEl.querySelector<HTMLElement>(".modal-close-button");
 		if (!croix) return;
 		croix.classList.add("qbd-web-wait-close");
+		/* L'infobulle au dessin de celle de Windows 11 (`data-tip`, CSS). Pas
+		   de `title` : Electron en ferait une infobulle Win32 à l'ancienne,
+		   impossible à styliser, qui viendrait en plus par-dessus. */
 		croix.dataset.tip = t("ai.web.cancel");
 		croix.setAttribute("aria-label", t("ai.web.cancel"));
 	}
 
-	/** La modale d'attente de connexion suit la phase `connexion`, comme
-	    `syncWebModal` suit `web` ; son corps est redessiné à chaque passage. */
-	function syncLoginModal(): void {
-		if (phase === "connexion") {
-			if (!loginModal) {
-				loginModal = requireHost("modals").open({
-					className: "qbd-web-wait-modal qbd-login-wait-modal",
-					onOpen: (m) => {
-						loginModalCorps = m.contentEl;
-						poserCroixAnnuler(m);
-					},
-					onClose: () => {
-						loginModal = null;
-						loginModalCorps = null;
-						const interne = loginModalFermetureInterne;
-						loginModalFermetureInterne = false;
-						if (!interne && phase === "connexion") annulerConnexion();
-					},
-				});
-			}
-			if (loginModalCorps) {
-				loginModalCorps.replaceChildren();
-				renderConnexion(loginModalCorps);
-			}
-		} else if (loginModal) {
-			loginModalFermetureInterne = true;
-			loginModal.close();
-		}
-	}
+	/* Les trois modales de phase de la page : connexion (fermer = annuler
+	   l'attente), génération (fermer = Stop, la demande revient au composer),
+	   erreur (fermer = reprendre la demande dans le composer). */
+	const syncLoginModal = creerModalePhase({
+		phase: "connexion", className: "qbd-web-wait-modal qbd-login-wait-modal",
+		rendre: renderConnexion, annuler: annulerConnexion,
+	});
+	const syncLoadingModal = creerModalePhase({
+		phase: "loading", className: "qbd-web-wait-modal qbd-loading-modal",
+		rendre: renderLoading,
+		/* Le même geste que le bouton Stop : `abort` rend la demande au
+		   composer et remet la page en `idle` (chemin `e.aborted`). */
+		annuler: () => { activeClient?.abort(); },
+	});
+	const syncErrorModal = creerModalePhase({
+		phase: "error", className: "qbd-web-wait-modal qbd-error-modal",
+		rendre: renderError,
+		annuler: () => { restoreComposerMessage(); phase = "idle"; render(containerRef); },
+	});
 
 	/**
 	 * La modale d'attente du canal web suit la PHASE : ouverte tant que
@@ -2511,7 +2600,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	function syncWebModal(): void {
 		if (phase === "web" && !webModal && attenteWeb) {
 			webModal = requireHost("modals").open({
-				className: "qbd-web-wait-modal",
+				/* Plus large quand il y a des fichiers : ils tiennent sur UNE rangée
+				   (retour Ahmed 2026-09-19, cinq fichiers sur trois lignes). */
+				className: "qbd-web-wait-modal" + (attenteWeb.aGlisser.length > 0 && host.depot ? " qbd-web-wait-modal--files" : ""),
 				onOpen: (m) => {
 					renderWeb(m.contentEl);
 					poserCroixAnnuler(m);
@@ -2545,6 +2636,74 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		/* Le presse-papier d'abord, quand la question n'a pas tenu dans
 		   l'adresse : il faut coller là-bas AVANT d'envoyer. */
 		if (attenteWeb.ouverture.mode === "presse-papier") ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t("ai.web.copied", { site }));
+		/* LES FICHIERS À GLISSER, en tuiles — les mêmes cartes que le composer
+		   (`poserCarte`) : on les saisit et on les lâche sur le site à gauche,
+		   c'est le vrai fichier qui part (`host.depot.glisser`, pendant le
+		   `dragstart`, le seul moment où Chromium accepte un glisser natif). */
+		if (attenteWeb.aGlisser.length > 0 && host.depot) {
+			const plusieurs = attenteWeb.aGlisser.length > 1;
+			ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t(plusieurs ? "ai.web.dropFilesMany" : "ai.web.dropFiles", { site }));
+			/* LES PILES — la même pile de feuilles que l'aperçu d'un PDF
+			   (`poserApercuPdf`, classes `qbd-ai-preview-*`), donc la même
+			   animation au survol (la page bascule, les feuilles s'éventaillent,
+			   la légende passe du nom à « Glisser »). Le NOM du fichier est la
+			   légende, toujours lisible au repos (Ahmed, 2026-09-19). Saisir
+			   n'importe quelle pile emporte TOUS les fichiers d'un seul geste. */
+			const rangee = ajouter(carte, "div", "qbd-ai-web-files");
+			const cibles = attenteWeb.aGlisser.map(tuile => tuile.cible);
+			void host.depot.preparer(cibles);
+			/* L'image qui suivra le curseur, une par pile saisissable : la pile
+			   en éventail, le fichier saisi devant, le nombre dans le badge bleu
+			   de l'Explorateur (`image-de-glisser.ts`). Dessinée maintenant, le
+			   `dragstart` ne peut pas l'attendre ; tant qu'elle manque, l'hôte
+			   prend l'icône de type. */
+			const imagesDeGlisser: Array<ImageDeGlisser | undefined> = [];
+			const echelle = window.devicePixelRatio || 1;
+			const cartes = attenteWeb.aGlisser.map(tuile => ({ thumb: tuile.thumb, badge: badgeDeFichier(tuile.name) }));
+			cartes.forEach((_, i) => {
+				void composerImageDeGlisser(cartes, i, echelle)
+					.then(png => { if (png) imagesDeGlisser[i] = { png, echelle }; })
+					.catch(err => console.warn(LOG_PREFIX, "image du glisser impossible:", err));
+			});
+			for (const [i, note] of attenteWeb.aGlisser.entries()) {
+				/* Pas de `title` : l'infobulle native du chemin se posait sur la
+				   pile au survol, par-dessus la légende (vu par Ahmed le
+				   2026-09-19) ; le nom est déjà écrit dessous. */
+				const pile = ajouter(rangee, "div", "qbd-ai-preview-pdf qbd-ai-web-pile is-openable");
+				const stack = ajouter(pile, "div", "qbd-ai-preview-stack is-ready");
+				const feuille = ajouter(stack, "div", "qbd-ai-preview-sheet");
+				if (note.thumb) {
+					const img = ajouter(feuille, "img", "qbd-ai-preview-stack-page");
+					img.src = note.thumb;
+					img.alt = note.name;
+					img.draggable = false;
+				} else {
+					/* Une note n'a pas de page dessinée : une feuille blanche qui
+					   porte le badge de son extension, aux mêmes proportions. */
+					const page = ajouter(feuille, "div", "qbd-ai-preview-stack-page qbd-ai-web-page--texte");
+					ajouter(page, "span", "qbd-ai-note-chip-badge", badgeDeFichier(note.name));
+				}
+				const legende = ajouter(pile, "div", "qbd-ai-preview-caption");
+				/* LE TYPE DU FICHIER RESTE TOUJOURS VISIBLE (règle d'Ahmed,
+				   2026-09-19) : coupe AU MILIEU. La tête se tronque avec ses points
+				   de suspension, la queue — trois caractères et l'extension — ne
+				   se tronque jamais : « GNU ddres…cue.md ». Un nom qui tient
+				   s'affiche entier, les deux morceaux se touchant. */
+				const nom = ajouter(legende, "span", "qbd-ai-preview-caption-pages qbd-ai-web-pile-nom");
+				const point = note.name.lastIndexOf(".");
+				const coupe = point > 0 ? Math.max(0, point - 3) : note.name.length;
+				ajouter(nom, "span", "qbd-ai-web-pile-nom-tete", note.name.slice(0, coupe));
+				if (coupe < note.name.length) ajouter(nom, "span", "qbd-ai-web-pile-nom-queue", note.name.slice(coupe));
+				const indice = ajouter(legende, "span", "qbd-ai-preview-open");
+				host.ui.setIcon(ajouter(indice, "span", "qbd-ai-preview-open-icon"), "hand");
+				ajouter(indice, "span", undefined, t(plusieurs ? "ai.web.dragAll" : "ai.web.dragOne"));
+				pile.draggable = true;
+				pile.addEventListener("dragstart", (ev) => {
+					ev.preventDefault();
+					void host.depot!.glisser(cibles, i, imagesDeGlisser[i]).then(ok => { if (!ok) host.ui.notice(t("ai.web.dropFailed")); });
+				});
+			}
+		}
 		/* UNE seule phrase à l'écran (demande d'Ahmed, 2026-09-19) : le titre dit
 		   déjà les deux gestes, et « le quiz se crée ici tout seul » est ce que
 		   l'utilisateur VERRA arriver. La ligne ne reste que là où il doit agir
@@ -2912,6 +3071,41 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		return { source, prompt };
 	}
 
+	/** La demande pour un site quand les fichiers sont DÉPOSÉS à côté : la
+	    consigne de l'utilisateur et les noms des documents, dont le contenu
+	    arrivera par le glisser-déposer — pas inliné. Adressé au modèle, donc en
+	    anglais ; la règle de langue du prompt système fait le reste. */
+	function demandeAvecFichiersDeposes(msg: SentMessage): { source: "text"; prompt: string } {
+		const noms = [...msg.images.map(i => i.file.name), ...msg.notes.map(n => n.name)].join(", ");
+		const consigne = msg.text.trim();
+		return {
+			source: "text",
+			prompt: (consigne ? consigne + "\n\n" : "")
+				+ "The source documents are attached to this message as files (" + noms + "): read them and build the quiz from their content, in their language.",
+		};
+	}
+
+	/** Les tuiles à glisser sur le site, dans l'ordre du composer (images puis
+	    documents). Une pièce qui a un chemin part telle quelle ; les autres
+	    sont écrites par l'hôte (`depot.ecrire`). `null` si l'une d'elles ne
+	    peut pas l'être : rien ne part plutôt qu'une demande incomplète. */
+	async function tuilesDeDepot(msg: SentMessage, depot: NonNullable<typeof host.depot>): Promise<TuileDepot[] | null> {
+		const tuiles: TuileDepot[] = [];
+		for (const image of msg.images) {
+			const cible = await depot.ecrire(image.file.name, new Uint8Array(await image.file.arrayBuffer()));
+			if (!cible) return null;
+			tuiles.push({ name: image.file.name, thumb: image.url, cible });
+		}
+		for (const note of msg.notes) {
+			let cible: HostFile | string | null = null;
+			if (note.path) cible = note.source === "vault" ? host.fs.getFile(note.path) : note.path;
+			if (!cible) cible = await depot.ecrire(note.name, note.bytes ?? new TextEncoder().encode(note.content));
+			if (!cible) return null;
+			tuiles.push({ name: note.name, thumb: note.thumb, cible });
+		}
+		return tuiles;
+	}
+
 	async function startGeneration(container: HTMLElement | null): Promise<void> {
 		/* VERROU d'abord, et de façon synchrone : `phase = "loading"` n'était
 		   posé qu'après l'attente ci-dessous, et Entrée ou un second clic
@@ -3088,14 +3282,40 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		/* Ni une adresse ni un presse-papier texte ne transportent une image :
 		   rien ne part, le composer garde tout. Même patron que le PDF refusé
 		   dans l'application. */
-		if (msg.images.length > 0) {
+		if (msg.images.length > 0 && !host.depot) {
 			host.ui.notice(t("ai.channel.noImages"));
 			restoreComposerMessage();
 			phase = "idle";
 			render(container);
 			return;
 		}
-		const { source, prompt } = composerDemande(msg);
+		/* LES PIÈCES JOINTES SONT GLISSÉES, PAS INLINÉES, quand l'hôte sait les
+		   montrer (`host.depot`, l'application) : le prompt qui part dans
+		   l'adresse ne porte que la demande et les NOMS des fichiers, et
+		   l'Explorateur s'ouvre LÀ OÙ ILS SONT, le premier sélectionné, pour un
+		   glisser-déposer sur le site (Ahmed, 2026-09-19 : « ce serait mieux si
+		   le fichier était uploadé comme on le fait habituellement »). Le PDF
+		   arrive alors en PDF, et l'adresse tient toujours. Une pièce sans
+		   chemin (déposée sans origine connue) ne peut pas être montrée : tout
+		   est inliné, comme sans `host.depot`. */
+		/* Une pièce SANS chemin (image collée, fichier déposé depuis
+		   l'Explorateur) est écrite par l'hôte dans un fichier glissable : elle
+		   ne retire plus toutes les tuiles, comme le faisait l'ancienne
+		   condition « toutes les pièces ont un chemin » (vu le 2026-09-19). */
+		let aGlisser: TuileDepot[] = [];
+		if (host.depot && (msg.notes.length > 0 || msg.images.length > 0)) {
+			const tuiles = await tuilesDeDepot(msg, host.depot);
+			if (!tuiles) {
+				host.ui.notice(t("ai.web.dropFailed"));
+				restoreComposerMessage();
+				phase = "idle";
+				render(container);
+				return;
+			}
+			aGlisser = tuiles;
+		}
+		const deposer = aGlisser.length > 0;
+		const { source, prompt } = deposer ? demandeAvecFichiersDeposes(msg) : composerDemande(msg);
 		const jeton = nouveauJeton();
 		const texte = texteWeb(composerPrompts(prompt, { count: questionCount, type: questionType, source }), jeton);
 		const ouverture = preparerOuverture(texte, canal.web, URL_MAX);
@@ -3103,6 +3323,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			const ok = deps.copyText ? await deps.copyText(ouverture.texte) : false;
 			if (!ok) { echecOuverture(t("ai.channel.copyFailed"), container); return; }
 		}
+		/* LA DISPOSITION AVANT L'OUVERTURE : Neo Quiz passe à droite et
+		   l'Explorateur s'ouvre sur le fichier PENDANT que le principal guette le
+		   navigateur ; celui-ci est posé à gauche dès qu'il apparaît, puis
+		   l'Explorateur revient devant. Ouvrir d'abord le site faisait bouger
+		   trois fenêtres l'une après l'autre sous les yeux (Ahmed, 2026-09-19 :
+		   « le plus proprement possible »). */
+		/* Les fichiers à glisser : ceux de la demande, tels que l'hôte saura les
+		   résoudre (vault → `HostFile` par l'index ; externe ou choisi par le
+		   dialogue → chemin absolu déjà admis). */
+		if (host.depot) await host.depot.disposer();
 		if (!(await host.shell.openUrl(ouverture.url))) { echecOuverture(t("ai.channel.openFailed"), container); return; }
 		arreterAttenteWeb();
 		/* Écouteurs de la phase : Esc annule ; un collage hors du composer est
@@ -3135,7 +3365,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		document.addEventListener("keydown", surTouche);
 		document.addEventListener("paste", surCollage, true);
 		attenteWeb = {
-			jeton, ouverture, site,
+			jeton, ouverture, site, aGlisser,
 			arreter: host.collage ? host.collage.attendre(jeton, texteRecu => void recevoirReponse(texteRecu)) : null,
 			retirer: () => { document.removeEventListener("keydown", surTouche); document.removeEventListener("paste", surCollage, true); },
 		};
@@ -3159,16 +3389,21 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    « Réessayer » (restore puis startGeneration), qui repasse par
 	    ouvrirSite. */
 	function rouvrirSite(): void {
-		arreterAttenteWeb();
+		arreterAttenteWeb(true);
 		relancerApresErreur();
 	}
 
 	/** Arrête la veille et retire les écouteurs ; ne touche pas à la phase. */
-	function arreterAttenteWeb(): void {
+	function arreterAttenteWeb(garderDisposition = false): void {
 		if (!attenteWeb) return;
 		attenteWeb.arreter?.();
 		attenteWeb.retirer();
 		attenteWeb = null;
+		/* La disposition des fenêtres prend fin avec l'attente (réponse reçue,
+		   annulation) : l'Explorateur se ferme, Neo Quiz revient devant,
+		   centré. Sauf pour « Rouvrir », qui relance une attente tout de
+		   suite : la rendre puis la refaire ferait sauter les fenêtres. */
+		if (!garderDisposition) void host.depot?.terminer();
 	}
 
 	/** Annuler = défaire l'ouverture : la demande revient dans le composer. */
@@ -3287,6 +3522,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (__focusRecheck) { window.removeEventListener("focus", __focusRecheck); __focusRecheck = null; }
 		raccourciComposer?.retirer();
 		raccourciComposer = null;
+		veilleComposerActif?.retirer();
+		veilleComposerActif = null;
 		// `void` : après un échec d'écriture, ce brouillon n'a toujours pas de
 		// note à autosauvegarder ; la promesse rendue est déjà résolue.
 		signalerGeneration(false);

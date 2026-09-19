@@ -37,7 +37,7 @@
    réussi.
 ══════════════════════════════════════════════════════════ */
 
-import { app, clipboard, dialog, ipcMain, net, shell } from "electron";
+import { app, clipboard, dialog, ipcMain, nativeImage, net, screen, shell } from "electron";
 import type { BrowserWindow } from "electron";
 import * as path from "node:path";
 // Le dossier par défaut CHOISI est créé ici s'il manque — voir son canal.
@@ -51,7 +51,7 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, erreurCli, estOutilAutorise, lancerTerminal, lireCache, ollamaInstalle, run, scriptConnexion, scriptInstallation } from "./process";
+import { demarrerOllama, disposerPourSite, iconeDeType, erreurCli, estOutilAutorise, lancerTerminal, lireCache, ollamaInstalle, run, scriptConnexion, scriptInstallation } from "./process";
 import type { Outil } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
@@ -652,6 +652,145 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	});
 	ipcMain.handle(CANAUX.collageAttendre, (_e, jeton: unknown) => jetonValide(jeton) && attente.demarrer(jeton, dernierTexteEcritParLapp));
 	ipcMain.handle(CANAUX.collageArreter, () => { attente.arreter(); });
+
+	/* ─── DISPOSER LES FENÊTRES POUR UN SITE ───
+	   Neo Quiz passe à droite (posé ici, par `setBounds`, sur l'écran où il
+	   est) ; le navigateur à gauche est posé par `disposerPourSite`
+	   (process.ts), qui ne rend la main qu'une fois prêt à le guetter. */
+	let dispositionAvant: { agrandie: boolean; bounds: Electron.Rectangle } | null = null;
+	ipcMain.handle(CANAUX.depotDisposer, async (): Promise<void> => {
+		const fenetre = deps.fenetreCourante();
+		let hwnd = 0;
+		if (fenetre && !fenetre.isDestroyed()) {
+			/* L'état d'AVANT, pour le rendre à la fin (`terminer`) : agrandie
+			   ou non, et sa taille. Une disposition qui suit une autre garde
+			   l'état d'origine, pas la moitié d'écran. */
+			if (!dispositionAvant) dispositionAvant = { agrandie: fenetre.isMaximized(), bounds: fenetre.getNormalBounds() };
+			const aire = screen.getDisplayMatching(fenetre.getBounds()).workArea;
+			const moitie = Math.floor(aire.width / 2);
+			if (fenetre.isMaximized()) fenetre.unmaximize();
+			fenetre.setBounds({ x: aire.x + moitie, y: aire.y, width: aire.width - moitie, height: aire.height });
+			const h = fenetre.getNativeWindowHandle();
+			hwnd = h.length >= 8 ? Number(h.readBigUInt64LE(0)) : h.readUInt32LE(0);
+		}
+		await disposerPourSite(hwnd);
+	});
+
+	/* ─── GLISSER UN FICHIER DEPUIS L'APPLICATION ───
+	   `startDrag` fait partir le VRAI fichier du disque vers la fenêtre où
+	   l'utilisateur lâche (le navigateur, claude.ai) : c'est un accès au
+	   fichier, BORNÉ comme une lecture. L'icône est celle que Windows donne au
+	   fichier. Appelé pendant le `dragstart` du rendu — c'est le seul moment
+	   où Chromium accepte de démarrer un glisser natif. */
+	/* Les icônes de type, extraites d'avance (voir `iconeDeType`) : bornées
+	   comme une lecture, elles aussi — l'icône d'un fichier hors périmètre
+	   ne regarde pas l'application. */
+	/* LES FICHIERS QUE LE PRINCIPAL A ÉCRITS LUI-MÊME pour le glisser : une
+	   image collée, un fichier déposé depuis l'Explorateur (le rendu n'en a
+	   que les octets, pas le chemin). Sans eux, UNE seule pièce sans chemin
+	   retirait TOUTES les tuiles de la modale d'attente (vu le 2026-09-19).
+	   Ils vivent hors du périmètre, dans le dossier temporaire de
+	   l'application ; seuls les chemins de CET ensemble sont admis au glisser
+	   en plus des chemins bornés — jamais une lecture, jamais `ouvrir`. */
+	const temporaires = new Set<string>();
+	const dossierDepot = path.join(app.getPath("temp"), "neo-quiz-depot");
+	const resoudreDepot = async (abs: unknown): Promise<string> => {
+		if (typeof abs === "string" && temporaires.has(path.normalize(abs))) return path.normalize(abs);
+		return path.normalize(await perimetre.borner(abs));
+	};
+	ipcMain.handle(CANAUX.depotEcrire, async (_e, nom: unknown, octets: unknown): Promise<string | null> => {
+		if (typeof nom !== "string" || !(octets instanceof Uint8Array) || octets.byteLength > 64 * 1024 * 1024) return null;
+		/* Le NOM seul, nettoyé : ni dossier, ni caractère interdit par Windows,
+		   ni extension exécutable (`extensionRefusee`). */
+		const propre = path.basename(nom).replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim().slice(-120) || "fichier";
+		if (extensionRefusee(propre)) return null;
+		/* Un sous-dossier par fichier : deux images collées s'appellent toutes
+		   deux « image.png », et le site doit recevoir ce nom-là. */
+		await fsp.mkdir(dossierDepot, { recursive: true });
+		const dossier = await fsp.mkdtemp(path.join(dossierDepot, "d-"));
+		const a = path.normalize(path.join(dossier, propre));
+		await fsp.writeFile(a, octets);
+		temporaires.add(a);
+		return a;
+	});
+	ipcMain.handle(CANAUX.depotPreparer, async (_e, absolus: unknown): Promise<void> => {
+		if (!Array.isArray(absolus)) return;
+		for (const abs of absolus.slice(0, 25)) {
+			let a: string;
+			try { a = await resoudreDepot(abs); } catch { continue; }
+			await iconeDeType(a, app.getPath("temp"));
+		}
+	});
+	/* L'image composée par le rendu (`composerImageDeGlisser`) : un PNG en
+	   `data:` URL, borné, à une échelle d'écran plausible. Tout le reste
+	   retombe sur l'icône de type — jamais un glisser refusé pour son image. */
+	const imageDuRendu = (image: unknown): Electron.NativeImage | null => {
+		if (!image || typeof image !== "object") return null;
+		const { png, echelle } = image as { png?: unknown; echelle?: unknown };
+		const PREFIXE = "data:image/png;base64,";
+		if (typeof png !== "string" || !png.startsWith(PREFIXE) || png.length > 4 * 1024 * 1024) return null;
+		if (typeof echelle !== "number" || !(echelle >= 0.5 && echelle <= 4)) return null;
+		const img = nativeImage.createFromBuffer(Buffer.from(png.slice(PREFIXE.length), "base64"), { scaleFactor: echelle });
+		return img.isEmpty() ? null : img;
+	};
+	ipcMain.handle(CANAUX.depotGlisser, async (e, absolus: unknown, saisi: unknown, image: unknown): Promise<boolean> => {
+		if (!Array.isArray(absolus)) return false;
+		const fichiers: string[] = [];
+		const indexSaisi = typeof saisi === "number" && Number.isInteger(saisi) ? saisi : 0;
+		let saisiAbs: string | null = null;
+		for (const [i, abs] of absolus.slice(0, 25).entries()) {
+			let a: string;
+			try { a = await resoudreDepot(abs); } catch { continue; }
+			try { await fsp.access(a); } catch { continue; }
+			fichiers.push(a);
+			if (i === indexSaisi) saisiAbs = a;
+		}
+		if (fichiers.length === 0) return false;
+		try {
+			/* L'icône du fichier SAISI (celui sous le curseur), comme dans
+			   l'Explorateur : Windows n'en montre qu'une. Celle du shell en 256 px
+			   si elle est déjà extraite (`preparer`) ; sinon celle d'Electron,
+			   48 px, pour ne pas rater le geste. */
+			const porteur = saisiAbs ?? fichiers[0];
+			const composee = imageDuRendu(image);
+			const png = composee ? null : await iconeDeType(porteur, app.getPath("temp"));
+			/* 64 pt (96 px à 150 %) : la taille de l'image que l'Explorateur
+			   glisse. Le PNG de 256 px, posé tel quel, débordait de la couche
+			   de glisser de Chromium et arrivait tronqué (vu le 2026-09-19). */
+			const icon = composee ?? (png
+				? nativeImage.createFromPath(png).resize({ width: 64, height: 64, quality: "best" })
+				: await app.getFileIcon(porteur, { size: "large" }));
+			/* `files` l'emporte sur `file` quand il est donné ; `file` reste requis par le type. */
+			e.sender.startDrag(fichiers.length === 1 ? { file: fichiers[0], icon } : { file: fichiers[0], files: fichiers, icon });
+			return true;
+		} catch (err) {
+			console.warn(LOG_PREFIX, "glisser impossible:", fichiers, err);
+			return false;
+		}
+	});
+
+	/* ─── LA FIN : Neo Quiz revient, centré, devant ───
+	   (Ahmed, 2026-09-19 : « dès que l'on copie, les fenêtres ouvertes avant
+	   se mettent en arrière-plan et Neo Quiz se met au centre »). La taille
+	   d'avant est rendue, centrée sur l'écran courant ; agrandie avant,
+	   agrandie après. Le navigateur n'est pas touché : il passe derrière du
+	   seul fait que Neo Quiz revient devant. */
+	ipcMain.handle(CANAUX.depotTerminer, async () => {
+		const fenetre = deps.fenetreCourante();
+		if (fenetre && !fenetre.isDestroyed() && dispositionAvant) {
+			const avant = dispositionAvant;
+			dispositionAvant = null;
+			if (avant.agrandie) {
+				fenetre.maximize();
+			} else {
+				const aire = screen.getDisplayMatching(fenetre.getBounds()).workArea;
+				const width = Math.min(avant.bounds.width, aire.width);
+				const height = Math.min(avant.bounds.height, aire.height);
+				fenetre.setBounds({ x: aire.x + Math.floor((aire.width - width) / 2), y: aire.y + Math.floor((aire.height - height) / 2), width, height });
+			}
+		}
+		deps.fenetre.premierPlan();
+	});
 
 	ipcMain.handle(CANAUX.vaultsObsidian, async () => {
 		/* Les vaults qu'Obsidian déclare LUI-MÊME entrent au périmètre : l'écran

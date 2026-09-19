@@ -304,6 +304,37 @@ function creerFenetre(): void {
 	    vault et une note dans une application que l'utilisateur a installée,
 	    et tout autre schéma (`file:`, `javascript:`, un exécutable enregistré
 	    comme gestionnaire) reste refusé. */
+	/**
+	 * `shell.openExternal` passe par ShellExecute, dont la ligne de commande
+	 * plafonne à ~32 K caractères (`report:url-max`) ; claude.ai en accepte le
+	 * double dans son adresse. Au-delà de la borne de Windows, l'adresse est
+	 * écrite dans un FICHIER HTML de redirection du dossier temporaire de
+	 * l'application, et c'est ce fichier qui est ouvert : le navigateur suit
+	 * `location.replace` sans limite de ligne de commande. Vérifié dans Brave
+	 * le 2026-09-19 avec 53 K. Le fichier est effacé une minute plus tard.
+	 *
+	 * L'adresse est mise dans le script par `JSON.stringify`, jamais
+	 * concaténée telle quelle : une URL qui contiendrait `</script>` fermerait
+	 * sinon la balise — c'est notre propre adresse, mais la règle ne coûte
+	 * rien. Seul `https:` emprunte ce chemin ; `obsidian:` et les adresses
+	 * courtes gardent `openExternal`.
+	 */
+	const LIGNE_DE_COMMANDE_MAX = 30000;
+	const ouvrirDehors = async (url: string): Promise<void> => {
+		if (url.length <= LIGNE_DE_COMMANDE_MAX || !url.startsWith("https:")) { await shell.openExternal(url); return; }
+		const dossier = path.join(app.getPath("temp"), "neo-quiz");
+		await fs.mkdir(dossier, { recursive: true });
+		const fichier = path.join(dossier, "ouvrir-" + Date.now().toString(36) + ".html");
+		const page = "<!doctype html><meta charset=\"utf-8\"><title>" + PRODUCT_NAME + "</title>"
+			+ "<script>location.replace(" + JSON.stringify(url) + ")</script>";
+		await fs.writeFile(fichier, page, "utf8");
+		const erreur = await shell.openPath(fichier);
+		if (erreur) {
+			console.warn(LOG_PREFIX, "redirection non ouverte:", erreur);
+			await shell.openExternal(url).catch(() => { /* trop long : rien de mieux à faire */ });
+		}
+		setTimeout(() => { void fs.rm(fichier, { force: true }); }, 60_000);
+	};
 	const remettreAuNavigateur = (url: string): void => {
 		/* Sous `try` : `memeOrigine` rend `false` sur une URL non analysable, et
 		   un `throw` ici, APRÈS le `preventDefault`, ferait sortir l'écouteur en
@@ -314,7 +345,7 @@ function creerFenetre(): void {
 		} catch {
 			// URL illisible : refusée, et rien à remettre au navigateur.
 		}
-		if (/^(https?|obsidian):$/.test(protocole)) void shell.openExternal(url);
+		if (/^(https?|obsidian):$/.test(protocole)) void ouvrirDehors(url);
 		else console.warn(LOG_PREFIX, "navigation refusée:", url);
 	};
 	const refuserHorsOrigine = (e: Electron.Event, url: string): void => {

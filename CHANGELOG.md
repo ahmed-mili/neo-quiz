@@ -16,8 +16,19 @@ release notes.
 ### Changed
 - The update indicator in the rail now works like Neo Calendar's: while the new version downloads, a small blue pill above Settings shows the percentage; once it is ready, the pill becomes the update icon and "Update" appears under it on hover (and once, on its own, when the download finishes). Clicking installs and shows "Installing…".
 - In the Ollama model menu, the selected model is marked by its cloud icon turning blue instead of a check mark, and paid models in "More models" can no longer be selected: clicking one opens Ollama's pricing page.
+- Each step of a generation (generating, error, waiting for sign-in, waiting for claude.ai) now appears in a centered dialog. Closing it stops the generation, or cancels the wait, and your request goes back to the composer.
+- When you generate with claude.ai, Neo Quiz moves to the right half of the screen and opens your browser on the left. When the answer arrives, Neo Quiz returns to its previous size, centered, in front.
+- Files attached to a claude.ai request are no longer pasted into the prompt as text. The waiting dialog shows them as stacks of pages that you drag onto claude.ai, all in one gesture, so a PDF arrives as a PDF. They sit on a single row of equal frames; hovering one fans out every stack and turns the other names blue, since they all leave together.
+- While you drag files onto claude.ai, the image under the cursor is a fanned stack with the file you grabbed on top and, as in File Explorer, the number of files in a blue badge.
+- On claude.ai, the provider button now reads "claude.ai" next to the Claude logo instead of "Claude · claude.ai".
+- The cross that cancels a generation or a wait turns red like the close button of a Windows 11 title bar, and its "Cancel" tooltip looks like a Windows 11 tooltip.
+- Images now work with claude.ai too: they are dragged along with the other files. In the composer, an image is a card of the same size as a document's, next to it, and clicking it opens a preview.
 
 ### Fixed
+- A long file name no longer hides its extension: it is cut in the middle ("GNU dd…let.md") in the files to drag onto claude.ai.
+- The outline of the composer no longer changes as the mouse moves: hovering and clicking give the same outline, and it only goes away when you click elsewhere on the page, not when you open one of its menus.
+- In the files to drag onto claude.ai, the scroll bar no longer vanishes under the mouse.
+- A course PDF sent to claude.ai no longer goes through the clipboard: the request stays in the link as long as claude.ai accepts it, instead of stopping at the much shorter limit of the Windows command line.
 - Generating with claude.ai from a long request (files attached, so the prompt travels through the clipboard) failed at once with "JSON5: invalid character 'Y'": Neo Quiz mistook the prompt it had just copied for the answer. It now ignores the text it copied itself and waits for the real answer.
 
 ## [1.9.0] - 2026-09-19

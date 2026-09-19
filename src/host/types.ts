@@ -731,6 +731,58 @@ export interface HostCollage {
 	attendre(jeton: string, surTexte: (texte: string) => void): () => void;
 }
 
+/**
+ * DISPOSER LES FENÊTRES POUR UN SITE, ET GLISSER UN FICHIER DEPUIS
+ * L'APPLICATION — un membre OPTIONNEL, l'application seule.
+ *
+ * Un site (claude.ai) n'accepte un fichier que par un geste de l'utilisateur
+ * dans sa page : aucune application ne peut lui en pousser un. Ce que Neo
+ * Quiz peut faire, c'est se mettre en position : le site dans la moitié
+ * gauche de l'écran, l'application dans la moitié droite, et les pièces
+ * jointes affichées dans la carte d'attente comme des tuiles qu'on GLISSE
+ * vers le site — c'est le vrai fichier du disque qui part (glisser-déposer
+ * natif, `webContents.startDrag`), pas une copie. Plus d'Explorateur à
+ * ouvrir : il se dessinait à son ancienne place avant qu'on puisse le poser
+ * (Ahmed, 2026-09-19). Le PDF arrive comme un vrai PDF, et le prompt tient
+ * toujours dans l'adresse.
+ *
+ * Les fichiers sont désignés comme pour `HostShell.openExternal` : un
+ * `HostFile` du contrat, ou un chemin ABSOLU déjà admis par l'hôte.
+ */
+/** L'image qui suit le curseur pendant un glisser (`HostDepot.glisser`) : un
+    PNG en `data:` URL, dessiné à l'échelle `echelle` de l'écran. */
+export interface ImageDeGlisser {
+	png: string;
+	echelle: number;
+}
+
+export interface HostDepot {
+	/** Le site à gauche, l'application à droite (sur l'écran de l'application).
+	    À appeler AVANT d'ouvrir le site : l'hôte guette la fenêtre du
+	    navigateur et la pose dès qu'elle naît. */
+	disposer(): Promise<void>;
+	/** Prépare le glisser : l'hôte extrait d'avance l'image que le curseur
+	    portera (l'icône de type de fichier de Windows, ~300 ms la première
+	    fois par extension) — le `dragstart` n'attend pas. À appeler quand les
+	    tuiles s'affichent. */
+	preparer(fichiers: Array<HostFile | string>): Promise<void>;
+	/** Pose une pièce jointe SANS chemin (image collée, fichier déposé depuis
+	    l'Explorateur) dans un fichier que l'hôte pourra glisser, et rend son
+	    chemin ; `null` si l'hôte refuse (nom exécutable, trop gros). */
+	ecrire(nom: string, octets: Uint8Array): Promise<string | null>;
+	/** Démarre le glisser-déposer natif de TOUS ces fichiers, d'un seul geste
+	    (Ahmed, 2026-09-19 : « on ne doit jamais se retrouver à devoir
+	    glisser plusieurs fichiers un par un ») ; à appeler depuis un écouteur
+	    `dragstart`, après `preventDefault`. `saisi` : l'index du fichier sous
+	    le curseur — c'est SON icône qui part avec le geste, comme dans
+	    l'Explorateur. `false` si aucun ne peut être glissé (hors périmètre,
+	    disparu) ; ceux qui le peuvent partent. */
+	glisser(fichiers: Array<HostFile | string>, saisi?: number, image?: ImageDeGlisser): Promise<boolean>;
+	/** La fin : l'application reprend sa taille d'avant, centrée, et revient au
+	    premier plan ; le site reste derrière. Sans effet sans `disposer`. */
+	terminer(): Promise<void>;
+}
+
 export interface Host {
 	fs: HostFs;
 	links: HostLinks;
@@ -750,4 +802,6 @@ export interface Host {
 	pdf?: HostPdf;
 	/** Absent sous le greffon — voir `HostCollage`. */
 	collage?: HostCollage;
+	/** Absent sous le greffon — voir `HostDepot`. */
+	depot?: HostDepot;
 }

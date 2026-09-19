@@ -132,7 +132,6 @@
 	overscroll-behavior: contain;
 }
 
-.qbd-ai-sent-images,
 .qbd-ai-sent-chips {
 	display: flex;
 	flex-wrap: wrap;
@@ -785,13 +784,15 @@
 	transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* Hover/focus DISCRETS (référence claude.ai) : accent atténué mêlé à la
-   bordure, pas de ring vif — le composer reste calme au focus. */
-.qbd-ai-composer:hover:not(.qbd-ai-composer--dragover) {
-	border-color: color-mix(in srgb, var(--interactive-accent) 35%, var(--background-modifier-border));
-}
-
-.qbd-ai-composer:focus-within {
+/* Survol et état ACTIF : UN SEUL contour, discret (référence claude.ai :
+   accent atténué mêlé à la bordure, pas de ring vif). Il ne tombe qu'au clic
+   ailleurs — `--actif` est posé et retiré par la page (`composerActif`,
+   ai.ts), pas par `:focus-within`, que le moindre menu ouvert depuis le
+   composer faisait perdre. Deux teintes (35 % au survol, 55 % au focus) et
+   une règle de survol plus spécifique que celle du focus faisaient changer
+   le contour selon la souris (Ahmed, 2026-09-19). */
+.qbd-ai-composer:hover:not(.qbd-ai-composer--dragover),
+.qbd-ai-composer--actif:not(.qbd-ai-composer--dragover) {
 	border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
 	box-shadow: 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 8%, transparent);
 }
@@ -984,23 +985,6 @@
 	white-space: nowrap;
 }
 
-/* Le contrôle du milieu sur un canal web : « Claude · claude.ai ». Pas de
-   modèle à choisir (c'est le site qui décide, avec le compte de
-   l'utilisateur), donc la marque en gras et le canal atténué à sa suite. */
-.qbd-channel-trigger .qbd-select-label {
-	gap: 5px;
-}
-
-.qbd-channel-trigger-sep {
-	color: var(--text-faint);
-}
-
-.qbd-channel-trigger-canal {
-	font-size: 12.5px;
-	font-weight: 500;
-	color: var(--text-muted);
-}
-
 @keyframes qbd-send-in {
 	from { opacity: 0; transform: scale(0.7); }
 	to   { opacity: 1; transform: scale(1); }
@@ -1059,16 +1043,6 @@
 .qbd-ai-quiz-page > .qbd-qz {
 	flex: 1;
 	min-height: 0;
-}
-
-/* Attachements dans le composer — vignettes d'images (rangée normale,
-   au-dessus du champ). Les chips « notes » vivent dans .qbd-ai-composer-
-   chips (ci-dessous), superposées à la 1ʳᵉ ligne du texte. */
-.qbd-ai-composer-attachments {
-	display: flex;
-	gap: 8px;
-	flex-wrap: wrap;
-	align-items: center;
 }
 
 /* Zone de texte : conteneur relatif partagé par la rangée de chips
@@ -1306,6 +1280,20 @@
 	pointer-events: none;
 }
 
+/* La carte d'une IMAGE (poserCarteImage) : la photo REMPLIT la carte,
+   recadrée — référence claude.ai (retour Ahmed 2026-09-19). Contrairement à
+   la page d'un PDF, sa forme n'est pas une information : pas de fond visible,
+   pas d'ombre de feuille. */
+.qbd-ai-note-chip--image .qbd-ai-note-chip-thumb {
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	object-fit: cover;
+	border-radius: 0;
+	box-shadow: none;
+}
+
 /* Sur une vignette, le badge et le nom ne sont PAS rendus (poserCarte) : rien
    ne recouvre la page. Seule la croix reste, sur un fond qui la détache quelle
    que soit la couleur dessous. */
@@ -1332,6 +1320,20 @@
 .qbd-ai-preview-modal {
 	width: 760px;
 	max-width: calc(100vw - 32px);
+}
+
+/* L'aperçu d'une image : elle entière, jamais recadrée, bornée par la
+   fenêtre ; la modale se règle sur elle plutôt que sur les 760 px d'un texte. */
+.qbd-ai-preview-modal--image {
+	width: auto;
+}
+
+.qbd-ai-preview-image {
+	display: block;
+	max-width: 100%;
+	max-height: 72vh;
+	margin: 0 auto;
+	border-radius: 8px;
 }
 
 /* Une seule ligne : le chemin (`.qbd-ai-preview-meta-path`) prend le reste de
@@ -1962,51 +1964,6 @@
 	}
 }
 
-.qbd-ai-image-thumb {
-	position: relative;
-}
-
-.qbd-ai-image-thumb-img {
-	width: 56px;
-	height: 56px;
-	border-radius: var(--radius-m, 8px);
-	object-fit: cover;
-	border: 1px solid var(--background-modifier-border);
-	transition: border-color 0.15s ease;
-}
-
-.qbd-ai-image-thumb:hover .qbd-ai-image-thumb-img {
-	border-color: var(--background-modifier-border-hover);
-}
-
-.qbd-ai-image-remove {
-	position: absolute;
-	top: -5px;
-	right: -5px;
-	width: 18px;
-	height: 18px;
-	padding: 0;
-	border-radius: 50%;
-	background: var(--color-red, #f87171) !important;
-	border: 2px solid var(--background-primary);
-	box-shadow: none !important;
-	color: white;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	transition: transform 0.1s ease;
-}
-
-.qbd-ai-image-remove svg {
-	width: 10px;
-	height: 10px;
-}
-
-.qbd-ai-image-remove:hover {
-	transform: scale(1.2);
-}
-
 /* ── Options : bouton du composer + popover (remplacent l'ancienne
    carte « Options » du formulaire) ── */
 /* Boutons icône du pied de composer (options, usage) : même gabarit que le
@@ -2302,48 +2259,210 @@
 .qbd-login-wait-modal .qbd-ai-loading-title { font-size: 16px; }
 .qbd-login-wait-modal .qbd-ai-login-hint { margin: 0; font-size: 13.5px; max-width: 40ch; }
 
+/* La GÉNÉRATION et l'ERREUR dans la même modale que l'attente : la carte y
+   perd sa surface (la modale est déjà la surface) et garde son contenu —
+   icône, titre, points ou message, action. Fermer la modale de génération,
+   c'est Stop ; fermer celle d'erreur rend la demande au composer. */
+.qbd-web-wait-modal.qbd-loading-modal,
+.qbd-web-wait-modal.qbd-error-modal { width: 480px; }
+.qbd-loading-modal .qbd-ai-preview-loading,
+.qbd-error-modal .qbd-ai-preview-error {
+	min-height: 220px;
+	width: auto;
+	background: transparent;
+	border: none;
+	padding: 32px 16px 24px;
+	gap: 14px;
+}
+.qbd-loading-modal .qbd-ai-preview-loading::before { display: none; }
+.qbd-error-modal .qbd-ai-error-msg { max-width: 42ch; }
+
+/* Les fichiers à glisser depuis la modale : les PILES de l'aperçu PDF
+   (`.qbd-ai-preview-pdf`, même animation au survol), la main « saisir » sur
+   toute la pile, et le nom du fichier en légende.
+
+   UNE RANGÉE DE CADRES ÉGAUX (retour Ahmed 2026-09-19 : cinq fichiers
+   s'étalaient sur trois lignes, chaque pile à la taille de son contenu, les
+   légendes à trois hauteurs). Chaque page tient dans un carré de 80 px, POSÉE
+   sur le bas du carré : les pages s'alignent sur une même ligne, et les
+   légendes sur la suivante, quelle que soit leur forme. Au-delà de ce que la
+   modale contient, la rangée DÉFILE, comme celle du composer, plutôt que de
+   passer à la ligne. `safe center` : centrée tant qu'elle tient, calée à
+   gauche dès qu'elle déborde — sinon son début sortirait par la gauche,
+   inatteignable. */
+.qbd-web-wait-modal.qbd-web-wait-modal--files { width: 620px; }
+/* La consigne tient sur une ligne dans cette modale plus large : à 46 ch,
+   « send. » tombait seul sur la seconde. */
+.qbd-web-wait-modal--files .qbd-ai-web-line { max-width: none; }
+.qbd-ai-web-files {
+	display: flex;
+	flex-wrap: nowrap;
+	justify-content: safe center;
+	align-items: flex-start;
+	/* Cinq cadres de 100 px et leurs écarts tiennent dans les 542 px utiles
+	   de la rangée (570 mesurés, moins son rembourrage) : la barre ne vient
+	   qu'au sixième. */
+	gap: 8px;
+	max-width: 100%;
+	box-sizing: border-box;
+	margin: 2px 0 4px;
+	/* L'air que réclament les feuilles de dessous (décalées à droite, et
+	   tournées au survol) : la rangée qui défile rogne tout ce qui dépasse. */
+	padding: 4px 14px 8px;
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+/* Pas de barre sur mesure : la rangée prend celle de toute la fenêtre
+   (`apps/windows/src/assets/shell.css`, 12 px de boîte, 6 px à l'œil). Une
+   règle d'ici, à la MÊME spécificité, perdait contre son `:hover` : la
+   bordure transparente de 3 px et `background-clip: padding-box` ne
+   laissaient rien à peindre sur une barre de 6 px, et le pouce disparaissait
+   sous la souris (vu par Ahmed le 2026-09-19). */
+.qbd-ai-web-pile {
+	flex: 0 0 100px;
+	width: 100px;
+	box-sizing: border-box;
+	padding: 10px 0 2px;
+	cursor: grab;
+}
+.qbd-ai-web-pile:active { cursor: grabbing; }
+
+/* TOUS LES FICHIERS RÉAGISSENT au survol de l'un d'eux (retour Ahmed
+   2026-09-19 : « Drag all » sous une seule pile laissait croire qu'un seul
+   fichier partirait). Toutes les piles s'éventaillent ensemble et prennent
+   le liseré accent — le geste emporte bien le groupe. Pas de cadre autour
+   des fichiers (essayé, retiré à sa demande le même jour). « Glisser tout »
+   n'apparaît que sous la pile SURVOLÉE ; les noms de toutes les autres
+   passent à l'accent, la couleur de « Glisser tout » : ils partent avec
+   (Ahmed, 2026-09-19 — « Glisser tout » sous chaque pile avait été essayé
+   et retiré). */
+.qbd-ai-web-pile .qbd-ai-preview-open { white-space: nowrap; }
+.qbd-ai-web-files:has(.qbd-ai-web-pile:hover) .qbd-ai-preview-stack-page {
+	rotate: -1deg;
+	border-color: color-mix(in oklab, var(--interactive-accent) 50%, #000);
+}
+.qbd-ai-web-files:has(.qbd-ai-web-pile:hover) .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::before {
+	transform: translateX(10px) rotate(3deg);
+	border-color: color-mix(in oklab, var(--interactive-accent) 50%, #000);
+}
+.qbd-ai-web-files:has(.qbd-ai-web-pile:hover) .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::after {
+	transform: translateX(5px) rotate(2deg);
+	border-color: color-mix(in oklab, var(--interactive-accent) 50%, #000);
+}
+.qbd-ai-web-files:has(.qbd-ai-web-pile:hover) .qbd-ai-web-pile:not(:hover) .qbd-ai-web-pile-nom {
+	color: var(--interactive-accent);
+}
+.qbd-ai-web-pile-nom { transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1), scale 0.15s cubic-bezier(0.4, 0, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) {
+	.qbd-ai-web-files:has(.qbd-ai-web-pile:hover) .qbd-ai-preview-stack-page { rotate: none; }
+	.qbd-ai-web-files:has(.qbd-ai-web-pile:hover) .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::before { transform: translateX(8px); }
+	.qbd-ai-web-files:has(.qbd-ai-web-pile:hover) .qbd-ai-preview-stack.is-ready .qbd-ai-preview-sheet::after { transform: translateX(4px); }
+	.qbd-ai-web-pile-nom { transition: none; }
+}
+.qbd-ai-web-pile .qbd-ai-preview-stack {
+	align-items: flex-end;
+	height: 80px;
+	min-height: 0;
+}
+.qbd-ai-web-pile .qbd-ai-preview-stack-page { max-width: 80px; max-height: 80px; border-radius: 6px; }
+.qbd-ai-web-pile .qbd-ai-preview-sheet::before,
+.qbd-ai-web-pile .qbd-ai-preview-sheet::after { border-radius: 6px; }
+.qbd-ai-web-pile .qbd-ai-preview-caption {
+	max-width: 100%;
+	box-sizing: border-box;
+	font-size: 12px;
+	line-height: 16px;
+}
+.qbd-ai-web-pile-nom {
+	display: flex;
+	/* Élément d'un `inline-flex` : sans `min-width: 0`, il garde la largeur
+	   de son texte entier et la tête ne se tronque jamais. */
+	min-width: 0;
+	max-width: 100%;
+	white-space: nowrap;
+}
+/* La tête cède la place, la queue (fin du nom + extension) jamais. */
+.qbd-ai-web-pile-nom-tete {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.qbd-ai-web-pile-nom-queue { flex: none; }
+/* La feuille d'une note : blanche, au format portrait d'une page (A4), le
+   badge d'extension au centre — le pendant de la première page d'un PDF. */
+.qbd-ai-web-page--texte {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 57px;
+	height: 80px;
+	box-sizing: border-box;
+	line-height: normal;
+}
+/* `align-self` : le badge garde celui des cartes du composer (`flex-start`),
+   qui le collait en haut de la feuille. */
+.qbd-ai-web-page--texte .qbd-ai-note-chip-badge { position: static; align-self: center; font-size: 11px; }
+.qbd-ai-web-pile .qbd-ai-preview-open { cursor: grab; }
+
 /* Le fond derrière ces deux modales est celui de TOUTES les modales de la
    fenêtre (le « smoke » de Windows 11, `apps/windows/src/assets/modal.css`) :
    une seule apparence pour toutes les boîtes de l'application (Ahmed,
    2026-09-19). Aucune exception ici. */
 
-/* La croix de cette modale ANNULE l'attente : son survol ne ressemble pas à
-   celui d'une croix ordinaire. Elle rougit, pivote d'un quart de tour, et la
-   bulle « Annuler » apparaît sous elle sans délai (aucune transition sur
-   l'opacité : une infobulle qui tarde, c'est une infobulle qu'on ne lit pas). */
+/* La croix de ces modales ANNULE : elle prend le survol de la croix de
+   fermeture NATIVE de Windows 11, celle de la barre de titre juste au-dessus
+   (Ahmed, 2026-09-19). Rouge système PLEIN et croix blanche au survol, le
+   même rouge à 90 % et la croix à 70 % à l'appui — les valeurs de la barre
+   de titre de WinUI, qui ne suivent pas le thème. Pas de rotation. */
 .qbd-web-wait-modal .modal-close-button.qbd-web-wait-close {
-	transition: background 0.12s ease, color 0.12s ease;
-}
-.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close svg {
-	transition: transform 0.18s ease;
+	transition: background-color 0.1s ease, color 0.1s ease;
 }
 .qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:hover,
 .qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:focus-visible {
-	background: color-mix(in srgb, var(--color-red) 16%, transparent);
-	color: var(--color-red);
+	background: #c42b1c;
+	color: #fff;
 }
-.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:hover svg,
-.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:focus-visible svg {
-	transform: rotate(90deg);
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:active {
+	background: rgba(196, 43, 28, 0.9);
+	color: rgba(255, 255, 255, 0.7);
 }
+
+/* « Annuler » : l'INFOBULLE DE WINDOWS 11 (le ToolTip de WinUI, thème
+   sombre), redessinée parce que celle qu'Electron tire d'un `title` est
+   l'infobulle Win32 d'avant Windows 11 — cadre noir carré, fond gris, qu'on
+   ne peut pas styliser (vu par Ahmed le 2026-09-19). Fond #2C2C2C, liseré
+   noir à 20 %, coins de 8 px, 12 px de Segoe UI, ombre d'élévation ; elle
+   vient après un court délai et s'efface aussitôt, comme celle du système.
+   PLACÉE À GAUCHE de la croix, centrée sur sa hauteur : la croix est dans le
+   coin haut-droit, dessous l'infobulle couvrirait le contenu de la modale,
+   au-dessus elle sortirait du panneau ; à gauche elle tient dans la bande
+   vide du titre, sur la même ligne que ce qu'elle nomme. */
 .qbd-web-wait-modal .modal-close-button.qbd-web-wait-close::after {
 	content: attr(data-tip);
 	position: absolute;
-	top: calc(100% + 6px);
-	right: 0;
-	padding: 3px 9px;
-	border-radius: 6px;
-	border: 1px solid color-mix(in srgb, var(--color-red) 45%, transparent);
-	background: var(--background-primary);
-	color: var(--color-red);
-	font-size: 11.5px;
-	font-weight: 500;
-	line-height: 1.5;
+	top: 50%;
+	right: calc(100% + 8px);
+	translate: 0 -50%;
+	padding: 5px 9px 7px;
+	border-radius: 8px;
+	border: 1px solid rgba(0, 0, 0, 0.2);
+	background: #2c2c2c;
+	box-shadow: 0 8px 16px rgba(0, 0, 0, 0.26);
+	color: #fff;
+	font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 16px;
 	white-space: nowrap;
 	pointer-events: none;
 	opacity: 0;
+	transition: opacity 0.08s linear;
 }
-.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:hover::after,
+.qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:hover::after {
+	opacity: 1;
+	transition-delay: 0.4s;
+}
 .qbd-web-wait-modal .modal-close-button.qbd-web-wait-close:focus-visible::after {
 	opacity: 1;
 }

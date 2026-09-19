@@ -575,6 +575,21 @@ export interface Pont {
 		arreter(): Promise<void>;
 		surTexte(rappel: (texte: string) => void): () => void;
 	};
+
+	/** DISPOSER LES FENÊTRES POUR UN SITE et GLISSER un fichier (voir
+	    `HostDepot`, src/host/types.ts) : le chemin est ABSOLU, borné par le
+	    périmètre comme une lecture. */
+	depot: {
+		disposer(): Promise<void>;
+		/** Écrit ces octets sous ce nom dans le dossier temporaire de
+		    l'application et rend le chemin, glissable ensuite ; `null` si refusé. */
+		ecrire(nom: string, octets: Uint8Array): Promise<string | null>;
+		preparer(absolus: string[]): Promise<void>;
+		/** `image` : le PNG (`data:` URL) qui suit le curseur, et son échelle ;
+		    sans elle, l'icône de type du fichier saisi. */
+		glisser(absolus: string[], saisi: number, image?: { png: string; echelle: number }): Promise<boolean>;
+		terminer(): Promise<void>;
+	};
 }
 
 /**
@@ -652,6 +667,11 @@ export const CANAUX = {
 	miseAJourEtat: "neo:mise-a-jour/etat",
 	miseAJourVerifier: "neo:mise-a-jour/verifier",
 	miseAJourInstaller: "neo:mise-a-jour/installer",
+	depotDisposer: "neo:depot/disposer",
+	depotEcrire: "neo:depot/ecrire",
+	depotPreparer: "neo:depot/preparer",
+	depotGlisser: "neo:depot/glisser",
+	depotTerminer: "neo:depot/terminer",
 	collageAttendre: "neo:collage/attendre",
 	collageArreter: "neo:collage/arreter",
 	/** POUSSÉ par le principal (`webContents.send`), comme `evenement` et

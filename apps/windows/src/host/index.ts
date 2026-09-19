@@ -160,5 +160,27 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		/* L'attente d'une réponse copiée (spec 2026-09-18, §4) : un passe-plat
 		   vers le pont, comme `process` et `net`. */
 		collage: createWindowsCollage(pont),
+		/* Disposer les fenêtres, glisser un fichier (la même résolution de
+		   chemin qu'`openExternal` : un `HostFile` du contrat → absolu par
+		   l'index ; une chaîne = un absolu déjà admis), et finir. */
+		depot: {
+			disposer: () => pont().depot.disposer().catch(e => { console.warn(LOG_PREFIX, "disposition impossible:", e); }),
+			async preparer(fichiers) {
+				const absolus = fichiers
+					.map(f => typeof f === "string" ? f : (f && index.get(f.path) ? carte.absolu(f.path) : null))
+					.filter((a): a is string => !!a);
+				if (absolus.length === 0) return;
+				try { await pont().depot.preparer(absolus); } catch (e) { console.warn(LOG_PREFIX, "préparation du glisser impossible:", e); }
+			},
+			ecrire: (nom, octets) => pont().depot.ecrire(nom, octets).catch(e => { console.warn(LOG_PREFIX, "écriture pour le glisser impossible:", nom, e); return null; }),
+			async glisser(fichiers, saisi = 0, image) {
+				const absolus = fichiers
+					.map(f => typeof f === "string" ? f : (f && index.get(f.path) ? carte.absolu(f.path) : null))
+					.filter((a): a is string => !!a);
+				if (absolus.length === 0) return false;
+				try { return await pont().depot.glisser(absolus, Math.max(0, Math.min(saisi, absolus.length - 1)), image); } catch (e) { console.warn(LOG_PREFIX, "glisser impossible:", e); return false; }
+			},
+			terminer: () => pont().depot.terminer().catch(e => { console.warn(LOG_PREFIX, "fin de disposition impossible:", e); }),
+		},
 	};
 }

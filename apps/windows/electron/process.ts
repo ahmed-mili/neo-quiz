@@ -67,9 +67,9 @@ import { commandeInstallationLancee } from "../../../src/cli-install-cmd";
 
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, extname, join } from "node:path";
 
 /** Ce que `lireCache` sait lire. `ollama` n'en a pas : son catalogue est
     interrogé par le réseau (`/api/tags`), pas par un fichier. */
@@ -394,6 +394,175 @@ export function scriptConnexion(tool: Outil, titre: string, messages: MessagesTe
 		connexion,
 		...issue(messages),
 	].join("\n");
+}
+
+/**
+ * DISPOSE LES FENÊTRES POUR UNE GÉNÉRATION PAR UN SITE (Ahmed, 2026-09-19) :
+ * le NAVIGATEUR occupe la moitié gauche de l'écran où vit Neo Quiz, Neo
+ * Quiz la moitié droite. Deux fenêtres qu'on voit ensemble : glisser le
+ * fichier depuis Neo Quiz, envoyer, copier. (Un Explorateur ouvert sur le
+ * fichier a été essayé et abandonné le même jour : il se dessinait à son
+ * ancienne place avant qu'on puisse le poser.)
+ *
+ * LE NAVIGATEUR EST POSÉ À L'INSTANT OÙ IL NAÎT : le script COMPILE d'abord
+ * ses appels `user32` (le seul temps long, ~1 s), pose Neo Quiz, puis écrit
+ * « pret » — et c'est SEULEMENT alors que le principal rend la main au rendu,
+ * qui ouvre le site. La fenêtre du navigateur est guettée toutes les 10 ms
+ * et posée dès sa première image. Un navigateur déjà ouvert existe déjà : on
+ * le déplace.
+ *
+ * PAR PowerShell ET `user32` : Electron ne rend pas la fenêtre du navigateur.
+ * Le navigateur par défaut se lit dans le registre (`UrlAssociations\https\
+ * UserChoice` → `ProgId` → sa commande), et SA fenêtre est celle qui est au
+ * premier plan et appartient à ce processus (jusqu'à huit secondes ; repli :
+ * sa fenêtre principale). Ça vaut pour tout navigateur qui ouvre une fenêtre
+ * Windows ordinaire — Chrome, Edge, Firefox, Brave. Une fenêtre Windows 11
+ * porte un cadre INVISIBLE de ~7 px : `Poser` mesure l'écart avec le cadre
+ * visible (DWM) et l'absorbe, sinon les fenêtres laissent un vide entre
+ * elles. Best effort ; `$idProc` et non `$pid`, variable réservée.
+ */
+export function scriptDisposerPourSite(hwndNeo: number): string {
+	return [
+		"$hwndNeo = " + String(Math.floor(hwndNeo)),
+		"$progId = (Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice').ProgId",
+		"$cmd = (Get-ItemProperty ('Registry::HKEY_CLASSES_ROOT\\' + $progId + '\\shell\\open\\command')).'(default)'",
+		"$exe = if ($cmd -match '^\"([^\"]+)\"') { $Matches[1] } else { ($cmd -split ' ')[0] }",
+		"$nomExe = [System.IO.Path]::GetFileNameWithoutExtension($exe)",
+		"Add-Type -Name Win -Namespace NQ -MemberDefinition @'",
+		"[DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();",
+		"[DllImport(\"user32.dll\")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);",
+		"[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h, int cmd);",
+		"[DllImport(\"user32.dll\")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);",
+		"[DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr h, out RECT r);",
+		"[DllImport(\"dwmapi.dll\")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int cb);",
+		"public struct RECT { public int L, T, R, B; }",
+		"'@",
+		"Add-Type -AssemblyName System.Windows.Forms",
+		"function Poser($h, $x, $y, $cx, $cy) {",
+		"  [NQ.Win]::ShowWindow($h, 9) | Out-Null",
+		"  [NQ.Win]::SetWindowPos($h, [IntPtr]::Zero, $x, $y, $cx, $cy, 0x0050) | Out-Null",
+		"  $r = New-Object NQ.Win+RECT; $f = New-Object NQ.Win+RECT",
+		"  [NQ.Win]::GetWindowRect($h, [ref]$r) | Out-Null",
+		"  if ([NQ.Win]::DwmGetWindowAttribute($h, 9, [ref]$f, 16) -eq 0) {",
+		"    $dl = $f.L - $r.L; $dt = $f.T - $r.T; $dr = $r.R - $f.R; $db = $r.B - $f.B",
+		"    [NQ.Win]::SetWindowPos($h, [IntPtr]::Zero, $x - $dl, $y - $dt, $cx + $dl + $dr, $cy + $dt + $db, 0x0050) | Out-Null",
+		"  }",
+		"}",
+		"$aire = if ($hwndNeo -ne 0) { [System.Windows.Forms.Screen]::FromHandle([IntPtr]$hwndNeo).WorkingArea } else { [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea }",
+		"$moitie = [int]($aire.Width / 2)",
+		"if ($hwndNeo -ne 0) { Poser ([IntPtr]$hwndNeo) ($aire.Left + $moitie) $aire.Top ($aire.Width - $moitie) $aire.Height }",
+		"[Console]::Out.WriteLine('pret'); [Console]::Out.Flush()",
+		"$hNav = [IntPtr]::Zero",
+		"for ($i = 0; $i -lt 800; $i++) {",
+		"  $h = [NQ.Win]::GetForegroundWindow(); $idProc = 0; [NQ.Win]::GetWindowThreadProcessId($h, [ref]$idProc) | Out-Null",
+		"  $proc = Get-Process -Id $idProc -ErrorAction SilentlyContinue",
+		"  if ($proc -and $proc.ProcessName -ieq $nomExe) { $hNav = $h; break }",
+		"  Start-Sleep -Milliseconds 10",
+		"}",
+		"if ($hNav -eq [IntPtr]::Zero) {",
+		"  $proc = Get-Process -Name $nomExe -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1",
+		"  if ($proc) { $hNav = $proc.MainWindowHandle }",
+		"}",
+		"if ($hNav -ne [IntPtr]::Zero) { Poser $hNav $aire.Left $aire.Top $moitie $aire.Height }",
+	].join("\n");
+}
+
+/**
+ * Lance la disposition et NE REND LA MAIN QU'AU SIGNAL « pret » du script
+ * (trois secondes au plus) : c'est ce qui permet au rendu d'ouvrir le site
+ * APRÈS que le guet de la fenêtre a commencé. Sans terminal, sans fenêtre.
+ */
+export function disposerPourSite(hwndNeo: number): Promise<void> {
+	if (process.platform !== "win32") return Promise.resolve();
+	return new Promise(resolve => {
+		let rendu = false;
+		const fin = (): void => { if (!rendu) { rendu = true; resolve(); } };
+		try {
+			const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptDisposerPourSite(hwndNeo))], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+			enfant.stdout.on("data", (d: Buffer) => { if (d.toString("utf8").includes("pret")) fin(); });
+			enfant.on("error", e => { console.warn(LOG_PREFIX, "disposition des fenêtres impossible:", e); fin(); });
+			enfant.on("exit", fin);
+			enfant.unref();
+		} catch (e) {
+			console.warn(LOG_PREFIX, "disposition des fenêtres impossible:", e);
+			fin();
+		}
+		setTimeout(fin, 3000);
+	});
+}
+
+/**
+ * L'ICÔNE DE TYPE DE FICHIER DE WINDOWS, telle que l'Explorateur la montre
+ * sous le curseur quand on glisse un fichier (Ahmed, 2026-09-19 : « que ce
+ * soit pareil, avec l'icône que Windows a mise par défaut »). 256 px, fond
+ * TRANSPARENT, écrite en PNG dans `sortie`.
+ *
+ * `app.getFileIcon` d'Electron plafonne à 48 px, et l'Explorateur, lui,
+ * glisse la grande icône du shell. On demande donc au shell lui-même, par
+ * `IShellItemImageFactory::GetImage` avec SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK
+ * (0x04 | 0x01 — PAS 0x80, qui est SIIGBF_ICONBACKGROUND et pose le fond bleu
+ * de la sélection). Le HBITMAP rendu est une section DIB 32 bits
+ * PRÉMULTIPLIÉE et de bas en haut : `Bitmap.FromHbitmap` en perd l'alpha,
+ * d'où la lecture des bits par `GetObject` et le retournement vertical.
+ * ~300 ms, à faire AVANT le glisser (le `dragstart` n'attend pas) — voir
+ * `iconeDeType`, qui met en cache par extension.
+ */
+export function scriptIconeDeType(fichier: string, sortie: string): string {
+	return [
+		"$fichier = " + citerPs(fichier),
+		"$sortie = " + citerPs(sortie),
+		"Add-Type -AssemblyName System.Drawing",
+		"Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'",
+		"using System; using System.Runtime.InteropServices; using System.Drawing; using System.Drawing.Imaging;",
+		"public static class NQIcone {",
+		"  [ComImport, Guid(\"bcc18b79-ba16-442f-80c4-8a59c30c463b\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]",
+		"  interface IShellItemImageFactory { [PreserveSig] int GetImage(SIZE size, int flags, out IntPtr phbm); }",
+		"  [StructLayout(LayoutKind.Sequential)] struct SIZE { public int cx; public int cy; public SIZE(int x, int y) { cx = x; cy = y; } }",
+		"  [StructLayout(LayoutKind.Sequential)] struct BITMAP { public int bmType, bmWidth, bmHeight, bmWidthBytes; public ushort bmPlanes, bmBitsPixel; public IntPtr bmBits; }",
+		"  [DllImport(\"shell32.dll\", CharSet = CharSet.Unicode, PreserveSig = false)] static extern void SHCreateItemFromParsingName(string path, IntPtr pbc, ref Guid riid, out IShellItemImageFactory ppv);",
+		"  [DllImport(\"gdi32.dll\")] static extern bool DeleteObject(IntPtr h);",
+		"  [DllImport(\"gdi32.dll\")] static extern int GetObject(IntPtr h, int c, out BITMAP b);",
+		"  public static void Sauver(string chemin, string sortie, int taille) {",
+		"    Guid g = new Guid(\"bcc18b79-ba16-442f-80c4-8a59c30c463b\"); IShellItemImageFactory f; SHCreateItemFromParsingName(chemin, IntPtr.Zero, ref g, out f);",
+		"    IntPtr hbm; int hr = f.GetImage(new SIZE(taille, taille), 0x04 | 0x01, out hbm); if (hr != 0) throw new Exception(\"GetImage \" + hr);",
+		"    BITMAP bm; GetObject(hbm, Marshal.SizeOf(typeof(BITMAP)), out bm);",
+		"    using (Bitmap c = new Bitmap(bm.bmWidth, bm.bmHeight, bm.bmWidthBytes, PixelFormat.Format32bppPArgb, bm.bmBits)) { c.RotateFlip(RotateFlipType.RotateNoneFlipY); using (Bitmap d = new Bitmap(c)) { d.Save(sortie, ImageFormat.Png); } }",
+		"    DeleteObject(hbm);",
+		"  }",
+		"}",
+		"'@",
+		"[NQIcone]::Sauver($fichier, $sortie, 256)",
+	].join("\n");
+}
+
+const iconesEnCours = new Map<string, Promise<string | null>>();
+
+/**
+ * Le PNG de l'icône de type d'un fichier, mis en cache PAR EXTENSION dans le
+ * dossier temporaire de l'application (une icône de type ne dépend que de
+ * l'extension et du gestionnaire associé). `null` si le shell n'a rien rendu.
+ * Les demandes simultanées d'une même extension partagent la même promesse.
+ */
+export function iconeDeType(fichier: string, dossierTemp: string): Promise<string | null> {
+	if (process.platform !== "win32") return Promise.resolve(null);
+	const ext = extname(fichier).toLowerCase().replace(/[^a-z0-9.]/g, "") || ".sans";
+	const sortie = join(dossierTemp, "neo-quiz", "icone-" + ext.slice(1) + ".png");
+	if (existsSync(sortie)) return Promise.resolve(sortie);
+	const enCours = iconesEnCours.get(ext);
+	if (enCours) return enCours;
+	const promesse = new Promise<string | null>(resolve => {
+		try {
+			mkdirSync(dirname(sortie), { recursive: true });
+			const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptIconeDeType(fichier, sortie))], { stdio: "ignore", windowsHide: true });
+			enfant.on("error", () => resolve(null));
+			enfant.on("exit", () => resolve(existsSync(sortie) ? sortie : null));
+			setTimeout(() => resolve(existsSync(sortie) ? sortie : null), 5000);
+		} catch {
+			resolve(null);
+		}
+	}).finally(() => { iconesEnCours.delete(ext); });
+	iconesEnCours.set(ext, promesse);
+	return promesse;
 }
 
 export function encoderCommande(script: string): string {

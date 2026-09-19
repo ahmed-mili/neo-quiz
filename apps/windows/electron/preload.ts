@@ -168,6 +168,14 @@ const pont: Pont = {
 		installer: () => ipcRenderer.invoke(CANAUX.miseAJourInstaller),
 	},
 
+	depot: {
+		disposer: () => ipcRenderer.invoke(CANAUX.depotDisposer),
+		/* RECOPIÉE, comme `writeBinary` : une vue partielle ne passe pas le pont. */
+		ecrire: (nom, octets) => ipcRenderer.invoke(CANAUX.depotEcrire, nom, new Uint8Array(octets)),
+		preparer: absolus => ipcRenderer.invoke(CANAUX.depotPreparer, absolus),
+		glisser: (absolus, saisi, image) => ipcRenderer.invoke(CANAUX.depotGlisser, absolus, saisi, image),
+		terminer: () => ipcRenderer.invoke(CANAUX.depotTerminer),
+	},
 	collage: {
 		attendre: jeton => ipcRenderer.invoke(CANAUX.collageAttendre, jeton),
 		arreter: () => ipcRenderer.invoke(CANAUX.collageArreter),

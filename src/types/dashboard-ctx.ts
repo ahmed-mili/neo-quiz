@@ -43,9 +43,11 @@ export interface AiSettings {
 	// (plugin.ts DEFAULT_SETTINGS) ; les helpers ollama la traitent comme « unset ».
 	aiOllamaModels?: string[] | null;
 	aiOllamaCatalog?: OllamaCatalogEntry[] | null;
-	/** Plan requis APPRIS par un 402 à la génération, par tag de modèle cloud
-	    (« kimi-k3:cloud » → « pro »). Vidé quand le plan du compte change. */
-	aiOllamaPlansAppris?: Record<string, string>;
+	/** Verdict de plan appris par la SONDE à zéro token (`sonderPlanOllama`) et
+	    par le 402 à la génération, par tag de modèle cloud (« kimi-k3:cloud »
+	    → « payant »). `"inconnu"` n'est jamais écrit ici (rien à retenir).
+	    Vidé quand le plan du compte change. */
+	aiOllamaPlansAppris?: Record<string, "inclus" | "payant">;
 	/** Le dernier plan vu par `/api/me` (« free », « pro »…) ; "" = inconnu. */
 	aiOllamaPlanCompte?: string;
 	/** Les canaux web dont l'utilisateur a coché « Ne plus afficher » sur le

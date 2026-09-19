@@ -1185,52 +1185,79 @@ export async function checkOllamaCompte(url?: string): Promise<CompteOllama> {
 	return absent;
 }
 
-/* ── LE PLAN REQUIS D'UN MODÈLE CLOUD : DEUX SOURCES, JAMAIS UNE LISTE ──
+/* ── LE PLAN REQUIS D'UN MODÈLE CLOUD : LA SONDE À ZÉRO TOKEN ──
    Ollama ne publie pas la liste des modèles compris dans le plan gratuit (la
    page de prix dit « starter models » sans les nommer ; la page des réglages
-   les liste, derrière la connexion). Ce qui existe : `required_plan` dans les
-   recommandations (cinq modèles, ce que l'application Ollama elle-même
-   affiche), et le 402 qu'un modèle hors plan rend à la génération. La page
-   combine les deux et n'écrit AUCUN modèle en dur — une liste embarquée
-   pourrirait sans qu'une erreur le dise (décision d'Ahmed, 2026-09-19). */
+   les liste, derrière la connexion), et `required_plan` des recommandations
+   ne couvre presque rien (5 modèles sur toute la sélection). Ce qui existe et
+   répond pour CHAQUE modèle : mesuré le 2026-09-19 (Ollama 0.34.2, compte
+   `free`), `POST /api/chat` avec `num_predict: 0` répond, en ~2 s et SANS
+   générer un seul token (le plan est vérifié AVANT la validation de
+   `max_tokens`) — 402 « this model is not included in your free usage… » sur
+   un modèle payant, 400 « max_tokens must be positive » sur un modèle compris
+   dans le plan gratuit. On SONDE donc chaque modèle plutôt que d'écrire une
+   liste : une liste embarquée pourrirait sans qu'une erreur le dise (décision
+   d'Ahmed, 2026-09-19). */
 
 export const OLLAMA_UPGRADE_URL = "https://ollama.com/upgrade";
 
-/** `required_plan` par tag, lu sur le DÉMON (`/api/experimental/
-    model-recommendations`, qui met en cache celui d'ollama.com). Best effort :
-    tout échec vaut `{}`. */
-export async function fetchOllamaPlansRequis(url?: string): Promise<Record<string, string>> {
+export type VerdictPlan = "inclus" | "payant" | "inconnu";
+
+/** PURE. Le verdict d'une réponse de la sonde `/api/chat` à zéro token :
+    402 (ou son message si le statut a changé) → `"payant"` ; 400 « max_tokens
+    must be positive » → `"inclus"` (le 400 est passé la vérification du plan
+    puisqu'Ollama a rejeté `num_predict: 0` ensuite) ; 2xx → `"inclus"` (une
+    version future qui accepterait 0 tokens) ; tout le reste (404 modèle
+    inconnu, 401, 5xx, corps illisible) → `"inconnu"`, jamais un statut tranché
+    sur une réponse qu'on ne comprend pas. */
+export function classerSondePlan(status: number, corps: string): VerdictPlan {
+	const data = corpsJson(corps) as { error?: unknown } | null;
+	const message = (data && typeof data.error === "string") ? data.error : corps;
+	if (erreurOllamaHorsPlan(status, message)) return "payant";
+	if (status === 400 && message.toLowerCase().includes("max_tokens must be positive")) return "inclus";
+	if (status >= 200 && status < 300) return "inclus";
+	return "inconnu";
+}
+
+/** La sonde d'un modèle cloud : zéro token demandé (voir l'en-tête) — le
+    verdict arrive avant qu'un seul token ne soit généré, donc sans coûter
+    d'usage inclus. `null` (réseau injoignable) → `"inconnu"`, jamais une
+    exception remontée à l'appelant. */
+export async function sonderPlanOllama(url: string | undefined, tag: string): Promise<VerdictPlan> {
 	const base = (url || "http://localhost:11434").replace(/\/+$/, "");
-	const resp = await requireHost("net").fetchJson({ url: base + "/api/experimental/model-recommendations" });
-	if (!resp || resp.status !== 200) return {};
-	const data = corpsJson(resp.body) as { recommendations?: Array<{ model?: unknown; required_plan?: unknown }> } | null;
-	const plans: Record<string, string> = {};
-	for (const rec of (data && Array.isArray(data.recommendations)) ? data.recommendations : []) {
-		if (typeof rec.model === "string" && typeof rec.required_plan === "string" && rec.required_plan) plans[rec.model] = rec.required_plan;
+	const resp = await requireHost("net").fetchJson({
+		url: base + "/api/chat",
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			model: tag,
+			messages: [{ role: "user", content: "." }],
+			stream: false,
+			think: false,
+			options: { num_predict: 0 }
+		})
+	});
+	if (!resp) return "inconnu";
+	return classerSondePlan(resp.status, resp.body);
+}
+
+/** PURE. Répartit des modèles entre le menu principal et « Plus de modèles ».
+    Un compte payant (ou dont le plan n'est pas encore connu) ne trie rien :
+    aucun modèle n'y est jamais hors plan de façon sûre. Sur un compte
+    gratuit, seul un modèle CLOUD dont la sonde a répondu `"payant"` part dans
+    `plus` — un local marqué `"payant"` par erreur resterait dans `principal`.
+    L'ordre d'entrée est conservé dans chacune des deux listes. */
+export function repartirParPlan<T extends { value: string; cloud: boolean }>(
+	modeles: T[], planCompte: string, verdicts: Record<string, VerdictPlan>
+): { principal: T[]; plus: T[] } {
+	if (planCompte !== "free") return { principal: modeles.slice(), plus: [] };
+	const principal: T[] = [];
+	const plus: T[] = [];
+	for (const m of modeles) {
+		if (m.cloud && verdicts[m.value] === "payant") plus.push(m);
+		else principal.push(m);
 	}
-	return plans;
-}
-
-/** Le plan requis d'un modèle, ou `null` si aucune source ne le sait. Les
-    recommandations priment : elles viennent d'Ollama, l'appris d'une réponse
-    d'erreur interprétée. */
-export function planRequisPour(tag: string, sources: { recommandations: Record<string, string>; appris: Record<string, string> }): string | null {
-	return sources.recommandations[tag] || sources.appris[tag] || null;
-}
-
-const ORDRE_PLANS = ["free", "pro", "max", "team"];
-
-/** Le modèle est-il AU-DESSUS du plan du compte ? `null` (on ne sait pas) n'est
-    pas hors plan : le badge informe, le 402 tranche. Un plan requis INCONNU
-    vaut « au-dessus de free » : un compte gratuit le voit, un compte payant
-    non — c'est le sens le plus probable d'un nom de plan qu'on ne connaît pas. */
-export function modeleHorsPlan(planCompte: string, planRequis: string | null): boolean {
-	if (planRequis === null) return false;
-	const requis = ORDRE_PLANS.indexOf(planRequis);
-	const compte = ORDRE_PLANS.indexOf(planCompte);
-	if (requis < 0) return compte <= 0;
-	if (compte < 0) return true;
-	return requis > compte;
+	return { principal, plus };
 }
 
 /** Un modèle hors plan : le 402 (mesuré le 2026-09-19 : « this model is not

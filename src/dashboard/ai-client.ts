@@ -1021,14 +1021,14 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 				}
 				/* Un modèle hors plan : 402 « this model is not included in your
 				   free usage … upgrade for included usage » (mesuré 2026-09-19).
-				   Jusqu'ici il tombait dans `ollamaHttp` générique. Le plan requis
-				   est APPRIS : la prochaine ouverture du menu marque ce modèle
-				   « Pro » avant même de cliquer (voir ai-providers.ts,
-				   planRequisPour). */
+				   Jusqu'ici il tombait dans `ollamaHttp` générique. Le verdict est
+				   APPRIS ici comme par la sonde à zéro token (voir ai-providers.ts,
+				   sonderPlanOllama) : la prochaine ouverture du menu classe ce
+				   modèle « Pro » avant même de cliquer. */
 				if (erreurOllamaHorsPlan(resp.status, errLower)) {
 					const appris = { ...(settings.get().aiOllamaPlansAppris || {}) };
-					if (appris[model] !== "pro") {
-						appris[model] = "pro";
+					if (appris[model] !== "payant") {
+						appris[model] = "payant";
 						// Le cache appris n'est pas critique : un échec de sauvegarde (IPC,
 						// disque) ne doit pas empêcher `erreurPlan` d'être levée juste après,
 						// sinon le catch générique ci-dessous la remplacerait par « injoignable ».

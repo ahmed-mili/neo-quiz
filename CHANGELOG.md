@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Fixed
+- On a free Ollama account, the model menu now lists only the cloud models your account includes; paid ones move to "More models", with a Pro badge and an Upgrade link. Neo Quiz finds out which is which by asking Ollama for each model, without generating anything or using your included usage.
+
 ## [1.7.0] - 2026-09-19
 
 ### Added

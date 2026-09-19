@@ -36,8 +36,14 @@ import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
     appelant y touche, et une mort en route masque les groupes suivants. */
 function fauxHote({ reponses = {}, caches = {}, runs = {} } = {}) {
 	const journal = [];
+	// `corps` : le CORPS de chaque requête `fetchJson`, dans l'ordre — `journal`
+	// reste un tuple à 3 (type, url, méthode) pour ne rien casser des cas
+	// existants qui le comparent tel quel ; un cas qui a besoin du corps posté
+	// (sonderPlanOllama : num_predict, stream) le relit ici séparément.
+	const corps = [];
 	return {
 		journal,
+		corps,
 		hote: {
 			fs: {
 				read: async () => "", readCached: async () => "", write: async () => {}, process: async () => {},
@@ -58,6 +64,7 @@ function fauxHote({ reponses = {}, caches = {}, runs = {} } = {}) {
 			net: {
 				async fetchJson(req) {
 					journal.push(["fetchJson", req.url, req.method ?? "GET"]);
+					corps.push({ url: req.url, method: req.method ?? "GET", body: req.body });
 					/* La clé la plus SPÉCIFIQUE qui préfixe l'URL : un cas pose
 					   « /api/tags » et « /api/version » séparément. */
 					const cle = Object.keys(reponses).filter(k => req.url.includes(k)).sort((a, b) => b.length - a.length)[0];
@@ -214,39 +221,60 @@ await withSrcModule(
 			r.check("démon injoignable (null) → pas connecté, sans adresse", await providers.checkOllamaCompte(), { connecte: false, signinUrl: null });
 		}
 
-		/* ── LE PLAN REQUIS D'UN MODÈLE : deux sources, jamais une liste ──
-		   `required_plan` des recommandations (cinq modèles, ce qu'utilise l'app
-		   Ollama elle-même) et les 402 APPRIS à la génération. Aucune liste de
-		   modèles gratuits n'est écrite dans le code : elle pourrirait sans
-		   erreur (décision d'Ahmed, 2026-09-19). */
+		/* ── LE PLAN REQUIS D'UN MODÈLE : LA SONDE À ZÉRO TOKEN ──
+		   Plus de `required_plan` des recommandations (5 modèles sur toute la
+		   sélection, presque rien) : chaque modèle cloud est sondé un par un par
+		   un `POST /api/chat` à `num_predict: 0`, qui tranche AVANT de générer un
+		   seul token (mesuré 2026-09-19). Aucune liste de modèles gratuits n'est
+		   écrite dans le code : elle pourrirait sans erreur (décision d'Ahmed). */
 		{
-			const recs = JSON.stringify({ recommendations: [
-				{ model: "glm-5.3:cloud", required_plan: "pro" },
-				{ model: "gemma4:31b-cloud", required_plan: "free" },
-				{ model: "gemma4:26b" },
-			] });
-			const { journal, hote } = fauxHote({ reponses: { "/api/experimental/model-recommendations": { status: 200, body: recs } } });
-			installHost(hote);
-			const plans = await providers.fetchOllamaPlansRequis("http://localhost:11434");
-			r.check("les recommandations sont lues sur le DÉMON (qui met ollama.com en cache), en GET",
-				journal.filter(l => l[0] === "fetchJson"), [["fetchJson", "http://localhost:11434/api/experimental/model-recommendations", "GET"]]);
-			r.check("seules les entrées qui portent required_plan sont retenues", plans, { "glm-5.3:cloud": "pro", "gemma4:31b-cloud": "free" });
+			r.check("classerSondePlan : 402 (le message mesuré) → payant",
+				providers.classerSondePlan(402, JSON.stringify({ error: "this model is not included in your free usage, add usage credits to pay as you go: https://ollama.com/settings or upgrade for included usage: https://ollama.com/upgrade (ref: x)" })),
+				"payant");
+			r.check("classerSondePlan : 400 « max_tokens must be positive » → inclus (le plan a déjà été validé, seul num_predict:0 est rejeté)",
+				providers.classerSondePlan(400, JSON.stringify({ error: "max_tokens must be positive, got: 0" })), "inclus");
+			r.check("classerSondePlan : 200 → inclus (une version future qui accepterait 0 token)",
+				providers.classerSondePlan(200, "{}"), "inclus");
+			r.check("classerSondePlan : 404 modèle inconnu → inconnu, jamais tranché sur une réponse qu'on ne comprend pas",
+				providers.classerSondePlan(404, JSON.stringify({ error: "model 'x' not found" })), "inconnu");
+			r.check("classerSondePlan : 400 avec un AUTRE message → inconnu",
+				providers.classerSondePlan(400, JSON.stringify({ error: "invalid request" })), "inconnu");
+			r.check("classerSondePlan : 500 → inconnu", providers.classerSondePlan(500, "boom"), "inconnu");
 		}
 		{
-			const { hote } = fauxHote({ reponses: {} });
+			const { journal, corps, hote } = fauxHote({
+				reponses: { "/api/chat": { status: 402, body: JSON.stringify({ error: "this model is not included in your free usage … upgrade for included usage" }) } },
+			});
 			installHost(hote);
-			r.check("recommandations injoignables → {} (best effort, jamais une exception)", await providers.fetchOllamaPlansRequis(), {});
+			const verdict = await providers.sonderPlanOllama("http://localhost:11434", "glm-5.3:cloud");
+			r.check("sonderPlanOllama : POST sur <url>/api/chat",
+				journal.filter(l => l[0] === "fetchJson"), [["fetchJson", "http://localhost:11434/api/chat", "POST"]]);
+			const requete = corps.find(c => c.url.includes("/api/chat"));
+			const corpsEnvoye = requete ? JSON.parse(requete.body) : null;
+			r.check("… zéro token demandé (num_predict), sans streaming, pour LE modèle sondé",
+				corpsEnvoye && { model: corpsEnvoye.model, stream: corpsEnvoye.stream, num_predict: corpsEnvoye.options?.num_predict },
+				{ model: "glm-5.3:cloud", stream: false, num_predict: 0 });
+			r.check("… et le verdict suit classerSondePlan (402 → payant)", verdict, "payant");
 		}
 		{
-			const sources = { recommandations: { "glm-5.3:cloud": "pro" }, appris: { "kimi-k3:cloud": "pro", "glm-5.3:cloud": "max" } };
-			r.check("planRequisPour : les recommandations priment sur l'appris, l'appris couvre le reste, null sinon",
-				["glm-5.3:cloud", "kimi-k3:cloud", "gpt-oss:120b-cloud"].map(t => providers.planRequisPour(t, sources)), ["pro", "pro", null]);
-			r.check("modeleHorsPlan : free < pro < max < team ; null = on ne sait pas = pas hors plan",
-				[
-					providers.modeleHorsPlan("free", "pro"), providers.modeleHorsPlan("pro", "pro"), providers.modeleHorsPlan("max", "pro"),
-					providers.modeleHorsPlan("free", "free"), providers.modeleHorsPlan("free", null), providers.modeleHorsPlan("free", "inconnu"), providers.modeleHorsPlan("pro", "inconnu"),
-				],
-				[true, false, false, false, false, true, false]);
+			const { hote } = fauxHote({});
+			installHost(hote);
+			r.check("sonderPlanOllama : démon injoignable (null) → inconnu, jamais une exception",
+				await providers.sonderPlanOllama("http://localhost:11434", "glm-5.3:cloud"), "inconnu");
+		}
+		{
+			const glm = { value: "glm-5.3:cloud", cloud: true };
+			const kimi = { value: "kimi-k3:cloud", cloud: true };
+			const local = { value: "qwen3:8b", cloud: false };
+			const verdicts = { "glm-5.3:cloud": "payant", "kimi-k3:cloud": "inclus", "qwen3:8b": "payant" };
+			r.check("repartirParPlan : compte « pro » (payant, ou plan pas encore connu) → tout dans principal, rien dans « plus »",
+				providers.repartirParPlan([glm, kimi, local], "pro", verdicts),
+				{ principal: [glm, kimi, local], plus: [] });
+			r.check("repartirParPlan : compte « free » → les payants CLOUD dans « plus », le reste (inclus, un LOCAL même marqué payant) dans principal, ordre conservé",
+				providers.repartirParPlan([glm, kimi, local], "free", verdicts),
+				{ principal: [kimi, local], plus: [glm] });
+		}
+		{
 			r.check("erreurOllamaHorsPlan : le 402 nu, ou le message mesuré, jamais un 403 « sign in »",
 				[
 					providers.erreurOllamaHorsPlan(402, ""),

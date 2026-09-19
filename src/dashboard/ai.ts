@@ -352,12 +352,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	/** L'adresse de connexion rendue par `/api/me` d'Ollama (401), à ouvrir
 	    dans le navigateur au clic sur « Se connecter ». `null` = inconnue. */
 	let ollamaSigninUrl: string | null = null;
-	/* `required_plan` des recommandations du démon, lu avec les statuts
-	   (force = à l'ouverture du menu). `{}` tant que rien n'a répondu. Hors de
-	   `render()` : `buildOllamaList` (fermeture dans `render`) le LIT et
-	   `refreshProviderStatuses` (fonction séparée, appelée depuis `render`)
-	   l'ÉCRIT — les deux doivent voir la même variable au fil des re-renders. */
-	let plansRecommandes: Record<string, string> = {};
+	/** Un seul passage de sonde de plan (zéro token) à la fois : un compte
+	    gratuit n'a qu'une requête simultanée sur le démon, et deux `render()`
+	    qui se chevauchent (composer redessiné pendant que la sonde tourne) ne
+	    doivent pas relancer une boucle sur les mêmes tags. */
+	let sondePlansEnCours = false;
+	/** Tags choisis EXPLICITEMENT depuis « Plus de modèles » dans CETTE session
+	    de page : le repli automatique d'un modèle courant devenu payant (voir
+	    `sonderPlansOllama`) ne doit jamais défaire un choix que l'utilisateur
+	    vient de faire lui-même. */
+	const modelesChoisisExplicitement = new Set<string>();
 	/** La vue a été fermée : plus rien ne doit repeindre ni démarrer. Un
 	    `abort()` posé pendant l'encodage des images n'a encore aucun processus
 	    à tuer — c'est ce drapeau qui arrête la génération à l'étape suivante. */
@@ -798,8 +802,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			const isInstalled = (v: string) => byNorm.has(v.replace(/:latest$/, ""));
 			const iconFor = (cloud: boolean, installed: boolean): string | null => cloud ? "cloud" : (installed ? null : "download");
 			const planCompte = settings().aiOllamaPlanCompte || "";
-			const horsPlan = (meta: aiProviders.OllamaModelMeta): boolean => meta.cloud && !!planCompte && aiProviders.modeleHorsPlan(
-				planCompte, aiProviders.planRequisPour(meta.value, { recommandations: plansRecommandes, appris: settings().aiOllamaPlansAppris || {} }));
+			const appris = settings().aiOllamaPlansAppris || {};
+			// Le verdict vient de la sonde à zéro token (`sonderPlansOllama` en
+			// arrière-plan) et du 402 appris à la génération — plus de recommandations.
+			const horsPlan = (meta: aiProviders.OllamaModelMeta): boolean =>
+				meta.cloud && planCompte === "free" && appris[meta.value] === "payant";
 			const decorate = (meta: aiProviders.OllamaModelMeta): OllamaListItem => {
 				const installed = meta.cloud ? true : isInstalled(meta.value);
 				return { value: meta.value, label: meta.label, cloud: meta.cloud,
@@ -807,6 +814,18 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			};
 			const catalog = settings().aiOllamaCatalog;
 			const list = aiProviders.resolveOllamaSelection(settings().aiOllamaModels, catalog).map(decorate);
+			// Compte gratuit : Ahmed veut aussi voir les modèles cloud du catalogue
+			// que la sonde a déjà classés « inclus », même hors de sa sélection —
+			// ajoutés après elle, sans doublon, sous le même plafond.
+			if (planCompte === "free") {
+				for (const entry of aiProviders.getOllamaCatalog(catalog)) {
+					if (list.length >= aiProviders.OLLAMA_MAX_MODELS) break;
+					if (!aiProviders.isOllamaCloudModel(entry.value)) continue;
+					if (appris[entry.value] !== "inclus") continue;
+					if (list.some(o => o.value === entry.value)) continue;
+					list.push(decorate(aiProviders.getOllamaModelMeta(entry.value, catalog)));
+				}
+			}
 			// Modèles locaux installés hors sélection → ajoutés en fin de liste.
 			(detected || []).forEach(m => {
 				const norm = m.name.replace(/:latest$/, "");
@@ -985,17 +1004,24 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					ctl.options = buildOllamaList(ctl.detected);
 					refreshTrigger();
 					const cur = curOpt();
+					// Répartition en deux listes : « Plus de modèles » (payant, sur un
+					// compte gratuit) n'apparaît QUE là, avec le badge Pro et le lien
+					// de mise à niveau — la liste principale ne porte ni l'un ni l'autre.
+					const { principal, plus } = aiProviders.repartirParPlan(
+						ctl.options, settings().aiOllamaPlanCompte || "", settings().aiOllamaPlansAppris || {});
 					openModelMenu(trigger, {
-						models: ctl.options.map(o => ({
+						models: principal,
+						moreModels: plus.map(o => ({
 							...o,
-							badge: o.horsPlan ? t("ai.badge.pro") : undefined,
-							upgrade: o.horsPlan ? { label: t("ai.upgrade.button"), onClick: () => { void host.shell.openUrl(aiProviders.OLLAMA_UPGRADE_URL); } } : undefined,
+							badge: t("ai.badge.pro"),
+							upgrade: { label: t("ai.upgrade.button"), onClick: () => { void host.shell.openUrl(aiProviders.OLLAMA_UPGRADE_URL); } },
 						})),
 						searchable: true,
 						currentModel: settings().aiModel || currentModel,
 						efforts: (cur && cur.thinking) ? efforts : [],
 						currentEffort: aiProviders.resolveEffort(provider, settings().aiEffort),
 						onPickModel: async (v) => {
+							modelesChoisisExplicitement.add(v);
 							await saveSettings({ aiModel: v });
 							refreshTrigger();
 						},
@@ -1515,6 +1541,74 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (id === active) renderHint(zone, opts);
 	}
 
+	/** Ce que `sonderPlansOllama` a besoin de toucher dans le contrôle Ollama de
+	    la CE render en cours : `ollamaCtl` et `buildOllamaList` sont des locales
+	    de `render()`, jamais visibles depuis `verifierCompte` (top-level de
+	    cette closure) sans être passées explicitement — même raison que
+	    `RefreshArgs` un peu plus haut. */
+	type OllamaSondeArgs = { ctl: OllamaCtl | null; buildList: (detected: aiProviders.OllamaDetectedModel[] | null) => OllamaListItem[] };
+
+	/** Le premier modèle de `principal` (jamais hors plan par construction) —
+	    ou `undefined` si la répartition ne laisse rien, cas dégénéré. */
+	function premierModeleInclus(args: OllamaSondeArgs): OllamaListItem | undefined {
+		const liste = args.buildList(args.ctl?.detected ?? null);
+		const { principal } = aiProviders.repartirParPlan(liste, settings().aiOllamaPlanCompte || "", settings().aiOllamaPlansAppris || {});
+		return principal[0];
+	}
+
+	/**
+	 * La sonde de plan EN ARRIÈRE-PLAN (tâche 8, correctif de T5) : sur un
+	 * compte `free`, `required_plan` des recommandations ne couvre presque
+	 * rien (5 modèles) — on SONDE donc chaque modèle cloud à zéro token (voir
+	 * `aiProviders.sonderPlanOllama`) au lieu d'attendre un 402 à la
+	 * génération. Un par un, JAMAIS en parallèle (un compte gratuit n'a qu'une
+	 * requête simultanée sur le démon), et un seul passage à la fois
+	 * (`sondePlansEnCours`).
+	 */
+	async function sonderPlansOllama(args?: OllamaSondeArgs): Promise<void> {
+		if (settings().aiOllamaPlanCompte !== "free") return;
+		if (sondePlansEnCours) return;
+		sondePlansEnCours = true;
+		try {
+			const catalog = settings().aiOllamaCatalog;
+			// Les tags cloud du catalogue complet, PLUS ceux de la sélection et le
+			// modèle courant s'il est cloud — un Set déduplique naturellement.
+			const tags = new Set<string>();
+			for (const m of aiProviders.getOllamaCatalog(catalog)) {
+				if (aiProviders.isOllamaCloudModel(m.value)) tags.add(m.value);
+			}
+			for (const m of aiProviders.resolveOllamaSelection(settings().aiOllamaModels, catalog)) {
+				if (m.cloud) tags.add(m.value);
+			}
+			const curModel = settings().aiModel || "";
+			if (aiProviders.isOllamaCloudModel(curModel)) tags.add(curModel);
+			// Ce qui est déjà su (verdict "inclus" ou "payant") n'a pas besoin
+			// d'être resondé — seul "inconnu" n'est jamais écrit dans les réglages.
+			const dejaSu = settings().aiOllamaPlansAppris || {};
+			for (const tag of tags) {
+				if (dejaSu[tag] === "inclus" || dejaSu[tag] === "payant") continue;
+				if (disposed) return;
+				const verdict = await aiProviders.sonderPlanOllama(settings().aiOllamaUrl, tag);
+				if (disposed) return;
+				if (verdict === "inconnu") continue; // rien à retenir
+				await saveSettings({ aiOllamaPlansAppris: { ...(settings().aiOllamaPlansAppris || {}), [tag]: verdict } });
+				if (args?.ctl) {
+					args.ctl.options = args.buildList(args.ctl.detected);
+					args.ctl.refreshTrigger?.();
+				}
+				// Repli : le modèle COURANT vient d'être classé payant — sauf s'il a
+				// été choisi lui-même depuis « Plus de modèles » dans cette session,
+				// on ne le laisse pas silencieusement sur un modèle hors plan.
+				if (verdict === "payant" && args && tag === (settings().aiModel || "") && !modelesChoisisExplicitement.has(tag)) {
+					const repli = premierModeleInclus(args);
+					if (repli) await saveSettings({ aiModel: repli.value });
+				}
+			}
+		} finally {
+			sondePlansEnCours = false;
+		}
+	}
+
 	/**
 	 * Le compte est-il connecté ? Appelée pour le fournisseur ACTIF seulement,
 	 * au rendu, au choix du fournisseur et au retour de focus (l'utilisateur
@@ -1526,7 +1620,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	 * Un hint d'ERREUR déjà posé (outil absent, serveur arrêté) prime : on ne
 	 * demande pas de se connecter à un outil qui n'est pas là.
 	 */
-	function verifierCompte(tool: OutilCompte, hintZone: HTMLElement | null, provider: string): void {
+	function verifierCompte(tool: OutilCompte, hintZone: HTMLElement | null, provider: string, ollamaArgs?: OllamaSondeArgs): void {
 		const id = tool === "claude" ? "claude-code" : tool;
 		if (provider !== id) return;
 		if (tool === "ollama" && !aiProviders.isOllamaCloudModel(settings().aiModel || "")) {
@@ -1543,6 +1637,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				if (c.connecte && c.plan !== settings().aiOllamaPlanCompte) {
 					void saveSettings({ aiOllamaPlanCompte: c.plan, aiOllamaPlansAppris: {} });
 				}
+				// La sonde de plan en arrière-plan ne tourne que sur un compte
+				// connecté ; elle-même filtre sur le plan "free" (aucune double
+				// vérification ici).
+				if (c.connecte) void sonderPlansOllama(ollamaArgs);
 				return c.connecte;
 			})
 			: aiProviders.sondeConnexion(tool)();
@@ -1773,18 +1871,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				// `verifierCompte` juste après.
 				if (providerHint["ollama"]?.icon !== "log-in") setHint("ollama", hintZone, provider, null);
 				if (provider !== "ollama") return;
-				// Recommandations `required_plan` du démon, lues avec les statuts
-				// (force = à l'ouverture du menu) : c'est ce que `buildOllamaList`
-				// croise avec `aiOllamaPlanCompte` pour décider du badge « Pro ».
-				plansRecommandes = await aiProviders.fetchOllamaPlansRequis(ollamaUrl);
 				// Reconstruit les options (sélection + locaux réellement installés,
-				// avec capability thinking) et rafraîchit le libellé du contrôle.
+				// avec capability thinking) et rafraîchit le libellé du contrôle. Le
+				// badge « Pro » vient du verdict appris (sonde + 402) : voir
+				// `buildOllamaList` et `sonderPlansOllama`.
 				if (ollamaCtl) {
 					ollamaCtl.detected = res.models;
 					ollamaCtl.options = buildOllamaList(res.models);
 					if (ollamaCtl.refreshTrigger) ollamaCtl.refreshTrigger();
 				}
-				verifierCompte("ollama", hintZone, provider);
+				verifierCompte("ollama", hintZone, provider, { ctl: ollamaCtl, buildList: buildOllamaList });
 			} else {
 				// Le plugin DIAGNOSTIQUE lui-même (demande Ahmed : jamais
 				// de « Serveur non détecté » sec ni de « si Ollama n'est

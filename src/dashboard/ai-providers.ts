@@ -1199,7 +1199,10 @@ export async function checkOllamaCompte(url?: string): Promise<CompteOllama> {
    liste : une liste embarquée pourrirait sans qu'une erreur le dise (décision
    d'Ahmed, 2026-09-19). */
 
-export const OLLAMA_UPGRADE_URL = "https://ollama.com/upgrade";
+/** Où mène « Mettre à niveau » : la page des PRIX, qui compare les plans,
+    plutôt que `/upgrade`, qui pousse directement vers un paiement (Ahmed,
+    2026-09-19). */
+export const OLLAMA_UPGRADE_URL = "https://ollama.com/pricing";
 
 export type VerdictPlan = "inclus" | "payant" | "inconnu";
 

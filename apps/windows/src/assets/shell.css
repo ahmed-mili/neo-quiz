@@ -47,6 +47,17 @@
 	box-sizing: border-box;
 }
 
+/* UN LIBELLÉ DE BOUTON NE SE SÉLECTIONNE PAS. Sous Obsidian, le greffon
+   héritait de la règle de l'application hôte ; la fenêtre, elle, est un
+   navigateur nu, et un double-clic sur « Install » surlignait le mot en bleu
+   (Ahmed, 2026-09-20). Les contrôles seulement : le texte des quiz, des
+   champs et des blocs de code reste sélectionnable, et un bloc à copier posé
+   DANS un bouton se réautorise au cas par cas (`user-select: text`). */
+:where(button) {
+	-webkit-user-select: none;
+	user-select: none;
+}
+
 html,
 body {
 	height: 100%;

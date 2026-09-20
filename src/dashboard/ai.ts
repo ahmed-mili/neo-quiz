@@ -3079,7 +3079,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			/* Sur un SITE, le modèle et l'effort sont les siens, inconnus d'ici :
 			   `model` porte le site, pas de ligne `effort`. */
 			const canalWeb = aiProviders.estCanalWeb(provider);
-			const model = canalWeb ? provider : (lastUsage?.model || settings().aiModel || "");
+			/* Antigravity ne publie pas d'usage, et un `aiModel` jamais choisi est
+			   vide : le frontmatter disait `model:` sans rien (vu le 2026-09-20 sur
+			   le premier quiz généré). On écrit la famille RÉSOLUE, celle qui est
+			   partie — le même repli que la génération. */
+			const model = canalWeb ? provider
+				: provider === "antigravity-cli" ? aiProviders.resolveAntigravityModel(settings().aiModel)
+				: (lastUsage?.model || settings().aiModel || "");
 			// Antigravity : le niveau de la FAMILLE (réglage par famille), pas
 			// `aiEffort` qui appartient à Claude et Codex.
 			const effort = canalWeb || provider === "ollama" ? undefined

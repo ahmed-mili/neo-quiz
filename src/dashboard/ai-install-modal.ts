@@ -14,7 +14,7 @@
    à la fermeture ET à la détection : jamais un minuteur orphelin.
 ══════════════════════════════════════════════════════════ */
 import { LOG_PREFIX } from "../branding";
-import { getProvider, logoDuCanal, setBrandLogo } from "./ai-providers";
+import { getProvider, setBrandLogo } from "./ai-providers";
 import { commandeInstallation } from "../cli-install-cmd";
 import { ajouter } from "../dom";
 import { currentHost, requireHost } from "../host/current";
@@ -104,8 +104,7 @@ export function openInstallModal(deps: InstallModalDeps): void {
 		className: "qbd-install-modal",
 		title: t(`ai.install.title.${deps.provider}`),
 		titleIcon: (el) => {
-			// Le modal installe un OUTIL : son logo, pas celui de sa marque.
-			setBrandLogo(el, logoDuCanal(deps.provider));
+			setBrandLogo(el, marque.logo);
 			el.style.color = marque.couleur;
 		},
 		onOpen: (m) => {

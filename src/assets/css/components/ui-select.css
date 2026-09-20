@@ -442,16 +442,14 @@
 /* ── Menu fournisseur à DEUX niveaux (la marque, puis le canal) ──
    Une marque à canal unique se choisit d'un clic ; une marque à plusieurs
    canaux porte un chevron et ouvre son flyout au survol, comme la ligne
-   « Effort » du menu de modèles. Le flyout porte un logo par ligne depuis le
-   2026-09-20 — celui du CLI quand l'outil en a un — et reste un peu plus
-   étroit que le menu : ses libellés (« Claude Code CLI », « claude.ai ») sont
-   plus courts que les noms de marque suivis de leur statut. */
+   « Effort » du menu de modèles. Le flyout est plus étroit que le menu : il
+   ne répète pas le logo, puisqu'il appartient déjà à une marque. */
 .qbd-provider-menu {
 	min-width: 250px;
 }
 
 .qbd-channel-flyout {
-	min-width: 240px;
+	min-width: 228px;
 }
 
 /* Le corps de l'option est en flex:1 et pousse déjà le chevron à droite ;

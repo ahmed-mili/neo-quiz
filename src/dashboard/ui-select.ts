@@ -721,10 +721,6 @@ export interface ProviderChannelOption {
 	value: string;
 	label: string;
 	sub?: string;
-	/** Le logo du canal, DÉJÀ résolu par l'appelant (celui de l'outil quand il
-	    en a un, celui de la marque sinon) : le menu ne connaît pas les SVG, il
-	    les pose par `renderLogo`. */
-	logo: string;
 	/** Visible, mais pas sélectionnable (CLI absent) → `onDisabledClick`. */
 	disabled?: boolean;
 	/** Pastille d'état, seulement quand ça ne va pas : "warn" | "err". */
@@ -840,14 +836,9 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		return btn;
 	}
 
-	/* Une ligne de canal, dans le flyout. Même forme que l'option de marque :
-	   logo, libellé gras, sous-titre. Le logo est celui de l'OUTIL quand il en
-	   a un — le pixel art de Claude Code face à l'astérisque de claude.ai, le
-	   `>_` de Codex face à la rosace de chatgpt.com — et celui de la marque
-	   sinon. Le flyout est resté longtemps sans logo au motif qu'il appartient
-	   déjà à une marque ; c'était vrai du glyphe de marque, répété à
-	   l'identique, et faux de celui du CLI, qui est l'icône même de l'outil
-	   qu'on choisit (Ahmed, 2026-09-20). */
+	/* Une ligne de canal, dans le flyout. Même forme que l'option de marque
+	   (libellé gras + sous-titre), sans logo : le flyout appartient déjà à
+	   une marque, répéter son glyphe à chaque ligne n'apprendrait rien. */
 	function appendChannel(parent: HTMLElement, c: ProviderChannelOption): void {
 		const active = c.value === opts.current && !c.disabled;
 		const btn = creerLigne(parent, "qbd-select-option qbd-channel-option" + (active ? " is-active" : ""), !!c.disabled);
@@ -856,8 +847,6 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		if (c.disabled) btn.setAttribute("aria-disabled", "true");
 		const check = ajouter(btn, "span", "qbd-select-check");
 		if (active) currentHost().ui.setIcon(check, "check");
-		const logo = ajouter(btn, "span", "qbd-provider-logo qbd-provider-logo--" + c.logo);
-		opts.renderLogo(logo, c.logo);
 		const body = ajouter(btn, "div", "qbd-provider-option-body");
 		ajouter(body, "span", "qbd-select-option-label", c.label);
 		if (c.sub) ajouter(body, "span", "qbd-provider-option-sub", c.sub);

@@ -6,7 +6,7 @@ import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord, StatsStore } from "./stats-store";
 import { quizTypeLabel } from "./quiz-card";
-import { getCanal, logoDuCanal, setBrandLogo } from "./ai-providers";
+import { getCanal, getMarque, setBrandLogo } from "./ai-providers";
 import { openTypePickerModal, openConfirmModal } from "../editor/modals";
 import { closeAllSelects } from "./ui-select";
 import { mathifyElement } from "../engine/mathjax";
@@ -511,7 +511,7 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 				   l'occupait, passe dans l'infobulle — il n'a de sens que pour
 				   qui l'a réglé. */
 				label: formatGeneratedAt(g.generatedAt),
-				logo: logoDuCanal(g.provider),
+				logo: getMarque(g.provider)?.logo,
 				cls: "qbd-qz-stat--generated",
 				title: g.effort
 					? t("dashboard.detail.generatedBy", { model: source, effort: g.effort })

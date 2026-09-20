@@ -2319,7 +2319,9 @@
 /* La modale d'attente de CONNEXION reprend ce panneau : la carte y perd sa
    surface et son balayage (la modale est déjà la surface, et rien ne
    génère), elle garde le spinner puis la coche. */
-.qbd-web-wait-modal.qbd-login-wait-modal { width: 480px; }
+/* 732 px, comme le modal d'installation et le terminal posé dessous : elle
+   en prend la place exacte à la détection du binaire (2026-09-20). */
+.qbd-web-wait-modal.qbd-login-wait-modal { width: 732px; }
 .qbd-login-wait-modal .qbd-ai-preview-loading {
 	min-height: 240px;
 	background: transparent;

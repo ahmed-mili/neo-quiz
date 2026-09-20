@@ -361,7 +361,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	 * phase — et, fermée par l'UTILISATEUR (Échap, fond, croix), elle appelle
 	 * `annuler`. `interne` distingue les deux fermetures.
 	 */
-	function creerModalePhase(spec: { phase: Phase; className: string; rendre: (corps: HTMLElement) => void; annuler: () => void }): () => void {
+	function creerModalePhase(spec: { phase: Phase; className: string; rendre: (corps: HTMLElement) => void; annuler: () => void; ouverte?: (m: HostModalHandle) => void }): () => void {
 		let modale: HostModalHandle | null = null;
 		let corps: HTMLElement | null = null;
 		let interne = false;
@@ -370,7 +370,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				if (!modale) {
 					modale = requireHost("modals").open({
 						className: spec.className,
-						onOpen: (m) => { corps = m.contentEl; poserCroixAnnuler(m); },
+						onOpen: (m) => { corps = m.contentEl; poserCroixAnnuler(m); spec.ouverte?.(m); },
 						onClose: () => {
 							modale = null;
 							corps = null;
@@ -1969,8 +1969,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				   hint qui le propose (on n'ouvre pas un site sans un clic). */
 				if (!detecte || id === "ollama") return;
 				const tool = OUTIL_DE_ID[id] as "claude" | "codex" | "agy";
+				/* LE TERMINAL EST DÉJÀ POSÉ sous la place remontée : la modale
+				   d'attente doit s'ouvrir remontée, sans transition, à la place
+				   exacte que le modal d'installation vient de quitter. */
+				attenteSousTerminal = true;
 				void aiProviders.sondeConnexion(tool)().then(connecte => {
 					if (!connecte && !disposed && (settings().aiProvider || "") === id) attendreCompte(tool, "hint");
+					else attenteSousTerminal = false;
 				});
 			},
 			copyText: deps.copyText,
@@ -2755,9 +2760,22 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	/* Les trois modales de phase de la page : connexion (fermer = annuler
 	   l'attente), génération (fermer = Stop, la demande revient au composer),
 	   erreur (fermer = reprendre la demande dans le composer). */
+	/* Vrai quand un terminal est déjà posé sous la place remontée : la modale
+	   d'attente s'ouvre alors DÉJÀ remontée (classe posée à l'ouverture, sans
+	   transition), pour reprendre exactement la place du modal
+	   d'installation qui vient de se fermer. */
+	let attenteSousTerminal = false;
 	const syncLoginModal = creerModalePhase({
 		phase: "connexion", className: "qbd-web-wait-modal qbd-login-wait-modal",
 		rendre: renderConnexion, annuler: annulerConnexion,
+		ouverte: (m) => {
+			if (!attenteSousTerminal) return;
+			attenteSousTerminal = false;
+			m.panelEl.style.transition = "none";
+			m.panelEl.classList.add(CLASSE_MODALE_HAUT);
+			void m.panelEl.offsetHeight;
+			m.panelEl.style.transition = "";
+		},
 	});
 	const syncLoadingModal = creerModalePhase({
 		phase: "loading", className: "qbd-web-wait-modal qbd-loading-modal",

@@ -187,20 +187,13 @@ export function openInstallModal(deps: InstallModalDeps): void {
 							await deps.onDetected();
 							detecte = true;
 							/* LE TERMINAL N'A PAS FINI quand le binaire apparaît : il
-							   enchaîne la CONNEXION du compte (navigateur, contrôle,
-							   compte à rebours). Le modal le dit et attend sa fin — un
-							   modal qui disparaissait pendant la connexion laissait
-							   croire qu'elle n'avait pas eu lieu (Ahmed, 2026-09-20 :
-							   « il s'est fermé trop vite »). Un hôte sans ce membre (le
-							   greffon) passe directement à la coche. */
-							if (host.process?.attendreFinTerminal) {
-								m.panelEl.dataset.state = "connexion";
-								etat.replaceChildren();
-								ajouter(etat, "span", "qbd-install-spinner");
-								ajouter(etat, "span", undefined, t("ai.install.connecting", { name }));
-								await host.process.attendreFinTerminal().catch(() => { /* la coche quand même */ });
-								if (!m.panelEl.isConnected) return;
-							}
+							   enchaîne la CONNEXION du compte. Ce n'est plus CE modal
+							   qui l'attend (il le disait par une ligne d'état, jusqu'au
+							   2026-09-20) : il montre sa coche et se ferme, et c'est la
+							   modale « En attente de la connexion » de la page qui prend
+							   la suite, à la même place — celle qui sonde le compte et
+							   dit quand il est vu (Ahmed : « le modal Waiting for
+							   sign-in doit apparaître au moment où c'est installé »). */
 							m.panelEl.dataset.state = "detecte";
 							etat.replaceChildren();
 							host.ui.setIcon(ajouter(etat, "span", "qbd-install-check"), "check");

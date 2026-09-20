@@ -193,6 +193,14 @@
 	   taille de son contenu et la barre de défilement n'apparaît jamais. */
 	min-height: 0;
 	overflow-y: auto;
+	/* `clip` ET NON `visible` SUR L'AUTRE AXE : un `overflow-y: auto` seul
+	   ramène l'axe X à `auto` (la spec interdit un seul axe visible), et UN
+	   ÉLÉMENT TRANSFORMÉ COMPTE DANS LA ZONE DÉFILABLE — le bouton
+	   d'installation, qui grossit de 1,5 % au survol, faisait donc apparaître
+	   une barre horizontale (Ahmed, 2026-09-20). `hidden` aurait rendu l'axe
+	   défilable au clavier ; `clip` coupe, sans rien défiler, et laisse le
+	   défilement vertical intact. */
+	overflow-x: clip;
 }
 
 .modal-close-button {

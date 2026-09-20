@@ -1482,6 +1482,7 @@
 .qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; }
 .qbd-install-state:not(:empty) { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: var(--background-modifier-hover); }
 .qbd-install-modal[data-state="en-cours"] .qbd-install-auto,
+.qbd-install-modal[data-state="connexion"] .qbd-install-auto,
 .qbd-install-modal[data-state="detecte"] .qbd-install-auto { display: none; }
 .qbd-install-spinner {
 	width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%;

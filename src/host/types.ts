@@ -546,6 +546,15 @@ export interface HostProcess {
 	    `ollama` n'a pas de compte : l'hôte rend `indisponible` plutôt que
 	    d'ouvrir un terminal sur rien. */
 	connecterCli(tool: CliTool): Promise<"lance" | "annule" | "indisponible">;
+	/** Rend la main quand la fenêtre du DERNIER terminal lancé par
+	    `installerCli` ou `connecterCli` a disparu — tout de suite s'il n'y en
+	    a pas, ou s'il n'a jamais été trouvé. C'est ce que le modal
+	    d'installation attend pour se fermer : détecter le binaire ne suffit
+	    pas, le terminal enchaîne la CONNEXION du compte juste après, et un
+	    modal qui disparaît pendant qu'elle se fait laisse croire qu'elle n'a
+	    pas eu lieu (Ahmed, 2026-09-20). OPTIONNEL : seul un hôte qui sait
+	    guetter une fenêtre l'offre. */
+	attendreFinTerminal?(): Promise<void>;
 }
 
 /**

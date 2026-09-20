@@ -914,9 +914,17 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   après. Best effort : si le terminal n'est jamais trouvé, la place est
 	   rendue tout de suite. */
 	let terminalAvant: { agrandie: boolean; bounds: Electron.Rectangle } | null = null;
+	/* LA FIN DU TERMINAL, comme promesse : `disposerPourTerminal` est le seul à
+	   savoir quand sa fenêtre disparaît, et le modal d'installation attend ce
+	   moment pour se fermer (`processusAttendreFinTerminal`). Une promesse par
+	   terminal lancé ; résolue aussi quand la fenêtre n'a jamais été trouvée,
+	   sinon le modal attendrait pour rien. */
+	let finTerminal: Promise<void> = Promise.resolve();
 	const disposerAvecTerminal = (titre: string): void => {
 		const fenetre = deps.fenetreCourante();
 		if (!fenetre || fenetre.isDestroyed()) return;
+		let resoudreFin: () => void = () => {};
+		finTerminal = new Promise<void>(resolve => { resoudreFin = resolve; });
 		if (!terminalAvant) terminalAvant = { agrandie: fenetre.isMaximized(), bounds: fenetre.getNormalBounds() };
 		const aire = screen.getDisplayMatching(fenetre.getBounds()).workArea;
 		const moitie = Math.floor(aire.width / 2);
@@ -925,6 +933,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		const h = fenetre.getNativeWindowHandle();
 		const hwnd = h.length >= 8 ? Number(h.readBigUInt64LE(0)) : h.readUInt32LE(0);
 		disposerPourTerminal(hwnd, titre, () => {
+			resoudreFin();
 			const f = deps.fenetreCourante();
 			const avant = terminalAvant;
 			terminalAvant = null;
@@ -940,6 +949,8 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			deps.fenetre.premierPlan();
 		});
 	};
+
+	ipcMain.handle(CANAUX.processusAttendreFinTerminal, () => finTerminal);
 
 	ipcMain.handle(CANAUX.processusInstaller, async (_e, tool: unknown): Promise<"lance" | "annule" | "indisponible"> => {
 		if (!estOutilAutorise(tool)) {

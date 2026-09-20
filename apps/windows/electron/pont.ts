@@ -480,6 +480,10 @@ export interface Pont {
 		    compromis obtiendrait ici, c'est une fenêtre de connexion ouverte
 		    sous les yeux de l'utilisateur, pas un script distant. */
 		connecter(tool: Outil): Promise<"lance" | "annule" | "indisponible">;
+		/** `HostProcess.attendreFinTerminal` vu du rendu : rend la main quand la
+		    fenêtre du dernier terminal a disparu. Rien ne traverse : ni nom, ni
+		    chemin, ni handle. */
+		attendreFinTerminal(): Promise<void>;
 	};
 
 	fenetre: {
@@ -663,6 +667,7 @@ export const CANAUX = {
 	processusDemarrerOllama: "neo:process/demarrer-ollama",
 	processusInstaller: "neo:process/installer",
 	processusConnecter: "neo:process/connecter",
+	processusAttendreFinTerminal: "neo:process/attendre-fin-terminal",
 	miseAJourEtatLire: "neo:mise-a-jour/etat-lire",
 	miseAJourEtat: "neo:mise-a-jour/etat",
 	miseAJourVerifier: "neo:mise-a-jour/verifier",

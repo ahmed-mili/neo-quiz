@@ -165,6 +165,7 @@ export const EN_AI = {
 	"ai.install.copy": "Copy",
 	"ai.install.copied": "Copied",
 	"ai.install.running": "Installing in PowerShell… Neo Quiz will detect it.",
+	"ai.install.connecting": "{name} is installed. Signing in to your account in the terminal…",
 	"ai.install.detected": "{name} v{version} is installed.",
 	"ai.install.detectedNoVersion": "{name} is installed.",
 	"ai.install.terminalFailed": "PowerShell could not be opened. Follow the manual steps below.",

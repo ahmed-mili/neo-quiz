@@ -94,5 +94,8 @@ export function createWindowsProcess(): HostProcess {
 		connecterCli(tool) {
 			return pont().processus.connecter(tool);
 		},
+		attendreFinTerminal() {
+			return pont().processus.attendreFinTerminal();
+		},
 	};
 }

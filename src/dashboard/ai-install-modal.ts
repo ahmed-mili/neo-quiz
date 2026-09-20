@@ -162,6 +162,21 @@ export function openInstallModal(deps: InstallModalDeps): void {
 							couperSonde();
 							await deps.onDetected();
 							detecte = true;
+							/* LE TERMINAL N'A PAS FINI quand le binaire apparaît : il
+							   enchaîne la CONNEXION du compte (navigateur, contrôle,
+							   compte à rebours). Le modal le dit et attend sa fin — un
+							   modal qui disparaissait pendant la connexion laissait
+							   croire qu'elle n'avait pas eu lieu (Ahmed, 2026-09-20 :
+							   « il s'est fermé trop vite »). Un hôte sans ce membre (le
+							   greffon) passe directement à la coche. */
+							if (host.process?.attendreFinTerminal) {
+								m.panelEl.dataset.state = "connexion";
+								etat.replaceChildren();
+								ajouter(etat, "span", "qbd-install-spinner");
+								ajouter(etat, "span", undefined, t("ai.install.connecting", { name }));
+								await host.process.attendreFinTerminal().catch(() => { /* la coche quand même */ });
+								if (!m.panelEl.isConnected) return;
+							}
 							m.panelEl.dataset.state = "detecte";
 							etat.replaceChildren();
 							host.ui.setIcon(ajouter(etat, "span", "qbd-install-check"), "check");
@@ -171,8 +186,8 @@ export function openInstallModal(deps: InstallModalDeps): void {
 							/* Le modal se ferme SEUL, une seconde et demie après la coche
 							   (demande d'Ahmed, 2026-09-19) : l'utilisateur l'a ouvert
 							   pour UTILISER cet outil, pas pour cliquer « Continuer ».
-							   La page reprend aussitôt — fournisseur choisi, puis
-							   attente de la connexion que le terminal demande déjà. */
+							   La page reprend aussitôt — fournisseur choisi, compte déjà
+							   connecté par le terminal. */
 							window.setTimeout(() => m.close(), 1500);
 						});
 					}, SONDE_MS);

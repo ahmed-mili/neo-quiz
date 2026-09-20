@@ -30,6 +30,8 @@
  */
 
 import { build } from "esbuild";
+import { copyFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ici = fileURLToPath(new URL(".", import.meta.url));
@@ -49,3 +51,14 @@ await build({
 	sourcemap: true,
 	logLevel: "info",
 });
+
+/* LA FENÊTRE DE MISE À JOUR est une page chargée par `file://` depuis l'asar,
+   sans chaîne de construction : son HTML et son décor sont COPIÉS tels quels.
+   Le décor est celui de l'installeur, par chemin relatif — un second fichier
+   identique finirait par diverger de celui qu'on regarde. */
+const sortieMaj = join(ici, "..", "dist-electron", "maj");
+await mkdir(sortieMaj, { recursive: true });
+await Promise.all([
+	copyFile(join(ici, "maj", "index.html"), join(sortieMaj, "index.html")),
+	copyFile(join(ici, "..", "installer", "fond.png"), join(sortieMaj, "fond.png")),
+]);

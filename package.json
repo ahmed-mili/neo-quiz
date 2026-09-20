@@ -37,6 +37,7 @@
     "report:url-max": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/report-url-max.ps1",
     "report:installation": "node scripts/mesurer-installation.mjs",
     "check:engine-review": "node scripts/check-engine-review.mjs",
+    "check:fenetre-maj": "node scripts/check-fenetre-maj.mjs",
     "check:electron-fs": "node scripts/check-electron-fs.mjs",
     "check:electron-index": "node scripts/check-electron-index.mjs",
     "check:electron-reglages": "node scripts/check-electron-reglages.mjs",

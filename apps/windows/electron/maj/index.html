@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self'">
+<title>Neo Quiz</title>
+<style>
+/* Les valeurs viennent de `installer/style-window.css` et `installer/style.css` :
+   cette fenêtre doit être reconnue comme la même famille que l'installeur, pas
+   comme une boîte de dialogue de plus. Elles sont RECOPIÉES et non importées —
+   le principal charge ce fichier par `file://` depuis l'asar, sans chaîne de
+   construction, et un `@import` vers `installer/` n'y résoudrait pas. */
+:root, body { background: transparent; }
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	height: 100vh;
+	overflow: hidden;
+	font-family: "Segoe UI", system-ui, sans-serif;
+	-webkit-user-select: none;
+	cursor: default;
+}
+#app {
+	position: relative;
+	height: 100vh;
+	border-radius: 10px;
+	overflow: hidden;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
+	background: linear-gradient(145deg, #07111f 0%, #07101d 58%, #060e1a 100%);
+}
+/* Le décor de l'installeur, cadré à droite comme chez lui. */
+#decor {
+	position: absolute;
+	inset: 0;
+	background: url("./fond.png") right center / cover no-repeat;
+	opacity: .96;
+}
+#contenu {
+	position: relative;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	padding: 0 34px 30px;
+	/* Le texte se détache du décor sans l'assombrir entièrement. */
+	background: linear-gradient(180deg, rgba(4, 9, 18, 0) 38%, rgba(4, 9, 18, .82) 78%, rgba(4, 9, 18, .93) 100%);
+}
+h1 {
+	margin: 0 0 7px;
+	font-size: 21px;
+	font-weight: 600;
+	letter-spacing: -.01em;
+	color: #eaf0ff;
+}
+p {
+	margin: 0 0 20px;
+	font-size: 13px;
+	line-height: 1.45;
+	color: rgba(207, 218, 239, .78);
+}
+.barre {
+	position: relative;
+	height: 4px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, .085);
+}
+/* Indéterminée par CHOIX : le NSIS lancé par electron-updater n'écrit dans
+   aucun dossier que cette fenêtre pourrait mesurer, et une barre qui resterait
+   morte 70 % du temps mentirait plus qu'elle n'informerait. */
+.barre i {
+	position: absolute;
+	display: block;
+	width: 42%;
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, #5c72ff, #9db8ff);
+	animation: glisse 1.15s ease-in-out infinite;
+}
+@keyframes glisse {
+	0% { transform: translateX(-115%); }
+	100% { transform: translateX(345%); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.barre i { animation-duration: 2.5s; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+	<div id="decor"></div>
+	<div id="contenu">
+		<h1 id="titre">Updating Neo Quiz</h1>
+		<p id="detail">Neo Quiz will reopen on its own once this is done.</p>
+		<div class="barre"><i></i></div>
+	</div>
+</div>
+</body>
+</html>

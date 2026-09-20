@@ -32,7 +32,16 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { LOG_PREFIX, PRODUCT_NAME } from "../../../src/branding";
-import { setLanguage, t } from "../../../src/i18n";
+import { currentLang, setLanguage, t } from "../../../src/i18n";
+import {
+	afficherFenetreMaj,
+	DRAPEAU_FENETRE_MAJ,
+	lancerFenetreMaj,
+	langueDepuisArguments,
+	marquerDemarrage,
+	nettoyerLiensMaj,
+	versionDepuisArguments,
+} from "./fenetre-maj";
 import { enregistrerCanaux } from "./canaux";
 import { cheminDossierDefaut } from "./dossier-defaut";
 import { chargerPathRegistre } from "./process";
@@ -580,11 +589,26 @@ function poserLocaleChromium(): void {
 
 poserLocaleChromium();
 
+/** LA FENÊTRE DE MISE À JOUR EST UN AUTRE PROGRAMME dans le même exécutable :
+    ce lancement-là n'est pas l'application, n'ouvre aucun vault et ne touche
+    aucun réglage. Il ne doit surtout pas prendre le verrou d'instance unique —
+    c'est l'application RELANCÉE par NSIS qui en a besoin. */
+function demarrerFenetreMaj(): void {
+	const version = versionDepuisArguments(process.argv);
+	const langue = langueDepuisArguments(process.argv);
+	void app.whenReady()
+		.then(() => afficherFenetreMaj(version, langue))
+		.catch(erreur => console.error(LOG_PREFIX, "fenêtre de mise à jour:", erreur))
+		.finally(() => app.quit());
+}
+
 /* UNE SEULE INSTANCE. `reglages.ts` tient sa table en mémoire et réécrit le
    fichier entier à chaque changement : deux instances écraseraient chacune
    les réglages de l'autre à tour de rôle, sans un mot. La seconde instance
    s'arrête et la première reprend le premier plan. */
-if (!app.requestSingleInstanceLock()) {
+if (process.argv.includes(DRAPEAU_FENETRE_MAJ)) {
+	demarrerFenetreMaj();
+} else if (!app.requestSingleInstanceLock()) {
 	app.quit();
 } else {
 	app.on("second-instance", () => {
@@ -723,6 +747,13 @@ if (!app.requestSingleInstanceLock()) {
 		});
 		arreterAttente = canaux.arreterAttente;
 		creerFenetre();
+		/* Le témoin que la fenêtre de mise à jour attend pour s'effacer, puis
+		   les reflets qu'une mise à jour passée a laissés : après elle, ces
+		   liens sont la seule référence aux fichiers de l'ANCIENNE version et
+		   pèsent son poids entier. Ni l'un ni l'autre ne doit retarder la
+		   fenêtre, d'où l'absence d'`await`. */
+		void marquerDemarrage();
+		void nettoyerLiensMaj();
 		// APRÈS la fenêtre : une erreur réseau au démarrage ne doit rien
 		// retarder. Sans argument — la mise à jour automatique ne se règle
 		// plus, elle est le seul mode (voir `mise-a-jour-etat.ts`).
@@ -743,7 +774,18 @@ if (!app.requestSingleInstanceLock()) {
    armée : c'est alors `quitAndInstall` qui quitte, après avoir lancé
    l'installeur silencieux ; l'application se relance seule. */
 app.on("window-all-closed", () => {
-	if (miseAJour?.installationArmee()) miseAJour.installerArmee();
-	else app.quit();
+	if (!miseAJour?.installationArmee()) {
+		app.quit();
+		return;
+	}
+	/* LA FENÊTRE D'ABORD, l'installation ENSUITE : `installerArmee` ne revient
+	   pas, et NSIS tue aussitôt ce processus. Lancer la fenêtre après serait
+	   lancer du code qui ne s'exécute jamais.
+
+	   Si le reflet échoue (voir `fenetre-maj.ts` : volume différent, temporaire
+	   inaccessible), on installe quand même, en silence comme avant. Une mise à
+	   jour sans fenêtre vaut mieux qu'une mise à jour empêchée. */
+	const armee = miseAJour;
+	void lancerFenetreMaj(armee.etat().version ?? "", currentLang()).finally(() => armee.installerArmee());
 });
 app.on("browser-window-focus", () => miseAJour?.surFocus());

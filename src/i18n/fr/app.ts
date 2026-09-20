@@ -22,6 +22,9 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.update.downloading": "Téléchargement de la mise à jour",
 	"app.update.install": "Mise à jour",
 	"app.update.installing": "Installation…",
+	"app.update.window.title": "Mise à jour de Neo Quiz",
+	"app.update.window.detail": "Neo Quiz se rouvrira tout seul une fois terminé.",
+	"app.update.window.version": "Installation de la version {version}",
 
 	/* ── Barre de titre et menu d'application (application seulement) ── */
 	"app.titlebar.menu": "Menu de l'application",

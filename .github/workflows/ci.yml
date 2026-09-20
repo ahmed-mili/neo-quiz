@@ -65,6 +65,14 @@ jobs:
       - name: Installer bootstrapper invariants
         run: npm run check:installer
 
+      # Le REFLET de l'installation, dont dépend qu'une mise à jour aboutisse :
+      # des liens durs sur un vrai dossier temporaire. Le risque tenu n'est pas
+      # qu'une fenêtre soit laide, c'est qu'un processus lancé depuis le dossier
+      # d'installation EMPÊCHE NSIS de le renommer. Pur Node, lecture seule sur
+      # le dépôt, comme les autres contrôles de ce job.
+      - name: Update window mirror
+        run: npm run check:fenetre-maj
+
       - name: Changelog
         run: npm run check:changelog
 

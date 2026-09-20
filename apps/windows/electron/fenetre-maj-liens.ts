@@ -1,0 +1,168 @@
+/* ══════════════════════════════════════════════════════════
+   LE REFLET DE L'INSTALLATION — le noyau, sans Electron
+
+   Ce que la fenêtre de mise à jour a de dangereux ne tient pas à sa fenêtre
+   mais à ces quelques fonctions de fichiers : c'est d'elles que dépend le fait
+   qu'une mise à jour aboutisse ou ÉCHOUE. Elles vivent donc à part, sans
+   Electron, pour que `npm run check:fenetre-maj` les éprouve sur un VRAI
+   dossier temporaire — même règle que `mise-a-jour-etat.ts` face à
+   `mise-a-jour.ts`, ou `garde-ia.ts` face à `canaux.ts`.
+
+   POURQUOI UN REFLET. Entre le clic sur « Mettre à jour » et la réouverture de
+   l'application, NSIS travaille 10,5 s sur un NVMe (mesuré le 2026-09-16,
+   `mesurer-installation.mjs`) et bien davantage sur un disque lent ou plein.
+   L'application est fermée : sans fenêtre, l'écran est VIDE tout ce temps.
+
+   Cette fenêtre ne peut pas être un second processus de l'application : NSIS
+   commence par TUER tout processus dont le nom de fichier est `neo-quiz.exe`
+   (`CHECK_APP_RUNNING`, `nsProcess::KillProcess`), puis il RENOMME le dossier
+   d'installation avant d'y poser la version neuve (`un.atomicRMDir`). Un
+   processus lancé depuis ce dossier serait tué par son nom ; et s'il ne l'était
+   pas, il risquerait d'empêcher le renommage, c'est-à-dire de FAIRE ÉCHOUER la
+   mise à jour — bien pire qu'une attente sans fenêtre.
+
+   D'où des LIENS DURS : le dossier d'installation est reflété dans le
+   temporaire, où l'exécutable prend un autre nom. Aucun octet n'est copié, ce
+   sont les mêmes fichiers sous un second nom. Le processus lancé de là échappe
+   au kill par nom, et le renommage du dossier d'origine reste permis.
+
+   ÉPROUVÉ (2026-09-20, sur le vrai arbre Electron de 297 Mo) : 18 liens en
+   26 ms et zéro octet copié ; le processus SURVIT au kill par nom ; le
+   renommage du dossier d'installation RÉUSSIT pendant qu'il tourne ; la version
+   neuve s'installe et l'ancien dossier se supprime entièrement.
+══════════════════════════════════════════════════════════ */
+
+import { link, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+export type LangueFenetre = "en" | "fr";
+
+/** Le drapeau qui fait de ce lancement une FENÊTRE DE MISE À JOUR et non
+    l'application. Lu par `main.ts` avant toute autre décision. */
+export const DRAPEAU_FENETRE_MAJ = "--neo-quiz-fenetre-maj";
+
+/** Le préfixe des dossiers de reflet, dans le temporaire de l'utilisateur.
+    `nettoyerLiensMaj` ne supprime que ce qui le porte. */
+export const PREFIXE_LIENS = "neo-quiz-maj-";
+
+/** Le nom que prend l'exécutable dans le reflet. TOUT SAUF celui de
+    l'application : c'est par le nom de fichier que NSIS tue. */
+export const NOM_EXECUTABLE_MAJ = "neo-quiz-maj.exe";
+
+/** Le témoin que l'APPLICATION écrit à son démarrage. C'est le signal de fin
+    que la fenêtre attend : quand l'application relancée par NSIS l'a touché, la
+    mise à jour est faite et il n'y a plus rien à montrer.
+
+    Un fichier, et non un canal : les deux processus n'ont ni profil commun ni
+    verrou d'instance commun (c'est tout l'objet de `--user-data-dir`), et rien
+    ne garantit l'ordre de leur démarrage. */
+export function cheminTemoin(base = tmpdir()): string {
+	return join(base, "neo-quiz-demarrage");
+}
+
+/** Appelé au démarrage de l'APPLICATION. N'échoue jamais bruyamment : une
+    erreur d'écriture laisse simplement la fenêtre expirer d'elle-même. */
+export async function marquerDemarrage(base = tmpdir()): Promise<void> {
+	await writeFile(cheminTemoin(base), String(Date.now()), "utf8").catch(() => undefined);
+}
+
+/** Reflète un arbre par des liens durs. Renvoie faux dès le premier échec : un
+    arbre à moitié lié ne lancerait rien de bon, et il vaut mieux renoncer à la
+    fenêtre que lancer un Electron incomplet. */
+export async function refleter(source: string, cible: string, nomExecutable: string): Promise<boolean> {
+	let entrees;
+	try {
+		entrees = await readdir(source, { withFileTypes: true });
+	} catch {
+		return false;
+	}
+	for (const entree of entrees) {
+		const depuis = join(source, entree.name);
+		/* L'exécutable, et lui seul, change de nom. Les autres fichiers gardent
+		   le leur : Electron les cherche par leur nom exact (`resources.pak`,
+		   `icudtl.dat`, `resources/app.asar`…). */
+		const nom = entree.name === nomExecutable ? NOM_EXECUTABLE_MAJ : entree.name;
+		const vers = join(cible, nom);
+		try {
+			if (entree.isDirectory()) {
+				await mkdir(vers, { recursive: true });
+				if (!(await refleter(depuis, vers, nomExecutable))) return false;
+			} else if (entree.isFile()) {
+				/* Le lien dur ne traverse pas les volumes : si le temporaire est sur
+				   un autre disque que l'installation, `link` rejette ici, et la mise à
+				   jour se fera sans fenêtre, comme avant. */
+				await link(depuis, vers);
+			}
+			/* Un lien symbolique dans un paquet Electron n'existe pas sous Windows ;
+			   le rencontrer signifie que l'arbre n'est pas celui qu'on croit, et le
+			   refléter à l'aveugle serait pire que renoncer. */
+		} catch {
+			return false;
+		}
+	}
+	return true;
+}
+
+/** Prépare le reflet d'un arbre et renvoie le chemin de l'exécutable à lancer,
+    ou `null` si quoi que ce soit a manqué — le dossier entamé est alors retiré,
+    pour ne pas laisser un demi-reflet que le nettoyage prendrait pour un vrai. */
+export async function preparerReflet(dossier: string, nomExecutable: string, base = tmpdir()): Promise<string | null> {
+	let liens: string;
+	try {
+		liens = await mkdtemp(join(base, PREFIXE_LIENS));
+	} catch {
+		return null;
+	}
+	const renoncer = async (): Promise<null> => {
+		await rm(liens, { recursive: true, force: true }).catch(() => undefined);
+		return null;
+	};
+	if (!(await refleter(dossier, liens, nomExecutable))) return await renoncer();
+	const exeLie = join(liens, NOM_EXECUTABLE_MAJ);
+	try {
+		await stat(exeLie);
+	} catch {
+		return await renoncer();
+	}
+	return exeLie;
+}
+
+/** Les reflets d'une mise à jour PASSÉE. Appelé au démarrage : la fenêtre ne
+    peut pas supprimer l'arbre depuis lequel elle s'exécute, et le seul moment
+    où plus personne ne le tient est le lancement suivant.
+
+    Un lien dur ne pèse rien tant que l'original existe ; après une mise à jour
+    l'original a disparu, et ces liens sont alors la SEULE référence aux fichiers
+    de l'ancienne version — ils pèsent son poids entier. */
+export async function nettoyerLiensMaj(base = tmpdir()): Promise<void> {
+	let entrees;
+	try {
+		entrees = await readdir(base, { withFileTypes: true });
+	} catch {
+		return;
+	}
+	for (const entree of entrees) {
+		if (!entree.isDirectory() || !entree.name.startsWith(PREFIXE_LIENS)) continue;
+		await rm(join(base, entree.name), { recursive: true, force: true }).catch(() => undefined);
+	}
+}
+
+/** La version à afficher, lue depuis les arguments de ce lancement. Tout ce qui
+    n'est pas un `X.Y.Z` est ignoré : cette chaîne est AFFICHÉE, et rien n'oblige
+    les arguments d'un processus à être ceux qu'on a écrits. */
+export function versionDepuisArguments(argv: readonly string[]): string {
+	const index = argv.indexOf(DRAPEAU_FENETRE_MAJ);
+	if (index < 0) return "";
+	const valeur = argv[index + 1];
+	return valeur && /^\d+\.\d+\.\d+$/.test(valeur) ? valeur : "";
+}
+
+/** La langue TRANSMISE par l'application. Elle n'est pas redéduite ici : la
+    fenêtre tourne sur un profil vide, où le réglage `language` n'existe pas, et
+    une application réglée en français annonçait sa mise à jour en anglais.
+    L'anglais reste le repli, comme partout ailleurs. */
+export function langueDepuisArguments(argv: readonly string[]): LangueFenetre {
+	const index = argv.indexOf(DRAPEAU_FENETRE_MAJ);
+	return index >= 0 && argv[index + 2] === "fr" ? "fr" : "en";
+}

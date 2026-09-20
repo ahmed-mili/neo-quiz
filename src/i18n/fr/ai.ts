@@ -218,6 +218,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.notice.noteAlreadyAttached": "« {name} » est déjà attachée",
 	"ai.notice.noteReadFailed": "Impossible de lire « {name} »",
 	"ai.notice.pathsAttached": "Joint depuis votre demande : {files}",
+	"ai.notice.linksNotRead": "Les liens ne sont pas lus : le modèle ne voit que l'adresse, pas la page. Joignez plutôt le contenu en fichier.",
 	"ai.notice.pathsUnresolved": "Introuvable dans le vault ou les dossiers configurés : {files}",
 	"ai.notice.pathsAmbiguous": "{count} fichiers correspondent à « {file} » — précisez un chemin plus long.",
 	"ai.notice.pathsTooMany": "Seuls les {max} premiers fichiers cités dans votre demande ont été joints.",

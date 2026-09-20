@@ -249,6 +249,7 @@ export const EN_AI = {
 	"ai.notice.noteReadFailed": "Could not read “{name}”",
 	/* Chemins cités dans le prompt et attachés automatiquement (prompt-paths.ts). */
 	"ai.notice.pathsAttached": "Attached from your request: {files}",
+	"ai.notice.linksNotRead": "Links are not read: the model only sees the address, not the page. Attach the content as a file instead.",
 	"ai.notice.pathsUnresolved": "Not found in your vault or configured folders: {files}",
 	"ai.notice.pathsAmbiguous": "{count} files match “{file}” — write a longer path to pick one.",
 	"ai.notice.pathsTooMany": "Only the first {max} files named in your request were attached.",

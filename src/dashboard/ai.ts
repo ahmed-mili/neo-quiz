@@ -3427,6 +3427,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (unresolved.length) {
 			host.ui.notice(t("ai.notice.pathsUnresolved", { files: unresolved.join(", ") }));
 		}
+		/* UNE ADRESSE WEB N'EST PAS LUE : le CLI part sans aucun outil et un
+		   site reçoit le texte tel quel — le modèle ne peut pas ouvrir la page,
+		   et un lien YouTube collé donnait un quiz inventé sans un mot
+		   (2026-09-20). Dit une fois par envoi ; le lien part quand même, en
+		   texte, jusqu'au chantier qui en extraira le contenu. */
+		if (/https?:\/\/\S+/i.test(text)) {
+			host.ui.notice(t("ai.notice.linksNotRead"));
+		}
 	}
 
 	/** Une génération est-elle DÉJÀ partie ? Posé avant le moindre `await`. */

@@ -1572,16 +1572,19 @@
 /* LES TROIS COULEURS DU BOUTON, et le sens qui les relie. Au repos, un
    BLANC à peine lavande (moitié de la teinte de l'interface, moitié blanc
    pur : rgb(226 231 250)) — le lavande franc essayé d'abord était trop
-   sourd pour une action principale (Ahmed, 2026-09-20). Au survol il monte
-   au blanc presque pur, à l'appui il redescend d'un cran : la couleur
-   suffit à dire l'enfoncement, là où le survol montait. Le survol commun
+   sourd pour une action principale (Ahmed, 2026-09-20). L'écart entre les
+   trois est ÉTROIT, par choix du même jour (« laisse ce blanc tout le
+   temps, il doit juste être un peu moins clair quand on ne survole pas ») :
+   le repos garde 30 % de teinte, le survol n'en laisse que 12, l'appui
+   remonte à 40. Ce qui SIGNALE le survol, c'est le balayage ; la couleur ne
+   fait que l'accompagner. Le survol commun
    des boutons principaux, lui, mêle 8 % du fond SOMBRE à la pilule — le
    gris clair voulu sur le blanc cassé de « Mes quiz », mais une salissure
    sur un lavande. Éclaircir, c'est aussi le sens du balayage et de l'onde :
    une seule direction pour les trois états. */
-.qbd-install-auto { --qbd-pilule: color-mix(in srgb, var(--text-normal) 50%, #ffffff); }
-.qbd-install-auto:hover { --qbd-pilule: color-mix(in srgb, var(--text-normal) 20%, #ffffff); }
-.qbd-install-auto:active { --qbd-pilule: color-mix(in srgb, var(--text-normal) 62%, #ffffff); }
+.qbd-install-auto { --qbd-pilule: color-mix(in srgb, var(--text-normal) 30%, #ffffff); }
+.qbd-install-auto:hover { --qbd-pilule: color-mix(in srgb, var(--text-normal) 12%, #ffffff); }
+.qbd-install-auto:active { --qbd-pilule: color-mix(in srgb, var(--text-normal) 40%, #ffffff); }
 /* LE BALAYAGE, l'effet qu'Ahmed a préféré des huit (2026-09-20) : un reflet
    oblique traverse le bouton UNE FOIS quand on arrive dessus. Il éclaire
    sans rien déformer — c'est le seul des trois états qui n'a pas à toucher

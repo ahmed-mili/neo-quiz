@@ -130,7 +130,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.install.what.codex": "L'outil en ligne de commande d'OpenAI, avec un abonnement ChatGPT. Ce n'est pas l'application Codex.",
 	"ai.install.what.ollama": "Des modèles gratuits sur votre ordinateur, sans compte.",
 	"ai.install.what.antigravity-cli": "L'outil en ligne de commande de Google pour Gemini, utilisé avec votre compte Google. Il a remplacé Gemini CLI pour les comptes personnels.",
-	"ai.install.auto": "Installer automatiquement",
+	"ai.install.auto": "Installer",
 	"ai.install.manual": "Installer manuellement",
 	"ai.install.step1": "Ouvrez PowerShell : Windows + X, puis I.",
 	"ai.install.step1Unix": "Ouvrez un terminal.",

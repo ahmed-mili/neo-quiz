@@ -151,7 +151,10 @@ export const EN_AI = {
 	"ai.install.what.codex": "OpenAI's command-line tool, used with a ChatGPT subscription. Not the Codex desktop app.",
 	"ai.install.what.ollama": "Free models on your own computer, no account needed.",
 	"ai.install.what.antigravity-cli": "Google's command-line tool for Gemini, used with your Google account. It replaced Gemini CLI for personal accounts.",
-	"ai.install.auto": "Install automatically",
+	/* « Install » seul : c'est « Install manually », juste au-dessus, qui a
+	   besoin de se qualifier ; le bouton principal fait l'installation, un
+	   point c'est tout (Ahmed, 2026-09-20). */
+	"ai.install.auto": "Install",
 		"ai.install.manual": "Install manually",
 	"ai.install.step1": "Open PowerShell: Windows + X, then I.",
 	"ai.install.step1Unix": "Open a terminal.",

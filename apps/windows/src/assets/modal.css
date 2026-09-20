@@ -74,6 +74,18 @@
 	-webkit-app-region: no-drag;
 }
 
+/* CENTRÉES SUR LA PAGE, PAS SUR LA FENÊTRE. Le rail du tableau de bord
+   (`.qbd-sidebar`, 88 px) est à gauche, et le contenu — le composer, les
+   cartes — se centre à sa droite ; une modale centrée sur la fenêtre entière
+   était donc décalée de 44 px vers la gauche par rapport à lui. Ça se voyait
+   sous le terminal d'installation, qui couvre la modale ET l'invite : il
+   dépassait de la modale à droite (Ahmed, 2026-09-20). Quand le rail est là,
+   la couche des modales lui laisse sa largeur : modale, invite et terminal
+   partagent alors le même axe. */
+body:has(.qbd-sidebar) .modal-container {
+	padding-left: 88px;
+}
+
 /* LA REMONTÉE D'UNE MODALE QUI ATTEND UN TERMINAL (installation d'un CLI,
    connexion d'un compte) : le terminal est posé juste en dessous, dans la
    fenêtre de Neo Quiz (Ahmed, 2026-09-20). Une CLASSE, et non une règle

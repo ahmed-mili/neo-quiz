@@ -330,9 +330,9 @@ export interface Marque {
 	/** Au moins un. Deux ou plus → le menu ouvre un second niveau. */
 	canaux: Canal[];
 	/** SECONDAIRE : rangée sous « Plus de fournisseurs » et non dans le menu,
-	    qui ne montre que quatre marques — cinq le faisaient déjà trop grand
-	    (Ahmed, 2026-09-20). Les quatre de tête : les trois assistants que
-	    tout le monde a, et Ollama, le seul canal local sans compte. */
+	    qui ne montre que les trois assistants que tout le monde a — cinq
+	    lignes le faisaient trop grand (2026-09-20). Ollama, Perplexity et
+	    DeepSeek sont derrière la ligne. */
 	secondaire?: true;
 }
 
@@ -387,6 +387,7 @@ export const MARQUES: Marque[] = [
 		id: "ollama",
 		name: "Ollama",
 		logo: "ollama",
+		secondaire: true,
 		canaux: [
 			{ id: "ollama", label: "Ollama", get sub() { return t("ai.provider.ollamaSub"); }, type: "serveur" }
 		]

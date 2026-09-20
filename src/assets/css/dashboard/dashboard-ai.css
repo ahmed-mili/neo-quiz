@@ -218,6 +218,12 @@
 	color: #d97757;
 }
 
+/* La baleine de DeepSeek en bleu, sa couleur publiée (Simple Icons 16.31,
+   #5786FE), comme le site la montre. */
+.qbd-provider-logo--deepseek {
+	color: #5786FE;
+}
+
 .qbd-provider-logo--ollama {
 	color: var(--text-normal);
 }

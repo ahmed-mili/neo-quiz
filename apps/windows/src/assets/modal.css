@@ -66,6 +66,18 @@
 	z-index: 90;
 }
 
+/* LES MODALES QUI ATTENDENT UN TERMINAL (installation d'un CLI, connexion
+   d'un compte) sont REMONTÉES : le terminal est posé juste en dessous, dans
+   la fenêtre de Neo Quiz (Ahmed, 2026-09-20 : « le modal un peu plus en
+   haut, la fenêtre du terminal juste en bas du modal »). 12 % de la hauteur
+   depuis le haut : la modale reste lisible, et il reste de quoi loger le
+   terminal (`rectangleTerminal`, process.ts, plafonne sa hauteur). */
+.modal-container:has(> .qbd-install-modal),
+.modal-container:has(> .qbd-login-wait-modal) {
+	align-items: flex-start;
+	padding-top: 12vh;
+}
+
 .modal-bg {
 	position: absolute;
 	inset: 0;

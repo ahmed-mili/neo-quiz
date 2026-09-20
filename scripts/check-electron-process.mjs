@@ -53,7 +53,7 @@ async function cas(r, nom, fn) {
 await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
 	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande, environnementOutil,
-	estOutilAutorise, lireCache, lirePlacement, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptInstallation, scriptRestaurerNavigateur,
+	estOutilAutorise, lireAncre, lireCache, lirePlacement, rectangleTerminal, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptInstallation, scriptRestaurerNavigateur,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -574,16 +574,17 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 	}
 	/* ── La disposition pour un TERMINAL (Ahmed, 2026-09-20) : la fenêtre est
 	   trouvée par son TITRE via `Get-Process` (pas `FindWindow`, dont le `$null`
-	   de classe arrive en chaîne vide depuis PowerShell), posée à gauche, puis
-	   guettée jusqu'à sa disparition — « fini » est ce que le principal attend
-	   pour rendre sa place à Neo Quiz ; « absent » si elle n'est jamais venue. ── */
+	   de classe arrive en chaîne vide depuis PowerShell), posée au RECTANGLE
+	   reçu (sous la modale, en pixels écran — plus à gauche de Neo Quiz, qui
+	   ne bouge plus), puis guettée jusqu'à sa disparition — « fini » est ce
+	   que le principal attend ; « absent » si elle n'est jamais venue. ── */
 	{
-		const d = scriptDisposerPourTerminal(1234, "Neo Quiz - Codex CLI");
+		const d = scriptDisposerPourTerminal(1234, "Neo Quiz - Codex CLI", { x: 700, y: 420.7, largeur: 560, hauteur: 300 });
 		r.check("terminal : trouvé par son titre exact, par Get-Process, jamais par FindWindow",
 			{ titre: d.includes("$titre = 'Neo Quiz - Codex CLI'"), getProcess: d.includes("$_.MainWindowTitle -eq $titre"), findWindow: d.includes("FindWindow") },
 			{ titre: true, getProcess: true, findWindow: false });
-		const iPose = d.indexOf("Poser $hTerm $aire.Left $aire.Top $moitie $aire.Height");
-		r.check("terminal : posé à GAUCHE, puis guetté jusqu'à disparition, puis « fini » ; « absent » s'il n'apparaît pas",
+		const iPose = d.indexOf("Poser $hTerm 700 420 560 300");
+		r.check("terminal : posé au rectangle reçu (entiers), puis guetté jusqu'à disparition, puis « fini » ; « absent » s'il n'apparaît pas",
 			{
 				gauche: iPose > 0,
 				attente: d.indexOf("while ([NQT.Win]::IsWindow($hTerm))") > iPose,
@@ -591,6 +592,26 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				absent: d.includes("WriteLine('absent')") && d.indexOf("WriteLine('absent')") < iPose,
 			},
 			{ gauche: true, attente: true, fini: true, absent: true });
+		/* Le rectangle du terminal, PUR : sous l'ancre (12 DIP), même largeur,
+		   jusqu'à 24 DIP du bas de la fenêtre, 460 au plus, 200 au moins ; les
+		   pixels CSS passent en DIP par le zoom ; sans ancre, la moitié basse. */
+		const contenu = { x: 100, y: 50, width: 1600, height: 900 };
+		r.check("rectangleTerminal : sous l'ancre, même largeur, plafonné à 460, zoom appliqué, moitié basse sans ancre",
+			{
+				sous: rectangleTerminal(contenu, 1, { x: 400, y: 100, largeur: 600, hauteur: 200 }),
+				zoom: rectangleTerminal(contenu, 1.25, { x: 400, y: 100, largeur: 600, hauteur: 200 }),
+				bas: rectangleTerminal(contenu, 1, { x: 400, y: 700, largeur: 600, hauteur: 200 }),
+				sans: rectangleTerminal(contenu, 1, null),
+			},
+			{
+				sous: { x: 500, y: 362, width: 600, height: 460 },
+				zoom: { x: 600, y: 437, width: 750, height: 460 },
+				bas: { x: 500, y: 962, width: 600, height: 200 },
+				sans: { x: 420, y: 500, width: 960, height: 426 },
+			});
+		r.check("lireAncre : quatre nombres finis et bornés, sinon null (jamais une propriété de plus)",
+			[lireAncre({ x: 1, y: 2, largeur: 3, hauteur: 4, autre: 5 }), lireAncre({ x: -1, y: 2, largeur: 3, hauteur: 4 }), lireAncre({ x: "1", y: 2, largeur: 3, hauteur: 4 }), lireAncre(null), lireAncre({ x: 1, y: 2, largeur: 3, hauteur: Infinity })],
+			[{ x: 1, y: 2, largeur: 3, hauteur: 4 }, null, null, null, null]);
 	}
 	r.done();
 });

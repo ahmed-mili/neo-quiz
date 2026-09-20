@@ -3,7 +3,7 @@ import type { EditorExamOptions } from "../types/editor-ctx";
 import type { AiPreset, DashboardViewName, NavigateData } from "../types/dashboard-ctx";
 import type { HostFile, HostModalHandle, ImageDeGlisser } from "../host/types";
 import { currentHost, requireHost } from "../host/current";
-import { ajouter } from "../dom";
+import { ajouter, ancreDe } from "../dom";
 import { LOG_PREFIX } from "../branding";
 import * as aiProviders from "./ai-providers";
 import { composerPrompts, parseReponseQuiz } from "./ai-client";
@@ -2606,19 +2606,25 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			verdict = ollamaSigninUrl && await host.shell.openUrl(ollamaSigninUrl) ? "lance" : "indisponible";
 		} else {
 			try {
-				verdict = await requireHost("process").connecterCli(tool);
+				/* La modale d'attente est OUVERTE AVANT le terminal, pour être
+				   mesurée : c'est sous elle qu'il se pose. Si le lancement
+				   échoue, `annulerConnexion` la referme. */
+				attendreCompte(tool, origine);
+				const modale = document.querySelector<HTMLElement>(".qbd-login-wait-modal");
+				verdict = await requireHost("process").connecterCli(tool, modale ? ancreDe(modale) : undefined);
 			} catch (e) {
 				console.warn(LOG_PREFIX, "connexion impossible:", e);
 				verdict = "indisponible";
 			}
 		}
 		if (verdict !== "lance") {
+			if (tool !== "ollama") annulerConnexion();
 			if (bouton) bouton.disabled = false;
 			// `annule` = l'utilisateur a dit non : rien de plus à dire.
 			if (verdict === "indisponible") host.ui.notice(t("ai.login.terminalFailed"));
 			return;
 		}
-		attendreCompte(tool, origine);
+		if (tool === "ollama") attendreCompte(tool, origine);
 	}
 
 	/** La carte d'attente et sa sonde, jusqu'à ce que le compte soit vu. Séparée

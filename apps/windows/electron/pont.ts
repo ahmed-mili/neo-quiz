@@ -46,7 +46,7 @@
    et la clé `folders` des réglages est gardée à l'écriture.
 ══════════════════════════════════════════════════════════ */
 
-import type { HostNetRequest, HostNetResponse, HostProcess } from "../../../src/host/types";
+import type { AncreTerminal, HostNetRequest, HostNetResponse, HostProcess } from "../../../src/host/types";
 export type { EtatMiseAJour, PhaseMiseAJour } from "./mise-a-jour-etat";
 import type { EtatMiseAJour } from "./mise-a-jour-etat";
 /* Le type des NOMS d'outils que le principal accepte de lancer/installer.
@@ -471,7 +471,7 @@ export interface Pont {
 		    confirmation NATIVE du principal précède le lancement, écrite et
 		    traduite là-bas (comme pour l'hôte Ollama des réglages) : un rendu
 		    compromis ne peut ni la formuler ni y répondre. */
-		installer(tool: Outil): Promise<"lance" | "annule" | "indisponible">;
+		installer(tool: Outil, ancre?: AncreTerminal): Promise<"lance" | "annule" | "indisponible">;
 		/** Ouvre un terminal VISIBLE qui connecte le compte d'un outil DÉJÀ
 		    installé : `HostProcess.connecterCli` vu du rendu. Même porte et
 		    même jugement du nom qu'`installer`, mais SANS confirmation native :
@@ -479,7 +479,7 @@ export interface Pont {
 		    exécutable qui est déjà sur la liste blanche. Ce qu'un rendu
 		    compromis obtiendrait ici, c'est une fenêtre de connexion ouverte
 		    sous les yeux de l'utilisateur, pas un script distant. */
-		connecter(tool: Outil): Promise<"lance" | "annule" | "indisponible">;
+		connecter(tool: Outil, ancre?: AncreTerminal): Promise<"lance" | "annule" | "indisponible">;
 		/** `HostProcess.attendreFinTerminal` vu du rendu : rend la main quand la
 		    fenêtre du dernier terminal a disparu. Rien ne traverse : ni nom, ni
 		    chemin, ni handle. */

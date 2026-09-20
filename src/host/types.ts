@@ -448,6 +448,18 @@ export interface HostNet {
  */
 export type CliTool = "claude" | "codex" | "ollama" | "agy";
 
+/** Le rectangle SOUS LEQUEL poser la fenêtre du terminal (la modale qui
+    attend, mesurée par `getBoundingClientRect`), en pixels CSS de la fenêtre.
+    Le terminal ne se place plus à côté de Neo Quiz mais juste en dessous de
+    la modale, dans Neo Quiz (Ahmed, 2026-09-20). Sans ancre, l'hôte pose le
+    terminal dans la moitié basse de la fenêtre. */
+export interface AncreTerminal {
+	x: number;
+	y: number;
+	largeur: number;
+	hauteur: number;
+}
+
 /**
  * LES PROCESSUS ET LES FICHIERS DES CLI, vus du code partagé.
  *
@@ -529,7 +541,7 @@ export interface HostProcess {
 	    `annule` : l'utilisateur a refusé la confirmation de l'hôte ;
 	    `indisponible` : l'hôte ne sait pas ouvrir de terminal (hors Windows)
 	    ou le lancement a échoué. */
-	installerCli(tool: CliTool): Promise<"lance" | "annule" | "indisponible">;
+	installerCli(tool: CliTool, ancre?: AncreTerminal): Promise<"lance" | "annule" | "indisponible">;
 	/** Ouvre un terminal VISIBLE qui CONNECTE le compte d'un outil DÉJÀ
 	    installé (`codex login`, `claude auth login`). Mêmes verdicts
 	    qu'`installerCli`, et même règle : le rendu n'envoie qu'un NOM, jugé
@@ -545,7 +557,7 @@ export interface HostProcess {
 
 	    `ollama` n'a pas de compte : l'hôte rend `indisponible` plutôt que
 	    d'ouvrir un terminal sur rien. */
-	connecterCli(tool: CliTool): Promise<"lance" | "annule" | "indisponible">;
+	connecterCli(tool: CliTool, ancre?: AncreTerminal): Promise<"lance" | "annule" | "indisponible">;
 	/** Rend la main quand la fenêtre du DERNIER terminal lancé par
 	    `installerCli` ou `connecterCli` a disparu — tout de suite s'il n'y en
 	    a pas, ou s'il n'a jamais été trouvé. C'est ce que le modal

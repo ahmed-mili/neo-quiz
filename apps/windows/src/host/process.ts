@@ -88,11 +88,11 @@ export function createWindowsProcess(): HostProcess {
 		demarrerOllama() {
 			return pont().processus.demarrerOllama();
 		},
-		installerCli(tool) {
-			return pont().processus.installer(tool);
+		installerCli(tool, ancre) {
+			return pont().processus.installer(tool, ancre);
 		},
-		connecterCli(tool) {
-			return pont().processus.connecter(tool);
+		connecterCli(tool, ancre) {
+			return pont().processus.connecter(tool, ancre);
 		},
 		attendreFinTerminal() {
 			return pont().processus.attendreFinTerminal();

@@ -16,7 +16,7 @@
 import { LOG_PREFIX } from "../branding";
 import { getProvider, setBrandLogo } from "./ai-providers";
 import { commandeInstallation } from "../cli-install-cmd";
-import { ajouter } from "../dom";
+import { ajouter, ancreDe } from "../dom";
 import { currentHost, requireHost } from "../host/current";
 import { t } from "../i18n";
 import { renderCollapsibleSection } from "./collapsible";
@@ -137,7 +137,9 @@ export function openInstallModal(deps: InstallModalDeps): void {
 					   verdict « indisponible ». */
 					let verdict: "lance" | "annule" | "indisponible";
 					try {
-						verdict = await host.process!.installerCli(OUTILS[deps.provider]);
+						/* La modale se mesure elle-même : le terminal sera posé juste
+						   en dessous (Ahmed, 2026-09-20). */
+						verdict = await host.process!.installerCli(OUTILS[deps.provider], ancreDe(m.panelEl));
 					} catch (e) {
 						console.warn(LOG_PREFIX, "installation impossible:", e);
 						auto.disabled = false;

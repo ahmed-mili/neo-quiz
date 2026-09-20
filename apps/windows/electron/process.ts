@@ -54,6 +54,7 @@
 
 import { nomDeFichierSur, substituerJetons } from "../../../src/host/jetons";
 import type { FichierJoint } from "../../../src/host/jetons";
+import type { AncreTerminal } from "../../../src/host/types";
 /* LA MOITIÉ PURE DE LA LIGNE DE COMMANDE est partagée avec l'hôte Obsidian
    (`src/host/cli-args.ts`) : citer un argument pour `cmd.exe` et lister les
    extensions du `PATH` sont les mêmes règles des deux côtés, et la citation a
@@ -585,7 +586,45 @@ export function scriptDisposerPourSite(hwndNeo: number): string {
  * suite, et personne d'autre ne sait quand la fenêtre s'en va. Une fenêtre
  * jamais trouvée écrit « absent », et le principal restaure aussitôt.
  */
-export function scriptDisposerPourTerminal(hwndNeo: number, titre: string): string {
+/** L'ancre telle qu'elle arrive du rendu, RECOMPOSÉE champ par champ (comme
+    tout ce qui traverse l'IPC) : quatre nombres finis, positifs, bornés à
+    un écran plausible ; sinon `null`, et le terminal prend la place par
+    défaut. Un rendu compromis ne peut au pire que déplacer un terminal
+    dans la fenêtre de Neo Quiz. */
+export function lireAncre(v: unknown): AncreTerminal | null {
+	if (!v || typeof v !== "object") return null;
+	const o = v as Record<string, unknown>;
+	const n = (k: string): number | null => {
+		const x = o[k];
+		return typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 32767 ? x : null;
+	};
+	const x = n("x"), y = n("y"), largeur = n("largeur"), hauteur = n("hauteur");
+	if (x === null || y === null || largeur === null || hauteur === null) return null;
+	return { x, y, largeur, hauteur };
+}
+
+/** Le rectangle du terminal en DIP, PUR. `contenu` est la zone de contenu de
+    la fenêtre (DIP, écran), `zoom` son facteur (les pixels CSS de l'ancre
+    en DIP), `ancre` la modale mesurée par le rendu. Sous l'ancre, à 12 DIP,
+    même largeur, jusqu'à 24 DIP du bas de la fenêtre et 460 DIP au plus ;
+    200 DIP au moins (une modale trop basse repousse plutôt que d'écraser).
+    Sans ancre : la moitié basse de la fenêtre, 60 % de sa largeur, centrée. */
+export function rectangleTerminal(contenu: { x: number; y: number; width: number; height: number }, zoom: number, ancre: AncreTerminal | null): { x: number; y: number; width: number; height: number } {
+	const z = zoom > 0 && Number.isFinite(zoom) ? zoom : 1;
+	const bas = contenu.y + contenu.height - 24;
+	if (!ancre) {
+		const width = Math.floor(contenu.width * 0.6);
+		const y = contenu.y + Math.floor(contenu.height / 2);
+		return { x: contenu.x + Math.floor((contenu.width - width) / 2), y, width, height: Math.max(200, bas - y) };
+	}
+	const x = Math.round(contenu.x + ancre.x * z);
+	const y = Math.round(contenu.y + (ancre.y + ancre.hauteur) * z) + 12;
+	const width = Math.max(320, Math.round(ancre.largeur * z));
+	const height = Math.max(200, Math.min(460, bas - y));
+	return { x, y, width, height };
+}
+
+export function scriptDisposerPourTerminal(hwndNeo: number, titre: string, rect: AncreTerminal): string {
 	return [
 		"$hwndNeo = " + String(Math.floor(hwndNeo)),
 		"$titre = " + citerPs(titre),
@@ -608,8 +647,6 @@ export function scriptDisposerPourTerminal(hwndNeo: number, titre: string): stri
 		"    [NQT.Win]::SetWindowPos($h, [IntPtr]::Zero, $x - $dl, $y - $dt, $cx + $dl + $dr, $cy + $dt + $db, 0x0050) | Out-Null",
 		"  }",
 		"}",
-		"$aire = if ($hwndNeo -ne 0) { [System.Windows.Forms.Screen]::FromHandle([IntPtr]$hwndNeo).WorkingArea } else { [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea }",
-		"$moitie = [int]($aire.Width / 2)",
 		/* PAR `Get-Process` ET NON `FindWindow` : depuis PowerShell, un `$null`
 		   passé pour la classe arrive en chaîne VIDE, et `FindWindow('', titre)`
 		   ne trouve rien (mesuré le 2026-09-20 sur une fenêtre pourtant listée
@@ -623,7 +660,7 @@ export function scriptDisposerPourTerminal(hwndNeo: number, titre: string): stri
 		"  Start-Sleep -Milliseconds 100",
 		"}",
 		"if ($hTerm -eq [IntPtr]::Zero) { [Console]::Out.WriteLine('absent'); [Console]::Out.Flush(); exit 0 }",
-		"Poser $hTerm $aire.Left $aire.Top $moitie $aire.Height",
+		"Poser $hTerm " + [rect.x, rect.y, rect.largeur, rect.hauteur].map(v => String(Math.floor(v))).join(" "),
 		"[Console]::Out.WriteLine('pose'); [Console]::Out.Flush()",
 		"while ([NQT.Win]::IsWindow($hTerm)) { Start-Sleep -Milliseconds 250 }",
 		"[Console]::Out.WriteLine('fini'); [Console]::Out.Flush()",
@@ -638,12 +675,12 @@ export function scriptDisposerPourTerminal(hwndNeo: number, titre: string): stri
  * `disposerPourSite` : hors Windows, ou si PowerShell manque, `surFin` est
  * appelé aussitôt et Neo Quiz garde sa place.
  */
-export function disposerPourTerminal(hwndNeo: number, titre: string, surFin: () => void): void {
+export function disposerPourTerminal(hwndNeo: number, titre: string, rect: AncreTerminal, surFin: () => void): void {
 	if (process.platform !== "win32") { surFin(); return; }
 	let rendu = false;
 	const fin = (): void => { if (!rendu) { rendu = true; surFin(); } };
 	try {
-		const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptDisposerPourTerminal(hwndNeo, titre))], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+		const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptDisposerPourTerminal(hwndNeo, titre, rect))], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
 		enfant.stdout.on("data", (d: Buffer) => {
 			const texte = d.toString("utf8");
 			if (texte.includes("fini") || texte.includes("absent")) fin();

@@ -26,6 +26,13 @@
  * nommée « <img src=x onerror=…>.md » exécuterait son code avec les droits
  * de la fenêtre. Le HTML d'un quiz a ses propres portes (`sanitizer.ts`).
  */
+/** Le rectangle d'un élément tel que l'hôte le veut pour poser une fenêtre
+    dessous (`AncreTerminal`) : pixels CSS de la fenêtre, entiers. */
+export function ancreDe(el: HTMLElement): { x: number; y: number; largeur: number; hauteur: number } {
+	const r = el.getBoundingClientRect();
+	return { x: Math.round(r.left), y: Math.round(r.top), largeur: Math.round(r.width), hauteur: Math.round(r.height) };
+}
+
 export function ajouter<K extends keyof HTMLElementTagNameMap>(
 	parent: HTMLElement,
 	tag: K,

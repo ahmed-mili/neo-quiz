@@ -50,7 +50,8 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, ollamaInstalle, run, scriptConnexion, scriptInstallation } from "./process";
+import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, rectangleTerminal, run, scriptConnexion, scriptInstallation } from "./process";
+import type { AncreTerminal } from "../../../src/host/types";
 import type { Outil } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
@@ -904,55 +905,44 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   étapes manuelles. */
 	const NOMS_OUTILS: Record<Outil, string> = { claude: "Claude Code", codex: "Codex CLI", ollama: "Ollama", agy: "Antigravity CLI" };
 	const SOURCES_OUTILS: Record<Outil, string> = { claude: "claude.ai/install.ps1", codex: "chatgpt.com/codex/install.ps1", ollama: "winget (Ollama.Ollama)", agy: "antigravity.google/cli/install.ps1" };
-	/* ─── NEO QUIZ À DROITE, LE TERMINAL À GAUCHE ───
-	   Pendant une installation ou une connexion, le terminal s'ouvrait
-	   par-dessus l'application et la cachait (Ahmed, 2026-09-20). Même
-	   disposition que pour un site : Neo Quiz prend la moitié droite de son
-	   écran, le terminal — trouvé par son titre — la moitié gauche
-	   (`disposerPourTerminal`, process.ts), et Neo Quiz retrouve sa place
-	   d'avant quand la fenêtre du terminal disparaît. Agrandi avant, agrandi
-	   après. Best effort : si le terminal n'est jamais trouvé, la place est
-	   rendue tout de suite. */
-	let terminalAvant: { agrandie: boolean; bounds: Electron.Rectangle } | null = null;
+	/* ─── LE TERMINAL JUSTE SOUS LA MODALE, DANS NEO QUIZ ───
+	   Neo Quiz ne bouge plus (la disposition gauche/droite du matin a été
+	   écartée : Ahmed, 2026-09-20, « on ne fait aucune des deux options »).
+	   La modale qui attend (installation ou connexion) est remontée par le
+	   CSS, et le rendu envoie SON rectangle (`ancre`, en pixels CSS de la
+	   fenêtre) : le terminal — trouvé par son titre, `disposerPourTerminal` —
+	   est posé juste en dessous, même largeur, jusqu'au bas de la fenêtre
+	   (plafonné). Sans ancre : la moitié basse de la fenêtre. Les pixels CSS
+	   deviennent des DIP par le facteur de zoom, puis des pixels ÉCRAN par
+	   `screen.dipToScreenPoint` — c'est ce que `SetWindowPos` attend. Best
+	   effort : si le terminal n'est jamais trouvé, rien à défaire. */
 	/* LA FIN DU TERMINAL, comme promesse : `disposerPourTerminal` est le seul à
 	   savoir quand sa fenêtre disparaît, et le modal d'installation attend ce
 	   moment pour se fermer (`processusAttendreFinTerminal`). Une promesse par
 	   terminal lancé ; résolue aussi quand la fenêtre n'a jamais été trouvée,
 	   sinon le modal attendrait pour rien. */
 	let finTerminal: Promise<void> = Promise.resolve();
-	const disposerAvecTerminal = (titre: string): void => {
+	const disposerAvecTerminal = (titre: string, ancre: AncreTerminal | null): void => {
 		const fenetre = deps.fenetreCourante();
 		if (!fenetre || fenetre.isDestroyed()) return;
 		let resoudreFin: () => void = () => {};
 		finTerminal = new Promise<void>(resolve => { resoudreFin = resolve; });
-		if (!terminalAvant) terminalAvant = { agrandie: fenetre.isMaximized(), bounds: fenetre.getNormalBounds() };
-		const aire = screen.getDisplayMatching(fenetre.getBounds()).workArea;
-		const moitie = Math.floor(aire.width / 2);
-		if (fenetre.isMaximized()) fenetre.unmaximize();
-		fenetre.setBounds({ x: aire.x + moitie, y: aire.y, width: aire.width - moitie, height: aire.height });
+		const rect = rectangleTerminal(fenetre.getContentBounds(), fenetre.webContents.getZoomFactor(), ancre);
+		const hautGauche = screen.dipToScreenPoint({ x: rect.x, y: rect.y });
+		const basDroite = screen.dipToScreenPoint({ x: rect.x + rect.width, y: rect.y + rect.height });
 		const h = fenetre.getNativeWindowHandle();
 		const hwnd = h.length >= 8 ? Number(h.readBigUInt64LE(0)) : h.readUInt32LE(0);
-		disposerPourTerminal(hwnd, titre, () => {
+		disposerPourTerminal(hwnd, titre, { x: hautGauche.x, y: hautGauche.y, largeur: basDroite.x - hautGauche.x, hauteur: basDroite.y - hautGauche.y }, () => {
 			resoudreFin();
 			const f = deps.fenetreCourante();
-			const avant = terminalAvant;
-			terminalAvant = null;
-			if (!f || f.isDestroyed() || !avant) return;
-			if (avant.agrandie) {
-				f.maximize();
-			} else {
-				const a = screen.getDisplayMatching(f.getBounds()).workArea;
-				const width = Math.min(avant.bounds.width, a.width);
-				const height = Math.min(avant.bounds.height, a.height);
-				f.setBounds({ x: a.x + Math.floor((a.width - width) / 2), y: a.y + Math.floor((a.height - height) / 2), width, height });
-			}
+			if (!f || f.isDestroyed()) return;
 			deps.fenetre.premierPlan();
 		});
 	};
 
 	ipcMain.handle(CANAUX.processusAttendreFinTerminal, () => finTerminal);
 
-	ipcMain.handle(CANAUX.processusInstaller, async (_e, tool: unknown): Promise<"lance" | "annule" | "indisponible"> => {
+	ipcMain.handle(CANAUX.processusInstaller, async (_e, tool: unknown, ancre: unknown): Promise<"lance" | "annule" | "indisponible"> => {
 		if (!estOutilAutorise(tool)) {
 			console.warn(LOG_PREFIX, "installation refusée, outil hors liste:", tool);
 			throw erreurCli("refuse", "outil hors liste : " + String(tool));
@@ -978,7 +968,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			echecInstallation: t("app.installCli.failed", { name }),
 		};
 		if (!lancerTerminal(titre, scriptInstallation(tool, titre, messages))) return "indisponible";
-		disposerAvecTerminal(titre);
+		disposerAvecTerminal(titre, lireAncre(ancre));
 		return "lance";
 	});
 
@@ -992,7 +982,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   pas là. `scriptConnexion` rend `null` pour Ollama, dont le compte se
 	   connecte par le navigateur (`/api/me` rend l'adresse, voir
 	   `ai-providers.ts`). */
-	ipcMain.handle(CANAUX.processusConnecter, async (_e, tool: unknown): Promise<"lance" | "annule" | "indisponible"> => {
+	ipcMain.handle(CANAUX.processusConnecter, async (_e, tool: unknown, ancre: unknown): Promise<"lance" | "annule" | "indisponible"> => {
 		if (!estOutilAutorise(tool)) {
 			console.warn(LOG_PREFIX, "connexion refusée, outil hors liste:", tool);
 			throw erreurCli("refuse", "outil hors liste : " + String(tool));
@@ -1006,7 +996,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		});
 		if (script === null) return "indisponible";
 		if (!lancerTerminal(titre, script)) return "indisponible";
-		disposerAvecTerminal(titre);
+		disposerAvecTerminal(titre, lireAncre(ancre));
 		return "lance";
 	});
 

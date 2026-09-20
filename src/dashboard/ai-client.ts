@@ -518,7 +518,7 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 	function runCli(spec: {
 		/* Les CLI que la génération lance. `ollama` n'y est pas : il est
 		   interrogé par le réseau, pas par un processus. */
-		tool: "claude" | "codex" | "gemini";
+		tool: "claude" | "codex" | "agy";
 		marqueur: string;
 		args: string[];
 		stdin: string;
@@ -630,129 +630,135 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 			const m = getCodexModels().find(x => x.value === model);
 			const fast = !!settings.get().aiCodexFast && !!(m && m.fast);
 			return callCodex(model, systemPrompt, userPrompt, images, effort, fast);
-		} else if (provider === "gemini") {
-			return callGemini(model, systemPrompt, userPrompt, images);
+		} else if (provider === "antigravity-cli") {
+			return callAntigravity(model, systemPrompt, userPrompt, images);
 		} else {
 			return callClaudeCode(model, systemPrompt, userPrompt, images);
 		}
 	}
 
-	/* ── Gemini via le CLI Gemini (compte Google) ──
-	   Aucune clé API : le CLI est connecté au compte Google de l'utilisateur
-	   (OAuth, identifiants dans le trousseau du système).
+	/* ── Gemini via Antigravity CLI (`agy`, compte Google) ──
+	   Le remplaçant de Gemini CLI, que Google a fermé aux comptes individuels
+	   en juin 2026 (`IneligibleTierError: UNSUPPORTED_CLIENT`, vécu le
+	   2026-09-20 après un jeton OAuth pourtant accepté). Aucune clé API : le
+	   CLI est connecté au compte Google de l'utilisateur, identifiants dans le
+	   gestionnaire d'identifiants Windows.
 
-	   LE PROMPT PART PAR STDIN, sans `-p`. La doc dit deux choses : le mode
-	   HEADLESS s'enclenche « dans un environnement non-TTY OU avec `-p` », et
-	   `-p` est APPENDU à l'entrée standard. L'application lance le CLI par
-	   `spawn`, donc sans TTY : le mode headless est acquis, et le prompt entier
-	   passe par stdin comme pour les deux autres CLI — aucun échappement
-	   d'argument, quelle que soit la taille du cours inliné.
+	   LE PROMPT PART PAR STDIN, EN `stream-json` : en mode texte, `-p` veut
+	   le prompt EN ARGUMENT (« --print took "--output-format" as its prompt »,
+	   mesuré) et n'accepte rien de stdin — or un cours inliné dépasse la
+	   ligne de commande de Windows. `--input-format stream-json` lit sur stdin
+	   un événement `user` par ligne, de la taille qu'on veut (41 Ko éprouvés,
+	   fin du texte relue), et `--output-format stream-json` rend un flux
+	   NDJSON dont le dernier événement, `result`, porte `status`, `response`
+	   et `error` — la même enveloppe que `--output-format json`. Doc :
+	   antigravity.google/docs/cli/headless, lue le 2026-09-20.
 
-	   LES OUTILS. Gemini CLI est un AGENT : il a des outils, là où Claude Code
-	   reçoit `--tools ""` et Codex `-s read-only`. Son équivalent existe — une
-	   règle `toolName = "*"`, `decision = "deny"` du moteur de politiques, qui
-	   retire les outils de la mémoire du modèle — mais elle se charge depuis
-	   `~/.gemini/policies/`, la configuration PERSONNELLE de l'utilisateur, que
-	   l'application n'a pas à modifier : elle vaut aussi pour ses autres usages
-	   de `gemini`. La contourner par `GEMINI_CLI_SYSTEM_DEFAULTS_PATH` sur le
-	   seul processus lancé demanderait de laisser le RENDU poser une variable
-	   d'environnement sur un processus du principal — exactement ce que le pont
-	   borné existe pour refuser. Ce qui tient ici, c'est donc le PROMPT : il
-	   interdit les outils en toutes lettres et INLINE toutes les sources (voir
-	   le paragraphe « NO TOOLS » de `composerPrompts`), et il n'y a rien à
-	   ouvrir puisque tout est déjà là. Décision d'Ahmed, 2026-09-20, en
-	   connaissance des deux autres voies. */
-	async function callGemini(model: string, systemPrompt: string, userPrompt: string, images: ImagePayload[] = []): Promise<ReponseQuiz> {
+	   LES OUTILS. Antigravity est un AGENT : il a des outils, là où Claude
+	   Code reçoit `--tools ""` et Codex `-s read-only`. En headless, son mode
+	   de permission est `request-review` : les outils qui écrivent, exécutent
+	   ou naviguent demandent une confirmation qui ne peut pas être donnée,
+	   et ne tournent donc pas. Ce qui tient pour le reste, c'est le PROMPT :
+	   il interdit les outils en toutes lettres et INLINE toutes les sources
+	   (paragraphe « NO TOOLS » de `composerPrompts`). Même décision que pour
+	   Gemini CLI (Ahmed, 2026-09-20), en connaissance de cause.
+
+	   LE MODÈLE vient de `agy models` (voir `ai-providers.ts`), jamais d'ici ;
+	   sans modèle connu, `--model` est omis et le CLI prend le sien. Le
+	   niveau de raisonnement est DANS le nom du modèle (`…-high`, `…-low`),
+	   donc pas d'effort à passer. */
+	async function callAntigravity(model: string, systemPrompt: string, userPrompt: string, images: ImagePayload[] = []): Promise<ReponseQuiz> {
 		if (!currentHost().platform.isDesktopApp) {
-			throw new Error(t("ai.hint.geminiDesktopOnly"));
+			throw new Error(t("ai.hint.antigravityDesktopOnly"));
 		}
-		if (!/^[a-zA-Z0-9._:-]+$/.test(model)) {
-			throw new Error(t("ai.err.invalidModelGemini", { model }));
+		if (model && !/^[a-zA-Z0-9._:-]+$/.test(model)) {
+			throw new Error(t("ai.err.invalidModelAntigravity", { model }));
 		}
 		/* UNE IMAGE NE PEUT PAS PARTIR PAR CE CANAL, et c'est dit plutôt que
-		   perdu : Claude Code lit les images jointes avec son outil `Read`, que
-		   Gemini n'a pas ici puisqu'on ne lui donne aucun outil. Même patron que
-		   le PDF refusé par l'application sur le canal web — refuser en le
-		   nommant, jamais joindre du vide. */
+		   perdu : Claude Code lit les images jointes avec son outil `Read` ;
+		   ici aucun outil n'est donné, et l'entrée `stream-json` n'accepte que
+		   des blocs de texte (« text is the only supported block type », doc).
+		   Même patron que le PDF refusé par l'application sur le canal web. */
 		if (images.length > 0) {
-			throw new Error(t("ai.err.geminiNoImages"));
+			throw new Error(t("ai.err.antigravityNoImages"));
 		}
 
 		const marqueur = nouveauMarqueur();
 		const fullPrompt = systemPrompt + "\n\n" + userPrompt;
+		/* UNE ligne : le CLI lit un événement par ligne, et `JSON.stringify`
+		   échappe les sauts de ligne du prompt. */
+		const entree = JSON.stringify({ event: "user", message: { content: fullPrompt } }) + "\n";
 
 		/** La cartographie des messages, au patron d'`erreurClaude` et
-		    d'`erreurCodex`. Les mots cherchés sont ceux du CLI Gemini : il dit
-		    « not authenticated » / « sign in » quand le compte n'est pas
-		    connecté, et « quota » / « resource_exhausted » quand le palier
-		    gratuit est épuisé (60 requêtes par minute, 1 000 par jour). */
-		const erreurGemini = (e: ExecError): Error => {
-			console.error("[quiz-blocks] Gemini CLI error:", e.message, e.stderr || "");
+		    d'`erreurCodex`. Les mots cherchés sont ceux du CLI : « Authentication
+		    required » sans compte, « quota » quand le forfait est épuisé. */
+		const erreurAntigravity = (e: ExecError): Error => {
+			console.error("[quiz-blocks] Antigravity CLI error:", e.message, e.stderr || "");
 			const detail = ((e.stderr || "") + " " + (e.stdout || "") + " " + e.message).toLowerCase();
 			if (e.code === "ENOENT" || e.code === 127 || detail.includes("not recognized") || detail.includes("introuvable") || detail.includes("command not found")) {
-				return new Error(t("ai.err.geminiNotInstalled"));
+				return new Error(t("ai.err.antigravityNotInstalled"));
 			}
 			if (e.killed || detail.includes("etimedout")) {
-				return new Error(t("ai.err.geminiTimeout", { minutes: CLI_TIMEOUT_MIN }));
+				return new Error(t("ai.err.antigravityTimeout", { minutes: CLI_TIMEOUT_MIN }));
 			}
-			if (detail.includes("not authenticated") || detail.includes("sign in") || detail.includes("login") || detail.includes("unauthorized") || detail.includes("401") || detail.includes("credential") || detail.includes("authenticat")) {
-				/* MESSAGE SEUL, sans `erreurConnexion` : le bouton « Se
-				   connecter » de la carte d'erreur suppose une sonde de
-				   connexion (`sondeConnexion`, `ai-providers.ts`) et un
-				   `OutilCompte` élargi, qui arrivent avec l'entrée de Gemini au
-				   registre. D'ici là le message dit quoi faire — il nomme la
-				   commande — plutôt que de proposer un bouton qui n'irait
-				   nulle part. */
-				return new Error(t("ai.err.geminiNotLoggedIn"));
+			if (detail.includes("authentication required") || detail.includes("authentication failed") || detail.includes("sign in") || detail.includes("unauthorized") || detail.includes("401")) {
+				/* MESSAGE SEUL, sans `erreurConnexion` : la connexion d'Antigravity
+				   se fait depuis le terminal d'installation (voir
+				   `commandeConnexion`, `process.ts`) ; le bouton « Se connecter »
+				   de la carte d'erreur suppose une sonde que le CLI n'offre pas. */
+				return new Error(t("ai.err.antigravityNotLoggedIn"));
 			}
-			if (detail.includes("quota") || detail.includes("resource_exhausted") || detail.includes("rate limit") || detail.includes("429")) {
-				return new Error(t("ai.err.geminiRateLimit"));
+			if (detail.includes("quota") || detail.includes("rate limit") || detail.includes("resource_exhausted") || detail.includes("429")) {
+				return new Error(t("ai.err.antigravityRateLimit"));
 			}
-			return new Error(t("ai.err.gemini", { detail: (e.stderr || e.message).trim().slice(0, 300) }));
+			return new Error(t("ai.err.antigravity", { detail: (e.stderr || e.message).trim().slice(0, 300) }));
 		};
 
 		let res: SortieCli;
 		try {
 			res = await runCli({
-				tool: "gemini",
-				/* `--output-format json` rend UN objet `{ response, stats }` :
-				   c'est la seule forme documentée qui sépare la réponse du
-				   bavardage du CLI. `-m` prend un ALIAS (`auto`, `pro`, `flash`,
-				   `flash-lite`) et c'est voulu : l'alias est résolu par le CLI
-				   lui-même, donc le jour où `pro` cesse d'être `gemini-2.5-pro`,
-				   l'application suit sans rien changer. Coder le nom concret
-				   ici, c'est le mensonge que la règle « jamais de modèle en
-				   dur » interdit. */
-				args: ["--output-format", "json", "-m", model],
+				tool: "agy",
+				args: ["--input-format", "stream-json", "--output-format", "stream-json", ...(model ? ["--model", model] : [])],
 				marqueur,
-				stdin: fullPrompt,
+				stdin: entree,
 				fichiers: [],
 			});
 		} catch (err) {
 			/* Une ANNULATION n'est pas une erreur (voir `callClaudeCode`). */
 			if (aborted) throw err;
-			throw erreurIndisponible(err) || erreurGemini(execErrorDepuisRejet(err));
+			throw erreurIndisponible(err) || erreurAntigravity(execErrorDepuisRejet(err));
 		}
-		if (res.code !== 0) throw erreurGemini(execErrorDepuisCode(res));
+		if (res.code !== 0) throw erreurAntigravity(execErrorDepuisCode(res));
 
-		/* `{ response, stats }` — et un repli sur stdout brut : une version du
-		   CLI qui changerait sa forme de sortie rendrait sinon « pas un quiz »
-		   alors que la réponse est là, sous les yeux, dans stdout. */
-		let raw = "";
-		try {
-			const objet = JSON.parse(res.stdout) as { response?: unknown; error?: { message?: string } };
-			if (objet && typeof objet.response === "string") raw = objet.response;
-			else if (objet && objet.error && typeof objet.error.message === "string") throw new Error(objet.error.message);
-		} catch (e) {
-			raw = "";
-		}
-		if (!raw.trim()) raw = String(res.stdout || "");
-
+		const resultat = lireResultatAntigravity(res.stdout);
+		if (resultat.erreur) throw erreurAntigravity({ message: resultat.erreur, stdout: res.stdout, stderr: res.stderr } as ExecError);
+		const raw = resultat.reponse;
 		if (!raw.trim()) {
-			throw new Error(t("ai.err.geminiEmpty"));
+			throw new Error(t("ai.err.antigravityEmpty"));
 		}
-		console.log("[quiz-blocks] Gemini success - response length:", raw.length);
+		console.log("[quiz-blocks] Antigravity success - response length:", raw.length);
 		return parseReponseQuiz(raw);
+	}
+
+	/** Le flux `stream-json` d'Antigravity : une ligne = un événement, et c'est
+	    l'événement `result` qui porte la réponse. Les `text_delta` des
+	    `agent_response` ne sont PAS reconstitués : `result.response` est déjà
+	    le texte entier, et le reconstituer ferait deux sources pour une
+	    valeur. Un `status` autre que `SUCCESS` est rendu comme erreur, avec
+	    son message. */
+	function lireResultatAntigravity(stdout: string): { reponse: string; erreur: string | null } {
+		let reponse = "";
+		let erreur: string | null = null;
+		for (const line of String(stdout || "").split("\n")) {
+			const trimmed = line.trim();
+			if (!trimmed.startsWith("{")) continue;
+			let evt: { event?: string; result?: { status?: string; response?: string; error?: string } };
+			try { evt = JSON.parse(trimmed); } catch (e) { continue; }
+			if (evt.event !== "result" || !evt.result) continue;
+			if (evt.result.status !== "SUCCESS") erreur = evt.result.error || ("status " + String(evt.result.status));
+			reponse = typeof evt.result.response === "string" ? evt.result.response : "";
+		}
+		return { reponse, erreur };
 	}
 
 	/* ── Claude via le CLI Claude Code (compte par abonnement) ──

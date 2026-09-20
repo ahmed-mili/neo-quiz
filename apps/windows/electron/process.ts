@@ -286,9 +286,6 @@ export interface MessagesTerminal {
 	succes: string;
 	echec: string;
 	echecInstallation?: string;
-	/** Ce qui manque AVANT de pouvoir installer — Node.js pour Gemini, le seul
-	    des quatre qui exige quelque chose (voir `src/cli-install-cmd.ts`). */
-	prerequisManquant?: string;
 }
 
 /**
@@ -312,89 +309,41 @@ function commandeConnexion(tool: Outil): string | null {
 	   enchaînait sur le REPL et affichait « connecté » quoi qu'il arrive. */
 	if (tool === "claude") return "claude auth login";
 	if (tool === "codex") return "codex login";
-	/* GEMINI N'A PAS DE SOUS-COMMANDE DE CONNEXION, et son REPL pose deux
-	   questions (« Do you trust the files in this folder? », puis « How would
-	   you like to authenticate? ») avant d'ouvrir le navigateur — vu par Ahmed
-	   le 2026-09-20 : « on n'est jamais censé avoir à interagir avec le
-	   terminal ». Le REPL ne rend d'ailleurs aucun code de sortie exploitable,
-	   le piège que le commentaire ci-dessus décrit.
-
-	   D'où un appel HEADLESS, sans REPL : `GOOGLE_GENAI_USE_GCA=true` choisit
-	   « Sign in with Google » depuis l'environnement (`getAuthTypeFromEnv`,
-	   `packages/core/src/core/contentGenerator.ts` du dépôt gemini-cli, lu le
-	   2026-09-20), et sans identifiant en cache le CLI ouvre LUI-MÊME le
-	   navigateur puis attend le retour (`authWithWeb` → `open(authUrl)`,
-	   `oauth2.ts`). Rien n'est écrit dans les réglages de l'utilisateur, et il
-	   n'a rien à taper : il autorise dans le navigateur, c'est tout. L'appel
-	   est aussi le CONTRÔLE : son code de sortie est celui que la fenêtre
-	   juge, et il dit vrai — le seul moyen de savoir si Gemini répond est de le
-	   lui demander. Il coûte une requête sur les mille du palier gratuit.
+	/* ANTIGRAVITY N'A PAS DE SOUS-COMMANDE DE CONNEXION (« Launch the CLI
+	   without arguments to sign in », dit-il), et son interface interactive
+	   ne rend aucun code de sortie utile. Mais son mode headless sait se
+	   connecter : sans identifiant en cache, `agy -p` ÉCRIT l'URL de
+	   connexion Google sur stderr et attend soixante secondes (mesuré le
+	   2026-09-20, `agy` 1.2.7) — sans ouvrir le navigateur lui-même, ni dans
+	   une fenêtre de console, ni ailleurs. C'est donc le SCRIPT qui l'ouvre :
+	   il lit la sortie ligne à ligne et lance la première adresse
+	   `accounts.google.com` qu'il voit. L'utilisateur autorise dans le
+	   navigateur, le CLI reçoit le jeton, répond, et son code de sortie est
+	   celui que la fenêtre juge — le même appel est le contrôle. Aucune
+	   question, aucun REPL, rien à taper : éprouvé de bout en bout le jour
+	   même (22 secondes, `status: SUCCESS`). Les identifiants vont au
+	   gestionnaire d'identifiants Windows.
 
 	   `Set-Location` d'abord : la fenêtre hérite du dossier courant de
-	   l'application (`apps/windows` en dev, le dossier d'installation sinon),
-	   et le CLI y chercherait un projet à charger. Le dossier personnel n'a
-	   rien de tel. `--output-format json` et la redirection gardent la fenêtre
-	   lisible ; l'utilisateur n'y voit que les deux messages. */
-	if (tool === "gemini") return GEMINI_CONNEXION.join("\n");
+	   l'application, et le CLI y chercherait un projet à charger. Chaque
+	   ligne est convertie en TEXTE avant d'être affichée : relue par `2>&1`,
+	   une ligne de stderr est un `ErrorRecord`, que PowerShell décorerait
+	   sinon d'un « NativeCommandError » rouge. La réponse JSON, elle, n'est
+	   pas affichée. */
+	if (tool === "agy") return AGY_CONNEXION.join("\n");
 	return null;
 }
 
-/**
- * UNE TOUCHE ENTRÉE DÉPOSÉE DANS LE TAMPON D'ENTRÉE DE LA CONSOLE, avant de
- * lancer `gemini`. Pourquoi : même en headless, le CLI demande « Opening
- * authentication page in your browser. Do you want to continue? [Y/n]: » et
- * attend UNE LIGNE au clavier (`getOauthConsentNonInteractive`,
- * `packages/core/src/utils/authConsent.ts` du dépôt gemini-cli, lu le
- * 2026-09-20) — la question partait dans `Out-Null`, et la fenêtre semblait
- * morte (vu par Ahmed : « j'ai vu installé et après plus rien »).
- *
- * On ne peut PAS répondre par un tube : quand stdin n'est pas un terminal, le
- * CLI le lit EN ENTIER comme prompt (`readStdin`, `gemini.tsx`), et la
- * question lit ensuite un flux déjà fermé — elle attendrait pour toujours.
- * Ni par `SendKeys`, qui exige que la fenêtre soit au premier plan alors que
- * le navigateur va justement le prendre. `WriteConsoleInput` écrit l'événement
- * clavier dans le TAMPON de la console, où il attend d'être lu : le premier
- * `readline` qui écoute le clavier — celui de la question — reçoit une ligne
- * vide, que le CLI compte pour « oui ». Éprouvé le 2026-09-20 sur un
- * `readline` Node dans une vraie fenêtre. Sans question (identifiants déjà
- * en cache), la touche reste dans le tampon : `issue` le VIDE avant son
- * `Read-Host`, sinon un échec se fermerait sans laisser lire.
- *
- * `Add-Type` compile ces lignes de C# à chaque lancement (une seconde environ,
- * avec le compilateur de .NET Framework que Windows PowerShell embarque) ;
- * c'est le prix d'un appel Win32 depuis PowerShell.
- */
-const DEPOSER_ENTREE = [
-	"$neoQuizConsole = @\"",
-	"using System;",
-	"using System.Runtime.InteropServices;",
-	"public static class NeoQuizConsole {",
-	"  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]",
-	"  public struct KEY_EVENT_RECORD { public int bKeyDown; public ushort wRepeatCount; public ushort wVirtualKeyCode; public ushort wVirtualScanCode; public char UnicodeChar; public uint dwControlKeyState; }",
-	"  [StructLayout(LayoutKind.Explicit, CharSet = CharSet.Unicode)]",
-	"  public struct INPUT_RECORD { [FieldOffset(0)] public ushort EventType; [FieldOffset(4)] public KEY_EVENT_RECORD KeyEvent; }",
-	"  [DllImport(\"kernel32.dll\", SetLastError = true)] static extern IntPtr GetStdHandle(int nStdHandle);",
-	"  [DllImport(\"kernel32.dll\", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool WriteConsoleInput(IntPtr hConsoleInput, INPUT_RECORD[] lpBuffer, uint nLength, out uint lpNumberOfEventsWritten);",
-	"  public static void PressEnter() {",
-	"    IntPtr h = GetStdHandle(-10);",
-	"    INPUT_RECORD down = new INPUT_RECORD(); down.EventType = 1;",
-	"    down.KeyEvent.bKeyDown = 1; down.KeyEvent.wRepeatCount = 1; down.KeyEvent.wVirtualKeyCode = 0x0D; down.KeyEvent.wVirtualScanCode = 0x1C; down.KeyEvent.UnicodeChar = '\\r';",
-	"    INPUT_RECORD up = down; up.KeyEvent.bKeyDown = 0;",
-	"    uint written; WriteConsoleInput(h, new INPUT_RECORD[] { down, up }, 2, out written);",
-	"  }",
-	"}",
-	"\"@",
-	"Add-Type -TypeDefinition $neoQuizConsole",
-	"[NeoQuizConsole]::PressEnter()",
-];
-
-/** Les lignes de la connexion de Gemini, séparées pour être lisibles (et pour
-    que `check:electron-process` puisse les nommer). */
-const GEMINI_CONNEXION = [
-	"$env:GOOGLE_GENAI_USE_GCA = 'true'",
+/** Les lignes de la connexion d'Antigravity, séparées pour être lisibles (et
+    pour que `check:electron-process` puisse les nommer). */
+const AGY_CONNEXION = [
 	"Set-Location $env:USERPROFILE",
-	...DEPOSER_ENTREE,
-	"gemini -p \"ok\" --output-format json | Out-Null",
+	"$script:urlOuverte = $false",
+	"agy -p \"ok\" --output-format json 2>&1 | ForEach-Object {",
+	"  $l = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { \"$_\" }",
+	"  if (-not $script:urlOuverte -and $l -match 'https://accounts\\.google\\.com/\\S+') { $script:urlOuverte = $true; Start-Process $Matches[0] }",
+	"  if ($l -and -not $l.StartsWith('{')) { Write-Host $l }",
+	"}",
 ];
 
 /**
@@ -428,9 +377,8 @@ function issue(messages: MessagesTerminal): string[] {
 		"} else {",
 		"  Write-Host " + citerPs(messages.echec) + " -ForegroundColor Red",
 		/* Le tampon d'entrée est VIDÉ avant d'attendre Entrée : une touche
-		   déposée d'avance et jamais lue (`DEPOSER_ENTREE`, quand Gemini n'a
-		   rien demandé) fermerait sinon la fenêtre sur le message d'échec,
-		   avant qu'on ait pu le lire. Sans effet pour les autres outils. */
+		   tapée pendant l'installation, restée dans le tampon, fermerait sinon
+		   la fenêtre sur le message d'échec avant qu'on ait pu le lire. */
 		"  $host.UI.RawUI.FlushInputBuffer()",
 		"  Read-Host | Out-Null",
 		"}",
@@ -484,36 +432,6 @@ export function scriptInstallation(tool: Outil, titre: string, messages: Message
 		   Posée dans la SESSION, elle est héritée par le sous-processus
 		   PowerShell qui exécute l'installateur. */
 		...(tool === "codex" ? ["$env:CODEX_NON_INTERACTIVE = '1'"] : []),
-		/* GEMINI S'INSTALLE PAR npm, ET PAR RIEN D'AUTRE : sans Node, la ligne
-		   d'installation échouerait sur « npm n'est pas reconnu », que le
-		   message d'échec générique traduirait par « l'installation a échoué »,
-		   sans dire ce qui manque ni où le prendre. On regarde donc AVANT, et on
-		   nomme le prérequis. */
-		...(tool === "gemini" ? [
-			"if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {",
-			"  Write-Host " + citerPs(messages.prerequisManquant || messages.echecInstallation || messages.echec) + " -ForegroundColor Red",
-			"  Read-Host | Out-Null",
-			"  exit 1",
-			"}",
-			/* LES VARIABLES `npm_config_*` HÉRITÉES SONT RETIRÉES AVANT
-			   D'INSTALLER. Lancée par `npm run app:dev`, l'application hérite
-			   de la configuration que npm pose dans l'environnement de ses
-			   scripts, et la fenêtre en hérite à son tour : `npm install -g` y
-			   prenait le dossier du PROJET pour préfixe global — les lanceurs
-			   `gemini`, `gemini.cmd`, `gemini.ps1` sont apparus dans
-			   `apps/windows/` et le paquet dans son `node_modules`, puis le REPL
-			   ne trouvait rien sur le PATH (vécu le 2026-09-20 ; trois fichiers
-			   entrés dans un commit avant d'être vus). L'application empaquetée
-			   n'a pas ces variables, mais le script ne doit pas dépendre de la
-			   façon dont elle a été lancée. */
-			/* `[Environment]::SetEnvironmentVariable(nom, '', 'Process')` et non
-			   `Remove-Item Env:nom` : ce dernier rougissait la fenêtre de
-			   « Impossible de trouver le chemin d'accès Env:\npm_config_… » pour
-			   des variables que `Get-ChildItem Env:` venait pourtant de lister
-			   (vu le 2026-09-20). Une valeur vide RETIRE la variable du
-			   processus, sans un mot. */
-			"Get-ChildItem Env: | Where-Object { $_.Name -like 'npm_config_*' } | ForEach-Object { [Environment]::SetEnvironmentVariable($_.Name, '', 'Process') }",
-		] : []),
 		commandeInstallationLancee(tool, true),
 		"if ($LASTEXITCODE -ne 0) {",
 		"  Write-Host " + citerPs(messages.echecInstallation || messages.echec) + " -ForegroundColor Red",
@@ -957,7 +875,10 @@ export async function avecFichiers<T>(
  * des chemins, qui sépare « lancer le CLI de l'utilisateur » de « lancer ce
  * qu'on vient d'écrire sur son disque ».
  */
-export const OUTILS = ["claude", "codex", "ollama", "gemini"] as const;
+/* `"gemini"` : PONT TEMPORAIRE, le temps que le registre des fournisseurs
+   passe à `"agy"` (voir `CliTool`). Le binaire n'est plus installé nulle
+   part : un lancement rend « introuvable ». À retirer avec le registre. */
+export const OUTILS = ["claude", "codex", "ollama", "agy", "gemini"] as const;
 
 export type Outil = (typeof OUTILS)[number];
 
@@ -1017,6 +938,11 @@ export function dossiersCli(env: NodeJS.ProcessEnv = process.env): string[] {
 		env.LOCALAPPDATA ? join(env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin") : null,
 		env.CODEX_INSTALL_DIR || null,
 		env.LOCALAPPDATA ? join(env.LOCALAPPDATA, "Programs", "Ollama") : null,
+		/* Antigravity CLI : `install.ps1` pose `agy.exe` ici et l'annonce en
+		   toutes lettres (« binary placed successfully at … agy\bin »), sans
+		   toucher au PATH de la session courante. `~/.local/bin`, plus haut,
+		   est son emplacement sur macOS et Linux. */
+		env.LOCALAPPDATA ? join(env.LOCALAPPDATA, "agy", "bin") : null,
 		join(home, ".claude", "local"),
 		join(home, ".bun", "bin"),
 		join(home, ".yarn", "bin"),
@@ -1030,26 +956,6 @@ export function environnementEnfant(env: NodeJS.ProcessEnv = process.env): NodeJ
 	const courant = env.PATH || "";
 	const fusion = courant + delimiter + dossiersCli(env).filter(p => !courant.includes(p)).join(delimiter);
 	return Object.assign({}, env, { PATH: fusion, Path: fusion });
-}
-
-/**
- * L'environnement d'UN outil : celui de tout enfant, plus ce que l'outil
- * exige pour tourner SANS INTERFACE. PURE.
- *
- * Gemini : `GOOGLE_GENAI_USE_GCA=true`. En mode headless, le CLI refuse de
- * partir tant qu'aucune méthode d'authentification n'est nommée — par ses
- * réglages, ou par l'environnement (`validateNonInteractiveAuth` : « Please
- * set an Auth method… or specify one of the following environment
- * variables »). Ses réglages ne la portent que si l'on est passé par le
- * dialogue du REPL, que la connexion depuis l'application évite justement
- * (voir `commandeConnexion`). Sans cette variable, une génération échouait
- * donc sur un compte pourtant connecté. C'est le PRINCIPAL qui la pose, sur un
- * outil de sa liste blanche : rien ne vient de la fenêtre.
- */
-export function environnementOutil(tool: Outil, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-	const base = environnementEnfant(env);
-	if (tool === "gemini") return Object.assign(base, { GOOGLE_GENAI_USE_GCA: "true" });
-	return base;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1454,10 +1360,6 @@ export async function run(spec: {
 	if (!estOutilAutorise(spec.tool)) {
 		throw erreurCli("refuse", "CLI hors liste : " + String(spec.tool));
 	}
-	/* Le nom JUGÉ, sous son type : la garde ci-dessus ne rétrécit ni une
-	   propriété ni ce qu'une fermeture lit plus bas, et `environnementOutil`
-	   veut un `Outil`. L'assertion ne dit que ce que la garde vient d'établir. */
-	const outil = spec.tool as Outil;
 	/* DES FICHIERS SANS MARQUEUR SONT REFUSÉS. Sans marqueur, `avecFichiers` ne
 	   substitue RIEN (son défaut sûr) : les pièces jointes seraient bel et bien
 	   écrites, mais AUCUN jeton ne pourrait les désigner, le CLI partirait sans
@@ -1495,7 +1397,7 @@ export async function run(spec: {
 				stdin: resolu.stdin,
 				signal: spec.signal,
 				timeoutMs: spec.timeoutMs,
-				env: environnementOutil(outil, env),
+				env: environnementEnfant(env),
 				cwd: dossierPersonnel(env),
 				tuer: options.tuer,
 				delaiGardeMs: options.delaiGardeMs,

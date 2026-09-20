@@ -31,7 +31,9 @@
 
 /** Les trois outils qu'on sait installer. Volontairement ce type et non
     `CliTool` du contrat d'hôte : ce module ne dépend de rien. */
-export type OutilInstallable = "claude" | "codex" | "ollama" | "gemini";
+/* `"gemini"` : PONT TEMPORAIRE, le temps que le registre passe à `"agy"` (voir
+   `CliTool`). Sa ligne npm est gardée pour la même raison, et rien d'autre. */
+export type OutilInstallable = "claude" | "codex" | "ollama" | "agy" | "gemini";
 
 /** La commande AFFICHÉE dans la voie manuelle du modal, et celle que le
     terminal exécute. `lang` sert à la coloration du bloc de code.
@@ -50,12 +52,16 @@ export function commandeInstallation(outil: OutilInstallable, windows: boolean):
 			? { code: 'powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"', lang: "powershell" }
 			: { code: "curl -fsSL https://chatgpt.com/codex/install.sh | sh", lang: "bash" };
 	}
-	/* GEMINI EST LE SEUL DES QUATRE QUI EXIGE QUELQUE CHOSE D'AVANCE. Les trois
-	   autres s'installent d'un script qui n'a besoin de rien ; Gemini CLI est
-	   publié sur npm et sur rien d'autre — pas d'installateur autonome, pas de
-	   paquet winget (doc officielle, get-started/installation.mdx, lue le
-	   2026-09-20) — et réclame Node.js 20 ou plus. La même ligne sur les deux
-	   systèmes, et c'est le modal qui dit le prérequis. */
+	/* ANTIGRAVITY CLI (`agy`), le remplaçant de Gemini CLI — que Google a fermé
+	   aux comptes individuels en juin 2026 (`IneligibleTierError`, vécu le
+	   2026-09-20). Un binaire Go posé par l'installateur officiel, comme Claude
+	   et Codex : rien à avoir d'avance. Formes vérifiées le 2026-09-20 sur
+	   antigravity.google/docs/cli/install. */
+	if (outil === "agy") {
+		return windows
+			? { code: "irm https://antigravity.google/cli/install.ps1 | iex", lang: "powershell" }
+			: { code: "curl -fsSL https://antigravity.google/cli/install.sh | bash", lang: "bash" };
+	}
 	if (outil === "gemini") {
 		return { code: "npm install -g @google/gemini-cli", lang: windows ? "powershell" : "bash" };
 	}

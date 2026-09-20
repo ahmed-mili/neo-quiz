@@ -126,7 +126,6 @@ export const EN_APP = {
 	"app.installCli.cancel": "Cancel",
 	"app.installCli.done": "{name} is set up. Back to Neo Quiz…",
 	"app.installCli.failed": "Installing {name} failed. Close this window and try again from Neo Quiz, or follow the manual steps there.",
-	"app.installCli.needsNode": "{name} is installed with npm, which comes with Node.js — and Node.js is not on this computer. Install Node.js 20 or later from nodejs.org, then try again from Neo Quiz.",
 	"app.connectCli.done": "{name} is connected. Back to Neo Quiz…",
 	"app.connectCli.failed": "Signing in to {name} failed. Close this window and try again from Neo Quiz.",
 } as const;

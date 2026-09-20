@@ -162,11 +162,13 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 					   2026-09-20. Un nom de la liste refusé ici rendrait sa
 					   génération impossible sans qu'aucun type ne bronche — le rendu
 					   n'envoie qu'un nom, et c'est ici qu'il est cru ou non. */
-					juge: ["claude", "codex", "ollama", "gemini", "notepad", "x.bat", "", null, 3].map(estOutilAutorise),
+					juge: ["claude", "codex", "ollama", "agy", "gemini", "notepad", "x.bat", "", null, 3].map(estOutilAutorise),
 				},
 				{
-					liste: ["claude", "codex", "ollama", "gemini"],
-					juge: [true, true, true, true, false, false, false, false, false],
+					/* `gemini` : pont temporaire, voir `OUTILS` ; disparaît avec le
+					   passage du registre à Antigravity. */
+					liste: ["claude", "codex", "ollama", "agy", "gemini"],
+					juge: [true, true, true, true, true, false, false, false, false, false],
 				});
 		});
 
@@ -275,76 +277,42 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 			},
 			{ avant: true, claude: false });
 	}
-	/* ── GEMINI : le seul qui s'installe par npm, et ce que ça impose ── */
+	/* ── ANTIGRAVITY (`agy`) : le remplaçant de Gemini CLI ── */
 	{
-		const inst = scriptInstallation("gemini", "Neo Quiz - Gemini CLI", { ...msgs, prerequisManquant: "il faut Node" }, envDossiers);
-		const ligneNpm = commandeInstallationLancee("gemini", true);
-		const iNpm = inst.indexOf("\n" + ligneNpm + "\n");
-		const iGarde = inst.indexOf("Get-Command npm");
-		const iNettoyage = inst.indexOf("Where-Object { $_.Name -like 'npm_config_*' }");
-		r.check("gemini installation : npm est cherché AVANT d'installer, et son absence nomme le prérequis puis retient la fenêtre",
+		const inst = scriptInstallation("agy", "Neo Quiz - Antigravity CLI", msgs, envDossiers);
+		const ligneInstall = commandeInstallationLancee("agy", true);
+		r.check("agy installation : l'installateur officiel, sans prérequis ni nettoyage npm (un binaire Go)",
 			{
-				avant: iGarde > 0 && iGarde < iNpm,
-				message: inst.slice(iGarde, iNpm).includes("Write-Host 'il faut Node'"),
-				retient: inst.slice(iGarde, iNpm).includes("Read-Host"),
+				officiel: inst.includes("\n" + ligneInstall + "\n") && ligneInstall.includes("antigravity.google/cli/install.ps1"),
+				/* Avant la ligne d'installation seulement : le rechargement du
+				   PATH, plus bas, cite le dossier npm de l'utilisateur. */
+				npm: /npm install|Get-Command npm|npm_config|Node\.js/.test(inst.slice(0, inst.indexOf(ligneInstall))),
 			},
-			{ avant: true, message: true, retient: true });
-		/* Lancée par `npm run app:dev`, l'application lègue ses `npm_config_*`
-		   à la fenêtre, et `npm install -g` y prenait le dossier du PROJET pour
-		   préfixe global (vécu le 2026-09-20 : trois lanceurs dans
-		   `apps/windows/`, entrés dans un commit). Retirées avant la ligne npm,
-		   et SEULEMENT pour Gemini — les trois autres n'appellent pas npm. */
-		r.check("gemini installation : les npm_config_* héritées sont retirées avant la ligne npm, et pas pour les autres outils",
-			{
-				avant: iNettoyage > 0 && iNettoyage < iNpm,
-				autres: ["claude", "codex", "ollama"].some(o => scriptInstallation(o, "t", msgs, envDossiers).includes("npm_config_")),
-			},
-			{ avant: true, autres: false });
-		/* La connexion est HEADLESS, sans REPL : le REPL posait deux questions
-		   (confiance du dossier, méthode d'authentification) et ne rendait
-		   aucun code de sortie utile. `GOOGLE_GENAI_USE_GCA` choisit « Sign in
-		   with Google » depuis l'environnement, `Set-Location` sort du dossier
-		   de l'application, et l'appel `-p` est à la fois la connexion (le CLI
-		   ouvre le navigateur) et le contrôle dont le code de sortie est jugé.
-		   `commandeConnexion` a le détail et les sources. */
-		const cx = scriptConnexion("gemini", "t", msgs, envDossiers);
-		const iGca = cx.indexOf("\n$env:GOOGLE_GENAI_USE_GCA = 'true'\n");
+			{ officiel: true, npm: false });
+		/* La connexion est HEADLESS et c'est le SCRIPT qui ouvre le navigateur :
+		   `agy -p` écrit l'URL Google sur stderr et attend, sans l'ouvrir
+		   lui-même (mesuré le 2026-09-20). Le script lit la sortie ligne à
+		   ligne, lance la première adresse `accounts.google.com`, convertit
+		   chaque ligne en texte (sinon un `NativeCommandError` rouge), et le
+		   code de sortie de l'appel est celui que la fenêtre juge. Jamais le
+		   TUI (`agy` seul), qui ne rend rien d'exploitable. */
+		const cx = scriptConnexion("agy", "t", msgs, envDossiers);
 		const iCd = cx.indexOf("\nSet-Location $env:USERPROFILE\n");
-		const iControle = cx.indexOf("\ngemini -p \"ok\" --output-format json | Out-Null\n");
+		const iAppel = cx.indexOf("\nagy -p \"ok\" --output-format json 2>&1 | ForEach-Object {");
 		const iJuge = cx.indexOf("if ($LASTEXITCODE -eq 0)");
-		r.check("gemini connexion : GCA posé, dossier personnel, appel headless, puis le jugement sur SON code de sortie — et jamais le REPL",
+		r.check("agy connexion : dossier personnel, appel headless qui ouvre lui-même l'URL Google, puis le jugement sur SON code de sortie — jamais le TUI",
 			{
-				ordre: iGca > 0 && iCd > iGca && iControle > iCd && iJuge > iControle,
-				pathAvant: cx.indexOf("GetEnvironmentVariable('Path','User')") < iControle,
-				repl: /\ngemini\s*\n/.test(cx),
+				ordre: iCd > 0 && iAppel > iCd && iJuge > iAppel,
+				ouvreUrl: cx.includes("accounts\\.google\\.com") && cx.includes("Start-Process $Matches[0]"),
+				texte: cx.includes("[System.Management.Automation.ErrorRecord]"),
+				pathAvant: cx.indexOf("GetEnvironmentVariable('Path','User')") < iAppel,
+				tui: /\nagy\s*\n/.test(cx),
 			},
-			{ ordre: true, pathAvant: true, repl: false });
-		/* Même en headless, le CLI demande « Do you want to continue? [Y/n] »
-		   au CLAVIER avant d'ouvrir le navigateur (`authConsent.ts`) : une
-		   touche Entrée est déposée dans le tampon de la console JUSTE AVANT
-		   l'appel, par `WriteConsoleInput` — après `Set-Location`, avant
-		   `gemini`. Et la branche d'échec VIDE ce tampon avant son `Read-Host`,
-		   sinon une touche jamais lue fermait la fenêtre sur le message. */
-		const iEntree = cx.indexOf("[NeoQuizConsole]::PressEnter()");
-		const iFlush = cx.indexOf("$host.UI.RawUI.FlushInputBuffer()");
-		const iReadHost = cx.indexOf("Read-Host", iJuge);
-		r.check("gemini connexion : une Entrée déposée dans la console juste avant l'appel, et le tampon vidé avant le Read-Host de l'échec",
-			{
-				entree: iEntree > iCd && iEntree < iControle,
-				win32: cx.includes("WriteConsoleInput(") && cx.includes("GetStdHandle(-10)"),
-				flush: iFlush > iJuge && iFlush < iReadHost,
-			},
-			{ entree: true, win32: true, flush: true });
-		/* Et la même variable sur l'outil LANCÉ PAR L'APPLICATION : sans elle,
-		   le mode headless refuse de partir, réglages muets, même connecté. */
-		r.check("gemini : l'environnement de l'outil porte GOOGLE_GENAI_USE_GCA, les autres non",
-			{
-				gemini: environnementOutil("gemini", { PATH: "x" }).GOOGLE_GENAI_USE_GCA,
-				autres: ["claude", "codex", "ollama"].map(o => environnementOutil(o, { PATH: "x" }).GOOGLE_GENAI_USE_GCA),
-				pathGarde: environnementOutil("gemini", { PATH: "x" }).PATH.startsWith("x"),
-			},
-			{ gemini: "true", autres: [undefined, undefined, undefined], pathGarde: true });
+			{ ordre: true, ouvreUrl: true, texte: true, pathAvant: true, tui: false });
+		r.check("agy : son dossier d'installation Windows est dans les dossiers des CLI",
+			dossiersCli(envDossiers).includes("C:\\U\\x\\AppData\\Local\\agy\\bin"), true);
 	}
+
 	const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", msgs);
 			r.check("ollama installation : ni connexion ni REPL, le message puis la fin",
 				{ login: /login|\nclaude|\ncodex/.test(ollama), succes: ollama.includes("Write-Host 'c''est fini'") }, { login: false, succes: true });

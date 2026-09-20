@@ -446,7 +446,12 @@ export interface HostNet {
  * ne voit pas : `fs.write("x.bat")` puis `process.run("x.bat")`. Voir la spec
  * docs/superpowers/specs/2026-09-11-generation-ia-app-design.md, §2.
  */
-export type CliTool = "claude" | "codex" | "ollama" | "gemini";
+/* `"gemini"` reste ICI, et nulle part ailleurs, le temps que le registre des
+   fournisseurs passe à `"agy"` (fichiers tenus par une autre tranche au
+   moment de ce commit) : sans lui, `ai-providers.ts` et le modal ne compilent
+   plus. Le processus principal, lui, ne l'accepte DÉJÀ plus (`OUTILS`). À
+   retirer avec le passage du registre. */
+export type CliTool = "claude" | "codex" | "ollama" | "agy" | "gemini";
 
 /**
  * LES PROCESSUS ET LES FICHIERS DES CLI, vus du code partagé.

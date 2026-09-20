@@ -27,6 +27,14 @@ const principalUi = readFileSync(resolve(racine, "apps/windows/installer/main-ui
 const preloadInstallateur = readFileSync(resolve(racine, "apps/windows/installer/preload.ts"), "utf8");
 const travailleurInstallateur = readFileSync(resolve(racine, "apps/windows/installer/worker.ts"), "utf8");
 const configBootstrapper = readFileSync(resolve(racine, "apps/windows/installer/electron-builder.config.mjs"), "utf8");
+const manifesteApp = JSON.parse(readFileSync(resolve(racine, "apps/windows/package.json"), "utf8"));
+const verrouApp = JSON.parse(readFileSync(resolve(racine, "apps/windows/package-lock.json"), "utf8"));
+/* Le correctif du conteneur portable : un fichier du DÉPÔT, appliqué à
+   `node_modules` par `patch-package` au `postinstall`. Il se lit donc ici sans
+   que `apps/windows/node_modules` existe — ce job de CI ne l'installe pas. */
+const versionAppBuilder = verrouApp.packages?.["node_modules/app-builder-lib"]?.version ?? "";
+const cheminCorrectif = resolve(racine, `apps/windows/patches/app-builder-lib+${versionAppBuilder}.patch`);
+const correctifPortable = existsSync(cheminCorrectif) ? readFileSync(cheminCorrectif, "utf8") : "";
 const protocoleInstallateur = readFileSync(resolve(racine, "apps/windows/installer/protocole.ts"), "utf8");
 const styleInstallateur = readFileSync(resolve(racine, "apps/windows/installer/style-details.css"), "utf8");
 const principalApplication = readFileSync(resolve(racine, "apps/windows/electron/main.ts"), "utf8");
@@ -476,6 +484,47 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 			principalInstallateur.includes("process.env.PORTABLE_EXECUTABLE_FILE"),
 		],
 		[true, false, true, false]);
+
+	/* LE CONTENEUR PORTABLE NE DÉMARRE PLUS EN SILENCE.
+
+	   `portable.nsi` d'electron-builder pose `SetSilent silent` : le stub NSIS
+	   décompresse ~300 Mo d'Electron dans le temporaire SANS RIEN À L'ÉCRAN, et
+	   rien de ce que fait ensuite le principal (fenêtre `show` au `dom-ready`)
+	   ne peut apparaître avant, puisque Electron n'est pas encore sur le disque.
+	   MESURÉ sur un NVMe : 5,05 s avant le premier pixel, dont 4,8 s de silence
+	   complet — sur un disque presque plein, avec l'antivirus qui lit chaque
+	   fichier extrait, l'utilisateur relance l'exe en croyant qu'il ne fait rien
+	   (signalé le 2026-09-20 sur un poste à 30 Go libres).
+
+	   Le correctif vit dans un patch du dépôt, pas dans une option : le gabarit
+	   du portable n'accepte NI script personnalisé (`nsis.script` ne sert qu'à
+	   l'installeur) NI include. La seule option native, `portable.splashImage`,
+	   peint un fond PLEIN ÉCRAN — pire que le silence.
+
+	   Trois propriétés, chacune un défaut distinct :
+	   - une page de progression native S'AFFICHE (mesuré à 282 ms) ;
+	   - l'archive est extraite DIRECTEMENT dans le dossier temporaire, au lieu
+	     d'être extraite puis RECOPIÉE (la copie du gabarit existe pour remplacer
+	     une application installée dont les fichiers peuvent être ouverts ; ici la
+	     cible est un dossier neuf, et la copie ne faisait que doubler les octets
+	     écrits — 312 Mo de plus, sur le disque qui en manque) ;
+	   - la page est CACHÉE avant `ExecWait`, pour que la fenêtre de l'installeur
+	     la remplace au lieu de s'ajouter à elle.
+
+	   Le nom du fichier porte la version d'`app-builder-lib` : un `npm update`
+	   qui la change fait tomber `correctifPortable` à vide et rougir ce cas —
+	   c'est le seul rappel qu'un gabarit neuf doit être re-patché. */
+	r.check("démarrage : le conteneur portable montre une progression au lieu de se taire",
+		[
+			manifesteApp.scripts?.postinstall === "patch-package",
+			manifesteApp.devDependencies?.["patch-package"] !== undefined,
+			correctifPortable.includes("-    SetSilent silent"),
+			correctifPortable.includes("+Page instfiles"),
+			correctifPortable.includes("-      !insertmacro extractEmbeddedAppPackage"),
+			correctifPortable.includes("+      !insertmacro extractEmbeddedAppPackageDirectly"),
+			correctifPortable.includes("+  HideWindow"),
+		],
+		[true, true, true, true, true, true, true]);
 
 	/* La langue de l'installeur est celle de WINDOWS (`app.getLocale()`), la
 	   même déduction que l'application en mode « auto ». Plus de langue « dans

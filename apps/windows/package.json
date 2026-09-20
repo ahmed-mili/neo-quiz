@@ -5,6 +5,7 @@
   "type": "module",
   "main": "dist-electron/main.cjs",
   "scripts": {
+    "postinstall": "patch-package",
     "dev": "concurrently -k -n vite,electron \"vite\" \"npm run dev:electron\"",
     "dev:electron": "npm run build:electron && electron dist-electron/main.cjs",
     "typecheck": "tsc --noEmit",
@@ -28,6 +29,7 @@
     "electron": "^44.3.0",
     "electron-builder": "^26.0.19",
     "esbuild": "0.28.2",
+    "patch-package": "^8.0.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.0"
   }

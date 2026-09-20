@@ -1,0 +1,113 @@
+diff --git a/node_modules/app-builder-lib/templates/nsis/portable.nsi b/node_modules/app-builder-lib/templates/nsis/portable.nsi
+index e5436bb..8b0ca28 100644
+--- a/node_modules/app-builder-lib/templates/nsis/portable.nsi
++++ b/node_modules/app-builder-lib/templates/nsis/portable.nsi
+@@ -7,17 +7,35 @@ WindowIcon Off
+ AutoCloseWindow True
+ RequestExecutionLevel ${REQUEST_EXECUTION_LEVEL}
+ 
+-Function .onInit
+-  !ifndef SPLASH_IMAGE
+-    SetSilent silent
+-  !endif
++# Neo Quiz: the stock template runs SILENT, so nothing is on screen while the
++# whole Electron tree (~300 MB) is decompressed to TEMP. On a slow disk that is
++# tens of seconds during which the user believes nothing happened. A single
++# native progress page appears at once instead, and is hidden as soon as the
++# extracted application takes over.
++Caption "${PRODUCT_NAME}"
++SubCaption 3 " "
++ChangeUI all "${NSISDIR}\Contrib\UIs\sdbarker_tiny.exe"
++InstProgressFlags smooth
++XPStyle on
++Page instfiles
+ 
++Function .onInit
+   !insertmacro check64BitAndSetRegView
+ FunctionEnd
+ 
+ Function .onGUIInit
+   InitPluginsDir
+ 
++  # Neo Quiz: the page only reports progress. Its Cancel, Back and Close
++  # buttons are disabled while the section runs anyway; hidden, they stop
++  # suggesting a choice that does not exist.
++  GetDlgItem $0 $HWNDPARENT 1
++  ShowWindow $0 0 # SW_HIDE
++  GetDlgItem $0 $HWNDPARENT 2
++  ShowWindow $0 0 # SW_HIDE
++  GetDlgItem $0 $HWNDPARENT 3
++  ShowWindow $0 0 # SW_HIDE
++
+   !ifdef SPLASH_IMAGE
+     File /oname=$PLUGINSDIR\splash.bmp "${SPLASH_IMAGE}"
+     BgImage::SetBg $PLUGINSDIR\splash.bmp
+@@ -25,11 +43,49 @@ Function .onGUIInit
+   !endif
+ FunctionEnd
+ 
++# Neo Quiz: extract straight into $INSTDIR. The stock `extractEmbeddedAppPackage`
++# decompresses into a staging folder, then COPIES everything into $INSTDIR: that
++# copy exists for replacing an installed application whose files may be in use.
++# $INSTDIR is a fresh temporary folder here, so the copy only doubled the bytes
++# written to disk (measured: 312 MB extracted, then 312 MB copied again).
++!macro extractEmbeddedAppPackageDirectly
++  !ifdef COMPRESS
++    SetCompress off
++  !endif
++
++  Var /GLOBAL packageArch
++
++  !insertmacro identify_package
++  !insertmacro compute_files_for_current_arch
++
++  !ifdef COMPRESS
++    SetCompress "${COMPRESS}"
++  !endif
++
++  !ifdef ZIP_COMPRESSION
++    nsisunz::Unzip "$PLUGINSDIR\app-$packageArch.zip" "$INSTDIR"
++    Pop $R0
++    StrCmp $R0 "success" +3
++      MessageBox MB_OK|MB_ICONEXCLAMATION "$(decompressionFailed)$\n$R0"
++      Quit
++  !else
++    Nsis7z::Extract "$PLUGINSDIR\app-$packageArch.7z"
++  !endif
++  Delete "$PLUGINSDIR\app-$packageArch.${COMPRESSION_METHOD}"
++  !insertmacro custom_files_post_decompression
++!macroend
++
+ Section
+   !ifdef SPLASH_IMAGE
+     HideWindow
+   !endif
+ 
++  # Neo Quiz: one status line in the user's language, instead of NSIS's own
++  # running commentary naming the temporary folder and the archive.
++  SetDetailsPrint textonly
++  DetailPrint "$(installing)"
++  SetDetailsPrint none
++
+   StrCpy $INSTDIR "$PLUGINSDIR\app"
+   !ifdef UNPACK_DIR_NAME
+     StrCpy $INSTDIR "$TEMP\${UNPACK_DIR_NAME}"
+@@ -70,7 +126,7 @@ Section
+     !ifdef APP_DIR_32
+       File /r "${APP_DIR_32}\*.*"
+     !else
+-      !insertmacro extractEmbeddedAppPackage
++      !insertmacro extractEmbeddedAppPackageDirectly
+     !endif
+   !endif
+ 
+@@ -83,6 +139,9 @@ Section
+     BgImage::Destroy
+   !endif
+ 
++  # Neo Quiz: the progress page has done its job; the application's own window
++  # replaces it. Hidden, not closed: closing would end the section before ExecWait.
++  HideWindow
+ 	ExecWait "$INSTDIR\${APP_EXECUTABLE_FILENAME} $R0" $0
+   SetErrorLevel $0
+ 

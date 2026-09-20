@@ -1545,6 +1545,21 @@
 	transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .qbd-install-auto > * { position: relative; z-index: 1; }
+/* LE SURVOL VA VERS L'ACCENT, PAS VERS LE GRIS. Le survol commun des boutons
+   principaux mêle 8 % du fond SOMBRE à la pilule : sur le blanc cassé de
+   « Mes quiz » cela donne le gris clair voulu, mais sur le lavande de ce
+   bouton-ci (`--text-normal`, rgb(198 208 245)) cela le TERNIT — deux
+   couleurs de la même famille dont l'une est sale (Ahmed, 2026-09-20 : « la
+   couleur du survol ne va pas très bien avec sa couleur de base »). Ici, le
+   survol pousse plutôt vers le bleu de la marque : même luminosité, plus de
+   saturation. « La même couleur, en plus vive » au lieu de « la même
+   couleur, salie » — et dans le sens de l'onde claire du clic. */
+.qbd-install-auto:hover {
+	background: color-mix(in srgb, var(--text-normal) 88%, var(--interactive-accent)) !important;
+}
+.qbd-install-auto:active {
+	background: color-mix(in srgb, var(--text-normal) 78%, var(--interactive-accent)) !important;
+}
 /* 1,2 % et non 1,5 : sur un bouton pleine largeur, la respiration se mesure
    en pixels, pas en pourcentage — elle ajoutait 7 px de large, assez pour se
    voir sortir (Ahmed, 2026-09-20). */

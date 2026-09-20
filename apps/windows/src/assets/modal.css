@@ -64,6 +64,14 @@
 	   (`.qbd-select-menu`, 1000) : un message levé depuis une modale et un
 	   dropdown ouvert depuis un de ses champs doivent rester visibles. */
 	z-index: 90;
+	/* UNE COUCHE MODALE N'EST JAMAIS UNE POIGNÉE DE FENÊTRE. La barre de
+	   titre (`.nq-barre`, 45 px, `-webkit-app-region: drag`) est traitée par
+	   le hit-test NATIF de Windows, avant le DOM : elle avale survol et clics
+	   quel que soit le z-index de ce qui la recouvre. Centrées, les modales
+	   n'entraient jamais dans ces 45 px ; remontées pour loger le terminal en
+	   dessous, leur croix y tombait et ne réagissait plus (Ahmed,
+	   2026-09-20 : « je n'arrive pas à survoler ce bouton »). */
+	-webkit-app-region: no-drag;
 }
 
 /* LES MODALES QUI ATTENDENT UN TERMINAL (installation d'un CLI, connexion

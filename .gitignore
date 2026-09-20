@@ -53,6 +53,9 @@ desktop.ini
 # AI tools
 .claude/
 .superpowers/
+# Les notes de conception (specs, plans, notes de contrôle) restent locales :
+# le dépôt est public et elles portent des chemins de machine et de vaults.
+docs/superpowers/
 
 # Local temp files
 temp/

@@ -1540,7 +1540,10 @@
 	transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .qbd-install-auto > * { position: relative; z-index: 1; }
-.qbd-install-auto:hover { transform: scale(1.015); }
+/* 1,2 % et non 1,5 : sur un bouton pleine largeur, la respiration se mesure
+   en pixels, pas en pourcentage — elle ajoutait 7 px de large, assez pour se
+   voir sortir (Ahmed, 2026-09-20). */
+.qbd-install-auto:hover { transform: scale(1.012); }
 .qbd-install-auto:active { transform: scale(0.955); transition-duration: 80ms; }
 .qbd-install-auto svg { width: 17px; height: 17px; }
 .qbd-onde {

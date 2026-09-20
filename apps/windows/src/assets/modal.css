@@ -199,8 +199,15 @@
 	   d'installation, qui grossit de 1,5 % au survol, faisait donc apparaître
 	   une barre horizontale (Ahmed, 2026-09-20). `hidden` aurait rendu l'axe
 	   défilable au clavier ; `clip` coupe, sans rien défiler, et laisse le
-	   défilement vertical intact. */
+	   défilement vertical intact.
+
+	   ET UNE MARGE AVANT DE COUPER : `clip` tranche au bord de la boîte de
+	   remplissage, et ce corps n'en a aucun — le bouton agrandi était donc
+	   coupé net sur ses deux flancs (Ahmed, 2026-09-20 : « ça sort en
+	   dehors »). 8 px suffisent à loger ce que la respiration ajoute, sans
+	   jamais atteindre le bord du panneau, qui a ses 16 px à lui. */
 	overflow-x: clip;
+	overflow-clip-margin: 8px;
 }
 
 .modal-close-button {

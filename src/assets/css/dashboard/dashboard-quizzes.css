@@ -1092,6 +1092,7 @@
 }
 
 .qbd-progress-donut-pct {
+	font-family: var(--font-display, inherit);
 	font-size: 32px;
 	font-weight: 700;
 	color: #f2f4fb;

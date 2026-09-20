@@ -94,6 +94,8 @@
 }
 
 .qbd-stat-value {
+	/* 24 px : la taille où Display prend le relais de Text (host-vars.css). */
+	font-family: var(--font-display, inherit);
 	font-size: 24px;
 	font-weight: 800;
 	color: var(--text-normal);

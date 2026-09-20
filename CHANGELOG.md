@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Added
+- ChatGPT can now generate a quiz from the web too: picking "chatgpt.com" opens chatgpt.com with your request already written in the composer, and the answer you copy comes back into Neo Quiz, exactly like claude.ai. ChatGPT shows no warning banner above the request, so no dialog is shown when you pick it.
+
 ## [1.10.0] - 2026-09-19
 
 ### Added

@@ -110,22 +110,52 @@ await withSrcModule(
 		r2.check("deux tirages diffèrent", a === b, false);
 	}
 
-	/* ── preparerOuverture ── */
+	/* ── preparerOuverture : la borne est celle DU SITE ── */
 	{
-		const site = { nouvelle: "https://claude.ai/new", parametre: "q" };
-		const court = web.preparerOuverture("Bonjour à tous", site, 200);
+		const site = { nouvelle: "https://claude.ai/new", parametre: "q", urlMax: 200 };
+		const court = web.preparerOuverture("Bonjour à tous", site);
 		r2.check("sous la borne : l'adresse porte le texte encodé",
 			court, { mode: "url", url: "https://claude.ai/new?q=Bonjour%20%C3%A0%20tous" });
-		const long = web.preparerOuverture("x".repeat(500), site, 200);
+		const long = web.preparerOuverture("x".repeat(500), site);
 		r2.check("au-delà : le presse-papier, l'adresse nue, le texte intact",
 			[long.mode, long.url, long.texte.length], ["presse-papier", "https://claude.ai/new", 500]);
-		const exact = web.preparerOuverture("abc", site, "https://claude.ai/new?q=abc".length);
+		const exact = web.preparerOuverture("abc", { ...site, urlMax: "https://claude.ai/new?q=abc".length });
 		r2.check("la borne exacte passe encore par l'adresse", exact.mode, "url");
+		/* DEUX SITES, DEUX BORNES : le même texte tient dans l'un et bascule
+		   dans l'autre. C'est tout l'objet du passage d'`URL_MAX` global à
+		   `urlMax` par site — une borne unique aurait rendu ce cas impossible
+		   à écrire, et le mur de chatgpt.com invisible depuis claude.ai. */
+		const texte = "y".repeat(120);
+		const large = web.preparerOuverture(texte, { nouvelle: "https://a/", parametre: "q", urlMax: 1000 });
+		const etroit = web.preparerOuverture(texte, { nouvelle: "https://b/", parametre: "q", urlMax: 100 });
+		r2.check("le même texte : adresse chez le site large, presse-papier chez l'étroit",
+			[large.mode, etroit.mode], ["url", "presse-papier"]);
 	}
 
-	/* ── estCanalCable ── */
+	/* ── estCanalCable, et les bornes RÉELLES des sites câblés ── */
 	r2.check("claude.ai est câblé", providers.estCanalCable("claude-web"), true);
-	r2.check("chatgpt.com ne l'est pas encore", providers.estCanalCable("chatgpt-web"), false);
+	r2.check("chatgpt.com est câblé, avec sa borne", [
+		providers.estCanalCable("chatgpt-web"),
+		providers.getCanal("chatgpt-web").web.nouvelle,
+		/* `prompt` et NON `q` : mesuré le 2026-09-19, `chatgpt.com/?q=` envoie
+		   la question immédiatement — l'utilisateur ne pourrait plus y glisser
+		   ses fichiers avant l'envoi, et ne verrait jamais ce qui part. */
+		providers.getCanal("chatgpt-web").web.parametre,
+		/* Strictement sous la borne MESURÉE (63 584 octets d'adresse acceptés,
+		   431 au-delà) : la marge paie les cookies de session du navigateur,
+		   qui entrent dans le même total. Voir le commentaire d'`urlMax`. */
+		providers.getCanal("chatgpt-web").web.urlMax < 63584,
+		/* Aucun bandeau d'avertissement sur chatgpt.com (mesuré le même jour) :
+		   pas de modal à ouvrir au choix du canal. */
+		providers.getCanal("chatgpt-web").avertissement,
+	], [true, "https://chatgpt.com/", "prompt", true, undefined]);
+	r2.check("claude.ai garde son avertissement et sa propre borne", [
+		providers.getCanal("claude-web").avertissement,
+		providers.getCanal("claude-web").web.urlMax,
+	], [true, 63000]);
+	/* perplexity.ai : NON câblé, et ce n'est pas un oubli — son `search?q=`
+	   envoie immédiatement, comme `chatgpt.com/?q=`. */
+	r2.check("perplexity.ai n'est pas câblé", providers.estCanalCable("perplexity-web"), false);
 	r2.check("un CLI n'est pas un canal web câblé", providers.estCanalCable("claude-code"), false);
 
 	r2.done();

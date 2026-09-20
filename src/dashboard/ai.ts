@@ -7,7 +7,7 @@ import { ajouter } from "../dom";
 import { LOG_PREFIX } from "../branding";
 import * as aiProviders from "./ai-providers";
 import { composerPrompts, parseReponseQuiz } from "./ai-client";
-import { nouveauJeton, texteWeb, preparerOuverture, URL_MAX } from "./ai-web";
+import { nouveauJeton, texteWeb, preparerOuverture } from "./ai-web";
 import type { ResultatOuverture } from "./ai-web";
 import type { Scanner, QuizIndexEntry } from "./scanner";
 import type { StatsStore } from "./stats-store";
@@ -3338,7 +3338,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		const { source, prompt } = deposer ? demandeAvecFichiersDeposes(msg) : composerDemande(msg);
 		const jeton = nouveauJeton();
 		const texte = texteWeb(composerPrompts(prompt, { count: questionCount, type: questionType, source }), jeton);
-		const ouverture = preparerOuverture(texte, canal.web, URL_MAX);
+		const ouverture = preparerOuverture(texte, canal.web);
 		if (ouverture.mode === "presse-papier") {
 			const ok = deps.copyText ? await deps.copyText(ouverture.texte) : false;
 			if (!ok) { echecOuverture(t("ai.channel.copyFailed"), container); return; }

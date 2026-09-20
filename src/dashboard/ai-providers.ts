@@ -217,13 +217,18 @@ export interface Canal {
 	type: TypeCanal;
 	/** Comment ouvrir le site avec la question déjà écrite. ABSENT : le canal
 	    n'est pas câblé, le bouton le dit (« aperçu du design »). Posé quand le
-	    site a été MESURÉ (claude.ai le 2026-09-18 : `/new?q=` préremplit sans
-	    envoyer). */
+	    site a été MESURÉ : claude.ai le 2026-09-18 (`/new?q=` préremplit sans
+	    envoyer), chatgpt.com le 2026-09-19 (`/?prompt=` préremplit sans
+	    envoyer ; `?q=`, lui, envoie tout de suite — d'où le paramètre `prompt`
+	    et non `q`). perplexity.ai reste non câblé : son `search?q=` part
+	    IMMÉDIATEMENT, donc sans laisser glisser les fichiers avant l'envoi. */
 	web?: OuvertureWeb;
 	/** Le site affiche un bandeau d'avertissement au-dessus d'une question
 	    arrivée par l'adresse (claude.ai, mesuré le 2026-09-18). La page ouvre
 	    alors un modal qui le montre et l'explique au CHOIX du canal, une fois,
-	    tant que l'utilisateur ne l'a pas masqué. */
+	    tant que l'utilisateur ne l'a pas masqué. ABSENT sur chatgpt.com :
+	    mesuré le 2026-09-19, aucun bandeau n'y apparaît — annoncer un
+	    avertissement qui n'existe pas apprendrait à l'ignorer. */
 	avertissement?: true;
 }
 
@@ -242,7 +247,7 @@ export const MARQUES: Marque[] = [
 		logo: "claude",
 		canaux: [
 			{ id: "claude-code", label: "Claude Code CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli" },
-			{ id: "claude-web", label: "claude.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://claude.ai/new", parametre: "q" }, avertissement: true }
+			{ id: "claude-web", label: "claude.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://claude.ai/new", parametre: "q", urlMax: 63000 }, avertissement: true }
 		]
 	},
 	{
@@ -251,7 +256,7 @@ export const MARQUES: Marque[] = [
 		logo: "openai",
 		canaux: [
 			{ id: "codex", label: "Codex CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli" },
-			{ id: "chatgpt-web", label: "chatgpt.com", get sub() { return t("ai.channel.webSub"); }, type: "web" }
+			{ id: "chatgpt-web", label: "chatgpt.com", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://chatgpt.com/", parametre: "prompt", urlMax: 59000 } }
 		]
 	},
 	{

@@ -530,6 +530,18 @@
 	min-width: 228px;
 }
 
+/* Le flyout « Plus de fournisseurs » porte les logos (il mêle plusieurs
+   marques), donc la largeur du menu et non celle d'un flyout de canaux. */
+.qbd-more-providers-flyout {
+	min-width: 250px;
+}
+
+/* La ligne « Plus de fournisseurs » : trois points à la place du logo, dans la
+   même case, en couleur atténuée. */
+.qbd-provider-logo--plus {
+	color: var(--text-muted);
+}
+
 /* Le corps de l'option est en flex:1 et pousse déjà le chevron à droite ;
    reste à le recentrer sur les deux lignes (libellé + sous-titre). */
 .qbd-brand-row {

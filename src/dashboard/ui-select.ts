@@ -864,6 +864,10 @@ export interface ProviderBrandOption {
 
 export interface OpenProviderMenuOptions {
 	brands: ProviderBrandOption[];
+	/** Les marques SECONDAIRES, sous une ligne « Plus de fournisseurs » qui
+	    ouvre leur flyout — le menu n'en montre que quatre en tête (Ahmed,
+	    2026-09-20). Chaque canal y est une ligne « Marque · canal ». */
+	moreBrands?: ProviderBrandOption[];
 	/** L'identifiant du CANAL courant (le réglage `aiProvider`). */
 	current: string;
 	/** Pose le logo de marque dans un élément (l'appelant connaît ses SVG). */
@@ -897,7 +901,7 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 
 	/** La marque qui porte le canal courant, pour la coche et le sous-titre. */
 	function brandOf(channelValue: string): ProviderBrandOption | undefined {
-		return opts.brands.find(b => b.channels.some(c => c.value === channelValue));
+		return [...opts.brands, ...(opts.moreBrands || [])].find(b => b.channels.some(c => c.value === channelValue));
 	}
 
 	function channelOf(b: ProviderBrandOption): ProviderChannelOption {
@@ -922,7 +926,44 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 			max = Math.max(max, essai.getBoundingClientRect().width);
 			essai.remove();
 		}
+		if (opts.moreBrands && opts.moreBrands.length) {
+			const essai = ajouter(document.body, "div", "qbd-select-menu qbd-channel-flyout qbd-more-providers-flyout");
+			essai.style.visibility = "hidden";
+			essai.style.top = "0px";
+			essai.style.left = "0px";
+			remplirFlyoutPlus(essai);
+			max = Math.max(max, essai.getBoundingClientRect().width);
+			essai.remove();
+		}
 		return max;
+	}
+
+	/* Une ligne « Marque · canal » du flyout « Plus de fournisseurs » : le logo
+	   ET le nom de la marque (le flyout en mêle plusieurs, contrairement à
+	   celui d'une marque), le canal en sous-titre, la coche sur le canal en
+	   usage, le bouton « Installer » si le CLI manque. */
+	function appendMarqueCanal(parent: HTMLElement, b: ProviderBrandOption, c: ProviderChannelOption): void {
+		const active = c.value === opts.current && !c.disabled;
+		const btn = creerLigne(parent, "qbd-select-option qbd-brand-row qbd-channel-option" + (active ? " is-active" : ""), !!c.disabled);
+		btn.setAttribute("role", "menuitemradio");
+		btn.setAttribute("aria-checked", active ? "true" : "false");
+		const check = ajouter(btn, "span", "qbd-select-check");
+		if (active) currentHost().ui.setIcon(check, "check");
+		const logo = ajouter(btn, "span", "qbd-provider-logo qbd-provider-logo--" + b.logo);
+		opts.renderLogo(logo, b.logo);
+		const body = ajouter(btn, "div", "qbd-provider-option-body");
+		ajouter(body, "span", "qbd-select-option-label", b.label);
+		ajouter(body, "span", "qbd-provider-option-sub", c.resume || c.sub || c.label);
+		appendStatut(btn, c.dot, c.value);
+		if (c.disabled) return;
+		btn.addEventListener("click", () => {
+			closeMenu();
+			if (c.value !== opts.current) opts.onPick?.(c.value);
+		});
+	}
+
+	function remplirFlyoutPlus(fly: HTMLElement): void {
+		for (const b of (opts.moreBrands || [])) for (const c of b.channels) appendMarqueCanal(fly, b, c);
 	}
 
 	function reposition(): void {
@@ -1033,15 +1074,17 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		menuEl.querySelectorAll(".qbd-brand-row.is-open").forEach(el => el.classList.remove("is-open"));
 	}
 
-	function openFlyout(row: HTMLElement, b: ProviderBrandOption): void {
-		if (flyout && flyoutBrand === b.value) return;
+	function openFlyout(row: HTMLElement, b: ProviderBrandOption | null): void {
+		const cle = b ? b.value : "__plus__";
+		if (flyout && flyoutBrand === cle) return;
 		closeFlyout();
-		flyoutBrand = b.value;
+		flyoutBrand = cle;
 		row.classList.add("is-open");
-		const fly = ajouter(document.body, "div", "qbd-select-menu qbd-channel-flyout");
+		const fly = ajouter(document.body, "div", "qbd-select-menu qbd-channel-flyout" + (b ? "" : " qbd-more-providers-flyout"));
 		flyout = fly;
 		fly.setAttribute("role", "menu");
-		for (const c of b.channels) appendChannel(fly, c);
+		if (b) for (const c of b.channels) appendChannel(fly, c);
+		else remplirFlyoutPlus(fly);
 
 		/* TOUJOURS À DROITE DU MENU, JAMAIS RABATTU À GAUCHE (Ahmed,
 		   2026-09-20). La ligne porte un chevron qui pointe à DROITE : un
@@ -1119,6 +1162,31 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 					if (c.value !== opts.current) opts.onPick?.(c.value);
 				});
 			}
+		}
+		/* « PLUS DE FOURNISSEURS » : la même ligne que « Plus de modèles » du
+		   menu de modèles — un libellé, un chevron, un flyout au survol. Son
+		   sous-titre nomme la marque secondaire EN USAGE (« DeepSeek ·
+		   chat.deepseek.com »), sinon la liste des marques qu'elle range ; et
+		   quand l'usage est dedans, la ligne est active comme une marque : le
+		   chevron passe à l'accent. */
+		if (opts.moreBrands && opts.moreBrands.length) {
+			const actifDedans = opts.moreBrands.find(b => b.channels.some(c => c.value === opts.current));
+			const row = creerLigne(menuEl, "qbd-select-option qbd-brand-row qbd-more-providers-row" + (actifDedans ? " is-active" : ""), false);
+			row.setAttribute("role", "menuitem");
+			row.setAttribute("aria-haspopup", "menu");
+			const logo = ajouter(row, "span", "qbd-provider-logo qbd-provider-logo--plus");
+			currentHost().ui.setIcon(logo, "ellipsis");
+			const body = ajouter(row, "div", "qbd-provider-option-body");
+			ajouter(body, "span", "qbd-select-option-label", t("dashboard.select.moreProviders"));
+			const sous = actifDedans
+				? actifDedans.label + " · " + (channelOf(actifDedans).resume || channelOf(actifDedans).label)
+				: opts.moreBrands.map(b => b.label).join(", ");
+			ajouter(body, "span", "qbd-provider-option-sub", sous);
+			const chev = ajouter(row, "span", "qbd-model-menu-row-chevron");
+			currentHost().ui.setIcon(chev, "chevron-right");
+			row.addEventListener("mouseenter", () => { cancelClose(); openFlyout(row, null); });
+			row.addEventListener("mouseleave", scheduleClose);
+			row.addEventListener("click", () => { cancelClose(); openFlyout(row, null); });
 		}
 	}
 

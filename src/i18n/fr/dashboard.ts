@@ -260,6 +260,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.select.effortDefault": "Par défaut",
 	"dashboard.select.modelHead": "Modèle",
 	"dashboard.select.moreModels": "Plus de modèles",
+	"dashboard.select.moreProviders": "Plus de fournisseurs",
 	"dashboard.select.effortHelp": "Un effort plus élevé génère des réponses plus complètes, mais prend plus de temps et utilise vos limites plus rapidement.",
 	"dashboard.select.effortFaster": "Plus rapide",
 	"dashboard.select.effortSmarter": "Plus intelligent",

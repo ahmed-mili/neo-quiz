@@ -824,6 +824,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true });
 				menu = openProviderMenu(btn, {
 					brands: optionsMarques(),
+					moreBrands: optionsMarques(true),
 					current: provider,
 					renderLogo: (el, logo) => aiProviders.setBrandLogo(el, logo),
 					onPick: (id) => {
@@ -1710,8 +1711,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   est son STATUT quand on en a un (« Claude Code CLI 2.1.4 » en dit plus
 	   que « Sur ta machine ») et son libellé générique sinon — un site n'a
 	   rien à détecter, il n'aura donc jamais de statut. */
-	function optionsMarques(): ProviderBrandOption[] {
-		return aiProviders.MARQUES.map(m => ({
+	function optionsMarques(secondaires = false): ProviderBrandOption[] {
+		return aiProviders.MARQUES.filter(m => !!m.secondaire === secondaires).map(m => ({
 			value: m.id,
 			label: m.name,
 			logo: m.logo,

@@ -288,6 +288,7 @@ export const EN_DASHBOARD = {
 	"dashboard.select.effortDefault": "Default",
 	"dashboard.select.modelHead": "Model",
 	"dashboard.select.moreModels": "More models",
+	"dashboard.select.moreProviders": "More providers",
 	"dashboard.select.effortHelp": "Higher effort produces more complete responses, but takes longer and uses your limits faster.",
 	"dashboard.select.effortFaster": "Faster",
 	"dashboard.select.effortSmarter": "Smarter",

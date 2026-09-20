@@ -21,7 +21,7 @@ release notes.
 
 ### Changed
 - In a provider's submenu, the website now comes before the command-line tool: it works right away, for everyone, without installing anything.
-- The submenu always opens on the right of the menu, the way its arrow points, even when the window is narrow; it used to flip to the left.
+- The submenu always opens on the right of the menu, the way its arrow points: the menu itself now leaves room for it, shifting left when it sits against the window's edge. It used to flip the submenu to the left, or lay it over the menu.
 - "Claude Code CLI" is back to "Claude Code" in the menu.
 - Connecting Gemini CLI no longer goes through its interactive screen (folder trust, "How would you like to authenticate?"): "Sign in with Google" is chosen in advance, the browser opens by itself, and the window closes once Gemini has answered. There is nothing to type in the terminal.
 - The PowerShell window that installs or connects a tool now counts down "3... 2... 1..." before closing on success, instead of vanishing after two silent seconds; and if anything goes wrong in it, it stays open on the error instead of closing. Its full output is also kept in a file (neo-quiz-installation.txt in your temporary folder), for the case where the window is gone before you could read it.

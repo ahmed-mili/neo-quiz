@@ -777,6 +777,27 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		return b.channels.find(c => c.value === opts.current) || b.channels[0];
 	}
 
+	/* LA LARGEUR DU PLUS LARGE DES FLYOUTS, mesurée en rendant chacun HORS
+	   ÉCRAN puis en le retirant. Elle sert à `reposition` : le menu réserve
+	   cette place à sa droite pour que le flyout y tienne QUOI QU'IL ARRIVE
+	   (Ahmed, 2026-09-20). Mesurée et non estimée : les libellés changent avec
+	   la langue et le nombre de canaux, et une estimation se serait trompée
+	   d'un côté ou de l'autre. Une seule mesure par ouverture du menu. */
+	function largeurFlyoutMax(): number {
+		let max = 0;
+		for (const b of opts.brands) {
+			if (b.channels.length < 2) continue;
+			const essai = ajouter(document.body, "div", "qbd-select-menu qbd-channel-flyout");
+			essai.style.visibility = "hidden";
+			essai.style.top = "0px";
+			essai.style.left = "0px";
+			for (const c of b.channels) appendChannel(essai, c);
+			max = Math.max(max, essai.getBoundingClientRect().width);
+			essai.remove();
+		}
+		return max;
+	}
+
 	function reposition(): void {
 		const rect = anchorEl.getBoundingClientRect();
 		menuEl.style.left = rect.left + "px";
@@ -786,9 +807,20 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		const below = rect.bottom + 4;
 		const above = rect.top - 4 - menuRect.height;
 		menuEl.style.top = (below + menuRect.height <= window.innerHeight - 8 || above < 8 ? below : above) + "px";
+		/* LE MENU RÉSERVE LA PLACE DE SON FLYOUT À SA DROITE. Le flyout d'une
+		   marque s'ouvre toujours du côté où pointe son chevron, jamais rabattu
+		   à gauche ; si le menu était collé au bord droit de la fenêtre — le
+		   bouton du composer y est — le flyout n'avait plus d'autre place que
+		   PAR-DESSUS le menu (vu le 2026-09-20). Le menu se décale donc vers la
+		   gauche d'autant qu'il faut pour que `menu + 4 px + flyout` tienne
+		   avant le bord, et c'est le MENU qui bouge, pas le flyout : c'est lui
+		   qui a un bouton d'ancrage à ne pas trop quitter, mais c'est le flyout
+		   qui a une direction à respecter. */
+		const reserve = largeurFlyoutMax();
+		const droiteMax = window.innerWidth - 8 - (reserve > 0 ? reserve + 4 : 0);
 		let left = rect.left;
-		if (menuRect.width + left > window.innerWidth - 8) {
-			left = Math.max(8, window.innerWidth - 8 - menuRect.width);
+		if (menuRect.width + left > droiteMax) {
+			left = Math.max(8, droiteMax - menuRect.width);
 		}
 		menuEl.style.left = left + "px";
 		menuEl.style.visibility = "";

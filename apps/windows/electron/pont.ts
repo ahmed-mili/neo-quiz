@@ -601,7 +601,7 @@ export interface Pont {
 		preparer(absolus: string[]): Promise<void>;
 		/** `image` : le PNG (`data:` URL) qui suit le curseur, et son échelle ;
 		    sans elle, l'icône de type du fichier saisi. */
-		glisser(absolus: string[], saisi: number, image?: { png: string; echelle: number }): Promise<boolean>;
+		glisser(absolus: string[], saisi: number, image?: { png: string; echelle: number }): Promise<"depose" | "revenu" | "impossible">;
 		terminer(): Promise<void>;
 	};
 }

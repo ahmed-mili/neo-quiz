@@ -738,8 +738,8 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		const img = nativeImage.createFromBuffer(Buffer.from(png.slice(PREFIXE.length), "base64"), { scaleFactor: echelle });
 		return img.isEmpty() ? null : img;
 	};
-	ipcMain.handle(CANAUX.depotGlisser, async (e, absolus: unknown, saisi: unknown, image: unknown): Promise<boolean> => {
-		if (!Array.isArray(absolus)) return false;
+	ipcMain.handle(CANAUX.depotGlisser, async (e, absolus: unknown, saisi: unknown, image: unknown): Promise<"depose" | "revenu" | "impossible"> => {
+		if (!Array.isArray(absolus)) return "impossible";
 		const fichiers: string[] = [];
 		const indexSaisi = typeof saisi === "number" && Number.isInteger(saisi) ? saisi : 0;
 		let saisiAbs: string | null = null;
@@ -750,7 +750,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			fichiers.push(a);
 			if (i === indexSaisi) saisiAbs = a;
 		}
-		if (fichiers.length === 0) return false;
+		if (fichiers.length === 0) return "impossible";
 		try {
 			/* L'icône du fichier SAISI (celui sous le curseur), comme dans
 			   l'Explorateur : Windows n'en montre qu'une. Celle du shell en 256 px
@@ -774,18 +774,23 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			   (vu par Ahmed le 2026-09-19). On lui dit donc où est VRAIMENT la
 			   souris : sortie de la fenêtre, ou à sa position dedans. */
 			const fenetre = BrowserWindow.fromWebContents(e.sender);
+			let dedans = true;
 			if (fenetre && !fenetre.isDestroyed()) {
 				const curseur = screen.getCursorScreenPoint();
 				const zone = fenetre.getContentBounds();
 				const x = curseur.x - zone.x;
 				const y = curseur.y - zone.y;
-				const dedans = x >= 0 && y >= 0 && x < zone.width && y < zone.height;
+				dedans = x >= 0 && y >= 0 && x < zone.width && y < zone.height;
 				e.sender.sendInputEvent({ type: dedans ? "mouseMove" : "mouseLeave", x, y });
 			}
-			return true;
+			/* OÙ LE BOUTON A ÉTÉ RELÂCHÉ est tout ce qu'on sait du dépôt : la cible
+			   ne dit jamais si elle a accepté. Hors de la fenêtre, dans la
+			   disposition d'un site, c'est le navigateur — la carte d'attente
+			   passe alors l'étape en « fait » (2026-09-20). */
+			return dedans ? "revenu" : "depose";
 		} catch (err) {
 			console.warn(LOG_PREFIX, "glisser impossible:", fichiers, err);
-			return false;
+			return "impossible";
 		}
 	});
 

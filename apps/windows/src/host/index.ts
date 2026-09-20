@@ -178,8 +178,8 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 				const absolus = fichiers
 					.map(f => typeof f === "string" ? f : (f && index.get(f.path) ? carte.absolu(f.path) : null))
 					.filter((a): a is string => !!a);
-				if (absolus.length === 0) return false;
-				try { return await pont().depot.glisser(absolus, Math.max(0, Math.min(saisi, absolus.length - 1)), image); } catch (e) { console.warn(LOG_PREFIX, "glisser impossible:", e); return false; }
+				if (absolus.length === 0) return "impossible";
+				try { return await pont().depot.glisser(absolus, Math.max(0, Math.min(saisi, absolus.length - 1)), image); } catch (e) { console.warn(LOG_PREFIX, "glisser impossible:", e); return "impossible"; }
 			},
 			terminer: () => pont().depot.terminer().catch(e => { console.warn(LOG_PREFIX, "fin de disposition impossible:", e); }),
 		},

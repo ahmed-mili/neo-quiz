@@ -99,6 +99,8 @@ export const EN_AI = {
 	"ai.web.step.pasted": "The prompt is pasted in the page.",
 	"ai.web.step.drop": "Drag the file below onto the page.",
 	"ai.web.step.dropMany": "Drag the files below onto the page, all at once.",
+	"ai.web.step.dropped": "The file is on the page.",
+	"ai.web.step.droppedMany": "The files are on the page.",
 	"ai.web.step.send": "Send, then copy the answer: Neo Quiz picks it up by itself.",
 	"ai.web.dragOne": "Drag",
 	"ai.web.dragAll": "Drag all",

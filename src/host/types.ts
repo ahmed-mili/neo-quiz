@@ -804,6 +804,14 @@ export interface ImageDeGlisser {
 	echelle: number;
 }
 
+/** Ce qu'un glisser a donné. `depose` : le bouton a été relâché HORS de la
+    fenêtre de l'application — donc, dans la disposition d'un site, sur le
+    navigateur à gauche : c'est le mieux qu'un hôte puisse savoir, la cible
+    ne dit jamais si elle a accepté. `revenu` : relâché dans l'application,
+    le geste n'a rien déposé. `impossible` : rien n'a pu partir (fichiers
+    hors périmètre, disparus). */
+export type ResultatGlisser = "depose" | "revenu" | "impossible";
+
 export interface HostDepot {
 	/** Le site à gauche, l'application à droite (sur l'écran de l'application).
 	    À appeler AVANT d'ouvrir le site : l'hôte guette la fenêtre du
@@ -839,7 +847,7 @@ export interface HostDepot {
 	    le curseur — c'est SON icône qui part avec le geste, comme dans
 	    l'Explorateur. `false` si aucun ne peut être glissé (hors périmètre,
 	    disparu) ; ceux qui le peuvent partent. */
-	glisser(fichiers: Array<HostFile | string>, saisi?: number, image?: ImageDeGlisser): Promise<boolean>;
+	glisser(fichiers: Array<HostFile | string>, saisi?: number, image?: ImageDeGlisser): Promise<ResultatGlisser>;
 	/** La fin : l'application reprend sa taille d'avant, centrée, et revient au
 	    premier plan ; le site reste derrière. Sans effet sans `disposer`. */
 	terminer(): Promise<void>;

@@ -335,8 +335,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   en phase « web » seulement : le jeton de CETTE ouverture, ce qui a été
 	   ouvert (adresse ou presse-papier), la fonction qui arrête la veille du
 	   principal (null sous un hôte sans `collage`), et les écouteurs à retirer. */
-	/** `colle` : l'hôte a collé le prompt dans la page (site sans préremplissage). */
-	let attenteWeb: { jeton: string; ouverture: ResultatOuverture; site: string; aGlisser: TuileDepot[]; arreter: (() => void) | null; retirer: () => void; colle?: boolean } | null = null;
+	/** `colle` : l'hôte a collé le prompt dans la page (site sans préremplissage) ;
+	    `depose` : les fichiers ont été relâchés hors de l'application, sur le site. */
+	let attenteWeb: { jeton: string; ouverture: ResultatOuverture; site: string; aGlisser: TuileDepot[]; arreter: (() => void) | null; retirer: () => void; colle?: boolean; depose?: boolean } | null = null;
 	/** Le site de la dernière ouverture, gardé au-delà de `attenteWeb` (remis à
 	    null avant l'écran d'erreur) : c'est lui que « Rouvrir {site} » affiche. */
 	let attenteWebSite = "";
@@ -2882,7 +2883,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (coller) etapes.push(attenteWeb.colle
 			? { texte: t("ai.web.step.pasted"), cle: "fait" }
 			: { texte: t("ai.web.step.paste", { site }), cle: "coller" });
-		if (aGlisser) etapes.push({ texte: t(plusieurs ? "ai.web.step.dropMany" : "ai.web.step.drop") });
+		if (aGlisser) etapes.push(attenteWeb.depose
+			? { texte: t(plusieurs ? "ai.web.step.droppedMany" : "ai.web.step.dropped"), cle: "fait" }
+			: { texte: t(plusieurs ? "ai.web.step.dropMany" : "ai.web.step.drop"), cle: "glisser" });
 		etapes.push({ texte: t("ai.web.step.send") });
 		if (etapes.length > 1) {
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.stepsTitle", { site }));
@@ -2956,7 +2959,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				pile.draggable = true;
 				pile.addEventListener("dragstart", (ev) => {
 					ev.preventDefault();
-					void host.depot!.glisser(cibles, i, imagesDeGlisser[i]).then(ok => { if (!ok) host.ui.notice(t("ai.web.dropFailed")); });
+					void host.depot!.glisser(cibles, i, imagesDeGlisser[i]).then(resultat => {
+						if (resultat === "impossible") { host.ui.notice(t("ai.web.dropFailed")); return; }
+						/* Relâché hors de l'application, donc sur le site : l'étape
+						   « glissez » passe en « fait » (2026-09-20). */
+						if (resultat === "depose") {
+							if (attenteWeb) attenteWeb.depose = true;
+							const li = document.querySelector<HTMLElement>(".qbd-ai-web-etapes li[data-etape='glisser']");
+							if (li) { li.textContent = t(plusieurs ? "ai.web.step.droppedMany" : "ai.web.step.dropped"); li.dataset.etape = "fait"; li.classList.add("is-fait"); }
+						}
+					});
 				});
 			}
 		}

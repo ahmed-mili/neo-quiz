@@ -1569,6 +1569,30 @@
 /* La respiration et l'écrasement, rétablis à la demande d'Ahmed
    (2026-09-20) après un essai sans eux : le mouvement fait le bouton. */
 .qbd-install-auto:hover { transform: scale(1.012); }
+/* LE BALAYAGE, l'effet qu'Ahmed a préféré des huit (2026-09-20) : un reflet
+   oblique traverse le bouton UNE FOIS quand on arrive dessus. Il éclaire
+   sans rien déformer — c'est le seul des trois états qui n'a pas à toucher
+   au texte pour se faire voir — et sa lumière est celle de l'onde du clic.
+   `overflow: hidden` le borne au bouton ; `z-index: 0` le garde derrière le
+   libellé, comme l'onde. */
+.qbd-install-auto::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: -60%;
+	width: 45%;
+	z-index: 0;
+	background: linear-gradient(100deg, transparent, rgb(255 255 255 / 0.78), transparent);
+	transform: skewX(-18deg);
+	opacity: 0;
+	pointer-events: none;
+}
+.qbd-install-auto:hover::after { animation: qbd-balayage 620ms ease-out; }
+@keyframes qbd-balayage {
+	from { left: -60%; opacity: 0.9; }
+	to { left: 120%; opacity: 0; }
+}
 .qbd-install-auto:active { transform: scale(0.955); transition-duration: 80ms; }
 
 .qbd-install-auto svg { width: 17px; height: 17px; }
@@ -1590,6 +1614,7 @@
 @media (prefers-reduced-motion: reduce) {
 	.qbd-install-auto { transition: none; }
 	.qbd-install-auto:hover, .qbd-install-auto:active { transform: none; }
+	.qbd-install-auto:hover::after { animation: none; }
 	.qbd-onde { display: none; }
 }
 .qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; font-size: 14px; }

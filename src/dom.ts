@@ -28,10 +28,10 @@
  */
 /** Le rectangle d'un élément tel que l'hôte le veut pour poser une fenêtre
     dessous (`AncreTerminal`) : pixels CSS de la fenêtre, entiers. */
-export function ancreDe(el: HTMLElement): { x: number; y: number; largeur: number; hauteur: number; limiteBas?: number } {
+export function ancreDe(el: HTMLElement): { x: number; y: number; largeur: number; hauteur: number; limiteBas?: number; inviteX?: number; inviteLargeur?: number } {
 	const r = el.getBoundingClientRect();
-	const limiteBas = limiteComposer();
-	return { x: Math.round(r.left), y: Math.round(r.top), largeur: Math.round(r.width), hauteur: Math.round(r.height), ...(limiteBas === undefined ? {} : { limiteBas }) };
+	const invite = limiteComposer();
+	return { x: Math.round(r.left), y: Math.round(r.top), largeur: Math.round(r.width), hauteur: Math.round(r.height), ...(invite ?? {}) };
 }
 
 /** LA CLASSE QUI REMONTE UNE MODALE au-dessus d'une fenêtre posée sous elle
@@ -43,11 +43,11 @@ export const CLASSE_MODALE_HAUT = "qbd-modal-haut";
     fenêtre posée sous la modale ne doit jamais recouvrir. `undefined` quand
     il n'y a pas de composer à l'écran (le terminal descend alors jusqu'au bas
     de la fenêtre). */
-export function limiteComposer(): number | undefined {
+export function limiteComposer(): { limiteBas: number; inviteX: number; inviteLargeur: number } | undefined {
 	const el = document.querySelector<HTMLElement>(".qbd-ai-composer");
 	if (!el) return undefined;
 	const r = el.getBoundingClientRect();
-	return r.height > 0 ? Math.round(r.top) : undefined;
+	return r.height > 0 ? { limiteBas: Math.round(r.top), inviteX: Math.round(r.left), inviteLargeur: Math.round(r.width) } : undefined;
 }
 
 /** Le rectangle qu'un élément AURA une fois remonté, mesuré SANS le peindre :

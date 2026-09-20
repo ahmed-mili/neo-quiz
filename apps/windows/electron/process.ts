@@ -660,8 +660,11 @@ export function lireAncre(v: unknown): AncreTerminal | null {
 	};
 	const x = n("x"), y = n("y"), largeur = n("largeur"), hauteur = n("hauteur");
 	if (x === null || y === null || largeur === null || hauteur === null) return null;
-	const limiteBas = n("limiteBas");
-	return limiteBas === null ? { x, y, largeur, hauteur } : { x, y, largeur, hauteur, limiteBas };
+	const limiteBas = n("limiteBas"), inviteX = n("inviteX"), inviteLargeur = n("inviteLargeur");
+	const ancre: AncreTerminal = { x, y, largeur, hauteur };
+	if (limiteBas !== null) ancre.limiteBas = limiteBas;
+	if (inviteX !== null && inviteLargeur !== null) { ancre.inviteX = inviteX; ancre.inviteLargeur = inviteLargeur; }
+	return ancre;
 }
 
 /** Le rectangle du terminal en DIP, PUR. `contenu` est la zone de contenu de
@@ -688,9 +691,21 @@ export function rectangleTerminal(contenu: { x: number; y: number; width: number
 		const y = contenu.y + Math.floor(contenu.height / 2);
 		return { x: contenu.x + Math.floor((contenu.width - width) / 2), y, width, height: Math.max(200, bas - y) };
 	}
-	const x = Math.round(contenu.x + ancre.x * z);
+	let x = Math.round(contenu.x + ancre.x * z);
 	const y = Math.round(contenu.y + (ancre.y + ancre.hauteur) * z) + 12;
-	const width = Math.max(320, Math.round(ancre.largeur * z));
+	let width = Math.max(320, Math.round(ancre.largeur * z));
+	/* PAS ASSEZ DE PLACE AU-DESSUS DE L'INVITE (moins de 320 DIP, quatre lignes
+	   ne suffisent à rien : Ahmed, 2026-09-20) : le terminal descend jusqu'au
+	   bas de la fenêtre et COUVRE L'INVITE EN ENTIER, au moins aussi large
+	   qu'elle — elle ne dépasse alors sur aucun flanc, ce qui est la règle. */
+	if (bas - y < 320 && typeof ancre.inviteX === "number" && typeof ancre.inviteLargeur === "number") {
+		const inviteGauche = Math.round(contenu.x + ancre.inviteX * z);
+		const inviteDroite = Math.round(contenu.x + (ancre.inviteX + ancre.inviteLargeur) * z);
+		const droite = Math.max(x + width, inviteDroite);
+		x = Math.min(x, inviteGauche);
+		width = droite - x;
+		return { x, y, width, height: Math.max(320, Math.min(560, basFenetre - y)) };
+	}
 	const height = Math.max(200, Math.min(560, bas - y));
 	return { x, y, width, height };
 }

@@ -977,9 +977,6 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		   n'aurait aucun sens, et l'utilisateur vient de cliquer dans l'app. */
 		if (fenetre.isMinimized()) fenetre.restore();
 		const rect = rectangleTerminal(fenetre.getContentBounds(), fenetre.webContents.getZoomFactor(), ancre);
-		// TRACE TEMPORAIRE (2026-09-20) : un vide entre la modale et le terminal.
-		void fsp.appendFile(path.join(app.getPath("temp"), "neo-quiz-disposition.txt"),
-			new Date().toISOString() + " ancre=" + JSON.stringify(ancre) + " contenu=" + JSON.stringify(fenetre.getContentBounds()) + " zoom=" + fenetre.webContents.getZoomFactor() + " rect=" + JSON.stringify(rect) + "\n").catch(() => {});
 		const hautGauche = screen.dipToScreenPoint({ x: rect.x, y: rect.y });
 		const basDroite = screen.dipToScreenPoint({ x: rect.x + rect.width, y: rect.y + rect.height });
 		const h = fenetre.getNativeWindowHandle();

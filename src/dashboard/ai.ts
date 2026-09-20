@@ -1743,7 +1743,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 
 	function setHint(id: string, zone: HTMLElement | null, active: string, opts: HintOptions | null): void {
 		providerHint[id] = opts;
-		if (id === active) renderHint(zone, opts);
+		/* LA ZONE COURANTE, pas celle qu'on tenait : une sonde part d'un rendu
+		   et revient après le suivant. Rendue dans la zone morte de l'ancien,
+		   sa réponse n'atteignait pas l'écran — et le nouveau rendu, dessiné
+		   entre-temps d'après `providerHint`, gardait « pas connecté » alors
+		   que le compte venait de l'être (vu le 2026-09-20 après une
+		   installation d'Antigravity). */
+		const cible = zone && zone.isConnected ? zone : (containerRef?.querySelector<HTMLElement>(".qbd-ai-model-hint") ?? null);
+		if (id === active) renderHint(cible, opts);
 	}
 
 	/** Ce que `sonderPlansOllama` a besoin de toucher dans le contrôle Ollama de

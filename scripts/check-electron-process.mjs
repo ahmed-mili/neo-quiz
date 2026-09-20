@@ -641,6 +641,16 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				zoom: { x: 600, y: 437, width: 750, height: 476 },
 				plusBasQueLaFenetre: { x: 500, y: 362, width: 600, height: 560 },
 			});
+		/* PAS ASSEZ DE PLACE AU-DESSUS DE L'INVITE : le terminal descend et la
+		   COUVRE EN ENTIER, au moins aussi large qu'elle (elle ne dépasse sur
+		   aucun flanc), au lieu des 200 px de quatre lignes (vu le 2026-09-20 :
+		   modale finie à 633, invite à 499). */
+		r.check("rectangleTerminal : sans place au-dessus de l'invite, il descend et la couvre en entier",
+			rectangleTerminal(contenu, 1, { x: 400, y: 100, largeur: 520, hauteur: 264, limiteBas: 300, inviteX: 300, inviteLargeur: 800 }),
+			{ x: 400, y: 426, width: 800, height: 500 });
+		r.check("rectangleTerminal : avec de la place, l'invite reste une simple limite basse",
+			rectangleTerminal(contenu, 1, { x: 400, y: 100, largeur: 520, hauteur: 200, limiteBas: 800, inviteX: 300, inviteLargeur: 800 }),
+			{ x: 500, y: 362, width: 520, height: 476 });
 		r.check("lireAncre : la limite basse traverse quand elle est valide, et son absence n'invalide rien",
 			[lireAncre({ x: 1, y: 2, largeur: 3, hauteur: 4, limiteBas: 5 }), lireAncre({ x: 1, y: 2, largeur: 3, hauteur: 4, limiteBas: -1 })],
 			[{ x: 1, y: 2, largeur: 3, hauteur: 4, limiteBas: 5 }, { x: 1, y: 2, largeur: 3, hauteur: 4 }]);

@@ -464,6 +464,13 @@ export interface AncreTerminal {
 	    (Ahmed, 2026-09-20 : « jamais en haut ou en bas »). Absente, le
 	    terminal descend jusqu'au bas de la fenêtre. */
 	limiteBas?: number;
+	/** L'INVITE elle-même (son bord gauche et sa largeur, pixels CSS) : quand
+	    la place au-dessus d'elle ne suffit pas, le terminal descend et la
+	    COUVRE EN ENTIER — au moins aussi large qu'elle — plutôt que de la
+	    laisser dépasser sur ses flancs (la règle d'Ahmed : jamais vue en haut
+	    ou en bas). */
+	inviteX?: number;
+	inviteLargeur?: number;
 }
 
 /**

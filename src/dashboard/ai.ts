@@ -2917,11 +2917,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				const li = ajouter(liste, "li", e.cle === "fait" ? "is-fait" : undefined, e.texte);
 				if (e.cle) li.dataset.etape = e.cle;
 			}
-			/* La dernière étape passe en encre pleine dès que celles d'avant sont
-			   faites, ou quand il n'y a rien à glisser. Pas d'animation : l'icône
-			   en tête de la carte en porte déjà une (2026-09-20). */
-			const derniere = liste.lastElementChild as HTMLElement | null;
-			if (derniere && (!aGlisser || attenteWeb.depose)) derniere.classList.add("is-ecoute");
+			/* Pas d'étape « courante » : l'application ne sait pas si le prompt
+			   est parti. À faire = encre pleine, fait = atténué, rien d'autre
+			   (2026-09-20 : sans fichier, « Envoyez » paraissait déjà fait). */
 		} else {
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.title", { site }));
 		}
@@ -2997,8 +2995,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 							if (li) {
 								li.dataset.etape = "fait";
 								li.classList.add("is-fait");
-								const derniere = li.parentElement?.lastElementChild as HTMLElement | null;
-								if (derniere && derniere !== li) derniere.classList.add("is-ecoute");
+
 							}
 						}
 					});

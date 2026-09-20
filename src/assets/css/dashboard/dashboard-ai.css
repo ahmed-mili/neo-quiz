@@ -2390,7 +2390,9 @@
 	text-align: left;
 	font-size: 13.5px;
 	line-height: 1.5;
-	color: var(--text-muted);
+	/* À faire = encre pleine ; fait = atténué (plus bas). Pas de troisième
+	   état : l'application ne sait pas si le prompt est parti. */
+	color: var(--text-normal);
 	counter-reset: etape;
 	list-style: none;
 }
@@ -2407,9 +2409,7 @@
    là-bas se re-glisse simplement. */
 .qbd-ai-web-etapes li.is-fait { color: color-mix(in srgb, var(--text-muted) 45%, transparent); }
 .qbd-ai-web-etapes li.is-fait::before { color: var(--color-green, #4ade80); }
-/* L'étape courante, une fois les précédentes faites : le texte en encre
-   pleine. Pas d'animation, l'icône de la carte en porte déjà une. */
-.qbd-ai-web-etapes li.is-ecoute { color: var(--text-normal); }
+
 .qbd-ai-web-etapes li::before {
 	counter-increment: etape;
 	content: counter(etape) ".";

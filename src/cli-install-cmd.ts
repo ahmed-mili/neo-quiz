@@ -31,9 +31,7 @@
 
 /** Les trois outils qu'on sait installer. Volontairement ce type et non
     `CliTool` du contrat d'hôte : ce module ne dépend de rien. */
-/* `"gemini"` : PONT TEMPORAIRE, le temps que le registre passe à `"agy"` (voir
-   `CliTool`). Sa ligne npm est gardée pour la même raison, et rien d'autre. */
-export type OutilInstallable = "claude" | "codex" | "ollama" | "agy" | "gemini";
+export type OutilInstallable = "claude" | "codex" | "ollama" | "agy";
 
 /** La commande AFFICHÉE dans la voie manuelle du modal, et celle que le
     terminal exécute. `lang` sert à la coloration du bloc de code.
@@ -61,9 +59,6 @@ export function commandeInstallation(outil: OutilInstallable, windows: boolean):
 		return windows
 			? { code: "irm https://antigravity.google/cli/install.ps1 | iex", lang: "powershell" }
 			: { code: "curl -fsSL https://antigravity.google/cli/install.sh | bash", lang: "bash" };
-	}
-	if (outil === "gemini") {
-		return { code: "npm install -g @google/gemini-cli", lang: windows ? "powershell" : "bash" };
 	}
 	return windows
 		? { code: "winget install --id Ollama.Ollama -e", lang: "powershell" }

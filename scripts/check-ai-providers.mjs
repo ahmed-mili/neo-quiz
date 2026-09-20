@@ -447,6 +447,35 @@ await withSrcModule(
 				{ ok: true, appel: ["claude auth status"] });
 		}
 
+		/* ── ANTIGRAVITY : les modèles viennent d'`agy models`, jamais d'une liste
+		   écrite dans le code (règle « jamais de modèle codé en dur »). Le CLI
+		   rend « id<TAB>libellé » par ligne, précédé d'une ligne d'attente
+		   (mesuré le 2026-09-20, `agy` 1.2.7). ── */
+		{
+			const sortie = "Fetching available models...\ngemini-3.8-flash-high\tGemini 3.8 Flash (High)\ngemini-3.1-pro-low\tGemini 3.1 Pro (Low)\nclaude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)\n\nun id avec espace\tRefusé\ngemini-3.8-flash-high\tDoublon\n";
+			r.check("parseAntigravityModels : une ligne « id<TAB>libellé » par modèle ; l'attente, les vides, les identifiants impossibles et les doublons sont ignorés",
+				providers.parseAntigravityModels(sortie),
+				[{ value: "gemini-3.8-flash-high", label: "Gemini 3.8 Flash (High)" }, { value: "gemini-3.1-pro-low", label: "Gemini 3.1 Pro (Low)" }, { value: "claude-opus-4-6-thinking", label: "Claude Opus 4.6 (Thinking)" }]);
+			r.check("parseAntigravityModels : rien ne rend rien", providers.parseAntigravityModels(""), []);
+			/* Sans lecture : liste vide, et le modèle résolu est la chaîne vide —
+			   `--model` sera OMIS, le CLI prend le sien. */
+			r.check("sans lecture : liste vide, modèle résolu vide", [providers.getAntigravityModels(), providers.resolveAntigravityModel("gemini-3.1-pro-low")], [[], ""]);
+			const { journal, hote } = fauxHote({ runs: { "agy models": { code: 0, stdout: sortie } } });
+			installHost(hote);
+			const change = await providers.refreshAntigravityModels(true);
+			r.check("refreshAntigravityModels lance `agy models`, remplit l'instantané et dit que la liste a changé",
+				{ change, appel: journal.filter(l => l[0] === "run").map(l => l[1]), n: providers.getAntigravityModels().length },
+				{ change: true, appel: ["agy models"], n: 3 });
+			r.check("resolveAntigravityModel : la valeur persistée si connue, sinon le PREMIER de la liste (le plus récent)",
+				[providers.resolveAntigravityModel("gemini-3.1-pro-low"), providers.resolveAntigravityModel("un-modele-retire"), providers.resolveAntigravityModel("")],
+				["gemini-3.1-pro-low", "gemini-3.8-flash-high", "gemini-3.8-flash-high"]);
+			/* Un échec (compte non connecté : « Please sign in… », code 1) garde
+			   l'instantané d'avant et ne dit AUCUN changement. */
+			installHost(fauxHote({ runs: { "agy models": { code: 1, stdout: "Fetching available models...\nError: Please sign in to view available models." } } }).hote);
+			r.check("un `agy models` en échec garde la liste d'avant et ne dit aucun changement",
+				{ change: await providers.refreshAntigravityModels(true), n: providers.getAntigravityModels().length }, { change: false, n: 3 });
+		}
+
 		r.done();
 	},
 );

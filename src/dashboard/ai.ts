@@ -944,32 +944,41 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// Claude Code et Codex (ChatGPT) partagent le même contrôle modèle+effort
 		// (menu façon claude.ai). Seules changent la liste de modèles, la liste
 		// d'efforts et la résolution du modèle (Fable expire côté Claude).
-		/* GEMINI : une liste de modèles (ses trois alias), et AUCUN bouton
-		   d'effort — le CLI n'expose pas de niveau de raisonnement, et un bouton
-		   qui ne part nulle part est pire qu'absent. Il ne partage donc pas le
-		   contrôle à deux boutons de Claude et Codex : il a le sien, réduit au
-		   modèle. */
-		if (provider === "gemini-cli") {
+		/* ANTIGRAVITY : une liste de modèles lue sur `agy models`, et AUCUN
+		   bouton d'effort — le niveau de raisonnement est dans le nom du modèle,
+		   et un bouton qui ne part nulle part est pire qu'absent. Il ne partage
+		   donc pas le contrôle à deux boutons de Claude et Codex : il a le
+		   sien, réduit au modèle. Tant que la liste n'est pas lue (CLI absent,
+		   compte non connecté), le bouton dit « modèle du CLI » et la
+		   génération part sans `--model`. */
+		if (provider === "antigravity-cli") {
 			buildModelControl = (parent: HTMLElement): void => {
-				const modeles = aiProviders.getDefaultModels("gemini-cli");
-				const courant = (): string => {
-					const v = settings().aiModel || currentModel;
-					return modeles.some(m => m.value === v) ? v : aiProviders.getProvider("gemini-cli").defaultModel;
-				};
+				const modeles = (): aiProviders.ModelDef[] => aiProviders.getAntigravityModels();
+				const courant = (): string => aiProviders.resolveAntigravityModel(settings().aiModel || currentModel);
 				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger qbd-composer-plain");
 				trigger.type = "button";
 				const trigLabel = ajouter(trigger, "span", "qbd-select-label");
 				const refresh = (): void => {
-					const cur = modeles.find(m => m.value === courant()) || modeles[0];
+					const cur = modeles().find(m => m.value === courant());
 					trigLabel.replaceChildren();
-					ajouter(trigLabel, "span", "qbd-model-trigger-name", cur.label);
+					ajouter(trigLabel, "span", "qbd-model-trigger-name", cur ? cur.label : t("ai.model.cliDefault"));
 				};
 				refresh();
-				trigger.addEventListener("click", () => {
+				/* La liste est relue en arrière-plan (au plus toutes les six
+				   heures) et l'étiquette redessinée si elle a changé — sans
+				   re-rendu du composer, qui effacerait le message en cours. */
+				void aiProviders.refreshAntigravityModels().then(change => {
+					if (change && trigger.isConnected) refresh();
+				});
+				trigger.addEventListener("click", async () => {
+					await aiProviders.refreshAntigravityModels();
+					if (!trigger.isConnected) return;
+					const liste = modeles();
+					if (liste.length === 0) { host.ui.notice(t("ai.model.cliListUnavailable")); return; }
 					openModelMenu(trigger, {
-						models: modeles,
+						models: liste,
 						currentModel: courant(),
-						// Pas de ligne Effort : le CLI Gemini n'en a pas.
+						// Pas de ligne Effort : il est dans le nom du modèle.
 						efforts: [],
 						onPickModel: async (v) => {
 							await saveSettings({ aiModel: v });
@@ -2052,34 +2061,34 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			}
 		});
 
-		/* GEMINI — même patron que Codex, à deux choses près, et les deux
-		   viennent du CLI lui-même : il n'a AUCUNE sonde de connexion non
-		   interactive (ses identifiants vont au trousseau du système), donc pas
-		   de `verifierCompte` ici ; et son installation passe par npm, ce que le
-		   modal dit. Sans sonde de compte, un compte non connecté se découvre à
-		   la génération, où le message nomme la commande à taper. */
-		aiProviders.checkGemini(force).then(res => {
+		/* ANTIGRAVITY — même patron que Codex, à une chose près, qui vient du
+		   CLI lui-même : il n'a AUCUNE sonde de connexion non interactive (ses
+		   identifiants vont au gestionnaire d'identifiants Windows), donc pas
+		   de `verifierCompte` ici. Un compte non connecté se découvre à la
+		   génération, où le message dit quoi faire ; la connexion elle-même est
+		   enchaînée par le terminal d'installation. */
+		aiProviders.checkAntigravity(force).then(res => {
 			if (res.ok) {
-				setStatus("gemini-cli", providerSelect, "ok", t("ai.status.geminiOk", { version: res.version }));
+				setStatus("antigravity-cli", providerSelect, "ok", t("ai.status.antigravityOk", { version: res.version }));
 			} else if (res.reason === "mobile") {
-				setStatus("gemini-cli", providerSelect, "warn", t("ai.status.desktopOnly"));
+				setStatus("antigravity-cli", providerSelect, "warn", t("ai.status.desktopOnly"));
 			} else {
-				setStatus("gemini-cli", providerSelect, "err", t("ai.status.geminiMissing"));
+				setStatus("antigravity-cli", providerSelect, "err", t("ai.status.antigravityMissing"));
 			}
 			if (res.ok) {
-				setHint("gemini-cli", hintZone, provider, null);
+				setHint("antigravity-cli", hintZone, provider, null);
 			} else if (res.reason === "mobile") {
-				setHint("gemini-cli", hintZone, provider, {
+				setHint("antigravity-cli", hintZone, provider, {
 					type: "warn", icon: "monitor",
-					text: t("ai.hint.geminiDesktopOnly")
+					text: t("ai.hint.antigravityDesktopOnly")
 				});
 			} else {
-				setHint("gemini-cli", hintZone, provider, {
+				setHint("antigravity-cli", hintZone, provider, {
 					type: "err", icon: "download",
-					text: t("ai.hint.geminiNotInstalled"),
+					text: t("ai.hint.antigravityNotInstalled"),
 					action: {
-						label: t("ai.hint.installGemini"), icon: "download",
-						onClick: () => ouvrirModalInstallation("gemini-cli", () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true }))
+						label: t("ai.hint.installAntigravity"), icon: "download",
+						onClick: () => ouvrirModalInstallation("antigravity-cli", () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true }))
 					}
 				});
 			}

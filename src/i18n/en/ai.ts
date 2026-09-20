@@ -77,6 +77,8 @@ export const EN_AI = {
 	"ai.provider.claudeSub": "Pro / Max account",
 	"ai.provider.codexSub": "Codex CLI · ChatGPT subscription",
 	"ai.provider.antigravitySub": "Antigravity CLI · Google account",
+	"ai.model.cliDefault": "CLI default model",
+	"ai.model.cliListUnavailable": "The model list could not be read: is Antigravity CLI installed and signed in?",
 	"ai.provider.ollamaSub": "Local and cloud",
 
 	/* ── Canaux (le second niveau du menu : par quelle voie on parle à la marque) ── */
@@ -199,9 +201,6 @@ export const EN_AI = {
 	"ai.modelDesc.codex55": "For complex coding and research",
 	"ai.modelDesc.codex54": "Solid for everyday coding",
 	"ai.modelDesc.codex54mini": "Light and fast for simple tasks",
-	"ai.modelDesc.geminiPro": "Best reasoning, 1M token context",
-	"ai.modelDesc.geminiFlash": "Fast and balanced for most quizzes",
-	"ai.modelDesc.geminiFlashLite": "Fastest, for simple material",
 
 	/* ── Badge d'accès à Fable (déduit du forfait lu dans le trousseau du CLI) ── */
 	"ai.badge.included": "Included",
@@ -292,23 +291,4 @@ export const EN_AI = {
 	"ai.err.ollama": "Ollama error: {detail}",
 	"ai.err.ollamaEmpty": "Ollama returned no response. Make sure the model is installed.",
 
-	/* PONT TEMPORAIRE : les clés de Gemini CLI, en attendant que le registre
-	   des fournisseurs passe à Antigravity (`agy`). À retirer avec lui. */
-	"ai.install.step3.gemini-cli": "Then type gemini and choose “Sign in with Google”.",
-	"ai.provider.geminiSub": "Gemini CLI · Google account",
-	"ai.status.geminiOk": "Gemini CLI v{version}",
-	"ai.status.geminiMissing": "Gemini CLI not installed",
-	"ai.hint.geminiDesktopOnly": "Generating with Gemini (Gemini CLI) is available on desktop only.",
-	"ai.hint.geminiNotInstalled": "Gemini CLI is not installed.",
-	"ai.hint.installGemini": "Install Gemini CLI",
-	"ai.install.title.gemini-cli": "Gemini CLI is not installed",
-	"ai.install.what.gemini-cli": "Google's command-line tool, used with your Google account. It is installed with npm, which comes with Node.js.",
-	"ai.err.invalidModelGemini": "Invalid Gemini model name: {model}",
-	"ai.err.geminiNotInstalled": "Gemini CLI is not installed. Install it (npm install -g @google/gemini-cli), then run “gemini” once and sign in with your Google account.",
-	"ai.err.geminiTimeout": "Gemini did not answer within the time limit ({minutes} min). Try again.",
-	"ai.err.geminiNotLoggedIn": "Google account not connected. In a terminal, run “gemini”, then choose “Sign in with Google”.",
-	"ai.err.geminiRateLimit": "You have reached the Gemini usage limit for now (60 requests per minute, 1000 per day on the free tier). Try again later.",
-	"ai.err.geminiNoImages": "Gemini CLI cannot take images: it runs without any tool, so it has no way to open them. Use a website channel, or Claude Code, for a quiz built from an image.",
-	"ai.err.geminiEmpty": "Gemini returned no response. Try again or switch model.",
-	"ai.err.gemini": "Gemini error: {detail}",
 } as const;

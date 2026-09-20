@@ -970,10 +970,7 @@ export async function avecFichiers<T>(
  * des chemins, qui sépare « lancer le CLI de l'utilisateur » de « lancer ce
  * qu'on vient d'écrire sur son disque ».
  */
-/* `"gemini"` : PONT TEMPORAIRE, le temps que le registre des fournisseurs
-   passe à `"agy"` (voir `CliTool`). Le binaire n'est plus installé nulle
-   part : un lancement rend « introuvable ». À retirer avec le registre. */
-export const OUTILS = ["claude", "codex", "ollama", "agy", "gemini"] as const;
+export const OUTILS = ["claude", "codex", "ollama", "agy"] as const;
 
 export type Outil = (typeof OUTILS)[number];
 

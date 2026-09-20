@@ -902,8 +902,8 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   pas lancer un script d'installation distant. Hors Windows,
 	   `indisponible` sans rien lancer : le modal du rendu montre alors les
 	   étapes manuelles. */
-	const NOMS_OUTILS: Record<Outil, string> = { claude: "Claude Code", codex: "Codex CLI", ollama: "Ollama", agy: "Antigravity CLI", gemini: "Gemini CLI" };
-	const SOURCES_OUTILS: Record<Outil, string> = { claude: "claude.ai/install.ps1", codex: "chatgpt.com/codex/install.ps1", ollama: "winget (Ollama.Ollama)", agy: "antigravity.google/cli/install.ps1", gemini: "npm (@google/gemini-cli)" };
+	const NOMS_OUTILS: Record<Outil, string> = { claude: "Claude Code", codex: "Codex CLI", ollama: "Ollama", agy: "Antigravity CLI" };
+	const SOURCES_OUTILS: Record<Outil, string> = { claude: "claude.ai/install.ps1", codex: "chatgpt.com/codex/install.ps1", ollama: "winget (Ollama.Ollama)", agy: "antigravity.google/cli/install.ps1" };
 	/* ─── NEO QUIZ À DROITE, LE TERMINAL À GAUCHE ───
 	   Pendant une installation ou une connexion, le terminal s'ouvrait
 	   par-dessus l'application et la cachait (Ahmed, 2026-09-20). Même

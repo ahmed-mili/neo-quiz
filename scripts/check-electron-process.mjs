@@ -162,13 +162,14 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 					   2026-09-20. Un nom de la liste refusé ici rendrait sa
 					   génération impossible sans qu'aucun type ne bronche — le rendu
 					   n'envoie qu'un nom, et c'est ici qu'il est cru ou non. */
+					/* `agy` est Antigravity CLI ; `gemini` n'y est PLUS : Gemini CLI a
+					   été fermé aux comptes individuels par Google (juin 2026), et
+					   un nom hors liste est refusé même si le binaire est encore là. */
 					juge: ["claude", "codex", "ollama", "agy", "gemini", "notepad", "x.bat", "", null, 3].map(estOutilAutorise),
 				},
 				{
-					/* `gemini` : pont temporaire, voir `OUTILS` ; disparaît avec le
-					   passage du registre à Antigravity. */
-					liste: ["claude", "codex", "ollama", "agy", "gemini"],
-					juge: [true, true, true, true, true, false, false, false, false, false],
+					liste: ["claude", "codex", "ollama", "agy"],
+					juge: [true, true, true, true, false, false, false, false, false, false],
 				});
 		});
 

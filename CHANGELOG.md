@@ -14,7 +14,7 @@ release notes.
 ## [Unreleased]
 
 ### Added
-- Gemini joins the providers, between ChatGPT and Perplexity, with its two channels: Gemini CLI, which generates with your Google account, and gemini.google.com. The CLI installs from the app like the others; it needs Node.js, and the installer says so instead of failing on "npm is not recognized".
+- Gemini joins the providers, between ChatGPT and Perplexity, with its two channels: Antigravity CLI, Google's terminal tool that generates with your Google account (Gemini CLI itself stopped serving personal accounts, free, Pro and Ultra alike, on June 18, 2026), and gemini.google.com. The CLI installs from the app like the others, with Google's official installer, and its model list comes from the tool itself ("agy models"), so a new model appears without an update.
 - The header of a quiz page now shows when it was generated: the tile that named the model carries the exact date and time underneath, with the logo of whoever generated it.
 - Perplexity can generate a quiz from the web too: picking "perplexity.ai" opens it with your request already written, waiting for you to send it. Perplexity's usual link ("?q=") searches straight away, which would leave no time to attach a course; Neo Quiz uses the one that only fills the box.
 - ChatGPT can now generate a quiz from the web too: picking "chatgpt.com" opens chatgpt.com with your request already written in the composer, and the answer you copy comes back into Neo Quiz, exactly like claude.ai. ChatGPT shows no warning banner above the request, so no dialog is shown when you pick it.
@@ -23,7 +23,8 @@ release notes.
 - In a provider's submenu, the website now comes before the command-line tool: it works right away, for everyone, without installing anything.
 - The submenu always opens on the right of the menu, the way its arrow points: the menu itself now leaves room for it, shifting left when it sits against the window's edge. It used to flip the submenu to the left, or lay it over the menu.
 - "Claude Code CLI" is back to "Claude Code" in the menu.
-- Connecting Gemini CLI no longer goes through its interactive screen (folder trust, "How would you like to authenticate?"): "Sign in with Google" is chosen in advance, the browser opens by itself, and the window closes once Gemini has answered. There is nothing to type in the terminal.
+- Connecting Antigravity CLI needs nothing typed in the terminal: the window opens the Google sign-in page in your browser by itself, waits for you to allow it, and closes once Gemini has answered.
+- While a tool installs or connects, Neo Quiz moves to the right half of the screen and the terminal window takes the left half, so both stay visible; Neo Quiz comes back to its place when the terminal closes.
 - The PowerShell window that installs or connects a tool now counts down "3... 2... 1..." before closing on success, instead of vanishing after two silent seconds; and if anything goes wrong in it, it stays open on the error instead of closing. Its full output is also kept in a file (neo-quiz-installation.txt in your temporary folder), for the case where the window is gone before you could read it.
 - The "Generated" folder no longer shows the Documents, Links and Notes sections: only generated quizzes are ever written there, so the three boxes stayed empty for good. Every other folder keeps them.
 - In that same folder, the header button is now "Generate" and opens the Generate page, instead of "New quiz" which offered to create a blank quiz or import one, neither of which lands there.

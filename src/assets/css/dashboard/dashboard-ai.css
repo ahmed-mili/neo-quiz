@@ -226,6 +226,11 @@
 	color: var(--text-normal);
 }
 
+/* Antigravity CLI n'a pas de couleur de marque publiée : noir sur blanc. */
+.qbd-provider-logo--antigravity {
+	color: var(--text-normal);
+}
+
 /* Icône à droite d'un modèle dans le menu (façon app Ollama) : nuage = cloud,
    téléchargement = local non installé, aucune = local installé. Calée à droite
    de la ligne, alignée sur le nom. */

@@ -127,6 +127,11 @@ const BRAND_LOGOS: Record<string, string> = {
 	ollama: '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16.361 10.26a.894.894 0 0 0-.558.47l-.072.148.001.207c0 .193.004.217.059.353.076.193.152.312.291.448.24.238.51.3.872.205a.86.86 0 0 0 .517-.436.752.752 0 0 0 .08-.498c-.064-.453-.33-.782-.724-.897a1.06 1.06 0 0 0-.466 0zm-9.203.005c-.305.096-.533.32-.65.639a1.187 1.187 0 0 0-.06.52c.057.309.31.59.598.667.362.095.632.033.872-.205.14-.136.215-.255.291-.448.055-.136.059-.16.059-.353l.001-.207-.072-.148a.894.894 0 0 0-.565-.472 1.02 1.02 0 0 0-.474.007Zm4.184 2c-.131.071-.223.25-.195.383.031.143.157.288.353.407.105.063.112.072.117.136.004.038-.01.146-.029.243-.02.094-.036.194-.036.222.002.074.07.195.143.253.064.052.076.054.255.059.164.005.198.001.264-.03.169-.082.212-.234.15-.525-.052-.243-.042-.28.087-.355.137-.08.281-.219.324-.314a.365.365 0 0 0-.175-.48.394.394 0 0 0-.181-.033c-.126 0-.207.03-.355.124l-.085.053-.053-.032c-.219-.13-.259-.145-.391-.143a.396.396 0 0 0-.193.032zm.39-2.195c-.373.036-.475.05-.654.086-.291.06-.68.195-.951.328-.94.46-1.589 1.226-1.787 2.114-.04.176-.045.234-.045.53 0 .294.005.357.043.524.264 1.16 1.332 2.017 2.714 2.173.3.033 1.596.033 1.896 0 1.11-.125 2.064-.727 2.493-1.571.114-.226.169-.372.22-.602.039-.167.044-.23.044-.523 0-.297-.005-.355-.045-.531-.288-1.29-1.539-2.304-3.072-2.497a6.873 6.873 0 0 0-.855-.031zm.645.937a3.283 3.283 0 0 1 1.44.514c.223.148.537.458.671.662.166.251.26.508.303.82.02.143.01.251-.043.482-.08.345-.332.705-.672.957a3.115 3.115 0 0 1-.689.348c-.382.122-.632.144-1.525.138-.582-.006-.686-.01-.853-.042-.57-.107-1.022-.334-1.35-.68-.264-.28-.385-.535-.45-.946-.03-.192.025-.509.137-.776.136-.326.488-.73.836-.963.403-.269.934-.46 1.422-.512.187-.02.586-.02.773-.002zm-5.503-11a1.653 1.653 0 0 0-.683.298C5.617.74 5.173 1.666 4.985 2.819c-.07.436-.119 1.04-.119 1.503 0 .544.064 1.24.155 1.721.02.107.031.202.023.208a8.12 8.12 0 0 1-.187.152 5.324 5.324 0 0 0-.949 1.02 5.49 5.49 0 0 0-.94 2.339 6.625 6.625 0 0 0-.023 1.357c.091.78.325 1.438.727 2.04l.13.195-.037.064c-.269.452-.498 1.105-.605 1.732-.084.496-.095.629-.095 1.294 0 .67.009.803.088 1.266.095.555.288 1.143.503 1.534.071.128.243.393.264.407.007.003-.014.067-.046.141a7.405 7.405 0 0 0-.548 1.873c-.062.417-.071.552-.071.991 0 .56.031.832.148 1.279L3.42 24h1.478l-.05-.091c-.297-.552-.325-1.575-.068-2.597.117-.472.25-.819.498-1.296l.148-.29v-.177c0-.165-.003-.184-.057-.293a.915.915 0 0 0-.194-.25 1.74 1.74 0 0 1-.385-.543c-.424-.92-.506-2.286-.208-3.451.124-.486.329-.918.544-1.154a.787.787 0 0 0 .223-.531c0-.195-.07-.355-.224-.522a3.136 3.136 0 0 1-.817-1.729c-.14-.96.114-2.005.69-2.834.563-.814 1.353-1.336 2.237-1.475.199-.033.57-.028.776.01.226.04.367.028.512-.041.179-.085.268-.19.374-.431.093-.215.165-.333.36-.576.234-.29.46-.489.822-.729.413-.27.884-.467 1.352-.561.17-.035.25-.04.569-.04.319 0 .398.005.569.04a4.07 4.07 0 0 1 1.914.997c.117.109.398.457.488.602.034.057.095.177.132.267.105.241.195.346.374.43.14.068.286.082.503.045.343-.058.607-.053.943.016 1.144.23 2.14 1.173 2.581 2.437.385 1.108.276 2.267-.296 3.153-.097.15-.193.27-.333.419-.301.322-.301.722-.001 1.053.493.539.801 1.866.708 3.036-.062.772-.26 1.463-.533 1.854a2.096 2.096 0 0 1-.224.258.916.916 0 0 0-.194.25c-.054.109-.057.128-.057.293v.178l.148.29c.248.476.38.823.498 1.295.253 1.008.231 2.01-.059 2.581a.845.845 0 0 0-.044.098c0 .006.329.009.732.009h.73l.02-.074.036-.134c.019-.076.057-.3.088-.516.029-.217.029-1.016 0-1.258-.11-.875-.295-1.57-.597-2.226-.032-.074-.053-.138-.046-.141.008-.005.057-.074.108-.152.376-.569.607-1.284.724-2.228.031-.26.031-1.378 0-1.628-.083-.645-.182-1.082-.348-1.525a6.083 6.083 0 0 0-.329-.7l-.038-.064.131-.194c.402-.604.636-1.262.727-2.04a6.625 6.625 0 0 0-.024-1.358 5.512 5.512 0 0 0-.939-2.339 5.325 5.325 0 0 0-.95-1.02 8.097 8.097 0 0 1-.186-.152.692.692 0 0 1 .023-.208c.208-1.087.201-2.443-.017-3.503-.19-.924-.535-1.658-.98-2.082-.354-.338-.716-.482-1.15-.455-.996.059-1.8 1.205-2.116 3.01a6.805 6.805 0 0 0-.097.726c0 .036-.007.066-.015.066a.96.96 0 0 1-.149-.078A4.857 4.857 0 0 0 12 3.03c-.832 0-1.687.243-2.456.698a.958.958 0 0 1-.148.078c-.008 0-.015-.03-.015-.066a6.71 6.71 0 0 0-.097-.725C8.997 1.392 8.337.319 7.46.048a2.096 2.096 0 0 0-.585-.041Zm.293 1.402c.248.197.523.759.682 1.388.03.113.06.244.069.292.007.047.026.152.041.233.067.365.098.76.102 1.24l.002.475-.12.175-.118.178h-.278c-.324 0-.646.041-.954.124l-.238.06c-.033.007-.038-.003-.057-.144a8.438 8.438 0 0 1 .016-2.323c.124-.788.413-1.501.696-1.711.067-.05.079-.049.157.013zm9.825-.012c.17.126.358.46.498.888.28.854.36 2.028.212 3.145-.019.14-.024.151-.057.144l-.238-.06a3.693 3.693 0 0 0-.954-.124h-.278l-.119-.178-.119-.175.002-.474c.004-.669.066-1.19.214-1.772.157-.623.434-1.185.68-1.382.078-.062.09-.063.159-.012z"/></svg>',
 	perplexity: '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M22.3977 7.0896h-2.3106V.0676l-7.5094 6.3542V.1577h-1.1554v6.1966L4.4904 0v7.0896H1.6023v10.3976h2.8882V24l6.932-6.3591v6.2005h1.1554v-6.0469l6.9318 6.1807v-6.4879h2.8882V7.0896zm-3.4657-4.531v4.531h-5.355l5.355-4.531zm-13.2862.0676 4.8691 4.4634H5.6458V2.6262zM2.7576 16.332V8.245h7.8476l-6.1149 6.1147v1.9723H2.7576zm2.8882 5.0404v-3.8852h.0001v-2.6488l5.7763-5.7764v7.0111l-5.7764 5.2993zm12.7086.0248-5.7766-5.1509V9.0618l5.7766 5.7766v6.5588zm2.8882-5.0652h-1.733v-1.9723L13.3948 8.245h7.8478v8.087z"/></svg>',
 	openai: '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5962 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>',
+	/* Antigravity CLI, le canal CLI de la marque Gemini : son propre logo, à la
+	   demande d'Ahmed (2026-09-20) — c'est un produit à part, pas un habillage
+	   de Gemini. Monochrome, un seul tracé (`@lobehub/icons`, `antigravity`) :
+	   sa version couleur est faite de masques et de flous, illisibles à 15 px. */
+	antigravity: '<svg viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z"/></svg>',
 	gemini: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
 		+ '<path fill="#3186FF" d="' + TRACE_GEMINI + '"/>'
 		+ '<path fill="url(#nq-gemini-0)" d="' + TRACE_GEMINI + '"/>'
@@ -215,21 +220,21 @@ export const PROVIDERS: Provider[] = [
 		defaultEffort: ""
 	},
 	{
-		id: "gemini-cli",
+		id: "antigravity-cli",
 		name: "Gemini",
-		get sub() { return t("ai.provider.geminiSub"); },
-		logo: "gemini",
-		// Le violet publié par Simple Icons pour « Google Gemini » : le logo de
-		// marque est un dégradé bleu→violet, qu'un aplat monochrome ne rend pas.
+		get sub() { return t("ai.provider.antigravitySub"); },
+		/* Le logo du CANAL, pas de la marque : l'entrée d'un fournisseur porte
+		   son propre logo, et c'est lui que le composer et la tuile « généré
+		   par » montrent. La ligne « Gemini » du menu, elle, garde l'étincelle. */
+		logo: "antigravity",
 		couleur: "#8E75B2",
 		desktopOnly: true,
-		/* `pro` et non `gemini-2.5-pro` : le CLI résout ses ALIAS lui-même, donc
-		   le jour où `pro` désigne autre chose, l'application suit sans rien
-		   changer. C'est la forme que prend ici la règle « jamais de modèle codé
-		   en dur ». */
-		defaultModel: "pro",
-		// Le CLI Gemini n'expose aucun niveau d'effort : un bouton d'effort ici
-		// afficherait un réglage qui ne part nulle part.
+		/* VIDE : le modèle vient de `agy models` (`getAntigravityModels`), et
+		   tant que la liste n'a pas été lue, `--model` est omis — le CLI prend
+		   le sien. Jamais un nom codé ici. */
+		defaultModel: "",
+		// Le niveau de raisonnement est DANS le nom du modèle (`…-high`,
+		// `…-low`) : un bouton d'effort n'aurait rien à régler.
 		defaultEffort: ""
 	},
 	{
@@ -337,7 +342,7 @@ export const MARQUES: Marque[] = [
 			   et le code de la page, compilé par Google, ne livre rien de
 			   lisible (là où perplexity.ai donnait `qfill`). Le canal est donc
 			   visible mais pas encore câblé : le bouton le dit. */
-			{ id: "gemini-cli", label: "Gemini CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli" }
+			{ id: "antigravity-cli", label: "Antigravity CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli" }
 		]
 	},
 	{
@@ -408,17 +413,75 @@ export const CLAUDE_CODE_MODELS: ModelDef[] = [
 // Niveaux d'effort de Claude Code (picker /effort), du plus faible au plus
 // élevé — l'ordre du tableau = ordre d'affichage haut→bas, donc le plus
 // élevé (ultracode) tout en bas. ultracode a une couleur dédiée (violet).
-/* LES MODÈLES DE GEMINI SONT SES ALIAS, et c'est la bonne réponse à « jamais
-   de modèle codé en dur » : `pro`, `flash` et `flash-lite` sont résolus par le
-   CLI lui-même (`auto` est écarté — il ne dit pas ce qu'il choisit, et un
-   quiz généré doit pouvoir nommer son modèle). Le jour où `pro` cesse d'être
-   `gemini-2.5-pro`, rien ne bouge ici. Documenté dans `docs/cli/cli-reference.md`
-   du dépôt gemini-cli, lu le 2026-09-20. */
-export const GEMINI_MODELS: ModelDef[] = [
-	{ value: "pro", label: "Gemini Pro", get hint() { return t("ai.modelHint.recommended"); }, get desc() { return t("ai.modelDesc.geminiPro"); } },
-	{ value: "flash", label: "Gemini Flash", get hint() { return t("ai.modelHint.everyday"); }, get desc() { return t("ai.modelDesc.geminiFlash"); } },
-	{ value: "flash-lite", label: "Gemini Flash Lite", get hint() { return t("ai.modelHint.fastest"); }, get desc() { return t("ai.modelDesc.geminiFlashLite"); } }
-];
+/* ── LES MODÈLES D'ANTIGRAVITY : `agy models`, jamais une liste écrite ici ──
+   Le CLI rend une ligne par modèle, « id<TAB>libellé » (mesuré le 2026-09-20,
+   `agy` 1.2.7 : « gemini-3.8-flash-high<TAB>Gemini 3.8 Flash (High) », quatorze
+   entrées, Gemini, Claude et GPT-OSS selon le forfait du compte). La liste
+   suit donc le COMPTE et le jour, sans mise à jour de l'application — c'est
+   la règle « jamais de modèle codé en dur », tenue ici par construction.
+   Le niveau de raisonnement est DANS le nom (`…-high`, `…-low`) : pas
+   d'effort à part. Instantané en mémoire, relu au plus toutes les six heures
+   (le CLI interroge le réseau pour répondre), ou à la demande. */
+const ANTIGRAVITY_MODELS_TTL = 6 * 60 * 60 * 1000;
+let antigravityModelsSnapshot: { at: number; models: ModelDef[] } | null = null;
+let antigravityRefreshEnCours: Promise<boolean> | null = null;
+
+/** PURE : le texte d'`agy models` en liste. Une ligne sans tabulation (le
+    « Fetching available models... » de tête, une ligne vide) est ignorée ;
+    un identifiant qui ne ressemble pas à un nom de modèle aussi — c'est ce qui
+    part ensuite en argument `--model`. */
+export function parseAntigravityModels(stdout: string): ModelDef[] {
+	const modeles: ModelDef[] = [];
+	for (const ligne of String(stdout || "").split(/\r?\n/)) {
+		const i = ligne.indexOf("\t");
+		if (i <= 0) continue;
+		const value = ligne.slice(0, i).trim();
+		const label = ligne.slice(i + 1).trim() || value;
+		if (!/^[a-zA-Z0-9._:-]+$/.test(value)) continue;
+		if (modeles.some(m => m.value === value)) continue;
+		modeles.push({ value, label });
+	}
+	return modeles;
+}
+
+/** La liste connue, SYNCHRONE : celle du dernier `refreshAntigravityModels`,
+    vide tant qu'aucun n'a abouti. Le composer la redessine quand le
+    rafraîchissement dit qu'elle a changé. */
+export function getAntigravityModels(): ModelDef[] {
+	return antigravityModelsSnapshot ? antigravityModelsSnapshot.models : [];
+}
+
+/** Relit `agy models` si l'instantané est absent ou périmé (ou `force`), et dit
+    si la liste a CHANGÉ. Tout échec (CLI absent, compte non connecté — il
+    répond « Please sign in to view available models ») garde l'instantané
+    d'avant et rend `false` : la page n'a rien à redessiner. */
+export function refreshAntigravityModels(force?: boolean): Promise<boolean> {
+	if (antigravityRefreshEnCours) return antigravityRefreshEnCours;
+	if (!force && antigravityModelsSnapshot && Date.now() - antigravityModelsSnapshot.at < ANTIGRAVITY_MODELS_TTL) return Promise.resolve(false);
+	if (!currentHost().platform.isDesktopApp) return Promise.resolve(false);
+	antigravityRefreshEnCours = requireHost("process")
+		.run({ tool: "agy", args: ["models"], stdin: "", timeoutMs: 20000 })
+		.then(res => {
+			if (res.code !== 0) return false;
+			const modeles = parseAntigravityModels(res.stdout);
+			if (modeles.length === 0) return false;
+			const avant = getAntigravityModels().map(m => m.value).join("\n");
+			antigravityModelsSnapshot = { at: Date.now(), models: modeles };
+			return avant !== modeles.map(m => m.value).join("\n");
+		})
+		.catch(() => false)
+		.finally(() => { antigravityRefreshEnCours = null; });
+	return antigravityRefreshEnCours;
+}
+
+/** Le modèle à passer à `agy` : la valeur persistée si la liste la connaît,
+    sinon le PREMIER de la liste (le CLI la rend du plus récent au plus
+    ancien), sinon la chaîne vide — `--model` est alors omis. */
+export function resolveAntigravityModel(value?: string): string {
+	const modeles = getAntigravityModels();
+	if (value && modeles.some(m => m.value === value)) return value;
+	return modeles.length ? modeles[0].value : "";
+}
 
 export const CLAUDE_EFFORTS: EffortDef[] = [
 	{ value: "low", label: "low" },
@@ -1115,7 +1178,7 @@ export async function fetchOllamaCloudCatalog(): Promise<OllamaCatalogEntry[]> {
 export function getDefaultModels(providerId: string): ModelDef[] {
 	if (providerId === "claude-code") return CLAUDE_CODE_MODELS;
 	if (providerId === "codex") return getCodexModels();
-	if (providerId === "gemini-cli") return GEMINI_MODELS;
+	if (providerId === "antigravity-cli") return getAntigravityModels();
 	// OllamaCatalogEntry[] est structurellement assignable à ModelDef[].
 	return dedupeOllamaLatest(OLLAMA_FALLBACK_CATALOG);
 }
@@ -1181,28 +1244,28 @@ export async function checkCodex(force?: boolean): Promise<CodexStatus> {
 	return result;
 }
 
-let geminiCache: { at: number; result: CodexStatus } | null = null;
+let antigravityCache: { at: number; result: CodexStatus } | null = null;
 
-/** Gemini CLI installé ? `gemini --version` rend le seul numéro, sur une ligne.
-    Même règle que les deux autres sondes : TOUT REJET VAUT « PAS INSTALLÉ »
-    (l'hôte peut ne pas savoir lancer de CLI, l'outil peut avoir disparu), et
-    c'est la seule chose que l'appelant demande. */
-export async function checkGemini(force?: boolean): Promise<CodexStatus> {
+/** Antigravity CLI installé ? `agy --version` rend le seul numéro (« 1.2.7 »),
+    sur une ligne. Même règle que les deux autres sondes : TOUT REJET VAUT
+    « PAS INSTALLÉ » (l'hôte peut ne pas savoir lancer de CLI, l'outil peut
+    avoir disparu), et c'est la seule chose que l'appelant demande. */
+export async function checkAntigravity(force?: boolean): Promise<CodexStatus> {
 	if (!currentHost().platform.isDesktopApp) {
 		return { ok: false, reason: "mobile" };
 	}
-	if (!force && geminiCache && Date.now() - geminiCache.at < CLAUDE_CODE_TTL) {
-		return geminiCache.result;
+	if (!force && antigravityCache && Date.now() - antigravityCache.at < CLAUDE_CODE_TTL) {
+		return antigravityCache.result;
 	}
 	const result = await requireHost("process")
-		.run({ tool: "gemini", args: ["--version"], stdin: "", timeoutMs: 10000 })
+		.run({ tool: "agy", args: ["--version"], stdin: "", timeoutMs: 10000 })
 		.then((res): CodexStatus => {
 			if (res.code !== 0) return { ok: false, reason: "not-installed" };
 			const parts = (res.stdout || "").trim().split(/\s+/);
 			return { ok: true, version: parts[parts.length - 1] || "" };
 		})
 		.catch((): CodexStatus => ({ ok: false, reason: "not-installed" }));
-	geminiCache = { at: Date.now(), result };
+	antigravityCache = { at: Date.now(), result };
 	return result;
 }
 

@@ -21,7 +21,7 @@ import { currentHost, requireHost } from "../host/current";
 import { t } from "../i18n";
 import { renderCollapsibleSection } from "./collapsible";
 
-export type InstallProvider = "claude-code" | "codex" | "ollama" | "gemini-cli";
+export type InstallProvider = "claude-code" | "codex" | "ollama" | "antigravity-cli";
 
 export interface InstallModalDeps {
 	provider: InstallProvider;
@@ -38,13 +38,13 @@ export interface InstallModalDeps {
 	renderCodeBlock?(host: HTMLElement, code: string, lang: string): void;
 }
 
-const NOMS: Record<InstallProvider, string> = { "claude-code": "Claude Code", codex: "Codex CLI", ollama: "Ollama", "gemini-cli": "Gemini CLI" };
-const OUTILS: Record<InstallProvider, "claude" | "codex" | "ollama" | "gemini"> = { "claude-code": "claude", codex: "codex", ollama: "ollama", "gemini-cli": "gemini" };
+const NOMS: Record<InstallProvider, string> = { "claude-code": "Claude Code", codex: "Codex CLI", ollama: "Ollama", "antigravity-cli": "Antigravity CLI" };
+const OUTILS: Record<InstallProvider, "claude" | "codex" | "ollama" | "agy"> = { "claude-code": "claude", codex: "codex", ollama: "ollama", "antigravity-cli": "agy" };
 const DOCS: Record<InstallProvider, string> = {
 	"claude-code": "https://code.claude.com/docs/en/setup",
 	codex: "https://learn.chatgpt.com/docs/codex/cli",
 	ollama: "https://ollama.com/download",
-	"gemini-cli": "https://geminicli.com/docs/get-started/installation",
+	"antigravity-cli": "https://antigravity.google/docs/cli/install/",
 };
 const SONDE_MS = 3000;
 

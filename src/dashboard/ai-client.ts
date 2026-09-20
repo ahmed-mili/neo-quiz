@@ -3,7 +3,7 @@ import { currentHost, requireHost } from "../host/current";
 import { jetonFichier, jetonHome, jetonSortie, nouveauMarqueur } from "../host/jetons";
 import {
 	resolveClaudeModel,
-	resolveCodexModel,
+	resolveCodexModel, resolveAntigravityModel,
 	resolveEffort,
 	getCodexModels,
 	getProvider,
@@ -606,6 +606,11 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 		// provider, slug retiré), retombe sur le défaut Codex.
 		if (provider === "codex") {
 			model = resolveCodexModel(model);
+		}
+		// Antigravity : la valeur persistée si `agy models` la connaît, sinon le
+		// premier de la liste, sinon rien — et `--model` est omis.
+		if (provider === "antigravity-cli") {
+			model = resolveAntigravityModel(model);
 		}
 
 		const { systemPrompt, userPrompt } = composerPrompts(prompt, options);

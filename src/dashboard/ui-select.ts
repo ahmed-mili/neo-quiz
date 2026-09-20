@@ -884,18 +884,21 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		fly.setAttribute("role", "menu");
 		for (const c of b.channels) appendChannel(fly, c);
 
-		// À droite du menu, rabattu à gauche s'il n'y a pas la place. Haut du
-		// flyout aligné sur le haut de sa ligne : les canaux descendent depuis
-		// la marque à laquelle ils appartiennent.
+		/* TOUJOURS À DROITE DU MENU, JAMAIS RABATTU À GAUCHE (Ahmed,
+		   2026-09-20). La ligne porte un chevron qui pointe à DROITE : un
+		   flyout qui s'ouvre du côté opposé fait mentir la seule indication
+		   que l'utilisateur ait de l'endroit où regarder. Quand la place
+		   manque, on la prend sur le bord de l'écran — le flyout est collé à
+		   8 px du bord droit — plutôt que de changer de côté. Haut du flyout
+		   aligné sur le haut de sa ligne : les canaux descendent depuis la
+		   marque à laquelle ils appartiennent. */
 		const rowR = row.getBoundingClientRect();
 		const menuR = menuEl.getBoundingClientRect();
 		fly.style.visibility = "hidden";
 		fly.style.top = "0px";
 		fly.style.left = "0px";
 		const fr = fly.getBoundingClientRect();
-		let left = menuR.right + 4;
-		if (left + fr.width > window.innerWidth - 8) left = menuR.left - 4 - fr.width;
-		left = Math.max(8, left);
+		const left = Math.max(8, Math.min(menuR.right + 4, window.innerWidth - 8 - fr.width));
 		const top = Math.min(Math.max(8, rowR.top), window.innerHeight - fr.height - 8);
 		fly.style.left = left + "px";
 		fly.style.top = top + "px";

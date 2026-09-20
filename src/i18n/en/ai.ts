@@ -109,6 +109,8 @@ export const EN_AI = {
 	"ai.status.claudeMissing": "Claude Code not installed",
 	"ai.status.codexOk": "Codex CLI v{version}",
 	"ai.status.codexMissing": "Codex CLI not installed",
+	"ai.status.geminiOk": "Gemini CLI v{version}",
+	"ai.status.geminiMissing": "Gemini CLI not installed",
 	// Affiché que le compte soit connecté ou non : le CLI et sa version, comme
 	// pour Claude/Codex/Ollama. C'est la PASTILLE (verte/orange) qui porte
 	// l'état — inutile de le répéter en toutes lettres (demande Ahmed).
@@ -128,6 +130,8 @@ export const EN_AI = {
 	"ai.hint.geminiDesktopOnly": "Generating with Gemini (Gemini CLI) is available on desktop only.",
 	"ai.hint.codexNotInstalled": "Codex CLI is not installed.",
 	"ai.hint.installCodex": "Install Codex CLI",
+	"ai.hint.geminiNotInstalled": "Gemini CLI is not installed.",
+	"ai.hint.installGemini": "Install Gemini CLI",
 	// Ni « installed », ni la version, ni ce qui se passera ensuite : le statut du
 	// fournisseur donne déjà la version, et les modèles qui apparaissent se voient
 	// (demande Ahmed). Ce message ne dit QUE ce qui manque et comment y remédier.
@@ -140,9 +144,11 @@ export const EN_AI = {
 	"ai.install.title.claude-code": "Claude Code is not installed",
 	"ai.install.title.codex": "Codex CLI is not installed",
 	"ai.install.title.ollama": "Ollama is not installed",
+	"ai.install.title.gemini-cli": "Gemini CLI is not installed",
 	"ai.install.what.claude-code": "Anthropic's command-line tool. Neo Quiz generates quizzes with your Claude account.",
 	"ai.install.what.codex": "OpenAI's command-line tool, used with a ChatGPT subscription. Not the Codex desktop app.",
 	"ai.install.what.ollama": "Free models on your own computer, no account needed.",
+	"ai.install.what.gemini-cli": "Google's command-line tool, used with your Google account. It is installed with npm, which comes with Node.js.",
 	"ai.install.auto": "Install automatically",
 		"ai.install.manual": "Install manually",
 	"ai.install.step1": "Open PowerShell: Windows + X, then I.",
@@ -151,6 +157,7 @@ export const EN_AI = {
 	"ai.install.step3.claude-code": "Then type claude and sign in with your Claude account.",
 	"ai.install.step3.codex": "Then type codex login and sign in with your ChatGPT account.",
 	"ai.install.step3.ollama": "Ollama starts by itself.",
+	"ai.install.step3.gemini-cli": "Then type gemini and choose “Sign in with Google”.",
 	"ai.install.step4": "Come back to Neo Quiz: it detects the installation.",
 	"ai.install.learnMore": "Learn more",
 	"ai.install.copy": "Copy",
@@ -192,6 +199,9 @@ export const EN_AI = {
 	"ai.modelDesc.codex55": "For complex coding and research",
 	"ai.modelDesc.codex54": "Solid for everyday coding",
 	"ai.modelDesc.codex54mini": "Light and fast for simple tasks",
+	"ai.modelDesc.geminiPro": "Best reasoning, 1M token context",
+	"ai.modelDesc.geminiFlash": "Fast and balanced for most quizzes",
+	"ai.modelDesc.geminiFlashLite": "Fastest, for simple material",
 
 	/* ── Badge d'accès à Fable (déduit du forfait lu dans le trousseau du CLI) ── */
 	"ai.badge.included": "Included",

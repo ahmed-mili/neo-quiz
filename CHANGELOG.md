@@ -14,11 +14,15 @@ release notes.
 ## [Unreleased]
 
 ### Added
+- Gemini joins the providers, between ChatGPT and Perplexity, with its two channels: Gemini CLI, which generates with your Google account, and gemini.google.com. The CLI installs from the app like the others; it needs Node.js, and the installer says so instead of failing on "npm is not recognized".
 - The header of a quiz page now shows when it was generated: the tile that named the model carries the exact date and time underneath, with the logo of whoever generated it.
 - Perplexity can generate a quiz from the web too: picking "perplexity.ai" opens it with your request already written, waiting for you to send it. Perplexity's usual link ("?q=") searches straight away, which would leave no time to attach a course; Neo Quiz uses the one that only fills the box.
 - ChatGPT can now generate a quiz from the web too: picking "chatgpt.com" opens chatgpt.com with your request already written in the composer, and the answer you copy comes back into Neo Quiz, exactly like claude.ai. ChatGPT shows no warning banner above the request, so no dialog is shown when you pick it.
 
 ### Changed
+- In a provider's submenu, the website now comes before the command-line tool: it works right away, for everyone, without installing anything.
+- The submenu always opens on the right of the menu, the way its arrow points, even when the window is narrow; it used to flip to the left.
+- "Claude Code CLI" is back to "Claude Code" in the menu.
 - The "Generated" folder no longer shows the Documents, Links and Notes sections: only generated quizzes are ever written there, so the three boxes stayed empty for good. Every other folder keeps them.
 - In that same folder, the header button is now "Generate" and opens the Generate page, instead of "New quiz" which offered to create a blank quiz or import one, neither of which lands there.
 

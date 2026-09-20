@@ -928,7 +928,41 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// Claude Code et Codex (ChatGPT) partagent le même contrôle modèle+effort
 		// (menu façon claude.ai). Seules changent la liste de modèles, la liste
 		// d'efforts et la résolution du modèle (Fable expire côté Claude).
-		if (provider === "claude-code" || provider === "codex") {
+		/* GEMINI : une liste de modèles (ses trois alias), et AUCUN bouton
+		   d'effort — le CLI n'expose pas de niveau de raisonnement, et un bouton
+		   qui ne part nulle part est pire qu'absent. Il ne partage donc pas le
+		   contrôle à deux boutons de Claude et Codex : il a le sien, réduit au
+		   modèle. */
+		if (provider === "gemini-cli") {
+			buildModelControl = (parent: HTMLElement): void => {
+				const modeles = aiProviders.getDefaultModels("gemini-cli");
+				const courant = (): string => {
+					const v = settings().aiModel || currentModel;
+					return modeles.some(m => m.value === v) ? v : aiProviders.getProvider("gemini-cli").defaultModel;
+				};
+				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger qbd-composer-plain");
+				trigger.type = "button";
+				const trigLabel = ajouter(trigger, "span", "qbd-select-label");
+				const refresh = (): void => {
+					const cur = modeles.find(m => m.value === courant()) || modeles[0];
+					trigLabel.replaceChildren();
+					ajouter(trigLabel, "span", "qbd-model-trigger-name", cur.label);
+				};
+				refresh();
+				trigger.addEventListener("click", () => {
+					openModelMenu(trigger, {
+						models: modeles,
+						currentModel: courant(),
+						// Pas de ligne Effort : le CLI Gemini n'en a pas.
+						efforts: [],
+						onPickModel: async (v) => {
+							await saveSettings({ aiModel: v });
+							refresh();
+						}
+					});
+				});
+			};
+		} else if (provider === "claude-code" || provider === "codex") {
 			const isClaude = provider === "claude-code";
 			// Liste relue à CHAQUE usage (trigger + ouverture du menu) : côté
 			// Claude, Fable expire à date ; côté Codex, la liste suit
@@ -1958,6 +1992,39 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					action: {
 						label: t("ai.hint.installCodex"), icon: "download",
 						onClick: () => ouvrirModalInstallation("codex", () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true }))
+					}
+				});
+			}
+		});
+
+		/* GEMINI — même patron que Codex, à deux choses près, et les deux
+		   viennent du CLI lui-même : il n'a AUCUNE sonde de connexion non
+		   interactive (ses identifiants vont au trousseau du système), donc pas
+		   de `verifierCompte` ici ; et son installation passe par npm, ce que le
+		   modal dit. Sans sonde de compte, un compte non connecté se découvre à
+		   la génération, où le message nomme la commande à taper. */
+		aiProviders.checkGemini(force).then(res => {
+			if (res.ok) {
+				setStatus("gemini-cli", providerSelect, "ok", t("ai.status.geminiOk", { version: res.version }));
+			} else if (res.reason === "mobile") {
+				setStatus("gemini-cli", providerSelect, "warn", t("ai.status.desktopOnly"));
+			} else {
+				setStatus("gemini-cli", providerSelect, "err", t("ai.status.geminiMissing"));
+			}
+			if (res.ok) {
+				setHint("gemini-cli", hintZone, provider, null);
+			} else if (res.reason === "mobile") {
+				setHint("gemini-cli", hintZone, provider, {
+					type: "warn", icon: "monitor",
+					text: t("ai.hint.geminiDesktopOnly")
+				});
+			} else {
+				setHint("gemini-cli", hintZone, provider, {
+					type: "err", icon: "download",
+					text: t("ai.hint.geminiNotInstalled"),
+					action: {
+						label: t("ai.hint.installGemini"), icon: "download",
+						onClick: () => ouvrirModalInstallation("gemini-cli", () => refreshProviderStatuses({ providerSelect, hintZone, provider, currentModel, modelSelect, ollamaCtl, buildOllamaList, force: true }))
 					}
 				});
 			}

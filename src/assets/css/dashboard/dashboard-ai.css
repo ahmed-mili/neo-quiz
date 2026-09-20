@@ -1512,10 +1512,14 @@
 .qbd-install-modal .modal-title-icon,
 .qbd-install-modal .modal-title-icon svg { width: 22px; height: 22px; }
 .qbd-install-what { margin: 0 0 20px; color: var(--text-muted); font-size: 14px; line-height: 1.6; }
-.qbd-install-auto { width: 100%; justify-content: center; margin: 14px 0 0; min-height: 42px; font-size: 14px; }
+/* L'ÉCART EST ÉCRIT, il ne vient plus du hasard : tant qu'un plancher
+   étirait la boîte, `margin-top: auto` posait l'air entre la voie manuelle
+   et ce bouton ; sans plancher, il n'y a plus rien à distribuer et les deux
+   se touchaient (Ahmed, 2026-09-20). */
+.qbd-install-auto { width: 100%; justify-content: center; margin: 22px 0 0; min-height: 42px; font-size: 14px; }
 .qbd-install-auto svg { width: 17px; height: 17px; }
 .qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; font-size: 14px; }
-.qbd-install-state:not(:empty) { margin: 14px 0 0; padding: 13px 14px; border-radius: 10px; background: var(--background-modifier-hover); }
+.qbd-install-state:not(:empty) { margin: 22px 0 0; padding: 13px 14px; border-radius: 10px; background: var(--background-modifier-hover); }
 .qbd-install-modal[data-state="en-cours"] .qbd-install-auto,
 .qbd-install-modal[data-state="connexion"] .qbd-install-auto,
 .qbd-install-modal[data-state="detecte"] .qbd-install-auto { display: none; }
@@ -1551,7 +1555,7 @@
 	cursor: pointer;
 }
 .qbd-install-manual-row .qbd-quizzes-node-head:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
-.qbd-install-manual-row .qbd-quizzes-node-head { padding: 9px 6px; }
+.qbd-install-manual-row .qbd-quizzes-node-head { padding: 9px 6px; margin-left: -6px; }
 .qbd-install-manual-row .qbd-quizzes-node-chevron { flex: 0 0 auto; width: 16px; height: 16px; display: inline-flex; }
 .qbd-install-manual-row .qbd-quizzes-node-chevron svg { width: 16px; height: 16px; }
 

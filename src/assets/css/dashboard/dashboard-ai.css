@@ -1549,22 +1549,24 @@
 	transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
 }
 .qbd-install-auto > * { position: relative; z-index: 1; }
-/* LES DEUX COULEURS DU BOUTON, et le sens qui les relie : au repos un
-   lavande FRANC (la teinte de l'interface poussée d'un sixième vers le bleu
-   de la marque, rgb(183 198 245) : la base seule tirait vers le gris bleuté
-   et manquait d'assise) ; au survol, il S'ÉCLAIRE au lieu de se ternir. Le
-   survol commun des boutons principaux mêle 8 % du fond SOMBRE à la pilule —
-   ce qui donne le gris clair voulu sur le blanc cassé de « Mes quiz », mais
-   salit un lavande (Ahmed, 2026-09-20). Éclaircir, c'est aussi le sens de
-   l'onde claire du clic : une seule direction pour les trois états. */
+/* LES TROIS COULEURS DU BOUTON, et le sens qui les relie. Au repos, un
+   BLANC à peine lavande (moitié de la teinte de l'interface, moitié blanc
+   pur : rgb(226 231 250)) — le lavande franc essayé d'abord était trop
+   sourd pour une action principale (Ahmed, 2026-09-20). Au survol il monte
+   au blanc presque pur, à l'appui il redescend d'un cran : la couleur
+   suffit à dire l'enfoncement, là où le survol montait. Le survol commun
+   des boutons principaux, lui, mêle 8 % du fond SOMBRE à la pilule — le
+   gris clair voulu sur le blanc cassé de « Mes quiz », mais une salissure
+   sur un lavande. Éclaircir, c'est aussi le sens du balayage et de l'onde :
+   une seule direction pour les trois états. */
 .qbd-install-auto {
-	background: color-mix(in srgb, var(--text-normal) 84%, var(--interactive-accent)) !important;
+	background: color-mix(in srgb, var(--text-normal) 50%, #ffffff) !important;
 }
 .qbd-install-auto:hover {
-	background: color-mix(in srgb, var(--text-normal) 66%, #ffffff) !important;
+	background: color-mix(in srgb, var(--text-normal) 20%, #ffffff) !important;
 }
 .qbd-install-auto:active {
-	background: color-mix(in srgb, var(--text-normal) 78%, #ffffff) !important;
+	background: color-mix(in srgb, var(--text-normal) 62%, #ffffff) !important;
 }
 /* La respiration et l'écrasement, rétablis à la demande d'Ahmed
    (2026-09-20) après un essai sans eux : le mouvement fait le bouton. */

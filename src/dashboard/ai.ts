@@ -4,6 +4,7 @@ import type { AiPreset, DashboardViewName, NavigateData } from "../types/dashboa
 import type { HostFile, HostModalHandle, ImageDeGlisser } from "../host/types";
 import { currentHost, requireHost } from "../host/current";
 import { ajouter, ancreApresRelayout, ancreRemontee, CLASSE_MODALE_HAUT } from "../dom";
+import { openConfirmModal } from "../editor/modals";
 import { LOG_PREFIX } from "../branding";
 import * as aiProviders from "./ai-providers";
 import { composerPrompts, parseReponseQuiz } from "./ai-client";
@@ -2830,8 +2831,25 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					const interne = webModalFermetureInterne;
 					webModalFermetureInterne = false;
 					/* Fermée par l'utilisateur (Échap, fond, croix) pendant
-					   l'attente : c'est « Annuler ». */
-					if (!interne && phase === "web") annulerAttenteWeb();
+					   l'attente : une CONFIRMATION d'abord (2026-09-20) — un clic
+					   sur la croix jetait une génération en cours sur le site.
+					   Refusée, la modale d'attente revient (la phase est encore
+					   « web », `syncWebModal` la rouvre). */
+					if (!interne && phase === "web") {
+						openConfirmModal(
+							t("ai.web.cancelTitle"),
+							t("ai.web.cancelMessage", { site: attenteWebSite }),
+							t("ai.web.cancelConfirm"),
+							t("ai.web.cancelKeep"),
+							(confirme) => {
+								if (phase !== "web") return;
+								if (confirme) annulerAttenteWeb();
+								else syncWebModal();
+							},
+							undefined,
+							"x-circle",
+						);
+					}
 				},
 			});
 		} else if (phase !== "web" && webModal) {

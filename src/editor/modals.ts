@@ -64,6 +64,9 @@ export function openConfirmModal(
 	/** Une ligne de détail sous le message (la date de modification d'un
 	    fichier qu'on s'apprête à effacer) — en retrait, plus discrète. */
 	details?: string,
+	/** L'icône Lucide de l'en-tête : la poubelle par défaut (effacer), autre
+	    chose quand ce qu'on confirme n'efface rien (annuler une attente). */
+	icon = "trash-2",
 ): void {
 	let confirmed = false;
 	requireHost("modals").open({
@@ -74,7 +77,7 @@ export function openConfirmModal(
 			// t() est déjà résolu par l'appelant (au clic, donc au rendu) : ces
 			// quatre libellés arrivent en paramètres, jamais d'une constante.
 			const entete = ajouter(c, "div", "qb-confirm-head");
-			currentHost().ui.setIcon(ajouter(entete, "div", "qb-confirm-icon"), "trash-2");
+			currentHost().ui.setIcon(ajouter(entete, "div", "qb-confirm-icon"), icon);
 			const texte = ajouter(entete, "div", "qb-confirm-text");
 			ajouter(texte, "h2", "qb-confirm-title", title);
 			ajouter(texte, "p", "qb-confirm-message", message);

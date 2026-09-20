@@ -2384,7 +2384,7 @@
 /* Les étapes de la carte d'attente : une liste numérotée, alignée à gauche
    dans une carte centrée, le numéro à l'accent. */
 .qbd-ai-web-etapes {
-	margin: 4px auto 6px;
+	margin: 4px auto 0;
 	padding: 0 0 0 26px;
 	max-width: 46ch;
 	text-align: left;
@@ -2432,10 +2432,11 @@
 	gap: 8px;
 	max-width: 100%;
 	box-sizing: border-box;
-	margin: 2px 0 4px;
+	margin: 0;
 	/* L'air que réclament les feuilles de dessous (décalées à droite, et
-	   tournées au survol) : la rangée qui défile rogne tout ce qui dépasse. */
-	padding: 4px 14px 8px;
+	   tournées au survol) : la rangée qui défile rogne tout ce qui dépasse.
+	   Resserré le 2026-09-20 : la carte laissait trop de vide en bas. */
+	padding: 4px 14px 2px;
 	overflow-x: auto;
 	overflow-y: hidden;
 }
@@ -2449,7 +2450,7 @@
 	flex: 0 0 100px;
 	width: 100px;
 	box-sizing: border-box;
-	padding: 10px 0 2px;
+	padding: 4px 0 0;
 	cursor: grab;
 }
 .qbd-ai-web-pile:active { cursor: grabbing; }
@@ -2646,7 +2647,7 @@
 	   plus bas), pas d'un minimum : la carte reste proportionnée à son
 	   contenu. */
 	min-height: 0;
-	padding: 4px 8px 10px;
+	padding: 4px 8px 0;
 	box-sizing: border-box;
 	text-align: center;
 }
@@ -2757,7 +2758,7 @@
 .qbd-ai-web-actions {
 	display: flex;
 	gap: 10px;
-	margin-top: 10px;
+	margin-top: 2px;
 }
 
 /* ── Le modal d'avertissement d'un site (claude.ai) ──

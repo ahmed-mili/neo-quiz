@@ -501,6 +501,13 @@ await withSrcModule(
 			r.check("niveauAntigravity : le niveau retenu pour LA famille, clampé à ses niveaux, sinon son défaut ; une famille nue n'en a pas",
 				[providers.niveauAntigravity({ "gemini-3.1-pro": "low" }, "gemini-3.1-pro"), providers.niveauAntigravity({ "gemini-3.1-pro": "medium" }, "gemini-3.1-pro"), providers.niveauAntigravity(undefined, "gemini-3.8-flash"), providers.niveauAntigravity({}, "claude-opus-4-6-thinking")],
 				["low", "low", "high", ""]);
+			/* La sonde de COMPTE est `agy models` : connecté si la liste vient,
+			   et elle est gardée au passage. */
+			r.check("sondeConnexion(agy) = checkAntigravityLogin : vrai quand `agy models` rend une liste",
+				{ ok: await providers.sondeConnexion("agy")(), n: providers.getAntigravityModels().length }, { ok: true, n: 4 });
+			installHost(fauxHote({ runs: { "agy models": { code: 1, stdout: "Fetching available models...\nError: Please sign in to view available models." } } }).hote);
+			r.check("checkAntigravityLogin : faux sur « Please sign in » (code 1)", await providers.checkAntigravityLogin(), false);
+			installHost(hote);
 			/* Un échec (compte non connecté : « Please sign in… », code 1) garde
 			   l'instantané d'avant et ne dit AUCUN changement. */
 			installHost(fauxHote({ runs: { "agy models": { code: 1, stdout: "Fetching available models...\nError: Please sign in to view available models." } } }).hote);

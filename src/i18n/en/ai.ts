@@ -174,6 +174,7 @@ export const EN_AI = {
 	"ai.login.button": "Sign in",
 	"ai.login.reason.codex": "Your ChatGPT account is not connected yet.",
 	"ai.login.reason.claude": "Your Claude account is not connected yet.",
+	"ai.login.reason.agy": "Your Google account is not connected to Antigravity CLI yet.",
 	"ai.login.reason.ollama": "Ollama is not connected to your account yet; cloud models need it.",
 	"ai.login.waiting": "Waiting for sign-in",
 	"ai.login.hint": "Finish signing in in the terminal window that just opened. Neo Quiz detects it by itself.",

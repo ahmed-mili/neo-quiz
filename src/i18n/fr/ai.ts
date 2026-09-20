@@ -153,6 +153,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.login.button": "Se connecter",
 	"ai.login.reason.codex": "Votre compte ChatGPT n'est pas encore connecté.",
 	"ai.login.reason.claude": "Votre compte Claude n'est pas encore connecté.",
+	"ai.login.reason.agy": "Votre compte Google n'est pas encore connecté à Antigravity CLI.",
 	"ai.login.reason.ollama": "Ollama n'est pas encore connecté à votre compte ; les modèles cloud en ont besoin.",
 	"ai.login.waiting": "En attente de la connexion",
 	"ai.login.hint": "Terminez la connexion dans la fenêtre de terminal qui vient de s'ouvrir. Neo Quiz la détecte tout seul.",

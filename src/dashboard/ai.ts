@@ -61,7 +61,10 @@ type Phase = "idle" | "loading" | "result" | "error" | "connexion" | "web";
 
 /** Les trois outils qui ont un compte à connecter (pas les modèles locaux
     Ollama, qui n'en ont pas besoin). */
-type OutilCompte = "claude" | "codex" | "ollama";
+type OutilCompte = "claude" | "codex" | "ollama" | "agy";
+/** L'identifiant de fournisseur de chaque outil à compte, et l'inverse. */
+const ID_DE_OUTIL: Record<OutilCompte, string> = { claude: "claude-code", codex: "codex", ollama: "ollama", agy: "antigravity-cli" };
+const OUTIL_DE_ID: Record<string, OutilCompte> = { "claude-code": "claude", codex: "codex", ollama: "ollama", "antigravity-cli": "agy" };
 
 /** Le pas de la sonde de connexion, le même que celui du modal
     d'installation : trois secondes, assez court pour que la détection semble
@@ -327,7 +330,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	/** L'outil que l'échec courant demande de connecter (`besoinConnexion` de
 	    `ai-client.ts`), ou `null` quand l'erreur est d'une autre nature. C'est
 	    lui qui décide du bouton de la carte d'erreur. */
-	let errorLogin: "claude" | "codex" | "ollama" | null = null;
+	let errorLogin: OutilCompte | null = null;
 	/* L'attente d'une réponse copiée (canal web, spec 2026-09-18). Non nulle
 	   en phase « web » seulement : le jeton de CETTE ouverture, ce qui a été
 	   ouvert (adresse ou presse-papier), la fonction qui arrête la veille du
@@ -1853,7 +1856,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	 * demande pas de se connecter à un outil qui n'est pas là.
 	 */
 	function verifierCompte(tool: OutilCompte, hintZone: HTMLElement | null, provider: string, ollamaArgs?: OllamaSondeArgs): void {
-		const id = tool === "claude" ? "claude-code" : tool;
+		const id = ID_DE_OUTIL[tool];
 		if (provider !== id) return;
 		if (tool === "ollama" && !aiProviders.isOllamaCloudModel(settings().aiModel || "")) {
 			/* Un modèle local n'a pas besoin de compte : si le hint affiché est
@@ -1922,8 +1925,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   fournisseur devient celui des réglages ; à la fermeture, statuts et
 	   hints sont relus pour que le menu dise le nouvel état. */
 	function ouvrirModalInstallation(id: InstallProvider, rafraichir: () => void): void {
+		/* CHAQUE fournisseur a SA sonde : celle d'Antigravity retombait sur
+		   Ollama, qui tourne ici — le modal disait « détecté » sans rapport
+		   avec `agy`, et rien n'enchaînait (vécu le 2026-09-20). */
 		const probe = id === "claude-code" ? () => aiProviders.checkClaudeCode(true)
 			: id === "codex" ? () => aiProviders.checkCodex(true)
+			: id === "antigravity-cli" ? () => aiProviders.checkAntigravity(true)
 			: () => aiProviders.checkOllama(settings().aiOllamaUrl, true);
 		openInstallModal({
 			provider: id,
@@ -1945,7 +1952,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				   Ollama, dont le compte passe par le navigateur : là, c'est le
 				   hint qui le propose (on n'ouvre pas un site sans un clic). */
 				if (!detecte || id === "ollama") return;
-				const tool: OutilCompte = id === "claude-code" ? "claude" : "codex";
+				const tool = OUTIL_DE_ID[id] as "claude" | "codex" | "agy";
 				void aiProviders.sondeConnexion(tool)().then(connecte => {
 					if (!connecte && !disposed && (settings().aiProvider || "") === id) attendreCompte(tool, "hint");
 				});
@@ -2108,6 +2115,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			}
 			if (res.ok) {
 				setHint("antigravity-cli", hintZone, provider, null);
+				// Installé : le compte est-il connecté ? (même filet que Claude
+				// et Codex — le hint « pas connecté » avec son bouton).
+				verifierCompte("agy", hintZone, provider);
 			} else if (res.reason === "mobile") {
 				setHint("antigravity-cli", hintZone, provider, {
 					type: "warn", icon: "monitor",
@@ -2504,7 +2514,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   que le bouton la remplace, la garder dirait de faire à la main ce
 		   qu'un clic fait — vu à l'écran le 2026-09-18, les deux ensemble. */
 		ajouter(errorEl, "p", "qbd-ai-error-msg",
-			offreConnexion ? t(`ai.login.reason.${tool as "claude" | "codex" | "ollama"}`) : errorMessage);
+			offreConnexion ? t(`ai.login.reason.${tool as OutilCompte}`) : errorMessage);
 
 		/* La réponse copiée n'était pas un quiz : rouvrir le site (avec un
 		   jeton neuf) est la seule action qui a du sens, pas « Réessayer »,
@@ -2615,7 +2625,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		couperSondeConnexion();
 		/* Le hint « pas connecté » a pu être posé juste AVANT l'attente (sonde
 		   du retour de modal) : il tombe ici, la carte d'attente le remplace. */
-		const idAttendu = tool === "claude" ? "claude-code" : tool;
+		const idAttendu = ID_DE_OUTIL[tool];
 		if (providerHint[idAttendu]?.icon === "log-in") providerHint[idAttendu] = null;
 		connexionVue = false;
 		connexionOrigine = origine;
@@ -2635,7 +2645,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				   d'Ahmed, 2026-09-19 — on installe et on connecte Claude Code
 				   pour s'en servir). S'il n'est pas le fournisseur choisi, il
 				   le devient ici, avec son modèle par défaut. */
-				const idOutil = tool === "claude" ? "claude-code" : tool;
+				const idOutil = ID_DE_OUTIL[tool];
 				providerHint[idOutil] = null;
 				if ((settings().aiProvider || "") !== idOutil) {
 					void saveSettings({ aiProvider: idOutil, aiModel: aiProviders.getProvider(idOutil).defaultModel });

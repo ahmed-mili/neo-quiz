@@ -166,7 +166,7 @@ function userError(message: string): UserFacingError {
     autrement que par son texte : `besoinConnexion` nomme l'outil à connecter.
     C'est ce drapeau, jamais le message, que la page « Générer » lit pour
     remplacer « Réessayer » par « Se connecter ». */
-export type LoginRequiredError = Error & { besoinConnexion?: "claude" | "codex" | "ollama" };
+export type LoginRequiredError = Error & { besoinConnexion?: "claude" | "codex" | "ollama" | "agy" };
 /** Une erreur dont la CAUSE est un plan insuffisant (Ollama 402) : la carte
     d'erreur remplace « Réessayer » par « Mettre à niveau », parce que
     réessayer rendrait le même 402. */
@@ -182,7 +182,7 @@ export type UpgradeRequiredError = Error & { besoinPlan?: true };
    « Ollama injoignable ») : sans ce drapeau, un 401/403 perdrait son
    `besoinConnexion` en traversant ce catch et retomberait sur le message
    réseau générique au lieu de la carte « Se connecter ». */
-function erreurConnexion(tool: "claude" | "codex" | "ollama", message: string): LoginRequiredError & UserFacingError {
+function erreurConnexion(tool: "claude" | "codex" | "ollama" | "agy", message: string): LoginRequiredError & UserFacingError {
 	const e = new Error(message) as LoginRequiredError & UserFacingError;
 	e.besoinConnexion = tool;
 	e.userFacing = true;
@@ -710,11 +710,11 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 				return new Error(t("ai.err.antigravityTimeout", { minutes: CLI_TIMEOUT_MIN }));
 			}
 			if (detail.includes("authentication required") || detail.includes("authentication failed") || detail.includes("sign in") || detail.includes("unauthorized") || detail.includes("401")) {
-				/* MESSAGE SEUL, sans `erreurConnexion` : la connexion d'Antigravity
-				   se fait depuis le terminal d'installation (voir
-				   `commandeConnexion`, `process.ts`) ; le bouton « Se connecter »
-				   de la carte d'erreur suppose une sonde que le CLI n'offre pas. */
-				return new Error(t("ai.err.antigravityNotLoggedIn"));
+				/* Le bouton « Se connecter » de la carte d'erreur, comme pour
+				   Claude et Codex : la sonde est `agy models`
+				   (`checkAntigravityLogin`), la connexion le terminal
+				   (`commandeConnexion`, `process.ts`). */
+				return erreurConnexion("agy", t("ai.err.antigravityNotLoggedIn"));
 			}
 			if (detail.includes("quota") || detail.includes("rate limit") || detail.includes("resource_exhausted") || detail.includes("429")) {
 				return new Error(t("ai.err.antigravityRateLimit"));

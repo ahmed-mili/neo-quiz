@@ -1412,8 +1412,26 @@ export async function checkClaudeLogin(): Promise<boolean> {
 
 /** La sonde de connexion d'un outil, ou `null` pour ceux qui n'ont pas de
     compte (Ollama). Un seul point d'appel pour la page « Générer ». */
-export function sondeConnexion(tool: "claude" | "codex"): () => Promise<boolean> {
-	return tool === "claude" ? checkClaudeLogin : checkCodexLogin;
+/** Antigravity : pas de sous-commande de statut ; `agy models` ne répond la
+    liste QUE connecté (sinon « Please sign in to view available models »,
+    code 1 — mesuré le 2026-09-20, `agy` 1.2.7). La liste lue est gardée au
+    passage : c'est la même que celle du composer. */
+export async function checkAntigravityLogin(): Promise<boolean> {
+	if (!currentHost().platform.isDesktopApp) return false;
+	return requireHost("process")
+		.run({ tool: "agy", args: ["models"], stdin: "", timeoutMs: SONDE_CONNEXION_MS })
+		.then(res => {
+			if (res.code !== 0) return false;
+			const modeles = parseAntigravityModels(res.stdout);
+			if (modeles.length === 0) return false;
+			antigravityModelsSnapshot = { at: Date.now(), models: modeles };
+			return true;
+		})
+		.catch(() => false);
+}
+
+export function sondeConnexion(tool: "claude" | "codex" | "agy"): () => Promise<boolean> {
+	return tool === "claude" ? checkClaudeLogin : tool === "codex" ? checkCodexLogin : checkAntigravityLogin;
 }
 
 let ollamaCache: { at: number; url: string; result: OllamaStatus } | null = null;

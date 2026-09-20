@@ -4,6 +4,26 @@
    au <body>, hors de tout wrapper de tokens du plugin.
    ═════════════════════════════════════════════════════════ */
 
+/* UN CONTRÔLE NE SE SÉLECTIONNE PAS, QUELLE QUE SOIT SA BALISE. La règle vit
+   ici, sur les CLASSES des contrôles (déclencheurs, lignes de menu), et non
+   sur `button` : posée sur la balise, elle avait lâché le libellé du site du
+   composer le jour où il est passé de `button` à `div` pour cesser d'être
+   cliquable — même rôle, même place, mais plus dans la règle, et un
+   double-clic le surlignait (Ahmed, 2026-09-20 : « normalement tu ne devrais
+   pas oublier ce type de chose »). Une propriété de RÔLE s'écrit sur le rôle.
+   Le champ de recherche d'un menu (« Find model… ») se réautorise juste
+   dessous. */
+.qbd-select,
+.qbd-select-option,
+.qbd-select-menu {
+	-webkit-user-select: none;
+	user-select: none;
+}
+.qbd-select-menu input {
+	-webkit-user-select: text;
+	user-select: text;
+}
+
 /* ── Trigger (look champ) ──
    background/box-shadow !important : neutralise le chrome natif
    des <button> d'Obsidian (.theme-dark button, spécificité 0,1,1). */
@@ -287,16 +307,13 @@
 }
 
 /* Le contrôle du milieu quand le canal est un SITE : un libellé, pas un
-   bouton (Ahmed, 2026-09-20). Ni survol, ni curseur, ni chevron — ni
-   sélection : n'étant plus un `button`, il échappait à la règle de la
-   fenêtre, et un double-clic surlignait « claude.ai » en bleu. */
+   bouton (Ahmed, 2026-09-20). Ni survol, ni curseur, ni chevron ; la
+   non-sélection lui vient de `.qbd-select`, en tête de cette feuille. */
 .qbd-channel-trigger--inerte,
 .qbd-channel-trigger--inerte:hover {
 	cursor: default;
 	background: transparent !important;
 	box-shadow: none !important;
-	-webkit-user-select: none;
-	user-select: none;
 }
 
 .qbd-model-trigger-effort {

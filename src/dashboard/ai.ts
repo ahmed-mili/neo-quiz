@@ -960,12 +960,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			buildModelControl = (parent: HTMLElement): void => {
 				const modeles = (): aiProviders.ModelDef[] => aiProviders.getAntigravityModels();
 				const courant = (): string => aiProviders.resolveAntigravityModel(settings().aiModel || currentModel);
-				/* Le niveau EN USAGE pour une famille : le réglage `aiEffort`
-				   clampé à SES niveaux (Gemini 3.1 Pro n'a pas de medium). C'est
-				   ce que chaque ligne affiche en gris, et ce qui partirait. */
-				const niveauDe = (famille: string): string => aiProviders.resolveEffort(provider, settings().aiEffort, famille);
+				/* Le niveau EN USAGE d'une famille : le sien (réglage par famille,
+				   comme chez Antigravity), clampé à ses niveaux (Gemini 3.1 Pro
+				   n'a pas de medium). C'est ce que chaque ligne affiche en gris,
+				   et ce qui partirait. */
+				const niveauDe = (famille: string): string => aiProviders.niveauAntigravity(settings().aiAntigravityLevels, famille);
 				const NIVEAU: Record<string, string> = { low: "Low", medium: "Medium", high: "High" };
-				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger");
+				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger qbd-model-trigger--levels");
 				trigger.type = "button";
 				const trigLabel = ajouter(trigger, "span", "qbd-select-label");
 				const trigChev = ajouter(trigger, "span", "qbd-select-chevron");
@@ -1011,7 +1012,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 							refresh();
 						},
 						onPickLevel: async (v, niveau) => {
-							await saveSettings({ aiModel: v, aiEffort: niveau });
+							await saveSettings({ aiModel: v, aiAntigravityLevels: { ...(settings().aiAntigravityLevels || {}), [v]: niveau } });
 							refresh();
 						}
 					});
@@ -3005,10 +3006,15 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			   `model` porte le site, pas de ligne `effort`. */
 			const canalWeb = aiProviders.estCanalWeb(provider);
 			const model = canalWeb ? provider : (lastUsage?.model || settings().aiModel || "");
+			// Antigravity : le niveau de la FAMILLE (réglage par famille), pas
+			// `aiEffort` qui appartient à Claude et Codex.
+			const effort = canalWeb || provider === "ollama" ? undefined
+				: provider === "antigravity-cli" ? (aiProviders.niveauAntigravity(settings().aiAntigravityLevels, aiProviders.resolveAntigravityModel(model)) || undefined)
+				: settings().aiEffort;
 			const frontmatter = ecrireFrontmatterNeoQuiz({
 				provider,
 				model,
-				effort: provider !== "ollama" && !canalWeb ? settings().aiEffort : undefined,
+				effort,
 				generatedAt: new Date().toISOString(),
 			});
 			await host.fs.write(path, frontmatter + exportAllWithFence(draft.questions, draft.examOptions) + "\n");

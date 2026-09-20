@@ -544,6 +544,13 @@ export function resolveAntigravityModel(value?: string): string {
 	return modeles.length ? modeles[0].value : "";
 }
 
+/** Le niveau EN USAGE d'une famille : celui retenu pour ELLE (réglage
+    `aiAntigravityLevels`), clampé à ses niveaux, sinon son défaut. C'est ce
+    que sa ligne affiche en gris, et ce qui part avec elle. */
+export function niveauAntigravity(memoire: Record<string, string> | undefined, famille: string): string {
+	return resolveEffort("antigravity-cli", memoire ? memoire[famille] : undefined, famille);
+}
+
 /** L'identifiant à passer à `agy --model` : la variante de la famille au
     niveau demandé (sinon au niveau par défaut), ou le modèle tel quel s'il
     n'a pas de variantes. */

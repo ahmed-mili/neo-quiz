@@ -498,6 +498,9 @@ await withSrcModule(
 			r.check("antigravityModelId : la variante au niveau demandé, le défaut si le niveau n'existe pas, le modèle nu tel quel",
 				[providers.antigravityModelId("gemini-3.8-flash", "low"), providers.antigravityModelId("gemini-3.1-pro", "medium"), providers.antigravityModelId("claude-opus-4-6-thinking", "high")],
 				["gemini-3.8-flash-low", "gemini-3.1-pro-high", "claude-opus-4-6-thinking"]);
+			r.check("niveauAntigravity : le niveau retenu pour LA famille, clampé à ses niveaux, sinon son défaut ; une famille nue n'en a pas",
+				[providers.niveauAntigravity({ "gemini-3.1-pro": "low" }, "gemini-3.1-pro"), providers.niveauAntigravity({ "gemini-3.1-pro": "medium" }, "gemini-3.1-pro"), providers.niveauAntigravity(undefined, "gemini-3.8-flash"), providers.niveauAntigravity({}, "claude-opus-4-6-thinking")],
+				["low", "low", "high", ""]);
 			/* Un échec (compte non connecté : « Please sign in… », code 1) garde
 			   l'instantané d'avant et ne dit AUCUN changement. */
 			installHost(fauxHote({ runs: { "agy models": { code: 1, stdout: "Fetching available models...\nError: Please sign in to view available models." } } }).hote);

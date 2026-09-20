@@ -433,23 +433,42 @@
 }
 
 /* ── Menu de modèles à NIVEAUX (référence : le sélecteur d'Antigravity,
-   capture du 2026-09-20). Un titre « Model » en tête ; sur chaque famille,
-   le niveau en gris juste après le nom (« Gemini 3.8 Flash  High ») ; à
-   droite, un chevron pour les familles à niveaux, dont le flyout
-   (Low / Medium / High) s'ouvre au survol. Le nom de la famille COURANTE
-   est en gras, comme chez Antigravity — le check seul ne suffit pas là où
-   la référence met les deux. ── */
+   capture du 2026-09-20, MESURÉE : 25 px par ligne, menu de 236 px, flyout
+   de 150 px à 29 px par ligne — bien plus serré que les ~38 px de nos autres
+   menus). Un titre « Model » en tête ; sur chaque famille, le niveau en gris
+   juste après le nom (« Gemini 3.8 Flash  High ») ; à droite, un chevron
+   pour les familles à niveaux, dont le flyout (Low / Medium / High) s'ouvre
+   au survol. Le nom de la famille COURANTE est en gras, comme chez
+   Antigravity — le check seul ne suffit pas là où la référence met les
+   deux. Le bouton du composer, lui, est en graisse normale : la référence
+   n'y met rien en gras. ── */
+.qbd-model-menu--levels {
+	gap: 0;
+	min-width: 236px;
+}
+
+.qbd-model-menu--levels .qbd-select-option {
+	min-height: 25px;
+	padding: 3px 10px;
+	font-size: 12.5px;
+}
+
 .qbd-model-menu-head {
-	padding: 6px 12px 4px;
+	padding: 5px 10px 3px;
 	font-size: 11.5px;
 	font-weight: 500;
 	color: var(--text-muted);
 }
 
 .qbd-model-option-level {
+	margin-left: 2px;
 	font-size: 12px;
 	color: var(--text-muted);
 	white-space: nowrap;
+}
+
+.qbd-model-trigger--levels .qbd-model-trigger-name {
+	font-weight: 400;
 }
 
 .qbd-level-row {
@@ -470,11 +489,13 @@
 .qbd-level-flyout {
 	min-width: 150px;
 	padding: 4px;
-	gap: 1px;
+	gap: 0;
 }
 
 .qbd-level-option {
-	min-height: 32px;
+	min-height: 29px;
+	padding: 4px 12px;
+	font-size: 12.5px;
 }
 
 /* Lignes « Effort » / « Plus de modèles » / famille à niveaux surlignées quand leur flyout est ouvert */

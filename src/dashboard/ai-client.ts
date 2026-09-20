@@ -3,7 +3,7 @@ import { currentHost, requireHost } from "../host/current";
 import { jetonFichier, jetonHome, jetonSortie, nouveauMarqueur } from "../host/jetons";
 import {
 	resolveClaudeModel,
-	resolveCodexModel, resolveAntigravityModel, antigravityModelId,
+	resolveCodexModel, resolveAntigravityModel, antigravityModelId, niveauAntigravity,
 	resolveEffort,
 	getCodexModels,
 	getProvider,
@@ -637,9 +637,8 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 			return callCodex(model, systemPrompt, userPrompt, images, effort, fast);
 		} else if (provider === "antigravity-cli") {
 			/* `model` est la FAMILLE (« gemini-3.8-flash ») ; le CLI attend la
-			   variante au niveau d'effort retenu (« gemini-3.8-flash-high »),
-			   clampé aux niveaux de cette famille. */
-			const effort = resolveEffort("antigravity-cli", settings.get().aiEffort, model);
+			   variante au niveau retenu pour ELLE (« gemini-3.8-flash-high »). */
+			const effort = niveauAntigravity(settings.get().aiAntigravityLevels, model);
 			return callAntigravity(antigravityModelId(model, effort), systemPrompt, userPrompt, images);
 		} else {
 			return callClaudeCode(model, systemPrompt, userPrompt, images);

@@ -41,7 +41,7 @@ export interface AiSettingsHost {
  * muté par l'un d'eux.
  */
 export function aiSettingsDefaults(): Required<Pick<AiSettings,
-	"aiProvider" | "aiModel" | "aiEffort" | "aiCodexFast" | "aiOllamaUrl" | "aiOllamaCloudKey"
+	"aiProvider" | "aiModel" | "aiEffort" | "aiCodexFast" | "aiAntigravityLevels" | "aiOllamaUrl" | "aiOllamaCloudKey"
 	| "aiOllamaModels" | "aiOllamaCatalog" | "aiOllamaPlansAppris" | "aiOllamaPlanCompte"
 	| "aiWebAvertissementMasque" | "aiUsageLog" | "aiUsageLimitsEnabled"
 	| "aiMentionExtraFolders" | "aiOutputFolder">> & { hotkeyAddFiles: Hotkey } {
@@ -53,6 +53,9 @@ export function aiSettingsDefaults(): Required<Pick<AiSettings,
 		// Mode Fast de Codex (service tier « priority », 1.5x speed) — l'éclair
 		// du popover effort ChatGPT. Ignoré si le modèle ne l'expose pas.
 		aiCodexFast: false,
+		// Rien de retenu par famille Antigravity : chacune part à son niveau par
+		// défaut (la variante que `agy models` cite en premier).
+		aiAntigravityLevels: {},
 		aiOllamaUrl: "http://localhost:11434",
 		aiOllamaCloudKey: "",
 		// Modèles Ollama affichés dans le menu (ordre réglable, max 7). null →

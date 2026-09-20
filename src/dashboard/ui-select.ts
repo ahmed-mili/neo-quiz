@@ -413,6 +413,8 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 
 	const menuEl = ajouter(document.body, "div", "qbd-select-menu qbd-model-menu");
 	menuEl.setAttribute("role", "menu");
+	// Menu à niveaux (référence Antigravity) : lignes serrées, cf. CSS.
+	if (opts.models.some(m => m.levels && m.levels.length)) menuEl.classList.add("qbd-model-menu--levels");
 	let effortFlyout: HTMLDivElement | null = null;
 	let effortCloseTimer = 0;
 	let moreFlyout: HTMLDivElement | null = null;

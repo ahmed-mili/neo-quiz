@@ -37,6 +37,9 @@ export interface AiSettings {
 	aiModel?: string;
 	aiEffort?: string;
 	aiCodexFast?: boolean;
+	/** Antigravity : le niveau retenu PAR famille (`{ "gemini-3.1-pro": "low" }`),
+	    comme le sélecteur d'Antigravity garde le sien à chaque modèle. */
+	aiAntigravityLevels?: Record<string, string>;
 	aiOllamaUrl?: string;
 	aiOllamaCloudKey?: string;
 	// `null` = sentinelle « défaut » réellement persistée par le plugin

@@ -17,6 +17,7 @@ import { LOG_PREFIX } from "../branding";
 import { getProvider, setBrandLogo } from "./ai-providers";
 import { commandeInstallation } from "../cli-install-cmd";
 import { ajouter, ancreApresRelayout, ancreRemontee, CLASSE_MODALE_HAUT } from "../dom";
+import { poserOnde } from "./onde";
 import { currentHost, requireHost } from "../host/current";
 import { t } from "../i18n";
 import { renderCollapsibleSection } from "./collapsible";
@@ -126,6 +127,8 @@ export function openInstallModal(deps: InstallModalDeps): void {
 			if (win && host.process) {
 				const auto = ajouter(c, "button", "qbd-btn--create qbd-install-auto");
 				auto.type = "button";
+				// L'onde nait sous le doigt (choisi a l'ecran le 2026-09-20).
+				poserOnde(auto);
 				host.ui.setIcon(ajouter(auto, "span", "qbd-btn-icon"), "download");
 				/* PLUS de phrase sous le bouton (2026-09-18) : la confirmation
 				   NATIVE que l'hôte ouvre juste après disait déjà les deux

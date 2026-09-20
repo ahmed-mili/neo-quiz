@@ -1520,8 +1520,49 @@
    étirait la boîte, `margin-top: auto` posait l'air entre la voie manuelle
    et ce bouton ; sans plancher, il n'y a plus rien à distribuer et les deux
    se touchaient (Ahmed, 2026-09-20). */
-.qbd-install-auto { width: 100%; justify-content: center; margin: 22px 0 0; min-height: 42px; font-size: 14px; }
+/* ── LE BOUTON PRINCIPAL REPOND AU DOIGT ──
+   Choisi a l'ecran le 2026-09-20 parmi huit effets, variante « Vif » : il
+   respire au survol, s'ecrase plus profond que la course habituelle et
+   DEPASSE au retour (la courbe a rebond), pendant qu'une onde CLAIRE part du
+   point d'appui (`onde.ts`). Claire et non sombre : elle allume le bouton
+   sous le doigt au lieu de le tacher, ce qui tient mieux sur un fond lavande
+   clair. `overflow: hidden` borne le cercle au bouton ; les enfants passent
+   au-dessus de lui, faute de quoi l'onde, ajoutee en dernier, couvrirait le
+   libelle. */
+.qbd-install-auto {
+	position: relative;
+	overflow: hidden;
+	width: 100%;
+	justify-content: center;
+	margin: 22px 0 0;
+	min-height: 42px;
+	font-size: 14px;
+	transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.qbd-install-auto > * { position: relative; z-index: 1; }
+.qbd-install-auto:hover { transform: scale(1.015); }
+.qbd-install-auto:active { transform: scale(0.955); transition-duration: 80ms; }
 .qbd-install-auto svg { width: 17px; height: 17px; }
+.qbd-onde {
+	position: absolute;
+	z-index: 0;
+	border-radius: 50%;
+	transform: scale(0);
+	pointer-events: none;
+	background: radial-gradient(circle, rgb(255 255 255 / 0.85), rgb(255 255 255 / 0.15) 70%);
+	animation: qbd-onde-claire 620ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards;
+}
+@keyframes qbd-onde-claire {
+	from { transform: scale(0); opacity: 0.9; }
+	to { transform: scale(1.05); opacity: 0; }
+}
+/* Sans mouvement : ni respiration, ni ecrasement, ni onde — le survol et
+   l'appui restent dits par le theme du bouton. */
+@media (prefers-reduced-motion: reduce) {
+	.qbd-install-auto { transition: none; }
+	.qbd-install-auto:hover, .qbd-install-auto:active { transform: none; }
+	.qbd-onde { display: none; }
+}
 .qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; font-size: 14px; }
 .qbd-install-state:not(:empty) { margin: 22px 0 0; padding: 13px 14px; border-radius: 10px; background: var(--background-modifier-hover); }
 .qbd-install-modal[data-state="en-cours"] .qbd-install-auto,

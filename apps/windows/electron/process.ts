@@ -286,6 +286,9 @@ export interface MessagesTerminal {
 	succes: string;
 	echec: string;
 	echecInstallation?: string;
+	/** Ce qui manque AVANT de pouvoir installer — Node.js pour Gemini, le seul
+	    des quatre qui exige quelque chose (voir `src/cli-install-cmd.ts`). */
+	prerequisManquant?: string;
 }
 
 /**
@@ -309,8 +312,29 @@ function commandeConnexion(tool: Outil): string | null {
 	   enchaînait sur le REPL et affichait « connecté » quoi qu'il arrive. */
 	if (tool === "claude") return "claude auth login";
 	if (tool === "codex") return "codex login";
+	/* GEMINI N'A PAS DE SOUS-COMMANDE DE CONNEXION. Sa connexion se fait DANS
+	   le REPL (« Sign in with Google », ou `/auth`) et ses identifiants vont au
+	   trousseau du système, pas dans un fichier qu'on pourrait regarder
+	   (`oauth-credential-storage.ts` du dépôt gemini-cli, lu le 2026-09-20).
+	   Le REPL ne rend donc rien d'exploitable — c'est exactement le piège que
+	   le commentaire ci-dessus décrit.
+	   D'où deux commandes : le REPL, puis un appel HEADLESS de contrôle, dont
+	   le code de sortie est celui que la fenêtre juge. Il coûte une requête
+	   (sur 1 000 par jour au palier gratuit) et c'est le prix d'un « connecté »
+	   qui dit vrai : le seul moyen de savoir si Gemini répond est de le lui
+	   demander. `--output-format json` et la redirection gardent la fenêtre
+	   lisible ; l'utilisateur n'y voit que les deux messages. */
+	if (tool === "gemini") return GEMINI_CONNEXION.join("\n");
 	return null;
 }
+
+/** Les deux temps de la connexion de Gemini, séparés pour être lisibles (et
+    pour que `check:electron-process` puisse les nommer). Le REPL rend la main
+    quand l'utilisateur tape `/quit` ; le contrôle suit. */
+const GEMINI_CONNEXION = [
+	"gemini",
+	"gemini -p \"ok\" --output-format json | Out-Null",
+];
 
 /**
  * La fin commune des deux scripts : le succès n'est affiché que si la
@@ -354,6 +378,18 @@ export function scriptInstallation(tool: Outil, titre: string, messages: Message
 		   Posée dans la SESSION, elle est héritée par le sous-processus
 		   PowerShell qui exécute l'installateur. */
 		...(tool === "codex" ? ["$env:CODEX_NON_INTERACTIVE = '1'"] : []),
+		/* GEMINI S'INSTALLE PAR npm, ET PAR RIEN D'AUTRE : sans Node, la ligne
+		   d'installation échouerait sur « npm n'est pas reconnu », que le
+		   message d'échec générique traduirait par « l'installation a échoué »,
+		   sans dire ce qui manque ni où le prendre. On regarde donc AVANT, et on
+		   nomme le prérequis. */
+		...(tool === "gemini" ? [
+			"if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {",
+			"  Write-Host " + citerPs(messages.prerequisManquant || messages.echecInstallation || messages.echec) + " -ForegroundColor Red",
+			"  Read-Host | Out-Null",
+			"  exit 1",
+			"}",
+		] : []),
 		commandeInstallationLancee(tool, true),
 		"if ($LASTEXITCODE -ne 0) {",
 		"  Write-Host " + citerPs(messages.echecInstallation || messages.echec) + " -ForegroundColor Red",
@@ -797,7 +833,7 @@ export async function avecFichiers<T>(
  * des chemins, qui sépare « lancer le CLI de l'utilisateur » de « lancer ce
  * qu'on vient d'écrire sur son disque ».
  */
-export const OUTILS = ["claude", "codex", "ollama"] as const;
+export const OUTILS = ["claude", "codex", "ollama", "gemini"] as const;
 
 export type Outil = (typeof OUTILS)[number];
 

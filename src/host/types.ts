@@ -446,7 +446,7 @@ export interface HostNet {
  * ne voit pas : `fs.write("x.bat")` puis `process.run("x.bat")`. Voir la spec
  * docs/superpowers/specs/2026-09-11-generation-ia-app-design.md, §2.
  */
-export type CliTool = "claude" | "codex" | "ollama";
+export type CliTool = "claude" | "codex" | "ollama" | "gemini";
 
 /**
  * LES PROCESSUS ET LES FICHIERS DES CLI, vus du code partagé.

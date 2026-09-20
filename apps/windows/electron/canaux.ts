@@ -902,8 +902,8 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   pas lancer un script d'installation distant. Hors Windows,
 	   `indisponible` sans rien lancer : le modal du rendu montre alors les
 	   étapes manuelles. */
-	const NOMS_OUTILS: Record<Outil, string> = { claude: "Claude Code", codex: "Codex CLI", ollama: "Ollama" };
-	const SOURCES_OUTILS: Record<Outil, string> = { claude: "claude.ai/install.ps1", codex: "chatgpt.com/codex/install.ps1", ollama: "winget (Ollama.Ollama)" };
+	const NOMS_OUTILS: Record<Outil, string> = { claude: "Claude Code", codex: "Codex CLI", ollama: "Ollama", gemini: "Gemini CLI" };
+	const SOURCES_OUTILS: Record<Outil, string> = { claude: "claude.ai/install.ps1", codex: "chatgpt.com/codex/install.ps1", ollama: "winget (Ollama.Ollama)", gemini: "npm (@google/gemini-cli)" };
 	ipcMain.handle(CANAUX.processusInstaller, async (_e, tool: unknown): Promise<"lance" | "annule" | "indisponible"> => {
 		if (!estOutilAutorise(tool)) {
 			console.warn(LOG_PREFIX, "installation refusée, outil hors liste:", tool);
@@ -928,6 +928,10 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			succes: t("app.installCli.done", { name }),
 			echec: t("app.connectCli.failed", { name }),
 			echecInstallation: t("app.installCli.failed", { name }),
+			/* Gemini CLI est le seul qui exige Node ; le script le vérifie AVANT
+			   d'installer et affiche cette ligne-là, qui nomme le prérequis au
+			   lieu de laisser « npm n'est pas reconnu » passer pour une panne. */
+			prerequisManquant: t("app.installCli.needsNode", { name }),
 		};
 		return lancerTerminal(titre, scriptInstallation(tool, titre, messages)) ? "lance" : "indisponible";
 	});

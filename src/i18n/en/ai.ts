@@ -76,6 +76,7 @@ export const EN_AI = {
 	"ai.provider.choose": "Choose a provider",
 	"ai.provider.claudeSub": "Pro / Max account",
 	"ai.provider.codexSub": "Codex CLI · ChatGPT subscription",
+	"ai.provider.geminiSub": "Gemini CLI · Google account",
 	"ai.provider.ollamaSub": "Local and cloud",
 
 	/* ── Canaux (le second niveau du menu : par quelle voie on parle à la marque) ── */
@@ -124,6 +125,7 @@ export const EN_AI = {
 	"ai.hint.claudeNotInstalled": "Claude Code is not installed.",
 	"ai.hint.installClaude": "Install Claude Code",
 	"ai.hint.codexDesktopOnly": "Generating with ChatGPT (Codex CLI) is available on desktop only.",
+	"ai.hint.geminiDesktopOnly": "Generating with Gemini (Gemini CLI) is available on desktop only.",
 	"ai.hint.codexNotInstalled": "Codex CLI is not installed.",
 	"ai.hint.installCodex": "Install Codex CLI",
 	// Ni « installed », ni la version, ni ce qui se passera ensuite : le statut du
@@ -258,6 +260,14 @@ export const EN_AI = {
 	"ai.err.codexRateLimit": "You have reached the usage limit of your ChatGPT subscription. Try again later.",
 	"ai.err.codexEmpty": "ChatGPT (Codex) returned no response. Try again or switch model.",
 	"ai.err.codex": "Codex error: {detail}",
+	"ai.err.invalidModelGemini": "Invalid Gemini model name: {model}",
+	"ai.err.geminiNotInstalled": "Gemini CLI is not installed. Install it (npm install -g @google/gemini-cli), then run “gemini” once and sign in with your Google account.",
+	"ai.err.geminiTimeout": "Gemini did not answer within the time limit ({minutes} min). Try again.",
+	"ai.err.geminiNotLoggedIn": "Google account not connected. In a terminal, run “gemini”, then choose “Sign in with Google”.",
+	"ai.err.geminiRateLimit": "You have reached the Gemini usage limit for now (60 requests per minute, 1000 per day on the free tier). Try again later.",
+	"ai.err.geminiNoImages": "Gemini CLI cannot take images: it runs without any tool, so it has no way to open them. Use a website channel, or Claude Code, for a quiz built from an image.",
+	"ai.err.geminiEmpty": "Gemini returned no response. Try again or switch model.",
+	"ai.err.gemini": "Gemini error: {detail}",
 	"ai.err.none": "none",
 	"ai.err.httpStatus": "Error {status}",
 	"ai.err.ollamaModelMissing": "Model \"{model}\" is not installed.\nRun in a terminal: ollama pull {model}\nAvailable models: {models}",

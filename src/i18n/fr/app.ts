@@ -86,6 +86,7 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.installCli.cancel": "Annuler",
 	"app.installCli.done": "{name} est installé. Retour dans Neo Quiz…",
 	"app.installCli.failed": "L'installation de {name} a échoué. Fermez cette fenêtre et réessayez depuis Neo Quiz, ou suivez-y les étapes manuelles.",
+	"app.installCli.needsNode": "{name} s'installe avec npm, qui vient avec Node.js — et Node.js n'est pas sur cet ordinateur. Installez Node.js 20 ou plus depuis nodejs.org, puis réessayez depuis Neo Quiz.",
 	"app.connectCli.done": "{name} est connecté. Retour dans Neo Quiz…",
 	"app.connectCli.failed": "La connexion à {name} a échoué. Fermez cette fenêtre et réessayez depuis Neo Quiz.",
 };

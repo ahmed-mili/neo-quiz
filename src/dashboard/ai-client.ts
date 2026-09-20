@@ -516,7 +516,9 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 	 * module, déménagé là où vit `child_process`.
 	 */
 	function runCli(spec: {
-		tool: "claude" | "codex";
+		/* Les CLI que la génération lance. `ollama` n'y est pas : il est
+		   interrogé par le réseau, pas par un processus. */
+		tool: "claude" | "codex" | "gemini";
 		marqueur: string;
 		args: string[];
 		stdin: string;
@@ -628,9 +630,129 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 			const m = getCodexModels().find(x => x.value === model);
 			const fast = !!settings.get().aiCodexFast && !!(m && m.fast);
 			return callCodex(model, systemPrompt, userPrompt, images, effort, fast);
+		} else if (provider === "gemini") {
+			return callGemini(model, systemPrompt, userPrompt, images);
 		} else {
 			return callClaudeCode(model, systemPrompt, userPrompt, images);
 		}
+	}
+
+	/* ── Gemini via le CLI Gemini (compte Google) ──
+	   Aucune clé API : le CLI est connecté au compte Google de l'utilisateur
+	   (OAuth, identifiants dans le trousseau du système).
+
+	   LE PROMPT PART PAR STDIN, sans `-p`. La doc dit deux choses : le mode
+	   HEADLESS s'enclenche « dans un environnement non-TTY OU avec `-p` », et
+	   `-p` est APPENDU à l'entrée standard. L'application lance le CLI par
+	   `spawn`, donc sans TTY : le mode headless est acquis, et le prompt entier
+	   passe par stdin comme pour les deux autres CLI — aucun échappement
+	   d'argument, quelle que soit la taille du cours inliné.
+
+	   LES OUTILS. Gemini CLI est un AGENT : il a des outils, là où Claude Code
+	   reçoit `--tools ""` et Codex `-s read-only`. Son équivalent existe — une
+	   règle `toolName = "*"`, `decision = "deny"` du moteur de politiques, qui
+	   retire les outils de la mémoire du modèle — mais elle se charge depuis
+	   `~/.gemini/policies/`, la configuration PERSONNELLE de l'utilisateur, que
+	   l'application n'a pas à modifier : elle vaut aussi pour ses autres usages
+	   de `gemini`. La contourner par `GEMINI_CLI_SYSTEM_DEFAULTS_PATH` sur le
+	   seul processus lancé demanderait de laisser le RENDU poser une variable
+	   d'environnement sur un processus du principal — exactement ce que le pont
+	   borné existe pour refuser. Ce qui tient ici, c'est donc le PROMPT : il
+	   interdit les outils en toutes lettres et INLINE toutes les sources (voir
+	   le paragraphe « NO TOOLS » de `composerPrompts`), et il n'y a rien à
+	   ouvrir puisque tout est déjà là. Décision d'Ahmed, 2026-09-20, en
+	   connaissance des deux autres voies. */
+	async function callGemini(model: string, systemPrompt: string, userPrompt: string, images: ImagePayload[] = []): Promise<ReponseQuiz> {
+		if (!currentHost().platform.isDesktopApp) {
+			throw new Error(t("ai.hint.geminiDesktopOnly"));
+		}
+		if (!/^[a-zA-Z0-9._:-]+$/.test(model)) {
+			throw new Error(t("ai.err.invalidModelGemini", { model }));
+		}
+		/* UNE IMAGE NE PEUT PAS PARTIR PAR CE CANAL, et c'est dit plutôt que
+		   perdu : Claude Code lit les images jointes avec son outil `Read`, que
+		   Gemini n'a pas ici puisqu'on ne lui donne aucun outil. Même patron que
+		   le PDF refusé par l'application sur le canal web — refuser en le
+		   nommant, jamais joindre du vide. */
+		if (images.length > 0) {
+			throw new Error(t("ai.err.geminiNoImages"));
+		}
+
+		const marqueur = nouveauMarqueur();
+		const fullPrompt = systemPrompt + "\n\n" + userPrompt;
+
+		/** La cartographie des messages, au patron d'`erreurClaude` et
+		    d'`erreurCodex`. Les mots cherchés sont ceux du CLI Gemini : il dit
+		    « not authenticated » / « sign in » quand le compte n'est pas
+		    connecté, et « quota » / « resource_exhausted » quand le palier
+		    gratuit est épuisé (60 requêtes par minute, 1 000 par jour). */
+		const erreurGemini = (e: ExecError): Error => {
+			console.error("[quiz-blocks] Gemini CLI error:", e.message, e.stderr || "");
+			const detail = ((e.stderr || "") + " " + (e.stdout || "") + " " + e.message).toLowerCase();
+			if (e.code === "ENOENT" || e.code === 127 || detail.includes("not recognized") || detail.includes("introuvable") || detail.includes("command not found")) {
+				return new Error(t("ai.err.geminiNotInstalled"));
+			}
+			if (e.killed || detail.includes("etimedout")) {
+				return new Error(t("ai.err.geminiTimeout", { minutes: CLI_TIMEOUT_MIN }));
+			}
+			if (detail.includes("not authenticated") || detail.includes("sign in") || detail.includes("login") || detail.includes("unauthorized") || detail.includes("401") || detail.includes("credential") || detail.includes("authenticat")) {
+				/* MESSAGE SEUL, sans `erreurConnexion` : le bouton « Se
+				   connecter » de la carte d'erreur suppose une sonde de
+				   connexion (`sondeConnexion`, `ai-providers.ts`) et un
+				   `OutilCompte` élargi, qui arrivent avec l'entrée de Gemini au
+				   registre. D'ici là le message dit quoi faire — il nomme la
+				   commande — plutôt que de proposer un bouton qui n'irait
+				   nulle part. */
+				return new Error(t("ai.err.geminiNotLoggedIn"));
+			}
+			if (detail.includes("quota") || detail.includes("resource_exhausted") || detail.includes("rate limit") || detail.includes("429")) {
+				return new Error(t("ai.err.geminiRateLimit"));
+			}
+			return new Error(t("ai.err.gemini", { detail: (e.stderr || e.message).trim().slice(0, 300) }));
+		};
+
+		let res: SortieCli;
+		try {
+			res = await runCli({
+				tool: "gemini",
+				/* `--output-format json` rend UN objet `{ response, stats }` :
+				   c'est la seule forme documentée qui sépare la réponse du
+				   bavardage du CLI. `-m` prend un ALIAS (`auto`, `pro`, `flash`,
+				   `flash-lite`) et c'est voulu : l'alias est résolu par le CLI
+				   lui-même, donc le jour où `pro` cesse d'être `gemini-2.5-pro`,
+				   l'application suit sans rien changer. Coder le nom concret
+				   ici, c'est le mensonge que la règle « jamais de modèle en
+				   dur » interdit. */
+				args: ["--output-format", "json", "-m", model],
+				marqueur,
+				stdin: fullPrompt,
+				fichiers: [],
+			});
+		} catch (err) {
+			/* Une ANNULATION n'est pas une erreur (voir `callClaudeCode`). */
+			if (aborted) throw err;
+			throw erreurIndisponible(err) || erreurGemini(execErrorDepuisRejet(err));
+		}
+		if (res.code !== 0) throw erreurGemini(execErrorDepuisCode(res));
+
+		/* `{ response, stats }` — et un repli sur stdout brut : une version du
+		   CLI qui changerait sa forme de sortie rendrait sinon « pas un quiz »
+		   alors que la réponse est là, sous les yeux, dans stdout. */
+		let raw = "";
+		try {
+			const objet = JSON.parse(res.stdout) as { response?: unknown; error?: { message?: string } };
+			if (objet && typeof objet.response === "string") raw = objet.response;
+			else if (objet && objet.error && typeof objet.error.message === "string") throw new Error(objet.error.message);
+		} catch (e) {
+			raw = "";
+		}
+		if (!raw.trim()) raw = String(res.stdout || "");
+
+		if (!raw.trim()) {
+			throw new Error(t("ai.err.geminiEmpty"));
+		}
+		console.log("[quiz-blocks] Gemini success - response length:", raw.length);
+		return parseReponseQuiz(raw);
 	}
 
 	/* ── Claude via le CLI Claude Code (compte par abonnement) ──

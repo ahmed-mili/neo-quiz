@@ -144,22 +144,29 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				});
 		});
 
-		await cas(r, "la liste blanche est celle de l'hôte Obsidian, et elle est jugée à l'exécution", async () => {
+		await cas(r, "la liste blanche est celle du contrat, et elle est jugée à l'exécution", async () => {
 			/* Le NOM vient du RENDU. `CliTool` le borne à la COMPILATION ; ceci le
 			   borne à l'EXÉCUTION, où arrive un jour une valeur venue d'un
 			   réglage, d'un quiz partagé ou d'une fenêtre compromise. La liste
-			   doit être EXACTEMENT celle de `CLI_AUTORISES` (`apps/obsidian/
-			   host.ts`) : le même code partagé appelle les deux hôtes, et un outil
-			   accepté d'un côté et refusé de l'autre ferait dépendre le sort d'un
-			   appel de l'hôte qui l'exécute. */
-			r.check("la liste blanche est celle de l'hôte Obsidian, et elle est jugée à l'exécution",
+			   doit être EXACTEMENT celle de `CliTool` (`src/host/types.ts`), que
+			   le code partagé lit : un outil accepté d'un côté et refusé de
+			   l'autre ferait dépendre le sort d'un appel de l'hôte qui l'exécute.
+			   (Le greffon Obsidian ne lance plus aucun CLI depuis le chantier
+			   « greffon lecteur » — son `CLI_AUTORISES`, que ce commentaire citait
+			   jusqu'au 2026-09-20, n'existe plus ; le contrat reste la référence,
+			   et l'application Android à venir en héritera.) */
+			r.check("la liste blanche est celle du contrat, et elle est jugée à l'exécution",
 				{
 					liste: [...OUTILS],
-					juge: ["claude", "codex", "ollama", "notepad", "x.bat", "", null, 3].map(estOutilAutorise),
+					/* `gemini` DOIT être jugé vrai : c'est le quatrième CLI, ajouté le
+					   2026-09-20. Un nom de la liste refusé ici rendrait sa
+					   génération impossible sans qu'aucun type ne bronche — le rendu
+					   n'envoie qu'un nom, et c'est ici qu'il est cru ou non. */
+					juge: ["claude", "codex", "ollama", "gemini", "notepad", "x.bat", "", null, 3].map(estOutilAutorise),
 				},
 				{
-					liste: ["claude", "codex", "ollama"],
-					juge: [true, true, true, false, false, false, false, false],
+					liste: ["claude", "codex", "ollama", "gemini"],
+					juge: [true, true, true, true, false, false, false, false, false],
 				});
 		});
 

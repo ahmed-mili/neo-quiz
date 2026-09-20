@@ -31,7 +31,7 @@
 
 /** Les trois outils qu'on sait installer. Volontairement ce type et non
     `CliTool` du contrat d'hôte : ce module ne dépend de rien. */
-export type OutilInstallable = "claude" | "codex" | "ollama";
+export type OutilInstallable = "claude" | "codex" | "ollama" | "gemini";
 
 /** La commande AFFICHÉE dans la voie manuelle du modal, et celle que le
     terminal exécute. `lang` sert à la coloration du bloc de code.
@@ -49,6 +49,15 @@ export function commandeInstallation(outil: OutilInstallable, windows: boolean):
 		return windows
 			? { code: 'powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"', lang: "powershell" }
 			: { code: "curl -fsSL https://chatgpt.com/codex/install.sh | sh", lang: "bash" };
+	}
+	/* GEMINI EST LE SEUL DES QUATRE QUI EXIGE QUELQUE CHOSE D'AVANCE. Les trois
+	   autres s'installent d'un script qui n'a besoin de rien ; Gemini CLI est
+	   publié sur npm et sur rien d'autre — pas d'installateur autonome, pas de
+	   paquet winget (doc officielle, get-started/installation.mdx, lue le
+	   2026-09-20) — et réclame Node.js 20 ou plus. La même ligne sur les deux
+	   systèmes, et c'est le modal qui dit le prérequis. */
+	if (outil === "gemini") {
+		return { code: "npm install -g @google/gemini-cli", lang: windows ? "powershell" : "bash" };
 	}
 	return windows
 		? { code: "winget install --id Ollama.Ollama -e", lang: "powershell" }

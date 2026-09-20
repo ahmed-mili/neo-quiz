@@ -84,7 +84,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.web.step.drop": "Glissez le fichier ci-dessous sur la page, puis envoyez.",
 	"ai.web.step.dropMany": "Glissez les fichiers ci-dessous sur la page, tous d'un coup, puis envoyez.",
 	"ai.web.step.send": "Envoyez le prompt.",
-	"ai.web.step.copy": "Attendez la fin de la génération du bloc de code, puis copiez-le d'un clic : Neo Quiz le reconnaît tout seul.",
+	"ai.web.step.copy": "Copiez le bloc de code d'un clic : Neo Quiz le reconnaît tout seul.",
 	"ai.web.dragOne": "Glisser",
 	"ai.web.dragAll": "Tout glisser",
 	"ai.web.dropFailed": "Les fichiers n'ont pas pu être glissés ; joignez-les vous-même sur le site.",

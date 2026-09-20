@@ -310,6 +310,15 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				tui: /\nagy\s*\n/.test(cx),
 			},
 			{ ordre: true, ouvreUrl: true, texte: true, pathAvant: true, tui: false });
+		/* `install.ps1` de Google pose `$ErrorActionPreference = "Stop"` dans
+		   la session (par `iex`) : sous `Stop`, la première ligne de stderr
+		   relue par `2>&1` — l'URL — arrêtait la pipeline (vécu le 2026-09-20).
+		   `Continue` doit être remis ENTRE l'installation et l'appel. */
+		const iContinue = inst.indexOf("$ErrorActionPreference = 'Continue'");
+		const iInstall = inst.indexOf(ligneInstall);
+		const iAppelInst = inst.indexOf("\nagy -p \"ok\"");
+		r.check("agy installation : ErrorActionPreference remis à Continue APRÈS l'installateur de Google et AVANT l'appel headless",
+			iInstall > 0 && iContinue > iInstall && iAppelInst > iContinue, true);
 		r.check("agy : son dossier d'installation Windows est dans les dossiers des CLI",
 			dossiersCli(envDossiers).includes("C:\\U\\x\\AppData\\Local\\agy\\bin"), true);
 	}

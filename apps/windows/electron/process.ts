@@ -338,6 +338,14 @@ function commandeConnexion(tool: Outil): string | null {
     pour que `check:electron-process` puisse les nommer). */
 const AGY_CONNEXION = [
 	"Set-Location $env:USERPROFILE",
+	/* `Continue` REMIS EXPRÈS : `install.ps1` de Google commence par
+	   `$ErrorActionPreference = "Stop"`, et `iex` l'applique à NOTRE session.
+	   Sous `Stop`, la première ligne de stderr relue par `2>&1` — celle qui
+	   annonce l'URL de connexion — devient une erreur TERMINANTE : la
+	   pipeline s'arrêtait avant de lire l'URL, la page Google ne s'ouvrait
+	   jamais (vécu le 2026-09-20 ; la sonde de la veille avait été éprouvée
+	   seule, sans installation avant). */
+	"$ErrorActionPreference = 'Continue'",
 	"$script:urlOuverte = $false",
 	"agy -p \"ok\" --output-format json 2>&1 | ForEach-Object {",
 	"  $l = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { \"$_\" }",

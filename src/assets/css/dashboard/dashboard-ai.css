@@ -2398,10 +2398,11 @@
 	position: relative;
 	margin: 0 0 6px;
 }
-/* Une étape faite s'atténue, texte et numéro : rien d'autre ne change. Un
-   clic la remet à faire (l'application ne voit pas la page du site). */
-.qbd-ai-web-etapes li.is-fait,
-.qbd-ai-web-etapes li.is-fait::before { color: var(--text-faint); }
+/* Une étape faite : le texte s'atténue, le numéro passe au VERT, rien
+   d'autre ne change. Un clic la remet à faire (l'application ne voit pas la
+   page du site). */
+.qbd-ai-web-etapes li.is-fait { color: var(--text-faint); }
+.qbd-ai-web-etapes li.is-fait::before { color: var(--color-green, #4ade80); }
 .qbd-ai-web-etapes li.is-fait { cursor: pointer; }
 .qbd-ai-web-etapes li.is-fait:hover { color: var(--text-muted); }
 .qbd-ai-web-etapes li::before {

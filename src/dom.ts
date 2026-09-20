@@ -43,6 +43,15 @@ export const CLASSE_MODALE_HAUT = "qbd-modal-haut";
     retirée — le tout dans la même tâche, donc aucune image intermédiaire.
     C'est ce qui permet d'envoyer la position cible à l'hôte AVANT que la
     modale ne bouge : elle ne remontera qu'une fois la fenêtre posée. */
+/** Le rectangle d'un élément APRÈS que la fenêtre a changé de taille : deux
+    images d'attente, le temps que le rendu ait refait sa mise en page (la
+    première suit le redimensionnement, la seconde le layout qui en découle). */
+export function ancreApresRelayout(el: HTMLElement): Promise<{ x: number; y: number; largeur: number; hauteur: number }> {
+	return new Promise(resolve => {
+		requestAnimationFrame(() => requestAnimationFrame(() => resolve(ancreDe(el))));
+	});
+}
+
 export function ancreRemontee(el: HTMLElement): { x: number; y: number; largeur: number; hauteur: number } {
 	const avait = el.classList.contains(CLASSE_MODALE_HAUT);
 	if (!avait) el.classList.add(CLASSE_MODALE_HAUT);

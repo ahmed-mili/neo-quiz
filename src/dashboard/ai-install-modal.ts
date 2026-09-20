@@ -16,7 +16,7 @@
 import { LOG_PREFIX } from "../branding";
 import { getProvider, setBrandLogo } from "./ai-providers";
 import { commandeInstallation } from "../cli-install-cmd";
-import { ajouter, ancreRemontee, CLASSE_MODALE_HAUT } from "../dom";
+import { ajouter, ancreApresRelayout, ancreRemontee, CLASSE_MODALE_HAUT } from "../dom";
 import { currentHost, requireHost } from "../host/current";
 import { t } from "../i18n";
 import { renderCollapsibleSection } from "./collapsible";
@@ -98,6 +98,8 @@ export function openInstallModal(deps: InstallModalDeps): void {
 	/* L'abonnement à « la fenêtre du terminal est posée » (l'instant où la
 	   modale remonte), retiré dès qu'il a servi ou à la fermeture. */
 	let desabonnerPose: (() => void) | null = null;
+	/* Et à « le navigateur s'est ouvert » (les deux colonnes). */
+	let desabonnerNav: (() => void) | null = null;
 
 	/* Le LOGO DE MARQUE dans la ligne du titre (2026-09-18) : coloré, sans
 	   pastille ni contour. Le fournisseur et sa couleur viennent du catalogue
@@ -149,6 +151,12 @@ export function openInstallModal(deps: InstallModalDeps): void {
 							m.panelEl.classList.add(CLASSE_MODALE_HAUT);
 							desabonnerPose?.();
 							desabonnerPose = null;
+						}) ?? null;
+						/* LES DEUX COLONNES : le navigateur de la connexion à gauche,
+						   Neo Quiz à droite — la modale a rétréci, le terminal la
+						   suit (Ahmed, 2026-09-20). */
+						desabonnerNav = host.process!.surNavigateurOuvert?.(() => {
+							void ancreApresRelayout(m.panelEl).then(a => host.process?.replacerTerminal?.(a));
 						}) ?? null;
 						verdict = await host.process!.installerCli(OUTILS[deps.provider], ancreRemontee(m.panelEl));
 					} catch (e) {
@@ -280,6 +288,8 @@ export function openInstallModal(deps: InstallModalDeps): void {
 		onClose: () => {
 			desabonnerPose?.();
 			desabonnerPose = null;
+			desabonnerNav?.();
+			desabonnerNav = null;
 			couperSonde();
 			deps.onClose(detecte);
 		},

@@ -53,7 +53,7 @@ async function cas(r, nom, fn) {
 await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
 	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande, environnementOutil,
-	estOutilAutorise, lireAncre, lireCache, lirePlacement, rectangleTerminal, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptInstallation, scriptRestaurerNavigateur,
+	estOutilAutorise, lireAncre, lireCache, lirePlacement, rectangleTerminal, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptInstallation, scriptPoserFenetre, scriptRestaurerNavigateur,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -609,6 +609,33 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				bas: { x: 500, y: 962, width: 600, height: 200 },
 				sans: { x: 420, y: 500, width: 960, height: 426 },
 			});
+		/* LES DEUX COLONNES : le même script guette le NAVIGATEUR au premier
+		   plan (jamais une fenêtre d'arrière-plan, que le repli
+		   `MainWindowHandle` du script de site aurait prise), écrit son
+		   placement d'avant puis « navigateur ». */
+		r.check("terminal : le navigateur est guetté au PREMIER PLAN, son placement écrit, puis posé à gauche et annoncé",
+			{
+				registre: d.includes("UrlAssociations") && d.includes("UserChoice"),
+				premierPlan: d.includes("GetForegroundWindow()") && d.includes("$proc.ProcessName -ieq $nomNav"),
+				repli: d.includes("Get-Process -Name $nomNav"),
+				avant: d.indexOf("WriteLine('avant ' + [int64]$hNav") > 0,
+				gauche: d.indexOf("Poser $hNav $aire.Left $aire.Top $moitie $aire.Height") > d.indexOf("WriteLine('avant ' + [int64]$hNav"),
+				annonce: d.indexOf("WriteLine('navigateur')") > d.indexOf("Poser $hNav $aire.Left"),
+			},
+			{ registre: true, premierPlan: true, repli: false, avant: true, gauche: true, annonce: true });
+		/* Reposer une fenêtre déjà ouverte : par son TITRE, sans rien guetter,
+		   cadre invisible absorbé comme partout. */
+		{
+			const pf = scriptPoserFenetre("Neo Quiz - Antigravity CLI", { x: 960, y: 300, largeur: 700, hauteur: 420 });
+			r.check("scriptPoserFenetre : trouve par titre, pose au rectangle, absorbe le cadre DWM, ne guette rien",
+				{
+					titre: pf.includes("$titre = 'Neo Quiz - Antigravity CLI'"),
+					rect: pf.includes("$x = 960; $y = 300; $cx = 700; $cy = 420"),
+					dwm: pf.includes("DwmGetWindowAttribute"),
+					attente: pf.includes("IsWindow") || pf.includes("Start-Sleep"),
+				},
+				{ titre: true, rect: true, dwm: true, attente: false });
+		}
 		r.check("lireAncre : quatre nombres finis et bornés, sinon null (jamais une propriété de plus)",
 			[lireAncre({ x: 1, y: 2, largeur: 3, hauteur: 4, autre: 5 }), lireAncre({ x: -1, y: 2, largeur: 3, hauteur: 4 }), lireAncre({ x: "1", y: 2, largeur: 3, hauteur: 4 }), lireAncre(null), lireAncre({ x: 1, y: 2, largeur: 3, hauteur: Infinity })],
 			[{ x: 1, y: 2, largeur: 3, hauteur: 4 }, null, null, null, null]);

@@ -50,7 +50,7 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, rectangleTerminal, run, scriptConnexion, scriptInstallation } from "./process";
+import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, poserFenetre, rectangleTerminal, run, scriptConnexion, scriptInstallation } from "./process";
 import type { AncreTerminal } from "../../../src/host/types";
 import type { Outil } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
@@ -922,11 +922,18 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   terminal lancé ; résolue aussi quand la fenêtre n'a jamais été trouvée,
 	   sinon le modal attendrait pour rien. */
 	let finTerminal: Promise<void> = Promise.resolve();
+	/* Le titre du terminal en cours et la place de Neo Quiz avant le passage
+	   en DEUX COLONNES : quand le navigateur de la connexion s'ouvre, il prend
+	   la moitié gauche, Neo Quiz la moitié droite, et le terminal suit sa
+	   modale (Ahmed, 2026-09-20). Tout est rendu à la fin. */
+	let titreTerminal = "";
+	let neoAvantColonnes: { agrandie: boolean; bounds: Electron.Rectangle } | null = null;
 	const disposerAvecTerminal = (titre: string, ancre: AncreTerminal | null): void => {
 		const fenetre = deps.fenetreCourante();
 		if (!fenetre || fenetre.isDestroyed()) return;
 		let resoudreFin: () => void = () => {};
 		finTerminal = new Promise<void>(resolve => { resoudreFin = resolve; });
+		titreTerminal = titre;
 		const rect = rectangleTerminal(fenetre.getContentBounds(), fenetre.webContents.getZoomFactor(), ancre);
 		const hautGauche = screen.dipToScreenPoint({ x: rect.x, y: rect.y });
 		const basDroite = screen.dipToScreenPoint({ x: rect.x + rect.width, y: rect.y + rect.height });
@@ -936,12 +943,51 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			const f = deps.fenetreCourante();
 			if (f && !f.isDestroyed()) f.webContents.send(CANAUX.processusTerminalPose);
 		}, () => {
-			resoudreFin();
+			/* LE NAVIGATEUR VIENT D'ÊTRE POSÉ À GAUCHE : Neo Quiz passe à
+			   droite, et le rendu remesure sa modale pour que le terminal la
+			   suive (`processusNavigateurOuvert` → `processusReplacerTerminal`). */
 			const f = deps.fenetreCourante();
 			if (!f || f.isDestroyed()) return;
+			if (!neoAvantColonnes) neoAvantColonnes = { agrandie: f.isMaximized(), bounds: f.getNormalBounds() };
+			const a = screen.getDisplayMatching(f.getBounds()).workArea;
+			const demi = Math.floor(a.width / 2);
+			if (f.isMaximized()) f.unmaximize();
+			f.setBounds({ x: a.x + demi, y: a.y, width: a.width - demi, height: a.height });
+			f.webContents.send(CANAUX.processusNavigateurOuvert);
+		}, () => {
+			resoudreFin();
+			titreTerminal = "";
+			const f = deps.fenetreCourante();
+			const avant = neoAvantColonnes;
+			neoAvantColonnes = null;
+			void restaurerNavigateur();
+			if (!f || f.isDestroyed()) return;
+			/* Sa place d'avant les deux colonnes, s'il y en a eu une. */
+			if (avant) {
+				if (avant.agrandie) {
+					f.maximize();
+				} else {
+					const a = screen.getDisplayMatching(f.getBounds()).workArea;
+					const width = Math.min(avant.bounds.width, a.width);
+					const height = Math.min(avant.bounds.height, a.height);
+					f.setBounds({ x: a.x + Math.floor((a.width - width) / 2), y: a.y + Math.floor((a.height - height) / 2), width, height });
+				}
+			}
 			deps.fenetre.premierPlan();
 		});
 	};
+
+	/* LA MODALE A BOUGÉ (Neo Quiz vient de passer à droite) : le rendu renvoie
+	   son nouveau rectangle, et le terminal est reposé dessous. Même lecture
+	   champ par champ que l'ancre d'`installer`. */
+	ipcMain.handle(CANAUX.processusReplacerTerminal, (_e, ancre: unknown) => {
+		const fenetre = deps.fenetreCourante();
+		if (!fenetre || fenetre.isDestroyed() || !titreTerminal) return;
+		const rect = rectangleTerminal(fenetre.getContentBounds(), fenetre.webContents.getZoomFactor(), lireAncre(ancre));
+		const hautGauche = screen.dipToScreenPoint({ x: rect.x, y: rect.y });
+		const basDroite = screen.dipToScreenPoint({ x: rect.x + rect.width, y: rect.y + rect.height });
+		poserFenetre(titreTerminal, { x: hautGauche.x, y: hautGauche.y, largeur: basDroite.x - hautGauche.x, hauteur: basDroite.y - hautGauche.y });
+	});
 
 	ipcMain.handle(CANAUX.processusAttendreFinTerminal, () => finTerminal);
 

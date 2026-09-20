@@ -487,6 +487,11 @@ export interface Pont {
 		/** S'abonne au moment où la fenêtre d'un terminal est posée. Rien ne
 		    traverse : l'appel ne porte aucune donnée, juste l'instant. */
 		surTerminalPose(rappel: () => void): () => void;
+		/** S'abonne au moment où le navigateur de la connexion s'ouvre (les
+		    deux colonnes) : la modale doit alors se remesurer. */
+		surNavigateurOuvert(rappel: () => void): () => void;
+		/** Le nouveau rectangle de la modale, sous lequel reposer le terminal. */
+		replacerTerminal(ancre: AncreTerminal): Promise<void>;
 	};
 
 	fenetre: {
@@ -675,6 +680,13 @@ export const CANAUX = {
 	    `fenetreEtat` : la fenêtre du terminal vient d'être POSÉE sous la
 	    modale. C'est à cet instant, et pas avant, que la modale remonte. */
 	processusTerminalPose: "neo:process/terminal-pose",
+	/** POUSSÉ par le principal : le navigateur de la connexion vient d'être
+	    posé à gauche et Neo Quiz à droite — la modale a bougé, qu'elle se
+	    remesure. */
+	processusNavigateurOuvert: "neo:process/navigateur-ouvert",
+	/** La réponse du rendu : le nouveau rectangle de sa modale, sous lequel
+	    reposer le terminal. */
+	processusReplacerTerminal: "neo:process/replacer-terminal",
 	miseAJourEtatLire: "neo:mise-a-jour/etat-lire",
 	miseAJourEtat: "neo:mise-a-jour/etat",
 	miseAJourVerifier: "neo:mise-a-jour/verifier",

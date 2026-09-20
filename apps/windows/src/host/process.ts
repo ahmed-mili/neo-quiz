@@ -100,5 +100,11 @@ export function createWindowsProcess(): HostProcess {
 		surTerminalPose(rappel) {
 			return pont().processus.surTerminalPose(rappel);
 		},
+		surNavigateurOuvert(rappel) {
+			return pont().processus.surNavigateurOuvert(rappel);
+		},
+		replacerTerminal(ancre) {
+			return pont().processus.replacerTerminal(ancre);
+		},
 	};
 }

@@ -3,7 +3,7 @@ import type { EditorExamOptions } from "../types/editor-ctx";
 import type { AiPreset, DashboardViewName, NavigateData } from "../types/dashboard-ctx";
 import type { HostFile, HostModalHandle, ImageDeGlisser } from "../host/types";
 import { currentHost, requireHost } from "../host/current";
-import { ajouter, ancreRemontee, CLASSE_MODALE_HAUT } from "../dom";
+import { ajouter, ancreApresRelayout, ancreRemontee, CLASSE_MODALE_HAUT } from "../dom";
 import { LOG_PREFIX } from "../branding";
 import * as aiProviders from "./ai-providers";
 import { composerPrompts, parseReponseQuiz } from "./ai-client";
@@ -396,6 +396,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    modale d'attente remonte), retiré dès qu'il a servi, à l'annulation ou
 	    à un lancement qui échoue. */
 	let desabonnerPose: (() => void) | null = null;
+	/** Et à « le navigateur de la connexion s'est ouvert » (les deux colonnes). */
+	let desabonnerNav: (() => void) | null = null;
 	/** Sondage « le compte est-il connecté ? », pour la même raison que
 	    `ollamaPoll` : sans être retenu, il survivrait à la fermeture de la vue
 	    et repeindrait un conteneur détaché. Coupé à la détection, à
@@ -2580,6 +2582,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		couperSondeConnexion();
 		desabonnerPose?.();
 		desabonnerPose = null;
+		desabonnerNav?.();
+		desabonnerNav = null;
 		if (phase !== "connexion") return;
 		phase = connexionOrigine === "erreur" && sentMessage ? "error" : "idle";
 		render(containerRef);
@@ -2627,6 +2631,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 						off?.();
 					});
 					desabonnerPose = off ?? null;
+					/* LES DEUX COLONNES : le navigateur à gauche, Neo Quiz à droite
+					   — la modale a rétréci, le terminal la suit. */
+					desabonnerNav = proc.surNavigateurOuvert?.(() => {
+						void ancreApresRelayout(modale).then(a => proc.replacerTerminal?.(a));
+					}) ?? null;
 				}
 				verdict = await proc.connecterCli(tool, modale ? ancreRemontee(modale) : undefined);
 			} catch (e) {
@@ -2637,6 +2646,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (verdict !== "lance") {
 			desabonnerPose?.();
 			desabonnerPose = null;
+			desabonnerNav?.();
+			desabonnerNav = null;
 			if (tool !== "ollama") annulerConnexion();
 			if (bouton) bouton.disabled = false;
 			// `annule` = l'utilisateur a dit non : rien de plus à dire.

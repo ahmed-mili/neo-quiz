@@ -585,6 +585,17 @@ export function scriptDisposerPourSite(hwndNeo: number): string {
  * Neo Quiz sa place. Le processus lanceur (`lancerTerminal`) meurt tout de
  * suite, et personne d'autre ne sait quand la fenêtre s'en va. Une fenêtre
  * jamais trouvée écrit « absent », et le principal restaure aussitôt.
+ *
+ * DANS LA MÊME ATTENTE, IL GUETTE LE NAVIGATEUR : la connexion d'un compte
+ * ouvre une page (Google pour Antigravity, l'éditeur pour Claude et Codex) et
+ * Ahmed veut alors les DEUX COLONNES (2026-09-20) — le navigateur à gauche,
+ * Neo Quiz à droite avec le terminal sous sa modale. La fenêtre du navigateur
+ * est reconnue comme dans `scriptDisposerPourSite` (navigateur par défaut du
+ * registre), mais SEULEMENT au PREMIER PLAN : le repli `MainWindowHandle` de
+ * l'autre script déplacerait une fenêtre déjà ouverte en arrière-plan, alors
+ * qu'ici on attend celle qui vient de naître. Son placement d'avant est écrit
+ * (`avant …`, lu par `lirePlacement`), elle est posée à gauche, et « navigateur »
+ * dit au principal de passer Neo Quiz à droite et de faire remesurer la modale.
  */
 /** L'ancre telle qu'elle arrive du rendu, RECOMPOSÉE champ par champ (comme
     tout ce qui traverse l'IPC) : quatre nombres finis, positifs, bornés à
@@ -633,8 +644,12 @@ export function scriptDisposerPourTerminal(hwndNeo: number, titre: string, rect:
 		"[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h, int cmd);",
 		"[DllImport(\"user32.dll\")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);",
 		"[DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr h, out RECT r);",
+		"[DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();",
+		"[DllImport(\"user32.dll\")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);",
+		"[DllImport(\"user32.dll\")] public static extern bool GetWindowPlacement(IntPtr h, ref WP p);",
 		"[DllImport(\"dwmapi.dll\")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int cb);",
 		"public struct RECT { public int L, T, R, B; }",
+		"public struct WP { public int Length, Flags, ShowCmd, MinX, MinY, MaxX, MaxY, L, T, R, B; }",
 		"'@",
 		"Add-Type -AssemblyName System.Windows.Forms",
 		"function Poser($h, $x, $y, $cx, $cy) {",
@@ -660,9 +675,37 @@ export function scriptDisposerPourTerminal(hwndNeo: number, titre: string, rect:
 		"  Start-Sleep -Milliseconds 100",
 		"}",
 		"if ($hTerm -eq [IntPtr]::Zero) { [Console]::Out.WriteLine('absent'); [Console]::Out.Flush(); exit 0 }",
+		// Le navigateur par défaut, lu au même endroit que pour un site.
+		"$progId = (Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice' -ErrorAction SilentlyContinue).ProgId",
+		"$nomNav = ''",
+		"if ($progId) {",
+		"  $cmd = (Get-ItemProperty ('Registry::HKEY_CLASSES_ROOT\\' + $progId + '\\shell\\open\\command') -ErrorAction SilentlyContinue).'(default)'",
+		"  if ($cmd) { $exe = if ($cmd -match '^\"([^\"]+)\"') { $Matches[1] } else { ($cmd -split ' ')[0] }; $nomNav = [System.IO.Path]::GetFileNameWithoutExtension($exe) }",
+		"}",
+		"$aire = [System.Windows.Forms.Screen]::FromHandle([IntPtr]$hTerm).WorkingArea",
+		"$moitie = [int]($aire.Width / 2)",
+		"$hNav = [IntPtr]::Zero",
 		"Poser $hTerm " + [rect.x, rect.y, rect.largeur, rect.hauteur].map(v => String(Math.floor(v))).join(" "),
 		"[Console]::Out.WriteLine('pose'); [Console]::Out.Flush()",
-		"while ([NQT.Win]::IsWindow($hTerm)) { Start-Sleep -Milliseconds 250 }",
+		/* UNE SEULE ATTENTE pour les deux : la fenêtre du terminal (250 ms
+		   suffisent pour sa disparition) et le navigateur, guetté au premier
+		   plan toutes les 50 ms tant qu'on ne l'a pas vu. */
+		"$tic = 0",
+		"while ([NQT.Win]::IsWindow($hTerm)) {",
+		"  if ($nomNav -ne '' -and $hNav -eq [IntPtr]::Zero) {",
+		"    $h = [NQT.Win]::GetForegroundWindow(); $idProc = 0; [NQT.Win]::GetWindowThreadProcessId($h, [ref]$idProc) | Out-Null",
+		"    $proc = Get-Process -Id $idProc -ErrorAction SilentlyContinue",
+		"    if ($proc -and $proc.ProcessName -ieq $nomNav) {",
+		"      $hNav = $h",
+		"      $p = New-Object NQT.Win+WP; $p.Length = 44",
+		"      if ([NQT.Win]::GetWindowPlacement($hNav, [ref]$p)) { [Console]::Out.WriteLine('avant ' + [int64]$hNav + ' ' + $p.ShowCmd + ' ' + $p.L + ' ' + $p.T + ' ' + $p.R + ' ' + $p.B); [Console]::Out.Flush() }",
+		"      Poser $hNav $aire.Left $aire.Top $moitie $aire.Height",
+		"      [Console]::Out.WriteLine('navigateur'); [Console]::Out.Flush()",
+		"    }",
+		"    Start-Sleep -Milliseconds 50",
+		"  } else { Start-Sleep -Milliseconds 250 }",
+		"  $tic++",
+		"}",
 		"[Console]::Out.WriteLine('fini'); [Console]::Out.Flush()",
 	].join("\n");
 }
@@ -675,7 +718,48 @@ export function scriptDisposerPourTerminal(hwndNeo: number, titre: string, rect:
  * `disposerPourSite` : hors Windows, ou si PowerShell manque, `surFin` est
  * appelé aussitôt et Neo Quiz garde sa place.
  */
-export function disposerPourTerminal(hwndNeo: number, titre: string, rect: AncreTerminal, surPose: () => void, surFin: () => void): void {
+/** Repose une fenêtre DÉJÀ ouverte, trouvée par son titre — sans rien
+    guetter ensuite. Sert quand la disposition change en cours de route (le
+    navigateur s'ouvre, Neo Quiz passe à droite, le terminal doit suivre sa
+    modale). */
+export function scriptPoserFenetre(titre: string, rect: AncreTerminal): string {
+	return [
+		"$titre = " + citerPs(titre),
+		"Add-Type -Name Win -Namespace NQP -MemberDefinition @'",
+		"[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h, int cmd);",
+		"[DllImport(\"user32.dll\")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);",
+		"[DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr h, out RECT r);",
+		"[DllImport(\"dwmapi.dll\")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int cb);",
+		"public struct RECT { public int L, T, R, B; }",
+		"'@",
+		"$p = Get-Process | Where-Object { $_.MainWindowTitle -eq $titre } | Select-Object -First 1",
+		"if (-not $p) { exit 0 }",
+		"$h = [IntPtr]$p.MainWindowHandle",
+		"$x = " + String(Math.floor(rect.x)) + "; $y = " + String(Math.floor(rect.y)) + "; $cx = " + String(Math.floor(rect.largeur)) + "; $cy = " + String(Math.floor(rect.hauteur)),
+		"[NQP.Win]::ShowWindow($h, 9) | Out-Null",
+		"[NQP.Win]::SetWindowPos($h, [IntPtr]::Zero, $x, $y, $cx, $cy, 0x0050) | Out-Null",
+		"$r = New-Object NQP.Win+RECT; $f = New-Object NQP.Win+RECT",
+		"[NQP.Win]::GetWindowRect($h, [ref]$r) | Out-Null",
+		"if ([NQP.Win]::DwmGetWindowAttribute($h, 9, [ref]$f, 16) -eq 0) {",
+		"  $dl = $f.L - $r.L; $dt = $f.T - $r.T; $dr = $r.R - $f.R; $db = $r.B - $f.B",
+		"  [NQP.Win]::SetWindowPos($h, [IntPtr]::Zero, ($x - $dl), ($y - $dt), ($cx + $dl + $dr), ($cy + $dt + $db), 0x0050) | Out-Null",
+		"}",
+	].join("\n");
+}
+
+/** Lance `scriptPoserFenetre`, sans attendre : best effort, comme tout ce qui
+    place des fenêtres ici. */
+export function poserFenetre(titre: string, rect: AncreTerminal): void {
+	if (process.platform !== "win32") return;
+	try {
+		const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptPoserFenetre(titre, rect))], { stdio: "ignore", windowsHide: true });
+		enfant.unref();
+	} catch (e) {
+		console.warn(LOG_PREFIX, "placement du terminal impossible:", e);
+	}
+}
+
+export function disposerPourTerminal(hwndNeo: number, titre: string, rect: AncreTerminal, surPose: () => void, surNavigateur: () => void, surFin: () => void): void {
 	if (process.platform !== "win32") { surFin(); return; }
 	let rendu = false;
 	const fin = (): void => { if (!rendu) { rendu = true; surFin(); } };
@@ -685,6 +769,14 @@ export function disposerPourTerminal(hwndNeo: number, titre: string, rect: Ancre
 			const texte = d.toString("utf8");
 			// « pose » : la fenêtre est en place, la modale peut remonter.
 			if (texte.includes("pose")) surPose();
+			/* « avant … » : le placement du navigateur avant qu'on le pose, à
+			   lui rendre à la fin — le même que pour un site. */
+			for (const ligne of texte.split("\n")) {
+				const p = lirePlacement(ligne);
+				if (p) placementNavigateur = p;
+			}
+			// « navigateur » : il vient d'être posé à gauche → deux colonnes.
+			if (texte.includes("navigateur")) surNavigateur();
 			if (texte.includes("fini") || texte.includes("absent")) fin();
 		});
 		enfant.on("error", e => { console.warn(LOG_PREFIX, "disposition du terminal impossible:", e); fin(); });

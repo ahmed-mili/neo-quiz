@@ -573,6 +573,14 @@ export interface HostProcess {
 	    2026-09-20). Rend de quoi se désabonner. OPTIONNEL, comme
 	    `attendreFinTerminal` : seul un hôte qui place des fenêtres l'offre. */
 	surTerminalPose?(rappel: () => void): () => void;
+	/** S'abonne à l'ouverture du NAVIGATEUR de la connexion : il prend la
+	    moitié gauche de l'écran, Neo Quiz la moitié droite (Ahmed,
+	    2026-09-20), et la modale a donc bougé — à elle de se remesurer et de
+	    rendre son nouveau rectangle par `replacerTerminal`, sous lequel le
+	    terminal est reposé. OPTIONNEL, comme les deux voisins. */
+	surNavigateurOuvert?(rappel: () => void): () => void;
+	/** Repose la fenêtre du terminal sous ce rectangle. */
+	replacerTerminal?(ancre: AncreTerminal): Promise<void>;
 }
 
 /**

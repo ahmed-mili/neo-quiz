@@ -522,6 +522,14 @@ entier aurait décoloré 594 fragments des quiz d'Ahmed. Mesurer avant de tranch
 
 ## Conventions & pièges
 
+- **Messages de commit : le dépôt est PUBLIC.** Un message dit ce qui a
+  changé dans l'app, en termes de fonctionnalité, concis, sans expliquer le
+  pourquoi en détail. **Jamais une citation d'Ahmed, jamais son prénom, jamais
+  un jugement sur un produit tiers ou un nom d'école** (règle posée le
+  2026-09-20 après un message qui citait un avis sur Copilot et le nom de
+  l'Efrei). Le pourquoi, avec ses citations, vit dans les commentaires du
+  code, la note du vault et le journal — pas dans l'historique git.
+
 - **Le PRODUIT s'appelle « Neo Quiz », le FORMAT s'appelle `quiz-blocks`.** Le nom
   affiché vit dans `src/branding.ts` (`PRODUCT_NAME`, `LOG_PREFIX`) — seule source,
   il était en dur à sept endroits avant. Deux valeurs ne le suivent JAMAIS, et les

@@ -2392,6 +2392,8 @@
 	position: relative;
 	margin: 0 0 6px;
 }
+.qbd-ai-web-etapes li.is-fait { color: var(--text-faint); }
+.qbd-ai-web-etapes li.is-fait::before { color: var(--color-green, #4ade80); }
 .qbd-ai-web-etapes li::before {
 	counter-increment: etape;
 	content: counter(etape) ".";

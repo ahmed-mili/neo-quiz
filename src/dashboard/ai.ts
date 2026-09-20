@@ -335,7 +335,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   en phase « web » seulement : le jeton de CETTE ouverture, ce qui a été
 	   ouvert (adresse ou presse-papier), la fonction qui arrête la veille du
 	   principal (null sous un hôte sans `collage`), et les écouteurs à retirer. */
-	let attenteWeb: { jeton: string; ouverture: ResultatOuverture; site: string; aGlisser: TuileDepot[]; arreter: (() => void) | null; retirer: () => void } | null = null;
+	/** `colle` : l'hôte a collé le prompt dans la page (site sans préremplissage). */
+	let attenteWeb: { jeton: string; ouverture: ResultatOuverture; site: string; aGlisser: TuileDepot[]; arreter: (() => void) | null; retirer: () => void; colle?: boolean } | null = null;
 	/** Le site de la dernière ouverture, gardé au-delà de `attenteWeb` (remis à
 	    null avant l'écran d'erreur) : c'est lui que « Rouvrir {site} » affiche. */
 	let attenteWebSite = "";
@@ -2874,14 +2875,22 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   les unes sous les autres se lisaient comme trois consignes
 		   concurrentes ; une liste dit l'ordre. Une seule étape : le titre
 		   d'avant suffit. */
-		const etapes: string[] = [];
-		if (coller) etapes.push(t("ai.web.step.paste", { site }));
-		if (aGlisser) etapes.push(t(plusieurs ? "ai.web.step.dropMany" : "ai.web.step.drop"));
-		etapes.push(t("ai.web.step.send"));
+		/* L'étape du collage porte `data-etape="coller"` : quand l'hôte dit
+		   avoir collé (`surColle`), elle passe en « fait » sans redessiner la
+		   carte, dont les tuiles à glisser tiennent un état. */
+		const etapes: Array<{ texte: string; cle?: string }> = [];
+		if (coller) etapes.push(attenteWeb.colle
+			? { texte: t("ai.web.step.pasted"), cle: "fait" }
+			: { texte: t("ai.web.step.paste", { site }), cle: "coller" });
+		if (aGlisser) etapes.push({ texte: t(plusieurs ? "ai.web.step.dropMany" : "ai.web.step.drop") });
+		etapes.push({ texte: t("ai.web.step.send") });
 		if (etapes.length > 1) {
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.stepsTitle", { site }));
 			const liste = ajouter(carte, "ol", "qbd-ai-web-etapes");
-			for (const e of etapes) ajouter(liste, "li", undefined, e);
+			for (const e of etapes) {
+				const li = ajouter(liste, "li", e.cle === "fait" ? "is-fait" : undefined, e.texte);
+				if (e.cle) li.dataset.etape = e.cle;
+			}
 		} else {
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.title", { site }));
 		}
@@ -3616,7 +3625,17 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   résoudre (vault → `HostFile` par l'index ; externe ou choisi par le
 		   dialogue → chemin absolu déjà admis). */
 		/* Le prompt parti par le presse-papier est COLLÉ par l'hôte dans la
-		   page une fois chargée (meilleur effort, voir `HostDepot.disposer`). */
+		   page une fois chargée (meilleur effort, voir `HostDepot.disposer`) ;
+		   quand il le dit, l'étape « collez » de la carte passe en « fait ». */
+		if (host.depot && ouverture.mode === "presse-papier" && host.depot.surColle) {
+			const off = host.depot.surColle(() => {
+				off();
+				if (attenteWeb) attenteWeb.colle = true;
+				const li = document.querySelector<HTMLElement>(".qbd-ai-web-etapes li[data-etape='coller']");
+				if (li) { li.textContent = t("ai.web.step.pasted"); li.dataset.etape = "fait"; li.classList.add("is-fait"); }
+			});
+			window.setTimeout(off, 30000);
+		}
 		if (host.depot) await host.depot.disposer({ coller: ouverture.mode === "presse-papier" });
 		if (!(await host.shell.openUrl(ouverture.url))) { echecOuverture(t("ai.channel.openFailed"), container); return; }
 		arreterAttenteWeb();

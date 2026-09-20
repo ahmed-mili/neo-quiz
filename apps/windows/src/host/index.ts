@@ -165,6 +165,7 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		   l'index ; une chaîne = un absolu déjà admis), et finir. */
 		depot: {
 			disposer: options => pont().depot.disposer(options).catch(e => { console.warn(LOG_PREFIX, "disposition impossible:", e); }),
+			surColle: rappel => pont().depot.surColle(rappel),
 			async preparer(fichiers) {
 				const absolus = fichiers
 					.map(f => typeof f === "string" ? f : (f && index.get(f.path) ? carte.absolu(f.path) : null))

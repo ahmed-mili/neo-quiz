@@ -96,6 +96,7 @@ export const EN_AI = {
 	"ai.web.callout": "{site} will display a warning because your question was submitted via a link. This link comes from Neo Quiz, so you can send your question as usual.",
 	"ai.web.stepsTitle": "On {site}",
 	"ai.web.step.paste": "Paste the prompt (Ctrl+V): it is already in your clipboard.",
+	"ai.web.step.pasted": "The prompt is pasted in the page.",
 	"ai.web.step.drop": "Drag the file below onto the page.",
 	"ai.web.step.dropMany": "Drag the files below onto the page, all at once.",
 	"ai.web.step.send": "Send, then copy the answer: Neo Quiz picks it up by itself.",

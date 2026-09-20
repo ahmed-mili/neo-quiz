@@ -593,6 +593,8 @@ export interface Pont {
 	    périmètre comme une lecture. */
 	depot: {
 		disposer(options?: { coller?: boolean }): Promise<void>;
+		/** Le prompt vient d'être collé dans la page du site. */
+		surColle(rappel: () => void): () => void;
 		/** Écrit ces octets sous ce nom dans le dossier temporaire de
 		    l'application et rend le chemin, glissable ensuite ; `null` si refusé. */
 		ecrire(nom: string, octets: Uint8Array): Promise<string | null>;
@@ -692,6 +694,8 @@ export const CANAUX = {
 	miseAJourVerifier: "neo:mise-a-jour/verifier",
 	miseAJourInstaller: "neo:mise-a-jour/installer",
 	depotDisposer: "neo:depot/disposer",
+	/** POUSSÉ par le principal : le prompt vient d'être collé dans la page. */
+	depotColle: "neo:depot/colle",
 	depotEcrire: "neo:depot/ecrire",
 	depotPreparer: "neo:depot/preparer",
 	depotGlisser: "neo:depot/glisser",

@@ -233,9 +233,25 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 					r.check(outil + " " + nom + " : le succès est conditionné au code de sortie de la connexion",
 						{ ordre: iIf > 0 && iIf < iSucces && iSucces < iElse && iElse < iEchec, apresLogin: iIf > script.indexOf("\n" + login) },
 						{ ordre: true, apresLogin: true });
-					r.check(outil + " " + nom + " : succès → la fenêtre se ferme seule après deux secondes ; échec → elle reste",
-						{ sleep: script.slice(iSucces, iElse).includes("Start-Sleep -Seconds 2"), reste: script.slice(iEchec).includes("Read-Host") },
-						{ sleep: true, reste: true });
+					/* Le succès se ferme seul, mais APRÈS un compte à rebours VISIBLE de
+					   trois secondes (Ahmed, 2026-09-20) : une fenêtre qui disparaît en
+					   silence se lit comme un plantage. Trois tours d'une seconde, et
+					   les chiffres écrits — pas un `Start-Sleep -Seconds 3` muet. */
+					const succes = script.slice(iSucces, iElse);
+					r.check(outil + " " + nom + " : succès → compte à rebours visible de 3 s puis la fenêtre se ferme seule ; échec → elle reste",
+						{
+							compte: succes.includes("for ($i = 3; $i -gt 0; $i--)") && succes.includes("Write-Host") && succes.includes("Start-Sleep -Seconds 1"),
+							muet: succes.includes("Start-Sleep -Seconds 2") || succes.includes("Start-Sleep -Seconds 3"),
+							reste: script.slice(iEchec).includes("Read-Host"),
+						},
+						{ compte: true, muet: false, reste: true });
+					/* Toute erreur d'EXÉCUTION retient la fenêtre (trap), et une
+					   transcription est écrite sur le disque : la fenêtre qui se
+					   fermait « instantanément » le 2026-09-20 n'avait laissé aucune
+					   trace à lire. */
+					r.check(outil + " " + nom + " : un trap retient la fenêtre sur toute erreur, et une transcription est écrite",
+						{ trap: /\ntrap \{[\s\S]*Read-Host[\s\S]*\n\}/.test(script), transcription: script.includes("Start-Transcript -Path") },
+						{ trap: true, transcription: true });
 				}
 				/* L'installation qui échoue n'enchaîne pas la connexion : le test de
 				   son code de sortie précède la ligne de connexion. */

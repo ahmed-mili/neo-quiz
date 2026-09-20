@@ -23,6 +23,7 @@ release notes.
 - In a provider's submenu, the website now comes before the command-line tool: it works right away, for everyone, without installing anything.
 - The submenu always opens on the right of the menu, the way its arrow points, even when the window is narrow; it used to flip to the left.
 - "Claude Code CLI" is back to "Claude Code" in the menu.
+- The PowerShell window that installs or connects a tool now counts down "3... 2... 1..." before closing on success, instead of vanishing after two silent seconds; and if anything goes wrong in it, it stays open on the error instead of closing. Its full output is also kept in a file (neo-quiz-installation.txt in your temporary folder), for the case where the window is gone before you could read it.
 - The "Generated" folder no longer shows the Documents, Links and Notes sections: only generated quizzes are ever written there, so the three boxes stayed empty for good. Every other folder keeps them.
 - In that same folder, the header button is now "Generate" and opens the Generate page, instead of "New quiz" which offered to create a blank quiz or import one, neither of which lands there.
 

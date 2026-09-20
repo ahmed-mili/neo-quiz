@@ -343,14 +343,54 @@ const GEMINI_CONNEXION = [
  * en rouge et RETIENT la fenêtre jusqu'à Entrée — c'est le seul moment où
  * l'utilisateur a quelque chose à lire.
  */
+/** UN COMPTE À REBOURS VISIBLE avant que la fenêtre se ferme, et non plus deux
+    secondes de silence (Ahmed, 2026-09-20 : « un compte à rebours de 3 sec
+    avant que le terminal se ferme, pour toutes les installations »). Une
+    fenêtre qui disparaît sans prévenir se lit comme un plantage, même quand
+    elle vient d'annoncer un succès. Des CHIFFRES seuls : rien à traduire, donc
+    rien qui puisse manquer dans une langue. `retrait` est l'indentation du
+    bloc appelant, pour que le script reste lisible dans la transcription. */
+function compteARebours(retrait: string): string[] {
+	return [
+		retrait + "for ($i = 3; $i -gt 0; $i--) {",
+		retrait + "  Write-Host (\"  \" + $i + \"...\") -ForegroundColor DarkGray",
+		retrait + "  Start-Sleep -Seconds 1",
+		retrait + "}",
+	];
+}
+
 function issue(messages: MessagesTerminal): string[] {
 	return [
 		"if ($LASTEXITCODE -eq 0) {",
 		"  Write-Host " + citerPs(messages.succes) + " -ForegroundColor Green",
-		"  Start-Sleep -Seconds 2",
+		...compteARebours("  "),
 		"} else {",
 		"  Write-Host " + citerPs(messages.echec) + " -ForegroundColor Red",
 		"  Read-Host | Out-Null",
+		"}",
+	];
+}
+
+/** LA PREMIÈRE LIGNE DE TOUT SCRIPT DE TERMINAL, et ce qu'elle achète : une
+    fenêtre qui disparaît sans rien laisser est indiagnosticable. `trap` retient
+    la fenêtre sur TOUTE erreur d'exécution au lieu de la laisser se fermer, et
+    la transcription garde une trace sur le disque même quand la fenêtre est
+    partie — le seul cas où le `trap` lui-même ne sert à rien (une erreur
+    d'ANALYSE tue le script avant sa première ligne).
+
+    Le fichier est écrasé à chaque lancement : c'est un dernier essai, pas un
+    journal. Il vit dans le dossier temporaire de l'utilisateur, celui que
+    `$env:TEMP` nomme. */
+const TRANSCRIPTION = "$env:TEMP\\neo-quiz-installation.txt";
+
+function entete(titre: string): string[] {
+	return [
+		"$host.UI.RawUI.WindowTitle = " + citerPs(titre),
+		"try { Start-Transcript -Path \"" + TRANSCRIPTION + "\" -Force | Out-Null } catch { }",
+		"trap {",
+		"  Write-Host $_ -ForegroundColor Red",
+		"  Read-Host | Out-Null",
+		"  exit 1",
 		"}",
 	];
 }
@@ -369,7 +409,7 @@ function issue(messages: MessagesTerminal): string[] {
  */
 export function scriptInstallation(tool: Outil, titre: string, messages: MessagesTerminal, env: NodeJS.ProcessEnv = process.env): string {
 	const lignes: string[] = [
-		"$host.UI.RawUI.WindowTitle = " + citerPs(titre),
+		...entete(titre),
 		/* `install.ps1` de Codex finit par « Start Codex now? [y/N] » et
 		   attendait qu'on tape n puis Entrée (vu dans la VM le 2026-09-19),
 		   alors que la connexion suit juste après. `CODEX_NON_INTERACTIVE`
@@ -400,8 +440,8 @@ export function scriptInstallation(tool: Outil, titre: string, messages: Message
 	const connexion = commandeConnexion(tool);
 	if (connexion === null) {
 		/* Ollama : pas de compte par terminal, c'est son application qui
-		   démarre. Le message, deux secondes, et la fenêtre se ferme. */
-		lignes.push("Write-Host " + citerPs(messages.succes) + " -ForegroundColor Green", "Start-Sleep -Seconds 2");
+		   démarre. Le message, le compte à rebours, et la fenêtre se ferme. */
+		lignes.push("Write-Host " + citerPs(messages.succes) + " -ForegroundColor Green", ...compteARebours(""));
 		return lignes.join("\n");
 	}
 	lignes.push(rechargerPath(env), connexion, ...issue(messages));
@@ -425,7 +465,7 @@ export function scriptConnexion(tool: Outil, titre: string, messages: MessagesTe
 	const connexion = commandeConnexion(tool);
 	if (connexion === null) return null;
 	return [
-		"$host.UI.RawUI.WindowTitle = " + citerPs(titre),
+		...entete(titre),
 		rechargerPath(env),
 		connexion,
 		...issue(messages),

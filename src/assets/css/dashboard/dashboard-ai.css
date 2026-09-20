@@ -2402,11 +2402,11 @@
    pas un gris plus sombre : une couleur fixe tombe trop près du verre de la
    modale, l'alpha s'atténue pareil sur tout fond), le numéro passe au VERT,
    rien d'autre ne change. L'alpha est posé sur la couleur et non en
-   `opacity` : celle-ci éteindrait le numéro avec le texte. Un clic la remet
-   à faire (l'application ne voit pas la page du site). */
-.qbd-ai-web-etapes li.is-fait { color: color-mix(in srgb, var(--text-muted) 45%, transparent); cursor: pointer; }
+   `opacity` : celle-ci éteindrait le numéro avec le texte. Rien ne se
+   clique : l'application ne voit pas la page du site, et un fichier retiré
+   là-bas se re-glisse simplement. */
+.qbd-ai-web-etapes li.is-fait { color: color-mix(in srgb, var(--text-muted) 45%, transparent); }
 .qbd-ai-web-etapes li.is-fait::before { color: var(--color-green, #4ade80); }
-.qbd-ai-web-etapes li.is-fait:hover { color: color-mix(in srgb, var(--text-muted) 75%, transparent); }
 .qbd-ai-web-etapes li::before {
 	counter-increment: etape;
 	content: counter(etape) ".";

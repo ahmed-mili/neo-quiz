@@ -1552,31 +1552,17 @@
 	   2026-09-20, deux fois). Le fond part donc sur `::before`, qui s'écrase
 	   seul : on voit la pilule se resserrer autour du libellé, et le libellé
 	   reste dessiné à sa taille. */
-	background: transparent !important;
-}
-/* LE FOND DU BOUTON RESTE NU DANS LES TROIS ÉTATS. Le survol commun des
-   boutons principaux (`.qbd-btn--create:hover`) repeignait la BOÎTE, qui ne
-   s'écrase pas : on voyait ses deux extrémités bleutées dépasser de la
-   pilule (Ahmed, 2026-09-20, « c'est quoi cet effet bizarre ? »). Seule la
-   pilule porte une couleur. */
-.qbd-install-auto:hover,
-.qbd-install-auto:active {
-	background: transparent !important;
-}
-.qbd-install-auto::before {
-	content: "";
-	position: absolute;
-	inset: 0;
-	z-index: 0;
-	border-radius: inherit;
-	/* LA COULEUR PASSE PAR UNE VARIABLE, et non par l'héritage : un fond posé
-	   sur le bouton ET sur sa pilule resterait visible derrière elle, et
-	   l'écrasement ne se verrait pas. Les trois états ne règlent donc que
-	   `--qbd-pilule`. */
-	background: var(--qbd-pilule);
+	/* LA VARIANTE « VIF » DE LA MAQUETTE, telle quelle (Ahmed, 2026-09-20,
+	   après l'avoir comparée aux autres) : le bouton ENTIER respire au
+	   survol, s'écrase plus profond à l'appui et dépasse au retour. C'est
+	   bien le bouton qui bouge, et non plus sa seule pilule — l'essai de
+	   n'écraser que le fond laissait dépasser les extrémités de la boîte, et
+	   le libellé dessiné à sa taille fixe ne suivait pas le mouvement. */
+	background: var(--qbd-pilule) !important;
 	transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
 }
-.qbd-install-auto:active::before { transform: scale(0.955); transition-duration: 80ms; }
+.qbd-install-auto:hover { transform: scale(1.015); }
+.qbd-install-auto:active { transform: scale(0.955); transition-duration: 80ms; }
 .qbd-install-auto > * { position: relative; z-index: 1; }
 /* LES TROIS COULEURS DU BOUTON, et le sens qui les relie. Au repos, un
    BLANC à peine lavande (moitié de la teinte de l'interface, moitié blanc
@@ -1585,39 +1571,13 @@
    trois est ÉTROIT, par choix du même jour (« laisse ce blanc tout le
    temps, il doit juste être un peu moins clair quand on ne survole pas ») :
    le repos garde 30 % de teinte, le survol n'en laisse que 12, l'appui
-   remonte à 40. Ce qui SIGNALE le survol, c'est le balayage ; la couleur ne
-   fait que l'accompagner. Le survol commun
-   des boutons principaux, lui, mêle 8 % du fond SOMBRE à la pilule — le
-   gris clair voulu sur le blanc cassé de « Mes quiz », mais une salissure
-   sur un lavande. Éclaircir, c'est aussi le sens du balayage et de l'onde :
-   une seule direction pour les trois états. */
+   remonte à 40. Le survol commun des boutons principaux, lui, mêle 8 % du
+   fond SOMBRE à la pilule — le gris clair voulu sur le blanc cassé de
+   « Mes quiz », mais une salissure ici. Éclaircir, c'est aussi le sens de
+   l'onde du clic : une seule direction pour les trois états. */
 .qbd-install-auto { --qbd-pilule: color-mix(in srgb, var(--text-normal) 30%, #ffffff); }
 .qbd-install-auto:hover { --qbd-pilule: color-mix(in srgb, var(--text-normal) 12%, #ffffff); }
 .qbd-install-auto:active { --qbd-pilule: color-mix(in srgb, var(--text-normal) 40%, #ffffff); }
-/* LE BALAYAGE, l'effet qu'Ahmed a préféré des huit (2026-09-20) : un reflet
-   oblique traverse le bouton UNE FOIS quand on arrive dessus. Il éclaire
-   sans rien déformer — c'est le seul des trois états qui n'a pas à toucher
-   au texte pour se faire voir — et sa lumière est celle de l'onde du clic.
-   `overflow: hidden` le borne au bouton ; `z-index: 0` le garde derrière le
-   libellé, comme l'onde. */
-.qbd-install-auto::after {
-	content: "";
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	left: -60%;
-	width: 45%;
-	z-index: 0;
-	background: linear-gradient(100deg, transparent, rgb(255 255 255 / 0.78), transparent);
-	transform: skewX(-18deg);
-	opacity: 0;
-	pointer-events: none;
-}
-.qbd-install-auto:hover::after { animation: qbd-balayage 620ms ease-out; }
-@keyframes qbd-balayage {
-	from { left: -60%; opacity: 0.9; }
-	to { left: 120%; opacity: 0; }
-}
 
 .qbd-install-auto svg { width: 17px; height: 17px; }
 .qbd-onde {
@@ -1637,8 +1597,7 @@
    l'appui restent dits par le theme du bouton. */
 @media (prefers-reduced-motion: reduce) {
 	.qbd-install-auto { transition: none; }
-	.qbd-install-auto:active::before { transform: none; }
-	.qbd-install-auto:hover::after { animation: none; }
+	.qbd-install-auto:hover, .qbd-install-auto:active { transform: none; }
 	.qbd-onde { display: none; }
 }
 .qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; font-size: 14px; }

@@ -966,7 +966,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				   et ce qui partirait. */
 				const niveauDe = (famille: string): string => aiProviders.niveauAntigravity(settings().aiAntigravityLevels, famille);
 				const NIVEAU: Record<string, string> = { low: "Low", medium: "Medium", high: "High" };
-				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger qbd-model-trigger--levels");
+				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger");
 				trigger.type = "button";
 				const trigLabel = ajouter(trigger, "span", "qbd-select-label");
 				const trigChev = ajouter(trigger, "span", "qbd-select-chevron");

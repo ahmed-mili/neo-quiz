@@ -53,7 +53,7 @@ async function cas(r, nom, fn) {
 await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
 	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande, environnementOutil,
-	estOutilAutorise, lireCache, lirePlacement, scriptConnexion, scriptDisposerPourSite, scriptInstallation, scriptRestaurerNavigateur,
+	estOutilAutorise, lireCache, lirePlacement, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptInstallation, scriptRestaurerNavigateur,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -561,6 +561,26 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		const restauration = scriptRestaurerNavigateur({ hwnd: 725604, showCmd: 3, l: 100, t: 100, r: 1000, b: 700 });
 		r.check("la restauration passe par SetWindowPlacement, sur la fenêtre si elle existe encore",
 			[restauration.includes("IsWindow($h)"), restauration.includes("SetWindowPlacement"), restauration.includes("$p.ShowCmd = 3"), restauration.includes("$p.R = 1000")], [true, true, true, true]);
+	}
+	/* ── La disposition pour un TERMINAL (Ahmed, 2026-09-20) : la fenêtre est
+	   trouvée par son TITRE via `Get-Process` (pas `FindWindow`, dont le `$null`
+	   de classe arrive en chaîne vide depuis PowerShell), posée à gauche, puis
+	   guettée jusqu'à sa disparition — « fini » est ce que le principal attend
+	   pour rendre sa place à Neo Quiz ; « absent » si elle n'est jamais venue. ── */
+	{
+		const d = scriptDisposerPourTerminal(1234, "Neo Quiz - Codex CLI");
+		r.check("terminal : trouvé par son titre exact, par Get-Process, jamais par FindWindow",
+			{ titre: d.includes("$titre = 'Neo Quiz - Codex CLI'"), getProcess: d.includes("$_.MainWindowTitle -eq $titre"), findWindow: d.includes("FindWindow") },
+			{ titre: true, getProcess: true, findWindow: false });
+		const iPose = d.indexOf("Poser $hTerm $aire.Left $aire.Top $moitie $aire.Height");
+		r.check("terminal : posé à GAUCHE, puis guetté jusqu'à disparition, puis « fini » ; « absent » s'il n'apparaît pas",
+			{
+				gauche: iPose > 0,
+				attente: d.indexOf("while ([NQT.Win]::IsWindow($hTerm))") > iPose,
+				fini: d.indexOf("WriteLine('fini')") > d.indexOf("while ([NQT.Win]::IsWindow($hTerm))"),
+				absent: d.includes("WriteLine('absent')") && d.indexOf("WriteLine('absent')") < iPose,
+			},
+			{ gauche: true, attente: true, fini: true, absent: true });
 	}
 	r.done();
 });

@@ -50,7 +50,7 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, disposerPourSite, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, ollamaInstalle, run, scriptConnexion, scriptInstallation } from "./process";
+import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, ollamaInstalle, run, scriptConnexion, scriptInstallation } from "./process";
 import type { Outil } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
@@ -904,6 +904,43 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   étapes manuelles. */
 	const NOMS_OUTILS: Record<Outil, string> = { claude: "Claude Code", codex: "Codex CLI", ollama: "Ollama", agy: "Antigravity CLI", gemini: "Gemini CLI" };
 	const SOURCES_OUTILS: Record<Outil, string> = { claude: "claude.ai/install.ps1", codex: "chatgpt.com/codex/install.ps1", ollama: "winget (Ollama.Ollama)", agy: "antigravity.google/cli/install.ps1", gemini: "npm (@google/gemini-cli)" };
+	/* ─── NEO QUIZ À DROITE, LE TERMINAL À GAUCHE ───
+	   Pendant une installation ou une connexion, le terminal s'ouvrait
+	   par-dessus l'application et la cachait (Ahmed, 2026-09-20). Même
+	   disposition que pour un site : Neo Quiz prend la moitié droite de son
+	   écran, le terminal — trouvé par son titre — la moitié gauche
+	   (`disposerPourTerminal`, process.ts), et Neo Quiz retrouve sa place
+	   d'avant quand la fenêtre du terminal disparaît. Agrandi avant, agrandi
+	   après. Best effort : si le terminal n'est jamais trouvé, la place est
+	   rendue tout de suite. */
+	let terminalAvant: { agrandie: boolean; bounds: Electron.Rectangle } | null = null;
+	const disposerAvecTerminal = (titre: string): void => {
+		const fenetre = deps.fenetreCourante();
+		if (!fenetre || fenetre.isDestroyed()) return;
+		if (!terminalAvant) terminalAvant = { agrandie: fenetre.isMaximized(), bounds: fenetre.getNormalBounds() };
+		const aire = screen.getDisplayMatching(fenetre.getBounds()).workArea;
+		const moitie = Math.floor(aire.width / 2);
+		if (fenetre.isMaximized()) fenetre.unmaximize();
+		fenetre.setBounds({ x: aire.x + moitie, y: aire.y, width: aire.width - moitie, height: aire.height });
+		const h = fenetre.getNativeWindowHandle();
+		const hwnd = h.length >= 8 ? Number(h.readBigUInt64LE(0)) : h.readUInt32LE(0);
+		disposerPourTerminal(hwnd, titre, () => {
+			const f = deps.fenetreCourante();
+			const avant = terminalAvant;
+			terminalAvant = null;
+			if (!f || f.isDestroyed() || !avant) return;
+			if (avant.agrandie) {
+				f.maximize();
+			} else {
+				const a = screen.getDisplayMatching(f.getBounds()).workArea;
+				const width = Math.min(avant.bounds.width, a.width);
+				const height = Math.min(avant.bounds.height, a.height);
+				f.setBounds({ x: a.x + Math.floor((a.width - width) / 2), y: a.y + Math.floor((a.height - height) / 2), width, height });
+			}
+			deps.fenetre.premierPlan();
+		});
+	};
+
 	ipcMain.handle(CANAUX.processusInstaller, async (_e, tool: unknown): Promise<"lance" | "annule" | "indisponible"> => {
 		if (!estOutilAutorise(tool)) {
 			console.warn(LOG_PREFIX, "installation refusée, outil hors liste:", tool);
@@ -929,7 +966,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			echec: t("app.connectCli.failed", { name }),
 			echecInstallation: t("app.installCli.failed", { name }),
 		};
-		return lancerTerminal(titre, scriptInstallation(tool, titre, messages)) ? "lance" : "indisponible";
+		if (!lancerTerminal(titre, scriptInstallation(tool, titre, messages))) return "indisponible";
+		disposerAvecTerminal(titre);
+		return "lance";
 	});
 
 	/* ─── CONNECTER UN CLI ───
@@ -955,7 +994,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			echec: t("app.connectCli.failed", { name }),
 		});
 		if (script === null) return "indisponible";
-		return lancerTerminal(titre, script) ? "lance" : "indisponible";
+		if (!lancerTerminal(titre, script)) return "indisponible";
+		disposerAvecTerminal(titre);
+		return "lance";
 	});
 
 	/* ─── LANCER UN CLI ───

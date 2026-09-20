@@ -554,6 +554,101 @@ export function scriptDisposerPourSite(hwndNeo: number): string {
 	].join("\n");
 }
 
+/**
+ * DISPOSE LES FENÊTRES POUR UN TERMINAL D'INSTALLATION OU DE CONNEXION
+ * (Ahmed, 2026-09-20 : « le terminal apparaît au-dessus de l'app et nous
+ * empêche de voir l'app »). Même dessin que pour un site : Neo Quiz occupe la
+ * moitié droite de son écran (posé par le principal, `setBounds`), le
+ * TERMINAL la moitié gauche — et quand le terminal se ferme, Neo Quiz
+ * retrouve sa place d'avant.
+ *
+ * LE TERMINAL EST TROUVÉ PAR SON TITRE, pas par son processus : sous Windows
+ * 11 le terminal par défaut est Windows Terminal, et la fenêtre visible est
+ * la sienne (`WindowsTerminal.exe`), pas celle de `powershell.exe` — dont
+ * `GetConsoleWindow` ne rend qu'une console cachée. Le script d'installation
+ * pose son titre en première ligne (`entete`), et la fenêtre qui héberge
+ * l'onglet actif porte ce titre (`MainWindowTitle`). Guettée jusqu'à huit
+ * secondes, le temps qu'elle apparaisse. Même `Poser` que pour le site,
+ * cadre invisible absorbé.
+ *
+ * PUIS LE SCRIPT ATTEND QUE CETTE FENÊTRE DISPARAISSE (`IsWindow`, toutes les
+ * 250 ms) et écrit « fini » : c'est ce que le principal attend pour rendre à
+ * Neo Quiz sa place. Le processus lanceur (`lancerTerminal`) meurt tout de
+ * suite, et personne d'autre ne sait quand la fenêtre s'en va. Une fenêtre
+ * jamais trouvée écrit « absent », et le principal restaure aussitôt.
+ */
+export function scriptDisposerPourTerminal(hwndNeo: number, titre: string): string {
+	return [
+		"$hwndNeo = " + String(Math.floor(hwndNeo)),
+		"$titre = " + citerPs(titre),
+		"Add-Type -Name Win -Namespace NQT -MemberDefinition @'",
+		"[DllImport(\"user32.dll\")] public static extern bool IsWindow(IntPtr h);",
+		"[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h, int cmd);",
+		"[DllImport(\"user32.dll\")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);",
+		"[DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr h, out RECT r);",
+		"[DllImport(\"dwmapi.dll\")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int cb);",
+		"public struct RECT { public int L, T, R, B; }",
+		"'@",
+		"Add-Type -AssemblyName System.Windows.Forms",
+		"function Poser($h, $x, $y, $cx, $cy) {",
+		"  [NQT.Win]::ShowWindow($h, 9) | Out-Null",
+		"  [NQT.Win]::SetWindowPos($h, [IntPtr]::Zero, $x, $y, $cx, $cy, 0x0050) | Out-Null",
+		"  $r = New-Object NQT.Win+RECT; $f = New-Object NQT.Win+RECT",
+		"  [NQT.Win]::GetWindowRect($h, [ref]$r) | Out-Null",
+		"  if ([NQT.Win]::DwmGetWindowAttribute($h, 9, [ref]$f, 16) -eq 0) {",
+		"    $dl = $f.L - $r.L; $dt = $f.T - $r.T; $dr = $r.R - $f.R; $db = $r.B - $f.B",
+		"    [NQT.Win]::SetWindowPos($h, [IntPtr]::Zero, $x - $dl, $y - $dt, $cx + $dl + $dr, $cy + $dt + $db, 0x0050) | Out-Null",
+		"  }",
+		"}",
+		"$aire = if ($hwndNeo -ne 0) { [System.Windows.Forms.Screen]::FromHandle([IntPtr]$hwndNeo).WorkingArea } else { [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea }",
+		"$moitie = [int]($aire.Width / 2)",
+		/* PAR `Get-Process` ET NON `FindWindow` : depuis PowerShell, un `$null`
+		   passé pour la classe arrive en chaîne VIDE, et `FindWindow('', titre)`
+		   ne trouve rien (mesuré le 2026-09-20 sur une fenêtre pourtant listée
+		   par `Get-Process` sous ce titre). `MainWindowTitle` vaut pour Windows
+		   Terminal comme pour une console classique. Toutes les 100 ms, huit
+		   secondes au plus. */
+		"$hTerm = [IntPtr]::Zero",
+		"for ($i = 0; $i -lt 80; $i++) {",
+		"  $p = Get-Process | Where-Object { $_.MainWindowTitle -eq $titre } | Select-Object -First 1",
+		"  if ($p) { $hTerm = [IntPtr]$p.MainWindowHandle; break }",
+		"  Start-Sleep -Milliseconds 100",
+		"}",
+		"if ($hTerm -eq [IntPtr]::Zero) { [Console]::Out.WriteLine('absent'); [Console]::Out.Flush(); exit 0 }",
+		"Poser $hTerm $aire.Left $aire.Top $moitie $aire.Height",
+		"[Console]::Out.WriteLine('pose'); [Console]::Out.Flush()",
+		"while ([NQT.Win]::IsWindow($hTerm)) { Start-Sleep -Milliseconds 250 }",
+		"[Console]::Out.WriteLine('fini'); [Console]::Out.Flush()",
+	].join("\n");
+}
+
+/**
+ * Lance la disposition pour un terminal et appelle `surFin` quand la fenêtre
+ * du terminal a disparu — ou tout de suite si elle n'est jamais apparue. Ne
+ * bloque pas : le terminal peut rester ouvert des minutes (une connexion
+ * dans le navigateur), et l'appelant n'a rien à attendre. Best effort, comme
+ * `disposerPourSite` : hors Windows, ou si PowerShell manque, `surFin` est
+ * appelé aussitôt et Neo Quiz garde sa place.
+ */
+export function disposerPourTerminal(hwndNeo: number, titre: string, surFin: () => void): void {
+	if (process.platform !== "win32") { surFin(); return; }
+	let rendu = false;
+	const fin = (): void => { if (!rendu) { rendu = true; surFin(); } };
+	try {
+		const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptDisposerPourTerminal(hwndNeo, titre))], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+		enfant.stdout.on("data", (d: Buffer) => {
+			const texte = d.toString("utf8");
+			if (texte.includes("fini") || texte.includes("absent")) fin();
+		});
+		enfant.on("error", e => { console.warn(LOG_PREFIX, "disposition du terminal impossible:", e); fin(); });
+		enfant.on("exit", fin);
+		enfant.unref();
+	} catch (e) {
+		console.warn(LOG_PREFIX, "disposition du terminal impossible:", e);
+		fin();
+	}
+}
+
 /** L'emplacement d'un navigateur avant qu'on le pose (`WINDOWPLACEMENT`). */
 export interface PlacementFenetre {
 	hwnd: number;

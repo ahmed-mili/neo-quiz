@@ -14,8 +14,14 @@ export interface OuvertureWeb {
 	/** Le paramètre qui porte la question (`q` sur claude.ai, mesuré le
 	    2026-09-18 ; `prompt` sur chatgpt.com, mesuré le 2026-09-19 ; `qfill`
 	    sur perplexity.ai, trouvé le 2026-09-20 dans le code du site — il n'est
-	    documenté nulle part, et c'est le SEUL des siens qui n'envoie pas). */
-	parametre: string;
+	    documenté nulle part, et c'est le SEUL des siens qui n'envoie pas).
+
+	    ABSENT : le site n'a aucun paramètre qui préremplisse son composer
+	    (gemini.google.com, mesuré le 2026-09-20 : `?q=` et `?text=` sont
+	    ignorés, et le code de la page, compilé par Google, ne livre rien de
+	    lisible). Le texte part alors TOUJOURS par le presse-papier, quelle que
+	    soit sa longueur — « pas de paramètre = presse-papier ». */
+	parametre?: string;
 	/** La plus longue adresse qu'on ose passer au navigateur POUR CE SITE —
 	    au-delà, le texte part par le presse-papier (`preparerOuverture`). Elle
 	    est PAR SITE et non globale : les deux serveurs mesurés refusent à des
@@ -95,6 +101,7 @@ export type ResultatOuverture =
     exacte, l'adresse passe. La borne est lue sur le site et non reçue en
     paramètre : deux appelants ne peuvent pas en choisir deux différentes. */
 export function preparerOuverture(texte: string, web: OuvertureWeb): ResultatOuverture {
+	if (!web.parametre) return { mode: "presse-papier", url: web.nouvelle, texte };
 	const url = web.nouvelle + "?" + web.parametre + "=" + encodeURIComponent(texte);
 	if (url.length <= web.urlMax) return { mode: "url", url };
 	return { mode: "presse-papier", url: web.nouvelle, texte };

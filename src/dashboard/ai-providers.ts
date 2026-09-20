@@ -345,12 +345,13 @@ export const MARQUES: Marque[] = [
 		name: "Gemini",
 		logo: "gemini",
 		canaux: [
-			{ id: "gemini-web", label: "gemini.google.com", get sub() { return t("ai.channel.webSub"); }, type: "web" },
-			/* Le site n'a PAS de `web:` : aucun paramètre ne préremplit son
-			   composer. Mesuré le 2026-09-20 — `?q=` et `?text=` sont ignorés,
-			   et le code de la page, compilé par Google, ne livre rien de
-			   lisible (là où perplexity.ai donnait `qfill`). Le canal est donc
-			   visible mais pas encore câblé : le bouton le dit. */
+			/* SANS `parametre` : aucun ne préremplit son composer (mesuré le
+			   2026-09-20 — `?q=` et `?text=` sont ignorés, et le code de la page,
+			   compilé par Google, ne livre rien de lisible, là où perplexity.ai
+			   donnait `qfill`). Le texte part donc toujours par le presse-papier,
+			   et la modale d'attente le dit ; `urlMax` ne sert alors à rien, mais
+			   le contrat le veut. */
+			{ id: "gemini-web", label: "gemini.google.com", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://gemini.google.com/app", urlMax: 0 } },
 			{ id: "antigravity-cli", label: "Antigravity CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli" }
 		]
 	},

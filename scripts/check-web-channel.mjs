@@ -121,6 +121,13 @@ await withSrcModule(
 			[long.mode, long.url, long.texte.length], ["presse-papier", "https://claude.ai/new", 500]);
 		const exact = web.preparerOuverture("abc", { ...site, urlMax: "https://claude.ai/new?q=abc".length });
 		r2.check("la borne exacte passe encore par l'adresse", exact.mode, "url");
+		/* PAS DE PARAMÈTRE = PRESSE-PAPIER, toujours : gemini.google.com n'a
+		   aucun paramètre qui préremplisse (2026-09-20). Même un texte de trois
+		   lettres part par le presse-papier, et l'adresse est celle d'une
+		   conversation neuve, nue. */
+		const sansParametre = web.preparerOuverture("abc", { nouvelle: "https://gemini.google.com/app", urlMax: 100000 });
+		r2.check("sans paramètre : le presse-papier quelle que soit la longueur, l'adresse nue",
+			sansParametre, { mode: "presse-papier", url: "https://gemini.google.com/app", texte: "abc" });
 		/* DEUX SITES, DEUX BORNES : le même texte tient dans l'un et bascule
 		   dans l'autre. C'est tout l'objet du passage d'`URL_MAX` global à
 		   `urlMax` par site — une borne unique aurait rendu ce cas impossible

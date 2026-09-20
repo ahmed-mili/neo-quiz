@@ -1561,8 +1561,20 @@
 	background: var(--qbd-pilule) !important;
 	transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
 }
-.qbd-install-auto:hover { transform: scale(1.015); }
-.qbd-install-auto:active { transform: scale(0.955); transition-duration: 80ms; }
+/* LE FOND EST REDIT DANS CHAQUE ÉTAT, sans quoi le survol commun des boutons
+   principaux (`.qbd-btn--create:hover`, plus spécifique d'une pseudo-classe)
+   l'emporte et ASSOMBRIT au lieu d'éclaircir (Ahmed, 2026-09-20). À
+   spécificité égale, c'est l'ordre des feuilles qui tranche, et celle-ci est
+   importée après. */
+.qbd-install-auto:hover {
+	background: var(--qbd-pilule) !important;
+	transform: scale(1.015);
+}
+.qbd-install-auto:active {
+	background: var(--qbd-pilule) !important;
+	transform: scale(0.955);
+	transition-duration: 80ms;
+}
 .qbd-install-auto > * { position: relative; z-index: 1; }
 /* LES TROIS COULEURS DU BOUTON, et le sens qui les relie. Au repos, un
    LAVANDE de l'interface, tel quel ; le survol l'emmène presque au blanc

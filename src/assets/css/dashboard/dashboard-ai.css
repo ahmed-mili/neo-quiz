@@ -2407,6 +2407,11 @@
    là-bas se re-glisse simplement. */
 .qbd-ai-web-etapes li.is-fait { color: color-mix(in srgb, var(--text-muted) 45%, transparent); }
 .qbd-ai-web-etapes li.is-fait::before { color: var(--color-green, #4ade80); }
+/* L'étape qui écoute : le texte en encre pleine, trois points qui pulsent
+   dessous (les mêmes que la carte du CLI, en plus petit). */
+.qbd-ai-web-etapes li.is-ecoute { color: var(--text-normal); }
+.qbd-ai-web-etape-dots { display: inline-flex; gap: 5px; margin: 6px 0 0 1px; }
+.qbd-ai-web-etape-dots .qbd-ai-loading-dot { width: 6px; height: 6px; }
 .qbd-ai-web-etapes li::before {
 	counter-increment: etape;
 	content: counter(etape) ".";

@@ -2899,6 +2899,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				const li = ajouter(liste, "li", e.cle === "fait" ? "is-fait" : undefined, e.texte);
 				if (e.cle) li.dataset.etape = e.cle;
 			}
+			/* LA DERNIÈRE ÉTAPE ÉCOUTE : dès que celles d'avant sont faites, elle
+			   porte les trois points de la génération (les mêmes que la carte du
+			   CLI) — non pas « ça génère » (l'application ne voit pas la page)
+			   mais « Neo Quiz attend la copie ». Posée quand le glisser est fait
+			   ou quand il n'y a rien à glisser (2026-09-20). */
+			const derniere = liste.lastElementChild as HTMLElement | null;
+			if (derniere && (!aGlisser || attenteWeb.depose)) poserEcoute(derniere);
 		} else {
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.title", { site }));
 		}
@@ -2971,7 +2978,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 						if (resultat === "depose") {
 							if (attenteWeb) attenteWeb.depose = true;
 							const li = document.querySelector<HTMLElement>(".qbd-ai-web-etapes li[data-etape='glisser']");
-							if (li) { li.dataset.etape = "fait"; li.classList.add("is-fait"); }
+							if (li) {
+								li.dataset.etape = "fait";
+								li.classList.add("is-fait");
+								const derniere = li.parentElement?.lastElementChild as HTMLElement | null;
+								if (derniere && derniere !== li) poserEcoute(derniere);
+							}
 						}
 					});
 				});
@@ -2989,6 +3001,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		host.ui.setIcon(ajouter(reopen, "span", "qbd-btn-icon qbd-btn-icon--sm"), "external-link");
 		ajouter(reopen, "span", undefined, t("ai.web.reopen", { site }));
 		reopen.addEventListener("click", rouvrirSite);
+	}
+
+	/** Les trois points d'écoute sur une étape, une seule fois. */
+	function poserEcoute(li: HTMLElement): void {
+		if (li.querySelector(".qbd-ai-loading-dots")) return;
+		li.classList.add("is-ecoute");
+		const dots = ajouter(li, "span", "qbd-ai-loading-dots qbd-ai-web-etape-dots");
+		for (let k = 0; k < 3; k++) ajouter(dots, "span", "qbd-ai-loading-dot");
 	}
 
 	/** Ouvre l'écran d'usage en lui passant la dernière lecture connue (il ne

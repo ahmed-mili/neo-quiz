@@ -1484,7 +1484,11 @@
    qui grandit d'un cran, pour que la boîte soit pleine plutôt qu'étirée. Le
    plancher reste un plancher : la voie manuelle dépliée la fait toujours
    grandir. */
-.qbd-install-modal { width: 520px; max-width: calc(100vw - 32px); }
+/* 732 px, LA LARGEUR DU COMPOSER, et non plus 520 : le terminal posé sous la
+   modale prend la largeur de l'invite quand il doit la couvrir, et les deux
+   doivent avoir les mêmes dimensions (Ahmed, 2026-09-20). Même largeur,
+   même centrage : ils s'alignent bord à bord. */
+.qbd-install-modal { width: 732px; max-width: calc(100vw - 32px); }
 /* TROIS ZONES, et non une pile qui retombe en haut d'une boîte trop grande
    (Ahmed, 2026-09-20 : « essaye de mieux organiser la modale »). De haut en
    bas : ce qu'on lit, la voie MANUELLE repliée, puis le bouton AUTOMATIQUE

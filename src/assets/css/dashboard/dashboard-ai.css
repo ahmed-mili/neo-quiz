@@ -1552,30 +1552,41 @@
 	   2026-09-20, deux fois). Le fond part donc sur `::before`, qui s'écrase
 	   seul : on voit la pilule se resserrer autour du libellé, et le libellé
 	   reste dessiné à sa taille. */
-	/* LA VARIANTE « VIF » DE LA MAQUETTE, telle quelle (Ahmed, 2026-09-20,
-	   après l'avoir comparée aux autres) : le bouton ENTIER respire au
-	   survol, s'écrase plus profond à l'appui et dépasse au retour. C'est
-	   bien le bouton qui bouge, et non plus sa seule pilule — l'essai de
-	   n'écraser que le fond laissait dépasser les extrémités de la boîte, et
-	   le libellé dessiné à sa taille fixe ne suivait pas le mouvement. */
-	background: var(--qbd-pilule) !important;
+	/* CE QUI BOUGE N'EST JAMAIS LE TEXTE. Toute mise à l'échelle redimensionne
+	   une IMAGE déjà rendue du libellé au lieu de le redessiner : il devient
+	   pâteux le temps de l'animation, et Ahmed l'a relevé trois fois
+	   (2026-09-20). Le mouvement de la maquette « Vif » est donc joué par
+	   deux pièces qui ne portent pas de texte : la PILULE (`::before`) respire
+	   et s'écrase, le CONTENU descend d'un pixel entier à l'appui — une
+	   translation entière ne déforme rien, elle déplace. Le rendu est celui de
+	   la maquette ; le libellé, lui, reste dessiné à sa taille. */
+	background: transparent !important;
+}
+.qbd-install-auto:hover,
+.qbd-install-auto:active { background: transparent !important; }
+.qbd-install-auto::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	border-radius: inherit;
+	/* La couleur passe par une variable : un fond posé sur la BOÎTE resterait
+	   visible derrière la pilule quand elle s'écrase, et on verrait ses
+	   extrémités dépasser. */
+	background: var(--qbd-pilule);
 	transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease;
 }
-/* LE FOND EST REDIT DANS CHAQUE ÉTAT, sans quoi le survol commun des boutons
-   principaux (`.qbd-btn--create:hover`, plus spécifique d'une pseudo-classe)
-   l'emporte et ASSOMBRIT au lieu d'éclaircir (Ahmed, 2026-09-20). À
-   spécificité égale, c'est l'ordre des feuilles qui tranche, et celle-ci est
-   importée après. */
-.qbd-install-auto:hover {
-	background: var(--qbd-pilule) !important;
-	transform: scale(1.015);
+.qbd-install-auto:hover::before { transform: scale(1.015); }
+.qbd-install-auto:active::before { transform: scale(0.955); transition-duration: 80ms; }
+.qbd-install-auto > * {
+	position: relative;
+	z-index: 1;
+	transition: transform 160ms cubic-bezier(0.34, 1.5, 0.64, 1);
 }
-.qbd-install-auto:active {
-	background: var(--qbd-pilule) !important;
-	transform: scale(0.955);
-	transition-duration: 80ms;
-}
-.qbd-install-auto > * { position: relative; z-index: 1; }
+.qbd-install-auto:active > * { transform: translateY(1px); transition-duration: 80ms; }
+/* L'écrasement commun à tous les boutons principaux (dashboard-components)
+   mettrait le libellé à l'échelle par une autre porte. */
+.qbd-install-auto:active { transform: none; }
 /* LES TROIS COULEURS DU BOUTON, et le sens qui les relie. Au repos, un
    LAVANDE de l'interface, tel quel ; le survol l'emmène presque au blanc
    (12 % de teinte), et l'appui revient à mi-chemin (30 %). L'ordre a été
@@ -1607,7 +1618,8 @@
    l'appui restent dits par le theme du bouton. */
 @media (prefers-reduced-motion: reduce) {
 	.qbd-install-auto { transition: none; }
-	.qbd-install-auto:hover, .qbd-install-auto:active { transform: none; }
+	.qbd-install-auto:hover::before, .qbd-install-auto:active::before { transform: none; }
+	.qbd-install-auto:active > * { transform: none; }
 	.qbd-onde { display: none; }
 }
 .qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; font-size: 14px; }

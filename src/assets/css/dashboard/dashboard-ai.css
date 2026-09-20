@@ -1476,28 +1476,35 @@
 }
 
 /* ── Le modal d'un fournisseur absent (spec 2026-09-17, § 3b) ── */
-/* La modale d'installation : 520 de large, et une hauteur PLANCHER (Ahmed,
-   2026-09-20 : « sa hauteur est trop basse »). Son contenu est court — un
-   paragraphe, une ligne d'état, un repli — et la boîte paraissait tassée à
-   côté de ses 520 px. Un plancher, pas une hauteur fixe : les états qui
-   parlent davantage (voie manuelle dépliée, erreur) continuent de grandir. */
+/* La modale d'installation : 520 de large, une hauteur PLANCHER, et un
+   contenu À SA TAILLE (Ahmed, 2026-09-20 : « sa hauteur est trop basse »,
+   puis « adapte le texte en conséquence et tous les autres éléments »).
+   Monter le plancher seul ouvrait un vide sous « Learn more » : c'est
+   l'ensemble — titre, paragraphe, bouton, ligne d'état, voie manuelle, lien —
+   qui grandit d'un cran, pour que la boîte soit pleine plutôt qu'étirée. Le
+   plancher reste un plancher : la voie manuelle dépliée la fait toujours
+   grandir. */
 .qbd-install-modal { width: 520px; max-width: calc(100vw - 32px); }
 .qbd-install-modal .modal-content { min-height: 232px; }
-.qbd-install-what { margin: 0 0 14px; color: var(--text-muted); line-height: 1.5; }
-.qbd-install-auto { width: 100%; justify-content: center; margin-bottom: 14px; }
-.qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; }
-.qbd-install-state:not(:empty) { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: var(--background-modifier-hover); }
+.qbd-install-modal .modal-title { font-size: 1.22em; margin-bottom: 16px; }
+.qbd-install-modal .modal-title-icon,
+.qbd-install-modal .modal-title-icon svg { width: 22px; height: 22px; }
+.qbd-install-what { margin: 0 0 20px; color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+.qbd-install-auto { width: 100%; justify-content: center; margin-bottom: 18px; min-height: 42px; font-size: 14px; }
+.qbd-install-auto svg { width: 17px; height: 17px; }
+.qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; font-size: 14px; }
+.qbd-install-state:not(:empty) { margin: 0 0 18px; padding: 13px 14px; border-radius: 10px; background: var(--background-modifier-hover); }
 .qbd-install-modal[data-state="en-cours"] .qbd-install-auto,
 .qbd-install-modal[data-state="connexion"] .qbd-install-auto,
 .qbd-install-modal[data-state="detecte"] .qbd-install-auto { display: none; }
 .qbd-install-spinner {
-	width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%;
+	width: 16px; height: 16px; flex-shrink: 0; border-radius: 50%;
 	border: 2px solid var(--text-faint); border-top-color: var(--interactive-accent);
 	animation: qbd-install-spin 0.8s linear infinite;
 }
 @keyframes qbd-install-spin { to { transform: rotate(360deg); } }
 .qbd-install-check { color: var(--color-green, #4ade80); display: inline-flex; }
-.qbd-install-check svg { width: 16px; height: 16px; }
+.qbd-install-check svg { width: 18px; height: 18px; }
 /* ── LA VOIE MANUELLE ──
    Sa ligne repliable reprend les classes de l'arbre des quiz
    (`qbd-quizzes-node-*`), qui les met en `flex` DANS cet arbre seulement.
@@ -1513,7 +1520,7 @@
 	padding: 6px 4px;
 	border-radius: 8px;
 	color: var(--text-muted);
-	font-size: 13px;
+	font-size: 14px;
 	/* La MAIN, parce que rien d'autre ne dit que cette ligne se clique : elle
 	   n'a ni l'aspect d'un bouton ni de soulignement, et le chevron seul est
 	   trop discret. Les boutons du modal l'ont par le thème ; ces deux-là ne
@@ -1522,6 +1529,7 @@
 	cursor: pointer;
 }
 .qbd-install-manual-row .qbd-quizzes-node-head:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.qbd-install-manual-row .qbd-quizzes-node-head { padding: 9px 6px; }
 .qbd-install-manual-row .qbd-quizzes-node-chevron { flex: 0 0 auto; width: 16px; height: 16px; display: inline-flex; }
 .qbd-install-manual-row .qbd-quizzes-node-chevron svg { width: 16px; height: 16px; }
 
@@ -1620,7 +1628,7 @@
 .qbd-install-modal .qbd-quizzes-node { margin: 0; padding: 0; background: transparent; border: none; }
 .qbd-root .qbd-install-modal .qbd-quizzes-node-body,
 .qbd-install-modal .qbd-quizzes-node-body { padding: 0; }
-.qbd-install-learn { display: inline-flex; margin-top: 12px; font-size: 12.5px; color: var(--interactive-accent); text-decoration: none; }
+.qbd-install-learn { display: inline-flex; margin-top: 16px; font-size: 13.5px; color: var(--interactive-accent); text-decoration: none; }
 .qbd-install-learn:hover { text-decoration: underline; }
 
 /* La scène. 30 et 5, et NON les 32 et 8 que déclarent les classes de la

@@ -1183,11 +1183,30 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				const trigLabel = ajouter(trigger, "span", "qbd-select-label");
 				const trigChev = ajouter(trigger, "span", "qbd-select-chevron");
 				host.ui.setIcon(trigChev, "chevron-down");
+				/* LE MODÈLE PAR DÉFAUT EST CHOISI ICI, et PERSISTÉ, quand le
+				   réglage est vide ou ne désigne plus rien de la liste : un modèle
+				   LOCAL installé d'abord (rien à payer, rien à joindre), sinon le
+				   premier qui n'est pas hors plan, sinon le premier. Rejoué à
+				   chaque redessin : les locaux détectés et les plans appris
+				   arrivent après le premier rendu, et le choix s'affine avec eux
+				   tant que l'utilisateur n'en a pas fait un lui-même. */
+				const choisirOllamaParDefaut = (): void => {
+					const mv = settings().aiModel || "";
+					if (mv && ctl.options.some(o => o.value === mv)) return;
+					const choix = ctl.options.find(o => o.installed && !o.cloud)
+						|| ctl.options.find(o => !o.horsPlan)
+						|| ctl.options[0];
+					if (choix && choix.value !== mv) void saveSettings({ aiModel: choix.value });
+				};
 				const curOpt = (): OllamaListItem | undefined => {
 					const mv = settings().aiModel || currentModel;
-					return ctl.options.find(o => o.value === mv) || ctl.options[0];
+					return ctl.options.find(o => o.value === mv)
+						|| ctl.options.find(o => o.installed && !o.cloud)
+						|| ctl.options.find(o => !o.horsPlan)
+						|| ctl.options[0];
 				};
 				const refreshTrigger = () => {
+					choisirOllamaParDefaut();
 					trigLabel.replaceChildren();
 					const cur = curOpt();
 					const mv = settings().aiModel || currentModel;

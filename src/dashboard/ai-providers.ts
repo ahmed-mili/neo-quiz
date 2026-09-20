@@ -201,7 +201,12 @@ export const PROVIDERS: Provider[] = [
 		logo: "ollama",
 		couleur: "#E7E9EE",
 		desktopOnly: false,
-		defaultModel: "glm-5.3:cloud",
+		/* VIDE, comme les CLI : un modèle codé ici posait « glm-5.3:cloud »,
+		   hors plan sur un compte gratuit, dès qu'on choisissait Ollama (vu le
+		   2026-09-20). Le composer choisit et PERSISTE le premier modèle
+		   utilisable (`choisirOllamaParDefaut`) : un local installé, sinon le
+		   premier qui n'est pas hors plan. */
+		defaultModel: "",
 		defaultEffort: "high"
 	},
 	/* ── Les canaux WEB ──

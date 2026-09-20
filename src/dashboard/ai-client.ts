@@ -3,7 +3,7 @@ import { currentHost, requireHost } from "../host/current";
 import { jetonFichier, jetonHome, jetonSortie, nouveauMarqueur } from "../host/jetons";
 import {
 	resolveClaudeModel,
-	resolveCodexModel, resolveAntigravityModel, antigravityModelId, niveauAntigravity,
+	resolveCodexModel, resolveAntigravityModel, antigravityModelId, niveauAntigravity, resolveOllamaSelection,
 	resolveEffort,
 	getCodexModels,
 	getProvider,
@@ -616,6 +616,10 @@ export function createAiClient(settings: AiSettingsHost): AiClient {
 		const { systemPrompt, userPrompt } = composerPrompts(prompt, options);
 
 		if (provider === "ollama") {
+			/* Le composer persiste le choix par défaut ; si la génération part
+			   avant (réglage vide), le premier de la sélection sert de repli —
+			   jamais une chaîne vide au serveur. */
+			if (!model) model = resolveOllamaSelection(settings.get().aiOllamaModels, settings.get().aiOllamaCatalog)[0]?.value || "";
 			// Un seul endpoint local : sert les modèles locaux ET cloud (:cloud).
 			// Clé optionnelle (le daemon connecté via `ollama signin` n'en a pas
 			// besoin) ; envoyée en Authorization si l'utilisateur en a défini une.

@@ -1485,15 +1485,27 @@
    plancher reste un plancher : la voie manuelle dépliée la fait toujours
    grandir. */
 .qbd-install-modal { width: 520px; max-width: calc(100vw - 32px); }
-.qbd-install-modal .modal-content { min-height: 232px; }
+/* TROIS ZONES, et non une pile qui retombe en haut d'une boîte trop grande
+   (Ahmed, 2026-09-20 : « essaye de mieux organiser la modale ») : ce qu'on
+   lit et ce qu'on clique en HAUT, puis l'espace libre, puis les deux issues
+   secondaires — la voie manuelle et le lien — en PIED, derrière un filet.
+   `margin-top: auto` sur la première ligne du pied fait le partage ; quand la
+   voie manuelle est dépliée, il n'y a plus d'espace à distribuer et la modale
+   grandit, comme avant. */
+.qbd-install-modal .modal-content { min-height: 232px; display: flex; flex-direction: column; }
+.qbd-install-modal .qbd-install-manual-row {
+	margin-top: auto;
+	padding-top: 14px;
+	border-top: 1px solid var(--background-modifier-border);
+}
 .qbd-install-modal .modal-title { font-size: 1.22em; margin-bottom: 16px; }
 .qbd-install-modal .modal-title-icon,
 .qbd-install-modal .modal-title-icon svg { width: 22px; height: 22px; }
 .qbd-install-what { margin: 0 0 20px; color: var(--text-muted); font-size: 14px; line-height: 1.6; }
-.qbd-install-auto { width: 100%; justify-content: center; margin-bottom: 18px; min-height: 42px; font-size: 14px; }
+.qbd-install-auto { width: 100%; justify-content: center; margin-bottom: 4px; min-height: 42px; font-size: 14px; }
 .qbd-install-auto svg { width: 17px; height: 17px; }
 .qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; font-size: 14px; }
-.qbd-install-state:not(:empty) { margin: 0 0 18px; padding: 13px 14px; border-radius: 10px; background: var(--background-modifier-hover); }
+.qbd-install-state:not(:empty) { margin: 0 0 4px; padding: 13px 14px; border-radius: 10px; background: var(--background-modifier-hover); }
 .qbd-install-modal[data-state="en-cours"] .qbd-install-auto,
 .qbd-install-modal[data-state="connexion"] .qbd-install-auto,
 .qbd-install-modal[data-state="detecte"] .qbd-install-auto { display: none; }
@@ -1628,7 +1640,7 @@
 .qbd-install-modal .qbd-quizzes-node { margin: 0; padding: 0; background: transparent; border: none; }
 .qbd-root .qbd-install-modal .qbd-quizzes-node-body,
 .qbd-install-modal .qbd-quizzes-node-body { padding: 0; }
-.qbd-install-learn { display: inline-flex; margin-top: 16px; font-size: 13.5px; color: var(--interactive-accent); text-decoration: none; }
+.qbd-install-learn { display: inline-flex; align-self: flex-start; margin-top: 10px; font-size: 13.5px; color: var(--interactive-accent); text-decoration: none; }
 .qbd-install-learn:hover { text-decoration: underline; }
 
 /* La scène. 30 et 5, et NON les 32 et 8 que déclarent les classes de la

@@ -319,6 +319,22 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				repl: /\ngemini\s*\n/.test(cx),
 			},
 			{ ordre: true, pathAvant: true, repl: false });
+		/* Même en headless, le CLI demande « Do you want to continue? [Y/n] »
+		   au CLAVIER avant d'ouvrir le navigateur (`authConsent.ts`) : une
+		   touche Entrée est déposée dans le tampon de la console JUSTE AVANT
+		   l'appel, par `WriteConsoleInput` — après `Set-Location`, avant
+		   `gemini`. Et la branche d'échec VIDE ce tampon avant son `Read-Host`,
+		   sinon une touche jamais lue fermait la fenêtre sur le message. */
+		const iEntree = cx.indexOf("[NeoQuizConsole]::PressEnter()");
+		const iFlush = cx.indexOf("$host.UI.RawUI.FlushInputBuffer()");
+		const iReadHost = cx.indexOf("Read-Host", iJuge);
+		r.check("gemini connexion : une Entrée déposée dans la console juste avant l'appel, et le tampon vidé avant le Read-Host de l'échec",
+			{
+				entree: iEntree > iCd && iEntree < iControle,
+				win32: cx.includes("WriteConsoleInput(") && cx.includes("GetStdHandle(-10)"),
+				flush: iFlush > iJuge && iFlush < iReadHost,
+			},
+			{ entree: true, win32: true, flush: true });
 		/* Et la même variable sur l'outil LANCÉ PAR L'APPLICATION : sans elle,
 		   le mode headless refuse de partir, réglages muets, même connecté. */
 		r.check("gemini : l'environnement de l'outil porte GOOGLE_GENAI_USE_GCA, les autres non",

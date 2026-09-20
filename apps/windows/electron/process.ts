@@ -339,11 +339,61 @@ function commandeConnexion(tool: Outil): string | null {
 	return null;
 }
 
+/**
+ * UNE TOUCHE ENTRÉE DÉPOSÉE DANS LE TAMPON D'ENTRÉE DE LA CONSOLE, avant de
+ * lancer `gemini`. Pourquoi : même en headless, le CLI demande « Opening
+ * authentication page in your browser. Do you want to continue? [Y/n]: » et
+ * attend UNE LIGNE au clavier (`getOauthConsentNonInteractive`,
+ * `packages/core/src/utils/authConsent.ts` du dépôt gemini-cli, lu le
+ * 2026-09-20) — la question partait dans `Out-Null`, et la fenêtre semblait
+ * morte (vu par Ahmed : « j'ai vu installé et après plus rien »).
+ *
+ * On ne peut PAS répondre par un tube : quand stdin n'est pas un terminal, le
+ * CLI le lit EN ENTIER comme prompt (`readStdin`, `gemini.tsx`), et la
+ * question lit ensuite un flux déjà fermé — elle attendrait pour toujours.
+ * Ni par `SendKeys`, qui exige que la fenêtre soit au premier plan alors que
+ * le navigateur va justement le prendre. `WriteConsoleInput` écrit l'événement
+ * clavier dans le TAMPON de la console, où il attend d'être lu : le premier
+ * `readline` qui écoute le clavier — celui de la question — reçoit une ligne
+ * vide, que le CLI compte pour « oui ». Éprouvé le 2026-09-20 sur un
+ * `readline` Node dans une vraie fenêtre. Sans question (identifiants déjà
+ * en cache), la touche reste dans le tampon : `issue` le VIDE avant son
+ * `Read-Host`, sinon un échec se fermerait sans laisser lire.
+ *
+ * `Add-Type` compile ces lignes de C# à chaque lancement (une seconde environ,
+ * avec le compilateur de .NET Framework que Windows PowerShell embarque) ;
+ * c'est le prix d'un appel Win32 depuis PowerShell.
+ */
+const DEPOSER_ENTREE = [
+	"$neoQuizConsole = @\"",
+	"using System;",
+	"using System.Runtime.InteropServices;",
+	"public static class NeoQuizConsole {",
+	"  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]",
+	"  public struct KEY_EVENT_RECORD { public int bKeyDown; public ushort wRepeatCount; public ushort wVirtualKeyCode; public ushort wVirtualScanCode; public char UnicodeChar; public uint dwControlKeyState; }",
+	"  [StructLayout(LayoutKind.Explicit, CharSet = CharSet.Unicode)]",
+	"  public struct INPUT_RECORD { [FieldOffset(0)] public ushort EventType; [FieldOffset(4)] public KEY_EVENT_RECORD KeyEvent; }",
+	"  [DllImport(\"kernel32.dll\", SetLastError = true)] static extern IntPtr GetStdHandle(int nStdHandle);",
+	"  [DllImport(\"kernel32.dll\", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool WriteConsoleInput(IntPtr hConsoleInput, INPUT_RECORD[] lpBuffer, uint nLength, out uint lpNumberOfEventsWritten);",
+	"  public static void PressEnter() {",
+	"    IntPtr h = GetStdHandle(-10);",
+	"    INPUT_RECORD down = new INPUT_RECORD(); down.EventType = 1;",
+	"    down.KeyEvent.bKeyDown = 1; down.KeyEvent.wRepeatCount = 1; down.KeyEvent.wVirtualKeyCode = 0x0D; down.KeyEvent.wVirtualScanCode = 0x1C; down.KeyEvent.UnicodeChar = '\\r';",
+	"    INPUT_RECORD up = down; up.KeyEvent.bKeyDown = 0;",
+	"    uint written; WriteConsoleInput(h, new INPUT_RECORD[] { down, up }, 2, out written);",
+	"  }",
+	"}",
+	"\"@",
+	"Add-Type -TypeDefinition $neoQuizConsole",
+	"[NeoQuizConsole]::PressEnter()",
+];
+
 /** Les lignes de la connexion de Gemini, séparées pour être lisibles (et pour
     que `check:electron-process` puisse les nommer). */
 const GEMINI_CONNEXION = [
 	"$env:GOOGLE_GENAI_USE_GCA = 'true'",
 	"Set-Location $env:USERPROFILE",
+	...DEPOSER_ENTREE,
 	"gemini -p \"ok\" --output-format json | Out-Null",
 ];
 
@@ -377,6 +427,11 @@ function issue(messages: MessagesTerminal): string[] {
 		...compteARebours("  "),
 		"} else {",
 		"  Write-Host " + citerPs(messages.echec) + " -ForegroundColor Red",
+		/* Le tampon d'entrée est VIDÉ avant d'attendre Entrée : une touche
+		   déposée d'avance et jamais lue (`DEPOSER_ENTREE`, quand Gemini n'a
+		   rien demandé) fermerait sinon la fenêtre sur le message d'échec,
+		   avant qu'on ait pu le lire. Sans effet pour les autres outils. */
+		"  $host.UI.RawUI.FlushInputBuffer()",
 		"  Read-Host | Out-Null",
 		"}",
 	];

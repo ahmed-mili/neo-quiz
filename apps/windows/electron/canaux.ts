@@ -934,6 +934,38 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   navigateur). Chaque lancement prend un numéro ; les rappels d'un numéro
 	   périmé ne font plus rien. */
 	let sessionTerminal = 0;
+	/* L'attente d'une ancre remesurée : posée par `preparerColonnes`, levée
+	   par le canal `processusReplacerTerminal` (ou par son délai). */
+	let attenteAncre: ((a: AncreTerminal | null) => void) | null = null;
+
+	/* ─── LES DEUX COLONNES, DÈS LE DÉPART ───
+	   Le navigateur FINIRA par s'ouvrir, quoi qu'il arrive : une connexion
+	   passe toujours par lui (Ahmed, 2026-09-20). Autant tout disposer tout de
+	   suite — Neo Quiz à droite, sa moitié gauche laissée libre — plutôt que
+	   de voir les fenêtres sauter en cours de route quand il arrive. La
+	   modale ayant rétréci avec la fenêtre, le rendu la remesure et rend son
+	   nouveau rectangle ; le terminal sera posé dessous. Un demi-seconde au
+	   plus : passé ce délai on garde l'ancre d'avant, qui vaut mieux que
+	   rien. */
+	const preparerColonnes = (ancreInitiale: AncreTerminal | null): Promise<AncreTerminal | null> => {
+		const f = deps.fenetreCourante();
+		if (!f || f.isDestroyed()) return Promise.resolve(ancreInitiale);
+		if (f.isMinimized()) f.restore();
+		if (!neoAvantColonnes) neoAvantColonnes = { agrandie: f.isMaximized(), bounds: f.getNormalBounds() };
+		const a = screen.getDisplayMatching(f.getBounds()).workArea;
+		const demi = Math.floor(a.width / 2);
+		if (f.isMaximized()) f.unmaximize();
+		f.setBounds({ x: a.x + demi, y: a.y, width: a.width - demi, height: a.height });
+		f.webContents.send(CANAUX.processusNavigateurOuvert);
+		return new Promise(resolve => {
+			const minuteur = setTimeout(() => { attenteAncre = null; resolve(ancreInitiale); }, 500);
+			attenteAncre = (nouvelle) => {
+				clearTimeout(minuteur);
+				attenteAncre = null;
+				resolve(nouvelle ?? ancreInitiale);
+			};
+		});
+	};
 	const disposerAvecTerminal = (titre: string, ancre: AncreTerminal | null): void => {
 		const fenetre = deps.fenetreCourante();
 		if (!fenetre || fenetre.isDestroyed()) return;
@@ -954,18 +986,11 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			const f = deps.fenetreCourante();
 			if (f && !f.isDestroyed()) f.webContents.send(CANAUX.processusTerminalPose);
 		}, () => {
-			if (session !== sessionTerminal) return;
-			/* LE NAVIGATEUR VIENT D'ÊTRE POSÉ À GAUCHE : Neo Quiz passe à
-			   droite, et le rendu remesure sa modale pour que le terminal la
-			   suive (`processusNavigateurOuvert` → `processusReplacerTerminal`). */
-			const f = deps.fenetreCourante();
-			if (!f || f.isDestroyed()) return;
-			if (!neoAvantColonnes) neoAvantColonnes = { agrandie: f.isMaximized(), bounds: f.getNormalBounds() };
-			const a = screen.getDisplayMatching(f.getBounds()).workArea;
-			const demi = Math.floor(a.width / 2);
-			if (f.isMaximized()) f.unmaximize();
-			f.setBounds({ x: a.x + demi, y: a.y, width: a.width - demi, height: a.height });
-			f.webContents.send(CANAUX.processusNavigateurOuvert);
+			/* LE NAVIGATEUR EST POSÉ À GAUCHE, dans la moitié que Neo Quiz a
+			   libérée avant même que le terminal ne s'ouvre : il n'y a plus
+			   rien à déplacer ici, et c'est tout l'intérêt de disposer dès le
+			   départ. Le rappel reste, pour le placement du navigateur qui se
+			   fait côté script. */
 		}, () => {
 			resoudreFin();
 			if (session !== sessionTerminal) return;
@@ -994,6 +1019,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   son nouveau rectangle, et le terminal est reposé dessous. Même lecture
 	   champ par champ que l'ancre d'`installer`. */
 	ipcMain.handle(CANAUX.processusReplacerTerminal, (_e, ancre: unknown) => {
+		/* Une préparation attend cette mesure pour LANCER le terminal : elle
+		   la prend, et rien n'est encore à replacer. */
+		if (attenteAncre) { attenteAncre(lireAncre(ancre)); return; }
 		const fenetre = deps.fenetreCourante();
 		if (!fenetre || fenetre.isDestroyed() || !titreTerminal) return;
 		const rect = rectangleTerminal(fenetre.getContentBounds(), fenetre.webContents.getZoomFactor(), lireAncre(ancre));
@@ -1030,8 +1058,11 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			echecInstallation: t("app.installCli.failed", { name }),
 			reessai: t("app.installCli.retry"),
 		};
+		/* Les colonnes D'ABORD (le navigateur finira par s'ouvrir), puis le
+		   terminal sous la modale remesurée. */
+		const place = await preparerColonnes(lireAncre(ancre));
 		if (!lancerTerminal(titre, scriptInstallation(tool, titre, messages))) return "indisponible";
-		disposerAvecTerminal(titre, lireAncre(ancre));
+		disposerAvecTerminal(titre, place);
 		return "lance";
 	});
 
@@ -1058,8 +1089,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			echec: t("app.connectCli.failed", { name }),
 		});
 		if (script === null) return "indisponible";
+		const place = await preparerColonnes(lireAncre(ancre));
 		if (!lancerTerminal(titre, script)) return "indisponible";
-		disposerAvecTerminal(titre, lireAncre(ancre));
+		disposerAvecTerminal(titre, place);
 		return "lance";
 	});
 

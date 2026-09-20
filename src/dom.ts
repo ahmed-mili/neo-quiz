@@ -55,12 +55,14 @@ export function limiteComposer(): number | undefined {
     retirée — le tout dans la même tâche, donc aucune image intermédiaire.
     C'est ce qui permet d'envoyer la position cible à l'hôte AVANT que la
     modale ne bouge : elle ne remontera qu'une fois la fenêtre posée. */
-/** Le rectangle d'un élément APRÈS que la fenêtre a changé de taille : deux
-    images d'attente, le temps que le rendu ait refait sa mise en page (la
-    première suit le redimensionnement, la seconde le layout qui en découle). */
+/** Le rectangle qu'un élément AURA une fois remonté, APRÈS que la fenêtre a
+    changé de taille : deux images d'attente, le temps que le rendu ait refait
+    sa mise en page (la première suit le redimensionnement, la seconde le
+    layout qui en découle). Remonté, parce que c'est sous cette place-là que
+    la fenêtre se posera, et que la modale y montera ensuite. */
 export function ancreApresRelayout(el: HTMLElement): Promise<{ x: number; y: number; largeur: number; hauteur: number }> {
 	return new Promise(resolve => {
-		requestAnimationFrame(() => requestAnimationFrame(() => resolve(ancreDe(el))));
+		requestAnimationFrame(() => requestAnimationFrame(() => resolve(ancreRemontee(el))));
 	});
 }
 

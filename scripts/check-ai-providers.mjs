@@ -28,6 +28,7 @@
  *
  *     npm run check:ai-providers
  */
+import { readFileSync } from "node:fs";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 /** Le faux hôte : il JOURNALISE chaque requête et chaque lecture de cache, et
@@ -124,6 +125,53 @@ await withSrcModule(
 				{ devine: false, exact: true });
 			r.check("le suffixe de tag d'ollama.com (« :0813 ») ne devient pas une famille à part",
 				catalogue.filter(m => m.value.startsWith("deepseek-v4-pro")).length, 1);
+		}
+
+		/* ── UNE VARIANTE N'EST PAS UNE VERSION ──
+		   Le 2026-09-10, ollama.com a publié `deepseek-v4.1-flash`. Regroupés par
+		   « préfixe avant le premier chiffre », `deepseek-v4.1-flash`,
+		   `deepseek-v4-pro` et `deepseek-v4-flash` étaient UN modèle de base
+		   `deepseek-v`, et 4.1 > 4 évinçait le V4 Pro — le plus gros du
+		   catalogue, dans la sélection par défaut, sans successeur. Mesuré sur le
+		   catalogue réel le 2026-09-20 : 13 entrées au lieu de 15. La règle
+		   « dernière version par modèle » vaut entre versions d'UNE variante
+		   (glm-5.2 → glm-5.3), jamais d'une variante à l'autre (pro / flash /
+		   code). */
+		{
+			const json = JSON.stringify({ models: [
+				{ name: "deepseek-v4.1-flash", modified_at: "2026-09-10T00:00:00Z", size: 1 },
+				{ name: "deepseek-v4-pro:0813", modified_at: "2026-08-13T00:00:00Z", size: 1 },
+				{ name: "deepseek-v4-flash:0731", modified_at: "2026-07-31T00:00:00Z", size: 1 },
+				{ name: "glm-5.2", modified_at: "2026-06-16T00:00:00Z", size: 1 },
+				{ name: "kimi-k2.7-code", modified_at: "2026-06-12T00:00:00Z", size: 1 },
+			] });
+			const { hote } = fauxHote({ reponses: { "ollama.com/api/tags": { status: 200, body: json } } });
+			installHost(hote);
+			const catalogue = await providers.fetchOllamaCloudCatalog().catch(() => []);
+			const tags = catalogue.map(m => m.value);
+			r.check("une variante sans successeur (V4 Pro) survit à la version supérieure d'une AUTRE variante (V4.1 Flash)",
+				{ pro: tags.includes("deepseek-v4-pro:cloud"), flash41: tags.includes("deepseek-v4.1-flash:cloud") },
+				{ pro: true, flash41: true });
+			r.check("… et la version périmée de la MÊME variante est bien évincée (V4 Flash par V4.1 Flash, GLM-5.2 par 5.3)",
+				{ flash4: tags.includes("deepseek-v4-flash:cloud"), glm52: tags.includes("glm-5.2:cloud"), glm53: tags.includes("glm-5.3:cloud") },
+				{ flash4: false, glm52: false, glm53: true });
+			r.check("un modèle de code (kimi-k2.7-code) n'est pas une version périmée de kimi-k3",
+				tags.includes("kimi-k2.7-code:cloud"), true);
+			r.check("le libellé d'une famille découverte suit la forme curée du repli (« DeepSeek V4.1 Flash », pas « Deepseek-V4.1-Flash »)",
+				catalogue.find(m => m.value === "deepseek-v4.1-flash:cloud")?.label, "DeepSeek V4.1 Flash");
+		}
+
+		/* ── ET QUELQU'UN L'APPELLE ──
+		   Le rafraîchissement vivait dans l'onglet de réglages du GREFFON, retiré
+		   au chantier lecteur (d123caa) et jamais reporté dans l'application :
+		   pendant une semaine `fetchOllamaCloudCatalog` n'a eu AUCUN appelant, le
+		   cache est resté nul et le menu sur son repli figé — tous les cas
+		   ci-dessus étaient verts. Un contrôle du module ne voit pas un
+		   câblage absent ; celui-ci lit la page. */
+		{
+			const page = readFileSync(new URL("../src/dashboard/ai.ts", import.meta.url), "utf8");
+			r.check("la page « Générer » appelle fetchOllamaCloudCatalog (le catalogue se rafraîchit)",
+				/fetchOllamaCloudCatalog\(/.test(page), true);
 		}
 		{
 			const { hote } = fauxHote({ reponses: { "ollama.com/api/tags": { status: 200, body: "<!doctype html><title>Cloud models</title>" } } });

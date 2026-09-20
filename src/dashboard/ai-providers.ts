@@ -908,7 +908,9 @@ export function resolveClaudeModel(value?: string): string {
    (dernière version par famille) et est rafraîchi dynamiquement depuis
    ollama.com (cf. fetchOllamaCloudCatalog) ; le tableau ci-dessous n'est qu'un
    repli embarqué (si hors-ligne) et la source des tags exacts connus. */
-/* Tags relevés un par un sur ollama.com/library/<modèle>/tags le 2026-08-29.
+/* Tags relevés un par un sur ollama.com/library/<modèle>/tags le 2026-08-29,
+   complétés le 2026-09-20 (deepseek-v4.1-flash, kimi-k2.7-code, vérifiés de
+   la même façon ; deepseek-v4-flash sort, remplacé par le 4.1).
    Les relever plutôt que les deviner N'EST PAS DU ZÈLE : « <famille>:cloud »
    n'existe pas pour tout le monde (mistral-large-3 n'a que « :675b-cloud »,
    nemotron-3-nano que « :30b-cloud »), et un tag inventé donne un 404 à la
@@ -925,7 +927,8 @@ export const OLLAMA_FALLBACK_CATALOG: OllamaCatalogEntry[] = [
 	{ value: "kimi-k3:cloud", label: "Kimi K3" },
 	{ value: "qwen3.5:cloud", label: "Qwen 3.5" },
 	{ value: "deepseek-v4-pro:cloud", label: "DeepSeek V4 Pro" },
-	{ value: "deepseek-v4-flash:cloud", label: "DeepSeek V4 Flash" },
+	{ value: "deepseek-v4.1-flash:cloud", label: "DeepSeek V4.1 Flash" },
+	{ value: "kimi-k2.7-code:cloud", label: "Kimi K2.7 Code" },
 	{ value: "mistral-large-3:675b-cloud", label: "Mistral Large 3" },
 	{ value: "gemma4:cloud", label: "Gemma 4" }
 ];
@@ -953,10 +956,13 @@ export function isOllamaCloudModel(value?: string): boolean {
    Cosmétique ; sert aux modèles hors repli (fetch dynamique / ajout manuel). */
 export function prettyOllamaLabel(value?: string): string {
 	const core = String(value || "").replace(/(?::|-)cloud$/, "").replace(/:latest$/, "").replace(/:/g, " ");
-	const ACR: Record<string, string> = { gpt: "GPT", oss: "OSS", glm: "GLM", ai: "AI", llm: "LLM" };
-	return core.split(/\s+/).map(seg =>
-		seg.split("-").map(w => ACR[w.toLowerCase()] || (w && /[a-z]/i.test(w[0]) ? w[0].toUpperCase() + w.slice(1) : w)).join("-")
-	).join(" ");
+	const ACR: Record<string, string> = { gpt: "GPT", oss: "OSS", glm: "GLM", ai: "AI", llm: "LLM", deepseek: "DeepSeek", minimax: "MiniMax" };
+	/* Les tirets deviennent des espaces : c'est la forme des libellés curés du
+	   repli (« Nemotron 3 Ultra », « Mistral Large 3 »), et un modèle
+	   découvert en ligne s'affiche dans la même liste qu'eux — « DeepSeek V4.1
+	   Flash » à côté de « DeepSeek V4 Pro », pas « Deepseek-V4.1-Flash ». Seul
+	   « GPT-OSS » garde son tiret, par son libellé curé, qui prime. */
+	return core.split(/[\s-]+/).map(w => ACR[w.toLowerCase()] || (w && /[a-z]/i.test(w[0]) ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
 }
 
 /* Catalogue effectif : cache dynamique (settings.aiOllamaCatalog) sinon repli.
@@ -1008,15 +1014,22 @@ export function resolveOllamaSelection(values?: string[] | null, catalog?: Ollam
    ne contient QUE la version la plus récente de chaque modèle. « kimi-k2.6 »
    disparaît dès que « kimi-k3 » est là ; « glm-5.2 » dès qu'il y a « glm-5.3 ».
 
-   Base = préfixe alphabétique AVANT le premier chiffre, sur le nom SANS le tag
-   (« :cloud »). C'est ce qui fait qu'un suffixe de variante (« -code ») ne scinde
-   PAS le modèle : « kimi-k2.6 » et « kimi-k2.7-code » → base « kimi-k » (même
-   modèle). Les tiers de MÊME version (« nemotron-3-super »/« -ultra » → base
-   « nemotron », version [3] pour les deux) restent tous les deux : on ne coupe
-   que sur la version, pas sur la variante. */
+   Base = le nom SANS ses nombres, sur le nom sans le tag (« :cloud ») :
+   « deepseek-v4.1-flash » → « deepseek-v-flash », « deepseek-v4-pro » →
+   « deepseek-v-pro », « glm-5.3 » → « glm ». Une VARIANTE (pro / flash /
+   code / super / ultra) est donc un modèle à part, qui n'a que ses propres
+   versions à perdre : « glm-5.2 » tombe devant « glm-5.3 », « deepseek-v4-flash »
+   devant « deepseek-v4.1-flash », mais « deepseek-v4-pro » reste — il n'a pas
+   de successeur. Jusqu'au 2026-09-20 la base était le PRÉFIXE AVANT LE PREMIER
+   CHIFFRE (« deepseek-v » pour les trois), et la sortie de V4.1 Flash le
+   2026-09-10 a fait disparaître V4 Pro — le plus gros du catalogue, dans la
+   sélection par défaut — ainsi que « kimi-k2.7-code », le modèle de code, lu
+   comme une version périmée de « kimi-k3 » (13 entrées au lieu de 15, mesuré
+   sur le catalogue réel). Les tiers de même version (« nemotron-3-super » /
+   « -ultra ») restent, comme avant : deux bases, chacune avec sa version. */
 function ollamaFamilyBase(name: string): string {
 	const fam = String(name).split(":")[0];
-	return (fam.match(/^[^0-9]*/)?.[0] || fam).replace(/[-.\s]+$/, "") || fam;
+	return fam.replace(/[0-9]+(?:\.[0-9]+)*/g, "").replace(/[-.\s]{2,}/g, "-").replace(/^[-.\s]+|[-.\s]+$/g, "") || fam;
 }
 /* Version = suite de nombres du nom, tag ignoré (pour ne pas lire une taille
    « 120b » comme une version). [0] si aucun chiffre. */

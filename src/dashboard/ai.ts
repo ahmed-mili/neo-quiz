@@ -416,6 +416,15 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    qui se chevauchent (composer redessiné pendant que la sonde tourne) ne
 	    doivent pas relancer une boucle sur les mêmes tags. */
 	let sondePlansEnCours = false;
+	/** L'heure du dernier rafraîchissement du catalogue cloud (ollama.com), et
+	    le TTL qui espace les requêtes : une par session de page, puis une par
+	    tranche de six heures pour une fenêtre qu'on laisse ouverte des jours.
+	    En MÉMOIRE et non dans les réglages : au lancement le menu part du
+	    cache persistant (`aiOllamaCatalog`), la requête ne fait que le mettre
+	    à jour, et un horodatage persisté n'aurait servi qu'à ÉVITER cette
+	    unique requête — pas un réglage pour ça. */
+	let catalogueOllamaRafraichiA = 0;
+	const CATALOGUE_OLLAMA_TTL = 6 * 60 * 60 * 1000;
 	/** Tags choisis EXPLICITEMENT depuis « Plus de modèles » dans CETTE session
 	    de page : le repli automatique d'un modèle courant devenu payant (voir
 	    `sonderPlansOllama`) ne doit jamais défaire un choix que l'utilisateur
@@ -899,17 +908,24 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			};
 			const catalog = settings().aiOllamaCatalog;
 			const list = aiProviders.resolveOllamaSelection(settings().aiOllamaModels, catalog).map(decorate);
-			// Compte gratuit : Ahmed veut aussi voir les modèles cloud du catalogue
-			// que la sonde a déjà classés « inclus », même hors de sa sélection —
-			// ajoutés après elle, sans doublon, sous le même plafond.
-			if (planCompte === "free") {
-				for (const entry of aiProviders.getOllamaCatalog(catalog)) {
-					if (list.length >= aiProviders.OLLAMA_MAX_MODELS) break;
-					if (!aiProviders.isOllamaCloudModel(entry.value)) continue;
-					if (appris[entry.value] !== "inclus") continue;
-					if (list.some(o => o.value === entry.value)) continue;
-					list.push(decorate(aiProviders.getOllamaModelMeta(entry.value, catalog)));
-				}
+			/* TOUT le catalogue cloud, après la sélection, sans doublon, sous le
+			   plafond — quel que soit le plan. Jusqu'au 2026-09-20 seuls les
+			   modèles déjà classés « inclus » d'un compte GRATUIT s'ajoutaient ici :
+			   un compte payant ne voyait jamais que les sept de la sélection par
+			   défaut, et un compte gratuit jamais un modèle payant hors de cette
+			   sélection — or le gestionnaire de sélection vivait dans les réglages
+			   du greffon, parti au chantier lecteur, et l'application n'en a pas.
+			   Un catalogue rafraîchi qui ne peut pas atteindre l'écran ne détecte
+			   rien (Ahmed : « il nous manque des modèles payants »). Le classement
+			   par plan reste celui de `repartirParPlan` à l'ouverture du menu : sur
+			   un compte gratuit, un payant part dans « Plus de modèles » avec son
+			   badge, un modèle pas encore sondé reste dans la liste principale le
+			   temps que la sonde le classe — exactement comme la sélection. */
+			for (const entry of aiProviders.getOllamaCatalog(catalog)) {
+				if (list.length >= aiProviders.OLLAMA_MAX_MODELS) break;
+				if (!aiProviders.isOllamaCloudModel(entry.value)) continue;
+				if (list.some(o => o.value === entry.value)) continue;
+				list.push(decorate(aiProviders.getOllamaModelMeta(entry.value, catalog)));
 			}
 			// Modèles locaux installés hors sélection → ajoutés en fin de liste.
 			(detected || []).forEach(m => {
@@ -1694,6 +1710,45 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	}
 
 	/**
+	 * Le catalogue cloud SE RAFRAÎCHIT TOUT SEUL. Il vivait dans l'onglet de
+	 * réglages du greffon (bouton « rafraîchir » + tâche de fond à
+	 * l'ouverture), retiré au chantier lecteur (d123caa) et jamais reporté :
+	 * pendant une semaine `fetchOllamaCloudCatalog` n'a eu aucun appelant, et
+	 * le menu est resté sur le repli figé au 2026-08-29 — DeepSeek V4.1 Flash,
+	 * sorti le 10 septembre, n'y était pas (Ahmed, 2026-09-20). Ici : à chaque
+	 * relecture des statuts avec Ollama choisi, au plus une fois par TTL, en
+	 * arrière-plan. Un échec (hors ligne, JSON absent) garde le cache ou le
+	 * repli sans un mot : `fetchOllamaCloudCatalog` LÈVE plutôt que de rendre
+	 * un catalogue vide, c'est pour ça. Un catalogue neuf reconstruit la liste
+	 * du menu et relance la sonde de plan : les familles découvertes n'ont pas
+	 * encore de verdict, et sur un compte gratuit elles iraient dans la liste
+	 * principale sans badge « Pro » tant qu'on ne les a pas sondées.
+	 */
+	function rafraichirCatalogueOllama(args: OllamaSondeArgs): void {
+		const maintenant = Date.now();
+		if (maintenant - catalogueOllamaRafraichiA < CATALOGUE_OLLAMA_TTL) return;
+		catalogueOllamaRafraichiA = maintenant;
+		void aiProviders.fetchOllamaCloudCatalog().then(async (catalogue) => {
+			if (disposed) return;
+			const actuel = settings().aiOllamaCatalog;
+			const inchange = Array.isArray(actuel) && actuel.length === catalogue.length
+				&& actuel.every((m, i) => m.value === catalogue[i].value && m.label === catalogue[i].label);
+			if (inchange) return;
+			await saveSettings({ aiOllamaCatalog: catalogue });
+			if (disposed || (settings().aiProvider || "") !== "ollama") return;
+			if (args.ctl) {
+				args.ctl.options = args.buildList(args.ctl.detected);
+				if (args.ctl.refreshTrigger) args.ctl.refreshTrigger();
+			}
+			if (settings().aiOllamaPlanCompte === "free") void sonderPlansOllama(args);
+		}).catch(() => {
+			// Hors ligne, ou ollama.com a changé de forme : on retentera au
+			// prochain TTL, et d'ici là le cache ou le repli font l'affaire.
+			catalogueOllamaRafraichiA = 0;
+		});
+	}
+
+	/**
 	 * La sonde de plan EN ARRIÈRE-PLAN (tâche 8, correctif de T5) : sur un
 	 * compte `free`, `required_plan` des recommandations ne couvre presque
 	 * rien (5 modèles) — on SONDE donc chaque modèle cloud à zéro token (voir
@@ -2030,6 +2085,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			}
 		});
 
+		// Le catalogue cloud vient d'ollama.com, pas du démon local : il se
+		// rafraîchit que le serveur réponde ou non (un démon arrêté n'empêche
+		// pas de voir la liste à jour une fois démarré).
+		if (provider === "ollama") rafraichirCatalogueOllama({ ctl: ollamaCtl, buildList: buildOllamaList });
 		aiProviders.checkOllama(ollamaUrl, force).then(async (res) => {
 			if (res.ok) {
 				// Affiche la version d'Ollama installée (comme Claude/Codex), ex.

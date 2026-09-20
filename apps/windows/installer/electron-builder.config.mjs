@@ -3,6 +3,9 @@
  * exécutable restent distincts pour qu'il ne puisse ni remplacer l'entrée de
  * désinstallation de Neo Quiz, ni être pris pour une mise à jour par NSIS.
  */
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
+
 export default async function () {
 	return {
 		appId: "com.ahmed.neoquiz.installer",
@@ -19,6 +22,39 @@ export default async function () {
 		   secondes d'extraction une seule fois, et autant à la CI, où l'envoi
 		   des paquets domine tout le reste. */
 		compression: "normal",
+		/* LE CONTENEUR PORTABLE S'EXTRAIT À CHAQUE LANCEMENT : tout ce qu'il
+		   embarque est réécrit sur le disque de l'utilisateur avant la première
+		   fenêtre, et compté dans le téléchargement. Les `.pak` que Chromium
+		   n'ouvrira jamais coûtent donc deux fois.
+
+		   L'installeur ne sait dire que DEUX langues (`LangueInstallateur`,
+		   `installer/noyau.ts`) : les 53 autres `.pak` traduisaient uniquement
+		   les chaînes internes de Chromium (menu contextuel d'un champ de
+		   texte), sous une interface déjà anglaise pour quiconque n'est ni
+		   anglophone ni francophone. MESURÉ : 47 Mo extraits et 7,8 Mo
+		   téléchargés en moins.
+
+		   L'APPLICATION, elle, garde toutes les langues : elle s'installe une
+		   fois et vit ensuite sur le disque — voir `../electron-builder.config.mjs`,
+		   qui ne porte PAS ce réglage. */
+		electronLanguages: ["en-US", "fr"],
+		/* Le compilateur HLSL d'exécution (26 Mo) ne sert qu'à WebGPU et au
+		   backend D3D12 d'ANGLE. Cette fenêtre est du HTML : sans ces deux
+		   fichiers, elle se peint à l'identique — éprouvé en forçant chaque
+		   backend (`--use-angle=d3d11|d3d9|gl|vulkan|swiftshader`) et sans GPU
+		   du tout. MESURÉ : 26 Mo extraits et 6,2 Mo téléchargés en moins.
+
+		   Ce qui RESTE, et qu'il ne faut pas retirer pour 11 Mo de plus :
+		   `vk_swiftshader.dll`, `vulkan-1.dll` et `d3dcompiler_47.dll` sont les
+		   replis d'une machine dont le GPU est absent ou sur liste noire —
+		   exactement le poste que ce bootstrapper doit servir. Et
+		   `LICENSES.chromium.html` (20 Mo) accompagne obligatoirement une
+		   redistribution binaire de Chromium. */
+		afterPack: async ({ appOutDir }) => {
+			for (const nom of ["dxcompiler.dll", "dxil.dll"]) {
+				await rm(join(appOutDir, nom), { force: true });
+			}
+		},
 		extraMetadata: {
 			main: "dist-bootstrapper/main.cjs",
 			author: { name: "Ahmed Mili" },

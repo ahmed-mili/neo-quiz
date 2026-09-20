@@ -27,6 +27,7 @@ const principalUi = readFileSync(resolve(racine, "apps/windows/installer/main-ui
 const preloadInstallateur = readFileSync(resolve(racine, "apps/windows/installer/preload.ts"), "utf8");
 const travailleurInstallateur = readFileSync(resolve(racine, "apps/windows/installer/worker.ts"), "utf8");
 const configBootstrapper = readFileSync(resolve(racine, "apps/windows/installer/electron-builder.config.mjs"), "utf8");
+const configApplication = readFileSync(resolve(racine, "apps/windows/electron-builder.config.mjs"), "utf8");
 const manifesteApp = JSON.parse(readFileSync(resolve(racine, "apps/windows/package.json"), "utf8"));
 const verrouApp = JSON.parse(readFileSync(resolve(racine, "apps/windows/package-lock.json"), "utf8"));
 /* Le correctif du conteneur portable : un fichier du DÉPÔT, appliqué à
@@ -525,6 +526,40 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 			correctifPortable.includes("+  HideWindow"),
 		],
 		[true, true, true, true, true, true, true]);
+
+	/* CE QUE LE CONTENEUR N'EMBARQUE PAS — et ce qu'il garde.
+
+	   Tout ce que le portable embarque est réécrit sur le disque de
+	   l'utilisateur AVANT la première fenêtre, et payé une seconde fois au
+	   téléchargement. Deux retraits, mesurés sur trois répétitions :
+	   les 53 `.pak` de langues que l'installeur ne sait pas parler
+	   (`LangueInstallateur` n'a que `en` et `fr`) et le compilateur HLSL
+	   d'exécution, qui ne sert qu'à WebGPU et à D3D12 — 102,2 Mo d'exe et
+	   4,35 s d'attente deviennent 88,2 Mo et 3,70 s.
+
+	   Ce qui RESTE embarqué compte autant : `vk_swiftshader.dll`,
+	   `vulkan-1.dll` et `d3dcompiler_47.dll` (11 Mo) sont les replis d'une
+	   machine sans GPU utilisable — le poste même qui a motivé ce chantier —
+	   et `LICENSES.chromium.html` (20 Mo) accompagne obligatoirement une
+	   redistribution binaire de Chromium. Un futur dégraissage les verrait
+	   comme les trois plus gros fichiers restants ; ce cas dit pourquoi ils
+	   sont là.
+
+	   L'APPLICATION ne suit PAS ce régime : elle s'installe une fois et vit
+	   ensuite sur le disque, où rien ne se réextrait. Copier ces réglages dans
+	   sa config amputerait l'installé pour économiser sur ce qui ne coûte
+	   plus rien. */
+	r.check("conteneur : seules les langues que l'installeur parle, et pas le compilateur HLSL",
+		[
+			configBootstrapper.includes('electronLanguages: ["en-US", "fr"]'),
+			configBootstrapper.includes('"dxcompiler.dll", "dxil.dll"'),
+			configBootstrapper.includes("vk_swiftshader.dll"),
+			configBootstrapper.includes("LICENSES.chromium.html"),
+			// L'application garde tout : ni langues coupées, ni fichier retiré.
+			configApplication.includes("electronLanguages"),
+			configApplication.includes("afterPack"),
+		],
+		[true, true, true, true, false, false]);
 
 	/* La langue de l'installeur est celle de WINDOWS (`app.getLocale()`), la
 	   même déduction que l'application en mode « auto ». Plus de langue « dans

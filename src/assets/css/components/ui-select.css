@@ -440,7 +440,8 @@
    chaque famille, le niveau en gris juste après le nom (« Gemini 3.8
    Flash  High ») ; à droite, un chevron pour les familles à niveaux, dont
    le flyout (Low / Medium / High) s'ouvre au survol. Le nom de la famille
-   COURANTE est en gras, comme chez Antigravity. ── */
+   COURANTE est en gras, comme chez Antigravity, et son chevron à l'accent,
+   comme la marque en usage de notre menu des fournisseurs. ── */
 .qbd-model-menu-head {
 	padding: 6px 8px 3px;
 	font-size: 10px;
@@ -465,11 +466,11 @@
 	font-weight: 600;
 }
 
-/* Sur la ligne courante, la coche cède la place au chevron le temps que le
-   flyout est ouvert (référence : « ✓ » au repos, « › » survolé). */
-.qbd-level-row.is-active:not(.is-open) .qbd-model-menu-row-chevron,
-.qbd-level-row.is-open .qbd-select-check {
-	display: none;
+/* La famille EN USAGE : pas de coche, son chevron passe à l'accent — la
+   convention de la marque en usage dans le menu des fournisseurs
+   (`.qbd-brand-row.is-active`), pas le « ✓ » d'Antigravity. */
+.qbd-level-row.is-active .qbd-model-menu-row-chevron {
+	color: var(--interactive-accent);
 }
 
 .qbd-level-flyout {

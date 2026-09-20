@@ -497,16 +497,18 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		/* Dans le menu Ollama (`searchable`), pas de coche : c'est l'icône
 		   nuage qui passe en bleu sur le modèle courant (Ahmed, 2026-09-19) —
 		   la coche à côté du nuage faisait deux glyphes pour un seul état. */
-		if (!(opts.searchable && m.icon)) {
+		const aNiveaux = !!(m.levels && m.levels.length);
+		if (!(opts.searchable && m.icon) && !aNiveaux) {
 			const check = ajouter(btn, "span", "qbd-select-check");
 			if (active) currentHost().ui.setIcon(check, "check");
 		}
 		/* Un modèle à NIVEAUX (référence Antigravity) : un chevron à droite,
 		   et son flyout s'ouvre au survol comme celui d'une marque à plusieurs
-		   canaux. Sur la ligne courante, la coche cède la place au chevron le
-		   temps que le flyout est ouvert (CSS `.is-open`). La ligne elle-même
+		   canaux. Même convention que cette marque : PAS de coche sur la ligne
+		   courante, c'est son chevron qui passe à l'accent (Ahmed, 2026-09-20
+		   — la coche est dans le flyout, sur le niveau). La ligne elle-même
 		   reste un clic : le modèle, à son niveau courant. */
-		if (m.levels && m.levels.length) {
+		if (aNiveaux) {
 			btn.classList.add("qbd-level-row");
 			btn.setAttribute("aria-haspopup", "menu");
 			const chev = ajouter(btn, "span", "qbd-model-menu-row-chevron");

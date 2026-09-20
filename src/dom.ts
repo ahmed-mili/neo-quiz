@@ -68,9 +68,22 @@ export function ancreApresRelayout(el: HTMLElement): Promise<{ x: number; y: num
 
 export function ancreRemontee(el: HTMLElement): { x: number; y: number; largeur: number; hauteur: number } {
 	const avait = el.classList.contains(CLASSE_MODALE_HAUT);
-	if (!avait) el.classList.add(CLASSE_MODALE_HAUT);
+	if (avait) return ancreDe(el);
+	/* LA TRANSITION EST COUPÉE LE TEMPS DE LA MESURE : la remontée est un
+	   `transform` animé, et `getBoundingClientRect` lit la valeur ANIMÉE — à
+	   l'instant où la classe arrive, elle vaut encore zéro. Mesurée ainsi, la
+	   « position remontée » était la position centrée, et le terminal se
+	   posait quatorze centièmes de hauteur trop bas (vu le 2026-09-20). Sans
+	   transition, la valeur calculée est la valeur finale. Le reflow forcé
+	   avant de rendre la transition garantit qu'aucune image n'a été peinte
+	   entre-temps. */
+	const transition = el.style.transition;
+	el.style.transition = "none";
+	el.classList.add(CLASSE_MODALE_HAUT);
 	const r = ancreDe(el);
-	if (!avait) el.classList.remove(CLASSE_MODALE_HAUT);
+	el.classList.remove(CLASSE_MODALE_HAUT);
+	void el.offsetHeight;
+	el.style.transition = transition;
 	return r;
 }
 

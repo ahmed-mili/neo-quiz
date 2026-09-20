@@ -2374,6 +2374,35 @@
 /* La consigne tient sur une ligne dans cette modale plus large : à 46 ch,
    « send. » tombait seul sur la seconde. */
 .qbd-web-wait-modal--files .qbd-ai-web-line { max-width: none; }
+
+/* Les étapes de la carte d'attente : une liste numérotée, alignée à gauche
+   dans une carte centrée, le numéro à l'accent. */
+.qbd-ai-web-etapes {
+	margin: 4px auto 6px;
+	padding: 0 0 0 26px;
+	max-width: 46ch;
+	text-align: left;
+	font-size: 13.5px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	counter-reset: etape;
+	list-style: none;
+}
+.qbd-ai-web-etapes li {
+	position: relative;
+	margin: 0 0 6px;
+}
+.qbd-ai-web-etapes li::before {
+	counter-increment: etape;
+	content: counter(etape) ".";
+	position: absolute;
+	left: -24px;
+	width: 18px;
+	text-align: right;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	color: var(--interactive-accent);
+}
 .qbd-ai-web-files {
 	display: flex;
 	flex-wrap: nowrap;

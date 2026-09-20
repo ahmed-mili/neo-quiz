@@ -287,11 +287,6 @@ export interface MessagesTerminal {
 	succes: string;
 	echec: string;
 	echecInstallation?: string;
-	/** Antigravity : ce que le terminal dit pendant que la page Google est
-	    ouverte (« cliquez sur Copy to Clipboard, ou tapez le code ici »), puis
-	    quand le code est parti. Traduits par le principal, comme les autres. */
-	collerCode?: string;
-	codeRecu?: string;
 	/** Ce qui s'affiche entre deux tentatives d'installation (le service de
 	    l'editeur n'a pas repondu). */
 	reessai?: string;
@@ -339,7 +334,7 @@ function commandeConnexion(tool: Outil, messages: MessagesTerminal): string | nu
 	   une ligne de stderr est un `ErrorRecord`, que PowerShell décorerait
 	   sinon d'un « NativeCommandError » rouge. La réponse JSON, elle, n'est
 	   pas affichée. */
-	if (tool === "agy") return AGY_CONNEXION(messages).join("\n");
+	if (tool === "agy") return AGY_CONNEXION.join("\n");
 	return null;
 }
 
@@ -347,97 +342,44 @@ function commandeConnexion(tool: Outil, messages: MessagesTerminal): string | nu
 
     GOOGLE NE REND PAS LA MAIN AU CLI : son `redirect_uri` est
     `https://antigravity.google/oauth-callback`, une page DISTANTE qui affiche
-    un CODE à recopier (« Paste this code into your application ») — rien ne
-    revient tout seul, et le CLI abandonne au bout d'une minute
-    (« authentication timed out », vécu le 2026-09-20). Le code doit donc
-    ARRIVER, et par deux voies plutôt qu'une (Ahmed, 2026-09-20 : « ça doit le
-    détecter et l'entrer dans l'app si possible, ou bien nous laisser le
-    rentrer ») :
+    un CODE à recopier. Le CLI l'annonce lui-même, attend soixante secondes,
+    puis abandonne.
 
-    — LE PRESSE-PAPIER. La page a un bouton « Copy to Clipboard » : un clic, le
-      script voit le presse-papier changer et écrit le code sur l'entrée du CLI.
-      Seul un contenu NEUF en forme de code Google (`4/…`) part — sans quoi un
-      vieux code resté dans le presse-papier serait envoyé à sa place.
-    — LE CLAVIER. Dès qu'une touche est frappée, le script lit la ligne et
-      l'envoie. Indispensable : l'entrée du CLI étant REDIRIGÉE (c'est la seule
-      façon d'y écrire), ce qu'on tape dans la fenêtre ne l'atteint plus — sans
-      cette voie, un collage manuel serait perdu.
+    LE SCRIPT NE FAIT QU'OUVRIR LA PAGE, et se tait pour le reste (Ahmed,
+    2026-09-20 : « on n'automatise pas ça finalement », « on laisse
+    Antigravity afficher ce qu'il doit afficher »). L'essai précédent
+    surveillait le presse-papier et écrivait le code sur l'entrée du CLI ; il
+    a échoué à l'usage pour une raison qui lui est propre : le code partait
+    dès que le presse-papier changeait, souvent avant que le CLI n'ait ouvert
+    son invite, et la ligne se perdait — « Code received » s'affichait, puis
+    « authentication timed out ». Rediriger l'entrée coûtait en plus la seule
+    porte de secours, puisque ce qu'on tape dans la fenêtre n'atteint plus un
+    CLI dont l'entrée est un tuyau.
 
-    D'où `System.Diagnostics.Process` et non une pipeline. La sortie d'erreur
-    est lue ligne à ligne (c'est là qu'arrive l'URL), la sortie standard relue
-    à la fin — le JSON tient dans son tampon. Si le CLI se termine seul (compte
-    déjà autorisé, comme le 2026-09-19), la boucle s'arrête sans rien coller. */
-function AGY_CONNEXION(messages: MessagesTerminal): string[] {
-	return [
-		"Set-Location $env:USERPROFILE",
-		/* `Continue` REMIS EXPRÈS : `install.ps1` de Google commence par
-		   `$ErrorActionPreference = "Stop"`, et `iex` l'applique à NOTRE
-		   session. Sous `Stop`, la moindre ligne d'un flux d'erreur redirigé
-		   devient terminante : la connexion s'arrêtait avant l'URL, la page
-		   Google ne s'ouvrait jamais (vécu le 2026-09-20 ; la sonde de la
-		   veille avait été éprouvée seule, sans installation avant). */
-		"$ErrorActionPreference = 'Continue'",
-		"$msgCollerCode = " + citerPs(messages.collerCode || "Click « Copy to Clipboard » on the Google page, or type the code here."),
-		"$msgCodeRecu = " + citerPs(messages.codeRecu || "Code received."),
-		"$psi = New-Object System.Diagnostics.ProcessStartInfo",
-		"$psi.FileName = 'agy'",
-		"$psi.Arguments = '-p \"ok\" --output-format json'",
-		"$psi.UseShellExecute = $false",
-		"$psi.RedirectStandardInput = $true",
-		"$psi.RedirectStandardOutput = $true",
-		"$psi.RedirectStandardError = $true",
-		"$psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8",
-		"$psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8",
-		"$agy = [System.Diagnostics.Process]::Start($psi)",
-		/* L'URL est sur la sortie d'erreur. Tout ce qui arrive est AFFICHÉ tel
-		   quel : l'utilisateur voit ce que fait le CLI. */
-		"$url = $null",
-		"while ($true) {",
-		"  $l = $agy.StandardError.ReadLine()",
-		"  if ($null -eq $l) { break }",
-		"  if ($l) { Write-Host $l }",
-		"  if ($l -match 'https://accounts\\.google\\.com/\\S+') { $url = $Matches[0]; break }",
-		"}",
-		"if ($url) {",
-		"  $avant = ''",
-		"  try { $avant = (Get-Clipboard -Raw -ErrorAction SilentlyContinue) } catch { }",
-		"  if ($avant) { $avant = $avant.Trim() }",
-		"  Start-Process $url",
-		"  Write-Host ''",
-		"  Write-Host $msgCollerCode -ForegroundColor Cyan",
-		"  $envoye = $false",
-		/* Deux minutes de guet, 300 ms par tour : le presse-papier d'abord, le
-		   clavier dès qu'une touche est frappée (un collage manuel dans la
-		   fenêtre en fait partie). */
-		"  for ($i = 0; $i -lt 400 -and -not $envoye; $i++) {",
-		"    if ($agy.HasExited) { break }",
-		"    $code = $null",
-		"    try { if ([Console]::KeyAvailable) { $code = Read-Host } } catch { }",
-		"    if (-not $code) {",
-		"      $c = ''",
-		"      try { $c = (Get-Clipboard -Raw -ErrorAction SilentlyContinue) } catch { }",
-		"      if ($c) { $c = $c.Trim() }",
-		"      if ($c -and $c -ne $avant -and $c -match '^4/[A-Za-z0-9_\\-]+$') { $code = $c }",
-		"    }",
-		"    if ($code) {",
-		"      $agy.StandardInput.WriteLine($code.Trim())",
-		"      $agy.StandardInput.Flush()",
-		"      Write-Host $msgCodeRecu -ForegroundColor Cyan",
-		"      $envoye = $true",
-		"      break",
-		"    }",
-		"    Start-Sleep -Milliseconds 300",
-		"  }",
-		"}",
-		/* Le reste des deux flux, puis le CODE DE SORTIE du CLI : c'est lui, et
-		   lui seul, que la fenêtre juge (la réponse JSON n'est pas affichée). */
-		"$reste = $agy.StandardError.ReadToEnd()",
-		"if ($reste) { foreach ($l in ($reste -split \"`n\")) { if ($l.Trim()) { Write-Host $l.TrimEnd() } } }",
-		"$agy.StandardOutput.ReadToEnd() | Out-Null",
-		"$agy.WaitForExit()",
-		"$global:LASTEXITCODE = $agy.ExitCode",
-	];
-}
+    Donc : une pipeline ordinaire, la console reste la console, et les
+    instructions affichées sont celles du CLI. Chaque ligne est convertie en
+    TEXTE avant d'être affichée : relue par `2>&1`, une ligne d'erreur est un
+    `ErrorRecord`, que PowerShell décorerait sinon d'un « NativeCommandError »
+    rouge. Et elle est réémise par `[Console]::Out`, JAMAIS par `Write-Host` :
+    celui-ci repeint chaque ligne avec la couleur courante de la console,
+    quand la sortie native porte déjà celles que le CLI a choisies (Ahmed,
+    2026-09-20 : « sans modifier la couleur de ce qu'il va afficher »). La
+    réponse JSON, elle, n'est pas affichée. */
+const AGY_CONNEXION = [
+	"Set-Location $env:USERPROFILE",
+	/* `Continue` REMIS EXPRÈS : `install.ps1` de Google commence par
+	   `$ErrorActionPreference = "Stop"`, et `iex` l'applique à NOTRE session.
+	   Sous `Stop`, la première ligne relue par `2>&1` — celle qui annonce
+	   l'URL — devient une erreur TERMINANTE : la pipeline s'arrêtait avant
+	   l'URL, et la page Google ne s'ouvrait jamais. */
+	"$ErrorActionPreference = 'Continue'",
+	"$script:urlOuverte = $false",
+	"agy -p \"ok\" --output-format json 2>&1 | ForEach-Object {",
+	"  $l = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { \"$_\" }",
+	"  if (-not $script:urlOuverte -and $l -match 'https://accounts\\.google\\.com/\\S+') { $script:urlOuverte = $true; Start-Process $Matches[0] }",
+	"  if ($l -and -not $l.StartsWith('{')) { [Console]::Out.WriteLine($l) }",
+	"}",
+];
 
 /**
  * La fin commune des deux scripts : le succès n'est affiché que si la

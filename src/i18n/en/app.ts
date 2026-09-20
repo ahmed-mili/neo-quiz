@@ -128,7 +128,5 @@ export const EN_APP = {
 	"app.installCli.done": "{name} is set up. Back to Neo Quiz…",
 	"app.installCli.failed": "Installing {name} failed. Close this window and try again from Neo Quiz, or follow the manual steps there.",
 	"app.connectCli.done": "{name} is connected. Back to Neo Quiz…",
-	"app.connectCli.pasteCode": "Sign in, then click « Copy to Clipboard » on the Google page — within a minute. Neo Quiz enters the code for you; you can also type it here.",
-	"app.connectCli.codeReceived": "Code received. Finishing sign-in…",
 	"app.connectCli.failed": "Signing in to {name} failed. Close this window and try again from Neo Quiz.",
 } as const;

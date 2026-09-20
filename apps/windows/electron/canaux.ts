@@ -1029,8 +1029,6 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			echec: t("app.connectCli.failed", { name }),
 			echecInstallation: t("app.installCli.failed", { name }),
 			reessai: t("app.installCli.retry"),
-			collerCode: t("app.connectCli.pasteCode"),
-			codeRecu: t("app.connectCli.codeReceived"),
 		};
 		if (!lancerTerminal(titre, scriptInstallation(tool, titre, messages))) return "indisponible";
 		disposerAvecTerminal(titre, lireAncre(ancre));
@@ -1058,8 +1056,6 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		const script = scriptConnexion(tool, titre, {
 			succes: t("app.connectCli.done", { name }),
 			echec: t("app.connectCli.failed", { name }),
-			collerCode: t("app.connectCli.pasteCode"),
-			codeRecu: t("app.connectCli.codeReceived"),
 		});
 		if (script === null) return "indisponible";
 		if (!lancerTerminal(titre, script)) return "indisponible";

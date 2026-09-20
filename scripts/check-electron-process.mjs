@@ -302,56 +302,37 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		   TUI (`agy` seul), qui ne rend rien d'exploitable. */
 		const cx = scriptConnexion("agy", "t", msgs, envDossiers);
 		const iCd = cx.indexOf("\nSet-Location $env:USERPROFILE\n");
-		const iAppel = cx.indexOf("$agy = [System.Diagnostics.Process]::Start($psi)");
+		const iAppel = cx.indexOf("\nagy -p \"ok\" --output-format json 2>&1 | ForEach-Object {");
 		const iJuge = cx.indexOf("if ($LASTEXITCODE -eq 0)");
 		/* GOOGLE NE REND PAS LA MAIN AU CLI (`redirect_uri` distant : la page
-		   affiche un CODE). Le script doit donc pouvoir ÉCRIRE sur l'entrée
-		   d'`agy` — d'où `System.Diagnostics.Process` et non une pipeline —,
-		   ouvrir lui-même l'URL, puis envoyer le code que l'utilisateur copie.
-		   Le TUI (`agy` seul) ne rend rien d'exploitable : jamais lancé. */
-		r.check("agy connexion : dossier personnel, entrée REDIRIGÉE, URL ouverte par le script, puis le jugement sur SON code de sortie — jamais le TUI",
+		   affiche un CODE). Le script ouvre la page et S'EN TIENT LÀ : la
+		   console reste la console, l'utilisateur colle son code, et ce qui
+		   s'affiche est ce que le CLI a écrit. L'essai d'automatiser le
+		   collage (presse-papier + entrée redirigée) a été retiré le
+		   2026-09-20 : le code partait avant l'invite et se perdait, et
+		   rediriger l'entrée ôtait la seule porte de secours. */
+		r.check("agy connexion : dossier personnel, URL ouverte par le script, sortie réémise SANS repeindre, puis le jugement sur SON code de sortie — jamais le TUI",
 			{
 				ordre: iCd > 0 && iAppel > iCd && iJuge > iAppel,
-				redirige: cx.includes("$psi.RedirectStandardInput = $true"),
-				ouvreUrl: cx.includes("accounts\\.google\\.com") && cx.includes("Start-Process $url"),
+				ouvreUrl: cx.includes("accounts\\.google\\.com") && cx.includes("Start-Process $Matches[0]"),
+				texte: cx.includes("[System.Management.Automation.ErrorRecord]"),
+				sansRepeindre: cx.includes("[Console]::Out.WriteLine($l)") && !cx.includes("Write-Host $l"),
 				pathAvant: cx.indexOf("GetEnvironmentVariable('Path','User')") < iAppel,
-				sortie: cx.includes("$global:LASTEXITCODE = $agy.ExitCode"),
 				tui: /\nagy\s*\n/.test(cx),
 			},
-			{ ordre: true, redirige: true, ouvreUrl: true, pathAvant: true, sortie: true, tui: false });
-		/* LE CODE VIENT DU PRESSE-PAPIER, et seulement s'il est NEUF et s'il a
-		   la forme d'un code Google : un vieux code resté dans le presse-papier
-		   partirait sinon à la place. La boucle s'arrête si le CLI se termine
-		   seul (compte déjà autorisé). */
-		{
-			const iAvant = cx.indexOf("$avant = (Get-Clipboard");
-			const iOuvre = cx.indexOf("Start-Process $url");
-			const iEnvoi = cx.indexOf("$agy.StandardInput.WriteLine($code.Trim())");
-			r.check("agy connexion : le presse-papier est lu AVANT d'ouvrir la page, et seul un contenu neuf en forme de code Google est envoyé",
-				{
-					avantPuisOuvre: iAvant > 0 && iOuvre > iAvant,
-					neuf: cx.includes("$c -ne $avant"),
-					forme: cx.includes("'^4/[A-Za-z0-9_\\-]+$'"),
-					envoi: iEnvoi > iOuvre,
-					sortSiFini: cx.includes("if ($agy.HasExited) { break }"),
-				},
-				{ avantPuisOuvre: true, neuf: true, forme: true, envoi: true, sortSiFini: true });
-			/* LA SECONDE VOIE : l'entrée étant redirigée, ce qu'on tape dans la
-			   fenêtre n'atteint plus le CLI — le script lit donc le clavier
-			   lui-même dès qu'une touche est frappée (Ahmed, 2026-09-20 : « ou
-			   bien nous laisser le rentrer »). */
-			r.check("agy connexion : le clavier est la seconde voie du code (l'entrée du CLI est redirigée)",
-				{ clavier: cx.includes("[Console]::KeyAvailable") && cx.includes("$code = Read-Host") },
-				{ clavier: true });
-		}
+			{ ordre: true, ouvreUrl: true, texte: true, sansRepeindre: true, pathAvant: true, tui: false });
+		/* L'ENTRÉE RESTE LA CONSOLE : sans redirection, ce qu'on colle dans la
+		   fenêtre atteint le CLI. C'est la contrepartie du retour au manuel. */
+		r.check("agy connexion : l'entrée du CLI n'est pas redirigée",
+			/RedirectStandardInput|Get-Clipboard|StandardInput\.WriteLine/.test(cx), false);
 		/* `install.ps1` de Google pose `$ErrorActionPreference = "Stop"` dans
-		   la session (par `iex`) : sous `Stop`, la moindre ligne d'erreur d'un
-		   flux redirigé arrêtait tout (vécu le 2026-09-20). `Continue` doit
-		   être remis ENTRE l'installation et l'appel. */
+		   la session (par `iex`) : sous `Stop`, la première ligne relue par
+		   `2>&1` — l'URL — arrêtait la pipeline (vécu le 2026-09-20).
+		   `Continue` doit être remis ENTRE l'installation et l'appel. */
 		{
 			const iContinue = inst.indexOf("$ErrorActionPreference = 'Continue'");
 			const iInstall = inst.indexOf(ligneInstall);
-			const iAppelInst = inst.indexOf("$agy = [System.Diagnostics.Process]::Start($psi)");
+			const iAppelInst = inst.indexOf("\nagy -p \"ok\"");
 			r.check("agy installation : ErrorActionPreference remis à Continue APRÈS l'installateur de Google et AVANT l'appel headless",
 				iInstall > 0 && iContinue > iInstall && iAppelInst > iContinue, true);
 		}

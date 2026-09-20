@@ -2922,7 +2922,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			   est parti. À faire = encre pleine, fait = atténué, rien d'autre
 			   (2026-09-20 : sans fichier, « Envoyez » paraissait déjà fait). */
 		} else {
+			/* Un titre court en gras, une ligne en dessous : la phrase entière en
+			   gras faisait quatre lignes (2026-09-20). */
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.title", { site }));
+			ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t("ai.web.thenCopy"));
 		}
 		/* LES FICHIERS À GLISSER, en tuiles — les mêmes cartes que le composer
 		   (`poserCarte`) : on les saisit et on les lâche sur le site à gauche,

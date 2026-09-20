@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-20
+
 ### Added
 - Updating Neo Quiz no longer leaves an empty screen: a small window in the installer's own style stays on screen while the update installs, and steps aside by itself the moment Neo Quiz reopens. It costs nothing to show — the window runs from a mirror of the installation made of hard links, so not a single byte is copied — and if that mirror cannot be made, the update proceeds silently as before rather than being held up.
 - Gemini joins the providers, between ChatGPT and Perplexity, with its two channels: Antigravity CLI, Google's terminal tool that generates with your Google account (Gemini CLI itself stopped serving personal accounts, free, Pro and Ultra alike, on June 18, 2026), and gemini.google.com. The CLI installs from the app like the others, with Google's official installer, and its model list comes from the tool itself ("agy models"), so a new model appears without an update.

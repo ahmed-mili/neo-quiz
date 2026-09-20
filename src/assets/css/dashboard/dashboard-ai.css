@@ -2322,8 +2322,12 @@
 /* 732 px, comme le modal d'installation et le terminal posé dessous : elle
    en prend la place exacte à la détection du binaire (2026-09-20). */
 .qbd-web-wait-modal.qbd-login-wait-modal { width: 732px; }
+/* 300 px de plancher, pour les DEUX états (attente, puis « compte
+   connecté ») : le second, sans paragraphe d'aide, retombait plus bas et
+   laissait paraître un bout du composer sous lui (Ahmed, 2026-09-20). Même
+   hauteur du début à la fin, rien ne bouge derrière. */
 .qbd-login-wait-modal .qbd-ai-preview-loading {
-	min-height: 240px;
+	min-height: 300px;
 	background: transparent;
 	border: none;
 	padding: 36px 16px 28px;

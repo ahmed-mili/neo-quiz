@@ -50,11 +50,6 @@ export function limiteComposer(): { limiteBas: number; inviteX: number; inviteLa
 	return r.height > 0 ? { limiteBas: Math.round(r.top), inviteX: Math.round(r.left), inviteLargeur: Math.round(r.width) } : undefined;
 }
 
-/** Le rectangle qu'un élément AURA une fois remonté, mesuré SANS le peindre :
-    la classe est posée, le rectangle lu (un reflow synchrone), la classe
-    retirée — le tout dans la même tâche, donc aucune image intermédiaire.
-    C'est ce qui permet d'envoyer la position cible à l'hôte AVANT que la
-    modale ne bouge : elle ne remontera qu'une fois la fenêtre posée. */
 /** Le rectangle qu'un élément AURA une fois remonté, APRÈS que la fenêtre a
     changé de taille : deux images d'attente, le temps que le rendu ait refait
     sa mise en page (la première suit le redimensionnement, la seconde le
@@ -66,6 +61,11 @@ export function ancreApresRelayout(el: HTMLElement): Promise<{ x: number; y: num
 	});
 }
 
+/** Le rectangle qu'un élément AURA une fois remonté, mesuré SANS le peindre :
+    la classe est posée, le rectangle lu (un reflow synchrone), la classe
+    retirée — le tout dans la même tâche, donc aucune image intermédiaire.
+    C'est ce qui permet d'envoyer la position cible à l'hôte AVANT que la
+    modale ne bouge : elle ne remontera qu'une fois la fenêtre posée. */
 export function ancreRemontee(el: HTMLElement): { x: number; y: number; largeur: number; hauteur: number } {
 	const avait = el.classList.contains(CLASSE_MODALE_HAUT);
 	if (avait) return ancreDe(el);

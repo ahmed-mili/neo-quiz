@@ -3016,7 +3016,6 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 							if (li) {
 								li.dataset.etape = "fait";
 								li.classList.add("is-fait");
-
 							}
 						}
 					});

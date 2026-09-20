@@ -1,11 +1,12 @@
 import { currentHost } from "../host/current";
 import { ajouter } from "../dom";
 import { markViewEnter } from "./view-enter";
-import { t } from "../i18n";
+import { t, currentLang } from "../i18n";
 import type { DashboardShellCtx } from "../types/dashboard-ctx";
 import type { QuizIndexEntry } from "./scanner";
 import type { QuizStatRecord, StatsStore } from "./stats-store";
 import { quizTypeLabel } from "./quiz-card";
+import { getCanal, getMarque, setBrandLogo } from "./ai-providers";
 import { openTypePickerModal, openConfirmModal } from "../editor/modals";
 import { closeAllSelects } from "./ui-select";
 import { mathifyElement } from "../engine/mathjax";
@@ -443,6 +444,21 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		}, 130);
 	}
 
+	/** La date et l'heure d'une génération, dans la langue de l'APPLICATION et
+	    non dans celle du système : « 20 sept. 2026, 12:57 ». Appelée au rendu,
+	    comme `t()`, pour suivre un changement de langue.
+
+	    `generatedAt` est une chaîne ISO écrite par `ecrireFrontmatterNeoQuiz`,
+	    mais un frontmatter retouché à la main peut en porter une illisible :
+	    elle est alors rendue TELLE QUELLE, plutôt qu'en « Invalid Date ». */
+	function formatGeneratedAt(iso: string): string {
+		const d = new Date(iso);
+		if (Number.isNaN(d.getTime())) return iso;
+		return d.toLocaleString(currentLang() === "fr" ? "fr-FR" : "en-US", {
+			day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+		});
+	}
+
 	/* ── Stats : la colonne de cartes d'avant, compactée en une rangée ──
 	   Absente pour un quiz qui n'existe pas encore (résultat d'une
 	   génération) : ni score, ni tentative, ni date — quatre cases vides. */
@@ -470,19 +486,36 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 		// 2026-07-21). Elles apparaissent à la première tentative, avec le
 		// compteur de tentatives qui, lui, n'a de sens qu'à partir de 1.
 		const played = stat.attempts > 0;
-		const cells: Array<{ label: string; value: string; accent?: string; cls?: string; title?: string }> = [
+		const cells: Array<{ label: string; value: string; accent?: string; cls?: string; title?: string; logo?: string }> = [
 			{ label: t("dashboard.detail.statType"), value: quizTypeLabel(quiz.quizType) },
 		];
-		// Qui a généré ce quiz — absente pour une note écrite à la main ou
-		// pour un quiz partagé sans frontmatter. `effort` en libellé (absent
-		// pour Ollama : le nom du fournisseur, seule information qu'il ait).
+		// Qui a généré ce quiz, et QUAND — absente pour une note écrite à la
+		// main ou pour un quiz partagé sans frontmatter.
 		if (quiz.generated) {
 			const g = quiz.generated;
+			/* LE NOM LISIBLE DE LA SOURCE. Sur un site, `provider` et `model`
+			   portent tous DEUX l'identifiant du canal (le modèle est celui du
+			   site, inconnu d'ici — cf. l'écriture du frontmatter dans `ai.ts`) :
+			   les afficher tels quels donnait « chatgpt-web » au-dessus de
+			   « CHATGPT-WEB », l'identifiant technique deux fois (vu par Ahmed le
+			   2026-09-20). Le canal, lui, connaît son nom d'affichage. Un CLI ou
+			   Ollama montrent leur MODÈLE, qui est l'information utile, et un
+			   `provider` inconnu (réglage d'une version future) retombe dessus. */
+			const canal = getCanal(g.provider);
+			const source = canal && canal.type === "web" ? canal.label : g.model;
 			cells.push({
-				label: g.effort ?? g.provider,
-				value: g.model,
+				value: source,
+				/* La date et l'heure EXACTES prennent la place du libellé : c'est
+				   le seul endroit de l'application qui dise quand un quiz a été
+				   généré (demande d'Ahmed, 2026-09-20). L'effort d'un CLI, qui
+				   l'occupait, passe dans l'infobulle — il n'a de sens que pour
+				   qui l'a réglé. */
+				label: formatGeneratedAt(g.generatedAt),
+				logo: getMarque(g.provider)?.logo,
 				cls: "qbd-qz-stat--generated",
-				title: t("dashboard.detail.generatedBy", { model: g.model, effort: g.effort ?? g.provider }),
+				title: g.effort
+					? t("dashboard.detail.generatedBy", { model: source, effort: g.effort })
+					: t("dashboard.detail.generatedBySimple", { model: source }),
 			});
 		}
 		if (played) {
@@ -500,7 +533,12 @@ export function createQuizPage(ctx: QuizPageDeps): QuizPageHandlers {
 			const cell = ajouter(row, "div", c.cls ? `qbd-qz-stat ${c.cls}` : "qbd-qz-stat");
 			if (c.title) cell.title = c.title;
 			const body = ajouter(cell, "div", "qbd-qz-stat-body");
-			const v = ajouter(body, "span", "qbd-qz-stat-value", c.value);
+			const v = ajouter(body, "span", c.logo ? "qbd-qz-stat-value qbd-qz-stat-value--logo" : "qbd-qz-stat-value");
+			if (c.logo) {
+				const logo = ajouter(v, "span", "qbd-provider-logo qbd-qz-stat-logo qbd-provider-logo--" + c.logo);
+				setBrandLogo(logo, c.logo);
+			}
+			ajouter(v, "span", "", c.value);
 			if (c.accent) v.style.color = c.accent;
 			ajouter(body, "span", "qbd-qz-stat-label", c.label);
 		}

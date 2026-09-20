@@ -182,6 +182,25 @@
 	letter-spacing: -0.02em;
 }
 
+/* La tuile « généré par » : le logo de la marque devant le nom de la source
+   (« chatgpt.com », « claude-sonnet-4-5 »), à la taille du texte et non à
+   celle du sélecteur de fournisseur. Le libellé, dessous, porte la date. */
+.qbd-qz-stat-value--logo {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.qbd-qz-stat-logo {
+	width: 14px;
+	height: 14px;
+}
+
+.qbd-qz-stat-logo svg {
+	width: 14px;
+	height: 14px;
+}
+
 .qbd-qz-stat-label {
 	font-size: 9px;
 	color: var(--text-faint);

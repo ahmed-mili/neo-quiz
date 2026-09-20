@@ -1487,10 +1487,13 @@
 .qbd-install-modal { width: 520px; max-width: calc(100vw - 32px); }
 /* TROIS ZONES, et non une pile qui retombe en haut d'une boîte trop grande
    (Ahmed, 2026-09-20 : « essaye de mieux organiser la modale »). De haut en
-   bas : ce qu'on lit, la voie MANUELLE repliée, l'espace libre, puis le
-   bouton AUTOMATIQUE et le lien en pied — les deux voies ont été inversées
-   le même jour, l'action principale en bas comme le bouton primaire d'un
-   ContentDialog. Pas de filet : il coupait la boîte en deux pour rien.
+   bas : ce qu'on lit, la voie MANUELLE repliée, puis le bouton AUTOMATIQUE
+   et le lien — les deux voies ont été inversées le même jour, l'action
+   principale en bas comme le bouton primaire d'un ContentDialog. Pas de
+   filet : il coupait la boîte en deux pour rien. Et plus de hauteur
+   PLANCHER : elle n'ouvrait qu'un vide sous le dernier lien (Ahmed,
+   2026-09-20, « pour éviter de laisser du vide ») — la boîte suit son
+   contenu, qui a gagné sa hauteur en taille de texte et en espacements.
 
    L'ORDRE EST POSÉ PAR `order`, pas par le DOM : la voie manuelle est un
    `renderCollapsibleSection`, donc un `.qbd-quizzes-node` qui enveloppe sa
@@ -1499,7 +1502,7 @@
    nœud, sans rien déplacer). `margin-top: auto` sur le pied fait le
    partage ; dépliée, la voie manuelle ne laisse plus d'espace à distribuer
    et la modale grandit, comme avant. */
-.qbd-install-modal .modal-content { min-height: 232px; display: flex; flex-direction: column; }
+.qbd-install-modal .modal-content { display: flex; flex-direction: column; }
 .qbd-install-modal .qbd-install-what { order: 1; }
 .qbd-install-modal .modal-content > .qbd-quizzes-node { order: 2; }
 .qbd-install-modal .qbd-install-state { order: 3; margin-top: auto; }
@@ -1640,8 +1643,11 @@
 }
 .qbd-root .qbd-install-manual-row .qbd-quizzes-node-head:hover,
 .qbd-install-manual-row .qbd-quizzes-node-head:hover { color: var(--text-normal); background: transparent; }
+/* LE NOMBRE D'ÉTAPES, montré et non plus masqué (Ahmed, 2026-09-20) : replié,
+   « Install manually » ne disait pas ce qu'il coûte ; le chiffre le dit avant
+   qu'on ouvre. Même chip que les sections de « Mes quiz ». */
 .qbd-root .qbd-install-manual-row .qbd-quizzes-node-badge,
-.qbd-install-manual-row .qbd-quizzes-node-badge { display: none; }
+.qbd-install-manual-row .qbd-quizzes-node-badge { display: inline-flex; }
 .qbd-install-manual-row .qbd-quizzes-node-chevron { opacity: 0.7; }
 .qbd-root .qbd-install-modal .qbd-quizzes-node,
 .qbd-install-modal .qbd-quizzes-node { margin: 0; padding: 0; background: transparent; border: none; }

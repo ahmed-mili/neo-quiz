@@ -164,7 +164,7 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		   chemin qu'`openExternal` : un `HostFile` du contrat → absolu par
 		   l'index ; une chaîne = un absolu déjà admis), et finir. */
 		depot: {
-			disposer: () => pont().depot.disposer().catch(e => { console.warn(LOG_PREFIX, "disposition impossible:", e); }),
+			disposer: options => pont().depot.disposer(options).catch(e => { console.warn(LOG_PREFIX, "disposition impossible:", e); }),
 			async preparer(fichiers) {
 				const absolus = fichiers
 					.map(f => typeof f === "string" ? f : (f && index.get(f.path) ? carte.absolu(f.path) : null))

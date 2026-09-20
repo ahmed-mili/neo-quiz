@@ -807,8 +807,18 @@ export interface ImageDeGlisser {
 export interface HostDepot {
 	/** Le site à gauche, l'application à droite (sur l'écran de l'application).
 	    À appeler AVANT d'ouvrir le site : l'hôte guette la fenêtre du
-	    navigateur et la pose dès qu'elle naît. */
-	disposer(): Promise<void>;
+	    navigateur et la pose dès qu'elle naît.
+
+	    `coller` : le prompt est déjà dans le presse-papier (le site n'a pas
+	    de paramètre qui préremplisse, ou le texte n'a pas tenu dans
+	    l'adresse), et l'hôte le COLLE lui-même dans la fenêtre du navigateur
+	    une fois la page chargée — un Ctrl+V envoyé à la fenêtre, quand son
+	    titre a cessé de changer. Meilleur effort : si la page tarde, si un
+	    autre champ a le focus (une page de connexion), le collage tombe à
+	    côté et la carte d'attente, qui dit toujours de coller, reste le filet.
+	    Demandé le 2026-09-20 pour gemini.google.com et chat.deepseek.com :
+	    « juste glisser les fichiers et appuyer sur Entrée ». */
+	disposer(options?: { coller?: boolean }): Promise<void>;
 	/** Prépare le glisser : l'hôte extrait d'avance l'image que le curseur
 	    portera (l'icône de type de fichier de Windows, ~300 ms la première
 	    fois par extension) — le `dragstart` n'attend pas. À appeler quand les

@@ -3615,7 +3615,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		/* Les fichiers à glisser : ceux de la demande, tels que l'hôte saura les
 		   résoudre (vault → `HostFile` par l'index ; externe ou choisi par le
 		   dialogue → chemin absolu déjà admis). */
-		if (host.depot) await host.depot.disposer();
+		/* Le prompt parti par le presse-papier est COLLÉ par l'hôte dans la
+		   page une fois chargée (meilleur effort, voir `HostDepot.disposer`). */
+		if (host.depot) await host.depot.disposer({ coller: ouverture.mode === "presse-papier" });
 		if (!(await host.shell.openUrl(ouverture.url))) { echecOuverture(t("ai.channel.openFailed"), container); return; }
 		arreterAttenteWeb();
 		/* Écouteurs de la phase : Esc annule ; un collage hors du composer est
@@ -3642,6 +3644,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			if (cible && cible.closest("input, textarea, [contenteditable=''], [contenteditable='true'], .qbd-ai-composer")) return;
 			const colle = e.clipboardData?.getData("text/plain") || "";
 			if (!colle.trim()) return;
+			/* SON PROPRE PROMPT N'EST PAS UNE RÉPONSE : le Ctrl+V que l'hôte
+			   envoie au navigateur peut retomber ici si le focus a changé entre
+			   temps. Le texte est alors celui qu'on vient de copier ; le lire
+			   comme une réponse aurait peint « pas un quiz » sur la carte. */
+			if (attenteWeb && attenteWeb.ouverture.mode === "presse-papier" && colle.trim() === attenteWeb.ouverture.texte.trim()) return;
 			e.preventDefault();
 			void recevoirReponse(colle);
 		};

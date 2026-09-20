@@ -181,7 +181,7 @@ const pont: Pont = {
 	},
 
 	depot: {
-		disposer: () => ipcRenderer.invoke(CANAUX.depotDisposer),
+		disposer: options => ipcRenderer.invoke(CANAUX.depotDisposer, options),
 		/* RECOPIÉE, comme `writeBinary` : une vue partielle ne passe pas le pont. */
 		ecrire: (nom, octets) => ipcRenderer.invoke(CANAUX.depotEcrire, nom, new Uint8Array(octets)),
 		preparer: absolus => ipcRenderer.invoke(CANAUX.depotPreparer, absolus),

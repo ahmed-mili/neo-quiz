@@ -592,7 +592,7 @@ export interface Pont {
 	    `HostDepot`, src/host/types.ts) : le chemin est ABSOLU, borné par le
 	    périmètre comme une lecture. */
 	depot: {
-		disposer(): Promise<void>;
+		disposer(options?: { coller?: boolean }): Promise<void>;
 		/** Écrit ces octets sous ce nom dans le dossier temporaire de
 		    l'application et rend le chemin, glissable ensuite ; `null` si refusé. */
 		ecrire(nom: string, octets: Uint8Array): Promise<string | null>;

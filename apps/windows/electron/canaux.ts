@@ -658,7 +658,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   est) ; le navigateur à gauche est posé par `disposerPourSite`
 	   (process.ts), qui ne rend la main qu'une fois prêt à le guetter. */
 	let dispositionAvant: { agrandie: boolean; bounds: Electron.Rectangle } | null = null;
-	ipcMain.handle(CANAUX.depotDisposer, async (): Promise<void> => {
+	ipcMain.handle(CANAUX.depotDisposer, async (_e, options: unknown): Promise<void> => {
+		/* Un seul drapeau traverse, lu comme un booléen strict. */
+		const coller = !!options && typeof options === "object" && (options as { coller?: unknown }).coller === true;
 		const fenetre = deps.fenetreCourante();
 		let hwnd = 0;
 		if (fenetre && !fenetre.isDestroyed()) {
@@ -673,7 +675,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			const h = fenetre.getNativeWindowHandle();
 			hwnd = h.length >= 8 ? Number(h.readBigUInt64LE(0)) : h.readUInt32LE(0);
 		}
-		await disposerPourSite(hwnd);
+		await disposerPourSite(hwnd, coller);
 	});
 
 	/* ─── GLISSER UN FICHIER DEPUIS L'APPLICATION ───

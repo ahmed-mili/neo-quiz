@@ -621,6 +621,22 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 			lirePlacement("avant 725604 3 100 100 1000 700"), { hwnd: 725604, showCmd: 3, l: 100, t: 100, r: 1000, b: 700 });
 		r.check("réduite (2) est rendue normale (1) : on l'avait restaurée pour la poser", lirePlacement("avant 5 2 0 0 10 10\r").showCmd, 1);
 		r.check("toute autre ligne : null", [lirePlacement("pret"), lirePlacement("avant x"), lirePlacement("")], [null, null, null]);
+		/* LE COLLAGE (2026-09-20) : demandé, le script attend que le titre de
+		   la fenêtre du navigateur se stabilise, la ramène devant et envoie
+		   Ctrl+V, APRÈS l'avoir posée ; non demandé, rien de tout cela. */
+		const avecCollage = scriptDisposerPourSite(1234, true);
+		r.check("collage demandé : titre stable, premier plan, Ctrl+V, après la pose du navigateur",
+			{
+				drapeau: avecCollage.includes("$coller = $true"),
+				titre: avecCollage.includes("GetWindowText($hNav"),
+				devant: avecCollage.includes("SetForegroundWindow($hNav)"),
+				colle: avecCollage.includes("SendWait('^v')"),
+				apresPose: avecCollage.indexOf("SendWait('^v')") > avecCollage.lastIndexOf("Poser $hNav"),
+			},
+			{ drapeau: true, titre: true, devant: true, colle: true, apresPose: true });
+		r.check("collage non demandé : le drapeau est faux et rien ne dépend de lui hors de sa garde",
+			{ drapeau: disposition.includes("$coller = $false"), garde: disposition.includes("if ($coller) {") },
+			{ drapeau: true, garde: true });
 		const restauration = scriptRestaurerNavigateur({ hwnd: 725604, showCmd: 3, l: 100, t: 100, r: 1000, b: 700 });
 		r.check("la restauration passe par SetWindowPlacement, sur la fenêtre si elle existe encore",
 			[restauration.includes("IsWindow($h)"), restauration.includes("SetWindowPlacement"), restauration.includes("$p.ShowCmd = 3"), restauration.includes("$p.R = 1000")], [true, true, true, true]);

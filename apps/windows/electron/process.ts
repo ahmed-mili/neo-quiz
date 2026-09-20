@@ -557,9 +557,10 @@ export function scriptConnexion(tool: Outil, titre: string, messages: MessagesTe
  * visible (DWM) et l'absorbe, sinon les fenêtres laissent un vide entre
  * elles. Best effort ; `$idProc` et non `$pid`, variable réservée.
  */
-export function scriptDisposerPourSite(hwndNeo: number): string {
+export function scriptDisposerPourSite(hwndNeo: number, coller = false): string {
 	return [
 		"$hwndNeo = " + String(Math.floor(hwndNeo)),
+		"$coller = " + (coller ? "$true" : "$false"),
 		"$progId = (Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice').ProgId",
 		"$cmd = (Get-ItemProperty ('Registry::HKEY_CLASSES_ROOT\\' + $progId + '\\shell\\open\\command')).'(default)'",
 		"$exe = if ($cmd -match '^\"([^\"]+)\"') { $Matches[1] } else { ($cmd -split ' ')[0] }",
@@ -572,6 +573,8 @@ export function scriptDisposerPourSite(hwndNeo: number): string {
 		"[DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr h, out RECT r);",
 		"[DllImport(\"dwmapi.dll\")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int cb);",
 		"[DllImport(\"user32.dll\")] public static extern bool GetWindowPlacement(IntPtr h, ref WP p);",
+		"[DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);",
+		"[DllImport(\"user32.dll\", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);",
 		"public struct RECT { public int L, T, R, B; }",
 		"public struct WP { public int Length, Flags, ShowCmd, MinX, MinY, MaxX, MaxY, L, T, R, B; }",
 		"'@",
@@ -608,6 +611,28 @@ export function scriptDisposerPourSite(hwndNeo: number): string {
 		"  $p = New-Object NQ.Win+WP; $p.Length = 44",
 		"  if ([NQ.Win]::GetWindowPlacement($hNav, [ref]$p)) { [Console]::Out.WriteLine('avant ' + [int64]$hNav + ' ' + $p.ShowCmd + ' ' + $p.L + ' ' + $p.T + ' ' + $p.R + ' ' + $p.B); [Console]::Out.Flush() }",
 		"  Poser $hNav $aire.Left $aire.Top $moitie $aire.Height",
+		/* LE COLLAGE, quand on l'a demandé : la page est tenue pour chargée
+		   quand le TITRE de la fenêtre a cessé de changer pendant une seconde
+		   et demie (il suit le `<title>` de la page, qui change au fil du
+		   chargement), quinze secondes au plus ; sept dixièmes de plus pour le
+		   composer, puis la fenêtre est ramenée devant et reçoit Ctrl+V.
+		   « colle » est écrit pour le principal. Meilleur effort, voir le
+		   contrat (`HostDepot.disposer`). */
+		"  if ($coller) {",
+		"    $sb = New-Object System.Text.StringBuilder 512; $prec = ''; $stable = 0",
+		"    for ($i = 0; $i -lt 150; $i++) {",
+		"      Start-Sleep -Milliseconds 100",
+		"      [NQ.Win]::GetWindowText($hNav, $sb, 512) | Out-Null; $t = $sb.ToString()",
+		"      if ($t -and $t -eq $prec) { $stable++ } else { $stable = 0 }",
+		"      $prec = $t",
+		"      if ($stable -ge 15) { break }",
+		"    }",
+		"    Start-Sleep -Milliseconds 700",
+		"    [NQ.Win]::SetForegroundWindow($hNav) | Out-Null",
+		"    Start-Sleep -Milliseconds 150",
+		"    [System.Windows.Forms.SendKeys]::SendWait('^v')",
+		"    [Console]::Out.WriteLine('colle'); [Console]::Out.Flush()",
+		"  }",
 		"}",
 	].join("\n");
 }
@@ -937,14 +962,14 @@ export function restaurerNavigateur(): Promise<void> {
  * (trois secondes au plus) : c'est ce qui permet au rendu d'ouvrir le site
  * APRÈS que le guet de la fenêtre a commencé. Sans terminal, sans fenêtre.
  */
-export function disposerPourSite(hwndNeo: number): Promise<void> {
+export function disposerPourSite(hwndNeo: number, coller = false): Promise<void> {
 	if (process.platform !== "win32") return Promise.resolve();
 	return new Promise(resolve => {
 		let rendu = false;
 		const fin = (): void => { if (!rendu) { rendu = true; resolve(); } };
 		try {
 			placementNavigateur = null;
-			const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptDisposerPourSite(hwndNeo))], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+			const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptDisposerPourSite(hwndNeo, coller))], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
 			enfant.stdout.on("data", (d: Buffer) => {
 				const texte = d.toString("utf8");
 				if (texte.includes("pret")) fin();

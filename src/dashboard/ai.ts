@@ -789,8 +789,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			btn.type = "button";
 			const p = provider ? aiProviders.getProvider(provider) : null;
 			if (p) {
-				const logo = ajouter(btn, "span", "qbd-provider-logo qbd-provider-logo--" + p.logo);
-				aiProviders.setBrandLogo(logo, p.logo);
+				// Le logo du CANAL et non celui de la marque : le bouton dit ce
+				// qui va être LANCÉ, et Codex CLI n'est pas chatgpt.com.
+				const cle = aiProviders.logoDuCanal(provider);
+				const logo = ajouter(btn, "span", "qbd-provider-logo qbd-provider-logo--" + cle);
+				aiProviders.setBrandLogo(logo, cle);
 			} else {
 				// Aucun fournisseur : slot vide, le tooltip guide.
 				const ic = ajouter(btn, "span", "qbd-provider-logo");
@@ -1620,6 +1623,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			channels: m.canaux.map(c => ({
 				value: c.id,
 				label: c.label,
+				// Le logo de l'OUTIL quand le canal en a un (Claude Code, Codex),
+				// celui de la marque sinon : le menu ne choisit pas, il pose.
+				logo: aiProviders.logoDuCanal(c.id),
 				sub: providerStatus[c.id]?.text || c.sub,
 				disabled: providerStatus[c.id]?.dot === "err",
 				// Pastille SEULEMENT quand quelque chose ne va pas (demande

@@ -208,13 +208,20 @@
 	color: var(--text-muted);
 }
 
+/* 17 px et non 15 : le menu porte désormais des logos d'OUTILS (le pixel art
+   de Claude Code, le `>_` de Codex), des formes pleines dont le détail
+   disparaissait à 15 px là où l'astérisque et la rosace, eux, tenaient. La
+   boîte reste à 18 px : rien ne bouge dans la ligne (comparé à l'écran le
+   2026-09-20). Le trigger du composer garde son 18 px, la tuile « généré
+   par » son 14 px — deux tailles posées pour leur propre surface. */
 .qbd-provider-logo svg {
-	width: 15px;
-	height: 15px;
+	width: 17px;
+	height: 17px;
 }
 
 /* Couleurs de marque */
-.qbd-provider-logo--claude {
+.qbd-provider-logo--claude,
+.qbd-provider-logo--claudecode {
 	color: #d97757;
 }
 
@@ -222,7 +229,8 @@
 	color: var(--text-normal);
 }
 
-.qbd-provider-logo--openai {
+.qbd-provider-logo--openai,
+.qbd-provider-logo--codex {
 	color: var(--text-normal);
 }
 

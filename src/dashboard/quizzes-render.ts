@@ -200,7 +200,11 @@ export function renderModuleDrill(
 	if (inModule.length === 0) {
 		const empty = ajouter(principal, "div", "qbd-empty-state");
 		ajouter(empty, "p", undefined, t("dashboard.quizzes.empty"));
-		if (cheminOuvert !== undefined) ajouter(empty, "p", "qbd-empty-state-hint", t("dashboard.quizzes.emptyFolderHint"));
+		/* L'indice d'un dossier vide renvoie aux « documents et notes
+		   ci-dessous » : dans le sas, ils ne sont plus là, il dirait donc de
+		   regarder du vide. Le sas a le sien, qui dit d'où viennent ses quiz. */
+		if (sas) ajouter(empty, "p", "qbd-empty-state-hint", t("dashboard.quizzes.emptyGeneratedHint"));
+		else if (cheminOuvert !== undefined) ajouter(empty, "p", "qbd-empty-state-hint", t("dashboard.quizzes.emptyFolderHint"));
 	}
 	const grid = ajouter(principal, "div", "qbd-home-grid qbd-quizzes-drill-grid");
 	for (const [index, quiz] of inModule.entries()) {
@@ -216,10 +220,14 @@ export function renderModuleDrill(
 		});
 	}
 
-	/* Les trois sections (Documents, Liens, Notes) sous la grille — pour tout
-	   dossier dont on connaît le chemin, le sas compris : ce qu'on y a généré
-	   vient parfois d'un PDF qu'on voudra revoir. */
-	if (cheminOuvert !== undefined) {
+	/* Les trois sections (Documents, Liens, Notes) sous la grille, pour tout
+	   dossier dont on connaît le chemin — SAUF LE SAS (demande d'Ahmed,
+	   2026-09-20). On avait fait l'inverse en pensant qu'on voudrait y revoir
+	   le PDF d'origine ; mais le sas ne reçoit QUE des quiz écrits par la
+	   génération, jamais un document déposé, et ses trois sections y restaient
+	   vides à demeure — trois grands cadres qui ne disent rien sous la grille.
+	   Les sources, elles, vivent dans le dossier du cours. */
+	if (cheminOuvert !== undefined && !sas) {
 		renderFolderSections(principal, { ctx, folder: cheminOuvert, rerender });
 	}
 

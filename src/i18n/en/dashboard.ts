@@ -79,6 +79,7 @@ export const EN_DASHBOARD = {
 	"dashboard.quizzes.importNoQuiz": "No quiz block found in this file",
 	"dashboard.quizzes.empty": "No quiz found",
 	"dashboard.quizzes.emptyFolderHint": "Create a quiz, or generate one from the documents and notes below.",
+	"dashboard.quizzes.emptyGeneratedHint": "Quizzes you generate land here.",
 
 	/* ── Les trois sections d'un dossier (folder-sections.ts) ── */
 	"dashboard.folder.documents": "Documents",

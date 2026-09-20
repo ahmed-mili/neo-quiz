@@ -313,7 +313,23 @@ export function createQuizzesHandlers(ctx: DashboardShellCtx): QuizzesHandlers {
 			// Absente côté application (modals = tranche 2.6, D5) : le bouton
 			// est alors MASQUÉ, pas grisé (Ruling 7 — un bouton d'action absent
 			// ne déroute personne, contrairement au rail de navigation).
-			if (ctx.createQuiz) {
+			/* LE SAS : « Générer », et non « Nouveau quiz » (demande d'Ahmed,
+			   2026-09-20). La génération est la SEULE façon dont un quiz arrive
+			   ici : les deux autres options du modal — vierge, import — écrivent
+			   dans le dossier de leur choix, jamais dans le sas. Proposer un
+			   geste qui ne remplit pas le dossier qu'on regarde est un bouton
+			   qui ment. MASQUÉ (pas grisé) si l'hôte ne sert pas « ai », même
+			   règle que le bouton de l'accueil : un bouton d'ACTION mort au clic
+			   est pire qu'absent. */
+			if (sas) {
+				if (ctx.canOpen("ai")) {
+					const genBtn = ajouter(headerActions, "button", "qbd-btn--create");
+					const genIcon = ajouter(genBtn, "span", "qbd-btn-icon");
+					currentHost().ui.setIcon(genIcon, "sparkles");
+					ajouter(genBtn, "span", undefined, t("dashboard.nav.generate"));
+					genBtn.addEventListener("click", () => ctx.navigate("ai"));
+				}
+			} else if (ctx.createQuiz) {
 				/* LE CHEMIN RÉEL, jamais le segment (correctif 2026-09-17) :
 				   `openModuleFolder` est une CLÉ de module (« Generated »), et
 				   l'écriture veut un chemin du contrat (« Neo Quiz/Generated »).

@@ -1133,19 +1133,18 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		} else if (aiProviders.estCanalWeb(provider)) {
 			/* Un SITE n'a pas de modèle à choisir : c'est lui qui décide, avec le
 			   compte de l'utilisateur. Le contrôle du milieu dit donc le SITE
-			   seul (« claude.ai »), là où un CLI dit son modèle, et rouvre le menu
-			   des marques — le seul réglage qu'on puisse encore toucher d'ici. La
-			   marque, c'est le logo juste à côté : « Claude · claude.ai » la
-			   disait deux fois (Ahmed, 2026-09-19). */
+			   seul (« claude.ai »), là où un CLI dit son modèle. La marque, c'est
+			   le logo juste à côté : « Claude · claude.ai » la disait deux fois
+			   (Ahmed, 2026-09-19). ET IL NE SE CLIQUE PAS : jusqu'au 2026-09-20 il
+			   rouvrait le menu des marques, avec un chevron — mais rien ne se
+			   règle ici, et un bouton qui ne mène qu'à un menu déjà accessible
+			   par le logo trompe (Ahmed : « on n'est pas censé pouvoir cliquer
+			   dessus »). Un libellé, sans chevron ni curseur. */
 			buildModelControl = (parent: HTMLElement): void => {
-				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger qbd-channel-trigger");
-				trigger.type = "button";
-				const label = ajouter(trigger, "span", "qbd-select-label");
+				const libelle = ajouter(parent, "div", "qbd-select qbd-model-trigger qbd-channel-trigger qbd-channel-trigger--inerte");
+				const label = ajouter(libelle, "span", "qbd-select-label");
 				const canal = aiProviders.getCanal(provider);
 				ajouter(label, "span", "qbd-model-trigger-name", canal ? canal.label : provider);
-				const chev = ajouter(trigger, "span", "qbd-select-chevron");
-				host.ui.setIcon(chev, "chevron-down");
-				trigger.addEventListener("click", () => ouvrirMenuFournisseur?.());
 			};
 		} else if (provider) {
 			// Ollama partage le MÊME contrôle modèle+effort que Claude/Codex

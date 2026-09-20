@@ -286,6 +286,15 @@
 	font-weight: 600;
 }
 
+/* Le contrôle du milieu quand le canal est un SITE : un libellé, pas un
+   bouton (Ahmed, 2026-09-20). Ni survol, ni curseur, ni chevron. */
+.qbd-channel-trigger--inerte,
+.qbd-channel-trigger--inerte:hover {
+	cursor: default;
+	background: transparent !important;
+	box-shadow: none !important;
+}
+
 .qbd-model-trigger-effort {
 	font-size: 11px;
 	font-weight: 500;

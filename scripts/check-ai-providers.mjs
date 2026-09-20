@@ -450,30 +450,59 @@ await withSrcModule(
 		/* ── ANTIGRAVITY : les modèles viennent d'`agy models`, jamais d'une liste
 		   écrite dans le code (règle « jamais de modèle codé en dur »). Le CLI
 		   rend « id<TAB>libellé » par ligne, précédé d'une ligne d'attente
-		   (mesuré le 2026-09-20, `agy` 1.2.7). ── */
+		   (mesuré le 2026-09-20, `agy` 1.2.7), et le NIVEAU dans le nom : les
+		   variantes d'une famille deviennent un modèle à `efforts`. ── */
 		{
-			const sortie = "Fetching available models...\ngemini-3.8-flash-high\tGemini 3.8 Flash (High)\ngemini-3.1-pro-low\tGemini 3.1 Pro (Low)\nclaude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)\n\nun id avec espace\tRefusé\ngemini-3.8-flash-high\tDoublon\n";
-			r.check("parseAntigravityModels : une ligne « id<TAB>libellé » par modèle ; l'attente, les vides, les identifiants impossibles et les doublons sont ignorés",
+			const sortie = "Fetching available models...\ngemini-3.8-flash-high\tGemini 3.8 Flash (High)\ngemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)\ngemini-3.8-flash-low\tGemini 3.8 Flash (Low)\ngemini-3.1-pro-high\tGemini 3.1 Pro (High)\ngemini-3.1-pro-low\tGemini 3.1 Pro (Low)\nclaude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)\ngpt-oss-120b-medium\tGPT-OSS 120B (Medium)\n\nun id avec espace\tRefusé\ngemini-3.8-flash-high\tDoublon\n";
+			r.check("parseAntigravityModels : une famille par modèle, ses niveaux dans `efforts` (ordre low→high), la variante citée en premier par défaut, `variantes` = l'identifiant du CLI par niveau ; une famille à UNE variante reste nue ; l'attente, les vides, les identifiants impossibles et les doublons sont ignorés",
 				providers.parseAntigravityModels(sortie),
-				[{ value: "gemini-3.8-flash-high", label: "Gemini 3.8 Flash (High)" }, { value: "gemini-3.1-pro-low", label: "Gemini 3.1 Pro (Low)" }, { value: "claude-opus-4-6-thinking", label: "Claude Opus 4.6 (Thinking)" }]);
+				[
+					{ value: "gemini-3.8-flash", label: "Gemini 3.8 Flash", efforts: ["low", "medium", "high"], defaultEffort: "high", variantes: { high: "gemini-3.8-flash-high", medium: "gemini-3.8-flash-medium", low: "gemini-3.8-flash-low" } },
+					{ value: "gemini-3.1-pro", label: "Gemini 3.1 Pro", efforts: ["low", "high"], defaultEffort: "high", variantes: { high: "gemini-3.1-pro-high", low: "gemini-3.1-pro-low" } },
+					{ value: "claude-opus-4-6-thinking", label: "Claude Opus 4.6 (Thinking)" },
+					{ value: "gpt-oss-120b-medium", label: "GPT-OSS 120B (Medium)" }
+				]);
+			/* Le niveau n'est reconnu que s'il est DANS LES DEUX (identifiant ET
+			   libellé) : un `-high` d'identifiant sans « (High) » de libellé n'est
+			   pas une variante. */
+			r.check("parseAntigravityModels : un suffixe d'identifiant sans le niveau dans le libellé n'est pas une variante",
+				providers.parseAntigravityModels("x-high\tX Rapide\nx-low\tX Lent\n"),
+				[{ value: "x-high", label: "X Rapide" }, { value: "x-low", label: "X Lent" }]);
 			r.check("parseAntigravityModels : rien ne rend rien", providers.parseAntigravityModels(""), []);
 			/* Sans lecture : liste vide, et le modèle résolu est la chaîne vide —
 			   `--model` sera OMIS, le CLI prend le sien. */
-			r.check("sans lecture : liste vide, modèle résolu vide", [providers.getAntigravityModels(), providers.resolveAntigravityModel("gemini-3.1-pro-low")], [[], ""]);
+			r.check("sans lecture : liste vide, modèle résolu vide, identifiant tel quel",
+				[providers.getAntigravityModels(), providers.resolveAntigravityModel("gemini-3.1-pro"), providers.antigravityModelId("gemini-3.1-pro", "low")], [[], "", "gemini-3.1-pro"]);
 			const { journal, hote } = fauxHote({ runs: { "agy models": { code: 0, stdout: sortie } } });
 			installHost(hote);
 			const change = await providers.refreshAntigravityModels(true);
 			r.check("refreshAntigravityModels lance `agy models`, remplit l'instantané et dit que la liste a changé",
 				{ change, appel: journal.filter(l => l[0] === "run").map(l => l[1]), n: providers.getAntigravityModels().length },
-				{ change: true, appel: ["agy models"], n: 3 });
-			r.check("resolveAntigravityModel : la valeur persistée si connue, sinon le PREMIER de la liste (le plus récent)",
-				[providers.resolveAntigravityModel("gemini-3.1-pro-low"), providers.resolveAntigravityModel("un-modele-retire"), providers.resolveAntigravityModel("")],
-				["gemini-3.1-pro-low", "gemini-3.8-flash-high", "gemini-3.8-flash-high"]);
+				{ change: true, appel: ["agy models"], n: 4 });
+			r.check("resolveAntigravityModel : la famille persistée si connue, un identifiant de variante persisté AVANT le regroupement ramené à sa famille, sinon le PREMIER de la liste (le plus récent)",
+				[providers.resolveAntigravityModel("gemini-3.1-pro"), providers.resolveAntigravityModel("gemini-3.1-pro-low"), providers.resolveAntigravityModel("un-modele-retire"), providers.resolveAntigravityModel("")],
+				["gemini-3.1-pro", "gemini-3.1-pro", "gemini-3.8-flash", "gemini-3.8-flash"]);
+			/* L'effort d'une famille : ses niveaux seulement (3.1 Pro n'a pas de
+			   medium → clampé en dessous), le défaut = la variante citée en
+			   premier, et un modèle nu n'en a AUCUN (le bouton disparaît). */
+			r.check("getEfforts / getDefaultEffort / resolveEffort sur une famille Antigravity",
+				{
+					flash: providers.getEfforts("antigravity-cli", "gemini-3.8-flash").map(e => e.value),
+					pro: providers.getEfforts("antigravity-cli", "gemini-3.1-pro").map(e => e.value),
+					opus: providers.getEfforts("antigravity-cli", "claude-opus-4-6-thinking").map(e => e.value),
+					defaut: providers.getDefaultEffort("antigravity-cli", "gemini-3.1-pro"),
+					clamp: providers.resolveEffort("antigravity-cli", "medium", "gemini-3.1-pro"),
+					inconnu: providers.resolveEffort("antigravity-cli", "ultracode", "gemini-3.8-flash")
+				},
+				{ flash: ["low", "medium", "high"], pro: ["low", "high"], opus: [], defaut: "high", clamp: "low", inconnu: "high" });
+			r.check("antigravityModelId : la variante au niveau demandé, le défaut si le niveau n'existe pas, le modèle nu tel quel",
+				[providers.antigravityModelId("gemini-3.8-flash", "low"), providers.antigravityModelId("gemini-3.1-pro", "medium"), providers.antigravityModelId("claude-opus-4-6-thinking", "high")],
+				["gemini-3.8-flash-low", "gemini-3.1-pro-high", "claude-opus-4-6-thinking"]);
 			/* Un échec (compte non connecté : « Please sign in… », code 1) garde
 			   l'instantané d'avant et ne dit AUCUN changement. */
 			installHost(fauxHote({ runs: { "agy models": { code: 1, stdout: "Fetching available models...\nError: Please sign in to view available models." } } }).hote);
 			r.check("un `agy models` en échec garde la liste d'avant et ne dit aucun changement",
-				{ change: await providers.refreshAntigravityModels(true), n: providers.getAntigravityModels().length }, { change: false, n: 3 });
+				{ change: await providers.refreshAntigravityModels(true), n: providers.getAntigravityModels().length }, { change: false, n: 4 });
 		}
 
 		r.done();

@@ -73,6 +73,10 @@ export interface ModelDef {
 	efforts?: string[];
 	defaultEffort?: string;
 	fast?: boolean;
+	/** Antigravity : l'identifiant que le CLI attend pour CHAQUE niveau
+	    (`{ high: "gemini-3.8-flash-high", … }`), la famille seule étant
+	    `value`. Absent quand le modèle n'a qu'un niveau. */
+	variantes?: Record<string, string>;
 }
 
 /** Entrée de catalogue Ollama (tag + libellé). */
@@ -238,8 +242,8 @@ export const PROVIDERS: Provider[] = [
 		   tant que la liste n'a pas été lue, `--model` est omis — le CLI prend
 		   le sien. Jamais un nom codé ici. */
 		defaultModel: "",
-		// Le niveau de raisonnement est DANS le nom du modèle (`…-high`,
-		// `…-low`) : un bouton d'effort n'aurait rien à régler.
+		/* L'effort par modèle vient d'`agy models` aussi (`efforts` de chaque
+		   famille, cf. `parseAntigravityModels`) : rien à écrire ici. */
 		defaultEffort: ""
 	},
 	{
@@ -424,27 +428,73 @@ export const CLAUDE_CODE_MODELS: ModelDef[] = [
    entrées, Gemini, Claude et GPT-OSS selon le forfait du compte). La liste
    suit donc le COMPTE et le jour, sans mise à jour de l'application — c'est
    la règle « jamais de modèle codé en dur », tenue ici par construction.
-   Le niveau de raisonnement est DANS le nom (`…-high`, `…-low`) : pas
-   d'effort à part. Instantané en mémoire, relu au plus toutes les six heures
+   Le niveau de raisonnement est DANS le nom (`…-high`, `…-low`) : le CLI
+   rend « Gemini 3.8 Flash (High) », « (Medium) », « (Low) » comme trois
+   modèles. Une liste de quatorze lignes pour cinq familles était illisible
+   (Ahmed, 2026-09-20) : les variantes d'une même famille sont REGROUPÉES en
+   un modèle dont `efforts` porte les niveaux, réglés par le bouton d'effort
+   comme pour Claude Code — et `variantes` retient l'identifiant à passer au
+   CLI pour chacun. Instantané en mémoire, relu au plus toutes les six heures
    (le CLI interroge le réseau pour répondre), ou à la demande. */
 const ANTIGRAVITY_MODELS_TTL = 6 * 60 * 60 * 1000;
 let antigravityModelsSnapshot: { at: number; models: ModelDef[] } | null = null;
 let antigravityRefreshEnCours: Promise<boolean> | null = null;
 
-/** PURE : le texte d'`agy models` en liste. Une ligne sans tabulation (le
-    « Fetching available models... » de tête, une ligne vide) est ignorée ;
-    un identifiant qui ne ressemble pas à un nom de modèle aussi — c'est ce qui
-    part ensuite en argument `--model`. */
+/* Les niveaux qu'Antigravity met dans ses noms de modèles, du plus faible au
+   plus élevé (ordre d'affichage du slider). Un modèle n'expose que les siens
+   (`efforts`) : Gemini 3.1 Pro n'a pas de « medium ». */
+export const ANTIGRAVITY_EFFORTS: EffortDef[] = [
+	{ value: "low", label: "low" },
+	{ value: "medium", label: "medium" },
+	{ value: "high", label: "high", isDefault: true }
+];
+
+/** PURE : le texte d'`agy models` en liste, une entrée par FAMILLE. Une ligne
+    sans tabulation (le « Fetching available models... » de tête, une ligne
+    vide) est ignorée ; un identifiant qui ne ressemble pas à un nom de modèle
+    aussi — c'est ce qui part ensuite en argument `--model`. Une ligne dont
+    l'identifiant finit par `-low|-medium|-high` ET dont le libellé finit par
+    « (Low|Medium|High) » est une variante de sa famille ; dès que la famille
+    en a deux, elles deviennent un seul modèle à `efforts`, l'effort par
+    défaut étant la variante que le CLI cite en premier. Une famille à une
+    seule variante reste un modèle nu, son niveau dans le nom : un bouton
+    d'effort à un cran n'aurait rien à régler. */
 export function parseAntigravityModels(stdout: string): ModelDef[] {
-	const modeles: ModelDef[] = [];
+	interface Ligne { value: string; label: string; famille: string; familleLabel: string; niveau: string | null }
+	const lignes: Ligne[] = [];
 	for (const ligne of String(stdout || "").split(/\r?\n/)) {
 		const i = ligne.indexOf("\t");
 		if (i <= 0) continue;
 		const value = ligne.slice(0, i).trim();
 		const label = ligne.slice(i + 1).trim() || value;
 		if (!/^[a-zA-Z0-9._:-]+$/.test(value)) continue;
-		if (modeles.some(m => m.value === value)) continue;
-		modeles.push({ value, label });
+		if (lignes.some(l => l.value === value)) continue;
+		const mId = /^(.+)-(low|medium|high)$/.exec(value);
+		const mLabel = /^(.+?)\s*\((low|medium|high)\)$/i.exec(label);
+		const niveau = (mId && mLabel && mId[2] === mLabel[2].toLowerCase()) ? mId[2] : null;
+		lignes.push({
+			value, label, niveau,
+			famille: niveau && mId ? mId[1] : value,
+			familleLabel: niveau && mLabel ? mLabel[1] : label
+		});
+	}
+	const modeles: ModelDef[] = [];
+	for (const l of lignes) {
+		if (modeles.some(m => m.value === l.famille)) continue;
+		const variantes = l.niveau ? lignes.filter(x => x.niveau && x.famille === l.famille) : [];
+		if (variantes.length < 2) {
+			modeles.push({ value: l.value, label: l.label });
+			continue;
+		}
+		const parNiveau: Record<string, string> = {};
+		for (const v of variantes) parNiveau[v.niveau as string] = v.value;
+		modeles.push({
+			value: l.famille,
+			label: l.familleLabel,
+			efforts: ANTIGRAVITY_EFFORTS.map(e => e.value).filter(e => e in parNiveau),
+			defaultEffort: variantes[0].niveau as string,
+			variantes: parNiveau
+		});
 	}
 	return modeles;
 }
@@ -479,13 +529,28 @@ export function refreshAntigravityModels(force?: boolean): Promise<boolean> {
 	return antigravityRefreshEnCours;
 }
 
-/** Le modèle à passer à `agy` : la valeur persistée si la liste la connaît,
-    sinon le PREMIER de la liste (le CLI la rend du plus récent au plus
-    ancien), sinon la chaîne vide — `--model` est alors omis. */
+/** Le modèle (la FAMILLE) retenu : la valeur persistée si la liste la
+    connaît — y compris un identifiant de variante persisté avant le
+    regroupement (`gemini-3.8-flash-high` → `gemini-3.8-flash`) —, sinon le
+    PREMIER de la liste (le CLI la rend du plus récent au plus ancien), sinon
+    la chaîne vide — `--model` est alors omis. */
 export function resolveAntigravityModel(value?: string): string {
 	const modeles = getAntigravityModels();
-	if (value && modeles.some(m => m.value === value)) return value;
+	if (value) {
+		if (modeles.some(m => m.value === value)) return value;
+		const famille = modeles.find(m => m.variantes && Object.values(m.variantes).includes(value));
+		if (famille) return famille.value;
+	}
 	return modeles.length ? modeles[0].value : "";
+}
+
+/** L'identifiant à passer à `agy --model` : la variante de la famille au
+    niveau demandé (sinon au niveau par défaut), ou le modèle tel quel s'il
+    n'a pas de variantes. */
+export function antigravityModelId(famille: string, effort: string): string {
+	const m = getAntigravityModels().find(x => x.value === famille);
+	if (!m || !m.variantes) return famille;
+	return m.variantes[effort] || (m.defaultEffort && m.variantes[m.defaultEffort]) || famille;
 }
 
 export const CLAUDE_EFFORTS: EffortDef[] = [
@@ -704,15 +769,25 @@ export function getEfforts(providerId: string, modelValue?: string): EffortDef[]
 		return CODEX_EFFORTS;
 	}
 	if (providerId === "ollama") return OLLAMA_EFFORTS;
+	/* Antigravity : les niveaux de CETTE famille (lus sur `agy models`) ; un
+	   modèle sans variantes n'en a AUCUN — le bouton d'effort disparaît. */
+	if (providerId === "antigravity-cli") {
+		if (!modelValue) return ANTIGRAVITY_EFFORTS;
+		const m = getAntigravityModels().find(x => x.value === modelValue);
+		const allowed = (m && m.efforts) || [];
+		return ANTIGRAVITY_EFFORTS.filter(e => allowed.includes(e.value));
+	}
 	return CLAUDE_EFFORTS;
 }
 
 /* Effort par défaut d'un provider (celui marqué isDefault, sinon le premier).
-   Codex + modèle : le default_reasoning_level du cache prime (sol → low). */
+   Codex + modèle : le default_reasoning_level du cache prime (sol → low) ;
+   Antigravity + famille : la variante que le CLI cite en premier. */
 export function getDefaultEffort(providerId: string, modelValue?: string): string {
 	const efforts = getEfforts(providerId, modelValue);
-	if (providerId === "codex" && modelValue) {
-		const m = getCodexModels().find(x => x.value === modelValue);
+	if ((providerId === "codex" || providerId === "antigravity-cli") && modelValue) {
+		const liste = providerId === "codex" ? getCodexModels() : getAntigravityModels();
+		const m = liste.find(x => x.value === modelValue);
 		if (m && m.defaultEffort && efforts.some(e => e.value === m.defaultEffort)) return m.defaultEffort;
 	}
 	const def = efforts.find(e => e.isDefault);

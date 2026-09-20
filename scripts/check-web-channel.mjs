@@ -153,9 +153,19 @@ await withSrcModule(
 		providers.getCanal("claude-web").avertissement,
 		providers.getCanal("claude-web").web.urlMax,
 	], [true, 63000]);
-	/* perplexity.ai : NON câblé, et ce n'est pas un oubli — son `search?q=`
-	   envoie immédiatement, comme `chatgpt.com/?q=`. */
-	r2.check("perplexity.ai n'est pas câblé", providers.estCanalCable("perplexity-web"), false);
+	r2.check("perplexity.ai est câblé, avec sa borne", [
+		providers.estCanalCable("perplexity-web"),
+		providers.getCanal("perplexity-web").web.nouvelle,
+		/* `qfill` et NON `q` : `?q=` et `search?q=` ENVOIENT la question sans
+		   rien demander (mesuré le 2026-09-20). `qfill` remplit le composer,
+		   nettoie l'adresse et attend — c'est le seul de la famille `q*` du
+		   site qui laisse joindre un fichier avant l'envoi. Il n'est documenté
+		   nulle part : ce cas est ce qui reste de sa découverte. */
+		providers.getCanal("perplexity-web").web.parametre,
+		/* Sous la borne mesurée (65 559 octets admis, 414 au-delà). */
+		providers.getCanal("perplexity-web").web.urlMax < 65559,
+		providers.getCanal("perplexity-web").avertissement,
+	], [true, "https://www.perplexity.ai/", "qfill", true, undefined]);
 	r2.check("un CLI n'est pas un canal web câblé", providers.estCanalCable("claude-code"), false);
 
 	r2.done();
@@ -183,7 +193,12 @@ for (const avecImage of [false, true]) {
 		sentMessage: { text: "Demande précédente", images: [], notes: [] }, sentAnimPending: false,
 		arrets: 0, retraits: 0, rendus: [],
 		attachPromptPaths: async () => {}, couperSondeConnexion: () => {},
-		settings: () => ({ aiProvider: avecImage ? "claude-web" : "chatgpt-web" }),
+		/* Un identifiant qui n'est PAS dans le registre : les trois sites du
+		   registre sont câblés depuis le 2026-09-20, et nommer l'un d'eux ici
+		   laisserait croire que ce cas les décrit. Ce qui est éprouvé, c'est le
+		   refus quand `getCanal` ne rend pas de `web` — un réglage écrit par une
+		   version future, ou un site retiré. */
+		settings: () => ({ aiProvider: avecImage ? "claude-web" : "un-site-sans-web" }),
 		aiProviders: { estCanalWeb: () => true, getCanal: () => ({ label: "site", web: avecImage ? {} : undefined }) },
 		host: { ui: { notice: () => {} } }, t: cle => cle,
 	};

@@ -220,8 +220,9 @@ export interface Canal {
 	    site a été MESURÉ : claude.ai le 2026-09-18 (`/new?q=` préremplit sans
 	    envoyer), chatgpt.com le 2026-09-19 (`/?prompt=` préremplit sans
 	    envoyer ; `?q=`, lui, envoie tout de suite — d'où le paramètre `prompt`
-	    et non `q`). perplexity.ai reste non câblé : son `search?q=` part
-	    IMMÉDIATEMENT, donc sans laisser glisser les fichiers avant l'envoi. */
+	    et non `q`), perplexity.ai le 2026-09-20 (`?qfill=` remplit le composer,
+	    nettoie l'adresse et n'envoie rien, là où `?q=` et `search?q=` partent
+	    IMMÉDIATEMENT, sans laisser joindre un fichier). */
 	web?: OuvertureWeb;
 	/** Le site affiche un bandeau d'avertissement au-dessus d'une question
 	    arrivée par l'adresse (claude.ai, mesuré le 2026-09-18). La page ouvre
@@ -264,7 +265,7 @@ export const MARQUES: Marque[] = [
 		name: "Perplexity",
 		logo: "perplexity",
 		canaux: [
-			{ id: "perplexity-web", label: "perplexity.ai", get sub() { return t("ai.channel.webSub"); }, type: "web" }
+			{ id: "perplexity-web", label: "perplexity.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://www.perplexity.ai/", parametre: "qfill", urlMax: 63000 } }
 		]
 	},
 	{

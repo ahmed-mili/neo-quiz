@@ -12,7 +12,9 @@ export interface OuvertureWeb {
 	/** L'adresse d'une conversation neuve, sans paramètre. */
 	nouvelle: string;
 	/** Le paramètre qui porte la question (`q` sur claude.ai, mesuré le
-	    2026-09-18 ; `prompt` sur chatgpt.com, mesuré le 2026-09-19). */
+	    2026-09-18 ; `prompt` sur chatgpt.com, mesuré le 2026-09-19 ; `qfill`
+	    sur perplexity.ai, trouvé le 2026-09-20 dans le code du site — il n'est
+	    documenté nulle part, et c'est le SEUL des siens qui n'envoie pas). */
 	parametre: string;
 	/** La plus longue adresse qu'on ose passer au navigateur POUR CE SITE —
 	    au-delà, le texte part par le presse-papier (`preparerOuverture`). Elle
@@ -33,6 +35,10 @@ export interface OuvertureWeb {
 	    ses cookies de session — plusieurs kilo-octets. D'où 59 000, une marge
 	    plus large que celle de claude.ai : au-dessus de la borne le site rend
 	    une page d'erreur, en dessous le presse-papier prend le relais.
+
+	    perplexity.ai, MESURÉ le 2026-09-20 par la même dichotomie : 65 559
+	    octets d'adresse admis, 414 à 65 560 — le budget de claude.ai à quatre
+	    octets près, d'où la même borne et la même marge que lui.
 
 	    La ligne de commande de Windows (32 644 caractères, `report:url-max`)
 	    N'EST PLUS la borne : l'hôte de l'application ouvre une adresse plus

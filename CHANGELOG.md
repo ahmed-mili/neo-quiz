@@ -15,6 +15,7 @@ release notes.
 
 ### Added
 - The header of a quiz page now shows when it was generated: the tile that named the model carries the exact date and time underneath, with the logo of whoever generated it.
+- Perplexity can generate a quiz from the web too: picking "perplexity.ai" opens it with your request already written, waiting for you to send it. Perplexity's usual link ("?q=") searches straight away, which would leave no time to attach a course; Neo Quiz uses the one that only fills the box.
 - ChatGPT can now generate a quiz from the web too: picking "chatgpt.com" opens chatgpt.com with your request already written in the composer, and the answer you copy comes back into Neo Quiz, exactly like claude.ai. ChatGPT shows no warning banner above the request, so no dialog is shown when you pick it.
 
 ### Fixed

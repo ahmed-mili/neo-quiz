@@ -523,6 +523,15 @@
 		color: var(--texte-attenue);
 	}
 
+	/* La plus récente porte « latest », à l'accent : sans elle, dix lignes
+	   nommées « vX.Y.Z » ne disent pas laquelle est la version du jour — et
+	   l'ordre seul ne suffit pas quand un numéro à deux chiffres passe pour
+	   plus petit qu'un numéro à un chiffre. */
+	.menu-versions .marque--latest {
+		color: var(--accent);
+		font-weight: 600;
+	}
+
 	.menu-versions .coche {
 		width: 14px;
 		height: 14px;
@@ -866,6 +875,16 @@
 		// portent aucun installeur Windows.
 		var MOTIF_TAG_APP = /^desktop-v\d+\.\d+\.\d+$/;
 
+		// `desktop-v1.10.0` → [1, 10, 0]. Ce qui manque vaut 0 : une comparaison
+		// sur `NaN` rend toujours faux et laisserait l'ordre au hasard.
+		function numeroDeTag(tag) {
+			var parties = String(tag || "").replace(/^(desktop-)?v/, "").split(".");
+			return [0, 1, 2].map(function (i) {
+				var n = parseInt(parties[i], 10);
+				return isNaN(n) ? 0 : n;
+			});
+		}
+
 		// La même coche que le menu de langue, au même trait : deux menus sur une
 		// page ne peuvent pas marquer leur ligne courante autrement.
 		var COCHE_MENU = '<svg class="coche" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"></path></svg>';
@@ -1013,6 +1032,18 @@
 					var version = String(release.tag_name || "").replace(/^(desktop-)?v/, "");
 					return String(release.tag_name || "") === tagDernier || bootstrapperEpingle(version);
 				});
+					// TRIÉES PAR NUMÉRO, décroissant. L'ordre rendu par l'API est celui
+				// des dates de création des tags : il plaçait `1.10.0` entre `1.7.0`
+				// et `1.6.0`. Chaque partie se compare comme un ENTIER — comparées
+				// comme du texte, « 10 » passe avant « 7 ».
+				honnetes.sort(function (a, b) {
+					var va = numeroDeTag(a.tag_name);
+					var vb = numeroDeTag(b.tag_name);
+					for (var i = 0; i < 3; i++) {
+						if (va[i] !== vb[i]) return vb[i] - va[i];
+					}
+					return 0;
+				});
 				honnetes.slice(0, 10).forEach(function (release) {
 					var version = String(release.tag_name || "").replace(/^(desktop-)?v/, "");
 					if (!version) return;
@@ -1042,10 +1073,10 @@
 					// une pastille — écrire « older » sur les neuf lignes qui suivent
 					// la première n'apprend rien à personne.
 					var suffixe = estDerniere ? null : (release.prerelease ? "beta" : "older");
-					if (release.prerelease) {
+					if (estDerniere || release.prerelease) {
 						var marque = document.createElement("span");
-						marque.className = "marque";
-						marque.textContent = "beta";
+						marque.className = estDerniere ? "marque marque--latest" : "marque";
+						marque.textContent = estDerniere ? "latest" : "beta";
 						fin.appendChild(marque);
 					}
 

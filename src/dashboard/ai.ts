@@ -1714,6 +1714,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				value: c.id,
 				label: c.label,
 				sub: providerStatus[c.id]?.text || c.sub,
+				// La ligne de marque nomme le SITE en usage (« claude.ai »), pas
+				// « Dans votre navigateur » — ça, c'est le flyout qui le dit.
+				resume: c.type === "web" ? c.label : undefined,
 				disabled: providerStatus[c.id]?.dot === "err",
 				// Pastille SEULEMENT quand quelque chose ne va pas (demande
 				// d'Ahmed, 2026-09-17) : orange « ça marcherait, mais le serveur

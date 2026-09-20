@@ -848,6 +848,10 @@ export interface ProviderChannelOption {
 	disabled?: boolean;
 	/** Pastille d'état, seulement quand ça ne va pas : "warn" | "err". */
 	dot?: string | null;
+	/** Ce que la ligne de MARQUE dit quand ce canal est en usage, s'il diffère
+	    de `sub` : un site se nomme (« claude.ai »), là où sa ligne de canal
+	    dit « Dans votre navigateur » (Ahmed, 2026-09-20). */
+	resume?: string;
 }
 
 /** Une marque dans le menu : un logo, un nom, et un ou plusieurs canaux. */
@@ -1090,8 +1094,10 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 			ajouter(body, "span", "qbd-select-option-label", b.label);
 			/* Le sous-titre dit le canal EN USAGE pour cette marque, pas la
 			   marque elle-même : c'est la seule chose qui change entre deux
-			   lignes du même logo, et donc la seule qui vaille la place. */
-			ajouter(body, "span", "qbd-provider-option-sub", canal ? (canal.sub || canal.label) : "");
+			   lignes du même logo, et donc la seule qui vaille la place. Un
+			   site se nomme (`resume`) ; « Dans votre navigateur » reste au
+			   flyout, sous le canal. */
+			ajouter(body, "span", "qbd-provider-option-sub", canal ? (canal.resume || canal.sub || canal.label) : "");
 			const st = canal && !multiple ? canal.dot : null;
 			appendStatut(row, st, canal ? canal.value : "");
 			if (multiple) {

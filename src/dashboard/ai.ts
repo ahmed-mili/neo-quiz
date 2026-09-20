@@ -2908,8 +2908,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		/* Une fois déposé, le texte ne change pas : la ligne s'ATTÉNUE
 		   seulement, sous celle qui reste à faire (2026-09-20). */
 		if (aGlisser) etapes.push({ texte: t(plusieurs ? "ai.web.step.dropMany" : "ai.web.step.drop"), cle: attenteWeb.depose ? "fait" : "glisser" });
-		else etapes.push({ texte: t("ai.web.step.send") });
-		etapes.push({ texte: t("ai.web.step.copy") });
+		/* Rien à coller ni à glisser : UNE phrase, envoyer puis copier — pas une
+		   liste d'une étape (2026-09-20). */
+		if (etapes.length > 0) etapes.push({ texte: t("ai.web.step.copy") });
 		if (etapes.length > 1) {
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.stepsTitle", { site }));
 			const liste = ajouter(carte, "ol", "qbd-ai-web-etapes");

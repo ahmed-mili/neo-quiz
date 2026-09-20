@@ -81,7 +81,6 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.web.callout": "{site} affichera un avertissement parce que votre question a été soumise par un lien. Ce lien vient de Neo Quiz : vous pouvez envoyer votre question comme d'habitude.",
 	"ai.web.stepsTitle": "Sur {site}",
 	"ai.web.step.paste": "Collez le prompt (Ctrl+V) : il est déjà dans votre presse-papier.",
-	"ai.web.step.pasted": "Le prompt est collé dans la page.",
 	"ai.web.step.drop": "Glissez le fichier ci-dessous sur la page, puis envoyez.",
 	"ai.web.step.dropMany": "Glissez les fichiers ci-dessous sur la page, tous d'un coup, puis envoyez.",
 	"ai.web.step.dropped": "Le fichier est sur la page : envoyez.",

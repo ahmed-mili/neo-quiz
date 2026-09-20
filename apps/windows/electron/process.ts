@@ -612,12 +612,13 @@ export function scriptDisposerPourSite(hwndNeo: number, coller = false): string 
 		"  if ([NQ.Win]::GetWindowPlacement($hNav, [ref]$p)) { [Console]::Out.WriteLine('avant ' + [int64]$hNav + ' ' + $p.ShowCmd + ' ' + $p.L + ' ' + $p.T + ' ' + $p.R + ' ' + $p.B); [Console]::Out.Flush() }",
 		"  Poser $hNav $aire.Left $aire.Top $moitie $aire.Height",
 		/* LE COLLAGE, quand on l'a demandé : la page est tenue pour chargée
-		   quand le TITRE de la fenêtre a cessé de changer pendant une seconde
-		   et demie (il suit le `<title>` de la page, qui change au fil du
-		   chargement), quinze secondes au plus ; sept dixièmes de plus pour le
-		   composer, puis la fenêtre est ramenée devant et reçoit Ctrl+V.
-		   « colle » est écrit pour le principal. Meilleur effort, voir le
-		   contrat (`HostDepot.disposer`). */
+		   quand le TITRE de la fenêtre a cessé de changer pendant six dixièmes
+		   de seconde (il suit le `<title>` de la page, qui change au fil du
+		   chargement), quinze secondes au plus ; trois dixièmes de plus pour
+		   le composer, puis la fenêtre est ramenée devant et reçoit Ctrl+V.
+		   Une seconde et demie puis sept dixièmes, au premier essai, se
+		   voyaient attendre (2026-09-20). « colle » est écrit pour le
+		   principal. Meilleur effort, voir le contrat (`HostDepot.disposer`). */
 		"  if ($coller) {",
 		"    $sb = New-Object System.Text.StringBuilder 512; $prec = ''; $stable = 0",
 		"    for ($i = 0; $i -lt 150; $i++) {",
@@ -625,9 +626,9 @@ export function scriptDisposerPourSite(hwndNeo: number, coller = false): string 
 		"      [NQ.Win]::GetWindowText($hNav, $sb, 512) | Out-Null; $t = $sb.ToString()",
 		"      if ($t -and $t -eq $prec) { $stable++ } else { $stable = 0 }",
 		"      $prec = $t",
-		"      if ($stable -ge 15) { break }",
+		"      if ($stable -ge 6) { break }",
 		"    }",
-		"    Start-Sleep -Milliseconds 700",
+		"    Start-Sleep -Milliseconds 300",
 		"    [NQ.Win]::SetForegroundWindow($hNav) | Out-Null",
 		"    Start-Sleep -Milliseconds 150",
 		"    [System.Windows.Forms.SendKeys]::SendWait('^v')",

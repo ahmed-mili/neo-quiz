@@ -2880,9 +2880,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   avoir collé (`surColle`), elle passe en « fait » sans redessiner la
 		   carte, dont les tuiles à glisser tiennent un état. */
 		const etapes: Array<{ texte: string; cle?: string }> = [];
-		if (coller) etapes.push(attenteWeb.colle
-			? { texte: t("ai.web.step.pasted"), cle: "fait" }
-			: { texte: t("ai.web.step.paste", { site }), cle: "coller" });
+		/* Une fois le prompt collé par l'hôte, l'étape DISPARAÎT : on le voit
+		   dans la page, la dire est inutile (2026-09-20). */
+		if (coller && !attenteWeb.colle) etapes.push({ texte: t("ai.web.step.paste", { site }), cle: "coller" });
 		/* L'ENVOI est dans l'étape des fichiers quand il y en a (on glisse, on
 		   envoie), seul sinon ; la dernière étape est l'attente du bloc de code
 		   et sa copie (formulation d'Ahmed, 2026-09-20). */
@@ -3648,7 +3648,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				off();
 				if (attenteWeb) attenteWeb.colle = true;
 				const li = document.querySelector<HTMLElement>(".qbd-ai-web-etapes li[data-etape='coller']");
-				if (li) { li.textContent = t("ai.web.step.pasted"); li.dataset.etape = "fait"; li.classList.add("is-fait"); }
+				// Retirée, pas cochée : la numérotation CSS se recalcule seule.
+				if (li) li.remove();
 			});
 			window.setTimeout(off, 30000);
 		}

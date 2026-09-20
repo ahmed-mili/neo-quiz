@@ -2883,10 +2883,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (coller) etapes.push(attenteWeb.colle
 			? { texte: t("ai.web.step.pasted"), cle: "fait" }
 			: { texte: t("ai.web.step.paste", { site }), cle: "coller" });
+		/* L'ENVOI est dans l'étape des fichiers quand il y en a (on glisse, on
+		   envoie), seul sinon ; la dernière étape est l'attente du bloc de code
+		   et sa copie (formulation d'Ahmed, 2026-09-20). */
 		if (aGlisser) etapes.push(attenteWeb.depose
 			? { texte: t(plusieurs ? "ai.web.step.droppedMany" : "ai.web.step.dropped"), cle: "fait" }
 			: { texte: t(plusieurs ? "ai.web.step.dropMany" : "ai.web.step.drop"), cle: "glisser" });
-		etapes.push({ texte: t("ai.web.step.send") });
+		else etapes.push({ texte: t("ai.web.step.send") });
+		etapes.push({ texte: t("ai.web.step.copy") });
 		if (etapes.length > 1) {
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.stepsTitle", { site }));
 			const liste = ajouter(carte, "ol", "qbd-ai-web-etapes");

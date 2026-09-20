@@ -1505,8 +1505,12 @@
 .qbd-install-modal .modal-content { display: flex; flex-direction: column; }
 .qbd-install-modal .qbd-install-what { order: 1; }
 .qbd-install-modal .modal-content > .qbd-quizzes-node { order: 2; }
-.qbd-install-modal .qbd-install-state { order: 3; margin-top: auto; }
-.qbd-install-modal .qbd-install-auto { order: 4; margin-top: auto; }
+/* `order` SEUL : le `margin-top: auto` d'avant servait à pousser le pied
+   quand un plancher étirait la boîte. Le plancher retiré, il ne poussait
+   plus rien — mais, plus spécifique, il écrasait l'écart de 22 px écrit plus
+   bas, et les deux voies se touchaient (Ahmed, 2026-09-20). */
+.qbd-install-modal .qbd-install-state { order: 3; }
+.qbd-install-modal .qbd-install-auto { order: 4; }
 .qbd-install-modal .qbd-install-learn { order: 5; }
 .qbd-install-modal .modal-title { font-size: 1.22em; margin-bottom: 16px; }
 .qbd-install-modal .modal-title-icon,

@@ -86,6 +86,8 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.installCli.cancel": "Annuler",
 	"app.installCli.done": "{name} est installé. Retour dans Neo Quiz…",
 	"app.installCli.failed": "L'installation de {name} a échoué. Fermez cette fenêtre et réessayez depuis Neo Quiz, ou suivez-y les étapes manuelles.",
+	"app.connectCli.pasteCode": "Connectez-vous, puis cliquez sur « Copy to Clipboard » sur la page Google — dans la minute. Neo Quiz saisit le code pour vous ; vous pouvez aussi le taper ici.",
+	"app.connectCli.codeReceived": "Code reçu. Fin de la connexion…",
 	"app.connectCli.done": "{name} est connecté. Retour dans Neo Quiz…",
 	"app.connectCli.failed": "La connexion à {name} a échoué. Fermez cette fenêtre et réessayez depuis Neo Quiz.",
 };

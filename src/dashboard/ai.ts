@@ -2898,6 +2898,17 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			for (const e of etapes) {
 				const li = ajouter(liste, "li", e.cle === "fait" ? "is-fait" : undefined, e.texte);
 				if (e.cle) li.dataset.etape = e.cle;
+				/* L'application ne voit pas la page du site : un fichier retiré
+				   là-bas ne se sait pas ici. Un clic sur l'étape atténuée la remet
+				   « à faire » (2026-09-20). */
+				if (e.cle === "fait" || e.cle === "glisser") {
+					li.addEventListener("click", () => {
+						if (!li.classList.contains("is-fait")) return;
+						li.classList.remove("is-fait");
+						li.dataset.etape = "glisser";
+						if (attenteWeb) attenteWeb.depose = false;
+					});
+				}
 			}
 		} else {
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.title", { site }));

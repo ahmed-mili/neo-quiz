@@ -367,9 +367,18 @@ export interface ModelOption {
 	/** Un lien à droite de la ligne (« Mettre à niveau » d'un modèle Ollama
 	    hors plan) : il s'active sans fermer le menu ni choisir le modèle. */
 	upgrade?: { label: string; onClick(): void };
+	/** Antigravity : le niveau de raisonnement de CE modèle, en gris après
+	    son nom (« Gemini 3.8 Flash  High »), et la liste de ses niveaux dans
+	    un flyout à droite de la ligne — la coche du flyout sur `currentLevel`.
+	    Sans `levels`, la ligne se choisit d'un clic, comme partout. */
+	level?: string;
+	levels?: EffortOption[];
+	currentLevel?: string;
 }
 
 export interface OpenModelMenuOptions {
+	/** Un titre en tête de la liste (« Model », référence Antigravity). */
+	head?: string;
 	models: ModelOption[];
 	/** Mutable : réassigné en interne au clic (cf. appendModelOption). */
 	currentModel: string;
@@ -381,6 +390,9 @@ export interface OpenModelMenuOptions {
 	searchable?: boolean;
 	onPickModel?: (value: string) => void;
 	onPickEffort?: (value: string) => void;
+	/** Un niveau choisi dans le flyout d'UN modèle (`ModelOption.levels`) :
+	    le modèle et son niveau partent ensemble. */
+	onPickLevel?: (model: string, level: string) => void;
 	onMore?: () => void;
 }
 
@@ -405,6 +417,9 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 	let effortCloseTimer = 0;
 	let moreFlyout: HTMLDivElement | null = null;
 	let moreCloseTimer = 0;
+	let levelFlyout: HTMLDivElement | null = null;
+	let levelFlyoutModel = "";
+	let levelCloseTimer = 0;
 
 	function effortLabelOf(v: string | undefined): string {
 		const efs = opts.efforts || [];
@@ -421,12 +436,34 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		const below = rect.bottom + 4;
 		const above = rect.top - 4 - menuRect.height;
 		menuEl.style.top = (below + menuRect.height <= window.innerHeight - 8 || above < 8 ? below : above) + "px";
+		/* Le menu RÉSERVE la place du flyout de niveaux à sa droite, comme le
+		   menu des fournisseurs réserve celle de ses canaux (même règle, même
+		   raison : le chevron pointe à droite, le flyout s'ouvre à droite). */
+		const reserve = largeurFlyoutNiveauxMax();
+		const droiteMax = window.innerWidth - 8 - (reserve > 0 ? reserve + 4 : 0);
 		let left = rect.left;
-		if (menuRect.width + left > window.innerWidth - 8) {
-			left = Math.max(8, window.innerWidth - 8 - menuRect.width);
+		if (menuRect.width + left > droiteMax) {
+			left = Math.max(8, droiteMax - menuRect.width);
 		}
 		menuEl.style.left = left + "px";
 		menuEl.style.visibility = "";
+	}
+
+	/* La largeur du plus large des flyouts de niveaux, mesurée hors écran
+	   (les libellés changent avec la langue). Zéro sans modèle à niveaux. */
+	function largeurFlyoutNiveauxMax(): number {
+		let max = 0;
+		for (const m of opts.models) {
+			if (!m.levels || !m.levels.length) continue;
+			const essai = ajouter(document.body, "div", "qbd-select-menu qbd-level-flyout");
+			essai.style.visibility = "hidden";
+			essai.style.top = "0px";
+			essai.style.left = "0px";
+			for (const lv of m.levels) appendLevel(essai, m, lv);
+			max = Math.max(max, essai.getBoundingClientRect().width);
+			essai.remove();
+		}
+		return max;
 	}
 
 	// Construit un bouton d'option modèle (liste principale ET flyout « Plus de
@@ -440,6 +477,7 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		const body = ajouter(btn, "div", "qbd-model-option-body");
 		const top = ajouter(body, "div", "qbd-model-option-top");
 		ajouter(top, "span", "qbd-select-option-label", m.label);
+		if (m.level) ajouter(top, "span", "qbd-model-option-level", m.level);
 		if (m.badge) ajouter(top, "span", "qbd-model-option-badge", m.badge);
 		if (m.desc) ajouter(body, "span", "qbd-model-option-desc", m.desc);
 		if (m.upgrade) {
@@ -463,6 +501,21 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 			const check = ajouter(btn, "span", "qbd-select-check");
 			if (active) currentHost().ui.setIcon(check, "check");
 		}
+		/* Un modèle à NIVEAUX (référence Antigravity) : un chevron à droite,
+		   et son flyout s'ouvre au survol comme celui d'une marque à plusieurs
+		   canaux. Sur la ligne courante, la coche cède la place au chevron le
+		   temps que le flyout est ouvert (CSS `.is-open`). La ligne elle-même
+		   reste un clic : le modèle, à son niveau courant. */
+		if (m.levels && m.levels.length) {
+			btn.classList.add("qbd-level-row");
+			btn.setAttribute("aria-haspopup", "menu");
+			const chev = ajouter(btn, "span", "qbd-model-menu-row-chevron");
+			currentHost().ui.setIcon(chev, "chevron-right");
+			btn.addEventListener("mouseenter", () => { cancelLevelClose(); openLevelFlyout(btn, m); });
+			btn.addEventListener("mouseleave", scheduleLevelClose);
+		} else if (parent === menuEl) {
+			btn.addEventListener("mouseenter", closeLevelFlyout);
+		}
 		btn.addEventListener("click", () => {
 			closeMenu();
 			if (m.upgrade) { m.upgrade.onClick(); return; }
@@ -473,8 +526,72 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		return btn;
 	}
 
+	/* Une ligne de niveau, dans le flyout d'un modèle : le libellé et la
+	   coche sur le niveau en usage pour CE modèle. */
+	function appendLevel(parent: HTMLElement, m: ModelOption, lv: EffortOption): void {
+		const active = lv.value === m.currentLevel;
+		const b = ajouter(parent, "button", "qbd-select-option qbd-level-option" + (active ? " is-active" : ""));
+		b.type = "button";
+		b.setAttribute("role", "menuitemradio");
+		b.setAttribute("aria-checked", active ? "true" : "false");
+		ajouter(b, "span", "qbd-select-option-label", lv.label);
+		const check = ajouter(b, "span", "qbd-select-check");
+		if (active) currentHost().ui.setIcon(check, "check");
+		b.addEventListener("click", () => {
+			closeMenu();
+			opts.currentModel = m.value;
+			opts.onPickLevel?.(m.value, lv.value);
+		});
+	}
+
+	// ── Flyout de niveaux d'UN modèle (référence Antigravity) ──
+	function cancelLevelClose(): void {
+		if (levelCloseTimer) { clearTimeout(levelCloseTimer); levelCloseTimer = 0; }
+	}
+
+	function scheduleLevelClose(): void {
+		cancelLevelClose();
+		levelCloseTimer = window.setTimeout(closeLevelFlyout, 140);
+	}
+
+	function closeLevelFlyout(): void {
+		cancelLevelClose();
+		if (levelFlyout) { levelFlyout.remove(); levelFlyout = null; }
+		levelFlyoutModel = "";
+		menuEl.querySelectorAll(".qbd-level-row.is-open").forEach(el => el.classList.remove("is-open"));
+	}
+
+	function openLevelFlyout(row: HTMLElement, m: ModelOption): void {
+		if (levelFlyout && levelFlyoutModel === m.value) return;
+		closeLevelFlyout();
+		levelFlyoutModel = m.value;
+		row.classList.add("is-open");
+		const fly = ajouter(document.body, "div", "qbd-select-menu qbd-level-flyout");
+		levelFlyout = fly;
+		fly.setAttribute("role", "menu");
+		for (const lv of (m.levels || [])) appendLevel(fly, m, lv);
+
+		// Toujours à droite du menu (la place est réservée par `reposition`),
+		// haut du flyout aligné sur le haut de sa ligne.
+		const rowR = row.getBoundingClientRect();
+		const menuR = menuEl.getBoundingClientRect();
+		fly.style.visibility = "hidden";
+		fly.style.top = "0px";
+		fly.style.left = "0px";
+		const fr = fly.getBoundingClientRect();
+		const left = Math.max(8, Math.min(menuR.right + 4, window.innerWidth - 8 - fr.width));
+		const top = Math.min(Math.max(8, rowR.top), window.innerHeight - fr.height - 8);
+		fly.style.left = left + "px";
+		fly.style.top = top + "px";
+		fly.style.visibility = "";
+
+		fly.addEventListener("mouseenter", cancelLevelClose);
+		fly.addEventListener("mouseleave", scheduleLevelClose);
+	}
+
 	function renderMain(): void {
 		menuEl.replaceChildren();
+		if (opts.head) ajouter(menuEl, "div", "qbd-model-menu-head", opts.head);
 
 		// Recherche « Find model… » + liste scrollable (façon app Ollama) quand
 		// opts.searchable : la liste défile en interne (hauteur ~7 lignes),
@@ -670,6 +787,7 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 	function closeMenu(): void {
 		closeEffortFlyout();
 		closeMoreFlyout();
+		closeLevelFlyout();
 		menuEl.remove();
 		openMenus.delete(closeMenu);
 		document.removeEventListener("mousedown", onDocDown, true);
@@ -683,7 +801,8 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		if (!t) return;
 		if (anchorEl.contains(t) || menuEl.contains(t)
 			|| (effortFlyout && effortFlyout.contains(t))
-			|| (moreFlyout && moreFlyout.contains(t))) return;
+			|| (moreFlyout && moreFlyout.contains(t))
+			|| (levelFlyout && levelFlyout.contains(t))) return;
 		closeMenu();
 	}
 
@@ -691,6 +810,7 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		if (e.key !== "Escape") return;
 		if (effortFlyout) closeEffortFlyout();
 		else if (moreFlyout) closeMoreFlyout();
+		else if (levelFlyout) closeLevelFlyout();
 		else closeMenu();
 	}
 
@@ -698,7 +818,8 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 		const t = e.target as Node | null;
 		if (!t) return;
 		if (menuEl.contains(t) || (effortFlyout && effortFlyout.contains(t))
-			|| (moreFlyout && moreFlyout.contains(t))) return;
+			|| (moreFlyout && moreFlyout.contains(t))
+			|| (levelFlyout && levelFlyout.contains(t))) return;
 		closeMenu();
 	}
 

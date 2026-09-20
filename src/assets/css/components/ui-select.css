@@ -432,9 +432,55 @@
 	transition: transform 0.14s ease;
 }
 
-/* Lignes « Effort » / « Plus de modèles » surlignées quand leur flyout est ouvert */
+/* ── Menu de modèles à NIVEAUX (référence : le sélecteur d'Antigravity,
+   capture du 2026-09-20). Un titre « Model » en tête ; sur chaque famille,
+   le niveau en gris juste après le nom (« Gemini 3.8 Flash  High ») ; à
+   droite, un chevron pour les familles à niveaux, dont le flyout
+   (Low / Medium / High) s'ouvre au survol. Le nom de la famille COURANTE
+   est en gras, comme chez Antigravity — le check seul ne suffit pas là où
+   la référence met les deux. ── */
+.qbd-model-menu-head {
+	padding: 6px 12px 4px;
+	font-size: 11.5px;
+	font-weight: 500;
+	color: var(--text-muted);
+}
+
+.qbd-model-option-level {
+	font-size: 12px;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.qbd-level-row {
+	align-items: center !important;
+}
+
+.qbd-level-row.is-active .qbd-select-option-label {
+	font-weight: 600;
+}
+
+/* Sur la ligne courante, la coche cède la place au chevron le temps que le
+   flyout est ouvert (référence : « ✓ » au repos, « › » survolé). */
+.qbd-level-row.is-active:not(.is-open) .qbd-model-menu-row-chevron,
+.qbd-level-row.is-open .qbd-select-check {
+	display: none;
+}
+
+.qbd-level-flyout {
+	min-width: 150px;
+	padding: 4px;
+	gap: 1px;
+}
+
+.qbd-level-option {
+	min-height: 32px;
+}
+
+/* Lignes « Effort » / « Plus de modèles » / famille à niveaux surlignées quand leur flyout est ouvert */
 .qbd-effort-row.is-open,
 .qbd-more-row.is-open,
+.qbd-level-row.is-open,
 .qbd-brand-row.is-open {
 	background: var(--background-modifier-hover) !important;
 }

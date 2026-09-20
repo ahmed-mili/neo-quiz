@@ -286,6 +286,7 @@ export const EN_DASHBOARD = {
 	"dashboard.select.effort": "Effort",
 	"dashboard.select.effortFlyoutHelp": "Higher effort means more thorough responses, but takes longer and uses your limits faster.",
 	"dashboard.select.effortDefault": "Default",
+	"dashboard.select.modelHead": "Model",
 	"dashboard.select.moreModels": "More models",
 	"dashboard.select.effortHelp": "Higher effort produces more complete responses, but takes longer and uses your limits faster.",
 	"dashboard.select.effortFaster": "Faster",

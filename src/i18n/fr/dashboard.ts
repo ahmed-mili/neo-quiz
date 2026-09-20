@@ -258,6 +258,7 @@ export const FR_DASHBOARD: Record<keyof typeof EN_DASHBOARD, string> = {
 	"dashboard.select.effort": "Effort",
 	"dashboard.select.effortFlyoutHelp": "Un effort plus élevé signifie des réponses plus approfondies, mais prend plus de temps et consomme vos limites plus rapidement.",
 	"dashboard.select.effortDefault": "Par défaut",
+	"dashboard.select.modelHead": "Modèle",
 	"dashboard.select.moreModels": "Plus de modèles",
 	"dashboard.select.effortHelp": "Un effort plus élevé génère des réponses plus complètes, mais prend plus de temps et utilise vos limites plus rapidement.",
 	"dashboard.select.effortFaster": "Plus rapide",

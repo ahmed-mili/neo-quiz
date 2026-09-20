@@ -941,33 +941,95 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			}
 			return list;
 		};
-		// Claude Code, Codex (ChatGPT) et Antigravity CLI partagent le même
-		// contrôle modèle+effort (menu façon claude.ai). Seules changent la
-		// liste de modèles, la liste d'efforts et la résolution du modèle
-		// (Fable expire côté Claude, `agy models` côté Antigravity).
-		if (provider === "claude-code" || provider === "codex" || provider === "antigravity-cli") {
+		// Claude Code et Codex (ChatGPT) partagent le même contrôle modèle+effort
+		// (menu façon claude.ai). Seules changent la liste de modèles, la liste
+		// d'efforts et la résolution du modèle (Fable expire côté Claude).
+		/* ANTIGRAVITY : la réplique du sélecteur d'Antigravity (capture du
+		   2026-09-20) — UN bouton « Gemini 3.8 Flash  High ⌄ », un menu titré
+		   « Model » avec une ligne par famille, son niveau en gris après le
+		   nom, et pour les familles à niveaux un flyout Low / Medium / High
+		   à droite, au survol. Pas le contrôle à deux boutons de Claude et
+		   Codex : chaque outil a le sien. La liste vient de `agy models` ;
+		   tant qu'elle n'est pas lue (CLI absent, compte non connecté), le
+		   bouton dit « modèle du CLI » et la génération part sans `--model`.
+		   Ce que la référence montre et qu'AUCUNE source ne donne au CLI est
+		   laissé de côté plutôt qu'inventé : la pastille « Fast » des Flash
+		   et le panneau « View Usage » (pas de sous-commande d'usage dans
+		   `agy`, vérifié le 2026-09-20). */
+		if (provider === "antigravity-cli") {
+			buildModelControl = (parent: HTMLElement): void => {
+				const modeles = (): aiProviders.ModelDef[] => aiProviders.getAntigravityModels();
+				const courant = (): string => aiProviders.resolveAntigravityModel(settings().aiModel || currentModel);
+				/* Le niveau EN USAGE pour une famille : le réglage `aiEffort`
+				   clampé à SES niveaux (Gemini 3.1 Pro n'a pas de medium). C'est
+				   ce que chaque ligne affiche en gris, et ce qui partirait. */
+				const niveauDe = (famille: string): string => aiProviders.resolveEffort(provider, settings().aiEffort, famille);
+				const NIVEAU: Record<string, string> = { low: "Low", medium: "Medium", high: "High" };
+				const trigger = ajouter(parent, "button", "qbd-select qbd-model-trigger");
+				trigger.type = "button";
+				const trigLabel = ajouter(trigger, "span", "qbd-select-label");
+				const trigChev = ajouter(trigger, "span", "qbd-select-chevron");
+				host.ui.setIcon(trigChev, "chevron-down");
+				const refresh = (): void => {
+					const cur = modeles().find(m => m.value === courant());
+					trigLabel.replaceChildren();
+					ajouter(trigLabel, "span", "qbd-model-trigger-name", cur ? cur.label : t("ai.model.cliDefault"));
+					if (cur && cur.efforts && cur.efforts.length) {
+						const n = niveauDe(cur.value);
+						ajouter(trigLabel, "span", "qbd-model-trigger-effort", NIVEAU[n] || n);
+					}
+				};
+				refresh();
+				/* La liste est relue en arrière-plan (au plus toutes les six
+				   heures) et l'étiquette redessinée si elle a changé — sans
+				   re-rendu du composer, qui effacerait le message en cours. */
+				void aiProviders.refreshAntigravityModels().then(change => {
+					if (change && trigger.isConnected) refresh();
+				});
+				trigger.addEventListener("click", async () => {
+					await aiProviders.refreshAntigravityModels();
+					if (!trigger.isConnected) return;
+					const liste = modeles();
+					if (liste.length === 0) { host.ui.notice(t("ai.model.cliListUnavailable")); return; }
+					openModelMenu(trigger, {
+						head: t("dashboard.select.modelHead"),
+						models: liste.map(m => {
+							const niveaux = aiProviders.getEfforts(provider, m.value);
+							if (!niveaux.length) return { value: m.value, label: m.label };
+							const n = niveauDe(m.value);
+							return {
+								value: m.value, label: m.label,
+								level: NIVEAU[n] || n,
+								levels: niveaux.map(e => ({ value: e.value, label: NIVEAU[e.value] || e.label })),
+								currentLevel: n
+							};
+						}),
+						currentModel: courant(),
+						efforts: [],
+						onPickModel: async (v) => {
+							await saveSettings({ aiModel: v });
+							refresh();
+						},
+						onPickLevel: async (v, niveau) => {
+							await saveSettings({ aiModel: v, aiEffort: niveau });
+							refresh();
+						}
+					});
+				});
+			};
+		} else if (provider === "claude-code" || provider === "codex") {
 			const isClaude = provider === "claude-code";
-			const isCodex = provider === "codex";
 			// Liste relue à CHAQUE usage (trigger + ouverture du menu) : côté
 			// Claude, Fable expire à date ; côté Codex, la liste suit
 			// ~/.codex/models_cache.json (nouveau modèle du compte → présent au
-			// prochain clic, sans mise à jour manuelle du plugin) ; côté
-			// Antigravity, `agy models` (au plus toutes les six heures).
-			const getModels = (): aiProviders.ModelDef[] => isClaude
-				? aiProviders.getClaudeModels(deps.usage?.claudePlan())
-				: isCodex ? aiProviders.getDefaultModels("codex") : aiProviders.getAntigravityModels();
-			const resolveMv = (v?: string): string => isClaude
-				? aiProviders.resolveClaudeModel(v)
-				: isCodex ? aiProviders.resolveCodexModel(v) : aiProviders.resolveAntigravityModel(v);
-			const refreshList = (): Promise<boolean> => isCodex || isClaude
-				? aiProviders.refreshCliCaches()
-				: aiProviders.refreshAntigravityModels();
+			// prochain clic, sans mise à jour manuelle du plugin).
+			const getModels = (): aiProviders.ModelDef[] => isClaude ? aiProviders.getClaudeModels(deps.usage?.claudePlan()) : aiProviders.getDefaultModels("codex");
+			const resolveMv = (v?: string): string => isClaude ? aiProviders.resolveClaudeModel(v) : aiProviders.resolveCodexModel(v);
 			// Modèle et effort = DEUX boutons séparés (référence claude.ai /
 			// ChatGPT). Le modèle ouvre le menu de modèles (sans ligne Effort) ;
 			// l'effort ouvre le popover slider (openEffortSlider), variante
-			// claude ou codex. Les efforts Codex et Antigravity dépendent du
-			// modèle courant (supported_reasoning_levels, variantes d'`agy
-			// models`) → tout est relu à chaque usage.
+			// claude ou codex. Les efforts Codex dépendent du modèle courant
+			// (supported_reasoning_levels) → tout est relu à chaque usage.
 			buildModelControl = (parent: HTMLElement): void => {
 				const currentMv = () => resolveMv(settings().aiModel || currentModel);
 				const currentEfforts = () => aiProviders.getEfforts(provider, currentMv());
@@ -994,32 +1056,24 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					const cur = models.find(m => m.value === currentMv()) || models[0];
 					// Fast actif (codex) → éclair à gauche du nom du modèle,
 					// comme la pill du composer ChatGPT.
-					if (isCodex && settings().aiCodexFast && cur && cur.fast) {
+					if (!isClaude && settings().aiCodexFast && cur.fast) {
 						const z = ajouter(trigLabel, "span", "qbd-model-trigger-zap");
 						host.ui.setIcon(z, "zap");
 					}
-					/* Antigravity, tant que la liste n'est pas lue (CLI absent,
-					   compte non connecté) : le bouton dit « modèle du CLI » et la
-					   génération part sans `--model`. */
-					ajouter(trigLabel, "span", "qbd-model-trigger-name", cur ? cur.label : t("ai.model.cliDefault"));
-					const efforts = currentEfforts();
+					ajouter(trigLabel, "span", "qbd-model-trigger-name", cur.label);
 					const ev = currentEv();
-					const ef = efforts.find(e => e.value === ev);
+					const ef = currentEfforts().find(e => e.value === ev);
 					effortLabel.textContent = (EFFORT_DISPLAY[ev] || (ef ? ef.label : ev));
 					effortBtn.classList.toggle("is-ultra", !!(ef && ef.accent));
-					// Un modèle sans niveau (Claude Opus via Antigravity) : pas de
-					// bouton — un bouton qui ne part nulle part est pire qu'absent.
-					effortBtn.hidden = efforts.length === 0;
 				};
 				refreshTriggers();
 				/* L'INSTANTANÉ des fichiers de CLI (tranche 5, tâche 3) :
 				   `getModels()` est synchrone et lit un instantané de module que
-				   seul `refreshCliCaches` (ou `refreshAntigravityModels`) remplit.
-				   L'étiquette vient d'être dessinée avec ce qu'on avait ; on la
-				   redessine UNE fois si l'instantané a changé — `refreshTriggers`
-				   et non un re-rendu du composer, qui effacerait le message en
-				   cours de frappe. */
-				void refreshList().then(change => {
+				   seul `refreshCliCaches` remplit. L'étiquette vient d'être
+				   dessinée avec ce qu'on avait ; on la redessine UNE fois si
+				   l'instantané a changé — `refreshTriggers` et non un re-rendu du
+				   composer, qui effacerait le message en cours de frappe. */
+				void aiProviders.refreshCliCaches().then(change => {
 					if (change && trigger.isConnected) refreshTriggers();
 				});
 
@@ -1029,12 +1083,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				   est devenue asynchrone, l'attente aussi — quelques
 				   millisecondes avant que le menu ne s'ouvre. */
 				trigger.addEventListener("click", async () => {
-					await refreshList();
+					await aiProviders.refreshCliCaches();
 					if (!trigger.isConnected) return;
-					const liste = getModels();
-					if (liste.length === 0) { host.ui.notice(t("ai.model.cliListUnavailable")); return; }
 					openModelMenu(trigger, {
-						models: liste,
+						models: getModels(),
 						currentModel: currentMv(),
 						// L'effort a son propre bouton → pas de ligne Effort ici.
 						efforts: [],
@@ -1049,7 +1101,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					// Éclair Fast (codex) : seulement si CE modèle expose le tier
 					// « priority » (models_cache) — toggle persisté aiCodexFast.
 					const curModel = getModels().find(m => m.value === currentMv());
-					const fast = (isCodex && curModel && curModel.fast) ? {
+					const fast = (!isClaude && curModel && curModel.fast) ? {
 						on: !!settings().aiCodexFast,
 						onToggle: async (v: boolean) => {
 							await saveSettings({ aiCodexFast: v });
@@ -1057,7 +1109,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 						}
 					} : null;
 					openEffortSlider(effortBtn, {
-						variant: isCodex ? "codex" : "claude",
+						variant: isClaude ? "claude" : "codex",
 						efforts: currentEfforts(),
 						currentEffort: currentEv(),
 						fast,

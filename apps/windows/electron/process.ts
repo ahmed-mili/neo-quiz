@@ -1657,19 +1657,31 @@ export function lancer(spec: {
 }
 
 /**
- * UN SEUL `run` PAR OUTIL À LA FOIS.
+ * UN SEUL `run` PAR OUTIL À LA FOIS — ET LE SUIVANT ATTEND SON TOUR.
  *
  * Le verrou vit ICI, dans le principal, et non dans le rendu : c'est le
  * principal qui lance, et deux fenêtres (ou une page rechargée pendant une
- * génération) ne partagent aucun état du rendu. Un second appel rejette
- * `occupe` — un nom, pas un silence : le code partagé peut le dire à
- * l'utilisateur au lieu de laisser deux CLI écrire dans le même terminal.
+ * génération) ne partagent aucun état du rendu.
+ *
+ * UN SECOND APPEL N'EST PLUS REJETÉ D'EMBLÉE : il ATTEND que le verrou se
+ * libère, un quart de minute au plus, et ne rend `occupe` qu'au-delà.
+ * Jusqu'au 2026-09-20 il rejetait tout de suite, et c'est une SONDE qui
+ * déclenchait le rejet : `agy models` (le compte est-il connecté ? la liste
+ * des modèles), `claude auth status`, `codex login status`, `--version`
+ * passent tous par `run`, donc par ce verrou, et durent une à deux
+ * secondes. Une génération lancée dans cette fenêtre échouait sur « une
+ * génération agy est déjà en cours » alors qu'aucune ne tournait (vécu
+ * juste après une installation, où les sondes se succèdent). Attendre une
+ * sonde est invisible ; attendre une vraie génération concurrente au-delà
+ * d'un quart de minute reste un `occupe`, un nom, pas un silence.
  *
  * ET IL EST RELÂCHÉ SUR TOUTES LES ISSUES (`finally`) : une fuite rendrait le
  * fournisseur DÉFINITIVEMENT inutilisable jusqu'au redémarrage de
- * l'application, sans qu'aucun message ne dise pourquoi.
+ * l'application, sans qu'aucun message ne dise pourquoi. La promesse est
+ * levée en même temps, pour que ceux qui attendent repartent.
  */
-const verrous = new Set<string>();
+const verrous = new Map<string, Promise<void>>();
+const ATTENTE_VERROU_MS = 15000;
 
 /**
  * Lance un CLI, pièces jointes comprises. C'est `HostProcess.run`
@@ -1698,6 +1710,9 @@ export async function run(spec: {
 	/** Les deux coutures de `lancer`, transmises telles quelles. */
 	tuer?: (pid: number | undefined) => Promise<void>;
 	delaiGardeMs?: number;
+	/** Combien de temps attendre un verrou pris avant de rendre `occupe`
+	    (un quart de minute par défaut ; les contrôles le raccourcissent). */
+	attenteVerrouMs?: number;
 } = {}): Promise<{
 	stdout: string; stderr: string; code: number | null; sortie?: string;
 }> {
@@ -1719,10 +1734,15 @@ export async function run(spec: {
 	if (spec.marqueur === undefined && ((spec.fichiers && spec.fichiers.length > 0) || spec.sortieFichier)) {
 		throw erreurCli("refuse", "pièces jointes ou fichier de sortie sans marqueur : aucun jeton ne pourrait les désigner");
 	}
-	if (verrous.has(spec.tool)) {
-		throw erreurCli("occupe", "une génération " + spec.tool + " est déjà en cours");
+	const attenteMax = options.attenteVerrouMs ?? ATTENTE_VERROU_MS;
+	const debut = Date.now();
+	for (let pris = verrous.get(spec.tool); pris; pris = verrous.get(spec.tool)) {
+		const reste = attenteMax - (Date.now() - debut);
+		if (reste <= 0) throw erreurCli("occupe", "une génération " + spec.tool + " est déjà en cours");
+		await Promise.race([pris, new Promise<void>(resolve => setTimeout(resolve, reste))]);
 	}
-	verrous.add(spec.tool);
+	let liberer: () => void = () => {};
+	verrous.set(spec.tool, new Promise<void>(resolve => { liberer = resolve; }));
 	try {
 		const executable = resoudreExecutable(spec.tool, env);
 		/* Rejeté AVANT d'écrire quoi que ce soit : un dossier temporaire créé
@@ -1754,5 +1774,6 @@ export async function run(spec: {
 		return Object.assign({}, resultat, { sortie });
 	} finally {
 		verrous.delete(spec.tool);
+		liberer();
 	}
 }

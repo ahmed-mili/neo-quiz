@@ -86,6 +86,20 @@ export function commandeInstallation(outil: OutilInstallable, windows: boolean):
  * la forme officielle de Codex, celle qui s'est installée dans la VM d'Ahmed
  * là où la forme nue mourait. La ligne AFFICHÉE reste la ligne courte de la
  * documentation : celui qui la tape voit lui-même sa fenêtre.
+ *
+ * L'ÉCART D'ANTIGRAVITY (2026-09-20). Son installateur appelle `agy.exe`, un
+ * binaire Go dont le journal part sur stderr AVANT que sa bibliothèque de
+ * journalisation soit initialisée : chaque étape s'affiche préfixée de
+ * « ERROR: logging before google.Init: I0920 19:58:12.796444 1
+ * installer.go:27] » — six lignes rouges pour dire que tout va bien. Ahmed ne
+ * veut aucune ligne d'erreur visible. Le sous-processus (même raison que
+ * Claude : `install.ps1` pose `$ErrorActionPreference = "Stop"`, qui ferait
+ * de la première ligne d'erreur relue une erreur terminante dans la session)
+ * est suivi d'un FILTRE D'AFFICHAGE : le préfixe est retiré, le message est
+ * gardé, et la ligne est réémise telle quelle — par `[Console]::Out`, pas
+ * `Write-Host`, pour ne pas la repeindre. Ce qui PART est toujours la ligne
+ * affichée ; seul ce qui REVIENT est nettoyé, et le nettoyage ne touche que
+ * ce préfixe-là.
  */
 export function commandeInstallationLancee(outil: OutilInstallable, windows: boolean): string {
 	const { code } = commandeInstallation(outil, windows);
@@ -95,5 +109,17 @@ export function commandeInstallationLancee(outil: OutilInstallable, windows: boo
 	if (outil === "claude" && windows) {
 		return 'powershell -ExecutionPolicy Bypass -c "' + code + '"';
 	}
+	if (outil === "agy" && windows) {
+		return 'powershell -ExecutionPolicy Bypass -c "' + code + '" 2>&1 | ForEach-Object { '
+			+ '$l = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }; '
+			+ "[Console]::Out.WriteLine(($l -replace '" + PREFIXE_JOURNAL_GO + "', '')) }";
+	}
 	return code;
 }
+
+/** Le préfixe de journalisation Go que l'installateur d'Antigravity laisse
+    devant chaque étape (`ERROR: logging before google.Init: I0920
+    19:58:12.796444       1 installer_windows.go:45] `), en expression
+    régulière PowerShell. Exporté pour que le contrôle l'éprouve sur une vraie
+    ligne. */
+export const PREFIXE_JOURNAL_GO = "^ERROR: logging before google\\.Init: [IWEF]\\d{4} [\\d:.]+\\s+\\d+ [^\\]]+\\] ";

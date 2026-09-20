@@ -50,7 +50,7 @@ async function cas(r, nom, fn) {
 	}
 }
 
-await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee }) => {
+await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee, PREFIXE_JOURNAL_GO }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
 	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande, environnementOutil,
 	estOutilAutorise, lireAncre, lireCache, lirePlacement, rectangleTerminal, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptFermerTerminal, scriptInstallation, scriptPoserFenetre, scriptRestaurerNavigateur,
@@ -359,17 +359,53 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				r.check(outil + " : la ligne lancée CONTIENT la ligne affichée, et le script la contient",
 					{ dansLeScript: script.includes(lancee), contient: lancee.includes(affichee) }, { dansLeScript: true, contient: true });
 			}
-			r.check("les écarts entre affiché et lancé sont exactement les deux admis",
+			r.check("les écarts entre affiché et lancé sont exactement les trois admis",
 				{
 					claude: commandeInstallationLancee("claude", true),
 					codex: commandeInstallationLancee("codex", true) === commandeInstallation("codex", true).code,
 					ollama: commandeInstallationLancee("ollama", true).slice(commandeInstallation("ollama", true).code.length),
+					/* Antigravity : le sous-processus (comme Claude) PUIS un filtre
+					   d'affichage qui retire le préfixe de journalisation Go — et
+					   rien d'autre : la ligne affichée est dedans, telle quelle. */
+					agy: commandeInstallationLancee("agy", true).startsWith('powershell -ExecutionPolicy Bypass -c "irm https://antigravity.google/cli/install.ps1 | iex" 2>&1 | ForEach-Object {')
+						&& commandeInstallationLancee("agy", true).includes("[Console]::Out.WriteLine(")
+						&& !commandeInstallationLancee("agy", true).includes("Write-Host"),
 				},
 				{
 					claude: 'powershell -ExecutionPolicy Bypass -c "irm https://claude.ai/install.ps1 | iex"',
 					codex: true,
 					ollama: " --accept-source-agreements --accept-package-agreements",
+					agy: true,
 				});
+			/* LE FILTRE, sur de vraies lignes de l'installateur (2026-09-20) : le
+			   préfixe tombe, le message reste, et une ligne ordinaire — le succès,
+			   l'URL de connexion — passe intacte. Éprouvé avec le moteur de
+			   PowerShell lui-même. */
+			{
+				const echantillon = [
+					"ERROR: logging before google.Init: I0920 19:58:12.796444       1 installer.go:27] Running Antigravity CLI setup...",
+					"ERROR: logging before google.Init: I0920 19:58:13.267352       1 installer_windows.go:179] PATH verification: C:\\Users\\Ahmed\\AppData\\Local\\agy\\bin is correctly configured in Environment PATH.",
+					"✅ Antigravity CLI installed successfully at C:\\Users\\Ahmed\\AppData\\Local\\agy\\bin\\agy.exe",
+					"  https://accounts.google.com/o/oauth2/auth?access_type=offline",
+				];
+				const { execFileSync } = await import("node:child_process");
+				/* La sortie de `powershell.exe` est lue ici en UTF-8 : sans le dire,
+				   la console du harnais rend la coche « ✅ » en « ? » — un défaut
+				   du TEST, pas du filtre. */
+				const ps = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p = '" + PREFIXE_JOURNAL_GO + "'; @(" + echantillon.map(l => "'" + l.replace(/'/g, "''") + "'").join(",") + ") | ForEach-Object { [Console]::Out.WriteLine(($_ -replace $p, '')) }";
+				let sortie = "";
+				try {
+					sortie = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { encoding: "utf8", windowsHide: true, timeout: 20000 });
+				} catch (e) { sortie = "ÉCHEC : " + String(e && e.message); }
+				r.check("le préfixe de journalisation Go tombe, le message reste, le reste passe intact",
+					sortie.split(/\r?\n/).filter(Boolean),
+					[
+						"Running Antigravity CLI setup...",
+						"PATH verification: C:\\Users\\Ahmed\\AppData\\Local\\agy\\bin is correctly configured in Environment PATH.",
+						"✅ Antigravity CLI installed successfully at C:\\Users\\Ahmed\\AppData\\Local\\agy\\bin\\agy.exe",
+						"  https://accounts.google.com/o/oauth2/auth?access_type=offline",
+					]);
+			}
 			r.check("hors Windows, la ligne lancée de Claude reste celle affichée (bash n'a pas ce problème)",
 				commandeInstallationLancee("claude", false), commandeInstallation("claude", false).code);
 
@@ -1060,19 +1096,26 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 				"timeout");
 		});
 
-		/* ── UN SEUL `run` PAR OUTIL, ET LE VERROU EST RELÂCHÉ ── */
-		await cas(r, "un second run du même outil rejette « occupe » ; un autre outil passe", async () => {
+		/* ── UN SEUL `run` PAR OUTIL, LE SUIVANT ATTEND, ET LE VERROU EST RELÂCHÉ ── */
+		await cas(r, "un second run du même outil ATTEND le premier ; au-delà du délai il rejette « occupe » ; un autre outil passe", async () => {
 			const lent = join(racine, "lent.js");
 			writeFileSync(lent, "setTimeout(() => { process.stdout.write('FINI'); }, 500);");
+			/* Une SONDE d'une seconde ne doit plus faire échouer la génération
+			   lancée pendant qu'elle tourne (vécu le 2026-09-20 avec `agy
+			   models`) : le second attend, puis passe. */
 			const premier = run({ tool: "codex", args: [lent], stdin: "" }, { env: envNode });
-			const second = await nomDuRejet(run({ tool: "codex", args: [lent], stdin: "" }, { env: envNode }));
+			const second = await run({ tool: "codex", args: [rapporteur], stdin: "ok" }, { env: envNode, attenteVerrouMs: 3000 });
+			/* Mais une génération qui dure plus que l'attente reste un `occupe`,
+			   un nom, pas un silence. */
+			const troisieme = run({ tool: "codex", args: [lent], stdin: "" }, { env: envNode });
+			const impatient = await nomDuRejet(run({ tool: "codex", args: [rapporteur], stdin: "ok" }, { env: envNode, attenteVerrouMs: 50 }));
 			/* Le verrou est par OUTIL : bloquer Codex pendant que Claude tourne
 			   serait une limite inventée, et l'utilisateur ne peut de toute façon
 			   lancer qu'une génération à la fois par fournisseur. */
 			const autre = await run({ tool: "claude", args: [lent], stdin: "" }, { env: envNode });
-			r.check("un second run du même outil rejette « occupe » ; un autre outil passe",
-				{ second, autre: autre.stdout, premier: (await premier).stdout },
-				{ second: "occupe", autre: "FINI", premier: "FINI" });
+			r.check("un second run du même outil ATTEND le premier ; au-delà du délai il rejette « occupe » ; un autre outil passe",
+				{ premier: (await premier).stdout, second: second.stdout, impatient, troisieme: (await troisieme).stdout, autre: autre.stdout },
+				{ premier: "FINI", second: "OUT:2:", impatient: "occupe", troisieme: "FINI", autre: "FINI" });
 		});
 
 		await cas(r, "le verrou est relâché sur TOUTES les issues, y compris un échec", async () => {

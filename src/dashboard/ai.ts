@@ -2887,9 +2887,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		/* L'ENVOI est dans l'étape des fichiers quand il y en a (on glisse, on
 		   envoie), seul sinon ; la dernière étape est l'attente du bloc de code
 		   et sa copie (formulation d'Ahmed, 2026-09-20). */
-		if (aGlisser) etapes.push(attenteWeb.depose
-			? { texte: t(plusieurs ? "ai.web.step.droppedMany" : "ai.web.step.dropped"), cle: "fait" }
-			: { texte: t(plusieurs ? "ai.web.step.dropMany" : "ai.web.step.drop"), cle: "glisser" });
+		/* Une fois déposé, le texte ne change pas : la ligne s'ATTÉNUE
+		   seulement, sous celle qui reste à faire (2026-09-20). */
+		if (aGlisser) etapes.push({ texte: t(plusieurs ? "ai.web.step.dropMany" : "ai.web.step.drop"), cle: attenteWeb.depose ? "fait" : "glisser" });
 		else etapes.push({ texte: t("ai.web.step.send") });
 		etapes.push({ texte: t("ai.web.step.copy") });
 		if (etapes.length > 1) {
@@ -2971,7 +2971,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 						if (resultat === "depose") {
 							if (attenteWeb) attenteWeb.depose = true;
 							const li = document.querySelector<HTMLElement>(".qbd-ai-web-etapes li[data-etape='glisser']");
-							if (li) { li.textContent = t(plusieurs ? "ai.web.step.droppedMany" : "ai.web.step.dropped"); li.dataset.etape = "fait"; li.classList.add("is-fait"); }
+							if (li) { li.dataset.etape = "fait"; li.classList.add("is-fait"); }
 						}
 					});
 				});

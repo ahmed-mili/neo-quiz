@@ -98,8 +98,6 @@ export const EN_AI = {
 	"ai.web.step.paste": "Paste the prompt (Ctrl+V): it is already in your clipboard.",
 	"ai.web.step.drop": "Drag the file below onto the page and send.",
 	"ai.web.step.dropMany": "Drag the files below onto the page, all at once, and send.",
-	"ai.web.step.dropped": "The file is on the page: send it.",
-	"ai.web.step.droppedMany": "The files are on the page: send them.",
 	"ai.web.step.send": "Send the prompt.",
 	"ai.web.step.copy": "Wait during the code block generation, then copy it in one click: Neo Quiz picks it up by itself.",
 	"ai.web.dragOne": "Drag",

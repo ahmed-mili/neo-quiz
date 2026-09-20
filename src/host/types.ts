@@ -567,6 +567,12 @@ export interface HostProcess {
 	    pas eu lieu (Ahmed, 2026-09-20). OPTIONNEL : seul un hôte qui sait
 	    guetter une fenêtre l'offre. */
 	attendreFinTerminal?(): Promise<void>;
+	/** S'abonne à l'instant où la fenêtre du terminal est POSÉE (sous la
+	    modale qui attend) : c'est là que cette modale remonte, et pas avant
+	    — remontée dès le clic, elle serait en hauteur sans raison (Ahmed,
+	    2026-09-20). Rend de quoi se désabonner. OPTIONNEL, comme
+	    `attendreFinTerminal` : seul un hôte qui place des fenêtres l'offre. */
+	surTerminalPose?(rappel: () => void): () => void;
 }
 
 /**

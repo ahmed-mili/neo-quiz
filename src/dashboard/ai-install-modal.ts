@@ -16,7 +16,7 @@
 import { LOG_PREFIX } from "../branding";
 import { getProvider, setBrandLogo } from "./ai-providers";
 import { commandeInstallation } from "../cli-install-cmd";
-import { ajouter, ancreDe } from "../dom";
+import { ajouter, ancreRemontee, CLASSE_MODALE_HAUT } from "../dom";
 import { currentHost, requireHost } from "../host/current";
 import { t } from "../i18n";
 import { renderCollapsibleSection } from "./collapsible";
@@ -95,6 +95,9 @@ export function openInstallModal(deps: InstallModalDeps): void {
 	// Posé à `true` UNIQUEMENT à la détection réelle (pas à une fermeture
 	// prématurée par la croix) : c'est ce que `onClose` transmet à la page.
 	let detecte = false;
+	/* L'abonnement à « la fenêtre du terminal est posée » (l'instant où la
+	   modale remonte), retiré dès qu'il a servi ou à la fermeture. */
+	let desabonnerPose: (() => void) | null = null;
 
 	/* Le LOGO DE MARQUE dans la ligne du titre (2026-09-18) : coloré, sans
 	   pastille ni contour. Le fournisseur et sa couleur viennent du catalogue
@@ -137,9 +140,17 @@ export function openInstallModal(deps: InstallModalDeps): void {
 					   verdict « indisponible ». */
 					let verdict: "lance" | "annule" | "indisponible";
 					try {
-						/* La modale se mesure elle-même : le terminal sera posé juste
-						   en dessous (Ahmed, 2026-09-20). */
-						verdict = await host.process!.installerCli(OUTILS[deps.provider], ancreDe(m.panelEl));
+						/* La modale mesure la place qu'elle AURA une fois remontée
+						   (sans bouger encore) : c'est là que le terminal se posera.
+						   Elle ne remonte qu'au signal `surTerminalPose`, quand la
+						   fenêtre est en place — remontée dès le clic, elle serait
+						   en hauteur sans raison (Ahmed, 2026-09-20). */
+						desabonnerPose = host.process!.surTerminalPose?.(() => {
+							m.panelEl.classList.add(CLASSE_MODALE_HAUT);
+							desabonnerPose?.();
+							desabonnerPose = null;
+						}) ?? null;
+						verdict = await host.process!.installerCli(OUTILS[deps.provider], ancreRemontee(m.panelEl));
 					} catch (e) {
 						console.warn(LOG_PREFIX, "installation impossible:", e);
 						auto.disabled = false;
@@ -147,7 +158,7 @@ export function openInstallModal(deps: InstallModalDeps): void {
 						manuelOuvert?.();
 						return;
 					}
-					if (verdict === "annule") { auto.disabled = false; return; }
+					if (verdict === "annule") { auto.disabled = false; desabonnerPose?.(); desabonnerPose = null; return; }
 					if (verdict === "indisponible") {
 						auto.disabled = false;
 						host.ui.notice(t("ai.install.terminalFailed"));
@@ -267,6 +278,8 @@ export function openInstallModal(deps: InstallModalDeps): void {
 			lien.rel = "noopener";
 		},
 		onClose: () => {
+			desabonnerPose?.();
+			desabonnerPose = null;
 			couperSonde();
 			deps.onClose(detecte);
 		},

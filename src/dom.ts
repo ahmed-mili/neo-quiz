@@ -33,6 +33,24 @@ export function ancreDe(el: HTMLElement): { x: number; y: number; largeur: numbe
 	return { x: Math.round(r.left), y: Math.round(r.top), largeur: Math.round(r.width), hauteur: Math.round(r.height) };
 }
 
+/** LA CLASSE QUI REMONTE UNE MODALE au-dessus d'une fenêtre posée sous elle
+    (le terminal d'installation). Le CSS de l'hôte la porte ; le code partagé
+    ne connaît que son nom. */
+export const CLASSE_MODALE_HAUT = "qbd-modal-haut";
+
+/** Le rectangle qu'un élément AURA une fois remonté, mesuré SANS le peindre :
+    la classe est posée, le rectangle lu (un reflow synchrone), la classe
+    retirée — le tout dans la même tâche, donc aucune image intermédiaire.
+    C'est ce qui permet d'envoyer la position cible à l'hôte AVANT que la
+    modale ne bouge : elle ne remontera qu'une fois la fenêtre posée. */
+export function ancreRemontee(el: HTMLElement): { x: number; y: number; largeur: number; hauteur: number } {
+	const avait = el.classList.contains(CLASSE_MODALE_HAUT);
+	if (!avait) el.classList.add(CLASSE_MODALE_HAUT);
+	const r = ancreDe(el);
+	if (!avait) el.classList.remove(CLASSE_MODALE_HAUT);
+	return r;
+}
+
 export function ajouter<K extends keyof HTMLElementTagNameMap>(
 	parent: HTMLElement,
 	tag: K,

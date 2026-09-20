@@ -3,7 +3,7 @@ import type { EditorExamOptions } from "../types/editor-ctx";
 import type { AiPreset, DashboardViewName, NavigateData } from "../types/dashboard-ctx";
 import type { HostFile, HostModalHandle, ImageDeGlisser } from "../host/types";
 import { currentHost, requireHost } from "../host/current";
-import { ajouter, ancreDe } from "../dom";
+import { ajouter, ancreRemontee, CLASSE_MODALE_HAUT } from "../dom";
 import { LOG_PREFIX } from "../branding";
 import * as aiProviders from "./ai-providers";
 import { composerPrompts, parseReponseQuiz } from "./ai-client";
@@ -392,6 +392,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    l'application n'a jamais faite) ; « upgrade » quand Ollama a répondu
 	    402 (modèle hors plan) — réessayer rendrait la même erreur. */
 	let errorAction: "reopen" | "upgrade" | null = null;
+	/** L'abonnement à « la fenêtre du terminal est posée » (l'instant où la
+	    modale d'attente remonte), retiré dès qu'il a servi, à l'annulation ou
+	    à un lancement qui échoue. */
+	let desabonnerPose: (() => void) | null = null;
 	/** Sondage « le compte est-il connecté ? », pour la même raison que
 	    `ollamaPoll` : sans être retenu, il survivrait à la fermeture de la vue
 	    et repeindrait un conteneur détaché. Coupé à la détection, à
@@ -2574,6 +2578,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    l'erreur se remontre ; depuis le hint, rien n'était parti. */
 	function annulerConnexion(): void {
 		couperSondeConnexion();
+		desabonnerPose?.();
+		desabonnerPose = null;
 		if (phase !== "connexion") return;
 		phase = connexionOrigine === "erreur" && sentMessage ? "error" : "idle";
 		render(containerRef);
@@ -2607,17 +2613,30 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		} else {
 			try {
 				/* La modale d'attente est OUVERTE AVANT le terminal, pour être
-				   mesurée : c'est sous elle qu'il se pose. Si le lancement
-				   échoue, `annulerConnexion` la referme. */
+				   mesurée : c'est sous elle qu'il se pose. Elle est mesurée
+				   REMONTÉE mais ne bouge pas encore — elle remonte au signal
+				   `surTerminalPose`, quand la fenêtre est en place (Ahmed,
+				   2026-09-20). Si le lancement échoue, `annulerConnexion` la
+				   referme. */
 				attendreCompte(tool, origine);
 				const modale = document.querySelector<HTMLElement>(".qbd-login-wait-modal");
-				verdict = await requireHost("process").connecterCli(tool, modale ? ancreDe(modale) : undefined);
+				const proc = requireHost("process");
+				if (modale) {
+					const off = proc.surTerminalPose?.(() => {
+						modale.classList.add(CLASSE_MODALE_HAUT);
+						off?.();
+					});
+					desabonnerPose = off ?? null;
+				}
+				verdict = await proc.connecterCli(tool, modale ? ancreRemontee(modale) : undefined);
 			} catch (e) {
 				console.warn(LOG_PREFIX, "connexion impossible:", e);
 				verdict = "indisponible";
 			}
 		}
 		if (verdict !== "lance") {
+			desabonnerPose?.();
+			desabonnerPose = null;
 			if (tool !== "ollama") annulerConnexion();
 			if (bouton) bouton.disabled = false;
 			// `annule` = l'utilisateur a dit non : rien de plus à dire.

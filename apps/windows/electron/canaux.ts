@@ -933,6 +933,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		const h = fenetre.getNativeWindowHandle();
 		const hwnd = h.length >= 8 ? Number(h.readBigUInt64LE(0)) : h.readUInt32LE(0);
 		disposerPourTerminal(hwnd, titre, { x: hautGauche.x, y: hautGauche.y, largeur: basDroite.x - hautGauche.x, hauteur: basDroite.y - hautGauche.y }, () => {
+			const f = deps.fenetreCourante();
+			if (f && !f.isDestroyed()) f.webContents.send(CANAUX.processusTerminalPose);
+		}, () => {
 			resoudreFin();
 			const f = deps.fenetreCourante();
 			if (!f || f.isDestroyed()) return;

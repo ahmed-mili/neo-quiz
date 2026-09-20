@@ -675,7 +675,7 @@ export function scriptDisposerPourTerminal(hwndNeo: number, titre: string, rect:
  * `disposerPourSite` : hors Windows, ou si PowerShell manque, `surFin` est
  * appelé aussitôt et Neo Quiz garde sa place.
  */
-export function disposerPourTerminal(hwndNeo: number, titre: string, rect: AncreTerminal, surFin: () => void): void {
+export function disposerPourTerminal(hwndNeo: number, titre: string, rect: AncreTerminal, surPose: () => void, surFin: () => void): void {
 	if (process.platform !== "win32") { surFin(); return; }
 	let rendu = false;
 	const fin = (): void => { if (!rendu) { rendu = true; surFin(); } };
@@ -683,6 +683,8 @@ export function disposerPourTerminal(hwndNeo: number, titre: string, rect: Ancre
 		const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptDisposerPourTerminal(hwndNeo, titre, rect))], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
 		enfant.stdout.on("data", (d: Buffer) => {
 			const texte = d.toString("utf8");
+			// « pose » : la fenêtre est en place, la modale peut remonter.
+			if (texte.includes("pose")) surPose();
 			if (texte.includes("fini") || texte.includes("absent")) fin();
 		});
 		enfant.on("error", e => { console.warn(LOG_PREFIX, "disposition du terminal impossible:", e); fin(); });

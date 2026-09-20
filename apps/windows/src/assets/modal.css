@@ -74,16 +74,22 @@
 	-webkit-app-region: no-drag;
 }
 
-/* LES MODALES QUI ATTENDENT UN TERMINAL (installation d'un CLI, connexion
-   d'un compte) sont REMONTÉES : le terminal est posé juste en dessous, dans
-   la fenêtre de Neo Quiz (Ahmed, 2026-09-20 : « le modal un peu plus en
-   haut, la fenêtre du terminal juste en bas du modal »). 12 % de la hauteur
-   depuis le haut : la modale reste lisible, et il reste de quoi loger le
-   terminal (`rectangleTerminal`, process.ts, plafonne sa hauteur). */
-.modal-container:has(> .qbd-install-modal),
-.modal-container:has(> .qbd-login-wait-modal) {
-	align-items: flex-start;
-	padding-top: 12vh;
+/* LA REMONTÉE D'UNE MODALE QUI ATTEND UN TERMINAL (installation d'un CLI,
+   connexion d'un compte) : le terminal est posé juste en dessous, dans la
+   fenêtre de Neo Quiz (Ahmed, 2026-09-20). Une CLASSE, et non une règle
+   permanente sur ces modales : « le modal ne doit changer de place qu'au
+   moment où le terminal apparaît et se place en dessous, sinon il est en
+   hauteur comme ça sans raison » (Ahmed, 2026-09-20). Le rendu la pose à
+   la seconde où le principal dit que la fenêtre est posée
+   (`surTerminalPose`) ; `transform` s'anime, là où `align-items` aurait
+   sauté. La MESURE, elle, se fait avant : le rendu ajoute la classe, lit le
+   rectangle et la retire dans la même tâche — un reflow, aucun paint. */
+.modal-container > .modal.qbd-modal-haut {
+	transform: translateY(-14vh);
+	transition: transform 220ms cubic-bezier(0, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+	.modal-container > .modal.qbd-modal-haut { transition: none; }
 }
 
 .modal-bg {

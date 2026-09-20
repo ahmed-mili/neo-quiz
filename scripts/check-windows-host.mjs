@@ -576,6 +576,9 @@ function installerPont(fichiers = {}, perimetre = null) {
 	const disque = new Map(Object.entries(fichiers).map(([p, t]) => [p, encodeur.encode(t)]));
 	const dossiers = new Set();
 	const journal = [];
+	/* Le rappel qu'un `surTerminalPose` a déposé : le test le déclenche pour
+	   jouer « la fenêtre du terminal est posée ». */
+	let poseDuTerminal = null;
 	const dates = new Map([...disque.keys()].map(p => [p, 1000]));
 	const toucher = (p) => {
 		dates.set(p, (dates.get(p) ?? 1000) + 5000);
@@ -760,7 +763,8 @@ function installerPont(fichiers = {}, perimetre = null) {
 			},
 			async ollamaInstalle() { journal.push(["processus.ollamaInstalle"]); return true; },
 			async demarrerOllama() { journal.push(["processus.demarrerOllama"]); return true; },
-			async installer(tool) { journal.push(["processus.installer", tool]); return "lance"; },
+			async installer(tool, ancre) { journal.push(["processus.installer", tool, ancre]); return "lance"; },
+			surTerminalPose(rappel) { journal.push(["processus.surTerminalPose"]); poseDuTerminal = rappel; return () => journal.push(["processus.surTerminalPose:off"]); },
 		},
 		fenetre: {
 			async surFermeture() {},
@@ -803,6 +807,9 @@ function installerPont(fichiers = {}, perimetre = null) {
 		ecrire: (p, t) => { disque.set(p, encodeur.encode(t)); toucher(p); },
 		/** Pousse un événement du « principal » vers tous les abonnés. */
 		emettre: (ev) => { for (const cb of abonnes) cb(ev); },
+		/** Joue « la fenêtre du terminal vient d'être posée » : le rappel que
+		    le rendu a déposé par `surTerminalPose`. */
+		poserTerminal: () => { poseDuTerminal?.(); },
 		/** Ce que le prochain `reseau.fetch` rend, et ce qu'il attend avant. */
 		reseau: reponseReseau,
 		/** Idem pour le prochain `processus.run`. */
@@ -1924,9 +1931,23 @@ await withSrcModule("apps/windows/src/host/process.ts", async ({ createWindowsPr
 				appels: ["processus.lireCache:codex", "processus.ollamaInstalle", "processus.demarrerOllama"],
 			});
 
-		r.check("installerCli relaie le NOM de l'outil au canal, et rend son verdict",
-			{ verdict: await processus.installerCli("claude"), appel: pont.journal.find(l => l[0] === "processus.installer") },
-			{ verdict: "lance", appel: ["processus.installer", "claude"] });
+		/* L'ANCRE traverse avec le nom : c'est le rectangle SOUS LEQUEL le
+		   principal pose la fenêtre du terminal (la modale mesurée remontée).
+		   Rien d'autre ne traverse, et un appel sans ancre reste valide. */
+		r.check("installerCli relaie le NOM de l'outil et son ANCRE au canal, et rend son verdict",
+			{ verdict: await processus.installerCli("claude", { x: 1, y: 2, largeur: 3, hauteur: 4 }), appel: pont.journal.find(l => l[0] === "processus.installer") },
+			{ verdict: "lance", appel: ["processus.installer", "claude", { x: 1, y: 2, largeur: 3, hauteur: 4 }] });
+		/* `surTerminalPose` : l'abonnement descend au pont, et le rappel du
+		   principal remonte tel quel — c'est lui qui fait remonter la modale. */
+		{
+			let vu = 0;
+			const off = processus.surTerminalPose(() => { vu++; });
+			pont.poserTerminal();
+			off();
+			r.check("surTerminalPose : l'abonnement passe par le pont, le rappel remonte, le désabonnement redescend",
+				{ vu, abonne: pont.journal.includes("processus.surTerminalPose") || !!pont.journal.find(l => l[0] === "processus.surTerminalPose"), desabonne: !!pont.journal.find(l => l[0] === "processus.surTerminalPose:off") },
+				{ vu: 1, abonne: true, desabonne: true });
+		}
 
 		/* ── `run` ── */
 

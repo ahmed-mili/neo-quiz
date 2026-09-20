@@ -124,6 +124,11 @@ const pont: Pont = {
 		installer: (tool, ancre) => ipcRenderer.invoke(CANAUX.processusInstaller, tool, ancre),
 		connecter: (tool, ancre) => ipcRenderer.invoke(CANAUX.processusConnecter, tool, ancre),
 		attendreFinTerminal: () => ipcRenderer.invoke(CANAUX.processusAttendreFinTerminal),
+		surTerminalPose(rappel) {
+			const ecouteur = (): void => rappel();
+			ipcRenderer.on(CANAUX.processusTerminalPose, ecouteur);
+			return () => { ipcRenderer.off(CANAUX.processusTerminalPose, ecouteur); };
+		},
 	},
 
 	fenetre: {

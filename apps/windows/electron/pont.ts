@@ -484,6 +484,9 @@ export interface Pont {
 		    fenêtre du dernier terminal a disparu. Rien ne traverse : ni nom, ni
 		    chemin, ni handle. */
 		attendreFinTerminal(): Promise<void>;
+		/** S'abonne au moment où la fenêtre d'un terminal est posée. Rien ne
+		    traverse : l'appel ne porte aucune donnée, juste l'instant. */
+		surTerminalPose(rappel: () => void): () => void;
 	};
 
 	fenetre: {
@@ -668,6 +671,10 @@ export const CANAUX = {
 	processusInstaller: "neo:process/installer",
 	processusConnecter: "neo:process/connecter",
 	processusAttendreFinTerminal: "neo:process/attendre-fin-terminal",
+	/** POUSSÉ par le principal (`webContents.send`), comme `evenement` et
+	    `fenetreEtat` : la fenêtre du terminal vient d'être POSÉE sous la
+	    modale. C'est à cet instant, et pas avant, que la modale remonte. */
+	processusTerminalPose: "neo:process/terminal-pose",
 	miseAJourEtatLire: "neo:mise-a-jour/etat-lire",
 	miseAJourEtat: "neo:mise-a-jour/etat",
 	miseAJourVerifier: "neo:mise-a-jour/verifier",

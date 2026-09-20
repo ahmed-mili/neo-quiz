@@ -292,6 +292,9 @@ export interface MessagesTerminal {
 	    quand le code est parti. Traduits par le principal, comme les autres. */
 	collerCode?: string;
 	codeRecu?: string;
+	/** Ce qui s'affiche entre deux tentatives d'installation (le service de
+	    l'editeur n'a pas repondu). */
+	reessai?: string;
 }
 
 /**
@@ -522,11 +525,34 @@ export function scriptInstallation(tool: Outil, titre: string, messages: Message
 		   Posée dans la SESSION, elle est héritée par le sous-processus
 		   PowerShell qui exécute l'installateur. */
 		...(tool === "codex" ? ["$env:CODEX_NON_INTERACTIVE = '1'"] : []),
-		commandeInstallationLancee(tool, true),
-		"if ($LASTEXITCODE -ne 0) {",
-		"  Write-Host " + citerPs(messages.echecInstallation || messages.echec) + " -ForegroundColor Red",
-		"  Read-Host | Out-Null",
-		"  exit 1",
+		/* DEUX TENTATIVES, TRENTE SECONDES D'ECART. Le 2026-09-20,
+		   `antigravity.google` a repondu « 503 Server Error - The service you
+		   requested is not available yet. Please try again in 30 seconds. » :
+		   un App Engine qui demarre a froid, retabli deux minutes plus tard.
+		   L'utilisateur, lui, voyait une pile rouge et une modale qui tournait
+		   sans fin. Le delai est celui que Google DEMANDE dans son message. La
+		   LIGNE d'installation est inchangee - c'est toujours celle que le
+		   modal affiche (`src/cli-install-cmd.ts`) ; seule son enveloppe
+		   reessaie, et le second essai est ANNONCE a l'ecran. */
+		"$essai = 0",
+		"while ($true) {",
+		"  $essai++",
+		"  $echec = $false",
+		"  try {",
+		"    " + commandeInstallationLancee(tool, true),
+		"    if ($LASTEXITCODE -ne 0) { $echec = $true }",
+		"  } catch {",
+		"    $echec = $true",
+		"    Write-Host $_ -ForegroundColor DarkGray",
+		"  }",
+		"  if (-not $echec) { break }",
+		"  if ($essai -ge 2) {",
+		"    Write-Host " + citerPs(messages.echecInstallation || messages.echec) + " -ForegroundColor Red",
+		"    Read-Host | Out-Null",
+		"    exit 1",
+		"  }",
+		"  Write-Host " + citerPs(messages.reessai || "The service did not answer. Trying again in 30 seconds...") + " -ForegroundColor Yellow",
+		"  Start-Sleep -Seconds 30",
 		"}",
 	];
 	const connexion = commandeConnexion(tool, messages);
@@ -692,18 +718,29 @@ export function lireAncre(v: unknown): AncreTerminal | null {
 	};
 	const x = n("x"), y = n("y"), largeur = n("largeur"), hauteur = n("hauteur");
 	if (x === null || y === null || largeur === null || hauteur === null) return null;
-	return { x, y, largeur, hauteur };
+	const limiteBas = n("limiteBas");
+	return limiteBas === null ? { x, y, largeur, hauteur } : { x, y, largeur, hauteur, limiteBas };
 }
 
 /** Le rectangle du terminal en DIP, PUR. `contenu` est la zone de contenu de
     la fenêtre (DIP, écran), `zoom` son facteur (les pixels CSS de l'ancre
     en DIP), `ancre` la modale mesurée par le rendu. Sous l'ancre, à 12 DIP,
-    même largeur, jusqu'à 24 DIP du bas de la fenêtre et 460 DIP au plus ;
+    même largeur, jusqu'à 24 DIP du bas de la fenêtre — ou jusqu'au HAUT DE
+    L'INVITE quand l'ancre le dit (`limiteBas`), que le terminal ne doit jamais
+    recouvrir — et 560 DIP au plus (460 ne montrait que quatre lignes, et
+    l'erreur de l'installateur y était coupée : Ahmed, 2026-09-20) ;
     200 DIP au moins (une modale trop basse repousse plutôt que d'écraser).
     Sans ancre : la moitié basse de la fenêtre, 60 % de sa largeur, centrée. */
 export function rectangleTerminal(contenu: { x: number; y: number; width: number; height: number }, zoom: number, ancre: AncreTerminal | null): { x: number; y: number; width: number; height: number } {
 	const z = zoom > 0 && Number.isFinite(zoom) ? zoom : 1;
-	const bas = contenu.y + contenu.height - 24;
+	/* LE BAS DISPONIBLE : celui de la fenêtre, ou le HAUT DE L'INVITE quand le
+	   rendu l'a dit — le terminal ne doit jamais se poser en travers d'elle
+	   (Ahmed, 2026-09-20 : « jamais en haut ou en bas »). 12 DIP d'écart,
+	   comme sous la modale. */
+	const basFenetre = contenu.y + contenu.height - 24;
+	const bas = ancre && typeof ancre.limiteBas === "number"
+		? Math.min(basFenetre, contenu.y + Math.round(ancre.limiteBas * z) - 12)
+		: basFenetre;
 	if (!ancre) {
 		const width = Math.floor(contenu.width * 0.6);
 		const y = contenu.y + Math.floor(contenu.height / 2);
@@ -712,7 +749,7 @@ export function rectangleTerminal(contenu: { x: number; y: number; width: number
 	const x = Math.round(contenu.x + ancre.x * z);
 	const y = Math.round(contenu.y + (ancre.y + ancre.hauteur) * z) + 12;
 	const width = Math.max(320, Math.round(ancre.largeur * z));
-	const height = Math.max(200, Math.min(460, bas - y));
+	const height = Math.max(200, Math.min(560, bas - y));
 	return { x, y, width, height };
 }
 

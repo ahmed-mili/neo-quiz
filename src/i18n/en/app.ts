@@ -124,6 +124,7 @@ export const EN_APP = {
 	"app.installCli.detail": "Source: {source}. You will see everything the installer does. The window closes by itself when it is done.",
 	"app.installCli.run": "Open PowerShell and install",
 	"app.installCli.cancel": "Cancel",
+	"app.installCli.retry": "The service did not answer. Trying again in 30 seconds…",
 	"app.installCli.done": "{name} is set up. Back to Neo Quiz…",
 	"app.installCli.failed": "Installing {name} failed. Close this window and try again from Neo Quiz, or follow the manual steps there.",
 	"app.connectCli.done": "{name} is connected. Back to Neo Quiz…",

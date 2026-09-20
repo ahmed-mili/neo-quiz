@@ -284,7 +284,10 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		const ligneInstall = commandeInstallationLancee("agy", true);
 		r.check("agy installation : l'installateur officiel, sans prérequis ni nettoyage npm (un binaire Go)",
 			{
-				officiel: inst.includes("\n" + ligneInstall + "\n") && ligneInstall.includes("antigravity.google/cli/install.ps1"),
+				/* La ligne est indentee dans le `try` du reessai : c'est son
+				   ENVELOPPE qui a change le 2026-09-20 (503 de Google), jamais la
+				   ligne elle-meme, celle que le modal affiche. */
+				officiel: inst.includes("\n    " + ligneInstall + "\n") && ligneInstall.includes("antigravity.google/cli/install.ps1"),
 				/* Avant la ligne d'installation seulement : le rechargement du
 				   PATH, plus bas, cite le dossier npm de l'utilisateur. */
 				npm: /npm install|Get-Command npm|npm_config|Node\.js/.test(inst.slice(0, inst.indexOf(ligneInstall))),
@@ -629,7 +632,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		   jusqu'à 24 DIP du bas de la fenêtre, 460 au plus, 200 au moins ; les
 		   pixels CSS passent en DIP par le zoom ; sans ancre, la moitié basse. */
 		const contenu = { x: 100, y: 50, width: 1600, height: 900 };
-		r.check("rectangleTerminal : sous l'ancre, même largeur, plafonné à 460, zoom appliqué, moitié basse sans ancre",
+		r.check("rectangleTerminal : sous l'ancre, même largeur, plafonné à 560, zoom appliqué, moitié basse sans ancre",
 			{
 				sous: rectangleTerminal(contenu, 1, { x: 400, y: 100, largeur: 600, hauteur: 200 }),
 				zoom: rectangleTerminal(contenu, 1.25, { x: 400, y: 100, largeur: 600, hauteur: 200 }),
@@ -637,11 +640,29 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				sans: rectangleTerminal(contenu, 1, null),
 			},
 			{
-				sous: { x: 500, y: 362, width: 600, height: 460 },
-				zoom: { x: 600, y: 437, width: 750, height: 460 },
+				sous: { x: 500, y: 362, width: 600, height: 560 },
+				zoom: { x: 600, y: 437, width: 750, height: 489 },
 				bas: { x: 500, y: 962, width: 600, height: 200 },
 				sans: { x: 420, y: 500, width: 960, height: 426 },
 			});
+		/* LA LIMITE BASSE : le terminal s'arrete AU-DESSUS de l'invite plutot
+		   que de se poser en travers (Ahmed, 2026-09-20). Elle est en pixels
+		   CSS, donc multipliee par le zoom comme le reste ; le bas de la
+		   fenetre reste le plafond quand elle est plus basse que lui. */
+		r.check("rectangleTerminal : la limite basse (le haut de l'invite) borne la hauteur, zoom compris, et ne depasse jamais le bas de la fenetre",
+			{
+				borne: rectangleTerminal(contenu, 1, { x: 400, y: 100, largeur: 600, hauteur: 200, limiteBas: 700 }),
+				zoom: rectangleTerminal(contenu, 1.25, { x: 400, y: 100, largeur: 600, hauteur: 200, limiteBas: 700 }),
+				plusBasQueLaFenetre: rectangleTerminal(contenu, 1, { x: 400, y: 100, largeur: 600, hauteur: 200, limiteBas: 5000 }),
+			},
+			{
+				borne: { x: 500, y: 362, width: 600, height: 376 },
+				zoom: { x: 600, y: 437, width: 750, height: 476 },
+				plusBasQueLaFenetre: { x: 500, y: 362, width: 600, height: 560 },
+			});
+		r.check("lireAncre : la limite basse traverse quand elle est valide, et son absence n'invalide rien",
+			[lireAncre({ x: 1, y: 2, largeur: 3, hauteur: 4, limiteBas: 5 }), lireAncre({ x: 1, y: 2, largeur: 3, hauteur: 4, limiteBas: -1 })],
+			[{ x: 1, y: 2, largeur: 3, hauteur: 4, limiteBas: 5 }, { x: 1, y: 2, largeur: 3, hauteur: 4 }]);
 		/* LES DEUX COLONNES : le même script guette le NAVIGATEUR au premier
 		   plan (jamais une fenêtre d'arrière-plan, que le repli
 		   `MainWindowHandle` du script de site aurait prise), écrit son

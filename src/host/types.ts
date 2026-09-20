@@ -458,6 +458,12 @@ export interface AncreTerminal {
 	y: number;
 	largeur: number;
 	hauteur: number;
+	/** LE HAUT DE CE QUE LE TERMINAL NE DOIT PAS RECOUVRIR (l'invite où l'on
+	    écrit son prompt), en pixels CSS. Sans cette limite, il se posait EN
+	    TRAVERS du composer : on n'en voyait plus que les bords gauche et droit
+	    (Ahmed, 2026-09-20 : « jamais en haut ou en bas »). Absente, le
+	    terminal descend jusqu'au bas de la fenêtre. */
+	limiteBas?: number;
 }
 
 /**

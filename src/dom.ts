@@ -28,15 +28,27 @@
  */
 /** Le rectangle d'un élément tel que l'hôte le veut pour poser une fenêtre
     dessous (`AncreTerminal`) : pixels CSS de la fenêtre, entiers. */
-export function ancreDe(el: HTMLElement): { x: number; y: number; largeur: number; hauteur: number } {
+export function ancreDe(el: HTMLElement): { x: number; y: number; largeur: number; hauteur: number; limiteBas?: number } {
 	const r = el.getBoundingClientRect();
-	return { x: Math.round(r.left), y: Math.round(r.top), largeur: Math.round(r.width), hauteur: Math.round(r.height) };
+	const limiteBas = limiteComposer();
+	return { x: Math.round(r.left), y: Math.round(r.top), largeur: Math.round(r.width), hauteur: Math.round(r.height), ...(limiteBas === undefined ? {} : { limiteBas }) };
 }
 
 /** LA CLASSE QUI REMONTE UNE MODALE au-dessus d'une fenêtre posée sous elle
     (le terminal d'installation). Le CSS de l'hôte la porte ; le code partagé
     ne connaît que son nom. */
 export const CLASSE_MODALE_HAUT = "qbd-modal-haut";
+
+/** LA LIMITE BASSE d'une ancre : le haut de l'invite du composer, que la
+    fenêtre posée sous la modale ne doit jamais recouvrir. `undefined` quand
+    il n'y a pas de composer à l'écran (le terminal descend alors jusqu'au bas
+    de la fenêtre). */
+export function limiteComposer(): number | undefined {
+	const el = document.querySelector<HTMLElement>(".qbd-ai-composer");
+	if (!el) return undefined;
+	const r = el.getBoundingClientRect();
+	return r.height > 0 ? Math.round(r.top) : undefined;
+}
 
 /** Le rectangle qu'un élément AURA une fois remonté, mesuré SANS le peindre :
     la classe est posée, le rectangle lu (un reflow synchrone), la classe

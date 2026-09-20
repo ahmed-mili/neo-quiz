@@ -1028,6 +1028,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			succes: t("app.installCli.done", { name }),
 			echec: t("app.connectCli.failed", { name }),
 			echecInstallation: t("app.installCli.failed", { name }),
+			reessai: t("app.installCli.retry"),
 			collerCode: t("app.connectCli.pasteCode"),
 			codeRecu: t("app.connectCli.codeReceived"),
 		};

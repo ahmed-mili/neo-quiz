@@ -429,6 +429,18 @@ export function scriptInstallation(tool: Outil, titre: string, messages: Message
 			"  Read-Host | Out-Null",
 			"  exit 1",
 			"}",
+			/* LES VARIABLES `npm_config_*` HÉRITÉES SONT RETIRÉES AVANT
+			   D'INSTALLER. Lancée par `npm run app:dev`, l'application hérite
+			   de la configuration que npm pose dans l'environnement de ses
+			   scripts, et la fenêtre en hérite à son tour : `npm install -g` y
+			   prenait le dossier du PROJET pour préfixe global — les lanceurs
+			   `gemini`, `gemini.cmd`, `gemini.ps1` sont apparus dans
+			   `apps/windows/` et le paquet dans son `node_modules`, puis le REPL
+			   ne trouvait rien sur le PATH (vécu le 2026-09-20 ; trois fichiers
+			   entrés dans un commit avant d'être vus). L'application empaquetée
+			   n'a pas ces variables, mais le script ne doit pas dépendre de la
+			   façon dont elle a été lancée. */
+			"Get-ChildItem Env: | Where-Object { $_.Name -like 'npm_config_*' } | ForEach-Object { Remove-Item ('Env:' + $_.Name) }",
 		] : []),
 		commandeInstallationLancee(tool, true),
 		"if ($LASTEXITCODE -ne 0) {",

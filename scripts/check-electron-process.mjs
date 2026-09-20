@@ -275,6 +275,42 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 			},
 			{ avant: true, claude: false });
 	}
+	/* ── GEMINI : le seul qui s'installe par npm, et ce que ça impose ── */
+	{
+		const inst = scriptInstallation("gemini", "Neo Quiz - Gemini CLI", { ...msgs, prerequisManquant: "il faut Node" }, envDossiers);
+		const ligneNpm = commandeInstallationLancee("gemini", true);
+		const iNpm = inst.indexOf("\n" + ligneNpm + "\n");
+		const iGarde = inst.indexOf("Get-Command npm");
+		const iNettoyage = inst.indexOf("Where-Object { $_.Name -like 'npm_config_*' }");
+		r.check("gemini installation : npm est cherché AVANT d'installer, et son absence nomme le prérequis puis retient la fenêtre",
+			{
+				avant: iGarde > 0 && iGarde < iNpm,
+				message: inst.slice(iGarde, iNpm).includes("Write-Host 'il faut Node'"),
+				retient: inst.slice(iGarde, iNpm).includes("Read-Host"),
+			},
+			{ avant: true, message: true, retient: true });
+		/* Lancée par `npm run app:dev`, l'application lègue ses `npm_config_*`
+		   à la fenêtre, et `npm install -g` y prenait le dossier du PROJET pour
+		   préfixe global (vécu le 2026-09-20 : trois lanceurs dans
+		   `apps/windows/`, entrés dans un commit). Retirées avant la ligne npm,
+		   et SEULEMENT pour Gemini — les trois autres n'appellent pas npm. */
+		r.check("gemini installation : les npm_config_* héritées sont retirées avant la ligne npm, et pas pour les autres outils",
+			{
+				avant: iNettoyage > 0 && iNettoyage < iNpm,
+				autres: ["claude", "codex", "ollama"].some(o => scriptInstallation(o, "t", msgs, envDossiers).includes("npm_config_")),
+			},
+			{ avant: true, autres: false });
+		/* La connexion est en DEUX temps : le REPL (l'utilisateur signe), puis
+		   un appel headless de contrôle dont le code de sortie est jugé —
+		   `commandeConnexion` explique pourquoi le REPL seul ne dit rien. */
+		const cx = scriptConnexion("gemini", "t", msgs, envDossiers);
+		const iRepl = cx.indexOf("\ngemini\n");
+		const iControle = cx.indexOf("\ngemini -p \"ok\" --output-format json | Out-Null\n");
+		const iJuge = cx.indexOf("if ($LASTEXITCODE -eq 0)");
+		r.check("gemini connexion : le REPL, puis l'appel de contrôle, puis le jugement sur SON code de sortie",
+			{ ordre: iRepl > 0 && iControle > iRepl && iJuge > iControle, pathAvant: cx.indexOf("GetEnvironmentVariable('Path','User')") < iRepl },
+			{ ordre: true, pathAvant: true });
+	}
 	const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", msgs);
 			r.check("ollama installation : ni connexion ni REPL, le message puis la fin",
 				{ login: /login|\nclaude|\ncodex/.test(ollama), succes: ollama.includes("Write-Host 'c''est fini'") }, { login: false, succes: true });

@@ -74,10 +74,20 @@
 	   question de licence que la décision du 2026-09-05 assumait disparaît
 	   d'elle-même. `assets/fonts.css` et ses quatre `.woff2` sont supprimés
 	   par le même geste ; l'historique git les garde si le choix se rejoue. */
-	--font-interface: ui-sans-serif, -apple-system, BlinkMacSystemFont,
-		system-ui, "Segoe UI", "Google Sans Flex", Roboto, "Inter Variable",
-		"Inter", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-		sans-serif;
+	/* « SEGOE UI VARIABLE TEXT » EN TÊTE, et non le `ui-sans-serif` qui la
+	   précédait : sous Windows, ce mot-clé résout à Segoe UI, la police de
+	   Windows 10. Windows 11 livre à sa place une famille VARIABLE à trois
+	   tailles optiques — Small sous 12 px, Text pour l'interface, Display
+	   pour les grands titres — dessinée pour les écrans d'aujourd'hui :
+	   contreformes plus ouvertes, chiffres mieux alignés, gris de page plus
+	   régulier. C'est celle que Réglages, l'Explorateur et le menu Démarrer
+	   emploient ; l'application s'y tient (vérifié installé le 2026-09-20).
+	   Rien n'est embarqué, la décision du 2026-09-05 tient : la famille est
+	   celle du système, et la pile retombe proprement ailleurs. */
+	--font-interface: "Segoe UI Variable Text", ui-sans-serif, -apple-system,
+		BlinkMacSystemFont, system-ui, "Segoe UI", "Google Sans Flex", Roboto,
+		"Inter Variable", "Inter", "Apple Color Emoji", "Segoe UI Emoji",
+		"Segoe UI Symbol", sans-serif;
 	--font-monospace: ui-monospace, SFMono-Regular, "Cascadia Mono", "Roboto Mono",
 		"DejaVu Sans Mono", Menlo, Monaco, "Consolas",
 		"Source Code Pro", monospace;

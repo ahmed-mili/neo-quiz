@@ -963,7 +963,7 @@ export function restaurerNavigateur(): Promise<void> {
  * (trois secondes au plus) : c'est ce qui permet au rendu d'ouvrir le site
  * APRÈS que le guet de la fenêtre a commencé. Sans terminal, sans fenêtre.
  */
-export function disposerPourSite(hwndNeo: number, coller = false, surColle?: () => void): Promise<void> {
+export function disposerPourSite(hwndNeo: number, coller = false): Promise<void> {
 	if (process.platform !== "win32") return Promise.resolve();
 	return new Promise(resolve => {
 		let rendu = false;
@@ -974,8 +974,6 @@ export function disposerPourSite(hwndNeo: number, coller = false, surColle?: () 
 			enfant.stdout.on("data", (d: Buffer) => {
 				const texte = d.toString("utf8");
 				if (texte.includes("pret")) fin();
-				// « colle » : le Ctrl+V est parti vers la page du site.
-				if (texte.includes("colle")) surColle?.();
 				/* La ligne « avant … » arrive APRÈS « pret », quand le navigateur
 				   est apparu : la sortie reste écoutée jusqu'à la fin du script. */
 				for (const ligne of texte.split(/\r?\n/)) { const p = lirePlacement(ligne); if (p) placementNavigateur = p; }

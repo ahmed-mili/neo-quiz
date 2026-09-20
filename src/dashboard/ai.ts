@@ -335,9 +335,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   en phase « web » seulement : le jeton de CETTE ouverture, ce qui a été
 	   ouvert (adresse ou presse-papier), la fonction qui arrête la veille du
 	   principal (null sous un hôte sans `collage`), et les écouteurs à retirer. */
-	/** `colle` : l'hôte a collé le prompt dans la page (site sans préremplissage) ;
-	    `depose` : les fichiers ont été relâchés hors de l'application, sur le site. */
-	let attenteWeb: { jeton: string; ouverture: ResultatOuverture; site: string; aGlisser: TuileDepot[]; arreter: (() => void) | null; retirer: () => void; colle?: boolean; depose?: boolean } | null = null;
+	/** `depose` : les fichiers ont été relâchés hors de l'application, sur le site. */
+	let attenteWeb: { jeton: string; ouverture: ResultatOuverture; site: string; aGlisser: TuileDepot[]; arreter: (() => void) | null; retirer: () => void; depose?: boolean } | null = null;
 	/** Le site de la dernière ouverture, gardé au-delà de `attenteWeb` (remis à
 	    null avant l'écran d'erreur) : c'est lui que « Rouvrir {site} » affiche. */
 	let attenteWebSite = "";
@@ -2880,9 +2879,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   avoir collé (`surColle`), elle passe en « fait » sans redessiner la
 		   carte, dont les tuiles à glisser tiennent un état. */
 		const etapes: Array<{ texte: string; cle?: string }> = [];
-		/* Une fois le prompt collé par l'hôte, l'étape DISPARAÎT : on le voit
-		   dans la page, la dire est inutile (2026-09-20). */
-		if (coller && !attenteWeb.colle) etapes.push({ texte: t("ai.web.step.paste", { site }), cle: "coller" });
+		/* L'étape « collez » n'existe que là où l'hôte NE COLLE PAS lui-même
+		   (le greffon) : dans l'application, le prompt arrive dans la page sans
+		   un geste, et la dire, même une seconde, était de trop (2026-09-20). */
+		const hoteColle = !!host.depot && "surColle" in host.depot;
+		if (coller && !hoteColle) etapes.push({ texte: t("ai.web.step.paste", { site }), cle: "coller" });
 		/* L'ENVOI est dans l'étape des fichiers quand il y en a (on glisse, on
 		   envoie), seul sinon ; la dernière étape est l'attente du bloc de code
 		   et sa copie (formulation d'Ahmed, 2026-09-20). */
@@ -3641,18 +3642,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   résoudre (vault → `HostFile` par l'index ; externe ou choisi par le
 		   dialogue → chemin absolu déjà admis). */
 		/* Le prompt parti par le presse-papier est COLLÉ par l'hôte dans la
-		   page une fois chargée (meilleur effort, voir `HostDepot.disposer`) ;
-		   quand il le dit, l'étape « collez » de la carte passe en « fait ». */
-		if (host.depot && ouverture.mode === "presse-papier" && host.depot.surColle) {
-			const off = host.depot.surColle(() => {
-				off();
-				if (attenteWeb) attenteWeb.colle = true;
-				const li = document.querySelector<HTMLElement>(".qbd-ai-web-etapes li[data-etape='coller']");
-				// Retirée, pas cochée : la numérotation CSS se recalcule seule.
-				if (li) li.remove();
-			});
-			window.setTimeout(off, 30000);
-		}
+		   page une fois chargée (meilleur effort, voir `HostDepot.disposer`). */
 		if (host.depot) await host.depot.disposer({ coller: ouverture.mode === "presse-papier" });
 		if (!(await host.shell.openUrl(ouverture.url))) { echecOuverture(t("ai.channel.openFailed"), container); return; }
 		arreterAttenteWeb();

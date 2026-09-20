@@ -827,10 +827,10 @@ export interface HostDepot {
 	    Demandé le 2026-09-20 pour gemini.google.com et chat.deepseek.com :
 	    « juste glisser les fichiers et appuyer sur Entrée ». */
 	disposer(options?: { coller?: boolean }): Promise<void>;
-	/** S'abonne à l'instant où l'hôte a collé le prompt dans la page (voir
-	    `disposer`) : la carte d'attente peut alors marquer l'étape faite.
-	    OPTIONNEL, comme le collage lui-même. Rend de quoi se désabonner. */
-	surColle?(rappel: () => void): () => void;
+	/** PRÉSENT quand l'hôte colle lui-même le prompt (voir `disposer`) : la
+	    carte d'attente n'affiche alors pas l'étape « collez ». Ne fait rien
+	    d'autre ; le greffon ne l'a pas. */
+	surColle?(): void;
 	/** Prépare le glisser : l'hôte extrait d'avance l'image que le curseur
 	    portera (l'icône de type de fichier de Windows, ~300 ms la première
 	    fois par extension) — le `dragstart` n'attend pas. À appeler quand les

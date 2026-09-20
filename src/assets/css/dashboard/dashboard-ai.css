@@ -1565,19 +1565,17 @@
 .qbd-install-auto:active { transform: scale(0.955); transition-duration: 80ms; }
 .qbd-install-auto > * { position: relative; z-index: 1; }
 /* LES TROIS COULEURS DU BOUTON, et le sens qui les relie. Au repos, un
-   BLANC à peine lavande (moitié de la teinte de l'interface, moitié blanc
-   pur : rgb(226 231 250)) — le lavande franc essayé d'abord était trop
-   sourd pour une action principale (Ahmed, 2026-09-20). L'écart entre les
-   trois est ÉTROIT, par choix du même jour (« laisse ce blanc tout le
-   temps, il doit juste être un peu moins clair quand on ne survole pas ») :
-   le repos garde 30 % de teinte, le survol n'en laisse que 12, l'appui
-   remonte à 40. Le survol commun des boutons principaux, lui, mêle 8 % du
-   fond SOMBRE à la pilule — le gris clair voulu sur le blanc cassé de
-   « Mes quiz », mais une salissure ici. Éclaircir, c'est aussi le sens de
-   l'onde du clic : une seule direction pour les trois états. */
-.qbd-install-auto { --qbd-pilule: color-mix(in srgb, var(--text-normal) 30%, #ffffff); }
+   LAVANDE de l'interface, tel quel ; le survol l'emmène presque au blanc
+   (12 % de teinte), et l'appui revient à mi-chemin (30 %). L'ordre a été
+   arrêté à l'écran le 2026-09-20 : « par défaut ça doit avoir cette
+   couleur, c'est au survol que ça devient blanc clair ». Le survol commun
+   des boutons principaux, lui, mêle 8 % du fond SOMBRE à la pilule — le
+   gris clair voulu sur le blanc cassé de « Mes quiz », mais une salissure
+   sur un lavande. Éclaircir, c'est aussi le sens de l'onde du clic : une
+   seule direction pour les trois états. */
+.qbd-install-auto { --qbd-pilule: var(--text-normal); }
 .qbd-install-auto:hover { --qbd-pilule: color-mix(in srgb, var(--text-normal) 12%, #ffffff); }
-.qbd-install-auto:active { --qbd-pilule: color-mix(in srgb, var(--text-normal) 40%, #ffffff); }
+.qbd-install-auto:active { --qbd-pilule: color-mix(in srgb, var(--text-normal) 30%, #ffffff); }
 
 .qbd-install-auto svg { width: 17px; height: 17px; }
 .qbd-onde {

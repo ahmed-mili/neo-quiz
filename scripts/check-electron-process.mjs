@@ -52,7 +52,7 @@ async function cas(r, nom, fn) {
 
 await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
-	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande,
+	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande, environnementOutil,
 	estOutilAutorise, lireCache, lirePlacement, scriptConnexion, scriptDisposerPourSite, scriptInstallation, scriptRestaurerNavigateur,
 }) => {
 	const r = makeReporter("Électron — les CLI");
@@ -300,16 +300,34 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				autres: ["claude", "codex", "ollama"].some(o => scriptInstallation(o, "t", msgs, envDossiers).includes("npm_config_")),
 			},
 			{ avant: true, autres: false });
-		/* La connexion est en DEUX temps : le REPL (l'utilisateur signe), puis
-		   un appel headless de contrôle dont le code de sortie est jugé —
-		   `commandeConnexion` explique pourquoi le REPL seul ne dit rien. */
+		/* La connexion est HEADLESS, sans REPL : le REPL posait deux questions
+		   (confiance du dossier, méthode d'authentification) et ne rendait
+		   aucun code de sortie utile. `GOOGLE_GENAI_USE_GCA` choisit « Sign in
+		   with Google » depuis l'environnement, `Set-Location` sort du dossier
+		   de l'application, et l'appel `-p` est à la fois la connexion (le CLI
+		   ouvre le navigateur) et le contrôle dont le code de sortie est jugé.
+		   `commandeConnexion` a le détail et les sources. */
 		const cx = scriptConnexion("gemini", "t", msgs, envDossiers);
-		const iRepl = cx.indexOf("\ngemini\n");
+		const iGca = cx.indexOf("\n$env:GOOGLE_GENAI_USE_GCA = 'true'\n");
+		const iCd = cx.indexOf("\nSet-Location $env:USERPROFILE\n");
 		const iControle = cx.indexOf("\ngemini -p \"ok\" --output-format json | Out-Null\n");
 		const iJuge = cx.indexOf("if ($LASTEXITCODE -eq 0)");
-		r.check("gemini connexion : le REPL, puis l'appel de contrôle, puis le jugement sur SON code de sortie",
-			{ ordre: iRepl > 0 && iControle > iRepl && iJuge > iControle, pathAvant: cx.indexOf("GetEnvironmentVariable('Path','User')") < iRepl },
-			{ ordre: true, pathAvant: true });
+		r.check("gemini connexion : GCA posé, dossier personnel, appel headless, puis le jugement sur SON code de sortie — et jamais le REPL",
+			{
+				ordre: iGca > 0 && iCd > iGca && iControle > iCd && iJuge > iControle,
+				pathAvant: cx.indexOf("GetEnvironmentVariable('Path','User')") < iControle,
+				repl: /\ngemini\s*\n/.test(cx),
+			},
+			{ ordre: true, pathAvant: true, repl: false });
+		/* Et la même variable sur l'outil LANCÉ PAR L'APPLICATION : sans elle,
+		   le mode headless refuse de partir, réglages muets, même connecté. */
+		r.check("gemini : l'environnement de l'outil porte GOOGLE_GENAI_USE_GCA, les autres non",
+			{
+				gemini: environnementOutil("gemini", { PATH: "x" }).GOOGLE_GENAI_USE_GCA,
+				autres: ["claude", "codex", "ollama"].map(o => environnementOutil(o, { PATH: "x" }).GOOGLE_GENAI_USE_GCA),
+				pathGarde: environnementOutil("gemini", { PATH: "x" }).PATH.startsWith("x"),
+			},
+			{ gemini: "true", autres: [undefined, undefined, undefined], pathGarde: true });
 	}
 	const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", msgs);
 			r.check("ollama installation : ni connexion ni REPL, le message puis la fin",

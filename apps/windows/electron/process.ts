@@ -312,27 +312,38 @@ function commandeConnexion(tool: Outil): string | null {
 	   enchaînait sur le REPL et affichait « connecté » quoi qu'il arrive. */
 	if (tool === "claude") return "claude auth login";
 	if (tool === "codex") return "codex login";
-	/* GEMINI N'A PAS DE SOUS-COMMANDE DE CONNEXION. Sa connexion se fait DANS
-	   le REPL (« Sign in with Google », ou `/auth`) et ses identifiants vont au
-	   trousseau du système, pas dans un fichier qu'on pourrait regarder
-	   (`oauth-credential-storage.ts` du dépôt gemini-cli, lu le 2026-09-20).
-	   Le REPL ne rend donc rien d'exploitable — c'est exactement le piège que
-	   le commentaire ci-dessus décrit.
-	   D'où deux commandes : le REPL, puis un appel HEADLESS de contrôle, dont
-	   le code de sortie est celui que la fenêtre juge. Il coûte une requête
-	   (sur 1 000 par jour au palier gratuit) et c'est le prix d'un « connecté »
-	   qui dit vrai : le seul moyen de savoir si Gemini répond est de le lui
-	   demander. `--output-format json` et la redirection gardent la fenêtre
+	/* GEMINI N'A PAS DE SOUS-COMMANDE DE CONNEXION, et son REPL pose deux
+	   questions (« Do you trust the files in this folder? », puis « How would
+	   you like to authenticate? ») avant d'ouvrir le navigateur — vu par Ahmed
+	   le 2026-09-20 : « on n'est jamais censé avoir à interagir avec le
+	   terminal ». Le REPL ne rend d'ailleurs aucun code de sortie exploitable,
+	   le piège que le commentaire ci-dessus décrit.
+
+	   D'où un appel HEADLESS, sans REPL : `GOOGLE_GENAI_USE_GCA=true` choisit
+	   « Sign in with Google » depuis l'environnement (`getAuthTypeFromEnv`,
+	   `packages/core/src/core/contentGenerator.ts` du dépôt gemini-cli, lu le
+	   2026-09-20), et sans identifiant en cache le CLI ouvre LUI-MÊME le
+	   navigateur puis attend le retour (`authWithWeb` → `open(authUrl)`,
+	   `oauth2.ts`). Rien n'est écrit dans les réglages de l'utilisateur, et il
+	   n'a rien à taper : il autorise dans le navigateur, c'est tout. L'appel
+	   est aussi le CONTRÔLE : son code de sortie est celui que la fenêtre
+	   juge, et il dit vrai — le seul moyen de savoir si Gemini répond est de le
+	   lui demander. Il coûte une requête sur les mille du palier gratuit.
+
+	   `Set-Location` d'abord : la fenêtre hérite du dossier courant de
+	   l'application (`apps/windows` en dev, le dossier d'installation sinon),
+	   et le CLI y chercherait un projet à charger. Le dossier personnel n'a
+	   rien de tel. `--output-format json` et la redirection gardent la fenêtre
 	   lisible ; l'utilisateur n'y voit que les deux messages. */
 	if (tool === "gemini") return GEMINI_CONNEXION.join("\n");
 	return null;
 }
 
-/** Les deux temps de la connexion de Gemini, séparés pour être lisibles (et
-    pour que `check:electron-process` puisse les nommer). Le REPL rend la main
-    quand l'utilisateur tape `/quit` ; le contrôle suit. */
+/** Les lignes de la connexion de Gemini, séparées pour être lisibles (et pour
+    que `check:electron-process` puisse les nommer). */
 const GEMINI_CONNEXION = [
-	"gemini",
+	"$env:GOOGLE_GENAI_USE_GCA = 'true'",
+	"Set-Location $env:USERPROFILE",
 	"gemini -p \"ok\" --output-format json | Out-Null",
 ];
 
@@ -440,7 +451,13 @@ export function scriptInstallation(tool: Outil, titre: string, messages: Message
 			   entrés dans un commit avant d'être vus). L'application empaquetée
 			   n'a pas ces variables, mais le script ne doit pas dépendre de la
 			   façon dont elle a été lancée. */
-			"Get-ChildItem Env: | Where-Object { $_.Name -like 'npm_config_*' } | ForEach-Object { Remove-Item ('Env:' + $_.Name) }",
+			/* `[Environment]::SetEnvironmentVariable(nom, '', 'Process')` et non
+			   `Remove-Item Env:nom` : ce dernier rougissait la fenêtre de
+			   « Impossible de trouver le chemin d'accès Env:\npm_config_… » pour
+			   des variables que `Get-ChildItem Env:` venait pourtant de lister
+			   (vu le 2026-09-20). Une valeur vide RETIRE la variable du
+			   processus, sans un mot. */
+			"Get-ChildItem Env: | Where-Object { $_.Name -like 'npm_config_*' } | ForEach-Object { [Environment]::SetEnvironmentVariable($_.Name, '', 'Process') }",
 		] : []),
 		commandeInstallationLancee(tool, true),
 		"if ($LASTEXITCODE -ne 0) {",
@@ -960,6 +977,26 @@ export function environnementEnfant(env: NodeJS.ProcessEnv = process.env): NodeJ
 	return Object.assign({}, env, { PATH: fusion, Path: fusion });
 }
 
+/**
+ * L'environnement d'UN outil : celui de tout enfant, plus ce que l'outil
+ * exige pour tourner SANS INTERFACE. PURE.
+ *
+ * Gemini : `GOOGLE_GENAI_USE_GCA=true`. En mode headless, le CLI refuse de
+ * partir tant qu'aucune méthode d'authentification n'est nommée — par ses
+ * réglages, ou par l'environnement (`validateNonInteractiveAuth` : « Please
+ * set an Auth method… or specify one of the following environment
+ * variables »). Ses réglages ne la portent que si l'on est passé par le
+ * dialogue du REPL, que la connexion depuis l'application évite justement
+ * (voir `commandeConnexion`). Sans cette variable, une génération échouait
+ * donc sur un compte pourtant connecté. C'est le PRINCIPAL qui la pose, sur un
+ * outil de sa liste blanche : rien ne vient de la fenêtre.
+ */
+export function environnementOutil(tool: Outil, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+	const base = environnementEnfant(env);
+	if (tool === "gemini") return Object.assign(base, { GOOGLE_GENAI_USE_GCA: "true" });
+	return base;
+}
+
 /* ══════════════════════════════════════════════════════════
    LE `PATH` DU REGISTRE — la cause réelle des « CLI introuvable »
 
@@ -1362,6 +1399,10 @@ export async function run(spec: {
 	if (!estOutilAutorise(spec.tool)) {
 		throw erreurCli("refuse", "CLI hors liste : " + String(spec.tool));
 	}
+	/* Le nom JUGÉ, sous son type : la garde ci-dessus ne rétrécit ni une
+	   propriété ni ce qu'une fermeture lit plus bas, et `environnementOutil`
+	   veut un `Outil`. L'assertion ne dit que ce que la garde vient d'établir. */
+	const outil = spec.tool as Outil;
 	/* DES FICHIERS SANS MARQUEUR SONT REFUSÉS. Sans marqueur, `avecFichiers` ne
 	   substitue RIEN (son défaut sûr) : les pièces jointes seraient bel et bien
 	   écrites, mais AUCUN jeton ne pourrait les désigner, le CLI partirait sans
@@ -1399,7 +1440,7 @@ export async function run(spec: {
 				stdin: resolu.stdin,
 				signal: spec.signal,
 				timeoutMs: spec.timeoutMs,
-				env: environnementEnfant(env),
+				env: environnementOutil(outil, env),
 				cwd: dossierPersonnel(env),
 				tuer: options.tuer,
 				delaiGardeMs: options.delaiGardeMs,

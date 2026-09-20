@@ -41,7 +41,7 @@ export interface AiSettingsHost {
  * muté par l'un d'eux.
  */
 export function aiSettingsDefaults(): Required<Pick<AiSettings,
-	"aiProvider" | "aiModel" | "aiEffort" | "aiCodexFast" | "aiAntigravityLevels" | "aiOllamaUrl" | "aiOllamaCloudKey"
+	"aiProvider" | "aiModel" | "aiEffort" | "aiCodexFast" | "aiAntigravityLevels" | "aiAntigravityModels" | "aiOllamaUrl" | "aiOllamaCloudKey"
 	| "aiOllamaModels" | "aiOllamaCatalog" | "aiOllamaPlansAppris" | "aiOllamaPlanCompte"
 	| "aiWebAvertissementMasque" | "aiUsageLog" | "aiUsageLimitsEnabled"
 	| "aiMentionExtraFolders" | "aiOutputFolder">> & { hotkeyAddFiles: Hotkey } {
@@ -56,6 +56,8 @@ export function aiSettingsDefaults(): Required<Pick<AiSettings,
 		// Rien de retenu par famille Antigravity : chacune part à son niveau par
 		// défaut (la variante que `agy models` cite en premier).
 		aiAntigravityLevels: {},
+		// Aucune liste tant qu'`agy models` n'a pas répondu une première fois.
+		aiAntigravityModels: null,
 		aiOllamaUrl: "http://localhost:11434",
 		aiOllamaCloudKey: "",
 		// Modèles Ollama affichés dans le menu (ordre réglable, max 7). null →

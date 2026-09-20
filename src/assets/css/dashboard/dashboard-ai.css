@@ -2436,7 +2436,7 @@
 	/* L'air que réclament les feuilles de dessous (décalées à droite, et
 	   tournées au survol) : la rangée qui défile rogne tout ce qui dépasse.
 	   Resserré le 2026-09-20 : la carte laissait trop de vide en bas. */
-	padding: 4px 14px 2px;
+	padding: 8px 14px 2px;
 	overflow-x: auto;
 	overflow-y: hidden;
 }
@@ -2489,7 +2489,9 @@
 }
 .qbd-ai-web-pile .qbd-ai-preview-stack {
 	align-items: flex-end;
-	height: 80px;
+	/* La hauteur est celle de la page, plus 80 px fixes : une page en
+	   paysage laissait 26 px de vide au-dessus d'elle (2026-09-20). */
+	height: auto;
 	min-height: 0;
 }
 .qbd-ai-web-pile .qbd-ai-preview-stack-page { max-width: 80px; max-height: 80px; border-radius: 6px; }

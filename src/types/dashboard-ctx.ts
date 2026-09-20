@@ -16,7 +16,7 @@
 import type { Scanner, QuizIndexEntry } from "../dashboard/scanner";
 import type { StatsStore } from "../dashboard/stats-store";
 import type { Hotkey } from "../hotkey-format";
-import type { OllamaCatalogEntry } from "../dashboard/ai-providers";
+import type { ModelDef, OllamaCatalogEntry } from "../dashboard/ai-providers";
 import type { AiUsageEntry } from "../dashboard/usage-format";
 import type { ModuleOverride, ModuleGroup, ModuleMap } from "../dashboard/quiz-modules";
 import type { ReviewStore } from "../review/review-store";
@@ -40,6 +40,10 @@ export interface AiSettings {
 	/** Antigravity : le niveau retenu PAR famille (`{ "gemini-3.1-pro": "low" }`),
 	    comme le sélecteur d'Antigravity garde le sien à chaque modèle. */
 	aiAntigravityLevels?: Record<string, string>;
+	/** Antigravity : la dernière liste lue sur `agy models`, gardée pour
+	    l'afficher tout de suite au lancement suivant (la lecture interroge le
+	    réseau, une seconde) ; relue en arrière-plan. */
+	aiAntigravityModels?: ModelDef[] | null;
 	aiOllamaUrl?: string;
 	aiOllamaCloudKey?: string;
 	// `null` = sentinelle « défaut » réellement persistée par le plugin

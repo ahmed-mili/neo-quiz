@@ -970,6 +970,17 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   `agy`, vérifié le 2026-09-20). */
 		if (provider === "antigravity-cli") {
 			buildModelControl = (parent: HTMLElement): void => {
+				/* La liste du lancement précédent, tout de suite (réglage
+				   `aiAntigravityModels`) ; `agy models` la relit derrière et la
+				   persiste si elle a changé. */
+				const gardee = settings().aiAntigravityModels;
+				if (gardee && gardee.length) aiProviders.seedAntigravityModels(gardee);
+				const persister = (): void => {
+					const liste = aiProviders.getAntigravityModels();
+					if (liste.length && JSON.stringify(liste) !== JSON.stringify(settings().aiAntigravityModels || null)) {
+						void saveSettings({ aiAntigravityModels: liste });
+					}
+				};
 				const modeles = (): aiProviders.ModelDef[] => aiProviders.getAntigravityModels();
 				const courant = (): string => aiProviders.resolveAntigravityModel(settings().aiModel || currentModel);
 				/* Le niveau EN USAGE d'une famille : le sien (réglage par famille,
@@ -986,6 +997,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				const refresh = (): void => {
 					const cur = modeles().find(m => m.value === courant());
 					trigLabel.replaceChildren();
+					/* Aucune liste (tout premier lancement, juste après
+					   l'installation) : un spinner le temps de la lecture, et non
+					   « modèle du CLI » posé comme un état stable (2026-09-20). */
+					if (!cur && modeles().length === 0) ajouter(trigLabel, "span", "qbd-install-spinner qbd-model-trigger-spinner");
 					ajouter(trigLabel, "span", "qbd-model-trigger-name", cur ? cur.label : t("ai.model.cliDefault"));
 					if (cur && cur.efforts && cur.efforts.length) {
 						const n = niveauDe(cur.value);
@@ -997,7 +1012,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				   heures) et l'étiquette redessinée si elle a changé — sans
 				   re-rendu du composer, qui effacerait le message en cours. */
 				void aiProviders.refreshAntigravityModels().then(change => {
-					if (change && trigger.isConnected) refresh();
+					persister();
+					if ((change || modeles().length) && trigger.isConnected) refresh();
 				});
 				trigger.addEventListener("click", async () => {
 					await aiProviders.refreshAntigravityModels();

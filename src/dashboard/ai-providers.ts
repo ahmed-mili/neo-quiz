@@ -542,6 +542,16 @@ export function getAntigravityModels(): ModelDef[] {
 	return antigravityModelsSnapshot ? antigravityModelsSnapshot.models : [];
 }
 
+/** SÈME l'instantané avec la liste gardée dans les réglages au lancement
+    précédent : le composer affiche un modèle tout de suite au lieu de
+    « modèle du CLI » pendant la seconde que prend `agy models`. Datée de
+    zéro, elle est PÉRIMÉE d'office : le prochain rafraîchissement relit le
+    CLI. Sans effet si une lecture a déjà eu lieu. */
+export function seedAntigravityModels(models: ModelDef[]): void {
+	if (antigravityModelsSnapshot || !models.length) return;
+	antigravityModelsSnapshot = { at: 0, models };
+}
+
 /** Relit `agy models` si l'instantané est absent ou périmé (ou `force`), et dit
     si la liste a CHANGÉ. Tout échec (CLI absent, compte non connecté — il
     répond « Please sign in to view available models ») garde l'instantané

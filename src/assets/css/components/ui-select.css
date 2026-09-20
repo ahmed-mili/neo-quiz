@@ -306,6 +306,15 @@
 	font-weight: 600;
 }
 
+/* Le spinner de la première lecture des modèles d'Antigravity, à la taille
+   du texte du bouton. */
+.qbd-model-trigger-spinner {
+	width: 12px;
+	height: 12px;
+	margin-right: 6px;
+	border-width: 2px;
+}
+
 /* Le contrôle du milieu quand le canal est un SITE : un libellé, pas un
    bouton (Ahmed, 2026-09-20). Ni survol, ni curseur, ni chevron ; la
    non-sélection lui vient de `.qbd-select`, en tête de cette feuille. */

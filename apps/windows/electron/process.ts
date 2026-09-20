@@ -66,7 +66,7 @@ import { LOG_PREFIX } from "../../../src/branding";
    l'affiche (voir son en-tête). Pure : aucun Node, donc lisible des deux côtés. */
 import { commandeInstallationLancee } from "../../../src/cli-install-cmd";
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -763,7 +763,10 @@ export function scriptDisposerPourTerminal(hwndNeo: number, titre: string, rect:
 		"  $cmd = (Get-ItemProperty ('Registry::HKEY_CLASSES_ROOT\\' + $progId + '\\shell\\open\\command') -ErrorAction SilentlyContinue).'(default)'",
 		"  if ($cmd) { $exe = if ($cmd -match '^\"([^\"]+)\"') { $Matches[1] } else { ($cmd -split ' ')[0] }; $nomNav = [System.IO.Path]::GetFileNameWithoutExtension($exe) }",
 		"}",
-		"$aire = [System.Windows.Forms.Screen]::FromHandle([IntPtr]$hTerm).WorkingArea",
+		/* L'aire est celle de l'écran de NEO QUIZ, pas du terminal : c'est là
+		   que les deux colonnes doivent se former, et un terminal né sur un
+		   autre écran aurait sinon emporté le navigateur avec lui. */
+		"$aire = if ($hwndNeo -ne 0) { [System.Windows.Forms.Screen]::FromHandle([IntPtr]$hwndNeo).WorkingArea } else { [System.Windows.Forms.Screen]::FromHandle([IntPtr]$hTerm).WorkingArea }",
 		"$moitie = [int]($aire.Width / 2)",
 		"$hNav = [IntPtr]::Zero",
 		"Poser $hTerm " + [rect.x, rect.y, rect.largeur, rect.hauteur].map(v => String(Math.floor(v))).join(" "),
@@ -1062,9 +1065,48 @@ export function argumentsTerminal(titre: string, script: string): string[] {
 		`Start-Process powershell.exe -ArgumentList '-ExecutionPolicy','Bypass','-EncodedCommand','${encoderCommande(script)}'`];
 }
 
+/** FERME LA FENÊTRE D'UN TERMINAL PRÉCÉDENT portant le même titre. Un essai
+    qui a échoué RETIENT sa fenêtre (`issue`, le `Read-Host` qui laisse lire
+    l'erreur) : relancer en ouvrait une seconde du même nom, et les deux
+    restaient là (Ahmed, 2026-09-20). Pire, le placement et l'attente
+    cherchent la fenêtre PAR SON TITRE (`MainWindowTitle`) : avec deux
+    homonymes, c'est l'ancienne qui pouvait être posée, et sa disparition qui
+    signalait la fin.
+
+    PAR `WM_CLOSE`, JAMAIS EN TUANT LE PROCESSUS : sous Windows 11 la fenêtre
+    visible appartient à Windows Terminal, qui héberge aussi les autres
+    terminaux de l'utilisateur — le tuer les fermerait tous. `WM_CLOSE` ne
+    ferme que cette fenêtre-là, comme un clic sur sa croix. */
+export function scriptFermerTerminal(titre: string): string {
+	return [
+		"$titre = " + citerPs(titre),
+		"Add-Type -Name Win -Namespace NQF -MemberDefinition @'",
+		"[DllImport(\"user32.dll\")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);",
+		"'@",
+		"foreach ($p in (Get-Process | Where-Object { $_.MainWindowTitle -eq $titre })) {",
+		"  [NQF.Win]::PostMessage([IntPtr]$p.MainWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null",
+		"}",
+	].join("\n");
+}
+
+/** Ferme le terminal précédent du même titre et ATTEND qu'il ait disparu (une
+    seconde au plus) : c'est la condition pour que la fenêtre suivante soit la
+    seule à porter ce nom quand le placement la cherchera. */
+function fermerTerminalPrecedent(titre: string): void {
+	if (process.platform !== "win32") return;
+	try {
+		spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptFermerTerminal(titre))], { stdio: "ignore", windowsHide: true, timeout: 4000 });
+	} catch (e) {
+		console.warn(LOG_PREFIX, "fermeture du terminal précédent impossible:", e);
+	}
+}
+
 export function lancerTerminal(titre: string, script: string): boolean {
 	if (process.platform !== "win32") return false;
 	try {
+		/* L'ANCIEN D'ABORD : deux fenêtres du même titre rendraient le
+		   placement et l'attente ambigus (voir `fermerTerminalPrecedent`). */
+		fermerTerminalPrecedent(titre);
 		/* NI `detached` NI `windowsHide` sur ce qui ouvre la fenêtre : la sonde
 		   a montré qu'un lanceur détaché ou masqué redonne un `conhost` sans
 		   fenêtre. Le processus lanceur meurt tout de suite ; c'est la fenêtre

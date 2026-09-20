@@ -53,7 +53,7 @@ async function cas(r, nom, fn) {
 await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
 	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande, environnementOutil,
-	estOutilAutorise, lireAncre, lireCache, lirePlacement, rectangleTerminal, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptInstallation, scriptPoserFenetre, scriptRestaurerNavigateur,
+	estOutilAutorise, lireAncre, lireCache, lirePlacement, rectangleTerminal, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptFermerTerminal, scriptInstallation, scriptPoserFenetre, scriptRestaurerNavigateur,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -669,6 +669,27 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 				},
 				{ titre: true, rect: true, dwm: true, attente: false });
 		}
+		/* DEUX FENÊTRES DU MÊME TITRE : un essai raté retient sa fenêtre, et
+		   relancer en ouvrait une seconde — le placement et l'attente, qui
+		   cherchent par TITRE, accrochaient alors l'ancienne (Ahmed,
+		   2026-09-20). L'ancienne est fermée par WM_CLOSE, jamais en tuant le
+		   processus : la fenêtre appartient à Windows Terminal, qui héberge
+		   aussi les autres terminaux de l'utilisateur. */
+		{
+			const f = scriptFermerTerminal("Neo Quiz - Antigravity CLI");
+			r.check("scriptFermerTerminal : WM_CLOSE sur les fenêtres de CE titre, jamais un Stop-Process",
+				{
+					titre: f.includes("$titre = 'Neo Quiz - Antigravity CLI'"),
+					parTitre: f.includes("$_.MainWindowTitle -eq $titre"),
+					wmClose: f.includes("PostMessage") && f.includes("0x0010"),
+					tue: /Stop-Process|\.Kill\(\)|taskkill/i.test(f),
+				},
+				{ titre: true, parTitre: true, wmClose: true, tue: false });
+		}
+		/* DEUX ÉCRANS : les colonnes se forment sur l'écran de NEO QUIZ. Un
+		   terminal né ailleurs aurait emporté le navigateur avec lui. */
+		r.check("terminal : l'aire des deux colonnes est celle de l'écran de Neo Quiz, le terminal en repli",
+			d.includes("$aire = if ($hwndNeo -ne 0) { [System.Windows.Forms.Screen]::FromHandle([IntPtr]$hwndNeo).WorkingArea }"), true);
 		r.check("lireAncre : quatre nombres finis et bornés, sinon null (jamais une propriété de plus)",
 			[lireAncre({ x: 1, y: 2, largeur: 3, hauteur: 4, autre: 5 }), lireAncre({ x: -1, y: 2, largeur: 3, hauteur: 4 }), lireAncre({ x: "1", y: 2, largeur: 3, hauteur: 4 }), lireAncre(null), lireAncre({ x: 1, y: 2, largeur: 3, hauteur: Infinity })],
 			[{ x: 1, y: 2, largeur: 3, hauteur: 4 }, null, null, null, null]);

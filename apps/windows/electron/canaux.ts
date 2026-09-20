@@ -928,21 +928,33 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	   modale (Ahmed, 2026-09-20). Tout est rendu à la fin. */
 	let titreTerminal = "";
 	let neoAvantColonnes: { agrandie: boolean; bounds: Electron.Rectangle } | null = null;
+	/* UN SEUL TERMINAL COMPTE : celui du dernier lancement. Relancer une
+	   installation pendant qu'une autre tourne laissait l'ancien guetteur
+	   rendre sa place à Neo Quiz au milieu de la nouvelle (et restaurer le
+	   navigateur). Chaque lancement prend un numéro ; les rappels d'un numéro
+	   périmé ne font plus rien. */
+	let sessionTerminal = 0;
 	const disposerAvecTerminal = (titre: string, ancre: AncreTerminal | null): void => {
 		const fenetre = deps.fenetreCourante();
 		if (!fenetre || fenetre.isDestroyed()) return;
 		let resoudreFin: () => void = () => {};
 		finTerminal = new Promise<void>(resolve => { resoudreFin = resolve; });
 		titreTerminal = titre;
+		const session = ++sessionTerminal;
+		/* Une fenêtre RÉDUITE n'a pas de modale à l'écran : la poser dessous
+		   n'aurait aucun sens, et l'utilisateur vient de cliquer dans l'app. */
+		if (fenetre.isMinimized()) fenetre.restore();
 		const rect = rectangleTerminal(fenetre.getContentBounds(), fenetre.webContents.getZoomFactor(), ancre);
 		const hautGauche = screen.dipToScreenPoint({ x: rect.x, y: rect.y });
 		const basDroite = screen.dipToScreenPoint({ x: rect.x + rect.width, y: rect.y + rect.height });
 		const h = fenetre.getNativeWindowHandle();
 		const hwnd = h.length >= 8 ? Number(h.readBigUInt64LE(0)) : h.readUInt32LE(0);
 		disposerPourTerminal(hwnd, titre, { x: hautGauche.x, y: hautGauche.y, largeur: basDroite.x - hautGauche.x, hauteur: basDroite.y - hautGauche.y }, () => {
+			if (session !== sessionTerminal) return;
 			const f = deps.fenetreCourante();
 			if (f && !f.isDestroyed()) f.webContents.send(CANAUX.processusTerminalPose);
 		}, () => {
+			if (session !== sessionTerminal) return;
 			/* LE NAVIGATEUR VIENT D'ÊTRE POSÉ À GAUCHE : Neo Quiz passe à
 			   droite, et le rendu remesure sa modale pour que le terminal la
 			   suive (`processusNavigateurOuvert` → `processusReplacerTerminal`). */
@@ -956,6 +968,7 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			f.webContents.send(CANAUX.processusNavigateurOuvert);
 		}, () => {
 			resoudreFin();
+			if (session !== sessionTerminal) return;
 			titreTerminal = "";
 			const f = deps.fenetreCourante();
 			const avant = neoAvantColonnes;

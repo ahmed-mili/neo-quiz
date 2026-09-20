@@ -1476,7 +1476,13 @@
 }
 
 /* ── Le modal d'un fournisseur absent (spec 2026-09-17, § 3b) ── */
+/* La modale d'installation : 520 de large, et une hauteur PLANCHER (Ahmed,
+   2026-09-20 : « sa hauteur est trop basse »). Son contenu est court — un
+   paragraphe, une ligne d'état, un repli — et la boîte paraissait tassée à
+   côté de ses 520 px. Un plancher, pas une hauteur fixe : les états qui
+   parlent davantage (voie manuelle dépliée, erreur) continuent de grandir. */
 .qbd-install-modal { width: 520px; max-width: calc(100vw - 32px); }
+.qbd-install-modal .modal-content { min-height: 232px; }
 .qbd-install-what { margin: 0 0 14px; color: var(--text-muted); line-height: 1.5; }
 .qbd-install-auto { width: 100%; justify-content: center; margin-bottom: 14px; }
 .qbd-install-state { display: flex; align-items: center; gap: 10px; min-height: 0; }

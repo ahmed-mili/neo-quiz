@@ -1554,6 +1554,15 @@
 	   reste dessiné à sa taille. */
 	background: transparent !important;
 }
+/* LE FOND DU BOUTON RESTE NU DANS LES TROIS ÉTATS. Le survol commun des
+   boutons principaux (`.qbd-btn--create:hover`) repeignait la BOÎTE, qui ne
+   s'écrase pas : on voyait ses deux extrémités bleutées dépasser de la
+   pilule (Ahmed, 2026-09-20, « c'est quoi cet effet bizarre ? »). Seule la
+   pilule porte une couleur. */
+.qbd-install-auto:hover,
+.qbd-install-auto:active {
+	background: transparent !important;
+}
 .qbd-install-auto::before {
 	content: "";
 	position: absolute;

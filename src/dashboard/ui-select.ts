@@ -1174,8 +1174,9 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 			const row = creerLigne(menuEl, "qbd-select-option qbd-brand-row qbd-more-providers-row" + (actifDedans ? " is-active" : ""), false);
 			row.setAttribute("role", "menuitem");
 			row.setAttribute("aria-haspopup", "menu");
-			const logo = ajouter(row, "span", "qbd-provider-logo qbd-provider-logo--plus");
-			currentHost().ui.setIcon(logo, "ellipsis");
+			// La case du logo, VIDE : elle tient l'alignement du libellé sur les
+			// marques au-dessus, sans glyphe — comme « Plus de modèles ».
+			ajouter(row, "span", "qbd-provider-logo qbd-provider-logo--plus");
 			const body = ajouter(row, "div", "qbd-provider-option-body");
 			ajouter(body, "span", "qbd-select-option-label", t("dashboard.select.moreProviders"));
 			const sous = actifDedans

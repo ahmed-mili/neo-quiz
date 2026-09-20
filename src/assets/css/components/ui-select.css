@@ -536,11 +536,7 @@
 	min-width: 250px;
 }
 
-/* La ligne « Plus de fournisseurs » : trois points à la place du logo, dans la
-   même case, en couleur atténuée. */
-.qbd-provider-logo--plus {
-	color: var(--text-muted);
-}
+
 
 /* Le corps de l'option est en flex:1 et pousse déjà le chevron à droite ;
    reste à le recentrer sur les deux lignes (libellé + sous-titre). */

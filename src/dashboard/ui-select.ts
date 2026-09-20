@@ -1165,10 +1165,10 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		}
 		/* « PLUS DE FOURNISSEURS » : la même ligne que « Plus de modèles » du
 		   menu de modèles — un libellé, un chevron, un flyout au survol. Son
-		   sous-titre nomme la marque secondaire EN USAGE (« DeepSeek ·
-		   chat.deepseek.com »), sinon la liste des marques qu'elle range ; et
-		   quand l'usage est dedans, la ligne est active comme une marque : le
-		   chevron passe à l'accent. */
+		   sous-titre est TOUJOURS la liste des marques qu'elle range : c'est ce
+		   qui dit ce qu'on y trouve (2026-09-20 ; nommer la marque en usage y
+		   répétait DeepSeek deux fois avec son adresse). L'usage, lui, se lit au
+		   chevron passé à l'accent, comme sur une marque. */
 		if (opts.moreBrands && opts.moreBrands.length) {
 			const actifDedans = opts.moreBrands.find(b => b.channels.some(c => c.value === opts.current));
 			const row = creerLigne(menuEl, "qbd-select-option qbd-brand-row qbd-more-providers-row" + (actifDedans ? " is-active" : ""), false);
@@ -1179,10 +1179,7 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 			ajouter(row, "span", "qbd-provider-logo qbd-provider-logo--plus");
 			const body = ajouter(row, "div", "qbd-provider-option-body");
 			ajouter(body, "span", "qbd-select-option-label", t("dashboard.select.moreProviders"));
-			const sous = actifDedans
-				? actifDedans.label + " · " + (channelOf(actifDedans).resume || channelOf(actifDedans).label)
-				: opts.moreBrands.map(b => b.label).join(", ");
-			ajouter(body, "span", "qbd-provider-option-sub", sous);
+			ajouter(body, "span", "qbd-provider-option-sub", opts.moreBrands.map(b => b.label).join(", "));
 			const chev = ajouter(row, "span", "qbd-model-menu-row-chevron");
 			currentHost().ui.setIcon(chev, "chevron-right");
 			row.addEventListener("mouseenter", () => { cancelClose(); openFlyout(row, null); });

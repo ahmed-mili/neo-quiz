@@ -2407,6 +2407,10 @@
    `opacity` : celle-ci éteindrait le numéro avec le texte. Rien ne se
    clique : l'application ne voit pas la page du site, et un fichier retiré
    là-bas se re-glisse simplement. */
+/* Le passage mis en avant d'une consigne (« copiez le bloc de code ») : gras
+   et accent. Atténué comme le reste quand l'étape est faite. */
+.qbd-ai-web-em { font-weight: 600; color: var(--interactive-accent); }
+.qbd-ai-web-etapes li.is-fait .qbd-ai-web-em { color: inherit; }
 .qbd-ai-web-etapes li.is-fait { color: color-mix(in srgb, var(--text-muted) 45%, transparent); }
 .qbd-ai-web-etapes li.is-fait::before { color: var(--color-green, #4ade80); }
 

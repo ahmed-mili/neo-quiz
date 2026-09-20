@@ -2931,7 +2931,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.stepsTitle", { site }));
 			const liste = ajouter(carte, "ol", "qbd-ai-web-etapes");
 			for (const e of etapes) {
-				const li = ajouter(liste, "li", e.cle === "fait" ? "is-fait" : undefined, e.texte);
+				const li = ajouter(liste, "li", e.cle === "fait" ? "is-fait" : undefined);
+				poserTexteMisEnAvant(li, e.texte);
 				if (e.cle) li.dataset.etape = e.cle;
 			}
 			/* Pas d'étape « courante » : l'application ne sait pas si le prompt
@@ -2941,7 +2942,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			/* Un titre court en gras, une ligne en dessous : la phrase entière en
 			   gras faisait quatre lignes (2026-09-20). */
 			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.title", { site }));
-			ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first", t("ai.web.thenCopy"));
+			poserTexteMisEnAvant(ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first"), t("ai.web.thenCopy"));
 		}
 		/* LES FICHIERS À GLISSER, en tuiles — les mêmes cartes que le composer
 		   (`poserCarte`) : on les saisit et on les lâche sur le site à gauche,
@@ -3034,6 +3035,19 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		host.ui.setIcon(ajouter(reopen, "span", "qbd-btn-icon qbd-btn-icon--sm"), "external-link");
 		ajouter(reopen, "span", undefined, t("ai.web.reopen", { site }));
 		reopen.addEventListener("click", rouvrirSite);
+	}
+
+	/** Pose un texte dont les passages entre `**` sont MIS EN AVANT (gras et
+	    accent) : « copy the code block » doit sauter aux yeux dans la carte
+	    d'attente (2026-09-20). Du texte, jamais du HTML : les morceaux sont
+	    des nœuds texte. */
+	function poserTexteMisEnAvant(parent: HTMLElement, texte: string): void {
+		const morceaux = texte.split("**");
+		morceaux.forEach((m, k) => {
+			if (!m) return;
+			if (k % 2 === 1) ajouter(parent, "strong", "qbd-ai-web-em", m);
+			else parent.appendChild(document.createTextNode(m));
+		});
 	}
 
 	/** Ouvre l'écran d'usage en lui passant la dernière lecture connue (il ne

@@ -75,6 +75,19 @@ export function comptClaude(stdout: string): { connecte: boolean; email: string 
 	};
 }
 
+/** Le forfait d'un `.claude/.credentials.json` DÉJÀ LU. Mesuré deux fois sur
+    le CLI 2.1.278 (2026-09-21, y compris dans l'environnement exact de
+    l'app) : `claude auth status --json` ne publie NI adresse NI forfait — le
+    forfait vit ici, dans la forme que `planClaude()` lit déjà (« Max (5x) »).
+    Seuls ces deux champs sortent, jamais l'objet : le fichier porte les
+    jetons. */
+export function planCredentialsClaude(credentials: unknown): string | null {
+	if (!credentials || typeof credentials !== "object") return null;
+	const o = (credentials as { claudeAiOauth?: unknown }).claudeAiOauth;
+	if (!o || typeof o !== "object") return null;
+	return planClaude(o);
+}
+
 /** L'adresse du compte dans un `~/.claude.json` DÉJÀ LU. `claude auth status
     --json` ne publie pas de champ `email` sur les versions du CLI mesurées
     (2026-09-21) : c'est `oauthAccount.emailAddress` qui la porte. Seul ce

@@ -54,6 +54,15 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
 		 m.emailOauthClaude({ oauthAccount: { emailAddress: "" } }), m.emailOauthClaude(null)],
 		[null, null, null, null]);
 
+	/* ─── Claude : le forfait de ~/.claude/.credentials.json ─── */
+	r.check("le forfait sort de .credentials.json quand auth status ne le dit pas",
+		m.planCredentialsClaude({ claudeAiOauth: { subscriptionType: "max", rateLimitTier: "default_claude_max_5x" } }),
+		"Max (5x)");
+
+	r.check("sans claudeAiOauth, sans type, ou vide, pas de forfait",
+		[m.planCredentialsClaude({}), m.planCredentialsClaude({ claudeAiOauth: {} }), m.planCredentialsClaude(null)],
+		[null, null, null]);
+
 	/* ─── Codex : les claims de l'id_token ─── */
 	r.check("codex rend l'adresse et le plan des claims",
 		m.comptCodex({ tokens: { id_token: idToken({ email: "a@b.c", "https://api.openai.com/auth": { chatgpt_plan_type: "plus" } }) } }),
@@ -156,6 +165,7 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
 		m.comptClaude(JSON.stringify({ loggedIn: true, email: "a@b.c", subscriptionType: "pro", accessToken: SECRET })),
 		m.emailAntigravity({ active: "x@gmail.com", access_token: SECRET, refresh_token: REFRESH }),
 		m.emailOauthClaude({ oauthAccount: { emailAddress: "a@b.c", accessToken: SECRET, refreshToken: REFRESH } }),
+		m.planCredentialsClaude({ claudeAiOauth: { subscriptionType: "pro", rateLimitTier: "default_claude_ai", accessToken: SECRET, refreshToken: REFRESH } }),
 	]);
 	r.check("aucune sortie ne contient de jeton",
 		[sorties.includes("SECRET-QUI-NE-DOIT-PAS-SORTIR"), sorties.includes("oat01")],
@@ -233,7 +243,10 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 		}));
 		await mkdir(join(dir, ".claude"), { recursive: true });
 		await writeFile(join(dir, ".claude", ".credentials.json"), JSON.stringify({
-			claudeAiOauth: { accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE },
+			claudeAiOauth: {
+				accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE,
+				subscriptionType: "pro", rateLimitTier: "default_claude_ai",
+			},
 		}));
 		/* `~/.claude.json` : l'adresse que les versions mesurées du CLI ne
 		   publient pas dans `auth status --json` — elle porte aussi des jetons
@@ -259,13 +272,14 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 		}
 
 		await Promise.all([
-			/* `auth status --json` : le JSON que le VRAI CLI rend, PLUS
-			   `accessToken`/`refreshToken` — un spread distrait au retour
-			   d'`etatClaude` les ferait fuiter. SANS `email` : les versions
-			   mesurées du CLI ne le publient pas, l'adresse doit venir du
-			   repli `~/.claude.json`. */
+			/* `auth status --json` : ce que le VRAI CLI 2.1.278 rend (mesuré
+			   deux fois le 2026-09-21, y compris dans l'environnement exact de
+			   l'app) : `loggedIn` SANS email NI subscriptionType — PLUS
+			   `accessToken`/`refreshToken`, qu'un spread distrait au retour
+			   d'`etatClaude` ferait fuiter. L'adresse et le forfait doivent
+			   venir des replis `~/.claude.json` et `~/.claude/.credentials.json`. */
 			poserFauxCli("claude", "process.stdout.write(" + JSON.stringify(JSON.stringify({
-				loggedIn: true, subscriptionType: "pro",
+				loggedIn: true,
 				accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE,
 			})) + ");"),
 			/* `login status` : seul le CODE DE SORTIE compte pour `connecte`. */

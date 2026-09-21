@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
 import type { EtatCompte } from "../../../src/host/types";
 import type { UsageRead } from "../../../src/dashboard/usage-format";
-import { comptClaude, comptCodex, emailAntigravity, emailOauthClaude, usageClaudeDepuisReponse, usageCodexDepuisLigne } from "./comptes-pur";
+import { comptClaude, comptCodex, emailAntigravity, emailOauthClaude, planCredentialsClaude, usageClaudeDepuisReponse, usageCodexDepuisLigne } from "./comptes-pur";
 import type { OutilCompte } from "./comptes-pur";
 import { dossierPersonnel, environnementEnfant, lancer, resoudreExecutable } from "./process";
 
@@ -41,18 +41,29 @@ async function etatClaude(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 			timeoutMs: DELAI_MS,
 			env: environnementEnfant(env),
 		});
-		const { connecte, email: emailStatut, plan } = comptClaude(stdout);
-		// `claude auth status --json` ne publie pas d'adresse sur les versions
-		// du CLI mesurées (2026-09-21) : elle vit dans `~/.claude.json`
-		// (`oauthAccount.emailAddress`), le même détournement de fichier que
-		// pour `auth.json` de Codex. Échec de lecture = pas d'adresse, la
-		// connexion reste vraie.
+		const { connecte, email: emailStatut, plan: planStatut } = comptClaude(stdout);
+		// `claude auth status --json` ne publie ni adresse ni forfait sur les
+		// versions du CLI mesurées (2.1.278, 2026-09-21, vérifié deux fois y
+		// compris dans l'environnement exact de l'app). Repli FICHIER, et
+		// champs SEULS : l'adresse dans `~/.claude.json`
+		// (`oauthAccount.emailAddress`), le forfait dans
+		// `~/.claude/.credentials.json` (`claudeAiOauth.subscriptionType` +
+		// `rateLimitTier`, la forme que `planClaude()` lit déjà) — jamais
+		// l'objet, ces fichiers portent les jetons. Échec de lecture = rien de
+		// plus à afficher, la connexion reste vraie.
 		let email = emailStatut;
 		if (connecte && !email) {
 			try {
 				const brut = await readFile(join(dossierPersonnel(env), ".claude.json"), "utf8");
 				email = emailOauthClaude(JSON.parse(brut) as unknown);
 			} catch (e) { /* pas d'adresse à afficher, la connexion reste vraie */ }
+		}
+		let plan = planStatut;
+		if (connecte && !plan) {
+			try {
+				const brut = await readFile(join(dossierPersonnel(env), ".claude", ".credentials.json"), "utf8");
+				plan = planCredentialsClaude(JSON.parse(brut) as unknown);
+			} catch (e) { /* pas de forfait à afficher, la connexion reste vraie */ }
 		}
 		return { outil: "claude", installe: true, connecte, email, plan };
 	} catch (e) {

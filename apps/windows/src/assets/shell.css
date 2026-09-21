@@ -374,20 +374,36 @@ body {
 	unicode-bidi: isolate;
 }
 
-/* Le forfait : un badge discret. Sur Claude Code et Codex c'est un BOUTON
-   (type="button") : il ouvre le popover d'usage au survol, d'où le curseur et
-   l'effet de survol, réservés au bouton — sur Antigravity et Ollama l'élément
-   est un span inerte (aucun usage à montrer), ou n'existe pas du tout. */
+/* Le forfait : une pastille sombre bordée de la couleur du fournisseur
+   (référence mesurée à la pipette 2026-09-21 : la pastille « Plus » de
+   ChatGPT). `--pastille` est un triplet R G B posé par ligne via data-outil.
+   Le dégradé vertical de la bordure passe par deux couches de fond : la
+   surface dans padding-box, la couleur en border-box. Sur Claude Code et
+   Codex l'élément est un BOUTON (il ouvre le popover d'usage, d'où le curseur
+   et l'allumage au survol : mêmes alphas +0,15) ; sur Antigravity et Ollama
+   c'est un span inerte, ou il n'existe pas. */
+.nq-comptes-ligne[data-outil="claude"] { --pastille: 217 119 87; }
+.nq-comptes-ligne[data-outil="codex"] { --pastille: 124 133 205; }
+.nq-comptes-ligne[data-outil="agy"] { --pastille: 49 134 255; }
+.nq-comptes-ligne[data-outil="ollama"] { --pastille: 226 226 226; }
+
 .nq-comptes-plan {
+	box-sizing: border-box;
 	flex: none;
-	padding: 3px 9px;
+	height: 22px;
+	padding: 0 10px;
 	border-radius: 999px;
 	border: 1px solid transparent;
-	background: var(--background-modifier-border);
-	color: var(--text-muted);
+	background:
+		linear-gradient(rgb(19, 19, 20), rgb(19, 19, 20)) padding-box,
+		linear-gradient(to bottom, rgb(var(--pastille) / 0.35), rgb(var(--pastille) / 0.8)) border-box;
+	color: rgb(226, 226, 226);
 	font: inherit;
 	font-size: 11px;
-	font-weight: 600;
+	font-weight: 700;
+	box-shadow:
+		inset 0 -1px 0 rgb(var(--pastille) / 0.7),
+		0 1px 6px rgb(var(--pastille) / 0.3);
 }
 
 button.nq-comptes-plan {
@@ -396,8 +412,13 @@ button.nq-comptes-plan {
 
 button.nq-comptes-plan:hover,
 button.nq-comptes-plan:focus-visible {
-	border-color: var(--text-accent);
-	color: var(--text-normal);
+	outline: none;
+	background:
+		linear-gradient(rgb(19, 19, 20), rgb(19, 19, 20)) padding-box,
+		linear-gradient(to bottom, rgb(var(--pastille) / 0.5), rgb(var(--pastille) / 0.95)) border-box;
+	box-shadow:
+		inset 0 -1px 0 rgb(var(--pastille) / 0.85),
+		0 1px 6px rgb(var(--pastille) / 0.45);
 }
 
 /* Les actions (« Sign out », « Sign in », « Install ») : une ligne de menu,

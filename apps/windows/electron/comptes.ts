@@ -49,14 +49,18 @@ async function etatClaude(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 }
 
 async function etatCodex(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
-	const installe = resoudreExecutable("codex", env) !== null;
 	try {
-		const brut = await readFile(join(dossierPersonnel(env), ".codex", "auth.json"), "utf8");
-		const { email, plan } = comptCodex(JSON.parse(brut) as unknown);
-		return { outil: "codex", installe, connecte: email !== null, email, plan };
+		const installe = resoudreExecutable("codex", env) !== null;
+		try {
+			const brut = await readFile(join(dossierPersonnel(env), ".codex", "auth.json"), "utf8");
+			const { email, plan } = comptCodex(JSON.parse(brut) as unknown);
+			return { outil: "codex", installe, connecte: email !== null, email, plan };
+		} catch (e) {
+			// Fichier absent, illisible ou pas du JSON : pas connecté, pas une erreur.
+			return { outil: "codex", installe, connecte: false, email: null, plan: null };
+		}
 	} catch (e) {
-		// Fichier absent, illisible ou pas du JSON : pas connecté, pas une erreur.
-		return { outil: "codex", installe, connecte: false, email: null, plan: null };
+		return etatVide("codex");
 	}
 }
 

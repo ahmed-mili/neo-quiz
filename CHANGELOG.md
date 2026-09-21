@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-21
+
 ### Added
 - Mistral joins the list of assistants you can send a quiz prompt to, through chat.mistral.ai. It is the one with a student price in France, and its free tier is enough to generate a quiz.
 

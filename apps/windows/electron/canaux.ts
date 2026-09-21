@@ -1148,6 +1148,11 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		const script = scriptConnexion(tool, titre, {
 			succes: t("app.connectCli.done", { name }),
 			echec: t("app.connectCli.failed", { name }),
+			/* Antigravity seulement (lus par `agyConnexion`) : l'avertissement
+			   des 60 secondes et le message d'expiration, traduits ICI — jamais
+			   un texte venu du rendu dans un script. */
+			agyCountdown: t("app.comptes.agyCountdown"),
+			agyExpire: t("app.comptes.agyExpired"),
 		});
 		if (script === null) return "indisponible";
 		const place = await preparerColonnes(lireAncre(ancre));

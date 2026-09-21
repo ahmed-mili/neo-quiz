@@ -290,6 +290,13 @@ export interface MessagesTerminal {
 	/** Ce qui s'affiche entre deux tentatives d'installation (le service de
 	    l'editeur n'a pas repondu). */
 	reessai?: string;
+	/** Antigravity seulement, lus par `agyConnexion` : l'avertissement des 60
+	    secondes affiché AVANT de lancer le CLI, et le message d'expiration
+	    affiché quand le script tue la tentative au bout de 70 s. Traduits par
+	    `canaux.ts` comme `succes` et `echec` — jamais un texte venu du rendu
+	    dans un script. */
+	agyCountdown?: string;
+	agyExpire?: string;
 }
 
 /**
@@ -334,7 +341,7 @@ function commandeConnexion(tool: Outil, messages: MessagesTerminal): string | nu
 	   une ligne de stderr est un `ErrorRecord`, que PowerShell décorerait
 	   sinon d'un « NativeCommandError » rouge. La réponse JSON, elle, n'est
 	   pas affichée. */
-	if (tool === "agy") return AGY_CONNEXION.join("\n");
+	if (tool === "agy") return agyConnexion(messages).join("\n");
 	return null;
 }
 
@@ -342,44 +349,117 @@ function commandeConnexion(tool: Outil, messages: MessagesTerminal): string | nu
 
     GOOGLE NE REND PAS LA MAIN AU CLI : son `redirect_uri` est
     `https://antigravity.google/oauth-callback`, une page DISTANTE qui affiche
-    un CODE à recopier. Le CLI l'annonce lui-même, attend soixante secondes,
-    puis abandonne.
+    un CODE à recopier. Le CLI l'annonce lui-même, attend soixante secondes
+    EN INTERNE, puis abandonne — et ne rend même pas la main (le pid du
+    2026-09-20 resté vivant après « auth timed out »). D'où CE QUE CE SCRIPT
+    REND VISIBLE ET RATTRAPABLE (Ahmed, 2026-09-21) :
 
-    LE SCRIPT NE FAIT QU'OUVRIR LA PAGE, et se tait pour le reste (Ahmed,
-    2026-09-20 : « on n'automatise pas ça finalement », « on laisse
-    Antigravity afficher ce qu'il doit afficher »). L'essai précédent
-    surveillait le presse-papier et écrivait le code sur l'entrée du CLI ; il
-    a échoué à l'usage pour une raison qui lui est propre : le code partait
-    dès que le presse-papier changeait, souvent avant que le CLI n'ait ouvert
-    son invite, et la ligne se perdait — « Code received » s'affichait, puis
-    « authentication timed out ». Rediriger l'entrée coûtait en plus la seule
-    porte de secours, puisque ce qu'on tape dans la fenêtre n'atteint plus un
-    CLI dont l'entrée est un tuyau.
+    1. L'AVERTISSEMENT avant de lancer le CLI : soixante secondes, ça se
+       traverse en sachant pourquoi. Le texte est traduit PAR L'APPELANT
+       (`canaux.ts`, clé `app.comptes.agyCountdown`), comme `succes` et
+       `echec` — jamais un texte venu du rendu dans un script.
+    2. LA BOUCLE : le CLI est lancé par `Start-Process -PassThru`, sa sortie
+       et son erreur redirigées vers deux fichiers temporaires relus en
+       continu (les mêmes lignes que l'ancienne pipeline `2>&1 | ForEach`,
+       réémises par `[Console]::Out`, JAMAIS par `Write-Host` : ne pas
+       repeindre). L'ENTRÉE, elle, n'est PAS redirigée — ce qu'on colle dans
+       la fenêtre atteint toujours le CLI : c'est la porte de secours. Au
+       bout de 70 s sans la réponse JSON de succès (le CLI n'abandonne qu'au
+       bout de 60, et parfois ne rend pas la main), le script TUE L'ARBRE de
+       la tentative (`taskkill /T /F`), affiche le message d'expiration
+       (`agyExpire`, traduit par l'appelant), attend Entrée, et RECOMMENCE :
+       un lien râté ne coûte plus la fenêtre entière.
+    3. LE SUCCÈS garde la fin commune (`issue`) : message, compte à rebours
+       3-2-1, fenêtre fermée. Il est jugé sur le code de sortie COMME AVANT —
+       mais aussi sur la réponse JSON elle-même (`"status": "SUCCESS"`) :
+       `Start-Process` sur un `.cmd` ne rend pas toujours de code de sortie,
+       et la réponse est le signal que le protocole du CLI émet de toute
+       façon.
 
-    Donc : une pipeline ordinaire, la console reste la console, et les
-    instructions affichées sont celles du CLI. Chaque ligne est convertie en
-    TEXTE avant d'être affichée : relue par `2>&1`, une ligne d'erreur est un
-    `ErrorRecord`, que PowerShell décorerait sinon d'un « NativeCommandError »
-    rouge. Et elle est réémise par `[Console]::Out`, JAMAIS par `Write-Host` :
-    celui-ci repeint chaque ligne avec la couleur courante de la console,
-    quand la sortie native porte déjà celles que le CLI a choisies (Ahmed,
-    2026-09-20 : « sans modifier la couleur de ce qu'il va afficher »). La
-    réponse JSON, elle, n'est pas affichée. */
-const AGY_CONNEXION = [
-	"Set-Location $env:USERPROFILE",
-	/* `Continue` REMIS EXPRÈS : `install.ps1` de Google commence par
-	   `$ErrorActionPreference = "Stop"`, et `iex` l'applique à NOTRE session.
-	   Sous `Stop`, la première ligne relue par `2>&1` — celle qui annonce
-	   l'URL — devient une erreur TERMINANTE : la pipeline s'arrêtait avant
-	   l'URL, et la page Google ne s'ouvrait jamais. */
-	"$ErrorActionPreference = 'Continue'",
-	"$script:urlOuverte = $false",
-	"agy -p \"ok\" --output-format json 2>&1 | ForEach-Object {",
-	"  $l = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { \"$_\" }",
-	"  if (-not $script:urlOuverte -and $l -match 'https://accounts\\.google\\.com/\\S+') { $script:urlOuverte = $true; Start-Process $Matches[0] }",
-	"  if ($l -and -not $l.StartsWith('{')) { [Console]::Out.WriteLine($l) }",
-	"}",
-];
+    `Set-Location` d'abord : la fenêtre hérite du dossier courant de
+    l'application, et le CLI y chercherait un projet à charger. Chaque ligne
+    est relue depuis le fichier : plus d'`ErrorRecord` à convertir, la
+    redirection a déjà rendu du texte. Une lecture peut perdre contre le
+    verrou du fichier en cours d'écriture : elle est réessayée au prochain
+    tour, et le compteur de lignes lues n'avance QUE si la lecture a réussi —
+    un échec au milieu ne rejouerait pas ce qui a déjà été affiché. */
+function agyConnexion(messages: MessagesTerminal): string[] {
+	const relire = (fichier: string, vus: string): string[] => [
+		/* `ReadAllLines` ouvre SANS partage : tant que le CLI tient son
+		   fichier de redirection, chaque lecture perdait contre son verrou et
+		   les lignes ne seraient devenues visibles qu'À SA MORT — l'URL
+		   Google, écrite à la première seconde, serait arrivée trop tard pour
+		   ouvrir le navigateur (vécu au test du 2026-09-21). `FileShare
+		   .ReadWrite` lit PENDANT que le CLI écrit. */
+		"  try {",
+		`    $lecteur = New-Object System.IO.StreamReader([System.IO.File]::Open(${fichier}, 'Open', 'Read', [System.IO.FileShare]::ReadWrite))`,
+		/* Les vides sont RETIRÉS, et `@()` FORCE le tableau : une seule ligne
+		   fendue arrive en scalaire, que `$lignes[$i]` indexerait en CARACTÈRE
+		   (vécu au test du 2026-09-21). */
+		'    $lignes = @(($lecteur.ReadToEnd() -split "`r`n|`n") | Where-Object { $_ })',
+		"    $lecteur.Close()",
+		"  } catch { $lignes = $null }",
+		`  if ($null -ne $lignes) {`,
+		`    for ($i = ${vus}; $i -lt $lignes.Count; $i++) {`,
+		"      $l = $lignes[$i]",
+		"      if (-not $urlOuverte -and $l -match 'https://accounts\\.google\\.com/\\S+') { $urlOuverte = $true; Start-Process $Matches[0] }",
+		`      if ($l -match '"status"\\s*:\\s*"SUCCESS"') { $succesVu = $true }`,
+		"      if ($l -and -not $l.StartsWith('{')) { [Console]::Out.WriteLine($l) }",
+		"    }",
+		`    ${vus} = $lignes.Count`,
+		"  }",
+	];
+	return [
+		"Set-Location $env:USERPROFILE",
+		/* `Continue` REMIS EXPRÈS : `install.ps1` de Google commence par
+		   `$ErrorActionPreference = "Stop"`, et `iex` l'applique à NOTRE session.
+		   Sous `Stop`, la première ligne relue — celle qui annonce l'URL —
+		   devient une erreur TERMINANTE : la boucle s'arrêtait avant l'URL, et
+		   la page Google ne s'ouvrait jamais. */
+		"$ErrorActionPreference = 'Continue'",
+		/* L'AVERTISSEMENT avant tout : les 60 secondes du CLI doivent se
+		   traverser en sachant pourquoi. */
+		"[Console]::Out.WriteLine(" + citerPs(messages.agyCountdown ?? "") + ")",
+		"$connecte = $false",
+		"while ($true) {",
+		"  $sortie = [System.IO.Path]::GetTempFileName()",
+		"  $erreur = [System.IO.Path]::GetTempFileName()",
+		"  $p = Start-Process -FilePath \"agy\" -ArgumentList @(\"-p\", \"ok\", \"--output-format\", \"json\") -PassThru -NoNewWindow -RedirectStandardOutput $sortie -RedirectStandardError $erreur",
+		"  $debut = [DateTime]::UtcNow",
+		"  $urlOuverte = $false",
+		"  $succesVu = $false",
+		"  $vusSortie = 0",
+		"  $vusErreur = 0",
+		"  while ($true) {",
+		...relire("$sortie", "$vusSortie"),
+		...relire("$erreur", "$vusErreur"),
+		"    if ($succesVu) { break }",
+		"    if ($p.HasExited) { break }",
+		/* Soixante-dix secondes, soit dix de plus que le chrono interne du
+		   CLI : on tue après lui, pas avant. */
+		"    if (([DateTime]::UtcNow - $debut).TotalSeconds -ge 70) { break }",
+		"    Start-Sleep -Milliseconds 300",
+		"  }",
+		"  if ($succesVu) {",
+		"    if (-not $p.WaitForExit(5000)) { & \"$env:SystemRoot\\System32\\taskkill.exe\" /PID $p.Id /T /F | Out-Null }",
+		"    $connecte = $true",
+		"    break",
+		"  }",
+		"  if ($p.HasExited) {",
+		"    if ($p.ExitCode -eq 0) { $connecte = $true }",
+		"    break",
+		"  }",
+		/* Soixante-dix secondes sans succès : TOUT l'arbre meurt — le CLI a
+		   peut-être spawné un navigateur ou un enfant, un `kill` sur le seul
+		   parent les laisserait tourner. */
+		"  & \"$env:SystemRoot\\System32\\taskkill.exe\" /PID $p.Id /T /F | Out-Null",
+		"  Remove-Item $sortie, $erreur -ErrorAction SilentlyContinue",
+		"  [Console]::Out.WriteLine(" + citerPs(messages.agyExpire ?? "") + ")",
+		"  $host.UI.RawUI.FlushInputBuffer()",
+		"  Read-Host | Out-Null",
+		"}",
+	];
+}
 
 /**
  * La fin commune des deux scripts : le succès n'est affiché que si la
@@ -404,9 +484,12 @@ function compteARebours(retrait: string): string[] {
 	];
 }
 
-function issue(messages: MessagesTerminal): string[] {
+/** `test` est la condition PowerShell du succès : le code de sortie du CLI
+    (`claude`, `codex`), ou la variable `$connecte` de la boucle d'Antigravity
+    (`agyConnexion`), qui ne passe pas par `$LASTEXITCODE`. */
+function issue(messages: MessagesTerminal, test = "$LASTEXITCODE -eq 0"): string[] {
 	return [
-		"if ($LASTEXITCODE -eq 0) {",
+		`if (${test}) {`,
 		"  Write-Host " + citerPs(messages.succes) + " -ForegroundColor Green",
 		...compteARebours("  "),
 		"} else {",
@@ -504,7 +587,7 @@ export function scriptInstallation(tool: Outil, titre: string, messages: Message
 		lignes.push("Write-Host " + citerPs(messages.succes) + " -ForegroundColor Green", ...compteARebours(""));
 		return lignes.join("\n");
 	}
-	lignes.push(rechargerPath(env), connexion, ...issue(messages));
+	lignes.push(rechargerPath(env), connexion, ...issue(messages, tool === "agy" ? "$connecte" : undefined));
 	return lignes.join("\n");
 }
 
@@ -528,7 +611,7 @@ export function scriptConnexion(tool: Outil, titre: string, messages: MessagesTe
 		...entete(titre),
 		rechargerPath(env),
 		connexion,
-		...issue(messages),
+		...issue(messages, tool === "agy" ? "$connecte" : undefined),
 	].join("\n");
 }
 

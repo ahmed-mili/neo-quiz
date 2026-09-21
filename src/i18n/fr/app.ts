@@ -86,6 +86,8 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.comptes.usageTerminal": "Ouvrir Antigravity CLI pour voir votre quota (/usage)",
 	"app.comptes.usageTerminalHint": "Tapez /usage pour voir l'usage de votre forfait. Quittez Antigravity quand vous avez fini.",
 	"app.comptes.usageTerminalFailed": "Impossible d'ouvrir le CLI Antigravity.",
+	"app.comptes.agyCountdown": "Vous avez 60 secondes après l'ouverture du navigateur pour coller le code ici. Passé ce délai, appuyez sur Entrée pour obtenir un nouveau lien.",
+	"app.comptes.agyExpired": "Le lien a expiré. Appuyez sur Entrée pour un nouveau lien, ou fermez cette fenêtre.",
 	"app.comptes.usage.resetsAt": "Réinitialisation {moment}",
 	"app.comptes.usage.errorRateLimited": "Le fournisseur limite les lectures d'usage en ce moment.",
 	"app.comptes.usage.errorRateLimitedDelay": "Le fournisseur limite les lectures d'usage. Réessayez dans {delai}.",

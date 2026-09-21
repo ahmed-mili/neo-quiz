@@ -135,6 +135,11 @@ export const EN_APP = {
 	"app.comptes.usageTerminal": "Open Antigravity CLI to check your quota (/usage)",
 	"app.comptes.usageTerminalHint": "Type /usage to see your plan's usage. Quit Antigravity when you're done.",
 	"app.comptes.usageTerminalFailed": "Could not open the Antigravity CLI.",
+	// Antigravity n'attend que 60 secondes, EN INTERNE, sans rien dire : le
+	// script de connexion affiche ces deux textes, traduits par le principal
+	// (`canaux.ts`) — jamais un texte venu du rendu dans un script.
+	"app.comptes.agyCountdown": "You have 60 seconds after the browser opens to paste the code here. If it expires, press Enter to get a new link.",
+	"app.comptes.agyExpired": "The link expired. Press Enter for a new one, or close this window.",
 	"app.comptes.usage.resetsAt": "Resets {moment}",
 	"app.comptes.usage.errorRateLimited": "The provider is rate-limiting usage reads right now.",
 	"app.comptes.usage.errorRateLimitedDelay": "The provider is rate-limiting usage reads. Try again in {delai}.",

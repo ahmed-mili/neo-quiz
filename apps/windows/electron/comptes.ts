@@ -48,17 +48,50 @@ async function etatClaude(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 	}
 }
 
+/** Le dossier `.codex`, respectant `$CODEX_HOME` comme le CLI Codex l'honore
+    lui-même — MÊME RÈGLE que `cheminCache` de `process.ts` : l'ignorer ferait
+    lire (ou effacer, ou ignorer l'échéance de) l'auth d'une AUTRE
+    installation que celle qui répond, sans qu'aucune erreur ne le dise. */
+function dossierCodex(env: NodeJS.ProcessEnv): string {
+	return env.CODEX_HOME || join(dossierPersonnel(env), ".codex");
+}
+
 async function etatCodex(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 	try {
-		const installe = resoudreExecutable("codex", env) !== null;
-		try {
-			const brut = await readFile(join(dossierPersonnel(env), ".codex", "auth.json"), "utf8");
-			const { email, plan } = comptCodex(JSON.parse(brut) as unknown);
-			return { outil: "codex", installe, connecte: email !== null, email, plan };
-		} catch (e) {
-			// Fichier absent, illisible ou pas du JSON : pas connecté, pas une erreur.
-			return { outil: "codex", installe, connecte: false, email: null, plan: null };
+		const executable = resoudreExecutable("codex", env);
+		const installe = executable !== null;
+		const { email, plan } = await (async () => {
+			try {
+				const brut = await readFile(join(dossierCodex(env), "auth.json"), "utf8");
+				return comptCodex(JSON.parse(brut) as unknown);
+			} catch (e) {
+				// Fichier absent, illisible ou pas du JSON : rien à afficher.
+				return { email: null, plan: null };
+			}
+		})();
+		// `auth.json` SURVIT à l'expiration de la session : un `id_token` dont
+		// les claims portent une adresse ne veut pas dire que la session
+		// MARCHE ENCORE. `connecte` vient donc du CODE DE SORTIE de
+		// `codex login status` — la même question que l'ancienne sonde —
+		// jamais de la seule présence du fichier. Par `lancer`, PAS `run()` du
+		// même module : `run` prend un verrou par outil et attendrait jusqu'à
+		// 15 s derrière une génération en cours (voir l'en-tête du fichier).
+		let connecte = false;
+		if (executable) {
+			try {
+				const { code } = await lancer({
+					executable,
+					args: ["login", "status"],
+					stdin: "",
+					timeoutMs: DELAI_MS,
+					env: environnementEnfant(env),
+				});
+				connecte = code === 0;
+			} catch (e) {
+				connecte = false;
+			}
 		}
+		return { outil: "codex", installe, connecte, email, plan };
 	} catch (e) {
 		return etatVide("codex");
 	}
@@ -92,9 +125,27 @@ async function etatAntigravity(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 }
 
 /** L'état des trois comptes que le principal peut lire, en PARALLÈLE. Un
-    échec sur l'un ne doit jamais faire disparaître les deux autres. */
-export async function etatComptes(env: NodeJS.ProcessEnv = process.env): Promise<EtatCompte[]> {
-	return Promise.all([etatClaude(env), etatCodex(env), etatAntigravity(env)]);
+    échec sur l'un ne doit jamais faire disparaître les deux autres.
+
+    `outils` FILTRE quelles sondes sont lancées (Ahmed, 2026-09-21) : les
+    sondes périodiques d'un flux de connexion (`comptes.ts`, `ai-providers.ts`,
+    toutes les trois secondes) n'ont besoin que d'un seul outil, et
+    `etatAntigravity` lance `agy models` (~1 s, un aller-retour réseau) — lire
+    les trois à chaque tick lançait des dizaines d'appels sans rapport avec ce
+    que l'utilisateur fait, jusque dans le sondage d'un flux OAuth de deux
+    minutes. Omis, les trois sont lues, comme avant (la section « Comptes »
+    des réglages). `ollama` n'a pas de sonde ici (son compte se lit en HTTP
+    depuis le rendu) : le filtrer ne change rien. */
+export async function etatComptes(
+	env: NodeJS.ProcessEnv = process.env,
+	outils?: EtatCompte["outil"][],
+): Promise<EtatCompte[]> {
+	const veut = (o: EtatCompte["outil"]): boolean => !outils || outils.includes(o);
+	return Promise.all([
+		veut("claude") ? etatClaude(env) : null,
+		veut("codex") ? etatCodex(env) : null,
+		veut("agy") ? etatAntigravity(env) : null,
+	]).then(etats => etats.filter((e): e is EtatCompte => e !== null));
 }
 
 /** Traduit le statut HTTP de l'endpoint de quotas Claude en `UsageReadError`,
@@ -156,7 +207,7 @@ async function usageClaude(env: NodeJS.ProcessEnv): Promise<UsageRead> {
 /** Le plus récent `.jsonl` sous `~/.codex/sessions/`, en ne descendant que les
     deux mois les plus récents : c'est là que vit une session en cours. */
 async function dernierRolloutCodex(env: NodeJS.ProcessEnv): Promise<string | null> {
-	const racine = join(dossierPersonnel(env), ".codex", "sessions");
+	const racine = join(dossierCodex(env), "sessions");
 	let annees: string[];
 	try {
 		annees = (await readdir(racine, { withFileTypes: true })).filter(e => e.isDirectory()).map(e => e.name).sort().reverse();
@@ -250,10 +301,15 @@ export async function deconnecterCompte(outil: OutilCompte | "ollama", env: Node
 async function deconnecterAntigravity(): Promise<"ok" | "echec" | "indisponible"> {
 	if (process.platform !== "win32") return "indisponible";
 	try {
+		// CHEMIN ABSOLU, pas un nom nu résolu sur le PATH : c'est l'appel le
+		// plus sensible du lot, il supprime une entrée du gestionnaire
+		// d'identifiants Windows. `%SystemRoot%` est presque toujours défini ;
+		// `C:\Windows` est le repli du système lui-même quand elle manque.
+		const systemRoot = process.env.SystemRoot || "C:\\Windows";
 		// Codes mesurés le 2026-09-21 : 0 quand l'entrée est supprimée, 1 quand
 		// il n'y avait rien à supprimer.
 		const { code } = await lancer({
-			executable: "cmdkey.exe",
+			executable: join(systemRoot, "System32", "cmdkey.exe"),
 			args: ["/delete:gemini:antigravity"],
 			stdin: "",
 			timeoutMs: DELAI_MS,

@@ -610,8 +610,16 @@ export interface HostProcess {
 	replacerTerminal?(ancre: AncreTerminal): Promise<void>;
 	/** L'état des comptes IA que seul l'hôte peut lire. Le contrat ne promet
 	    JAMAIS de jeton : un hôte qui en ferait traverser un violerait la seule
-	    règle de cette capacité. */
-	etatComptes(): Promise<EtatCompte[]>;
+	    règle de cette capacité.
+
+	    `outils` FILTRE la lecture (Ahmed, 2026-09-21) : sans lui, les trois
+	    sondes tournent, dont `agy models` (~1 s, un aller-retour réseau). Les
+	    sondes PÉRIODIQUES d'un flux de connexion (`comptes.ts`, `ai.ts`, trois
+	    secondes) n'ont besoin que d'un seul outil ; lire les trois à chaque
+	    tick y lance des dizaines d'appels sans rapport avec ce que
+	    l'utilisateur fait. La section « Comptes » continue de demander les
+	    trois d'un coup en omettant ce paramètre. */
+	etatComptes(outils?: EtatCompte["outil"][]): Promise<EtatCompte[]>;
 	/** Les quotas du forfait, pour les deux fournisseurs qui les publient. */
 	usageCompte(tool: "claude" | "codex"): Promise<UsageRead>;
 	/** Déconnecte le compte d'un CLI. Vaut pour TOUTE la machine : c'est le

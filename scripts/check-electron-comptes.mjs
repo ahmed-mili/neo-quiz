@@ -11,6 +11,9 @@
  *
  *     npm run check:electron-comptes
  */
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
 /** Un id_token fabriqué : trois segments base64url, le second porte les claims. */
@@ -147,5 +150,70 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
 		[sorties.includes("SECRET-QUI-NE-DOIT-PAS-SORTIR"), sorties.includes("oat01")],
 		[false, false]);
 
+	r.done();
+});
+
+/* ─────────── L'ASSEMBLAGE, pas seulement les parseurs ───────────
+
+   Les cas ci-dessus éprouvent `comptClaude`/`comptCodex`/`emailAntigravity`,
+   des fonctions PURES — mais la fuite que ce contrôle existe pour empêcher
+   se joue dans `etatComptes()` de `comptes.ts`, IMPUR, chargé par aucun
+   script jusqu'ici (Ahmed, 2026-09-21). Un `...(JSON.parse(brut) as object)`
+   distrait au retour d'`etatCodex` — exactement le spread que ce contrôle
+   existe pour empêcher — laissait 22/22 cas verts ci-dessus tout en faisant
+   fuiter `access_token`/`refresh_token` par le pont.
+
+   Un VRAI dossier temporaire joue le rôle du dossier personnel, avec de faux
+   `auth.json` (Codex), `google_accounts.json` (Antigravity) et
+   `.credentials.json` (Claude), chacun porteur d'un jeton reconnaissable.
+   `PATH` n'est PAS étendu au `PATH` réel du système : `resoudreExecutable`
+   ne trouve donc aucun des trois CLI, et `etatComptes()` ne lance jamais de
+   process réel — seule la lecture de fichier est éprouvée. */
+await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) => {
+	const r = makeReporter("Électron — comptes (assemblage)");
+	const dir = await mkdtemp(join(tmpdir(), "electron-comptes-"));
+	try {
+		const SECRET_CODEX = "sk-codex-SECRET-QUI-NE-DOIT-PAS-SORTIR";
+		const REFRESH_CODEX = "refresh-codex-SECRET-QUI-NE-DOIT-PAS-SORTIR";
+		const SECRET_AGY = "sk-agy-SECRET-QUI-NE-DOIT-PAS-SORTIR";
+		const REFRESH_AGY = "refresh-agy-SECRET-QUI-NE-DOIT-PAS-SORTIR";
+		const SECRET_CLAUDE = "sk-ant-oat01-SECRET-QUI-NE-DOIT-PAS-SORTIR";
+		const REFRESH_CLAUDE = "refresh-claude-SECRET-QUI-NE-DOIT-PAS-SORTIR";
+
+		await mkdir(join(dir, ".codex"), { recursive: true });
+		await writeFile(join(dir, ".codex", "auth.json"), JSON.stringify({
+			tokens: {
+				id_token: idToken({ email: "a@b.c", "https://api.openai.com/auth": { chatgpt_plan_type: "plus" } }),
+				access_token: SECRET_CODEX,
+				refresh_token: REFRESH_CODEX,
+			},
+		}));
+		await mkdir(join(dir, ".gemini"), { recursive: true });
+		await writeFile(join(dir, ".gemini", "google_accounts.json"), JSON.stringify({
+			active: "x@gmail.com", access_token: SECRET_AGY, refresh_token: REFRESH_AGY,
+		}));
+		await mkdir(join(dir, ".claude"), { recursive: true });
+		await writeFile(join(dir, ".claude", ".credentials.json"), JSON.stringify({
+			claudeAiOauth: { accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE },
+		}));
+
+		const env = { USERPROFILE: dir, HOME: dir };
+		const etats = await etatComptes(env);
+		const serialise = JSON.stringify(etats);
+
+		r.check("etatComptes() rend bien les trois outils lus",
+			etats.map(e => e.outil).sort(),
+			["agy", "claude", "codex"]);
+
+		r.check("etatComptes() lit l'adresse Codex depuis le vrai fichier",
+			etats.find(e => e.outil === "codex")?.email, "a@b.c");
+
+		r.check("la réponse sérialisée d'etatComptes() ne contient aucun des six jetons",
+			[SECRET_CODEX, REFRESH_CODEX, SECRET_AGY, REFRESH_AGY, SECRET_CLAUDE, REFRESH_CLAUDE]
+				.map(jeton => serialise.includes(jeton)),
+			[false, false, false, false, false, false]);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
 	r.done();
 });

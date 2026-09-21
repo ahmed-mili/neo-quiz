@@ -1443,8 +1443,12 @@ const SONDE_CONNEXION_MS = 10000;
     sondes : l'appelant ne demande que ça. */
 async function connecteSelonEtatComptes(outil: "claude" | "codex" | "agy"): Promise<boolean> {
 	if (!currentHost().platform.isDesktopApp) return false;
+	// FILTRÉ à ce seul outil (Ahmed, 2026-09-21) : cette sonde tourne toutes
+	// les trois secondes pendant un flux de connexion qui peut durer deux
+	// minutes ; lire les trois comptes à chaque tick lancerait `agy models`
+	// (~1 s, réseau) en boucle sans rapport avec ce que l'utilisateur fait.
 	return requireHost("process")
-		.etatComptes()
+		.etatComptes([outil])
 		.then(etats => etats.find(e => e.outil === outil)?.connecte === true)
 		.catch(() => false);
 }

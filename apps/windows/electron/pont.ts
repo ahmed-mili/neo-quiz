@@ -496,8 +496,9 @@ export interface Pont {
 		/** L'état des trois comptes que le PRINCIPAL seul peut lire. Aucun jeton
 		    ne traverse : seulement une adresse, un nom de forfait et deux
 		    booléens. Ollama n'y est pas, son compte se sonde en HTTP local
-		    depuis le rendu. */
-		comptesEtat(): Promise<EtatCompte[]>;
+		    depuis le rendu. `outils` filtre la lecture (voir `HostProcess.etatComptes`) :
+		    omis, les trois sont lus, comme avant. */
+		comptesEtat(outils?: EtatCompte["outil"][]): Promise<EtatCompte[]>;
 		/** Les quotas d'un compte. Le jeton qui les obtient ne quitte jamais le
 		    principal. */
 		comptesUsage(tool: "claude" | "codex"): Promise<UsageRead>;

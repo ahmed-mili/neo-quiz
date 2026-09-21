@@ -266,6 +266,17 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		for (const fermer of Array.from(popoversUsage)) fermer();
 	}
 
+	/** Les minuteurs d'OUVERTURE en attente (survol démarré, popover pas
+	    encore posé) — distincts de `popoversUsage`, qui ne connaît que ce
+	    qu'`ouvrirMaintenant` a déjà inscrit. Sans ce second registre, fermer
+	    les réglages pendant le délai d'ouverture (`DELAI_OUVERTURE_MS`) laisse
+	    le minuteur se déclencher après coup et poser un popover portalé au
+	    `<body>` qui ne se retire jamais (Ahmed, 2026-09-21). */
+	const ouverturesEnAttente = new Set<() => void>();
+	function annulerOuverturesEnAttente(): void {
+		for (const annuler of Array.from(ouverturesEnAttente)) annuler();
+	}
+
 	/** Popover d'usage au survol ou au focus clavier d'une ligne Claude ou
 	    Codex — jamais Antigravity ni Ollama : seul `outil: OutilAvecUsage`
 	    (paramètre de cette fonction) rend l'appel possible, le compilateur
@@ -281,6 +292,7 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 
 		function annulerOuverture(): void {
 			if (minuteurOuverture != null) { window.clearTimeout(minuteurOuverture); minuteurOuverture = null; }
+			ouverturesEnAttente.delete(annulerOuverture);
 		}
 		function annulerFermeture(): void {
 			if (minuteurFermeture != null) { window.clearTimeout(minuteurFermeture); minuteurFermeture = null; }
@@ -310,7 +322,10 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		}
 
 		function ouvrirMaintenant(): void {
-			if (popEl) return;
+			// La section a pu être démontée entre le survol et ce déclenchement
+			// (délai d'ouverture, ou `focusin` juste avant fermeture) : poser un
+			// popover portalé au `<body>` après coup le laisserait orphelin.
+			if (detruit || popEl) return;
 			annulerOuverture();
 			annulerFermeture();
 			const monJeton = ++jeton;
@@ -340,7 +355,8 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		function programmerOuverture(): void {
 			if (popEl || minuteurOuverture != null) return;
 			annulerFermeture();
-			minuteurOuverture = window.setTimeout(() => { minuteurOuverture = null; ouvrirMaintenant(); }, DELAI_OUVERTURE_MS);
+			ouverturesEnAttente.add(annulerOuverture);
+			minuteurOuverture = window.setTimeout(() => { minuteurOuverture = null; ouverturesEnAttente.delete(annulerOuverture); ouvrirMaintenant(); }, DELAI_OUVERTURE_MS);
 		}
 
 		function programmerFermeture(): void {
@@ -560,6 +576,11 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		bouton: HTMLButtonElement,
 	): Promise<void> {
 		if (action === "deconnecter") {
+			// FERMÉ AVANT D'OUVRIR LA MODALE, comme `redessiner` et
+			// `poserSquelette` : le popover d'usage est à z-index 1000, au-dessus
+			// de la couche modale (90), et resterait peint par-dessus la
+			// confirmation sans ça.
+			fermerPopoversUsage();
 			// DÉSACTIVÉ AVANT D'OUVRIR LA CONFIRMATION, comme les deux autres
 			// branches : sans ça, un double-clic rapide empile deux modales de
 			// confirmation. Réactivé si l'utilisateur annule — `redessiner()`
@@ -630,5 +651,5 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 	poserSquelette();
 	void redessiner();
 
-	return () => { detruit = true; fermerPopoversUsage(); };
+	return () => { detruit = true; annulerOuverturesEnAttente(); fermerPopoversUsage(); };
 }

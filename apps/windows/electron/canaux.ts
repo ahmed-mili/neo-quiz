@@ -1041,7 +1041,16 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 
 	ipcMain.handle(CANAUX.processusAttendreFinTerminal, () => finTerminal);
 
-	ipcMain.handle(CANAUX.comptesEtat, (): Promise<EtatCompte[]> => etatComptes());
+	// `outils` vient du rendu : filtré contre la liste des quatre noms valides
+	// avant transmission, une valeur hors liste étant simplement ignorée
+	// (comme un canal qui reçoit un `tool` hors liste ailleurs dans ce fichier).
+	const OUTILS_COMPTE: ReadonlyArray<EtatCompte["outil"]> = ["claude", "codex", "agy", "ollama"];
+	ipcMain.handle(CANAUX.comptesEtat, (_e, outils: unknown): Promise<EtatCompte[]> => {
+		const filtre = Array.isArray(outils)
+			? outils.filter((o): o is EtatCompte["outil"] => OUTILS_COMPTE.includes(o as EtatCompte["outil"]))
+			: undefined;
+		return etatComptes(undefined, filtre);
+	});
 
 	ipcMain.handle(CANAUX.comptesUsage, (_e, tool: unknown): Promise<UsageRead> => {
 		if (tool !== "claude" && tool !== "codex") {

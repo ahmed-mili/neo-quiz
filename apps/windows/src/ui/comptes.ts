@@ -519,7 +519,18 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 				void requireHost("process").terminalUsageCli("agy").then((verdict) => {
 					/* « indisponible » : hors Windows, ou le terminal n'a pas pu
 					   être lancé — une Notice, jamais un bouton mort. */
-					if (verdict !== "lance") currentHost().ui.notice(t("app.comptes.usageTerminalFailed"));
+					if (verdict !== "lance") { currentHost().ui.notice(t("app.comptes.usageTerminalFailed")); return; }
+					/* LA CONSIGNE VIENT DE L'APPLICATION, PAS DU TERMINAL (mesuré
+					   le 2026-09-21) : `agy` peint son interface sur l'ÉCRAN
+					   ALTERNATIF du terminal, ce qui EFFACE la ligne que le
+					   script y écrit avant de le lancer — elle ne reparaît qu'à
+					   la sortie du CLI, quand elle ne sert plus. Une Notice, elle,
+					   vit dans une fenêtre qu'`agy` ne peut pas repeindre. Elle
+					   annonce aussi la configuration du PREMIER lancement : tant
+					   qu'elle n'est pas faite, `agy` ouvre son assistant (choix du
+					   thème, conditions d'utilisation) au lieu de son invite, et
+					   `/usage` n'est pas encore atteignable. */
+					currentHost().ui.notice(t("app.comptes.usageTerminalOpened"));
 				}).catch((e: unknown) => {
 					console.warn(LOG_PREFIX, "terminal d'usage Antigravity impossible:", e);
 					currentHost().ui.notice(t("app.comptes.usageTerminalFailed"));

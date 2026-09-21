@@ -135,6 +135,7 @@ export const EN_APP = {
 	"app.comptes.usageTerminal": "Open Antigravity CLI to check your quota (/usage)",
 	"app.comptes.usageTerminalHint": "Type /usage to see your plan's usage. Quit Antigravity when you're done.",
 	"app.comptes.usageTerminalFailed": "Could not open the Antigravity CLI.",
+	"app.comptes.usageTerminalOpened": "Antigravity CLI is opening in a terminal — type /usage there to see your quota. On its very first launch it asks you to set it up first.",
 	// Antigravity n'attend que 60 secondes, EN INTERNE, sans rien dire : le
 	// script de connexion affiche ces deux textes, traduits par le principal
 	// (`canaux.ts`) — jamais un texte venu du rendu dans un script.

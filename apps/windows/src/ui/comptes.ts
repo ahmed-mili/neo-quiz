@@ -19,13 +19,15 @@
 
 import type { CliTool, EtatCompte } from "../../../../src/host/types";
 import { currentHost, requireHost } from "../../../../src/host/current";
-import { t } from "../../../../src/i18n";
+import { t, currentLang } from "../../../../src/i18n";
 import { ajouter } from "../../../../src/dom";
 import { openConfirmModal } from "../../../../src/editor/modals";
 import { checkOllamaCompte, setBrandLogo } from "../../../../src/dashboard/ai-providers";
 import { pont } from "../host/pont";
 import { CLE_REGLAGES_IA } from "../../electron/pont";
 import { LOG_PREFIX } from "../../../../src/branding";
+import type { UsageRead, UsageReadError, UsageRow } from "../../../../src/dashboard/usage-format";
+import { usageRowLabel, formatResetMoment, formatAge, formatDuration } from "../../../../src/dashboard/usage-format";
 
 /** L'ordre d'affichage, fixé par le cahier des charges — jamais celui que
     rendrait `etatComptes()` (qui ne connaît pas Ollama). */
@@ -117,6 +119,120 @@ function actionDe(etat: EtatCompte): "installer" | "connecter" | "deconnecter" {
 	return etat.connecte ? "deconnecter" : "connecter";
 }
 
+/* ── Le popover d'usage (survol / focus d'une ligne Claude ou Codex) ──
+   `usageCompte` n'accepte que ces deux outils — le compilateur refuse déjà
+   Antigravity et Ollama à l'appel, ce module n'a pas besoin de le revérifier
+   lui-même au-delà de ce type. */
+type OutilAvecUsage = "claude" | "codex";
+
+const DELAI_OUVERTURE_MS = 250;
+const DELAI_FERMETURE_MS = 150;
+/** Le résultat d'une lecture est gardé 60 s par outil : Claude coûte un
+    aller-retour réseau, Codex une lecture de fichier — aucun des deux
+    n'a besoin d'être relu à chaque survol de la même minute. */
+const USAGE_CACHE_MS = 60_000;
+const USAGE_SEUIL_AVERTISSEMENT = 80;
+const USAGE_SEUIL_CRITIQUE = 95;
+
+interface EntreeUsage { at: number; resultat: UsageRead; }
+
+const usageCache = new Map<OutilAvecUsage, EntreeUsage>();
+const usageEnCours = new Map<OutilAvecUsage, Promise<EntreeUsage>>();
+
+/** Lecture de l'usage, gardée en cache. NE REJETTE JAMAIS : une exception du
+    pont (Claude) ou de la lecture disque (Codex) devient une erreur
+    `unavailable`, exactement comme le reste de ce module transforme les
+    rejets du pont en un état affichable plutôt qu'en rejection non gérée. */
+async function lireUsageAvecAge(outil: OutilAvecUsage): Promise<EntreeUsage> {
+	const cache = usageCache.get(outil);
+	if (cache && Date.now() - cache.at < USAGE_CACHE_MS) return cache;
+	const enCours = usageEnCours.get(outil);
+	if (enCours) return enCours;
+	const promesse = requireHost("process").usageCompte(outil)
+		.catch((e): UsageRead => {
+			console.warn(LOG_PREFIX, "lecture d'usage impossible:", e);
+			return { rows: [], error: { kind: "unavailable" } };
+		})
+		.then((resultat): EntreeUsage => {
+			const entree = { at: Date.now(), resultat };
+			usageCache.set(outil, entree);
+			usageEnCours.delete(outil);
+			return entree;
+		});
+	usageEnCours.set(outil, promesse);
+	return promesse;
+}
+
+function classeSeuil(pct: number): string {
+	if (pct >= USAGE_SEUIL_CRITIQUE) return " is-critical";
+	if (pct >= USAGE_SEUIL_AVERTISSEMENT) return " is-warning";
+	return "";
+}
+
+/** Une jauge : réutilise `.qbd-ai-usage-gauge-bar`/`-fill` (dashboard-ai.css,
+    posées mais jusqu'ici jamais consommées) plutôt que d'en redéfinir une —
+    même barre que celle que l'écran d'usage du greffon aurait affichée. */
+function poserLigneUsage(pop: HTMLElement, row: UsageRow): void {
+	const ligneUsage = ajouter(pop, "div", "nq-usage-row");
+	const info = ajouter(ligneUsage, "div", "nq-usage-row-info");
+	ajouter(info, "div", "nq-usage-row-label", usageRowLabel(row));
+	const reset = formatResetMoment(row.resetsAt, currentLang());
+	if (reset) ajouter(info, "div", "nq-usage-row-reset", t("app.comptes.usage.resetsAt", { moment: reset }));
+	ajouter(ligneUsage, "span", "nq-usage-row-pct", t("ai.usage.usedPercent", { n: Math.round(row.usedPercent) }));
+	const barre = ajouter(ligneUsage, "div", "qbd-ai-usage-gauge-bar");
+	const remplissage = ajouter(barre, "div", "qbd-ai-usage-gauge-fill" + classeSeuil(row.usedPercent));
+	remplissage.style.width = Math.max(0, Math.min(100, row.usedPercent)) + "%";
+}
+
+/** Les QUATRE cas d'échec (`UsageReadError.kind`), chacun sa phrase — un
+    popover qui resterait vide sur un échec serait indiscernable d'un bug. */
+function poserErreurUsage(pop: HTMLElement, erreur: UsageReadError): void {
+	const message = erreur.kind === "rate-limited"
+		? (erreur.retryAfterSec != null
+			? t("app.comptes.usage.errorRateLimitedDelay", { delai: formatDuration(erreur.retryAfterSec * 1000) })
+			: t("app.comptes.usage.errorRateLimited"))
+		: erreur.kind === "unauthenticated" ? t("app.comptes.usage.errorUnauthenticated")
+			: erreur.kind === "jamais-lance" ? t("app.comptes.usage.errorNeverRun")
+				: t("app.comptes.usage.errorUnavailable");
+	ajouter(pop, "p", "nq-usage-error", message);
+}
+
+/** Affiché DÈS l'ouverture, avant que `usageCompte` ait répondu — sans ça, le
+    popover apparaît vide puis se remplit d'un coup, ce qui saute à l'œil. */
+function poserUsagePopoverChargement(pop: HTMLElement, outil: OutilAvecUsage): void {
+	ajouter(pop, "div", "nq-usage-titre", nomOutil(outil));
+	for (let i = 0; i < 2; i++) {
+		const ligneUsage = ajouter(pop, "div", "nq-usage-row");
+		const info = ajouter(ligneUsage, "div", "nq-usage-row-info");
+		ajouter(info, "div", "nq-usage-row-label", t("app.comptes.loading"));
+		const barre = ajouter(ligneUsage, "div", "qbd-ai-usage-gauge-bar");
+		ajouter(barre, "div", "qbd-ai-usage-gauge-fill nq-usage-fill--attente");
+	}
+}
+
+function poserUsagePopoverContenu(pop: HTMLElement, outil: OutilAvecUsage, entree: EntreeUsage): void {
+	ajouter(pop, "div", "nq-usage-titre", nomOutil(outil));
+	if (entree.resultat.error) {
+		poserErreurUsage(pop, entree.resultat.error);
+		return;
+	}
+	if (!entree.resultat.rows.length) {
+		// Une lecture réussie sans AUCUNE ligne n'a pas de sens pour ces deux
+		// outils (ils publient toujours au moins une jauge) ; un message
+		// reste plus honnête qu'un cadre nu — même principe que les quatre
+		// erreurs ci-dessus.
+		ajouter(pop, "p", "nq-usage-error", t("app.comptes.usage.errorUnavailable"));
+		return;
+	}
+	for (const row of entree.resultat.rows) poserLigneUsage(pop, row);
+	if (outil === "codex") {
+		// Codex n'a pas d'état courant : la lecture vient du dernier fichier
+		// de session écrit sur disque, une photo prise à SA dernière lecture
+		// (le seul horodatage disponible ici), pas au lancement du CLI.
+		ajouter(pop, "p", "nq-usage-note", t("app.comptes.usage.codexSnapshot", { age: formatAge(entree.at, Date.now()) }));
+	}
+}
+
 export function monterReglagesComptes(section: HTMLElement): () => void {
 	let detruit = false;
 	/** L'adresse de connexion Ollama, retenue depuis le dernier redessin —
@@ -126,6 +242,108 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 	let ollamaSigninUrl: string | null = null;
 
 	const liste = ajouter(section, "div", "nq-comptes-liste");
+
+	/** Les popovers d'usage OUVERTS — au plus un par ligne, mais une action
+	    peut redessiner la liste pendant qu'un survol est en cours. Fermés
+	    avant tout redessin et au démontage : un popover portalé au `<body>`
+	    survit à sa ligne si personne ne le retire explicitement. */
+	const popoversUsage = new Set<() => void>();
+	function fermerPopoversUsage(): void {
+		for (const fermer of Array.from(popoversUsage)) fermer();
+	}
+
+	/** Popover d'usage au survol ou au focus clavier d'une ligne Claude ou
+	    Codex — jamais Antigravity ni Ollama : seul `outil: OutilAvecUsage`
+	    (paramètre de cette fonction) rend l'appel possible, le compilateur
+	    refuse déjà les deux autres à `usageCompte`. */
+	function attacherPopoverUsage(ligne: HTMLElement, outil: OutilAvecUsage): void {
+		let popEl: HTMLElement | null = null;
+		let minuteurOuverture: number | null = null;
+		let minuteurFermeture: number | null = null;
+		/* Incrémenté à chaque ouverture : une lecture qui répond après que ce
+		   jeton a changé (fermé puis pas rouvert, ou rouvert une seconde fois)
+		   ne doit jamais toucher un popover qui n'est plus le sien. */
+		let jeton = 0;
+
+		function annulerOuverture(): void {
+			if (minuteurOuverture != null) { window.clearTimeout(minuteurOuverture); minuteurOuverture = null; }
+		}
+		function annulerFermeture(): void {
+			if (minuteurFermeture != null) { window.clearTimeout(minuteurFermeture); minuteurFermeture = null; }
+		}
+
+		function fermer(): void {
+			annulerOuverture();
+			annulerFermeture();
+			jeton++;
+			if (popEl) { popEl.remove(); popEl = null; }
+			popoversUsage.delete(fermer);
+		}
+
+		function positionner(): void {
+			if (!popEl) return;
+			const r = ligne.getBoundingClientRect();
+			// Mesuré caché : sa taille dépend du contenu qu'on vient de poser
+			// (squelette ou vraies jauges), inconnue avant qu'il soit dans le DOM.
+			popEl.style.visibility = "hidden";
+			const pr = popEl.getBoundingClientRect();
+			const left = Math.min(Math.max(8, r.left), window.innerWidth - pr.width - 8);
+			let top = r.bottom + 6;
+			if (top + pr.height > window.innerHeight - 8) top = Math.max(8, r.top - pr.height - 6);
+			popEl.style.left = left + "px";
+			popEl.style.top = top + "px";
+			popEl.style.visibility = "";
+		}
+
+		function ouvrirMaintenant(): void {
+			if (popEl) return;
+			annulerOuverture();
+			annulerFermeture();
+			const monJeton = ++jeton;
+			popoversUsage.add(fermer);
+			popEl = ajouter(document.body, "div", "nq-usage-popover");
+			popEl.addEventListener("mouseenter", annulerFermeture);
+			popEl.addEventListener("mouseleave", programmerFermeture);
+			// AFFICHÉ AVANT la réponse, avec ses jauges en attente : un popover
+			// qui apparaît vide puis se remplit sauterait à l'œil.
+			poserUsagePopoverChargement(popEl, outil);
+			positionner();
+			// Pas de `.catch` : `lireUsageAvecAge` ne rejette jamais (elle
+			// transforme toute exception en erreur affichable) — le `.then`
+			// ci-dessous couvre sa seule issue possible.
+			void lireUsageAvecAge(outil).then((entree) => {
+				/* Trois façons pour cette réponse d'arriver « trop tard » : la
+				   section a été démontée, ce popover a été fermé (et pas
+				   rouvert), ou il a été rouvert une seconde fois depuis — dans
+				   les trois cas `jeton` a changé, ne rien toucher. */
+				if (detruit || monJeton !== jeton || !popEl) return;
+				popEl.replaceChildren();
+				poserUsagePopoverContenu(popEl, outil, entree);
+				positionner();
+			});
+		}
+
+		function programmerOuverture(): void {
+			if (popEl || minuteurOuverture != null) return;
+			annulerFermeture();
+			minuteurOuverture = window.setTimeout(() => { minuteurOuverture = null; ouvrirMaintenant(); }, DELAI_OUVERTURE_MS);
+		}
+
+		function programmerFermeture(): void {
+			annulerOuverture();
+			if (minuteurFermeture != null) return;
+			minuteurFermeture = window.setTimeout(() => { minuteurFermeture = null; fermer(); }, DELAI_FERMETURE_MS);
+		}
+
+		ligne.addEventListener("mouseenter", programmerOuverture);
+		ligne.addEventListener("mouseleave", programmerFermeture);
+		// `focusin`/`focusout` BUBBLENT depuis le bouton d'action (seul enfant
+		// focalisable) : Tab jusqu'à la ligne ouvre le popover sans délai —
+		// contrairement au survol, un geste clavier explicite n'a pas besoin
+		// d'être filtré d'un passage rapide.
+		ligne.addEventListener("focusin", ouvrirMaintenant);
+		ligne.addEventListener("focusout", programmerFermeture);
+	}
 
 	/** Le logo et le nom, communs à la ligne SQUELETTE et à la ligne finale :
 	    les deux seules choses connues sans attendre aucune lecture. */
@@ -142,6 +360,7 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 	    STRUCTURE que `poserLigne` (mêmes classes, un bouton de même taille)
 	    pour que la hauteur ne saute pas quand les vraies lignes la remplacent. */
 	function poserSquelette(): void {
+		fermerPopoversUsage();
 		liste.replaceChildren();
 		for (const outil of ORDRE) {
 			const ligne = ajouter(liste, "div", "nq-comptes-ligne");
@@ -185,6 +404,12 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		bouton.addEventListener("click", () => {
 			void surClicAction(etat.outil, action, bouton);
 		});
+
+		// Antigravity et Ollama n'ont rien à montrer (aucun forfait lisible) :
+		// l'absence de popover EST l'information, pas un oubli.
+		if (etat.outil === "claude" || etat.outil === "codex") {
+			attacherPopoverUsage(ligne, etat.outil);
+		}
 	}
 
 	/** Redessine la section entière. NE JETTE JAMAIS : son seul appelant est
@@ -200,12 +425,14 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		} catch (e) {
 			console.warn(LOG_PREFIX, "lecture des comptes IA impossible:", e);
 			if (detruit) return;
+			fermerPopoversUsage();
 			liste.replaceChildren();
 			ajouter(liste, "p", "nq-comptes-erreur", t("app.comptes.loadError"));
 			return;
 		}
 		if (detruit) return;
 		ollamaSigninUrl = resultat.ollamaSigninUrl;
+		fermerPopoversUsage();
 		liste.replaceChildren();
 		for (const etat of resultat.etats) poserLigne(etat);
 	}
@@ -316,5 +543,5 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 	poserSquelette();
 	void redessiner();
 
-	return () => { detruit = true; };
+	return () => { detruit = true; fermerPopoversUsage(); };
 }

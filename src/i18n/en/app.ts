@@ -122,6 +122,20 @@ export const EN_APP = {
 	"app.comptes.cancel": "Cancel",
 	"app.comptes.logoutFailed": "Could not sign out of {name}.",
 
+	/* ── Popover d'usage au survol d'une ligne Claude ou Codex ──
+	   Les seuls deux outils dont le forfait est lisible (`usageCompte`, typé
+	   "claude" | "codex"). Quatre messages d'échec, un par `UsageReadError`
+	   (`usage-format.ts`) — aucun ne laisse le popover vide. */
+	"app.comptes.usage.resetsAt": "Resets {moment}",
+	"app.comptes.usage.errorRateLimited": "The provider is rate-limiting usage reads right now.",
+	"app.comptes.usage.errorRateLimitedDelay": "The provider is rate-limiting usage reads. Try again in {delai}.",
+	"app.comptes.usage.errorUnauthenticated": "This account isn't readable — sign in again.",
+	"app.comptes.usage.errorUnavailable": "Couldn't reach the usage endpoint.",
+	"app.comptes.usage.errorNeverRun": "Codex hasn't run on this machine yet.",
+	// Codex n'a pas d'état courant : sa lecture vient du dernier fichier de
+	// session écrit sur disque, une photo prise au dernier lancement du CLI.
+	"app.comptes.usage.codexSnapshot": "Snapshot taken {age}.",
+
 	/* ── Réglages « Général » (application seulement) ── */
 	"app.settings.general": "General",
 	"app.settings.languageAuto": "Automatic (follow Windows)",

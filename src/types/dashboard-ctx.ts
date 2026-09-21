@@ -63,8 +63,6 @@ export interface AiSettings {
 	aiWebAvertissementMasque?: string[];
 	/** Journal des générations IA (dashboard/ai-usage.ts). */
 	aiUsageLog?: AiUsageEntry[];
-	/** Lecture opt-in de l'usage de l'abonnement du fournisseur. */
-	aiUsageLimitsEnabled?: boolean;
 	hotkeyAddFiles?: Hotkey | null;
 	/** IGNORÉ depuis le 2026-09-17 (le bouton « Add notes » n'existe plus) ;
 	    jamais effacé, comme les réglages de la dictée. */

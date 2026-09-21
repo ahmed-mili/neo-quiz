@@ -43,7 +43,7 @@ export interface AiSettingsHost {
 export function aiSettingsDefaults(): Required<Pick<AiSettings,
 	"aiProvider" | "aiModel" | "aiEffort" | "aiCodexFast" | "aiAntigravityLevels" | "aiAntigravityModels" | "aiOllamaUrl" | "aiOllamaCloudKey"
 	| "aiOllamaModels" | "aiOllamaCatalog" | "aiOllamaPlansAppris" | "aiOllamaPlanCompte"
-	| "aiWebAvertissementMasque" | "aiUsageLog" | "aiUsageLimitsEnabled"
+	| "aiWebAvertissementMasque" | "aiUsageLog"
 	| "aiMentionExtraFolders" | "aiOutputFolder">> & { hotkeyAddFiles: Hotkey } {
 	return {
 		// Aucun fournisseur par défaut : le choix reste la première étape.
@@ -72,9 +72,6 @@ export function aiSettingsDefaults(): Required<Pick<AiSettings,
 		aiWebAvertissementMasque: [],
 		// Journal d'usage : purement informatif, borné à 300 entrées (ai-usage.ts).
 		aiUsageLog: [],
-		// Désactivé par défaut : lire les quotas du compte suppose d'ouvrir le
-		// fichier de session du CLI installé — jamais sans demande explicite.
-		aiUsageLimitsEnabled: false,
 		// Ctrl+E, plus facile à atteindre que Ctrl+U (demande Ahmed, 2026-09-17).
 		hotkeyAddFiles: { modifiers: ["Mod"], key: "e" },
 		// Vide par défaut : le « @ » se limite au vault tant qu'on n'ajoute rien.

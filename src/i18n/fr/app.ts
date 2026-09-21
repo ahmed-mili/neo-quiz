@@ -80,6 +80,14 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.comptes.cancel": "Annuler",
 	"app.comptes.logoutFailed": "Impossible de se déconnecter de {name}.",
 
+	"app.comptes.usage.resetsAt": "Réarmement {moment}",
+	"app.comptes.usage.errorRateLimited": "Le fournisseur limite les lectures d'usage en ce moment.",
+	"app.comptes.usage.errorRateLimitedDelay": "Le fournisseur limite les lectures d'usage. Réessayez dans {delai}.",
+	"app.comptes.usage.errorUnauthenticated": "Ce compte n'est pas lisible — reconnectez-vous.",
+	"app.comptes.usage.errorUnavailable": "Impossible de joindre le service d'usage.",
+	"app.comptes.usage.errorNeverRun": "Codex n'a pas encore tourné sur cette machine.",
+	"app.comptes.usage.codexSnapshot": "Photo prise {age}.",
+
 	"app.settings.general": "Général",
 	"app.settings.languageAuto": "Automatique (suivre Windows)",
 	"app.settings.languageHint": "Langue de l'interface. L'installeur la règle sur la langue de la page de téléchargement ; changez-la ici à tout moment. Les quiz générés suivent toujours la langue de votre demande.",

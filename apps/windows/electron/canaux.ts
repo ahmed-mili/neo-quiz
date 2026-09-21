@@ -50,7 +50,7 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, poserFenetre, rectangleTerminal, run, scriptConnexion, scriptInstallation, scriptUsageTerminal } from "./process";
+import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, verifierNavigateurVisible, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, poserFenetre, rectangleTerminal, run, scriptConnexion, scriptInstallation, scriptUsageTerminal } from "./process";
 import { deconnecterCompte, etatComptes, usageCompte } from "./comptes";
 import type { AncreTerminal, EtatCompte } from "../../../src/host/types";
 import type { UsageRead } from "../../../src/dashboard/usage-format";
@@ -803,7 +803,9 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	ipcMain.handle(CANAUX.depotTerminer, async () => {
 		/* Le navigateur d'abord, à sa place d'avant — ATTENDU : rendu agrandi,
 		   il prend le premier plan, et Neo Quiz doit le reprendre après. */
-		await restaurerNavigateur();
+		console.log(LOG_PREFIX, "[terminer] début");
+		const pNav = await restaurerNavigateur();
+		console.log(LOG_PREFIX, "[terminer] restaurerNavigateur terminé, pNav:", pNav ? `hwnd=${pNav.hwnd}` : "null");
 		const fenetre = deps.fenetreCourante();
 		if (fenetre && !fenetre.isDestroyed() && dispositionAvant) {
 			const avant = dispositionAvant;
@@ -818,6 +820,12 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			}
 		}
 		deps.fenetre.premierPlan();
+		console.log(LOG_PREFIX, "[terminer] fin — premierPlan appelé");
+		if (pNav) {
+			setTimeout(() => {
+				void verifierNavigateurVisible(pNav);
+			}, 150);
+		}
 	});
 
 	ipcMain.handle(CANAUX.vaultsObsidian, async () => {

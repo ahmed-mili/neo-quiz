@@ -2854,7 +2854,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					   « web », `syncWebModal` la rouvre). */
 					if (!interne && phase === "web") {
 						openConfirmModal(
-							t("ai.web.cancelTitle"),
+							t("ai.web.cancelTitle", { site: attenteWebSite }),
 							t("ai.web.cancelMessage", { site: attenteWebSite }),
 							t("ai.web.cancelConfirm"),
 							t("ai.web.cancelKeep"),

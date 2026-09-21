@@ -1131,24 +1131,55 @@ export function scriptRestaurerNavigateur(p: PlacementFenetre): string {
 		"Add-Type -Name Win -Namespace NQ -MemberDefinition @'",
 		"[DllImport(\"user32.dll\")] public static extern bool IsWindow(IntPtr h);",
 		"[DllImport(\"user32.dll\")] public static extern bool IsIconic(IntPtr h);",
+		"[DllImport(\"user32.dll\")] public static extern bool IsWindowVisible(IntPtr h);",
 		"[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h, int cmd);",
 		"[DllImport(\"user32.dll\")] public static extern bool SetWindowPlacement(IntPtr h, ref WP p);",
+		"[DllImport(\"user32.dll\")] public static extern bool GetWindowPlacement(IntPtr h, ref WP p);",
 		"public struct WP { public int Length, Flags, ShowCmd, MinX, MinY, MaxX, MaxY, L, T, R, B; }",
 		"'@",
 		"$h = [IntPtr]" + String(Math.floor(p.hwnd)),
+		"[Console]::Out.WriteLine('hwnd=' + [int64]$h + ' isWindow=' + [NQ.Win]::IsWindow($h) + ' isVisible=' + [NQ.Win]::IsWindowVisible($h) + ' isIconic=' + [NQ.Win]::IsIconic($h)); [Console]::Out.Flush()",
 		"if ([NQ.Win]::IsWindow($h)) {",
+		/* L'état d'AVANT le placement, pour le diagnostic (2026-09-22). */
+		"  $avant = New-Object NQ.Win+WP; $avant.Length = 44; [NQ.Win]::GetWindowPlacement($h, [ref]$avant) | Out-Null",
+		"  [Console]::Out.WriteLine('avant: showCmd=' + $avant.ShowCmd + ' rect=[' + $avant.L + ',' + $avant.T + ',' + $avant.R + ',' + $avant.B + ']'); [Console]::Out.Flush()",
 		"  $p = New-Object NQ.Win+WP; $p.Length = 44; $p.ShowCmd = " + String(p.showCmd) + "; $p.MinX = -1; $p.MinY = -1; $p.MaxX = -1; $p.MaxY = -1",
 		"  $p.L = " + String(p.l) + "; $p.T = " + String(p.t) + "; $p.R = " + String(p.r) + "; $p.B = " + String(p.b),
-		"  [NQ.Win]::SetWindowPlacement($h, [ref]$p) | Out-Null",
-		/* JAMAIS RÉDUITE (exigence : ne jamais fermer ni perdre la fenêtre du
-		   navigateur) : l'état réduit n'a été vu qu'après une attente annulée
-		   alors qu'aucune ligne du dépôt ne minimise — posé par Windows
-		   lui-même au terme de la bataille de premier plan qui suit la
-		   restauration (SW_SHOWMAXIMIZED active le navigateur, puis Neo Quiz
-		   reprend le devant). Si la fenêtre finit malgré tout réduite, un
-		   ShowWindow SANS ACTIVATION (4) la rattrape : visible à sa place
-		   d'avant, sans prendre le focus à Neo Quiz qui se remet juste après. */
-		"  if ([NQ.Win]::IsIconic($h)) { [NQ.Win]::ShowWindow($h, 4) | Out-Null }",
+		"  $ok = [NQ.Win]::SetWindowPlacement($h, [ref]$p)",
+		"  [Console]::Out.WriteLine('SetWindowPlacement=' + $ok + ' showCmd=' + " + String(p.showCmd) + "); [Console]::Out.Flush()",
+		/* 1. Si la fenêtre est réduite/iconique, SW_RESTORE (9) est le SEUL qui la restaure (4 ou 8 ne restaurent jamais une fenêtre réduite) */
+		"  if ([NQ.Win]::IsIconic($h)) { [NQ.Win]::ShowWindow($h, 9) | Out-Null; [Console]::Out.WriteLine('rattrapage: etait reduite -> SW_RESTORE'); [Console]::Out.Flush() }",
+		/* 2. Si la fenêtre n'est pas visible (WS_VISIBLE a sauté suite au SetWindowPlacement ou autre), la réafficher dans son état voulu */
+		"  if (-not [NQ.Win]::IsWindowVisible($h)) {",
+		"    if (" + String(p.showCmd) + " -eq 3) { [NQ.Win]::ShowWindow($h, 3) | Out-Null; [Console]::Out.WriteLine('rattrapage: etait invisible -> SW_SHOWMAXIMIZED'); [Console]::Out.Flush() }",
+		"    else { [NQ.Win]::ShowWindow($h, 8) | Out-Null; [Console]::Out.WriteLine('rattrapage: etait invisible -> SW_SHOWNA'); [Console]::Out.Flush() }",
+		"  }",
+		"  [Console]::Out.WriteLine('apres: isVisible=' + [NQ.Win]::IsWindowVisible($h) + ' isIconic=' + [NQ.Win]::IsIconic($h)); [Console]::Out.Flush()",
+		"} else {",
+		"  [Console]::Out.WriteLine('fenetre disparue (IsWindow=false)'); [Console]::Out.Flush()",
+		"}",
+	].join("\n");
+}
+
+export function scriptVerifierNavigateurVisible(p: PlacementFenetre): string {
+	return [
+		"Add-Type -Name WinV -Namespace NQV -MemberDefinition @'",
+		"[DllImport(\"user32.dll\")] public static extern bool IsWindow(IntPtr h);",
+		"[DllImport(\"user32.dll\")] public static extern bool IsIconic(IntPtr h);",
+		"[DllImport(\"user32.dll\")] public static extern bool IsWindowVisible(IntPtr h);",
+		"[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h, int cmd);",
+		"'@",
+		"$h = [IntPtr]" + String(Math.floor(p.hwnd)),
+		"if ([NQV.WinV]::IsWindow($h)) {",
+		"  if ([NQV.WinV]::IsIconic($h)) {",
+		"    [NQV.WinV]::ShowWindow($h, 9) | Out-Null",
+		"    [Console]::Out.WriteLine('verifierNavigateur: etait reduite apres premierPlan -> SW_RESTORE')",
+		"  }",
+		"  if (-not [NQV.WinV]::IsWindowVisible($h)) {",
+		"    if (" + String(p.showCmd) + " -eq 3) { [NQV.WinV]::ShowWindow($h, 3) | Out-Null }",
+		"    else { [NQV.WinV]::ShowWindow($h, 8) | Out-Null }",
+		"    [Console]::Out.WriteLine('verifierNavigateur: etait invisible apres premierPlan -> ShowWindow')",
+		"  }",
 		"}",
 	].join("\n");
 }
@@ -1162,22 +1193,44 @@ let placementNavigateur: PlacementFenetre | null = null;
     une fenêtre rendue agrandie prend le premier plan, et Neo Quiz doit le
     reprendre APRÈS, pas avant (Ahmed, 2026-09-19 : « ensuite, Neo Quiz au
     premier plan avec le focus »). */
-export function restaurerNavigateur(): Promise<void> {
+export function restaurerNavigateur(): Promise<PlacementFenetre | null> {
 	const p = placementNavigateur;
 	placementNavigateur = null;
-	if (!p || process.platform !== "win32") return Promise.resolve();
+	if (!p || process.platform !== "win32") {
+		console.log(LOG_PREFIX, "[restaurerNavigateur] rien à restaurer (placement:", p ? "oui" : "non", ", plateforme:", process.platform, ")");
+		return Promise.resolve(null);
+	}
+	console.log(LOG_PREFIX, "[restaurerNavigateur] lancement — hwnd:", p.hwnd, "showCmd:", p.showCmd, "rect:", [p.l, p.t, p.r, p.b]);
 	return new Promise(resolve => {
 		let rendu = false;
-		const fin = (): void => { if (!rendu) { rendu = true; resolve(); } };
+		const fin = (raison: string): void => { if (!rendu) { rendu = true; console.log(LOG_PREFIX, "[restaurerNavigateur] fin —", raison); resolve(p); } };
 		try {
-			const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptRestaurerNavigateur(p))], { stdio: "ignore", windowsHide: true });
-			enfant.on("error", e => { console.warn(LOG_PREFIX, "restauration du navigateur impossible:", e); fin(); });
-			enfant.on("exit", fin);
+			const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptRestaurerNavigateur(p))], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+			enfant.stdout.on("data", (d: Buffer) => { console.log(LOG_PREFIX, "[restaurerNavigateur] stdout:", d.toString("utf8").trim()); });
+			enfant.stderr.on("data", (d: Buffer) => { console.warn(LOG_PREFIX, "[restaurerNavigateur] stderr:", d.toString("utf8").trim()); });
+			enfant.on("error", e => { console.warn(LOG_PREFIX, "restauration du navigateur impossible:", e); fin("erreur spawn"); });
+			enfant.on("exit", (code) => fin("exit code=" + String(code)));
 		} catch (e) {
 			console.warn(LOG_PREFIX, "restauration du navigateur impossible:", e);
-			fin();
+			fin("exception");
 		}
-		setTimeout(fin, 3000);
+		setTimeout(() => fin("timeout 3s"), 3000);
+	});
+}
+
+/** Vérification après premierPlan pour rattraper tout masquage ou minimisation imposé par Windows lors de la bascule de focus. */
+export function verifierNavigateurVisible(p: PlacementFenetre): Promise<void> {
+	if (process.platform !== "win32") return Promise.resolve();
+	return new Promise(resolve => {
+		try {
+			const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptVerifierNavigateurVisible(p))], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+			enfant.stdout.on("data", (d: Buffer) => { console.log(LOG_PREFIX, "[verifierNavigateurVisible] stdout:", d.toString("utf8").trim()); });
+			enfant.on("exit", () => resolve());
+			enfant.on("error", () => resolve());
+			enfant.unref();
+		} catch {
+			resolve();
+		}
 	});
 }
 
@@ -1199,7 +1252,13 @@ export function disposerPourSite(hwndNeo: number, coller = false): Promise<void>
 				if (texte.includes("pret")) fin();
 				/* La ligne « avant … » arrive APRÈS « pret », quand le navigateur
 				   est apparu : la sortie reste écoutée jusqu'à la fin du script. */
-				for (const ligne of texte.split(/\r?\n/)) { const p = lirePlacement(ligne); if (p) placementNavigateur = p; }
+				for (const ligne of texte.split(/\r?\n/)) {
+					const p = lirePlacement(ligne);
+					if (p) {
+						placementNavigateur = p;
+						console.log(LOG_PREFIX, "[disposerPourSite] placement capturé — hwnd:", p.hwnd, "showCmd:", p.showCmd, "rect:", [p.l, p.t, p.r, p.b]);
+					}
+				}
 			});
 			enfant.on("error", e => { console.warn(LOG_PREFIX, "disposition des fenêtres impossible:", e); fin(); });
 			enfant.on("exit", fin);

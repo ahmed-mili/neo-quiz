@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-09-21
+
 ### Fixed
 - Your Antigravity quota now appears by itself: clicking the usage icon opens the CLI and runs `/usage` for you, instead of leaving you to type it.
 

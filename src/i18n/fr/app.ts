@@ -87,6 +87,7 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.comptes.usage.errorUnavailable": "Impossible de joindre le service d'usage.",
 	"app.comptes.usage.errorNeverRun": "Codex n'a pas encore tourné sur cette machine.",
 	"app.comptes.usage.codexSnapshot": "Photo prise {age}.",
+	"app.comptes.usage.codexSnapshotSansDate": "Photo du dernier lancement de Codex — l'heure exacte n'est pas disponible.",
 
 	"app.settings.general": "Général",
 	"app.settings.languageAuto": "Automatique (suivre Windows)",

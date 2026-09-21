@@ -55,10 +55,21 @@ export type UsageReadError =
 	    « aucune session » n'est pas une panne. */
 	| { kind: "jamais-lance" };
 
-/** Résultat brut d'une lecture : des lignes, ou la raison de leur absence. */
+/** Résultat brut d'une lecture : des lignes, ou la raison de leur absence.
+ *
+ * `mesureAt` distingue l'instant de la LECTURE (quand on a interrogé la
+ * source) de l'instant de la MESURE (ce que les chiffres décrivent
+ * réellement). Pour Claude, une requête réseau, les deux coïncident. Pour
+ * Codex, les chiffres viennent du dernier fichier de session écrit sur
+ * disque — potentiellement vieux de plusieurs jours — et les confondre
+ * afficherait « lu à l'instant » sur une mesure obsolète : une date fausse,
+ * plus trompeuse qu'une date absente. `null` quand la source de l'instant
+ * (le mtime du fichier) n'a pas pu être lue.
+ */
 export interface UsageRead {
 	rows: UsageRow[];
 	error: UsageReadError | null;
+	mesureAt: number | null;
 }
 
 /** Fournisseurs dont le forfait est réellement lisible sur cette machine.

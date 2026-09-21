@@ -135,6 +135,9 @@ export const EN_APP = {
 	// Codex n'a pas d'état courant : sa lecture vient du dernier fichier de
 	// session écrit sur disque, une photo prise au dernier lancement du CLI.
 	"app.comptes.usage.codexSnapshot": "Snapshot taken {age}.",
+	// `mesureAt` absent (mtime illisible) : dire D'OÙ viennent les chiffres,
+	// sans prétendre QUAND — une date fausse serait pire qu'une date absente.
+	"app.comptes.usage.codexSnapshotSansDate": "From the last time Codex ran — the exact time isn't available.",
 
 	/* ── Réglages « Général » (application seulement) ── */
 	"app.settings.general": "General",

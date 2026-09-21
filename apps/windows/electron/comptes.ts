@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
 import type { EtatCompte } from "../../../src/host/types";
@@ -117,16 +117,16 @@ async function usageClaude(env: NodeJS.ProcessEnv): Promise<UsageRead> {
 	try {
 		brut = await readFile(join(dossierPersonnel(env), ".claude", ".credentials.json"), "utf8");
 	} catch (e) {
-		return { rows: [], error: { kind: "unauthenticated" } };
+		return { rows: [], error: { kind: "unauthenticated" }, mesureAt: null };
 	}
 	let oauth: { accessToken?: unknown } | undefined;
 	try {
 		oauth = (JSON.parse(brut) as { claudeAiOauth?: { accessToken?: unknown } }).claudeAiOauth;
 	} catch (e) {
-		return { rows: [], error: { kind: "unauthenticated" } };
+		return { rows: [], error: { kind: "unauthenticated" }, mesureAt: null };
 	}
 	if (typeof oauth?.accessToken !== "string" || !oauth.accessToken) {
-		return { rows: [], error: { kind: "unauthenticated" } };
+		return { rows: [], error: { kind: "unauthenticated" }, mesureAt: null };
 	}
 	let resp: Response;
 	try {
@@ -139,16 +139,18 @@ async function usageClaude(env: NodeJS.ProcessEnv): Promise<UsageRead> {
 			signal: AbortSignal.timeout(DELAI_MS),
 		});
 	} catch (e) {
-		return { rows: [], error: { kind: "unavailable" } };
+		return { rows: [], error: { kind: "unavailable" }, mesureAt: null };
 	}
-	if (!resp.ok) return { rows: [], error: erreurDepuisStatut(resp.status, resp.headers) };
+	if (!resp.ok) return { rows: [], error: erreurDepuisStatut(resp.status, resp.headers), mesureAt: null };
 	let corps: unknown;
 	try {
 		corps = await resp.json();
 	} catch (e) {
-		return { rows: [], error: { kind: "unavailable" } };
+		return { rows: [], error: { kind: "unavailable" }, mesureAt: null };
 	}
-	return { rows: usageClaudeDepuisReponse(corps), error: null };
+	// REQUÊTE EN TEMPS RÉEL : l'instant de la lecture EST l'instant de la
+	// mesure, contrairement à Codex qui lit un fichier écrit plus tôt.
+	return { rows: usageClaudeDepuisReponse(corps), error: null, mesureAt: Date.now() };
 }
 
 /** Le plus récent `.jsonl` sous `~/.codex/sessions/`, en ne descendant que les
@@ -185,21 +187,30 @@ async function dernierRolloutCodex(env: NodeJS.ProcessEnv): Promise<string | nul
 
 async function usageCodex(env: NodeJS.ProcessEnv): Promise<UsageRead> {
 	const fichier = await dernierRolloutCodex(env);
-	if (!fichier) return { rows: [], error: { kind: "jamais-lance" } };
+	if (!fichier) return { rows: [], error: { kind: "jamais-lance" }, mesureAt: null };
 	let brut: string;
 	try {
 		brut = await readFile(fichier, "utf8");
 	} catch (e) {
-		return { rows: [], error: { kind: "jamais-lance" } };
+		return { rows: [], error: { kind: "jamais-lance" }, mesureAt: null };
 	}
+	// PHOTO, PAS ÉTAT COURANT : les chiffres décrivent l'instant où Codex a
+	// ÉCRIT ce fichier (dernier lancement), jamais celui où NOUS venons de le
+	// lire — `stat` plutôt que `Date.now()`. Un `stat` qui échoue (fichier
+	// disparu entre la lecture du répertoire et celle-ci) rend `null`, jamais
+	// un repli sur l'heure courante qui mentirait sur l'âge de la mesure.
+	let mesureAt: number | null = null;
+	try {
+		mesureAt = (await stat(fichier)).mtimeMs;
+	} catch (e) { /* mesureAt reste null */ }
 	const lignes = brut.split("\n");
 	for (let i = lignes.length - 1; i >= 0; i--) {
 		const ligne = lignes[i].trim();
 		if (!ligne) continue;
 		const rows = usageCodexDepuisLigne(ligne);
-		if (rows) return { rows, error: null };
+		if (rows) return { rows, error: null, mesureAt };
 	}
-	return { rows: [], error: { kind: "unavailable" } };
+	return { rows: [], error: { kind: "unavailable" }, mesureAt: null };
 }
 
 /** Les quotas du forfait, pour les deux fournisseurs qui les publient. */

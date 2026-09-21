@@ -151,7 +151,7 @@ async function lireUsageAvecAge(outil: OutilAvecUsage): Promise<EntreeUsage> {
 	const promesse = requireHost("process").usageCompte(outil)
 		.catch((e): UsageRead => {
 			console.warn(LOG_PREFIX, "lecture d'usage impossible:", e);
-			return { rows: [], error: { kind: "unavailable" } };
+			return { rows: [], error: { kind: "unavailable" }, mesureAt: null };
 		})
 		.then((resultat): EntreeUsage => {
 			const entree = { at: Date.now(), resultat };
@@ -227,9 +227,16 @@ function poserUsagePopoverContenu(pop: HTMLElement, outil: OutilAvecUsage, entre
 	for (const row of entree.resultat.rows) poserLigneUsage(pop, row);
 	if (outil === "codex") {
 		// Codex n'a pas d'état courant : la lecture vient du dernier fichier
-		// de session écrit sur disque, une photo prise à SA dernière lecture
-		// (le seul horodatage disponible ici), pas au lancement du CLI.
-		ajouter(pop, "p", "nq-usage-note", t("app.comptes.usage.codexSnapshot", { age: formatAge(entree.at, Date.now()) }));
+		// de session écrit sur disque, une photo prise au dernier LANCEMENT du
+		// CLI (`mesureAt`, le mtime de ce fichier côté principal) — jamais
+		// l'instant où NOUS venons de le lire (`entree.at`), qui daterait
+		// faussement des chiffres potentiellement vieux de plusieurs jours.
+		// `mesureAt` absent (mtime illisible) : on dit d'où viennent les
+		// chiffres SANS prétendre quand — une date fausse serait pire qu'une
+		// date absente, elle aurait l'air vraie.
+		ajouter(pop, "p", "nq-usage-note", entree.resultat.mesureAt != null
+			? t("app.comptes.usage.codexSnapshot", { age: formatAge(entree.resultat.mesureAt, Date.now()) })
+			: t("app.comptes.usage.codexSnapshotSansDate"));
 	}
 }
 

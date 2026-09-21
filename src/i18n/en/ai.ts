@@ -88,7 +88,7 @@ export const EN_AI = {
 	"ai.channel.noImages": "Images can't be sent to a website. Remove them, or pick a CLI channel.",
 	"ai.channel.copyFailed": "The prompt could not be copied to the clipboard.",
 	"ai.channel.openFailed": "The browser could not be opened.",
-	"ai.web.title": "Send the prompt on {site}",
+	"ai.web.title": "**Send the prompt** on {site}",
 	"ai.web.thenCopy": "Then **copy the code block** in one click: Neo Quiz picks it up by itself.",
 	"ai.web.received": "Answer received",
 	"ai.web.creating": "Creating the quiz…",

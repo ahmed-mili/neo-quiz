@@ -2941,9 +2941,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			   (2026-09-20 : sans fichier, « Envoyez » paraissait déjà fait). */
 		} else {
 			/* Un titre court en gras, une ligne en dessous : la phrase entière en
-			   gras faisait quatre lignes (2026-09-20). En BLEU comme l'accent de
-			   la ligne du dessous (Ahmed, 2026-09-21). */
-			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title qbd-web-wait-title--prompt", t("ai.web.title", { site }));
+			   gras faisait quatre lignes (2026-09-20). SEUL « Send the prompt »
+			   porte la couleur d'accent, pas le site qui suit (Ahmed, 2026-09-21)
+			   — l'emphase vient de la clé, rendue comme la ligne du dessous. */
+			const titre = ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title");
+			poserTexteMisEnAvant(titre, t("ai.web.title", { site }));
 			poserTexteMisEnAvant(ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first"), t("ai.web.thenCopy"));
 		}
 		/* LES FICHIERS À GLISSER, en tuiles — les mêmes cartes que le composer

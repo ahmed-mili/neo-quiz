@@ -446,12 +446,19 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		}
 
 		const action = actionDe(etat);
-		const bouton = ajouter(ligne, "button", "nq-comptes-action", t(
+		const bouton = ajouter(ligne, "button", "nq-comptes-action");
+		bouton.type = "button";
+		// Une ligne de menu, pas un bouton à cadre (référence mesurée 2026-09-21)
+		// : icône Lucide à gauche du libellé, `download` / `log-in` / `log-out`
+		// selon l'action.
+		currentHost().ui.setIcon(ajouter(bouton, "span", "nq-comptes-action-icone"),
+			action === "installer" ? "download"
+				: action === "connecter" ? "log-in" : "log-out");
+		ajouter(bouton, "span", "nq-comptes-action-libelle", t(
 			action === "installer" ? "app.comptes.install"
 				: action === "connecter" ? "app.comptes.connect"
 					: "app.comptes.disconnect",
 		));
-		bouton.type = "button";
 		bouton.addEventListener("click", () => {
 			void surClicAction(etat.outil, action, bouton);
 		});

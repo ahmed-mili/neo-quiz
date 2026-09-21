@@ -400,21 +400,42 @@ button.nq-comptes-plan:focus-visible {
 	color: var(--text-normal);
 }
 
+/* Les actions (« Sign out », « Sign in », « Install ») : une ligne de menu,
+   pas un bouton à cadre (référence mesurée à la pipette 2026-09-21). Le fond
+   de survol est exactement celui de `.nq-menu-ligne:hover` — le même token,
+   pas une autre couleur ; sur la surface sombre des réglages il éclaircit
+   bien (surcouche claire à 7,5 %, mesuré : rgb(32,32,31) → rgb(49,49,48)). */
 .nq-comptes-action {
 	flex: none;
-	padding: 5px 12px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 28px;
+	padding: 0 10px;
+	border: 0;
 	border-radius: var(--radius-m);
-	border: 1px solid var(--background-modifier-border);
 	background: transparent;
-	color: var(--text-muted);
+	color: var(--text-normal);
 	font: inherit;
-	font-size: 12px;
+	font-size: 13px;
+	font-weight: 500;
 	cursor: pointer;
 }
 
-.nq-comptes-action:hover:not(:disabled) {
-	border-color: var(--text-accent);
-	color: var(--text-normal);
+.nq-comptes-action-icone {
+	display: flex;
+	flex: none;
+}
+
+.nq-comptes-action-icone svg {
+	width: 16px;
+	height: 16px;
+}
+
+.nq-comptes-action:hover:not(:disabled),
+.nq-comptes-action:focus-visible:not(:disabled) {
+	background: var(--background-modifier-hover);
+	outline: none;
 }
 
 .nq-comptes-action:disabled {

@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-09-21
+
 ### Changed
 - Claude Code and Codex show their official logos in full color in the assistant menu, instead of the single-color silhouettes.
 

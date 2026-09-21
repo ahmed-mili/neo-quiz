@@ -324,6 +324,100 @@ body {
 	background: center / cover no-repeat;
 }
 
+/* ── Comptes IA (Réglages) ──
+   Une rangée par CLI, structure proche de `.nq-reglages-dossier` mais réécrite
+   à part : deux zones supplémentaires (le forfait, le bouton d'action) que la
+   rangée d'un dossier n'a pas, et une icône décorative plutôt qu'un logo de
+   marque — voir `ui/comptes.ts`. */
+.nq-comptes-liste {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.nq-comptes-ligne {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 10px 14px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+}
+
+.nq-comptes-icone {
+	display: grid;
+	place-items: center;
+	flex: none;
+	color: var(--text-muted);
+}
+
+.nq-comptes-icone svg {
+	width: 18px;
+	height: 18px;
+}
+
+.nq-comptes-texte {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	flex: 1;
+}
+
+.nq-comptes-nom {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-normal);
+	unicode-bidi: isolate;
+}
+
+.nq-comptes-email {
+	font-size: 11px;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	unicode-bidi: isolate;
+}
+
+/* Le forfait : un badge discret, pas un bouton — Antigravity ne le pose
+   jamais (aucun forfait publié), et l'élément n'existe alors simplement pas. */
+.nq-comptes-plan {
+	flex: none;
+	padding: 3px 9px;
+	border-radius: 999px;
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.nq-comptes-action {
+	flex: none;
+	padding: 5px 12px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: transparent;
+	color: var(--text-muted);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.nq-comptes-action:hover:not(:disabled) {
+	border-color: var(--text-accent);
+	color: var(--text-normal);
+}
+
+.nq-comptes-action:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
 /* ── LA MODALE DE CHOIX D'UN FOND ──
    Une LISTE, pas une grille de vignettes nues : chaque ligne porte le nom de
    la photo et son auteur, que vingt cases de 96 pixels ne pouvaient pas dire.

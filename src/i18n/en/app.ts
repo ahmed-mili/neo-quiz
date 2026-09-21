@@ -91,6 +91,30 @@ export const EN_APP = {
 	"app.settings.folderInsideOpen": "This folder is already inside one of your open folders. Add it from My quizzes → New folder → Open an existing folder.",
 	"app.settings.folderContainsOpen": "This folder contains one of your open folders.",
 
+	/* ── Réglages « Comptes » (application seulement) ──
+	   Les quatre CLI de génération, avec de quoi se (dé)connecter. Antigravity
+	   ne publie aucun forfait : sa ligne montre l'adresse seule, `plan` y
+	   reste `null` et la colonne ne s'affiche pas. */
+	"app.settings.accounts": "Accounts",
+	"app.comptes.claude": "Claude Code",
+	"app.comptes.codex": "Codex CLI",
+	"app.comptes.agy": "Antigravity CLI",
+	"app.comptes.ollama": "Ollama",
+	"app.comptes.notInstalled": "Not installed",
+	"app.comptes.notConnected": "Not signed in",
+	"app.comptes.connectedNoEmail": "Signed in",
+	"app.comptes.install": "Install",
+	"app.comptes.connect": "Sign in",
+	"app.comptes.disconnect": "Sign out",
+	"app.comptes.installFailed": "Could not install {name}.",
+	"app.comptes.connectFailed": "Could not sign in to {name}.",
+	"app.comptes.logoutTitle": "Sign out of {name}?",
+	"app.comptes.logoutMessage": "Neo Quiz will sign this account out of {name}.",
+	"app.comptes.logoutDetail": "This signs out the whole machine, including any terminal session where you're already signed in.",
+	"app.comptes.logoutConfirm": "Sign out",
+	"app.comptes.cancel": "Cancel",
+	"app.comptes.logoutFailed": "Could not sign out of {name}.",
+
 	/* ── Réglages « Général » (application seulement) ── */
 	"app.settings.general": "General",
 	"app.settings.languageAuto": "Automatic (follow Windows)",

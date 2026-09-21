@@ -24,6 +24,7 @@ import { chargerLangue, lireLangue, reglerLangue } from "./langue";
 import { pont } from "../host/pont";
 import { createSelect } from "../../../../src/dashboard/ui-select";
 import { monterReglagesFond } from "./fond";
+import { monterReglagesComptes } from "./comptes";
 
 export function renderSettings(
 	root: HTMLElement,
@@ -203,6 +204,11 @@ export function renderSettings(
 	void chargerLangue().then(l => langueSelect.setValue(l));
 	ajouter(general, "p", "nq-reglages-aide", t("app.settings.languageHint"));
 
+	/* ── Comptes IA ── */
+	const comptes = ajouter(contenu, "section", "nq-reglages-section");
+	ajouter(comptes, "h3", "nq-reglages-titre", t("app.settings.accounts"));
+	const demonterComptes = monterReglagesComptes(comptes);
+
 	/* ── Fond d'écran ── */
 	const fond = ajouter(contenu, "section", "nq-reglages-section");
 	ajouter(fond, "h3", "nq-reglages-titre", t("app.settings.wallpaper"));
@@ -212,5 +218,5 @@ export function renderSettings(
 	   (2026-09-17) et le seul abonnement restant est celui du rail, qui vit
 	   aussi longtemps que la coquille. Il est rendu quand même parce que TOUT
 	   écran en rend un. */
-	return () => { demonterFond(); root.replaceChildren(); };
+	return () => { demonterComptes(); demonterFond(); root.replaceChildren(); };
 }

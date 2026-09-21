@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-09-21
+
 ### Fixed
 - Stopping the wait for a website now shows the actual website name in the confirmation title instead of the raw `{site}` placeholder.
 - Stopping the wait for a website no longer hides your browser window from the desktop and taskbar while its sound keeps playing: the window is properly restored to its previous state and guarded against being minimized or hidden during focus transitions.

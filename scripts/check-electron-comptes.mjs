@@ -85,6 +85,49 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
 		m.usageCodexDepuisLigne(JSON.stringify({ payload: { rate_limits: { primary: { window_minutes: 300 } } } })),
 		[]);
 
+	/* ─── Claude : les quotas de `GET /api/oauth/usage`. Fixture mesurée sur
+	   un vrai compte connecté le 2026-09-21 — `limits[]` porte `percent`,
+	   les champs historiques `utilization`, et `resets_at` est une chaîne
+	   ISO absolue, pas un nombre de secondes. ─── */
+	const REPONSE_REELLE = {
+		limits: [
+			{ kind: "session", group: "session", percent: 83, severity: "warning", resets_at: "2026-09-21T10:00:00.643999+00:00", scope: null, is_active: true },
+			{ kind: "weekly_all", group: "weekly", percent: 66, severity: "normal", resets_at: "2026-09-22T08:00:00.644026+00:00", scope: null, is_active: false },
+		],
+		five_hour: { utilization: 82, resets_at: "2026-09-21T10:00:00.925975+00:00", limit_dollars: null, used_dollars: null, remaining_dollars: null, locked_reason: null },
+		seven_day: { utilization: 66, resets_at: "2026-09-22T08:00:00.925996+00:00" },
+	};
+	r.check("limits[] rend une ligne session et une ligne weekly-all, resets_at en ms",
+		m.usageClaudeDepuisReponse(REPONSE_REELLE),
+		[{ kind: "session", usedPercent: 83, resetsAt: Date.parse("2026-09-21T10:00:00.643999+00:00") },
+		 { kind: "weekly-all", usedPercent: 66, resetsAt: Date.parse("2026-09-22T08:00:00.644026+00:00") }]);
+
+	r.check("le repli (five_hour/seven_day, `utilization`) rend les deux mêmes lignes sans limits[]",
+		m.usageClaudeDepuisReponse({ five_hour: REPONSE_REELLE.five_hour, seven_day: REPONSE_REELLE.seven_day }),
+		[{ kind: "session", usedPercent: 82, resetsAt: Date.parse("2026-09-21T10:00:00.925975+00:00") },
+		 { kind: "weekly-all", usedPercent: 66, resetsAt: Date.parse("2026-09-22T08:00:00.925996+00:00") }]);
+
+	r.check("limits[] vide fait céder la main au repli",
+		m.usageClaudeDepuisReponse({ limits: [], five_hour: REPONSE_REELLE.five_hour, seven_day: REPONSE_REELLE.seven_day }),
+		[{ kind: "session", usedPercent: 82, resetsAt: Date.parse("2026-09-21T10:00:00.925975+00:00") },
+		 { kind: "weekly-all", usedPercent: 66, resetsAt: Date.parse("2026-09-22T08:00:00.925996+00:00") }]);
+
+	r.check("une entrée de limits[] sans `percent` numérique est omise, pas mise à zéro",
+		m.usageClaudeDepuisReponse({ limits: [{ kind: "session", resets_at: "2026-09-21T10:00:00Z" }] }),
+		[]);
+
+	r.check("un `kind` inconnu AVEC un nom de modèle rend une ligne weekly-model",
+		m.usageClaudeDepuisReponse({ limits: [{ kind: "weekly_opus", percent: 12, resets_at: "2026-09-22T08:00:00Z", scope: { model: { display_name: "Opus" } } }] }),
+		[{ kind: "weekly-model", modelName: "Opus", usedPercent: 12, resetsAt: Date.parse("2026-09-22T08:00:00Z") }]);
+
+	r.check("un `kind` inconnu SANS nom de modèle est omis : on ne devine pas de qui il parle",
+		m.usageClaudeDepuisReponse({ limits: [{ kind: "weekly_opus", percent: 12, resets_at: "2026-09-22T08:00:00Z" }] }),
+		[]);
+
+	r.check("un `resets_at` illisible rend resetsAt: null, sans jeter",
+		m.usageClaudeDepuisReponse({ limits: [{ kind: "session", percent: 50, resets_at: "pas une date" }] }),
+		[{ kind: "session", usedPercent: 50, resetsAt: null }]);
+
 	/* ─── L'ASSERTION QUI COMPTE : aucun jeton ne sort ─── */
 	const SECRET = "sk-ant-oat01-SECRET-QUI-NE-DOIT-PAS-SORTIR";
 	const REFRESH = "refresh-SECRET-QUI-NE-DOIT-PAS-SORTIR";

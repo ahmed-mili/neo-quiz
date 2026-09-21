@@ -2,8 +2,8 @@ import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
 import type { EtatCompte } from "../../../src/host/types";
-import type { UsageRead, UsageRow } from "../../../src/dashboard/usage-format";
-import { comptClaude, comptCodex, emailAntigravity, usageCodexDepuisLigne } from "./comptes-pur";
+import type { UsageRead } from "../../../src/dashboard/usage-format";
+import { comptClaude, comptCodex, emailAntigravity, usageClaudeDepuisReponse, usageCodexDepuisLigne } from "./comptes-pur";
 import type { OutilCompte } from "./comptes-pur";
 import { dossierPersonnel, environnementEnfant, lancer, resoudreExecutable } from "./process";
 
@@ -106,25 +106,6 @@ function erreurDepuisStatut(statut: number, headers: Headers): UsageRead["error"
 	return { kind: "unavailable" };
 }
 
-interface LimiteBrute {
-	kind?: unknown;
-	used_percent?: unknown;
-	resets_in_seconds?: unknown;
-	scope?: { model?: { display_name?: unknown } };
-}
-
-function ligneDepuisLimite(l: LimiteBrute, maintenant: number): UsageRow | null {
-	if (typeof l.used_percent !== "number") return null;
-	const resetsAt = typeof l.resets_in_seconds === "number" ? maintenant + l.resets_in_seconds * 1000 : null;
-	if (l.kind === "session") return { kind: "session", usedPercent: l.used_percent, resetsAt };
-	if (l.kind === "weekly_all") return { kind: "weekly-all", usedPercent: l.used_percent, resetsAt };
-	const modelName = l.scope?.model?.display_name;
-	if (typeof modelName === "string" && modelName) {
-		return { kind: "weekly-model", modelName, usedPercent: l.used_percent, resetsAt };
-	}
-	return null;
-}
-
 /** Les quotas du forfait Claude, lus DIRECTEMENT (`fetch`) : le jeton qui les
     obtient ne quitte jamais ce module. */
 async function usageClaude(env: NodeJS.ProcessEnv): Promise<UsageRead> {
@@ -163,24 +144,7 @@ async function usageClaude(env: NodeJS.ProcessEnv): Promise<UsageRead> {
 	} catch (e) {
 		return { rows: [], error: { kind: "unavailable" } };
 	}
-	const maintenant = Date.now();
-	const d = corps as { limits?: LimiteBrute[]; five_hour?: LimiteBrute; seven_day?: LimiteBrute; seven_day_opus?: LimiteBrute };
-	if (Array.isArray(d.limits) && d.limits.length > 0) {
-		const rows = d.limits.map(l => ligneDepuisLimite(l, maintenant)).filter((r): r is UsageRow => r !== null);
-		return { rows, error: null };
-	}
-	// Repli sur les champs historiques : le compte de référence ne renvoie QUE
-	// ceux-là, et sans ce repli l'écran serait vide.
-	const repli: UsageRow[] = [];
-	const session = d.five_hour ? ligneDepuisLimite({ ...d.five_hour, kind: "session" }, maintenant) : null;
-	const semaine = d.seven_day ? ligneDepuisLimite({ ...d.seven_day, kind: "weekly_all" }, maintenant) : null;
-	const opus = d.seven_day_opus?.used_percent != null
-		? ligneDepuisLimite({ used_percent: d.seven_day_opus.used_percent, resets_in_seconds: d.seven_day_opus.resets_in_seconds, scope: { model: { display_name: "Opus" } } }, maintenant)
-		: null;
-	if (session) repli.push(session);
-	if (semaine) repli.push(semaine);
-	if (opus) repli.push(opus);
-	return { rows: repli, error: null };
+	return { rows: usageClaudeDepuisReponse(corps), error: null };
 }
 
 /** Le plus récent `.jsonl` sous `~/.codex/sessions/`, en ne descendant que les

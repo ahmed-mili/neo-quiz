@@ -105,6 +105,66 @@ export function usageCodexDepuisLigne(ligne: string): UsageRow[] | null {
 	return [fenetre(r.primary), fenetre(r.secondary)].filter((x): x is UsageRow => x !== null);
 }
 
+interface LimiteBrute {
+	kind?: unknown;
+	percent?: unknown;
+	utilization?: unknown;
+	resets_at?: unknown;
+	scope?: { model?: { display_name?: unknown } } | null;
+}
+
+/** `resets_at` est une chaîne ISO 8601 ABSOLUE (« 2026-09-21T10:00:00Z… »),
+    jamais une durée : `Date.parse` la convertit en ms epoch, `null` si elle
+    ne se lit pas — jamais une exception ni une date inventée. */
+function resetsAtDepuis(brut: unknown): number | null {
+	if (typeof brut !== "string") return null;
+	const ms = Date.parse(brut);
+	return Number.isFinite(ms) ? ms : null;
+}
+
+function ligneDepuisLimite(l: LimiteBrute, percent: unknown): UsageRow | null {
+	if (typeof percent !== "number") return null;
+	const resetsAt = resetsAtDepuis(l.resets_at);
+	if (l.kind === "session") return { kind: "session", usedPercent: percent, resetsAt };
+	if (l.kind === "weekly_all") return { kind: "weekly-all", usedPercent: percent, resetsAt };
+	const modelName = l.scope?.model?.display_name;
+	if (typeof modelName === "string" && modelName) {
+		return { kind: "weekly-model", modelName, usedPercent: percent, resetsAt };
+	}
+	return null;
+}
+
+/** La réponse (déjà décodée en JSON) de `GET /api/oauth/usage` de Claude, en
+    lignes affichables. PURE : aucune horloge, `resets_at` est absolu.
+ *
+ * Deux formes coexistent dans la même réponse, mesurées sur un vrai compte le
+ * 2026-09-21 : `limits[]` (chaque entrée porte `kind` et `percent`), lue EN
+ * PREMIER, et les champs historiques `five_hour`/`seven_day`/`seven_day_opus`
+ * (chacun porte `utilization`, pas `percent`) — repli seulement si `limits[]`
+ * est absent, vide, ou n'a produit aucune ligne exploitable : un compte de
+ * référence ne renvoie QUE ces champs historiques, et sans ce repli l'écran
+ * serait vide. */
+export function usageClaudeDepuisReponse(corps: unknown): UsageRow[] {
+	if (!corps || typeof corps !== "object") return [];
+	const d = corps as { limits?: unknown; five_hour?: LimiteBrute; seven_day?: LimiteBrute; seven_day_opus?: LimiteBrute };
+	if (Array.isArray(d.limits)) {
+		const rows = (d.limits as LimiteBrute[])
+			.map(l => ligneDepuisLimite(l, l?.percent))
+			.filter((r): r is UsageRow => r !== null);
+		if (rows.length > 0) return rows;
+	}
+	const repli: UsageRow[] = [];
+	const session = d.five_hour ? ligneDepuisLimite({ ...d.five_hour, kind: "session" }, d.five_hour.utilization) : null;
+	const semaine = d.seven_day ? ligneDepuisLimite({ ...d.seven_day, kind: "weekly_all" }, d.seven_day.utilization) : null;
+	const opus = d.seven_day_opus
+		? ligneDepuisLimite({ resets_at: d.seven_day_opus.resets_at, scope: { model: { display_name: "Opus" } } }, d.seven_day_opus.utilization)
+		: null;
+	if (session) repli.push(session);
+	if (semaine) repli.push(semaine);
+	if (opus) repli.push(opus);
+	return repli;
+}
+
 function majuscule(s: string): string {
 	return s.charAt(0).toUpperCase() + s.slice(1);
 }

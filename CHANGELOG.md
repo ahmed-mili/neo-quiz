@@ -13,6 +13,12 @@ release notes.
 
 ## [Unreleased]
 
+### Added
+- Mistral joins the list of assistants you can send a quiz prompt to, through chat.mistral.ai. It is the one with a student price in France, and its free tier is enough to generate a quiz.
+
+### Changed
+- The assistant menu now shows each command-line tool's own logo next to it, instead of repeating the brand's.
+
 ## [1.12.1] - 2026-09-21
 
 ### Fixed

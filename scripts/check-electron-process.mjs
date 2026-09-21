@@ -53,7 +53,7 @@ async function cas(r, nom, fn) {
 await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee, PREFIXE_JOURNAL_GO }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
 	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande, environnementOutil,
-	estOutilAutorise, lireAncre, lireCache, lirePlacement, rectangleTerminal, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptFermerTerminal, scriptInstallation, scriptPoserFenetre, scriptRestaurerNavigateur,
+	estOutilAutorise, lireAncre, lireCache, lirePlacement, rectangleTerminal, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptFermerTerminal, scriptInstallation, scriptPoserFenetre, scriptRestaurerNavigateur, scriptUsageTerminal,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -338,6 +338,38 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		}
 		r.check("agy : son dossier d'installation Windows est dans les dossiers des CLI",
 			dossiersCli(envDossiers).includes("C:\\U\\x\\AppData\\Local\\agy\\bin"), true);
+	}
+
+	/* ── LE TERMINAL D'USAGE (`scriptUsageTerminal`) ──
+	   Le quota d'Antigravity ne se lit que dans son REPL (`/usage`) : le
+	   script ouvre ce REPL, précédé d'une invite traduite par l'APPELANT —
+	   jamais un texte venu du rendu. Sa liste blanche est PLUS ÉTROITE que
+	   celle d'`estOutilAutorise` : les trois autres outils ont une lecture
+	   directe ou une page web. La discriminance INVERSE (refuser `claude`,
+	   qui passerait partout ailleurs) est ce qui prouve que la liste n'est
+	   pas la liste commune recopiée. */
+	r.check("usage terminal : null pour tout autre outil que agy — jamais un terminal sur rien",
+		["claude", "codex", "ollama"].map(t => scriptUsageTerminal(t, "t", "tapez /usage")), [null, null, null]);
+	{
+		const s = scriptUsageTerminal("agy", "Neo Quiz - Antigravity CLI", "tapez /usage", envDossiers);
+		const iPath = s.indexOf("GetEnvironmentVariable('Path','User')");
+		const iInvite = s.indexOf("[Console]::Out.WriteLine('tapez /usage')");
+		/* Dernière ligne du script : elle se termine par le REPL. */
+		const iAgy = s.lastIndexOf("\nagy");
+		r.check("usage terminal agy : titre en première ligne, PATH rechargé, invite AVANT le REPL, sans repeindre, trap et transcription",
+			{
+				titre: s.startsWith("$host.UI.RawUI.WindowTitle = 'Neo Quiz - Antigravity CLI'"),
+				ordre: iPath > 0 && iInvite > iPath && iAgy > iInvite && s.endsWith("\nagy"),
+				invite: iInvite > 0,
+				trap: /\ntrap \{[\s\S]*Read-Host[\s\S]*\n\}/.test(s),
+				transcription: s.includes("Start-Transcript -Path"),
+			},
+			{ titre: true, ordre: true, invite: true, trap: true, transcription: true });
+		/* Le REPL est INTERACTIF : ni sortie ni entrée redirigée — c'est ce qui
+		   distingue ce script du `agy -p` headless de la connexion, et ce qui
+		   laisse ce que l'utilisateur tape atteindre le CLI. */
+		r.check("usage terminal agy : ni la sortie ni l'entrée du REPL ne sont redirigées",
+			/ForEach-Object|RedirectStandardInput|\| Out-String/.test(s), false);
 	}
 
 	const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", msgs);

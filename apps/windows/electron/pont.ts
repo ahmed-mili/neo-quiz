@@ -505,6 +505,13 @@ export interface Pont {
 		/** Déconnecte un compte, sans terminal. Le NOM est jugé par
 		    `estOutilAutorise` avant tout, comme `run` et `connecter`. */
 		comptesDeconnecter(tool: Outil): Promise<"ok" | "echec" | "indisponible">;
+		/** Ouvre un terminal VISIBLE où le CLI tourne INTERACTIF, pour ce
+		    qu'aucune lecture ne sait obtenir : Antigravity ne publie son quota
+		    que dans son propre REPL (`/usage`), ni en HTTP ni sur une page web.
+		    Liste blanche PLUS ÉTROITE que `connecter` : seul `agy` est servi,
+		    tout autre nom rejette (`refuse`). L'invite affichée dans la fenêtre
+		    est traduite PAR LE PRINCIPAL — le rendu ne passe que le nom. */
+		comptesUsageTerminal(tool: Outil): Promise<"lance" | "indisponible">;
 	};
 
 	fenetre: {
@@ -703,6 +710,7 @@ export const CANAUX = {
 	comptesEtat: "neo:comptes/etat",
 	comptesUsage: "neo:comptes/usage",
 	comptesDeconnecter: "neo:comptes/deconnecter",
+	comptesUsageTerminal: "neo:comptes/usage-terminal",
 	miseAJourEtatLire: "neo:mise-a-jour/etat-lire",
 	miseAJourEtat: "neo:mise-a-jour/etat",
 	miseAJourVerifier: "neo:mise-a-jour/verifier",

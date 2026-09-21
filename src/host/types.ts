@@ -625,6 +625,15 @@ export interface HostProcess {
 	/** Déconnecte le compte d'un CLI. Vaut pour TOUTE la machine : c'est le
 	    compte de l'outil, pas celui de l'application. L'appelant confirme. */
 	deconnecterCli(tool: CliTool): Promise<"ok" | "echec" | "indisponible">;
+	/** Ouvre un terminal VISIBLE où le CLI tourne INTERACTIF, pour ce
+	    qu'aucune lecture ne sait obtenir : Antigravity ne publie son quota que
+	    dans son propre REPL (commande `/usage`), ni en HTTP ni sur une page
+	    web. Mêmes verdicts qu'`connecterCli` sans `annule` — rien n'est
+	    téléchargé ni confirmé, seul part un exécutable déjà sur la liste
+	    blanche. Liste PLUS ÉTROITE que `connecterCli` : seul `agy` est servi,
+	    les trois autres ont une lecture directe (`usageCompte`) ou une page
+	    web — l'hôte rend `indisponible` plutôt qu'un terminal sur rien. */
+	terminalUsageCli(tool: CliTool): Promise<"lance" | "indisponible">;
 }
 
 /**

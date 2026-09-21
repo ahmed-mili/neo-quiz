@@ -50,7 +50,7 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, poserFenetre, rectangleTerminal, run, scriptConnexion, scriptInstallation } from "./process";
+import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, poserFenetre, rectangleTerminal, run, scriptConnexion, scriptInstallation, scriptUsageTerminal } from "./process";
 import { deconnecterCompte, etatComptes, usageCompte } from "./comptes";
 import type { AncreTerminal, EtatCompte } from "../../../src/host/types";
 import type { UsageRead } from "../../../src/dashboard/usage-format";
@@ -1066,6 +1066,31 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 			throw erreurCli("refuse", "outil hors liste : " + String(tool));
 		}
 		return deconnecterCompte(tool);
+	});
+
+	/* ─── LE TERMINAL D'USAGE D'ANTIGRAVITY ───
+	   Son quota ne se lit nulle part hors de son REPL (`/usage`) : le canal
+	   ouvre un terminal interactif, même mécanique que `connecter` — mais sa
+	   liste blanche est PLUS ÉTROITE que `estOutilAutorise` : seul `agy` a
+	   besoin d'un REPL, les trois autres ont une lecture directe ou une page
+	   web, et un terminal sur rien vaudrait `indisponible`, pas une fenêtre.
+	   L'invite est traduite ICI, sur la langue posée par `main.ts` — le rendu
+	   ne passe que le nom d'outil, jamais un texte. */
+	ipcMain.handle(CANAUX.comptesUsageTerminal, (_e, tool: unknown): "lance" | "indisponible" => {
+		if (tool !== "agy") {
+			console.warn(LOG_PREFIX, "terminal d'usage refusé, outil hors liste:", tool);
+			throw erreurCli("refuse", "outil hors liste : " + String(tool));
+		}
+		if (process.platform !== "win32") return "indisponible";
+		const titre = PRODUCT_NAME + " - " + NOMS_OUTILS[tool];
+		const script = scriptUsageTerminal(tool, titre, t("app.comptes.usageTerminalHint"));
+		if (script === null) return "indisponible";
+		if (!lancerTerminal(titre, script)) return "indisponible";
+		/* Posé SOUS LA FENÊTRE (moitié basse, pas de modale à ancrer), et sa
+		   disparition rend la main comme pour les deux autres terminaux :
+		   Neo Quiz revient au premier plan quand on quitte le REPL. */
+		disposerAvecTerminal(titre, null);
+		return "lance";
 	});
 
 	ipcMain.handle(CANAUX.processusInstaller, async (_e, tool: unknown, ancre: unknown): Promise<"lance" | "annule" | "indisponible"> => {

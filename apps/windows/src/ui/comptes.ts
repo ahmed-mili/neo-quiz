@@ -469,12 +469,14 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 	    - Ollama : un clic ouvre `ollama.com/settings` dans le navigateur — la
 	      seule page où Ollama montre l'usage de la session et de la semaine ;
 	      `/api/me` ne le publie pas (ollama/ollama#12532).
-	    - Antigravity : RIEN. Son quota ne s'affiche que dans le CLI lui-même
-	      (`/usage`, une interface interactive) ; aucune page web ne le montre
-	      (vérifié le 2026-09-21). Une icône qui n'ouvre rien d'utile serait
-	      pire que son absence. */
+	    - Antigravity : un clic ouvre un TERMINAL interactif où `agy` tourne,
+	      prêt à recevoir `/usage` — son quota ne s'affiche nulle part ailleurs
+	      (aucune page web, aucun mode headless ; vérifié le 2026-09-21). Un
+	      trou à sa place ferait la seule ligne des quatre sans rien (décision
+	      d'Ahmed du même jour : les quatre lignes portent chacune leur
+	      accès à l'usage). */
 	function poserIconeUsage(droite: HTMLElement, etat: EtatCompte): void {
-		if (!etat.connecte || etat.outil === "agy") return;
+		if (!etat.connecte) return;
 		const icone = ajouter(droite, "button", "nq-comptes-usage");
 		icone.type = "button";
 		currentHost().ui.setIcon(icone, "gauge");
@@ -487,6 +489,21 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 				}).catch((e: unknown) => {
 					console.warn(LOG_PREFIX, "ouverture de l'usage Ollama impossible:", e);
 					currentHost().ui.notice(t("app.comptes.usageOpenFailed"));
+				});
+			});
+			return;
+		}
+		if (etat.outil === "agy") {
+			icone.setAttribute("aria-label", t("app.comptes.usageTerminal"));
+			icone.title = t("app.comptes.usageTerminal");
+			icone.addEventListener("click", () => {
+				void requireHost("process").terminalUsageCli("agy").then((verdict) => {
+					/* « indisponible » : hors Windows, ou le terminal n'a pas pu
+					   être lancé — une Notice, jamais un bouton mort. */
+					if (verdict !== "lance") currentHost().ui.notice(t("app.comptes.usageTerminalFailed"));
+				}).catch((e: unknown) => {
+					console.warn(LOG_PREFIX, "terminal d'usage Antigravity impossible:", e);
+					currentHost().ui.notice(t("app.comptes.usageTerminalFailed"));
 				});
 			});
 			return;

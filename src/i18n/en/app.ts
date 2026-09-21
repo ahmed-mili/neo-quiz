@@ -129,6 +129,12 @@ export const EN_APP = {
 	"app.comptes.usageOf": "Usage of {name}",
 	"app.comptes.usageOpen": "Open usage on ollama.com",
 	"app.comptes.usageOpenFailed": "Could not open ollama.com.",
+	// Antigravity : son quota ne se lit que dans son REPL (`/usage`), le clic
+	// ouvre un terminal interactif. L'invite y est traduite PAR LE PRINCIPAL
+	// (`canaux.ts`) — cette clé n'est lue que pour l'info-bulle du bouton.
+	"app.comptes.usageTerminal": "Open Antigravity CLI to check your quota (/usage)",
+	"app.comptes.usageTerminalHint": "Type /usage to see your plan's usage. Quit Antigravity when you're done.",
+	"app.comptes.usageTerminalFailed": "Could not open the Antigravity CLI.",
 	"app.comptes.usage.resetsAt": "Resets {moment}",
 	"app.comptes.usage.errorRateLimited": "The provider is rate-limiting usage reads right now.",
 	"app.comptes.usage.errorRateLimitedDelay": "The provider is rate-limiting usage reads. Try again in {delai}.",

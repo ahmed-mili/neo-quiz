@@ -533,6 +533,44 @@ export function scriptConnexion(tool: Outil, titre: string, messages: MessagesTe
 }
 
 /**
+ * Le script PowerShell qui ouvre un CLI en INTERACTIF dans un terminal, pour
+ * ce qu'aucune lecture ne sait obtenir : Antigravity ne publie son quota que
+ * dans son propre REPL, par la commande `/usage` — ni en HTTP, ni dans un
+ * journal, ni sur une page web (cherché le 2026-09-21). PURE, jumelle
+ * d'`scriptConnexion`.
+ *
+ * `null` pour tout autre outil, et la liste est PLUS ÉTROITE que celle
+ * d'`estOutilAutorise` : Claude et Codex ont une lecture DIRECTE de leur
+ * quota (`usageCompte`), Ollama passe par son site — ouvrir un REPL sur rien
+ * serait une fenêtre de plus à fermer. Le canal (`canaux.ts`) juge aussi ;
+ * la fonction reste jugeable SANS fenêtre, et `npm run check:electron-process`
+ * prouve la discriminance par le refus de `claude`.
+ *
+ * L'INVITE est traduite PAR L'APPELANT (`canaux.ts`, sur la langue posée par
+ * `main.ts`), comme le titre et les messages des deux scripts voisins : un
+ * texte qui vient du rendu dans un script serait une phrase de plus qu'un
+ * rendu compromis ne devrait pas pouvoir formuler. `[Console]::Out`, JAMAIS
+ * `Write-Host`, pour la même raison que `AGY_CONNEXION` : ne pas repeindre.
+ *
+ * La sortie du REPL, elle, n'est PAS redirigée : c'est une fenêtre
+ * interactive, la console reste la console, et ce que l'utilisateur tape doit
+ * atteindre le CLI. Si `agy` manque malgré le `PATH` rechargé, le `trap` de
+ * `entete` retient la fenêtre sur l'erreur — un CommandNotFoundException est
+ * terminant, il y tombe.
+ */
+export function scriptUsageTerminal(tool: Outil, titre: string, invite: string, env: NodeJS.ProcessEnv = process.env): string | null {
+	if (tool !== "agy") return null;
+	return [
+		...entete(titre),
+		rechargerPath(env),
+		/* L'INVITE AVANT le CLI : un REPL qui démarrait sans rien dire
+		   laisserait l'utilisateur chercher quoi taper. */
+		"[Console]::Out.WriteLine(" + citerPs(invite) + ")",
+		"agy",
+	].join("\n");
+}
+
+/**
  * DISPOSE LES FENÊTRES POUR UNE GÉNÉRATION PAR UN SITE (Ahmed, 2026-09-19) :
  * le NAVIGATEUR occupe la moitié gauche de l'écran où vit Neo Quiz, Neo
  * Quiz la moitié droite. Deux fenêtres qu'on voit ensemble : glisser le

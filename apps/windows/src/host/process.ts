@@ -115,5 +115,8 @@ export function createWindowsProcess(): HostProcess {
 		deconnecterCli(tool) {
 			return pont().processus.comptesDeconnecter(tool);
 		},
+		terminalUsageCli(tool) {
+			return pont().processus.comptesUsageTerminal(tool);
+		},
 	};
 }

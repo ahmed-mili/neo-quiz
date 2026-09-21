@@ -166,12 +166,40 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
    Un VRAI dossier temporaire joue le rôle du dossier personnel, avec de faux
    `auth.json` (Codex), `google_accounts.json` (Antigravity) et
    `.credentials.json` (Claude), chacun porteur d'un jeton reconnaissable.
-   `PATH` n'est PAS étendu au `PATH` réel du système : `resoudreExecutable`
-   ne trouve donc aucun des trois CLI, et `etatComptes()` ne lance jamais de
-   process réel — seule la lecture de fichier est éprouvée. */
+
+   `etatClaude` ET `etatAntigravity` COMMENCENT PAR `resoudreExecutable(...)` et
+   rendent `etatVide(...)` AVANT d'avoir lu le moindre fichier — un dossier
+   temporaire dont le seul environnement est `USERPROFILE`/`HOME` (comme
+   c'était le cas jusqu'au 2026-09-21) ne les trouve jamais : `PATH` est vide
+   et `dossiersCli` ne produit rien sans `APPDATA`/`LOCALAPPDATA`. Les deux
+   retombaient donc sur `etatVide` SANS AVOIR RIEN LU, et les faux fichiers
+   écrits par ce cas n'étaient jamais lus — les assertions sur
+   `SECRET_CLAUDE`/`REFRESH_CLAUDE`/`SECRET_AGY`/`REFRESH_AGY` passaient
+   TRIVIALEMENT. Seul Codex, qui lit `auth.json` indépendamment de la
+   résolution de son exécutable, était réellement éprouvé.
+
+   LA CORRECTION : un VRAI faux exécutable par outil, posé dans un dossier de
+   `PATH` FABRIQUÉ (`poserFauxCli`, même patron que `check-electron-process.mjs`)
+   — un `.cmd` sous Windows, qui lance `node` sur un script. `resoudreExecutable`
+   le trouve pour de vrai, et le code va jusqu'au bout de son assemblage :
+   - `claude` : le faux CLI répond à `auth status --json` avec le JSON que le
+     VRAI CLI rend (`loggedIn`/`email`/`subscriptionType`), PLUS un
+     `accessToken`/`refreshToken` — un `...JSON.parse(stdout)` distrait au
+     retour d'`etatClaude` les ferait fuiter, exactement comme le spread
+     documenté plus haut pour Codex.
+   - `agy` : le faux CLI répond à `models` par une ligne non vide et un code 0
+     (`connecte` en dépend) ; l'adresse est ensuite lue, comme avant, dans
+     `google_accounts.json`, qui porte `access_token`/`refresh_token`.
+   - `codex` : déjà exercé sans exécutable (il lit `auth.json` directement) ;
+     l'exécutable posé ici ne sert plus qu'à faire répondre `login status`
+     en 0, pour que `connecte` vaille `true` comme un vrai poste connecté. */
 await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) => {
 	const r = makeReporter("Électron — comptes (assemblage)");
-	const dir = await mkdtemp(join(tmpdir(), "electron-comptes-"));
+	const racine = await mkdtemp(join(tmpdir(), "electron-comptes-"));
+	const dir = join(racine, "maison");
+	const bin = join(racine, "bin");
+	await mkdir(dir, { recursive: true });
+	await mkdir(bin, { recursive: true });
 	try {
 		const SECRET_CODEX = "sk-codex-SECRET-QUI-NE-DOIT-PAS-SORTIR";
 		const REFRESH_CODEX = "refresh-codex-SECRET-QUI-NE-DOIT-PAS-SORTIR";
@@ -197,7 +225,50 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 			claudeAiOauth: { accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE },
 		}));
 
-		const env = { USERPROFILE: dir, HOME: dir };
+		/** Un faux CLI : un script Node, plus un lanceur du nom demandé — même
+		    patron que `poserFauxCli` de `check-electron-process.mjs` (un `.cmd`
+		    sous Windows, le repli npm réel, qui exécute le script par
+		    `process.execPath`). `corps` est le contenu JS du script. */
+		async function poserFauxCli(nom, corps) {
+			const script = join(bin, nom + ".js");
+			await writeFile(script, corps);
+			const lanceur = join(bin, process.platform === "win32" ? nom + ".cmd" : nom);
+			if (process.platform === "win32") {
+				await writeFile(lanceur, '@echo off\r\n"' + process.execPath + '" "' + script + '" %*\r\n');
+			} else {
+				await writeFile(lanceur, '#!/bin/sh\nexec "' + process.execPath + '" "' + script + '" "$@"\n', { mode: 0o755 });
+			}
+		}
+
+		await Promise.all([
+			/* `auth status --json` : le JSON que le VRAI CLI rend, PLUS
+			   `accessToken`/`refreshToken` — un spread distrait au retour
+			   d'`etatClaude` les ferait fuiter. */
+			poserFauxCli("claude", "process.stdout.write(" + JSON.stringify(JSON.stringify({
+				loggedIn: true, email: "a@b.c", subscriptionType: "pro",
+				accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE,
+			})) + ");"),
+			/* `login status` : seul le CODE DE SORTIE compte pour `connecte`. */
+			poserFauxCli("codex", "process.exit(0);"),
+			/* `models` : `connecte` exige un code 0 et une sortie non vide ;
+			   l'adresse, elle, est relue ensuite dans `google_accounts.json`. */
+			poserFauxCli("agy", "process.stdout.write('modele-a\\n');"),
+		]);
+
+		/* AUCUN autre dossier de `PATH` : `PATH` porte EXACTEMENT le dossier
+		   des faux CLI, jamais le `PATH` réel du poste. `dossiersCli` reste
+		   sans effet, faute d'`APPDATA`/`LOCALAPPDATA` dans cet environnement,
+		   sauf pour `.local/bin` et `.claude/local`, sous `dir`, qui restent
+		   vides — le seul exécutable trouvable est celui posé ici. */
+		const env = {
+			USERPROFILE: dir, HOME: dir,
+			PATH: bin, Path: bin,
+			SystemRoot: process.env.SystemRoot,
+			ComSpec: process.env.ComSpec,
+			PATHEXT: process.env.PATHEXT,
+			TEMP: process.env.TEMP,
+			TMP: process.env.TMP,
+		};
 		const etats = await etatComptes(env);
 		const serialise = JSON.stringify(etats);
 
@@ -208,12 +279,20 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 		r.check("etatComptes() lit l'adresse Codex depuis le vrai fichier",
 			etats.find(e => e.outil === "codex")?.email, "a@b.c");
 
+		r.check("etatComptes() lit le vrai faux exécutable claude (installe, connecte, email)",
+			etats.find(e => e.outil === "claude"),
+			{ outil: "claude", installe: true, connecte: true, email: "a@b.c", plan: "Pro" });
+
+		r.check("etatComptes() lit le vrai faux exécutable agy (connecte) puis l'adresse du fichier",
+			etats.find(e => e.outil === "agy"),
+			{ outil: "agy", installe: true, connecte: true, email: "x@gmail.com", plan: null });
+
 		r.check("la réponse sérialisée d'etatComptes() ne contient aucun des six jetons",
 			[SECRET_CODEX, REFRESH_CODEX, SECRET_AGY, REFRESH_AGY, SECRET_CLAUDE, REFRESH_CLAUDE]
 				.map(jeton => serialise.includes(jeton)),
 			[false, false, false, false, false, false]);
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await rm(racine, { recursive: true, force: true });
 	}
 	r.done();
 });

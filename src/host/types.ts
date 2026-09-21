@@ -16,6 +16,8 @@
    Tauri doivent tous les deux se réduire à un `HostFile` sans rien inventer.
 ══════════════════════════════════════════════════════════ */
 
+import type { UsageRead } from "../dashboard/usage-format";
+
 /** Un fichier vu par l'hôte. Volontairement plat et sérialisable. */
 export interface HostFile {
 	/** Chemin depuis la racine du dossier, séparateurs `/`, jamais absolu.
@@ -448,6 +450,18 @@ export interface HostNet {
  */
 export type CliTool = "claude" | "codex" | "ollama" | "agy";
 
+/** L'état d'un compte IA tel que la section « Comptes » l'affiche. JAMAIS un
+    jeton : le principal lit les fichiers de secrets et n'en ressort que ceci.
+    `installe` est distinct de `connecte` — sans lui, un outil absent de la
+    machine et un outil présent mais déconnecté offriraient le même bouton. */
+export interface EtatCompte {
+	outil: "claude" | "codex" | "agy" | "ollama";
+	installe: boolean;
+	connecte: boolean;
+	email: string | null;
+	plan: string | null;
+}
+
 /** Le rectangle SOUS LEQUEL poser la fenêtre du terminal (la modale qui
     attend, mesurée par `getBoundingClientRect`), en pixels CSS de la fenêtre.
     Le terminal ne se place plus à côté de Neo Quiz mais juste en dessous de
@@ -594,6 +608,32 @@ export interface HostProcess {
 	surNavigateurOuvert?(rappel: () => void): () => void;
 	/** Repose la fenêtre du terminal sous ce rectangle. */
 	replacerTerminal?(ancre: AncreTerminal): Promise<void>;
+	/** L'état des comptes IA que seul l'hôte peut lire. Le contrat ne promet
+	    JAMAIS de jeton : un hôte qui en ferait traverser un violerait la seule
+	    règle de cette capacité.
+
+	    `outils` FILTRE la lecture (Ahmed, 2026-09-21) : sans lui, les trois
+	    sondes tournent, dont `agy models` (~1 s, un aller-retour réseau). Les
+	    sondes PÉRIODIQUES d'un flux de connexion (`comptes.ts`, `ai.ts`, trois
+	    secondes) n'ont besoin que d'un seul outil ; lire les trois à chaque
+	    tick y lance des dizaines d'appels sans rapport avec ce que
+	    l'utilisateur fait. La section « Comptes » continue de demander les
+	    trois d'un coup en omettant ce paramètre. */
+	etatComptes(outils?: EtatCompte["outil"][]): Promise<EtatCompte[]>;
+	/** Les quotas du forfait, pour les deux fournisseurs qui les publient. */
+	usageCompte(tool: "claude" | "codex"): Promise<UsageRead>;
+	/** Déconnecte le compte d'un CLI. Vaut pour TOUTE la machine : c'est le
+	    compte de l'outil, pas celui de l'application. L'appelant confirme. */
+	deconnecterCli(tool: CliTool): Promise<"ok" | "echec" | "indisponible">;
+	/** Ouvre un terminal VISIBLE où le CLI tourne INTERACTIF, pour ce
+	    qu'aucune lecture ne sait obtenir : Antigravity ne publie son quota que
+	    dans son propre REPL (commande `/usage`), ni en HTTP ni sur une page
+	    web. Mêmes verdicts qu'`connecterCli` sans `annule` — rien n'est
+	    téléchargé ni confirmé, seul part un exécutable déjà sur la liste
+	    blanche. Liste PLUS ÉTROITE que `connecterCli` : seul `agy` est servi,
+	    les trois autres ont une lecture directe (`usageCompte`) ou une page
+	    web — l'hôte rend `indisponible` plutôt qu'un terminal sur rien. */
+	terminalUsageCli(tool: CliTool): Promise<"lance" | "indisponible">;
 }
 
 /**

@@ -53,7 +53,7 @@ async function cas(r, nom, fn) {
 await withSrcModule("src/cli-install-cmd.ts", async ({ commandeInstallation, commandeInstallationLancee, PREFIXE_JOURNAL_GO }) => {
 await withSrcModule("apps/windows/electron/process.ts", async ({
 	OUTILS, argumentsTerminal, avecFichiers, cheminCache, dossierPersonnel, dossiersCli, emplacementsOllama, encoderCommande, environnementOutil,
-	estOutilAutorise, lireAncre, lireCache, lirePlacement, rectangleTerminal, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptFermerTerminal, scriptInstallation, scriptPoserFenetre, scriptRestaurerNavigateur,
+	estOutilAutorise, lireAncre, lireCache, lirePlacement, rectangleTerminal, scriptConnexion, scriptDisposerPourSite, scriptDisposerPourTerminal, scriptFermerTerminal, scriptInstallation, scriptPoserFenetre, scriptRestaurerNavigateur, scriptUsageTerminal,
 }) => {
 	const r = makeReporter("Électron — les CLI");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-process-"));
@@ -195,7 +195,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		   « installé » et le terminal « terme non reconnu » — puis affichait quand
 		   même « Claude Code est connecté », parce que le `Write-Host` suivait la
 		   commande sans condition. */
-		const msgs = { succes: "c'est fini", echec: "raté", echecInstallation: "install ratée" };
+		const msgs = { succes: "c'est fini", echec: "raté", echecInstallation: "install ratée", agyCountdown: "60 secondes", agyExpire: "lien expiré" };
 		const envDossiers = { USERPROFILE: "C:\\U\\x", HOME: "C:\\U\\x", LOCALAPPDATA: "C:\\U\\x\\AppData\\Local", APPDATA: "C:\\U\\x\\AppData\\Roaming" };
 		{
 			const dossiers = dossiersCli(envDossiers);
@@ -294,50 +294,123 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 			},
 			{ officiel: true, npm: false });
 		/* La connexion est HEADLESS et c'est le SCRIPT qui ouvre le navigateur :
-		   `agy -p` écrit l'URL Google sur stderr et attend, sans l'ouvrir
-		   lui-même (mesuré le 2026-09-20). Le script lit la sortie ligne à
-		   ligne, lance la première adresse `accounts.google.com`, convertit
-		   chaque ligne en texte (sinon un `NativeCommandError` rouge), et le
-		   code de sortie de l'appel est celui que la fenêtre juge. Jamais le
-		   TUI (`agy` seul), qui ne rend rien d'exploitable. */
+		   `agy -p` écrit l'URL Google sur stderr et attend SOIXANTE secondes
+		   EN INTERNE, puis abandonne sans rendre la main (mesuré les
+		   2026-09-20 et 09-21). Depuis le 2026-09-21, le script rend ces 60 s
+		   VISIBLES et RATTRAPABLES : un avertissement traduit par l'APPELANT
+		   avant de lancer, une BOUCLE qui relit la sortie redirigée et tue
+		   l'arbre de la tentative au bout de 70 s, attend Entrée, relance. */
 		const cx = scriptConnexion("agy", "t", msgs, envDossiers);
 		const iCd = cx.indexOf("\nSet-Location $env:USERPROFILE\n");
-		const iAppel = cx.indexOf("\nagy -p \"ok\" --output-format json 2>&1 | ForEach-Object {");
-		const iJuge = cx.indexOf("if ($LASTEXITCODE -eq 0)");
-		/* GOOGLE NE REND PAS LA MAIN AU CLI (`redirect_uri` distant : la page
-		   affiche un CODE). Le script ouvre la page et S'EN TIENT LÀ : la
-		   console reste la console, l'utilisateur colle son code, et ce qui
-		   s'affiche est ce que le CLI a écrit. L'essai d'automatiser le
-		   collage (presse-papier + entrée redirigée) a été retiré le
-		   2026-09-20 : le code partait avant l'invite et se perdait, et
-		   rediriger l'entrée ôtait la seule porte de secours. */
-		r.check("agy connexion : dossier personnel, URL ouverte par le script, sortie réémise SANS repeindre, puis le jugement sur SON code de sortie — jamais le TUI",
+		const iAvertissement = cx.indexOf("[Console]::Out.WriteLine('60 secondes')");
+		const iLancement = cx.indexOf("$p = Start-Process -FilePath \"agy\"");
+		const iJuge = cx.indexOf("if ($connecte) {");
+		const iTuer = cx.indexOf("taskkill.exe\" /PID $p.Id /T /F");
+		const iExpire = cx.indexOf("[Console]::Out.WriteLine('lien expiré')");
+		const iAttente = cx.indexOf("TotalSeconds -ge 70");
+		r.check("agy connexion : dossier personnel, AVERTISSEMENT AVANT le lancement, sortie redirigée et relue, puis le jugement sur $connecte",
 			{
-				ordre: iCd > 0 && iAppel > iCd && iJuge > iAppel,
+				ordre: iCd > 0 && iAvertissement > iCd && iLancement > iAvertissement && iJuge > iLancement,
 				ouvreUrl: cx.includes("accounts\\.google\\.com") && cx.includes("Start-Process $Matches[0]"),
-				texte: cx.includes("[System.Management.Automation.ErrorRecord]"),
 				sansRepeindre: cx.includes("[Console]::Out.WriteLine($l)") && !cx.includes("Write-Host $l"),
-				pathAvant: cx.indexOf("GetEnvironmentVariable('Path','User')") < iAppel,
+				pathAvant: cx.indexOf("GetEnvironmentVariable('Path','User')") < iLancement,
 				tui: /\nagy\s*\n/.test(cx),
 			},
-			{ ordre: true, ouvreUrl: true, texte: true, sansRepeindre: true, pathAvant: true, tui: false });
+			{ ordre: true, ouvreUrl: true, sansRepeindre: true, pathAvant: true, tui: false });
+		/* LA BOUCLE : 70 s (dix de plus que le chrono interne du CLI), l'ARBRE
+		   tué, le message d'expiration traduit par l'appelant, Entrée attendue
+		   DANS la boucle — un lien râté relance, il ne coûte plus la fenêtre. */
+		r.check("agy connexion : la boucle tue l'arbre au bout de 70 s, annonce l'expiration, attend Entrée et relance",
+			{
+				boucle: cx.includes("while ($true) {"),
+				delai: iAttente > iLancement && cx.includes("-Milliseconds 300"),
+				toutLArbre: /taskkill\.exe" \/PID \$p\.Id \/T \/F/.test(cx),
+				expireAvantAttente: iAttente > iLancement && iTuer > iAttente && iExpire > iTuer && cx.slice(iExpire).indexOf("Read-Host") > 0,
+				relance: cx.lastIndexOf("Read-Host | Out-Null") < cx.lastIndexOf("}"),
+			},
+			{ boucle: true, delai: true, toutLArbre: true, expireAvantAttente: true, relance: true });
+		/* LE SUCCÈS est jugé sur $connecte (code de sortie OU réponse JSON) :
+		   Start-Process sur un .cmd ne rend pas toujours de code de sortie, et
+		   la réponse est le signal que le protocole émet de toute façon. */
+		r.check("agy connexion : succès = code de sortie 0 OU réponse JSON, et l'arbre tué si le CLI traîne après sa réponse",
+			{
+				json: cx.includes(`if ($l -match '"status"\\s*:\\s*"SUCCESS"') { $succesVu = $true }`),
+				connecte: iJuge > 0 && !cx.includes("if ($LASTEXITCODE -eq 0)"),
+				reponseAttendue: cx.includes("if (-not $p.WaitForExit(5000))"),
+			},
+			{ json: true, connecte: true, reponseAttendue: true });
+		/* LA SORTIE EST REDIRIGÉE (fichiers temporaires relus en continu),
+		   JAMAIS L'ENTRÉE : ce qu'on colle dans la fenêtre atteint le CLI —
+		   c'est la porte de secours, et ce qui distingue ce script du terminal
+		   d'usage (qui n'a AUCUNE redirection). Les compteurs de lignes lues
+		   n'avancent que si la lecture a réussi : un verrou au milieu ne
+		   rejouerait pas ce qui a déjà été affiché. */
+		r.check("agy connexion : sortie redirigée vers des fichiers relus, entrée INTACTE, compteurs à l'abri d'une lecture perdue",
+			{
+				redirection: cx.includes("-RedirectStandardOutput $sortie") && cx.includes("-RedirectStandardError $erreur"),
+				lectureContinue: cx.includes("[System.IO.File]::Open($sortie, 'Open', 'Read', [System.IO.FileShare]::ReadWrite)") && cx.includes("[System.IO.File]::Open($erreur, 'Open', 'Read', [System.IO.FileShare]::ReadWrite)"),
+				entreeIntacte: !/RedirectStandardInput|Get-Clipboard|StandardInput\.WriteLine/.test(cx),
+				compteurGarde: /catch \{ \$lignes = \$null \}/.test(cx) && cx.includes("if ($null -ne $lignes) {"),
+			},
+			{ redirection: true, lectureContinue: true, entreeIntacte: true, compteurGarde: true });
 		/* L'ENTRÉE RESTE LA CONSOLE : sans redirection, ce qu'on colle dans la
 		   fenêtre atteint le CLI. C'est la contrepartie du retour au manuel. */
 		r.check("agy connexion : l'entrée du CLI n'est pas redirigée",
 			/RedirectStandardInput|Get-Clipboard|StandardInput\.WriteLine/.test(cx), false);
+		/* DISCRIMINANCE : la boucle, le chrono et le texte d'avertissement sont
+		   propres à Antigravity — les deux scripts à sous-commande n'ont rien
+		   de tout ça. */
+		{
+			const cl = scriptConnexion("claude", "t", msgs, envDossiers);
+			r.check("agy connexion : la boucle et le chrono n'existent que pour agy",
+				{ agy: cx.includes("while ($true) {") && cl.includes("while ($true) {") === false, jugeAgy: cl.includes("if ($LASTEXITCODE -eq 0)") },
+				{ agy: true, jugeAgy: true });
+		}
 		/* `install.ps1` de Google pose `$ErrorActionPreference = "Stop"` dans
-		   la session (par `iex`) : sous `Stop`, la première ligne relue par
-		   `2>&1` — l'URL — arrêtait la pipeline (vécu le 2026-09-20).
-		   `Continue` doit être remis ENTRE l'installation et l'appel. */
+		   la session (par `iex`) : sous `Stop`, la première ligne relue —
+		   l'URL — arrêtait le script (vécu le 2026-09-20). `Continue` doit
+		   être remis ENTRE l'installation et le lancement. */
 		{
 			const iContinue = inst.indexOf("$ErrorActionPreference = 'Continue'");
 			const iInstall = inst.indexOf(ligneInstall);
-			const iAppelInst = inst.indexOf("\nagy -p \"ok\"");
+			const iAppelInst = inst.indexOf("$p = Start-Process -FilePath \"agy\"");
 			r.check("agy installation : ErrorActionPreference remis à Continue APRÈS l'installateur de Google et AVANT l'appel headless",
 				iInstall > 0 && iContinue > iInstall && iAppelInst > iContinue, true);
 		}
 		r.check("agy : son dossier d'installation Windows est dans les dossiers des CLI",
 			dossiersCli(envDossiers).includes("C:\\U\\x\\AppData\\Local\\agy\\bin"), true);
+	}
+
+	/* ── LE TERMINAL D'USAGE (`scriptUsageTerminal`) ──
+	   Le quota d'Antigravity ne se lit que dans son REPL (`/usage`) : le
+	   script ouvre ce REPL, précédé d'une invite traduite par l'APPELANT —
+	   jamais un texte venu du rendu. Sa liste blanche est PLUS ÉTROITE que
+	   celle d'`estOutilAutorise` : les trois autres outils ont une lecture
+	   directe ou une page web. La discriminance INVERSE (refuser `claude`,
+	   qui passerait partout ailleurs) est ce qui prouve que la liste n'est
+	   pas la liste commune recopiée. */
+	r.check("usage terminal : null pour tout autre outil que agy — jamais un terminal sur rien",
+		["claude", "codex", "ollama"].map(t => scriptUsageTerminal(t, "t", "tapez /usage")), [null, null, null]);
+	{
+		const s = scriptUsageTerminal("agy", "Neo Quiz - Antigravity CLI", "tapez /usage", envDossiers);
+		const iPath = s.indexOf("GetEnvironmentVariable('Path','User')");
+		const iInvite = s.indexOf("[Console]::Out.WriteLine('tapez /usage')");
+		/* Dernière ligne du script : elle se termine par le REPL. */
+		const iAgy = s.lastIndexOf("\nagy");
+		r.check("usage terminal agy : titre en première ligne, PATH rechargé, invite AVANT le REPL, sans repeindre, trap et transcription",
+			{
+				titre: s.startsWith("$host.UI.RawUI.WindowTitle = 'Neo Quiz - Antigravity CLI'"),
+				ordre: iPath > 0 && iInvite > iPath && iAgy > iInvite && s.endsWith("\nagy"),
+				invite: iInvite > 0,
+				trap: /\ntrap \{[\s\S]*Read-Host[\s\S]*\n\}/.test(s),
+				transcription: s.includes("Start-Transcript -Path"),
+			},
+			{ titre: true, ordre: true, invite: true, trap: true, transcription: true });
+		/* Le REPL est INTERACTIF : ni sortie ni entrée redirigée — c'est ce qui
+		   distingue ce script du `agy -p` headless de la connexion, et ce qui
+		   laisse ce que l'utilisateur tape atteindre le CLI. */
+		r.check("usage terminal agy : ni la sortie ni l'entrée du REPL ne sont redirigées",
+			/ForEach-Object|RedirectStandardInput|\| Out-String/.test(s), false);
 	}
 
 	const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", msgs);

@@ -50,8 +50,10 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, poserFenetre, rectangleTerminal, run, scriptConnexion, scriptInstallation } from "./process";
-import type { AncreTerminal } from "../../../src/host/types";
+import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, poserFenetre, rectangleTerminal, run, scriptConnexion, scriptInstallation, scriptUsageTerminal } from "./process";
+import { deconnecterCompte, etatComptes, usageCompte } from "./comptes";
+import type { AncreTerminal, EtatCompte } from "../../../src/host/types";
+import type { UsageRead } from "../../../src/dashboard/usage-format";
 import type { Outil } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
@@ -1039,6 +1041,58 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 
 	ipcMain.handle(CANAUX.processusAttendreFinTerminal, () => finTerminal);
 
+	// `outils` vient du rendu : filtré contre la liste des quatre noms valides
+	// avant transmission, une valeur hors liste étant simplement ignorée
+	// (comme un canal qui reçoit un `tool` hors liste ailleurs dans ce fichier).
+	const OUTILS_COMPTE: ReadonlyArray<EtatCompte["outil"]> = ["claude", "codex", "agy", "ollama"];
+	ipcMain.handle(CANAUX.comptesEtat, (_e, outils: unknown): Promise<EtatCompte[]> => {
+		const filtre = Array.isArray(outils)
+			? outils.filter((o): o is EtatCompte["outil"] => OUTILS_COMPTE.includes(o as EtatCompte["outil"]))
+			: undefined;
+		return etatComptes(undefined, filtre);
+	});
+
+	ipcMain.handle(CANAUX.comptesUsage, (_e, tool: unknown): Promise<UsageRead> => {
+		if (tool !== "claude" && tool !== "codex") {
+			console.warn(LOG_PREFIX, "lecture de quota refusée, outil hors liste:", tool);
+			throw erreurCli("refuse", "outil hors liste : " + String(tool));
+		}
+		return usageCompte(tool);
+	});
+
+	ipcMain.handle(CANAUX.comptesDeconnecter, (_e, tool: unknown): Promise<"ok" | "echec" | "indisponible"> => {
+		if (!estOutilAutorise(tool)) {
+			console.warn(LOG_PREFIX, "déconnexion refusée, outil hors liste:", tool);
+			throw erreurCli("refuse", "outil hors liste : " + String(tool));
+		}
+		return deconnecterCompte(tool);
+	});
+
+	/* ─── LE TERMINAL D'USAGE D'ANTIGRAVITY ───
+	   Son quota ne se lit nulle part hors de son REPL (`/usage`) : le canal
+	   ouvre un terminal interactif, même mécanique que `connecter` — mais sa
+	   liste blanche est PLUS ÉTROITE que `estOutilAutorise` : seul `agy` a
+	   besoin d'un REPL, les trois autres ont une lecture directe ou une page
+	   web, et un terminal sur rien vaudrait `indisponible`, pas une fenêtre.
+	   L'invite est traduite ICI, sur la langue posée par `main.ts` — le rendu
+	   ne passe que le nom d'outil, jamais un texte. */
+	ipcMain.handle(CANAUX.comptesUsageTerminal, (_e, tool: unknown): "lance" | "indisponible" => {
+		if (tool !== "agy") {
+			console.warn(LOG_PREFIX, "terminal d'usage refusé, outil hors liste:", tool);
+			throw erreurCli("refuse", "outil hors liste : " + String(tool));
+		}
+		if (process.platform !== "win32") return "indisponible";
+		const titre = PRODUCT_NAME + " - " + NOMS_OUTILS[tool];
+		const script = scriptUsageTerminal(tool, titre, t("app.comptes.usageTerminalHint"));
+		if (script === null) return "indisponible";
+		if (!lancerTerminal(titre, script)) return "indisponible";
+		/* Posé SOUS LA FENÊTRE (moitié basse, pas de modale à ancrer), et sa
+		   disparition rend la main comme pour les deux autres terminaux :
+		   Neo Quiz revient au premier plan quand on quitte le REPL. */
+		disposerAvecTerminal(titre, null);
+		return "lance";
+	});
+
 	ipcMain.handle(CANAUX.processusInstaller, async (_e, tool: unknown, ancre: unknown): Promise<"lance" | "annule" | "indisponible"> => {
 		if (!estOutilAutorise(tool)) {
 			console.warn(LOG_PREFIX, "installation refusée, outil hors liste:", tool);
@@ -1094,6 +1148,11 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		const script = scriptConnexion(tool, titre, {
 			succes: t("app.connectCli.done", { name }),
 			echec: t("app.connectCli.failed", { name }),
+			/* Antigravity seulement (lus par `agyConnexion`) : l'avertissement
+			   des 60 secondes et le message d'expiration, traduits ICI — jamais
+			   un texte venu du rendu dans un script. */
+			agyCountdown: t("app.comptes.agyCountdown"),
+			agyExpire: t("app.comptes.agyExpired"),
 		});
 		if (script === null) return "indisponible";
 		const place = await preparerColonnes(lireAncre(ancre));

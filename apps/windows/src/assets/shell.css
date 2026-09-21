@@ -324,6 +324,275 @@ body {
 	background: center / cover no-repeat;
 }
 
+/* ── Comptes IA (Réglages) ──
+   Une rangée par CLI, structure proche de `.nq-reglages-dossier` mais réécrite
+   à part : deux zones supplémentaires (le forfait, le bouton d'action) que la
+   rangée d'un dossier n'a pas. Le logo de MARQUE (`.qbd-provider-logo`,
+   `dashboard-ai.css`) porte déjà sa propre taille et sa propre couleur —
+   aucune classe `.nq-comptes-icone` ici, `ui/comptes.ts` réutilise la classe
+   du sélecteur de fournisseur plutôt que d'en redéfinir une. */
+.nq-comptes-liste {
+	display: flex;
+	flex-direction: column;
+	margin-top: 4px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	overflow: hidden;
+}
+
+/* Un seul conteneur à bordure, les quatre lignes séparées par un filet —
+   plus de carte par ligne (référence : la carte « Wallpaper » de la page).
+   `+` plutôt qu'`:first-child : le filet vient d'un SŒUR, jamais du premier
+   enfant lui-même, donc aucun filet fantôme au-dessus de la première ligne. */
+.nq-comptes-ligne {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	box-sizing: border-box;
+	height: 56px;
+	padding: 0 14px;
+}
+
+.nq-comptes-ligne + .nq-comptes-ligne {
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Le logo de marque dans une pastille ronde de 32 px (logo 20 px dedans). */
+.nq-comptes-logo {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	background: var(--background-modifier-border);
+}
+
+.nq-comptes-logo .qbd-provider-logo {
+	width: 20px;
+	height: 20px;
+}
+
+.nq-comptes-texte {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	flex: 1;
+}
+
+.nq-comptes-nom {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-normal);
+	unicode-bidi: isolate;
+}
+
+.nq-comptes-email {
+	font-size: 12px;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	unicode-bidi: isolate;
+}
+
+/* La colonne droite : badge puis action, alignée à droite sur toutes les
+   lignes — elle-même flex:none pour ne pas se laisser presser par le texte. */
+.nq-comptes-droite {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex: none;
+}
+
+/* Les actions (« Sign out », « Sign in », « Install ») : une ligne de menu,
+   pas un bouton à cadre (référence mesurée à la pipette 2026-09-21). Le fond
+   de survol est exactement celui de `.nq-menu-ligne:hover` — le même token,
+   pas une autre couleur ; sur la surface sombre des réglages il éclaircit
+   bien (surcouche claire à 7,5 %, mesuré : rgb(32,32,31) → rgb(49,49,48)). */
+.nq-comptes-action {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 28px;
+	padding: 0 10px;
+	border: 0;
+	border-radius: var(--radius-m);
+	background: transparent;
+	color: var(--text-normal);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+}
+
+.nq-comptes-action-icone {
+	display: flex;
+	flex: none;
+}
+
+.nq-comptes-action-icone svg {
+	width: 16px;
+	height: 16px;
+}
+
+.nq-comptes-action:hover:not(:disabled),
+.nq-comptes-action:focus-visible:not(:disabled) {
+	background: var(--background-modifier-hover);
+	outline: none;
+}
+
+/* L'icône d'usage (`ui/comptes.ts`, `poserIconeUsage`) : un bouton carré de
+   la hauteur de l'action, sans cadre, même fond au survol — c'est une ligne de
+   menu miniature, pas un contrôle à part. Muette (`--text-muted`) au repos
+   pour ne pas concurrencer le libellé d'action, normale au survol. */
+.nq-comptes-usage {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-m);
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.nq-comptes-usage svg {
+	width: 16px;
+	height: 16px;
+}
+
+.nq-comptes-usage:hover,
+.nq-comptes-usage:focus-visible {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+	outline: none;
+}
+
+.nq-comptes-action:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* La lecture des quatre comptes a échoué (le pont a rejeté) : une ligne à la
+   place de la liste, dans le même style que l'aide d'une section — pas une
+   couleur d'alerte à part, la liste vide serait de toute façon suivie d'une
+   notice le cas échéant (installation, connexion). */
+.nq-comptes-erreur {
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--text-muted);
+}
+
+/* ── Le popover d'usage (survol / focus du badge de forfait, Claude et Codex) ──
+   Portalé au <body>, comme `.qbd-select-menu` (ui-select.css) : les réglages
+   sont une MODALE (`.modal-container`, z-index 90 dans `modal.css`), et un
+   popover NON portalé serait coupé par son défilement. z-index 1000, même
+   valeur que `.qbd-select-menu` — au-dessus de la modale ET du menu
+   déroulant, jamais dessous. Même surface verre « dense » que le menu :
+   c'est le même registre visuel de flottant, pas un second style. */
+.nq-usage-popover {
+	position: fixed;
+	z-index: 1000;
+	width: 280px;
+	max-width: calc(100vw - 16px);
+	box-sizing: border-box;
+	padding: 12px 14px;
+	background: var(--qbd-glass-bg-dense);
+	backdrop-filter: var(--qbd-glass-blur-dense);
+	-webkit-backdrop-filter: var(--qbd-glass-blur-dense);
+	border: 1px solid var(--qbd-glass-edge);
+	border-radius: 10px;
+	box-shadow: var(--qbd-glass-sheen),
+		0 14px 28px -6px rgba(0, 0, 0, 0.4), 0 2px 6px -1px rgba(0, 0, 0, 0.22);
+}
+
+.nq-usage-titre {
+	margin: 0 0 8px;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+/* Deux colonnes : libellé + réarmement à gauche, pourcentage à droite ; la
+   jauge (3e enfant) s'étend sur les deux — `grid-column: 1 / -1` ci-dessous,
+   posée sur `.qbd-ai-usage-gauge-bar` DANS ce popover seulement. */
+.nq-usage-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: start;
+	gap: 8px;
+	margin-bottom: 10px;
+}
+
+.nq-usage-row:last-child {
+	margin-bottom: 0;
+}
+
+.nq-usage-row-info {
+	min-width: 0;
+}
+
+.nq-usage-row-label {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--text-normal);
+	overflow-wrap: anywhere;
+}
+
+.nq-usage-row-reset {
+	margin-top: 2px;
+	font-size: 10px;
+	color: var(--text-muted);
+}
+
+.nq-usage-row-pct {
+	font-size: 10.5px;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.nq-usage-row .qbd-ai-usage-gauge-bar {
+	grid-column: 1 / -1;
+	margin-top: 5px;
+}
+
+/* Jauge en attente : largeur fixe, pulsée — dit « ça charge » sans annoncer un
+   pourcentage qu'on ne connaît pas encore. */
+.nq-usage-fill--attente {
+	width: 35%;
+	animation: nq-usage-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes nq-usage-pulse {
+	0%, 100% { opacity: 0.35; }
+	50% { opacity: 0.75; }
+}
+
+.nq-usage-note {
+	margin: 8px 0 0;
+	font-size: 10px;
+	line-height: 1.5;
+	color: var(--text-faint);
+}
+
+/* Un des quatre cas d'échec (`UsageReadError.kind`) — jamais un popover vide. */
+.nq-usage-error {
+	margin: 0;
+	font-size: 11px;
+	line-height: 1.5;
+	color: var(--text-muted);
+}
+
 /* ── LA MODALE DE CHOIX D'UN FOND ──
    Une LISTE, pas une grille de vignettes nues : chaque ligne porte le nom de
    la photo et son auteur, que vingt cases de 96 pixels ne pouvaient pas dire.

@@ -91,6 +91,69 @@ export const EN_APP = {
 	"app.settings.folderInsideOpen": "This folder is already inside one of your open folders. Add it from My quizzes → New folder → Open an existing folder.",
 	"app.settings.folderContainsOpen": "This folder contains one of your open folders.",
 
+	/* ── Réglages « Comptes » (application seulement) ──
+	   Les quatre CLI de génération, avec de quoi se (dé)connecter. Antigravity
+	   ne publie aucun forfait : sa ligne montre l'adresse seule, `plan` y
+	   reste `null` et la colonne ne s'affiche pas. */
+	"app.settings.accounts": "CLI accounts",
+	"app.comptes.claude": "Claude Code",
+	"app.comptes.codex": "Codex CLI",
+	"app.comptes.agy": "Antigravity CLI",
+	"app.comptes.ollama": "Ollama",
+	"app.comptes.notInstalled": "Not installed",
+	"app.comptes.notConnected": "Not signed in",
+	"app.comptes.connectedNoEmail": "Signed in",
+	// L'espace réservé du squelette, posé avant toute lecture — même ligne
+	// pour l'adresse et pour le bouton, remplacée par la vraie valeur dès
+	// qu'elle arrive.
+	"app.comptes.loading": "…",
+	// La lecture des comptes a ÉCHOUÉ (le pont a rejeté) : un état d'erreur
+	// lisible plutôt qu'une liste vide qui resterait vide pour toujours.
+	"app.comptes.loadError": "Could not read your AI accounts.",
+	"app.comptes.install": "Install",
+	"app.comptes.connect": "Sign in",
+	"app.comptes.disconnect": "Sign out",
+	"app.comptes.installFailed": "Could not install {name}.",
+	"app.comptes.connectFailed": "Could not sign in to {name}.",
+	"app.comptes.logoutTitle": "Sign out of {name}?",
+	"app.comptes.logoutMessage": "Neo Quiz will sign this account out of {name}.",
+	"app.comptes.logoutDetail": "This signs out the whole machine, including any terminal session where you're already signed in.",
+	"app.comptes.logoutConfirm": "Sign out",
+	"app.comptes.cancel": "Cancel",
+	"app.comptes.logoutFailed": "Could not sign out of {name}.",
+
+	/* ── Popover d'usage au survol d'une ligne Claude ou Codex ──
+	   Les seuls deux outils dont le forfait est lisible (`usageCompte`, typé
+	   "claude" | "codex"). Quatre messages d'échec, un par `UsageReadError`
+	   (`usage-format.ts`) — aucun ne laisse le popover vide. */
+	"app.comptes.usageOf": "Usage of {name}",
+	"app.comptes.usageOpen": "Open usage on ollama.com",
+	"app.comptes.usageOpenFailed": "Could not open ollama.com.",
+	// Antigravity : son quota ne se lit que dans son REPL (`/usage`), le clic
+	// ouvre un terminal interactif. L'invite y est traduite PAR LE PRINCIPAL
+	// (`canaux.ts`) — cette clé n'est lue que pour l'info-bulle du bouton.
+	"app.comptes.usageTerminal": "Open Antigravity CLI to check your quota (/usage)",
+	"app.comptes.usageTerminalHint": "Type /usage to see your plan's usage. Quit Antigravity when you're done.",
+	"app.comptes.usageTerminalFailed": "Could not open the Antigravity CLI.",
+	"app.comptes.usageTerminalOpened": "Antigravity CLI is opening in a terminal — type /usage there to see your quota. On its very first launch it asks you to set it up first.",
+	// Antigravity n'attend que 60 secondes, EN INTERNE, sans rien dire : le
+	// script de connexion affiche ces deux textes, traduits par le principal
+	// (`canaux.ts`) — jamais un texte venu du rendu dans un script.
+	"app.comptes.agyCountdown": "You have 60 seconds after the browser opens to paste the code here. If it expires, press Enter to get a new link.",
+	"app.comptes.agyExpired": "The link expired. Press Enter for a new one, or close this window.",
+	"app.comptes.usage.resetsAt": "Resets {moment}",
+	"app.comptes.usage.errorRateLimited": "The provider is rate-limiting usage reads right now.",
+	"app.comptes.usage.errorRateLimitedDelay": "The provider is rate-limiting usage reads. Try again in {delai}.",
+	"app.comptes.usage.errorUnauthenticated": "This account isn't readable — sign in again.",
+	"app.comptes.usage.errorUnavailable": "Couldn't reach the usage endpoint.",
+	"app.comptes.usage.errorNeverRun": "Codex hasn't run on this machine yet.",
+	// Codex n'a pas d'état courant : sa lecture vient du dernier fichier de
+	// session écrit sur disque, une photo prise au dernier lancement du CLI.
+	"app.comptes.usage.codexSnapshot": "Snapshot taken {age}.",
+	// `mesureAt` absent (mtime illisible) : dire D'OÙ viennent les chiffres,
+	// sans prétendre QUAND — une date fausse serait pire qu'une date absente.
+	"app.comptes.usage.codexSnapshotSansDate": "From the last time Codex ran — the exact time isn't available.",
+
 	/* ── Réglages « Général » (application seulement) ── */
 	"app.settings.general": "General",
 	"app.settings.languageAuto": "Automatic (follow Windows)",

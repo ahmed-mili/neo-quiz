@@ -1414,10 +1414,20 @@ export async function checkAntigravity(force?: boolean): Promise<CodexStatus> {
    que l'utilisateur est en train de faire dans un terminal. Un TTL de 60 s y
    ferait attendre une minute devant un « En attente… » alors que c'est fait.
 
-   Les deux commandes sont NON INTERACTIVES (vérifié le 2026-09-18 :
-   `codex login status` → « Logged in using ChatGPT », `claude auth status` →
-   du JSON) et passent par la porte existante, `HostProcess.run` : aucun
-   nouveau canal, aucun nouveau droit.
+   Claude et Codex passent désormais par `etatComptes()` (Ahmed, 2026-09-21) :
+   c'est la MÊME lecture que la section « Comptes » des réglages, faite SANS
+   VERROU dans le processus principal (`apps/windows/electron/comptes.ts`) —
+   contrairement à `HostProcess.run`, qui prend un verrou par outil et
+   attendrait jusqu'à 15 s derrière une génération en cours, rendant cette
+   sonde muette pendant toute génération. Deux chemins qui répondaient à la
+   même question («suis-je connecté ?») auraient divergé au premier
+   changement ; il n'y en a plus qu'un.
+
+   Antigravity reste sur `agy models` par `HostProcess.run` : la sonde lit
+   aussi la LISTE des modèles dans la même sortie (`parseAntigravityModels`),
+   que `etatComptes()` ne rend pas — la faire passer par lui aurait vidé
+   `antigravityModelsSnapshot` en silence et fait retomber le menu des
+   modèles sur son repli embarqué.
 
    TOUT REJET VAUT « PAS CONNECTÉ », comme pour les sondes d'installation :
    l'outil peut avoir disparu entre-temps, l'hôte peut ne pas savoir lancer de
@@ -1426,39 +1436,34 @@ export async function checkAntigravity(force?: boolean): Promise<CodexStatus> {
 
 const SONDE_CONNEXION_MS = 10000;
 
-/** Codex : `codex login status` sort 0 quand un compte est connecté, non nul
-    sinon. Le TEXTE n'est pas lu — il change avec la version du CLI, le code
-    de sortie non. */
-export async function checkCodexLogin(): Promise<boolean> {
+/** Le verdict d'un outil, lu par `etatComptes()` — la lecture SANS VERROU du
+    processus principal (voir son en-tête, `apps/windows/electron/comptes.ts`) :
+    contrairement à `run()`, elle n'attend jamais derrière une génération en
+    cours. Un rejet du pont vaut « pas connecté », comme pour les anciennes
+    sondes : l'appelant ne demande que ça. */
+async function connecteSelonEtatComptes(outil: "claude" | "codex" | "agy"): Promise<boolean> {
 	if (!currentHost().platform.isDesktopApp) return false;
+	// FILTRÉ à ce seul outil (Ahmed, 2026-09-21) : cette sonde tourne toutes
+	// les trois secondes pendant un flux de connexion qui peut durer deux
+	// minutes ; lire les trois comptes à chaque tick lancerait `agy models`
+	// (~1 s, réseau) en boucle sans rapport avec ce que l'utilisateur fait.
 	return requireHost("process")
-		.run({ tool: "codex", args: ["login", "status"], stdin: "", timeoutMs: SONDE_CONNEXION_MS })
-		.then(res => res.code === 0)
+		.etatComptes([outil])
+		.then(etats => etats.find(e => e.outil === outil)?.connecte === true)
 		.catch(() => false);
 }
 
-/** Claude : `claude auth status` sort du JSON dont on ne lit QUE `loggedIn`.
-    Le reste de cet objet porte l'adresse e-mail et l'identifiant
-    d'organisation du compte : il n'est ni conservé, ni journalisé, ni rendu à
-    l'appelant. Le code de sortie ne suffit pas — il vaut 0 pour « voici mon
-    statut », y compris quand ce statut est « déconnecté ». */
+/** Codex : la même question qu'avant (`codex login status`), désormais lue
+    par `etatComptes()` — une seule vérité sur « qui est connecté », partagée
+    avec la section « Comptes » des réglages. */
+export async function checkCodexLogin(): Promise<boolean> {
+	return connecteSelonEtatComptes("codex");
+}
+
+/** Claude : la même question qu'avant (`claude auth status`, dont on ne
+    lisait QUE `loggedIn`), désormais lue par `etatComptes()`. */
 export async function checkClaudeLogin(): Promise<boolean> {
-	if (!currentHost().platform.isDesktopApp) return false;
-	return requireHost("process")
-		.run({ tool: "claude", args: ["auth", "status"], stdin: "", timeoutMs: SONDE_CONNEXION_MS })
-		.then(res => {
-			if (res.code !== 0) return false;
-			try {
-				const json: unknown = JSON.parse(res.stdout || "");
-				return !!json && typeof json === "object" && (json as { loggedIn?: unknown }).loggedIn === true;
-			} catch {
-				/* Une sortie qui n'est pas du JSON (version plus ancienne du CLI,
-				   bannière, mise à jour automatique qui s'annonce sur stdout) ne
-				   prouve pas la connexion : la seule preuve est le drapeau. */
-				return false;
-			}
-		})
-		.catch(() => false);
+	return connecteSelonEtatComptes("claude");
 }
 
 /** La sonde de connexion d'un outil, ou `null` pour ceux qui n'ont pas de
@@ -1513,14 +1518,17 @@ export async function checkOllama(url?: string, force?: boolean): Promise<Ollama
    défaut) en ont besoin ; jusqu'ici l'utilisateur ne l'apprenait qu'au premier
    envoi, par une erreur qui lui disait de taper une commande.
 
-   SEUL `plan` EST LU. `email`, `name`, `avatarurl` ne sont ni conservés, ni
-   journalisés, ni rendus : même règle que `checkClaudeLogin`.
+   SEUL `plan` ÉTAIT LU à l'origine (la sonde ne servait que la page
+   « Générer », qui n'affiche pas de compte). La section « Comptes » des
+   réglages a changé l'intention : l'adresse s'affiche comme pour les trois
+   autres outils, donc `email` est extrait et rendu — il ne reste jamais
+   journalisé. `name` et `avatarurl` restent ignorés.
 
    `signin_url` N'EST ADMISE QUE SUR `https://ollama.com` : c'est une adresse
    que la page va OUVRIR dans le navigateur, et un démon usurpé (un service
    qui occupe le port 11434) ne doit pas pouvoir y mettre n'importe quoi. */
 export type CompteOllama =
-	| { connecte: true; plan: string }
+	| { connecte: true; plan: string; email: string | null }
 	| { connecte: false; signinUrl: string | null };
 
 export async function checkOllamaCompte(url?: string): Promise<CompteOllama> {
@@ -1528,10 +1536,16 @@ export async function checkOllamaCompte(url?: string): Promise<CompteOllama> {
 	const resp = await requireHost("net").fetchJson({ url: base + "/api/me", method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
 	const absent: CompteOllama = { connecte: false, signinUrl: null };
 	if (!resp) return absent;
-	const data = corpsJson(resp.body) as { plan?: unknown; signin_url?: unknown } | null;
+	const data = corpsJson(resp.body) as { plan?: unknown; email?: unknown; signin_url?: unknown } | null;
 	// Un `plan` VIDE reste connecté : le 200 prouve la connexion, un plan
 	// inconnu n'empêche que le badge (qui exige un plan lu) de s'afficher.
-	if (resp.status === 200 && data && typeof data.plan === "string") return { connecte: true, plan: data.plan };
+	if (resp.status === 200 && data && typeof data.plan === "string") {
+		const email = typeof data.email === "string" && data.email.trim() ? data.email.trim() : null;
+		// `plan` reste TEL QUEL (« pro », « free ») : `ai.ts` le compare à
+		// `"free"` et `repartirParPlan` s'en sert comme clé — le capitaliser
+		// « pour l'affichage » a cassé ces deux comparaisons le 2026-09-21.
+		return { connecte: true, plan: data.plan, email };
+	}
 	if (resp.status === 401 && data && typeof data.signin_url === "string") {
 		try {
 			const u = new URL(data.signin_url);

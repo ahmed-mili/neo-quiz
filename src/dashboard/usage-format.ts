@@ -49,12 +49,27 @@ export type UsageReadError =
 	/** Pas de session CLI exploitable (jeton absent, expiré, refusé). */
 	| { kind: "unauthenticated" }
 	/** Injoignable ou réponse inattendue. */
-	| { kind: "unavailable" };
+	| { kind: "unavailable" }
+	/** Codex n'a jamais tourné sur cette machine : il n'y a pas de fichier de
+	    session à lire. Distinct d'`unavailable` — il n'y a rien à réparer, et
+	    « aucune session » n'est pas une panne. */
+	| { kind: "jamais-lance" };
 
-/** Résultat brut d'une lecture : des lignes, ou la raison de leur absence. */
+/** Résultat brut d'une lecture : des lignes, ou la raison de leur absence.
+ *
+ * `mesureAt` distingue l'instant de la LECTURE (quand on a interrogé la
+ * source) de l'instant de la MESURE (ce que les chiffres décrivent
+ * réellement). Pour Claude, une requête réseau, les deux coïncident. Pour
+ * Codex, les chiffres viennent du dernier fichier de session écrit sur
+ * disque — potentiellement vieux de plusieurs jours — et les confondre
+ * afficherait « lu à l'instant » sur une mesure obsolète : une date fausse,
+ * plus trompeuse qu'une date absente. `null` quand la source de l'instant
+ * (le mtime du fichier) n'a pas pu être lue.
+ */
 export interface UsageRead {
 	rows: UsageRow[];
 	error: UsageReadError | null;
+	mesureAt: number | null;
 }
 
 /** Fournisseurs dont le forfait est réellement lisible sur cette machine.

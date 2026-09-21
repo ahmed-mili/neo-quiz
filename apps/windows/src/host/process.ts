@@ -106,5 +106,17 @@ export function createWindowsProcess(): HostProcess {
 		replacerTerminal(ancre) {
 			return pont().processus.replacerTerminal(ancre);
 		},
+		etatComptes(outils) {
+			return pont().processus.comptesEtat(outils);
+		},
+		usageCompte(tool) {
+			return pont().processus.comptesUsage(tool);
+		},
+		deconnecterCli(tool) {
+			return pont().processus.comptesDeconnecter(tool);
+		},
+		terminalUsageCli(tool) {
+			return pont().processus.comptesUsageTerminal(tool);
+		},
 	};
 }

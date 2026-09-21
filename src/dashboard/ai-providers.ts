@@ -127,10 +127,11 @@ export interface OllamaInstalledStatus {
 const TRACE_GEMINI = "M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z";
 
 const BRAND_LOGOS: Record<string, string> = {
-	/* Claude Code, tel que Simple Icons le publie (CC0, slug `claudecode`,
-	   récupéré le 2026-09-21) : le « M » pixelisé de l'invite de commande,
-	   logo PROPRE du canal CLI — la marque Claude garde son astérisque. */
-	claudecode: '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M21 10.5h3v3h-3v3h-1.5v3H18v-3h-1.5v3H15v-3H9v3H7.5v-3H6v3H4.5v-3H3v-3H0v-3h3v-6h18Zm-15 0h1.5v-3H6Zm10.5 0H18v-3h-1.5z"/></svg>',
+	/* Claude Code, le « M » pixelisé de l'invite, EN COULEURS (Anthropic,
+	   #D97757) — à la demande d'Ahmed (2026-09-21), comme Gemini, Mistral et
+	   Antigravity les seuls de la table à porter les leurs. SVG passé par
+	   Ahmed lui-même ; aucun `id`, rien à réécrire à la pose. */
+	claudecode: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path clip-rule="evenodd" fill="#D97757" fill-rule="evenodd" d="M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z"/></svg>',
 	/* Codex, tel que @lobehub/icons-static-svg le publie (MIT, récupéré le
 	   2026-09-21 — Simple Icons ne le porte pas) : la pastille avec l'invite
 	   « >_ » en creux, logo PROPRE du canal CLI — la marque ChatGPT garde le

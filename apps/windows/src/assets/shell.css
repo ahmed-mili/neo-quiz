@@ -334,20 +334,45 @@ body {
 .nq-comptes-liste {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
 	margin-top: 4px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	overflow: hidden;
 }
 
+/* Un seul conteneur à bordure, les quatre lignes séparées par un filet —
+   plus de carte par ligne (référence : la carte « Wallpaper » de la page).
+   `+` plutôt qu'`:first-child : le filet vient d'un SŒUR, jamais du premier
+   enfant lui-même, donc aucun filet fantôme au-dessus de la première ligne. */
 .nq-comptes-ligne {
 	display: flex;
 	align-items: center;
 	gap: 12px;
 	width: 100%;
 	box-sizing: border-box;
-	padding: 10px 14px;
-	border-radius: var(--radius-m);
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-secondary);
+	height: 56px;
+	padding: 0 14px;
+}
+
+.nq-comptes-ligne + .nq-comptes-ligne {
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Le logo de marque dans une pastille ronde de 32 px (logo 20 px dedans). */
+.nq-comptes-logo {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	background: var(--background-modifier-border);
+}
+
+.nq-comptes-logo .qbd-provider-logo {
+	width: 20px;
+	height: 20px;
 }
 
 .nq-comptes-texte {
@@ -366,12 +391,21 @@ body {
 }
 
 .nq-comptes-email {
-	font-size: 11px;
+	font-size: 12px;
 	color: var(--text-muted);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	unicode-bidi: isolate;
+}
+
+/* La colonne droite : badge puis action, alignée à droite sur toutes les
+   lignes — elle-même flex:none pour ne pas se laisser presser par le texte. */
+.nq-comptes-droite {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex: none;
 }
 
 /* Le forfait : une pastille sombre bordée de la couleur du fournisseur

@@ -382,9 +382,12 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 	}
 
 	/** Le logo et le nom, communs à la ligne SQUELETTE et à la ligne finale :
-	    les deux seules choses connues sans attendre aucune lecture. */
+	    les deux seules choses connues sans attendre aucune lecture. Le logo de
+	    marque est posé dans une pastille ronde de 32 px (référence d'écran
+	    2026-09-21 : une pastille par ligne, pas un logo nu). */
 	function poserEntete(ligne: HTMLElement, outil: CliTool): void {
-		const icone = ajouter(ligne, "span", "qbd-provider-logo qbd-provider-logo--" + LOGOS[outil]);
+		const pastille = ajouter(ligne, "span", "nq-comptes-logo");
+		const icone = ajouter(pastille, "span", "qbd-provider-logo qbd-provider-logo--" + LOGOS[outil]);
 		setBrandLogo(icone, LOGOS[outil]);
 		const texte = ajouter(ligne, "div", "nq-comptes-texte");
 		ajouter(texte, "span", "nq-comptes-nom", nomOutil(outil));
@@ -404,7 +407,8 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 			poserEntete(ligne, outil);
 			const texte = ligne.querySelector<HTMLElement>(".nq-comptes-texte")!;
 			ajouter(texte, "span", "nq-comptes-email", t("app.comptes.loading"));
-			const bouton = ajouter(ligne, "button", "nq-comptes-action", t("app.comptes.loading"));
+			const droite = ajouter(ligne, "div", "nq-comptes-droite");
+			const bouton = ajouter(droite, "button", "nq-comptes-action", t("app.comptes.loading"));
 			bouton.type = "button";
 			bouton.disabled = true;
 		}
@@ -426,6 +430,9 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 				: (etat.email ?? t("app.comptes.connectedNoEmail"));
 		ajouter(texte, "span", "nq-comptes-email", etatTexte);
 
+		// La colonne droite : badge puis action, alignés sur toutes les lignes.
+		const droite = ajouter(ligne, "div", "nq-comptes-droite");
+
 		// Le badge de forfait. Pour Claude Code et Codex, un BOUTON rendu MÊME
 		// sans forfait connu (libellé « Usage ») : c'est lui qui ouvre le
 		// popover d'usage au survol — le rendre conditionnel à `etat.plan`
@@ -436,17 +443,17 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		// d'usage : simple badge inerte s'ils publient un forfait, rien sinon.
 		if (etat.outil === "claude" || etat.outil === "codex") {
 			if (etat.connecte) {
-				const badge = ajouter(ligne, "button", "nq-comptes-plan",
+				const badge = ajouter(droite, "button", "nq-comptes-plan",
 					etat.plan ?? t("app.comptes.usage"));
 				badge.type = "button";
 				attacherPopoverUsage(badge, etat.outil);
 			}
 		} else if (etat.plan) {
-			ajouter(ligne, "span", "nq-comptes-plan", etat.plan);
+			ajouter(droite, "span", "nq-comptes-plan", etat.plan);
 		}
 
 		const action = actionDe(etat);
-		const bouton = ajouter(ligne, "button", "nq-comptes-action");
+		const bouton = ajouter(droite, "button", "nq-comptes-action");
 		bouton.type = "button";
 		// Une ligne de menu, pas un bouton à cadre (référence mesurée 2026-09-21)
 		// : icône Lucide à gauche du libellé, `download` / `log-in` / `log-out`

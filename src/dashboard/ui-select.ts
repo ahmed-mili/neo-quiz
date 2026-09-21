@@ -852,6 +852,9 @@ export interface ProviderChannelOption {
 	    de `sub` : un site se nomme (« claude.ai »), là où sa ligne de canal
 	    dit « Dans votre navigateur » (Ahmed, 2026-09-20). */
 	resume?: string;
+	/** Le logo propre au CANAL, quand il en a un (Claude Code, Codex,
+	    Antigravity) ; absent, la ligne reprend celui de sa marque. */
+	logo?: string;
 }
 
 /** Une marque dans le menu : un logo, un nom, et un ou plusieurs canaux. */
@@ -1047,6 +1050,14 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		if (c.disabled) btn.setAttribute("aria-disabled", "true");
 		const check = ajouter(btn, "span", "qbd-select-check");
 		if (active) currentHost().ui.setIcon(check, "check");
+		/* Le logo du CANAL quand il en porte un (Claude Code, Codex,
+		   Antigravity), sinon celui de sa marque — chaque ligne du flyout en
+		   porte un, comme la ligne « Marque · canal » du flyout « Plus de
+		   fournisseurs » (Ahmed, 2026-09-21). */
+		if (c.logo) {
+			const logo = ajouter(btn, "span", "qbd-provider-logo qbd-provider-logo--" + c.logo);
+			opts.renderLogo(logo, c.logo);
+		}
 		const body = ajouter(btn, "div", "qbd-provider-option-body");
 		ajouter(body, "span", "qbd-select-option-label", c.label);
 		if (c.sub) ajouter(body, "span", "qbd-provider-option-sub", c.sub);

@@ -1758,6 +1758,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				value: c.id,
 				label: c.label,
 				sub: providerStatus[c.id]?.text || c.sub,
+				// Le logo du CANAL s'il en a un (Claude Code, Codex,
+				// Antigravity), sinon celui de la marque — la ligne web montre
+				// donc le logo de marque déjà présent, le CLI le sien propre
+				// (Ahmed, 2026-09-21).
+				logo: c.logo || m.logo,
 				// La ligne de marque nomme le SITE en usage (« claude.ai »), pas
 				// « Dans votre navigateur » — ça, c'est le flyout qui le dit.
 				resume: c.type === "web" ? c.label : undefined,
@@ -2936,8 +2941,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			   (2026-09-20 : sans fichier, « Envoyez » paraissait déjà fait). */
 		} else {
 			/* Un titre court en gras, une ligne en dessous : la phrase entière en
-			   gras faisait quatre lignes (2026-09-20). */
-			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title", t("ai.web.title", { site }));
+			   gras faisait quatre lignes (2026-09-20). En BLEU comme l'accent de
+			   la ligne du dessous (Ahmed, 2026-09-21). */
+			ajouter(carte, "p", "qbd-ai-loading-title qbd-web-wait-title qbd-web-wait-title--prompt", t("ai.web.title", { site }));
 			poserTexteMisEnAvant(ajouter(carte, "p", "qbd-ai-web-line qbd-ai-web-line--first"), t("ai.web.thenCopy"));
 		}
 		/* LES FICHIERS À GLISSER, en tuiles — les mêmes cartes que le composer

@@ -2677,6 +2677,12 @@
 .qbd-ai-web-card .qbd-web-wait-icon svg { display: block; width: 30px; height: 30px; margin: 0; }
 .qbd-web-wait-title { max-width: 30ch; text-align: center; text-wrap: balance; line-height: 1.4; }
 
+/* Le titre « Send the prompt on … » porte la même couleur que l'emphase
+   « copy the code block » en dessous (Ahmed, 2026-09-21) : la consigne et
+   son geste se lisent d'un même regard. La carte « reçu » et celle des
+   fichiers gardent leur encre normale. */
+.qbd-web-wait-title--prompt { color: var(--interactive-accent); }
+
 /* L'ATTENTE : deux ondes partent de la tuile et s'effacent en grandissant
    (« sonar », choisi à l'écran par Ahmed le 2026-09-19 parmi sept effets).
    L'échelle (1,75 × 64 px) et les marges de la tuile sont calées ENSEMBLE :

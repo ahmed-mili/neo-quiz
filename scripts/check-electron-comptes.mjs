@@ -11,7 +11,7 @@
  *
  *     npm run check:electron-comptes
  */
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
@@ -44,25 +44,6 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
 		 m.planClaude({})],
 		["Max (5x)", "Pro", null]);
 
-	/* ─── Claude : l'adresse de ~/.claude.json ─── */
-	r.check("l'adresse OAuth sort de ~/.claude.json quand auth status ne la dit pas",
-		m.emailOauthClaude({ oauthAccount: { emailAddress: "a@b.c", accountUuid: "x" } }),
-		"a@b.c");
-
-	r.check("sans oauthAccount, sans emailAddress, ou vide, pas d'adresse",
-		[m.emailOauthClaude({}), m.emailOauthClaude({ oauthAccount: {} }),
-		 m.emailOauthClaude({ oauthAccount: { emailAddress: "" } }), m.emailOauthClaude(null)],
-		[null, null, null, null]);
-
-	/* ─── Claude : le forfait de ~/.claude/.credentials.json ─── */
-	r.check("le forfait sort de .credentials.json quand auth status ne le dit pas",
-		m.planCredentialsClaude({ claudeAiOauth: { subscriptionType: "max", rateLimitTier: "default_claude_max_5x" } }),
-		"Max (5x)");
-
-	r.check("sans claudeAiOauth, sans type, ou vide, pas de forfait",
-		[m.planCredentialsClaude({}), m.planCredentialsClaude({ claudeAiOauth: {} }), m.planCredentialsClaude(null)],
-		[null, null, null]);
-
 	/* ─── Codex : les claims de l'id_token ─── */
 	r.check("codex rend l'adresse et le plan des claims",
 		m.comptCodex({ tokens: { id_token: idToken({ email: "a@b.c", "https://api.openai.com/auth": { chatgpt_plan_type: "plus" } }) } }),
@@ -79,12 +60,16 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
 	r.check("un auth.json vide ne produit rien",
 		m.comptCodex({}), { email: null, plan: null });
 
-	/* ─── Antigravity : google_accounts.json ─── */
-	r.check("antigravity rend le compte actif",
-		m.emailAntigravity({ active: "x@gmail.com", old: [] }), "x@gmail.com");
+	/* ─── Antigravity : le journal du CLI (`--log-file`) ─── */
+	const JOURNAL_AGY = "I0921 17:34:36.301059      13 server.go:1584] Starting language server process with pid 30304\n"
+		+ "I0921 17:34:36.513108       1 server_oauth.go:196] applyAuthResult: email=x@gmail.com, authMethod=consumer, quotaProject=\n"
+		+ "I0921 17:34:37.704505     243 quota_manager.go:45] doRefreshQuota: starting reload (force=true)\n";
+	r.check("antigravity rend l'adresse de la ligne applyAuthResult du journal",
+		m.emailAntigravityDepuisJournal(JOURNAL_AGY), "x@gmail.com");
 
-	r.check("sans `active`, personne n'est connecté",
-		[m.emailAntigravity({ old: ["x@gmail.com"] }), m.emailAntigravity(null), m.emailAntigravity({ active: 42 })],
+	r.check("sans ligne applyAuthResult, ou sans journal, pas d'adresse",
+		[m.emailAntigravityDepuisJournal("I0921 doRefreshQuota: skipped (not logged in)\n"),
+		 m.emailAntigravityDepuisJournal(""), m.emailAntigravityDepuisJournal(null)],
 		[null, null, null]);
 
 	/* ─── Codex : les quotas d'une ligne de rollout ─── */
@@ -163,9 +148,7 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
 			},
 		}),
 		m.comptClaude(JSON.stringify({ loggedIn: true, email: "a@b.c", subscriptionType: "pro", accessToken: SECRET })),
-		m.emailAntigravity({ active: "x@gmail.com", access_token: SECRET, refresh_token: REFRESH }),
-		m.emailOauthClaude({ oauthAccount: { emailAddress: "a@b.c", accessToken: SECRET, refreshToken: REFRESH } }),
-		m.planCredentialsClaude({ claudeAiOauth: { subscriptionType: "pro", rateLimitTier: "default_claude_ai", accessToken: SECRET, refreshToken: REFRESH } }),
+		m.emailAntigravityDepuisJournal("applyAuthResult: email=x@gmail.com, authMethod=consumer, token=" + SECRET + " refresh=" + REFRESH + "\n"),
 	]);
 	r.check("aucune sortie ne contient de jeton",
 		[sorties.includes("SECRET-QUI-NE-DOIT-PAS-SORTIR"), sorties.includes("oat01")],
@@ -184,9 +167,10 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
    existe pour empêcher — laissait 22/22 cas verts ci-dessus tout en faisant
    fuiter `access_token`/`refresh_token` par le pont.
 
-   Un VRAI dossier temporaire joue le rôle du dossier personnel, avec de faux
-   `auth.json` (Codex), `google_accounts.json` (Antigravity) et
-   `.credentials.json` (Claude), chacun porteur d'un jeton reconnaissable.
+   Un VRAI dossier temporaire joue le rôle du dossier personnel, avec un faux
+   `auth.json` (Codex) porteur d'un jeton reconnaissable, et un faux
+   `google_accounts.json` (Antigravity) que le code ne doit PLUS lire : c'est un
+   vestige de Gemini CLI, l'adresse vient du journal de la sonde (voir plus bas).
 
    `etatClaude` ET `etatAntigravity` COMMENCENT PAR `resoudreExecutable(...)` et
    rendent `etatVide(...)` AVANT d'avoir lu le moindre fichier — un dossier
@@ -209,8 +193,10 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
      retour d'`etatClaude` les ferait fuiter, exactement comme le spread
      documenté plus haut pour Codex.
    - `agy` : le faux CLI répond à `models` par une ligne non vide et un code 0
-     (`connecte` en dépend) ; l'adresse est ensuite lue, comme avant, dans
-     `google_accounts.json`, qui porte `access_token`/`refresh_token`.
+     (`connecte` en dépend) et ÉCRIT, au chemin reçu par `--log-file`, un
+     journal comme le vrai — la ligne `applyAuthResult` PLUS des jetons,
+     qu'une recopie du journal ferait fuiter. Le journal est ensuite RETIRÉ
+     par `etatAntigravity`, sonde expirée comprise : vérifié ici.
    - `codex` : déjà exercé sans exécutable (il lit `auth.json` directement) ;
      l'exécutable posé ici ne sert plus qu'à faire répondre `login status`
      en 0, pour que `connecte` vaille `true` comme un vrai poste connecté. */
@@ -237,23 +223,13 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 				refresh_token: REFRESH_CODEX,
 			},
 		}));
+		/* `~/.gemini/google_accounts.json` est posé EXPRÈS avec une AUTRE
+		   adresse que celle du journal : c'est un vestige de Gemini CLI, et
+		   `etatAntigravity` ne doit plus le lire (mesuré le 2026-09-21 : il
+		   nommait un compte qui n'était pas celui du CLI). */
 		await mkdir(join(dir, ".gemini"), { recursive: true });
 		await writeFile(join(dir, ".gemini", "google_accounts.json"), JSON.stringify({
-			active: "x@gmail.com", access_token: SECRET_AGY, refresh_token: REFRESH_AGY,
-		}));
-		await mkdir(join(dir, ".claude"), { recursive: true });
-		await writeFile(join(dir, ".claude", ".credentials.json"), JSON.stringify({
-			claudeAiOauth: {
-				accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE,
-				subscriptionType: "pro", rateLimitTier: "default_claude_ai",
-			},
-		}));
-		/* `~/.claude.json` : l'adresse que les versions mesurées du CLI ne
-		   publient pas dans `auth status --json` — elle porte aussi des jetons
-		   (déjà dans la liste de l'assertion « aucun jeton »), qu'un spread
-		   distrait sur le chemin du repli ferait fuiter. */
-		await writeFile(join(dir, ".claude.json"), JSON.stringify({
-			oauthAccount: { emailAddress: "a@b.c", accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE },
+			active: "vestige@gmail.com", access_token: SECRET_AGY, refresh_token: REFRESH_AGY,
 		}));
 
 		/** Un faux CLI : un script Node, plus un lanceur du nom demandé — même
@@ -272,21 +248,24 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 		}
 
 		await Promise.all([
-			/* `auth status --json` : ce que le VRAI CLI 2.1.278 rend (mesuré
-			   deux fois le 2026-09-21, y compris dans l'environnement exact de
-			   l'app) : `loggedIn` SANS email NI subscriptionType — PLUS
-			   `accessToken`/`refreshToken`, qu'un spread distrait au retour
-			   d'`etatClaude` ferait fuiter. L'adresse et le forfait doivent
-			   venir des replis `~/.claude.json` et `~/.claude/.credentials.json`. */
+			/* `auth status --json` : ce que le VRAI CLI 2.1.278 rend pour une
+			   connexion claude.ai (`loggedIn`/`email`/`subscriptionType`) —
+			   PLUS `accessToken`/`refreshToken`, qu'un spread distrait au
+			   retour d'`etatClaude` ferait fuiter. */
 			poserFauxCli("claude", "process.stdout.write(" + JSON.stringify(JSON.stringify({
-				loggedIn: true,
+				loggedIn: true, email: "a@b.c", subscriptionType: "pro",
 				accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE,
 			})) + ");"),
 			/* `login status` : seul le CODE DE SORTIE compte pour `connecte`. */
 			poserFauxCli("codex", "process.exit(0);"),
-			/* `models` : `connecte` exige un code 0 et une sortie non vide ;
-			   l'adresse, elle, est relue ensuite dans `google_accounts.json`. */
-			poserFauxCli("agy", "process.stdout.write('modele-a\\n');"),
+			/* `--log-file <chemin> models` : `connecte` exige un code 0 et une
+			   sortie non vide ; l'adresse vient du journal écrit au chemin reçu,
+			   avec des jetons dedans comme le vrai en porterait. */
+			poserFauxCli("agy", "const i = process.argv.indexOf('--log-file');"
+				+ " require('node:fs').writeFileSync(process.argv[i + 1],"
+				+ " 'server_oauth.go:196] applyAuthResult: email=x@gmail.com, authMethod=consumer\\n'"
+				+ " + 'token=" + SECRET_AGY + " refresh=" + REFRESH_AGY + "\\n');"
+				+ " process.stdout.write('modele-a\\n');"),
 		]);
 
 		/* AUCUN autre dossier de `PATH` : `PATH` porte EXACTEMENT le dossier
@@ -317,7 +296,7 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 			etats.find(e => e.outil === "claude"),
 			{ outil: "claude", installe: true, connecte: true, email: "a@b.c", plan: "Pro" });
 
-		r.check("etatComptes() lit le vrai faux exécutable agy (connecte) puis l'adresse du fichier",
+		r.check("etatComptes() lit le vrai faux exécutable agy (connecte) puis l'adresse de SON journal, pas du vestige",
 			etats.find(e => e.outil === "agy"),
 			{ outil: "agy", installe: true, connecte: true, email: "x@gmail.com", plan: null });
 
@@ -338,6 +317,12 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 		r.check("une sonde agy expirée garde « installé », jamais « non installé »",
 			apresExpiration.find(e => e.outil === "agy"),
 			{ outil: "agy", installe: true, connecte: false, email: null, plan: null });
+
+		/* Le journal de sonde ne survit à aucune issue : après les deux sondes
+		   (l'une aboutie, l'autre expirée), aucun `neo-quiz-agy-<pid>-<date>.log` ne reste
+		   dans le dossier temporaire du système. */
+		const restes = (await readdir(tmpdir())).filter(f => /^neo-quiz-agy-\d+-\d+\.log$/.test(f));
+		r.check("aucun journal de sonde agy ne reste dans le dossier temporaire", restes, []);
 	} finally {
 		await rm(racine, { recursive: true, force: true });
 	}

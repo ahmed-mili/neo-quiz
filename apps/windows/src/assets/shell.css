@@ -408,37 +408,6 @@ body {
 	flex: none;
 }
 
-/* La pastille de forfait — copie mesurée de la pastille « Plus » de ChatGPT
-   (2026-09-21) : fond quasi noir, bordure en dégradé vertical de la couleur
-   du fournisseur, lueur intérieure qui s'intensifie vers le bas. `--pastille`
-   est un triplet R G B posé par ligne (`data-outil`). */
-.nq-comptes-plan {
-	--pastille: 226 226 226;
-	display: inline-flex;
-	align-items: center;
-	flex: none;
-	height: 22px;
-	padding: 0 10px;
-	border: 1px solid transparent;
-	border-radius: 999px;
-	background:
-		linear-gradient(rgb(19 19 20), rgb(19 19 20)) padding-box,
-		linear-gradient(to bottom, rgb(var(--pastille) / 0.32), rgb(var(--pastille) / 0.9)) border-box;
-	box-shadow:
-		inset 0 0 6px rgb(var(--pastille) / 0.25),
-		inset 0 -5px 6px -3px rgb(var(--pastille) / 0.85);
-	color: rgb(226 226 226);
-	font: inherit;
-	font-size: 11px;
-	font-weight: 700;
-	line-height: 1;
-	white-space: nowrap;
-}
-.nq-comptes-ligne[data-outil="codex"] .nq-comptes-plan { --pastille: 124 133 205; }
-.nq-comptes-ligne[data-outil="claude"] .nq-comptes-plan { --pastille: 217 119 87; }
-.nq-comptes-ligne[data-outil="agy"] .nq-comptes-plan { --pastille: 49 134 255; }
-.nq-comptes-ligne[data-outil="ollama"] .nq-comptes-plan { --pastille: 226 226 226; }
-
 /* Les actions (« Sign out », « Sign in », « Install ») : une ligne de menu,
    pas un bouton à cadre (référence mesurée à la pipette 2026-09-21). Le fond
    de survol est exactement celui de `.nq-menu-ligne:hover` — le même token,
@@ -474,6 +443,37 @@ body {
 .nq-comptes-action:hover:not(:disabled),
 .nq-comptes-action:focus-visible:not(:disabled) {
 	background: var(--background-modifier-hover);
+	outline: none;
+}
+
+/* L'icône d'usage (`ui/comptes.ts`, `poserIconeUsage`) : un bouton carré de
+   la hauteur de l'action, sans cadre, même fond au survol — c'est une ligne de
+   menu miniature, pas un contrôle à part. Muette (`--text-muted`) au repos
+   pour ne pas concurrencer le libellé d'action, normale au survol. */
+.nq-comptes-usage {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-m);
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.nq-comptes-usage svg {
+	width: 16px;
+	height: 16px;
+}
+
+.nq-comptes-usage:hover,
+.nq-comptes-usage:focus-visible {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 	outline: none;
 }
 

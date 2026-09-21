@@ -133,6 +133,9 @@ function actionDe(etat: EtatCompte): "installer" | "connecter" | "deconnecter" {
    lui-même au-delà de ce type. */
 type OutilAvecUsage = "claude" | "codex";
 
+/** La page d'usage d'Ollama (session + semaine), ouverte au clic sur l'icône. */
+const OLLAMA_USAGE_URL = "https://ollama.com/settings";
+
 const DELAI_OUVERTURE_MS = 250;
 const DELAI_FERMETURE_MS = 150;
 /** Le résultat d'une lecture est gardé 60 s par outil : Claude coûte un
@@ -278,11 +281,11 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		for (const annuler of Array.from(ouverturesEnAttente)) annuler();
 	}
 
-	/** Popover d'usage au survol ou au focus du BADGE de forfait d'une ligne
+	/** Popover d'usage au survol ou au focus de l'ICÔNE d'usage d'une ligne
 	    Claude ou Codex — jamais Antigravity ni Ollama : seul
 	    `outil: OutilAvecUsage` (paramètre de cette fonction) rend l'appel
 	    possible, le compilateur refuse déjà les deux autres à `usageCompte`.
-	    L'ancre est le badge, pas la ligne entière (retour d'écran 2026-09-21) :
+	    L'ancre est l'icône, pas la ligne entière (retour d'écran 2026-09-21) :
 	    un survol qui traverse la ligne pour atteindre le bouton d'action
 	    déclenchait des lectures d'usage à chaque passage. */
 	function attacherPopoverUsage(ancre: HTMLElement, outil: OutilAvecUsage): void {
@@ -317,7 +320,7 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 			// (squelette ou vraies jauges), inconnue avant qu'il soit dans le DOM.
 			popEl.style.visibility = "hidden";
 			const pr = popEl.getBoundingClientRect();
-			// Bord DROIT du popover aligné sur celui du badge (retour d'écran
+			// Bord DROIT du popover aligné sur celui de l'icône (retour d'écran
 			// 2026-09-21 : calé sur r.left, il débordait de la modale des
 			// réglages — le popover, portalé au body, n'est pas borné par elle).
 			const left = Math.max(8, Math.min(r.right - pr.width, window.innerWidth - pr.width - 8));
@@ -374,7 +377,7 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 
 		ancre.addEventListener("mouseenter", programmerOuverture);
 		ancre.addEventListener("mouseleave", programmerFermeture);
-		// Le badge est un BOUTON focalisable : Tab jusqu'à lui ouvre le popover
+		// L'icône est un BOUTON focalisable : Tab jusqu'à elle ouvre le popover
 		// sans délai — contrairement au survol, un geste clavier explicite n'a
 		// pas besoin d'être filtré d'un passage rapide.
 		ancre.addEventListener("focusin", ouvrirMaintenant);
@@ -430,27 +433,15 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 				: (etat.email ?? t("app.comptes.connectedNoEmail"));
 		ajouter(texte, "span", "nq-comptes-email", etatTexte);
 
-		// La colonne droite : badge puis action, alignés sur toutes les lignes.
+		// La colonne droite : l'icône d'usage puis l'action, alignées sur
+		// toutes les lignes.
 		const droite = ajouter(ligne, "div", "nq-comptes-droite");
 
-		// Le badge de forfait. Pour Claude Code et Codex, un BOUTON rendu MÊME
-		// sans forfait connu (libellé « Usage ») : c'est lui qui ouvre le
-		// popover d'usage au survol — le rendre conditionnel à `etat.plan`
-		// ferait perdre l'accès à l'usage quand le forfait n'est pas lisible
-		// (Claude Code, 2026-09-21). Rendu seulement SI CONNECTÉ : sur une
-		// ligne « not installed » ou « not connected », un bouton « Usage »
-		// n'ouvrirait qu'un cas d'échec. Antigravity et Ollama n'ont pas
-		// d'usage : simple badge inerte s'ils publient un forfait, rien sinon.
-		if (etat.outil === "claude" || etat.outil === "codex") {
-			if (etat.connecte) {
-				const badge = ajouter(droite, "button", "nq-comptes-plan",
-					etat.plan ?? t("app.comptes.usage"));
-				badge.type = "button";
-				attacherPopoverUsage(badge, etat.outil);
-			}
-		} else if (etat.plan) {
-			ajouter(droite, "span", "nq-comptes-plan", etat.plan);
-		}
+		// PAS DE BADGE DE FORFAIT (décision du 2026-09-21) : Antigravity n'en
+		// publie aucun, nulle part — et un badge sur trois lignes sur quatre
+		// aurait fait passer la quatrième pour cassée. Le forfait reste lu
+		// (`etat.plan`, la page « Générer » s'en sert pour Ollama), pas montré.
+		poserIconeUsage(droite, etat);
 
 		const action = actionDe(etat);
 		const bouton = ajouter(droite, "button", "nq-comptes-action");
@@ -469,6 +460,39 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		bouton.addEventListener("click", () => {
 			void surClicAction(etat.outil, action, bouton);
 		});
+	}
+
+	/** L'icône d'usage, à gauche de l'action, sur une ligne CONNECTÉE seulement
+	    (ailleurs elle n'ouvrirait qu'un cas d'échec) :
+	    - Claude Code et Codex : le survol (ou le focus) ouvre le popover des
+	      jauges, lues par le principal.
+	    - Ollama : un clic ouvre `ollama.com/settings` dans le navigateur — la
+	      seule page où Ollama montre l'usage de la session et de la semaine ;
+	      `/api/me` ne le publie pas (ollama/ollama#12532).
+	    - Antigravity : RIEN. Son quota ne s'affiche que dans le CLI lui-même
+	      (`/usage`, une interface interactive) ; aucune page web ne le montre
+	      (vérifié le 2026-09-21). Une icône qui n'ouvre rien d'utile serait
+	      pire que son absence. */
+	function poserIconeUsage(droite: HTMLElement, etat: EtatCompte): void {
+		if (!etat.connecte || etat.outil === "agy") return;
+		const icone = ajouter(droite, "button", "nq-comptes-usage");
+		icone.type = "button";
+		currentHost().ui.setIcon(icone, "gauge");
+		if (etat.outil === "ollama") {
+			icone.setAttribute("aria-label", t("app.comptes.usageOpen"));
+			icone.title = t("app.comptes.usageOpen");
+			icone.addEventListener("click", () => {
+				void currentHost().shell.openUrl(OLLAMA_USAGE_URL).then((ouvert) => {
+					if (!ouvert) currentHost().ui.notice(t("app.comptes.usageOpenFailed"));
+				}).catch((e: unknown) => {
+					console.warn(LOG_PREFIX, "ouverture de l'usage Ollama impossible:", e);
+					currentHost().ui.notice(t("app.comptes.usageOpenFailed"));
+				});
+			});
+			return;
+		}
+		icone.setAttribute("aria-label", t("app.comptes.usageOf", { name: nomOutil(etat.outil) }));
+		attacherPopoverUsage(icone, etat.outil);
 	}
 
 	/** Redessine la section entière. NE JETTE JAMAIS : son seul appelant est

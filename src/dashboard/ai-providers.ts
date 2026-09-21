@@ -1541,10 +1541,10 @@ export async function checkOllamaCompte(url?: string): Promise<CompteOllama> {
 	// inconnu n'empêche que le badge (qui exige un plan lu) de s'afficher.
 	if (resp.status === 200 && data && typeof data.plan === "string") {
 		const email = typeof data.email === "string" && data.email.trim() ? data.email.trim() : null;
-		// « pro » → « Pro » : `/api/me` publie le forfait en minuscule, les
-		// trois autres outils l'affichent capitalisé — même badge, même forme.
-		const plan = data.plan ? data.plan.charAt(0).toUpperCase() + data.plan.slice(1) : data.plan;
-		return { connecte: true, plan, email };
+		// `plan` reste TEL QUEL (« pro », « free ») : `ai.ts` le compare à
+		// `"free"` et `repartirParPlan` s'en sert comme clé — le capitaliser
+		// « pour l'affichage » a cassé ces deux comparaisons le 2026-09-21.
+		return { connecte: true, plan: data.plan, email };
 	}
 	if (resp.status === 401 && data && typeof data.signin_url === "string") {
 		try {

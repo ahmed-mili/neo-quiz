@@ -1,9 +1,10 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
 import type { EtatCompte } from "../../../src/host/types";
 import type { UsageRead } from "../../../src/dashboard/usage-format";
-import { comptClaude, comptCodex, emailAntigravity, emailOauthClaude, planCredentialsClaude, usageClaudeDepuisReponse, usageCodexDepuisLigne } from "./comptes-pur";
+import { comptClaude, comptCodex, emailAntigravityDepuisJournal, usageClaudeDepuisReponse, usageCodexDepuisLigne } from "./comptes-pur";
 import type { OutilCompte } from "./comptes-pur";
 import { dossierPersonnel, environnementEnfant, lancer, resoudreExecutable } from "./process";
 
@@ -41,30 +42,16 @@ async function etatClaude(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 			timeoutMs: DELAI_MS,
 			env: environnementEnfant(env),
 		});
-		const { connecte, email: emailStatut, plan: planStatut } = comptClaude(stdout);
-		// `claude auth status --json` ne publie ni adresse ni forfait sur les
-		// versions du CLI mesurées (2.1.278, 2026-09-21, vérifié deux fois y
-		// compris dans l'environnement exact de l'app). Repli FICHIER, et
-		// champs SEULS : l'adresse dans `~/.claude.json`
-		// (`oauthAccount.emailAddress`), le forfait dans
-		// `~/.claude/.credentials.json` (`claudeAiOauth.subscriptionType` +
-		// `rateLimitTier`, la forme que `planClaude()` lit déjà) — jamais
-		// l'objet, ces fichiers portent les jetons. Échec de lecture = rien de
-		// plus à afficher, la connexion reste vraie.
-		let email = emailStatut;
-		if (connecte && !email) {
-			try {
-				const brut = await readFile(join(dossierPersonnel(env), ".claude.json"), "utf8");
-				email = emailOauthClaude(JSON.parse(brut) as unknown);
-			} catch (e) { /* pas d'adresse à afficher, la connexion reste vraie */ }
-		}
-		let plan = planStatut;
-		if (connecte && !plan) {
-			try {
-				const brut = await readFile(join(dossierPersonnel(env), ".claude", ".credentials.json"), "utf8");
-				plan = planCredentialsClaude(JSON.parse(brut) as unknown);
-			} catch (e) { /* pas de forfait à afficher, la connexion reste vraie */ }
-		}
+		// `claude auth status --json` publie l'adresse et le forfait
+		// (`subscriptionType`) dès que la connexion est celle de claude.ai. Il
+		// ne les publie PAS quand une variable `ANTHROPIC_AUTH_TOKEN` /
+		// `ANTHROPIC_API_KEY` est dans l'environnement : la connexion est alors
+		// « oauth_token » ou « apiKey », sans compte. C'est ce qui s'est vu le
+		// 2026-09-21 en lançant l'app depuis une session `ollama launch claude`
+		// (qui pose ces variables), et qui a fait croire à tort que le CLI ne
+		// publiait rien. Aucun repli sur `~/.claude.json` ni `.credentials.json`
+		// : ils décrivent le compte claude.ai, pas celui que le CLI UTILISE.
+		const { connecte, email, plan } = comptClaude(stdout);
 		return { outil: "claude", installe: true, connecte, email, plan };
 	} catch (e) {
 		// Sonde expirée ou lancement raté : l'exécutable EXISTE (résolu plus
@@ -127,24 +114,30 @@ async function etatCodex(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 async function etatAntigravity(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 	const executable = resoudreExecutable("agy", env);
 	if (!executable) return etatVide("agy");
+	// Le journal de la sonde, dans un fichier à nous : `agy` y écrit à chaque
+	// lancement le compte qu'il vient d'authentifier (`applyAuthResult`), et
+	// c'est la SEULE source qui dise le compte réellement connecté (voir
+	// `emailAntigravityDepuisJournal`). Retiré sur toutes les issues, sonde
+	// expirée comprise : il peut porter plus que l'adresse.
+	const journal = join(tmpdir(), "neo-quiz-agy-" + process.pid + "-" + Date.now() + ".log");
 	try {
 		const { stdout, code } = await lancer({
 			executable,
-			args: ["models"],
+			// Le drapeau AVANT la sous-commande : après, `agy models` le rejette
+			// (« Usage: agy.exe models [flags] », mesuré).
+			args: ["--log-file", journal, "models"],
 			stdin: "",
 			timeoutMs: DELAI_MS,
 			env: environnementEnfant(env),
 		});
 		const connecte = code === 0 && stdout.trim().length > 0;
 		if (!connecte) return { outil: "agy", installe: true, connecte: false, email: null, plan: null };
-		// L'adresse n'est lue et affichée QUE si connecté : ce fichier garde
-		// l'adresse d'une connexion passée (champ `old`), et la lire hors
-		// connexion ferait dire « connecté » à une trace morte.
 		let email: string | null = null;
 		try {
-			const brut = await readFile(join(dossierPersonnel(env), ".gemini", "google_accounts.json"), "utf8");
-			email = emailAntigravity(JSON.parse(brut) as unknown);
+			email = emailAntigravityDepuisJournal(await readFile(journal, "utf8"));
 		} catch (e) { /* pas d'adresse à afficher, la connexion reste vraie */ }
+		// Antigravity ne publie aucun forfait, ni dans ce journal ni ailleurs
+		// (cherché le 2026-09-21) : la colonne reste vide plutôt qu'inventée.
 		return { outil: "agy", installe: true, connecte: true, email, plan: null };
 	} catch (e) {
 		// Sonde expirée (`agy models` a mesuré jusqu'à 2,3 s sain, mais un
@@ -153,6 +146,8 @@ async function etatAntigravity(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 		// (vu à l'écran le 2026-09-21). « Non connecté » est l'état le moins
 		// faux ; rouvrir les réglages re-sonde.
 		return { outil: "agy", installe: true, connecte: false, email: null, plan: null };
+	} finally {
+		await rm(journal, { force: true }).catch(() => { /* déjà absent */ });
 	}
 }
 

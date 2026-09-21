@@ -248,14 +248,16 @@ await withSrcModule(
 			const compte = await providers.checkOllamaCompte("http://localhost:11434/");
 			r.check("/api/me est demandé en POST, sur l'URL réglée sans barre finale",
 				journal.filter(l => l[0] === "fetchJson"), [["fetchJson", "http://localhost:11434/api/me", "POST"]]);
-			r.check("200 avec plan → connecté, le plan, et RIEN d'autre", compte, { connecte: true, plan: "free" });
+			/* `email` sort depuis la section « Comptes » des réglages (2026-09-21) ;
+			   `name`, `id` et `avatarurl` restent ignorés. */
+			r.check("200 avec plan → connecté, le plan, l'adresse, et RIEN d'autre", compte, { connecte: true, plan: "free", email: "a@b.c" });
 		}
 		{
 			/* Le 200 PROUVE la connexion, indépendamment du plan : un plan vide
-			   ne fera afficher aucun badge (la page exige un plan connu pour ça). */
+			   ne change rien à l'affichage (aucun badge de forfait n'est rendu). */
 			const { hote } = fauxHote({ reponses: { "/api/me": { status: 200, body: JSON.stringify({ plan: "" }) } } });
 			installHost(hote);
-			r.check("200 avec plan VIDE → connecté quand même, plan vide", await providers.checkOllamaCompte(), { connecte: true, plan: "" });
+			r.check("200 avec plan VIDE → connecté quand même, plan vide", await providers.checkOllamaCompte(), { connecte: true, plan: "", email: null });
 		}
 		{
 			const { hote } = fauxHote({ reponses: { "/api/me": { status: 401, body: JSON.stringify({ error: "unauthorized", signin_url: "https://ollama.com/connect?name=x&key=y" }) } } });

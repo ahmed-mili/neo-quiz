@@ -35,7 +35,7 @@ import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
     rend ce que le cas lui a préparé. Tout le reste du contrat est là sous sa
     forme minimale — un faux hôte PARTIEL meurt sur un TypeError le jour où un
     appelant y touche, et une mort en route masque les groupes suivants. */
-function fauxHote({ reponses = {}, caches = {}, runs = {} } = {}) {
+function fauxHote({ reponses = {}, caches = {}, runs = {}, comptes = [], comptesErreur = false } = {}) {
 	const journal = [];
 	// `corps` : le CORPS de chaque requête `fetchJson`, dans l'ordre — `journal`
 	// reste un tuple à 3 (type, url, méthode) pour ne rien casser des cas
@@ -90,6 +90,17 @@ function fauxHote({ reponses = {}, caches = {}, runs = {} } = {}) {
 				},
 				ollamaInstalle: async () => false,
 				demarrerOllama: async () => false,
+				/* `etatComptes()` : la lecture SANS VERROU dont Claude et Codex se
+				   servent depuis le 2026-09-21 (voir l'en-tête de
+				   `ai-providers.ts`, section « LE COMPTE EST-IL CONNECTÉ ? »).
+				   `comptes` est la liste rendue telle quelle ; `comptesErreur`
+				   simule un pont qui rejette (outil hors liste blanche, panne
+				   d'IPC). */
+				async etatComptes() {
+					journal.push(["etatComptes"]);
+					if (comptesErreur) throw new Error("pont indisponible");
+					return comptes;
+				},
 			},
 		},
 	};
@@ -378,44 +389,50 @@ await withSrcModule(
 
 		   CE QU'ELLES EMPÊCHENT. La page « Générer » ouvre un terminal sur
 		   `codex login` / `claude auth login` puis ATTEND, en boucle, que le
-		   compte apparaisse. Trois façons dont cette attente échouerait sans
-		   bruit, et c'est ce groupe qui les tient :
+		   compte apparaisse. Depuis le 2026-09-21, Claude et Codex ne lancent
+		   plus ce CLI eux-mêmes : ils lisent `etatComptes()`, la même lecture
+		   SANS VERROU que la section « Comptes » des réglages (voir l'en-tête
+		   du module). Ce que ce groupe tient désormais :
 
-		   — `claude auth status` SORT EN 0 même déconnecté (c'est un rapport de
-		     statut, pas un test) : juger sur le code de sortie relancerait la
-		     génération sur un compte absent, et l'utilisateur relirait le même
-		     échec sans comprendre ;
-		   — une sortie qui n'est pas du JSON (bannière de mise à jour, version
-		     plus ancienne du CLI) ne prouve RIEN : la prendre pour un succès
-		     ferait la même chose ;
+		   — le verdict suit `.connecte` de l'entrée qui porte le bon `outil`,
+		     jamais un autre champ ni une autre entrée du tableau ;
 		   — un CACHE ferait attendre jusqu'à une minute devant « En attente de la
 		     connexion » alors que c'est fait. Les sondes d'INSTALLATION en ont un
-		     (60 s) ; celles-ci ne doivent pas. */
+		     (60 s) ; celles-ci ne doivent pas ;
+		   — tout rejet du pont (outil hors liste blanche, panne d'IPC) vaut
+		     « pas connecté », jamais une exception qui remonterait jusqu'à la
+		     page.
+
+		   La lecture du JSON `claude auth status` (`loggedIn` seul, une sortie
+		   non-JSON qui ne prouve rien) a DÉMÉNAGÉ avec la lecture elle-même,
+		   dans le processus principal (`comptClaude`,
+		   `apps/windows/electron/comptes-pur.ts`) : ces cas sont couverts par
+		   `check:electron-comptes`, pas ici. */
 		{
 			const { journal, hote } = fauxHote({
-				runs: {
-					"codex login status": { code: 0, stdout: "Logged in using ChatGPT" },
-					"claude auth status": { code: 0, stdout: JSON.stringify({ loggedIn: true, email: "x@y.z" }) },
-				},
+				comptes: [
+					{ outil: "codex", installe: true, connecte: true, email: null, plan: null },
+					{ outil: "claude", installe: true, connecte: true, email: "x@y.z", plan: null },
+				],
 			});
 			installHost(hote);
-			r.check("codex : `codex login status` en 0 vaut connecté",
-				{ ok: await providers.checkCodexLogin(), appel: journal.filter(l => l[0] === "run").map(l => l[1]) },
-				{ ok: true, appel: ["codex login status"] });
-			r.check("claude : `auth status` et le drapeau `loggedIn` du JSON",
+			r.check("codex : `.connecte` de l'entrée `etatComptes()` vaut connecté",
+				{ ok: await providers.checkCodexLogin(), appel: journal.filter(l => l[0] === "etatComptes").length },
+				{ ok: true, appel: 1 });
+			r.check("claude : `.connecte` de l'entrée `etatComptes()` vaut connecté",
 				await providers.checkClaudeLogin(), true);
-			/* Deux appels de suite doivent RELANCER le CLI : c'est toute la
-			   différence avec `checkCodex`, qui cache 60 s. */
+			/* Deux appels de suite doivent RELIRE `etatComptes()` : c'est toute la
+			   différence avec les sondes d'installation, qui cachent 60 s. */
 			await providers.checkCodexLogin();
-			r.check("aucun cache : chaque sonde relance le CLI",
-				journal.filter(l => l[1] === "codex login status").length, 2);
+			r.check("aucun cache : chaque sonde relit `etatComptes()`",
+				journal.filter(l => l[0] === "etatComptes").length, 3);
 		}
 		{
 			const { hote } = fauxHote({
-				runs: {
-					"codex login status": { code: 1, stderr: "Not logged in" },
-					"claude auth status": { code: 0, stdout: JSON.stringify({ loggedIn: false }) },
-				},
+				comptes: [
+					{ outil: "codex", installe: true, connecte: false, email: null, plan: null },
+					{ outil: "claude", installe: true, connecte: false, email: null, plan: null },
+				],
 			});
 			installHost(hote);
 			r.check("un compte absent n'est pas connecté, des deux côtés",
@@ -423,28 +440,23 @@ await withSrcModule(
 				{ codex: false, claude: false });
 		}
 		{
-			/* Le cas qui a décidé de lire le JSON plutôt que le code de sortie. */
-			const { hote } = fauxHote({ runs: { "claude auth status": { code: 0, stdout: "Checking for updates…" } } });
-			installHost(hote);
-			r.check("claude : une sortie qui n'est pas du JSON ne prouve pas la connexion, même en code 0",
-				await providers.checkClaudeLogin(), false);
-		}
-		{
 			/* Un outil disparu entre-temps, un hôte sans CLI : ni l'un ni l'autre
 			   n'est « connecté ». Le rejet ne doit pas remonter jusqu'à la page,
 			   qui repeindrait une erreur par-dessus la carte d'attente. */
-			const { hote } = fauxHote({});
+			const { hote } = fauxHote({ comptesErreur: true });
 			installHost(hote);
 			r.check("tout rejet de l'hôte vaut « pas connecté », jamais une exception",
 				{ codex: await providers.checkCodexLogin(), claude: await providers.checkClaudeLogin() },
 				{ codex: false, claude: false });
 		}
 		{
-			const { journal, hote } = fauxHote({ runs: { "claude auth status": { code: 0, stdout: '{"loggedIn":true}' } } });
+			const { journal, hote } = fauxHote({
+				comptes: [{ outil: "claude", installe: true, connecte: true, email: null, plan: null }],
+			});
 			installHost(hote);
 			r.check("sondeConnexion(outil) rend bien la sonde de CET outil",
-				{ ok: await providers.sondeConnexion("claude")(), appel: journal.filter(l => l[0] === "run").map(l => l[1]) },
-				{ ok: true, appel: ["claude auth status"] });
+				{ ok: await providers.sondeConnexion("claude")(), appel: journal.filter(l => l[0] === "etatComptes").length },
+				{ ok: true, appel: 1 });
 		}
 
 		/* ── ANTIGRAVITY : les modèles viennent d'`agy models`, jamais d'une liste

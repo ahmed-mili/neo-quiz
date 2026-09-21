@@ -3,10 +3,11 @@ import type { EditorExamOptions } from "../types/editor-ctx";
 import type { AiPreset, DashboardViewName, NavigateData } from "../types/dashboard-ctx";
 import type { HostFile, HostModalHandle, ImageDeGlisser } from "../host/types";
 import { currentHost, requireHost } from "../host/current";
-import { ajouter, ancreApresRelayout, ancreRemontee, CLASSE_MODALE_HAUT } from "../dom";
+import { ajouter, CLASSE_MODALE_HAUT } from "../dom";
 import { openConfirmModal } from "../editor/modals";
 import { LOG_PREFIX } from "../branding";
 import * as aiProviders from "./ai-providers";
+import { demarrerConnexionCli, poserCroixAnnuler } from "./connexion-cli";
 import { composerPrompts, parseReponseQuiz } from "./ai-client";
 import { nouveauJeton, texteWeb, preparerOuverture } from "./ai-web";
 import type { ResultatOuverture } from "./ai-web";
@@ -2664,33 +2665,20 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			}
 			verdict = ollamaSigninUrl && await host.shell.openUrl(ollamaSigninUrl) ? "lance" : "indisponible";
 		} else {
-			try {
-				/* La modale d'attente est OUVERTE AVANT le terminal, pour être
-				   mesurée : c'est sous elle qu'il se pose. Elle est mesurée
-				   REMONTÉE mais ne bouge pas encore — elle remonte au signal
-				   `surTerminalPose`, quand la fenêtre est en place (Ahmed,
-				   2026-09-20). Si le lancement échoue, `annulerConnexion` la
-				   referme. */
-				attendreCompte(tool, origine);
-				const modale = document.querySelector<HTMLElement>(".qbd-login-wait-modal");
-				const proc = requireHost("process");
-				if (modale) {
-					const off = proc.surTerminalPose?.(() => {
-						modale.classList.add(CLASSE_MODALE_HAUT);
-						off?.();
-					});
-					desabonnerPose = off ?? null;
-					/* LES DEUX COLONNES : le navigateur à gauche, Neo Quiz à droite
-					   — la modale a rétréci, le terminal la suit. */
-					desabonnerNav = proc.surNavigateurOuvert?.(() => {
-						void ancreApresRelayout(modale).then(a => proc.replacerTerminal?.(a));
-					}) ?? null;
-				}
-				verdict = await proc.connecterCli(tool, modale ? ancreRemontee(modale) : undefined);
-			} catch (e) {
-				console.warn(LOG_PREFIX, "connexion impossible:", e);
-				verdict = "indisponible";
-			}
+			/* La modale d'attente est OUVERTE AVANT le terminal (par
+			   `attendreCompte`, qui passe `phase` à « connexion » et rend),
+			   pour être mesurée : c'est sous elle qu'il se pose. Le geste
+			   lui-même — mesure, abonnements, verdict — vit dans
+			   `connexion-cli.ts`, partagé avec la section « Comptes » des
+			   réglages. Si le lancement échoue, `annulerConnexion` la referme. */
+			attendreCompte(tool, origine);
+			verdict = await demarrerConnexionCli(tool, {
+				modaleEl: document.querySelector<HTMLElement>(".qbd-login-wait-modal"),
+				// `lance` : les deux abonnements restent actifs (le terminal ou
+				// le navigateur peuvent encore se poser après ce retour) —
+				// c'est `annulerConnexion` qui les coupera, à SA fin d'attente.
+				onDesabonner: (off) => { desabonnerPose = off; desabonnerNav = null; },
+			});
 		}
 		if (verdict !== "lance") {
 			desabonnerPose?.();
@@ -2779,20 +2767,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		/* Pas de bouton Annuler : c'est la croix de la modale (ou Échap). */
 	}
 
-	/** La croix d'une modale d'attente EST l'annulation (plus de bouton
-	    Annuler, demande d'Ahmed, 2026-09-19) : elle se signale comme telle au
-	    survol — rouge, et la bulle « Annuler » tout de suite dessous (CSS
-	    `.qbd-web-wait-close`). */
-	function poserCroixAnnuler(m: HostModalHandle): void {
-		const croix = m.panelEl.querySelector<HTMLElement>(".modal-close-button");
-		if (!croix) return;
-		croix.classList.add("qbd-web-wait-close");
-		/* L'infobulle au dessin de celle de Windows 11 (`data-tip`, CSS). Pas
-		   de `title` : Electron en ferait une infobulle Win32 à l'ancienne,
-		   impossible à styliser, qui viendrait en plus par-dessus. */
-		croix.dataset.tip = t("ai.web.cancel");
-		croix.setAttribute("aria-label", t("ai.web.cancel"));
-	}
+	/* `poserCroixAnnuler` vit désormais dans `connexion-cli.ts`, partagée avec
+	   la section « Comptes » des réglages — même apparence pour toutes les
+	   attentes de la page (voir son en-tête). */
 
 	/* Les trois modales de phase de la page : connexion (fermer = annuler
 	   l'attente), génération (fermer = Stop, la demande revient au composer),

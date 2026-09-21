@@ -1414,10 +1414,20 @@ export async function checkAntigravity(force?: boolean): Promise<CodexStatus> {
    que l'utilisateur est en train de faire dans un terminal. Un TTL de 60 s y
    ferait attendre une minute devant un « En attente… » alors que c'est fait.
 
-   Les deux commandes sont NON INTERACTIVES (vérifié le 2026-09-18 :
-   `codex login status` → « Logged in using ChatGPT », `claude auth status` →
-   du JSON) et passent par la porte existante, `HostProcess.run` : aucun
-   nouveau canal, aucun nouveau droit.
+   Claude et Codex passent désormais par `etatComptes()` (Ahmed, 2026-09-21) :
+   c'est la MÊME lecture que la section « Comptes » des réglages, faite SANS
+   VERROU dans le processus principal (`apps/windows/electron/comptes.ts`) —
+   contrairement à `HostProcess.run`, qui prend un verrou par outil et
+   attendrait jusqu'à 15 s derrière une génération en cours, rendant cette
+   sonde muette pendant toute génération. Deux chemins qui répondaient à la
+   même question («suis-je connecté ?») auraient divergé au premier
+   changement ; il n'y en a plus qu'un.
+
+   Antigravity reste sur `agy models` par `HostProcess.run` : la sonde lit
+   aussi la LISTE des modèles dans la même sortie (`parseAntigravityModels`),
+   que `etatComptes()` ne rend pas — la faire passer par lui aurait vidé
+   `antigravityModelsSnapshot` en silence et fait retomber le menu des
+   modèles sur son repli embarqué.
 
    TOUT REJET VAUT « PAS CONNECTÉ », comme pour les sondes d'installation :
    l'outil peut avoir disparu entre-temps, l'hôte peut ne pas savoir lancer de
@@ -1426,39 +1436,30 @@ export async function checkAntigravity(force?: boolean): Promise<CodexStatus> {
 
 const SONDE_CONNEXION_MS = 10000;
 
-/** Codex : `codex login status` sort 0 quand un compte est connecté, non nul
-    sinon. Le TEXTE n'est pas lu — il change avec la version du CLI, le code
-    de sortie non. */
-export async function checkCodexLogin(): Promise<boolean> {
+/** Le verdict d'un outil, lu par `etatComptes()` — la lecture SANS VERROU du
+    processus principal (voir son en-tête, `apps/windows/electron/comptes.ts`) :
+    contrairement à `run()`, elle n'attend jamais derrière une génération en
+    cours. Un rejet du pont vaut « pas connecté », comme pour les anciennes
+    sondes : l'appelant ne demande que ça. */
+async function connecteSelonEtatComptes(outil: "claude" | "codex" | "agy"): Promise<boolean> {
 	if (!currentHost().platform.isDesktopApp) return false;
 	return requireHost("process")
-		.run({ tool: "codex", args: ["login", "status"], stdin: "", timeoutMs: SONDE_CONNEXION_MS })
-		.then(res => res.code === 0)
+		.etatComptes()
+		.then(etats => etats.find(e => e.outil === outil)?.connecte === true)
 		.catch(() => false);
 }
 
-/** Claude : `claude auth status` sort du JSON dont on ne lit QUE `loggedIn`.
-    Le reste de cet objet porte l'adresse e-mail et l'identifiant
-    d'organisation du compte : il n'est ni conservé, ni journalisé, ni rendu à
-    l'appelant. Le code de sortie ne suffit pas — il vaut 0 pour « voici mon
-    statut », y compris quand ce statut est « déconnecté ». */
+/** Codex : la même question qu'avant (`codex login status`), désormais lue
+    par `etatComptes()` — une seule vérité sur « qui est connecté », partagée
+    avec la section « Comptes » des réglages. */
+export async function checkCodexLogin(): Promise<boolean> {
+	return connecteSelonEtatComptes("codex");
+}
+
+/** Claude : la même question qu'avant (`claude auth status`, dont on ne
+    lisait QUE `loggedIn`), désormais lue par `etatComptes()`. */
 export async function checkClaudeLogin(): Promise<boolean> {
-	if (!currentHost().platform.isDesktopApp) return false;
-	return requireHost("process")
-		.run({ tool: "claude", args: ["auth", "status"], stdin: "", timeoutMs: SONDE_CONNEXION_MS })
-		.then(res => {
-			if (res.code !== 0) return false;
-			try {
-				const json: unknown = JSON.parse(res.stdout || "");
-				return !!json && typeof json === "object" && (json as { loggedIn?: unknown }).loggedIn === true;
-			} catch {
-				/* Une sortie qui n'est pas du JSON (version plus ancienne du CLI,
-				   bannière, mise à jour automatique qui s'annonce sur stdout) ne
-				   prouve pas la connexion : la seule preuve est le drapeau. */
-				return false;
-			}
-		})
-		.catch(() => false);
+	return connecteSelonEtatComptes("claude");
 }
 
 /** La sonde de connexion d'un outil, ou `null` pour ceux qui n'ont pas de

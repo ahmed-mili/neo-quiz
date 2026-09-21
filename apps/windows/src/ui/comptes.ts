@@ -22,7 +22,9 @@ import { currentHost, requireHost } from "../../../../src/host/current";
 import { t, currentLang } from "../../../../src/i18n";
 import { ajouter } from "../../../../src/dom";
 import { openConfirmModal } from "../../../../src/editor/modals";
-import { checkOllamaCompte, setBrandLogo } from "../../../../src/dashboard/ai-providers";
+import { checkOllamaCompte, setBrandLogo, sondeConnexion } from "../../../../src/dashboard/ai-providers";
+import { demarrerConnexionCli, poserCroixAnnuler, renderCarteAttenteConnexion } from "../../../../src/dashboard/connexion-cli";
+import type { OutilConnectable } from "../../../../src/dashboard/connexion-cli";
 import { pont } from "../host/pont";
 import { CLE_REGLAGES_IA } from "../../electron/pont";
 import { LOG_PREFIX } from "../../../../src/branding";
@@ -32,6 +34,11 @@ import { usageRowLabel, formatResetMoment, formatAge, formatDuration } from "../
 /** L'ordre d'affichage, fixé par le cahier des charges — jamais celui que
     rendrait `etatComptes()` (qui ne connaît pas Ollama). */
 const ORDRE: CliTool[] = ["claude", "codex", "agy", "ollama"];
+
+/** L'intervalle de la sonde « le compte est-il connecté ? », même valeur que
+    la page « Générer » (`ai.ts`) : c'est la même attente, avec la même
+    modale (`connexion-cli.ts`). */
+const SONDE_CONNEXION_POLL_MS = 3000;
 
 /** Le logo de MARQUE par outil, posé par `setBrandLogo` (`ai-providers.ts`),
     même patron que le sélecteur de fournisseur de la page « Générer »
@@ -476,6 +483,77 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		await redessiner();
 	}
 
+	/**
+	 * La connexion de Claude, Codex ou Antigravity : MÊME MODALE d'attente que
+	 * la carte d'erreur de la page « Générer », par le module partagé
+	 * `connexion-cli.ts` — un terminal s'ouvre, la modale se remonte sous lui
+	 * dès qu'il est posé, et suit le navigateur s'il en ouvre un (les deux
+	 * colonnes). Ne rend la main qu'à la fermeture de la modale (annulée, ou
+	 * refermée après détection) : `surClicAction` redessine la ligne à ce
+	 * moment-là, jamais avant.
+	 */
+	async function connecterAvecAttente(outil: OutilConnectable): Promise<void> {
+		return new Promise<void>((resolve) => {
+			let sonde: number | null = null;
+			let connecteVu = false;
+			let desabonnerConnexion: (() => void) | null = null;
+			let corpsEl: HTMLElement | null = null;
+			const couperSonde = (): void => {
+				if (sonde !== null) { window.clearInterval(sonde); sonde = null; }
+			};
+			const modale = requireHost("modals").open({
+				className: "qbd-web-wait-modal qbd-login-wait-modal",
+				title: nomOutil(outil),
+				onOpen: (m) => {
+					corpsEl = m.contentEl;
+					poserCroixAnnuler(m);
+					renderCarteAttenteConnexion(corpsEl, connecteVu);
+				},
+				// Fermée par la croix/Échap (annulation) OU par nous-mêmes après
+				// détection : dans les deux cas, tout ce que cette attente a posé
+				// doit disparaître — la sonde, l'abonnement de repositionnement.
+				onClose: () => {
+					couperSonde();
+					desabonnerConnexion?.();
+					desabonnerConnexion = null;
+					corpsEl = null;
+					resolve();
+				},
+			});
+			void (async () => {
+				const verdict = await demarrerConnexionCli(outil, {
+					modaleEl: modale.panelEl,
+					// `lance` seulement : les deux autres verdicts ont déjà coupé
+					// leurs abonnements dans `demarrerConnexionCli` lui-même.
+					onDesabonner: (off) => { desabonnerConnexion = off; },
+				});
+				if (verdict !== "lance") {
+					if (verdict === "indisponible") {
+						currentHost().ui.notice(t("app.comptes.connectFailed", { name: nomOutil(outil) }));
+					}
+					// `annule` : l'utilisateur a dit non, rien de plus à dire.
+					modale.close();
+					return;
+				}
+				const sondeFn = sondeConnexion(outil);
+				sonde = window.setInterval(() => {
+					void sondeFn().then((connecte) => {
+						// `sonde === null` : annulée pendant que la sonde tournait — son
+						// résultat ne doit plus rien déclencher.
+						if (!connecte || sonde === null || detruit) return;
+						couperSonde();
+						connecteVu = true;
+						if (corpsEl) { corpsEl.replaceChildren(); renderCarteAttenteConnexion(corpsEl, true); }
+						/* La seconde d'attente rend la détection LISIBLE, même règle
+						   que la page « Générer » : sans elle, la coche et la fermeture
+						   se remplaceraient dans la même image. */
+						window.setTimeout(() => modale.close(), 1000);
+					});
+				}, SONDE_CONNEXION_POLL_MS);
+			})();
+		});
+	}
+
 	async function surClicAction(
 		outil: CliTool,
 		action: "installer" | "connecter" | "deconnecter",
@@ -523,13 +601,15 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 				if (!ouvert) currentHost().ui.notice(t("app.comptes.connectFailed", { name: nomOutil(outil) }));
 				return;
 			}
-			const proc = requireHost("process");
-			const verdict = action === "installer" ? await proc.installerCli(outil) : await proc.connecterCli(outil);
+			if (action === "connecter") {
+				// CLAUDE, CODEX, ANTIGRAVITY : même modale d'attente que la carte
+				// d'erreur de la page « Générer » — voir `connecterAvecAttente`.
+				await connecterAvecAttente(outil as OutilConnectable);
+				return;
+			}
+			const verdict = await requireHost("process").installerCli(outil);
 			if (verdict === "indisponible") {
-				currentHost().ui.notice(t(
-					action === "installer" ? "app.comptes.installFailed" : "app.comptes.connectFailed",
-					{ name: nomOutil(outil) },
-				));
+				currentHost().ui.notice(t("app.comptes.installFailed", { name: nomOutil(outil) }));
 			}
 			// `"lance"` ou `"annule"` : rien à dire de plus ici, le terminal (s'il
 			// est parti) fait le reste — la ligne se redessine, au pire inchangée.

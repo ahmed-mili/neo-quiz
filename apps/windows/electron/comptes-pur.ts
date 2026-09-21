@@ -75,6 +75,18 @@ export function comptClaude(stdout: string): { connecte: boolean; email: string 
 	};
 }
 
+/** L'adresse du compte dans un `~/.claude.json` DÉJÀ LU. `claude auth status
+    --json` ne publie pas de champ `email` sur les versions du CLI mesurées
+    (2026-09-21) : c'est `oauthAccount.emailAddress` qui la porte. Seul ce
+    champ sort, jamais l'objet : le fichier porte aussi des jetons. */
+export function emailOauthClaude(claude: unknown): string | null {
+	if (!claude || typeof claude !== "object") return null;
+	const o = (claude as { oauthAccount?: unknown }).oauthAccount;
+	if (!o || typeof o !== "object") return null;
+	const email = (o as { emailAddress?: unknown }).emailAddress;
+	return typeof email === "string" && email ? email : null;
+}
+
 /** Le compte actif d'un `~/.gemini/google_accounts.json` DÉJÀ LU. */
 export function emailAntigravity(google: unknown): string | null {
 	if (!google || typeof google !== "object") return null;

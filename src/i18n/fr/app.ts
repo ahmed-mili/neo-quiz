@@ -58,7 +58,7 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.settings.folderInsideOpen": "Ce dossier est déjà dans un de vos dossiers ouverts. Ajoutez-le depuis Mes quiz → Nouveau dossier → Ouvrir un dossier existant.",
 	"app.settings.folderContainsOpen": "Ce dossier contient un de vos dossiers ouverts.",
 
-	"app.settings.accounts": "Comptes",
+	"app.settings.accounts": "Comptes CLI",
 	"app.comptes.claude": "Claude Code",
 	"app.comptes.codex": "Codex CLI",
 	"app.comptes.agy": "Antigravity CLI",

@@ -44,6 +44,16 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
 		 m.planClaude({})],
 		["Max (5x)", "Pro", null]);
 
+	/* ─── Claude : l'adresse de ~/.claude.json ─── */
+	r.check("l'adresse OAuth sort de ~/.claude.json quand auth status ne la dit pas",
+		m.emailOauthClaude({ oauthAccount: { emailAddress: "a@b.c", accountUuid: "x" } }),
+		"a@b.c");
+
+	r.check("sans oauthAccount, sans emailAddress, ou vide, pas d'adresse",
+		[m.emailOauthClaude({}), m.emailOauthClaude({ oauthAccount: {} }),
+		 m.emailOauthClaude({ oauthAccount: { emailAddress: "" } }), m.emailOauthClaude(null)],
+		[null, null, null, null]);
+
 	/* ─── Codex : les claims de l'id_token ─── */
 	r.check("codex rend l'adresse et le plan des claims",
 		m.comptCodex({ tokens: { id_token: idToken({ email: "a@b.c", "https://api.openai.com/auth": { chatgpt_plan_type: "plus" } }) } }),
@@ -145,6 +155,7 @@ await withSrcModule("apps/windows/electron/comptes-pur.ts", async (m) => {
 		}),
 		m.comptClaude(JSON.stringify({ loggedIn: true, email: "a@b.c", subscriptionType: "pro", accessToken: SECRET })),
 		m.emailAntigravity({ active: "x@gmail.com", access_token: SECRET, refresh_token: REFRESH }),
+		m.emailOauthClaude({ oauthAccount: { emailAddress: "a@b.c", accessToken: SECRET, refreshToken: REFRESH } }),
 	]);
 	r.check("aucune sortie ne contient de jeton",
 		[sorties.includes("SECRET-QUI-NE-DOIT-PAS-SORTIR"), sorties.includes("oat01")],
@@ -224,6 +235,13 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 		await writeFile(join(dir, ".claude", ".credentials.json"), JSON.stringify({
 			claudeAiOauth: { accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE },
 		}));
+		/* `~/.claude.json` : l'adresse que les versions mesurées du CLI ne
+		   publient pas dans `auth status --json` — elle porte aussi des jetons
+		   (déjà dans la liste de l'assertion « aucun jeton »), qu'un spread
+		   distrait sur le chemin du repli ferait fuiter. */
+		await writeFile(join(dir, ".claude.json"), JSON.stringify({
+			oauthAccount: { emailAddress: "a@b.c", accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE },
+		}));
 
 		/** Un faux CLI : un script Node, plus un lanceur du nom demandé — même
 		    patron que `poserFauxCli` de `check-electron-process.mjs` (un `.cmd`
@@ -243,9 +261,11 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 		await Promise.all([
 			/* `auth status --json` : le JSON que le VRAI CLI rend, PLUS
 			   `accessToken`/`refreshToken` — un spread distrait au retour
-			   d'`etatClaude` les ferait fuiter. */
+			   d'`etatClaude` les ferait fuiter. SANS `email` : les versions
+			   mesurées du CLI ne le publient pas, l'adresse doit venir du
+			   repli `~/.claude.json`. */
 			poserFauxCli("claude", "process.stdout.write(" + JSON.stringify(JSON.stringify({
-				loggedIn: true, email: "a@b.c", subscriptionType: "pro",
+				loggedIn: true, subscriptionType: "pro",
 				accessToken: SECRET_CLAUDE, refreshToken: REFRESH_CLAUDE,
 			})) + ");"),
 			/* `login status` : seul le CODE DE SORTIE compte pour `connecte`. */
@@ -291,6 +311,19 @@ await withSrcModule("apps/windows/electron/comptes.ts", async ({ etatComptes }) 
 			[SECRET_CODEX, REFRESH_CODEX, SECRET_AGY, REFRESH_AGY, SECRET_CLAUDE, REFRESH_CLAUDE]
 				.map(jeton => serialise.includes(jeton)),
 			[false, false, false, false, false, false]);
+
+		/* DISCRIMINANCE de la sémantique d'échec de sonde (vu à l'écran le
+		   2026-09-21 : un `agy models` lent au démarrage à froid dépassait le
+		   délai, et la ligne passait à « Not installed » avec un bouton
+		   Install — pour un outil PRESENT). Un faux agy qui ne répond jamais :
+		   la sonde expire, et l'état doit rester « installé, non connecté » —
+		   l'exécutable a été résolu, c'est un fait, jamais un échec de sonde
+		   ne le retire. Coût : ~5 s (le délai réel d'abandon). */
+		await poserFauxCli("agy", "setTimeout(() => process.stdout.write('trop tard\\n'), 30000);");
+		const apresExpiration = await etatComptes(env);
+		r.check("une sonde agy expirée garde « installé », jamais « non installé »",
+			apresExpiration.find(e => e.outil === "agy"),
+			{ outil: "agy", installe: true, connecte: false, email: null, plan: null });
 	} finally {
 		await rm(racine, { recursive: true, force: true });
 	}

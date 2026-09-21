@@ -1518,14 +1518,17 @@ export async function checkOllama(url?: string, force?: boolean): Promise<Ollama
    défaut) en ont besoin ; jusqu'ici l'utilisateur ne l'apprenait qu'au premier
    envoi, par une erreur qui lui disait de taper une commande.
 
-   SEUL `plan` EST LU. `email`, `name`, `avatarurl` ne sont ni conservés, ni
-   journalisés, ni rendus : même règle que `checkClaudeLogin`.
+   SEUL `plan` ÉTAIT LU à l'origine (la sonde ne servait que la page
+   « Générer », qui n'affiche pas de compte). La section « Comptes » des
+   réglages a changé l'intention : l'adresse s'affiche comme pour les trois
+   autres outils, donc `email` est extrait et rendu — il ne reste jamais
+   journalisé. `name` et `avatarurl` restent ignorés.
 
    `signin_url` N'EST ADMISE QUE SUR `https://ollama.com` : c'est une adresse
    que la page va OUVRIR dans le navigateur, et un démon usurpé (un service
    qui occupe le port 11434) ne doit pas pouvoir y mettre n'importe quoi. */
 export type CompteOllama =
-	| { connecte: true; plan: string }
+	| { connecte: true; plan: string; email: string | null }
 	| { connecte: false; signinUrl: string | null };
 
 export async function checkOllamaCompte(url?: string): Promise<CompteOllama> {
@@ -1533,10 +1536,13 @@ export async function checkOllamaCompte(url?: string): Promise<CompteOllama> {
 	const resp = await requireHost("net").fetchJson({ url: base + "/api/me", method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
 	const absent: CompteOllama = { connecte: false, signinUrl: null };
 	if (!resp) return absent;
-	const data = corpsJson(resp.body) as { plan?: unknown; signin_url?: unknown } | null;
+	const data = corpsJson(resp.body) as { plan?: unknown; email?: unknown; signin_url?: unknown } | null;
 	// Un `plan` VIDE reste connecté : le 200 prouve la connexion, un plan
 	// inconnu n'empêche que le badge (qui exige un plan lu) de s'afficher.
-	if (resp.status === 200 && data && typeof data.plan === "string") return { connecte: true, plan: data.plan };
+	if (resp.status === 200 && data && typeof data.plan === "string") {
+		const email = typeof data.email === "string" && data.email.trim() ? data.email.trim() : null;
+		return { connecte: true, plan: data.plan, email };
+	}
 	if (resp.status === 401 && data && typeof data.signin_url === "string") {
 		try {
 			const u = new URL(data.signin_url);

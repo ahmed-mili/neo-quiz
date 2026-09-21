@@ -91,8 +91,9 @@ async function etatOllama(): Promise<{ etat: EtatCompte; signinUrl: string | nul
 			outil: "ollama",
 			installe,
 			connecte: compte.connecte,
-			// Ollama ne publie pas d'adresse de compte, seulement un forfait.
-			email: null,
+			// L'adresse vient de `POST /api/me` (`email`), le forfait de `plan` :
+			// le serveur local est la seule source, comme pour les trois autres.
+			email: compte.connecte ? compte.email : null,
 			plan: compte.connecte ? compte.plan : null,
 		},
 		signinUrl: compte.connecte ? null : compte.signinUrl,

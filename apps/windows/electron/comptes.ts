@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { LOG_PREFIX } from "../../../src/branding";
 import type { EtatCompte } from "../../../src/host/types";
 import type { UsageRead } from "../../../src/dashboard/usage-format";
-import { comptClaude, comptCodex, emailAntigravity, usageClaudeDepuisReponse, usageCodexDepuisLigne } from "./comptes-pur";
+import { comptClaude, comptCodex, emailAntigravity, emailOauthClaude, usageClaudeDepuisReponse, usageCodexDepuisLigne } from "./comptes-pur";
 import type { OutilCompte } from "./comptes-pur";
 import { dossierPersonnel, environnementEnfant, lancer, resoudreExecutable } from "./process";
 
@@ -31,9 +31,9 @@ function etatVide(outil: EtatCompte["outil"]): EtatCompte {
 }
 
 async function etatClaude(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
+	const executable = resoudreExecutable("claude", env);
+	if (!executable) return etatVide("claude");
 	try {
-		const executable = resoudreExecutable("claude", env);
-		if (!executable) return etatVide("claude");
 		const { stdout } = await lancer({
 			executable,
 			args: ["auth", "status", "--json"],
@@ -41,10 +41,26 @@ async function etatClaude(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 			timeoutMs: DELAI_MS,
 			env: environnementEnfant(env),
 		});
-		const { connecte, email, plan } = comptClaude(stdout);
+		const { connecte, email: emailStatut, plan } = comptClaude(stdout);
+		// `claude auth status --json` ne publie pas d'adresse sur les versions
+		// du CLI mesurées (2026-09-21) : elle vit dans `~/.claude.json`
+		// (`oauthAccount.emailAddress`), le même détournement de fichier que
+		// pour `auth.json` de Codex. Échec de lecture = pas d'adresse, la
+		// connexion reste vraie.
+		let email = emailStatut;
+		if (connecte && !email) {
+			try {
+				const brut = await readFile(join(dossierPersonnel(env), ".claude.json"), "utf8");
+				email = emailOauthClaude(JSON.parse(brut) as unknown);
+			} catch (e) { /* pas d'adresse à afficher, la connexion reste vraie */ }
+		}
 		return { outil: "claude", installe: true, connecte, email, plan };
 	} catch (e) {
-		return etatVide("claude");
+		// Sonde expirée ou lancement raté : l'exécutable EXISTE (résolu plus
+		// haut) — « non installé » ferait proposer d'installer un outil déjà
+		// présent (vu à l'écran le 2026-09-21, `agy` lent au démarrage à froid).
+		// « Non connecté » est l'état le moins faux.
+		return { outil: "claude", installe: true, connecte: false, email: null, plan: null };
 	}
 }
 
@@ -98,9 +114,9 @@ async function etatCodex(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 }
 
 async function etatAntigravity(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
+	const executable = resoudreExecutable("agy", env);
+	if (!executable) return etatVide("agy");
 	try {
-		const executable = resoudreExecutable("agy", env);
-		if (!executable) return etatVide("agy");
 		const { stdout, code } = await lancer({
 			executable,
 			args: ["models"],
@@ -120,7 +136,12 @@ async function etatAntigravity(env: NodeJS.ProcessEnv): Promise<EtatCompte> {
 		} catch (e) { /* pas d'adresse à afficher, la connexion reste vraie */ }
 		return { outil: "agy", installe: true, connecte: true, email, plan: null };
 	} catch (e) {
-		return etatVide("agy");
+		// Sonde expirée (`agy models` a mesuré jusqu'à 2,3 s sain, mais un
+		// démarrage à froid peut dépasser le délai) : l'exécutable EXISTE —
+		// « non installé » ferait proposer d'installer un outil déjà présent
+		// (vu à l'écran le 2026-09-21). « Non connecté » est l'état le moins
+		// faux ; rouvrir les réglages re-sonde.
+		return { outil: "agy", installe: true, connecte: false, email: null, plan: null };
 	}
 }
 

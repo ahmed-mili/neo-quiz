@@ -95,7 +95,7 @@ export const EN_APP = {
 	   Les quatre CLI de génération, avec de quoi se (dé)connecter. Antigravity
 	   ne publie aucun forfait : sa ligne montre l'adresse seule, `plan` y
 	   reste `null` et la colonne ne s'affiche pas. */
-	"app.settings.accounts": "Accounts",
+	"app.settings.accounts": "CLI accounts",
 	"app.comptes.claude": "Claude Code",
 	"app.comptes.codex": "Codex CLI",
 	"app.comptes.agy": "Antigravity CLI",

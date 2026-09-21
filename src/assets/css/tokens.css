@@ -4,13 +4,15 @@
 
 /* ── Système VERRE du dashboard (harmonisation Ahmed 2026-07-21) ──
    Une seule source pour toutes les surfaces glassmorphism. Posé AUSSI sur
-   .qbd-select-menu : portalé au <body>, il sort du sous-arbre .qbd-root et
-   des tokens nus y résoudraient au vide (piège obsidian:plugin-design §3).
+   .qbd-select-menu et .nq-usage-popover : tous deux portalés au <body>, ils
+   sortent du sous-arbre .qbd-root et des tokens nus y résoudraient au vide
+   (piège obsidian:plugin-design §3) — vu à l'écran le 2026-09-21 : un popover
+   transparent, son texte superposé aux lignes des réglages.
    Échelle de profondeur : surface posée (cartes, panneau) = --qbd-glass-bg ;
    surface flottante ou petit contrôle (menu, chip) = --qbd-glass-bg-dense,
    plus opaque pour la lisibilité. Le reflet haut (sheen) est la signature
    commune du verre ; l'ombre décolle la surface du wallpaper. */
-.qbd-root, .qbd-select-menu {
+.qbd-root, .qbd-select-menu, .nq-usage-popover {
   /* THEME-AWARE (demande Ahmed 2026-07-21) : aucune teinte figée — le verre
      dérive du thème actif. --background-secondary est la surface assombrie
      du thème (sur celui d'Ahmed, rgb(24,24,37) ≈ l'ancien rgba(16,22,40)

@@ -408,52 +408,36 @@ body {
 	flex: none;
 }
 
-/* Le forfait : une pastille sombre bordée de la couleur du fournisseur
-   (référence mesurée à la pipette 2026-09-21 : la pastille « Plus » de
-   ChatGPT). `--pastille` est un triplet R G B posé par ligne via data-outil.
-   Le dégradé vertical de la bordure passe par deux couches de fond : la
-   surface dans padding-box, la couleur en border-box. Sur Claude Code et
-   Codex l'élément est un BOUTON (il ouvre le popover d'usage, d'où le curseur
-   et l'allumage au survol : mêmes alphas +0,15) ; sur Antigravity et Ollama
-   c'est un span inerte, ou il n'existe pas. */
-.nq-comptes-ligne[data-outil="claude"] { --pastille: 217 119 87; }
-.nq-comptes-ligne[data-outil="codex"] { --pastille: 124 133 205; }
-.nq-comptes-ligne[data-outil="agy"] { --pastille: 49 134 255; }
-.nq-comptes-ligne[data-outil="ollama"] { --pastille: 226 226 226; }
-
+/* La pastille de forfait — copie mesurée de la pastille « Plus » de ChatGPT
+   (2026-09-21) : fond quasi noir, bordure en dégradé vertical de la couleur
+   du fournisseur, lueur intérieure qui s'intensifie vers le bas. `--pastille`
+   est un triplet R G B posé par ligne (`data-outil`). */
 .nq-comptes-plan {
-	box-sizing: border-box;
+	--pastille: 226 226 226;
+	display: inline-flex;
+	align-items: center;
 	flex: none;
 	height: 22px;
 	padding: 0 10px;
-	border-radius: 999px;
 	border: 1px solid transparent;
+	border-radius: 999px;
 	background:
-		linear-gradient(rgb(19, 19, 20), rgb(19, 19, 20)) padding-box,
-		linear-gradient(to bottom, rgb(var(--pastille) / 0.35), rgb(var(--pastille) / 0.8)) border-box;
-	color: rgb(226, 226, 226);
+		linear-gradient(rgb(19 19 20), rgb(19 19 20)) padding-box,
+		linear-gradient(to bottom, rgb(var(--pastille) / 0.32), rgb(var(--pastille) / 0.9)) border-box;
+	box-shadow:
+		inset 0 0 6px rgb(var(--pastille) / 0.25),
+		inset 0 -5px 6px -3px rgb(var(--pastille) / 0.85);
+	color: rgb(226 226 226);
 	font: inherit;
 	font-size: 11px;
 	font-weight: 700;
-	box-shadow:
-		inset 0 -1px 0 rgb(var(--pastille) / 0.7),
-		0 1px 6px rgb(var(--pastille) / 0.3);
+	line-height: 1;
+	white-space: nowrap;
 }
-
-button.nq-comptes-plan {
-	cursor: pointer;
-}
-
-button.nq-comptes-plan:hover,
-button.nq-comptes-plan:focus-visible {
-	outline: none;
-	background:
-		linear-gradient(rgb(19, 19, 20), rgb(19, 19, 20)) padding-box,
-		linear-gradient(to bottom, rgb(var(--pastille) / 0.5), rgb(var(--pastille) / 0.95)) border-box;
-	box-shadow:
-		inset 0 -1px 0 rgb(var(--pastille) / 0.85),
-		0 1px 6px rgb(var(--pastille) / 0.45);
-}
+.nq-comptes-ligne[data-outil="codex"] .nq-comptes-plan { --pastille: 124 133 205; }
+.nq-comptes-ligne[data-outil="claude"] .nq-comptes-plan { --pastille: 217 119 87; }
+.nq-comptes-ligne[data-outil="agy"] .nq-comptes-plan { --pastille: 49 134 255; }
+.nq-comptes-ligne[data-outil="ollama"] .nq-comptes-plan { --pastille: 226 226 226; }
 
 /* Les actions (« Sign out », « Sign in », « Install ») : une ligne de menu,
    pas un bouton à cadre (référence mesurée à la pipette 2026-09-21). Le fond

@@ -448,6 +448,18 @@ export interface HostNet {
  */
 export type CliTool = "claude" | "codex" | "ollama" | "agy";
 
+/** L'état d'un compte IA tel que la section « Comptes » l'affiche. JAMAIS un
+    jeton : le principal lit les fichiers de secrets et n'en ressort que ceci.
+    `installe` est distinct de `connecte` — sans lui, un outil absent de la
+    machine et un outil présent mais déconnecté offriraient le même bouton. */
+export interface EtatCompte {
+	outil: "claude" | "codex" | "agy" | "ollama";
+	installe: boolean;
+	connecte: boolean;
+	email: string | null;
+	plan: string | null;
+}
+
 /** Le rectangle SOUS LEQUEL poser la fenêtre du terminal (la modale qui
     attend, mesurée par `getBoundingClientRect`), en pixels CSS de la fenêtre.
     Le terminal ne se place plus à côté de Neo Quiz mais juste en dessous de

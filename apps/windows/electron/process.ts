@@ -768,6 +768,7 @@ export function scriptDisposerPourSite(hwndNeo: number, coller = false): string 
 		"[DllImport(\"user32.dll\")] public static extern bool GetWindowPlacement(IntPtr h, ref WP p);",
 		"[DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);",
 		"[DllImport(\"user32.dll\", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);",
+		"[DllImport(\"user32.dll\")] public static extern bool IsWindowVisible(IntPtr h);",
 		"public struct RECT { public int L, T, R, B; }",
 		"public struct WP { public int Length, Flags, ShowCmd, MinX, MinY, MaxX, MaxY, L, T, R, B; }",
 		"'@",
@@ -794,8 +795,26 @@ export function scriptDisposerPourSite(hwndNeo: number, coller = false): string 
 		"  Start-Sleep -Milliseconds 10",
 		"}",
 		"if ($hNav -eq [IntPtr]::Zero) {",
-		"  $proc = Get-Process -Name $nomExe -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1",
-		"  if ($proc) { $hNav = $proc.MainWindowHandle }",
+		/* LE REPLI NE PEUT PAS SE FIER AU SEUL `MainWindowHandle` : à l'ouverture
+		   À FROID, Chromium expose une fenêtre de handoff SANS TITRE et
+		   INVISIBLE avant la vraie. Mesuré le 2026-09-21 sur une fenêtre Brave
+		   neuve : hwnd 6950082, titre vide, vis=False, rect 0,0,0,0, puis la
+		   vraie fenêtre (10227442, « about:blank - Brave »). La prendre, c'est
+		   poser à gauche une fenêtre que personne ne voit et coller le prompt
+		   dedans — exactement le constat d'Ahmed : « ça le fait quand brave est
+		   fermé et que c'est neo quiz qui l'ouvre ». On ne retient donc qu'une
+		   fenêtre VISIBLE, TITRÉE et dimensionnée ; sans candidate, on n'en
+		   pose aucune (`$hNav` reste 0) plutôt que de viser la mauvaise. */
+		"  foreach ($pr in (Get-Process -Name $nomExe -ErrorAction SilentlyContinue)) {",
+		"    $hc = $pr.MainWindowHandle",
+		"    if ($hc -eq 0) { continue }",
+		"    if (-not [NQ.Win]::IsWindowVisible($hc)) { continue }",
+		"    $tc = New-Object System.Text.StringBuilder 512; [NQ.Win]::GetWindowText($hc, $tc, 512) | Out-Null",
+		"    if (-not $tc.ToString().Trim()) { continue }",
+		"    $rc = New-Object NQ.Win+RECT; [NQ.Win]::GetWindowRect($hc, [ref]$rc) | Out-Null",
+		"    if (($rc.R - $rc.L) -le 0 -or ($rc.B - $rc.T) -le 0) { continue }",
+		"    $hNav = $hc; break",
+		"  }",
 		"}",
 		/* L'EMPLACEMENT D'AVANT du navigateur, écrit sur la sortie AVANT de le
 		   poser : le principal le retient et le lui rend à la fin de l'attente

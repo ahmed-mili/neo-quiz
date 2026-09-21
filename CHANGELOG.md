@@ -20,6 +20,7 @@ release notes.
 - In the waiting dialog, only "Send the prompt" carries the blue accent now — the site name after it reads in the normal ink.
 - Every numbered step of the waiting dialog highlights its own action in blue: "Drag the file below onto the page" no longer reads as plain text next to the copy step that was already blue.
 - Stopping the wait for a website no longer leaves your browser window minimized with its sound still playing: the window is always brought back visible at its place, without stealing focus from Neo Quiz.
+- When Neo Quiz starts your browser itself, your prompt now reaches the page on the first try: the side-by-side layout no longer targets the invisible window the browser shows while it is still starting up.
 
 ## [1.13.0] - 2026-09-21
 

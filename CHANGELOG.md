@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Added
+- Settings now show the address and plan status of your Claude Code, Codex, Antigravity and Ollama accounts, let you sign in and out directly without opening a terminal, and display plan usage on hover for Claude and Codex — both the five-hour window and the weekly window, with the reset time underneath.
+
 ## [1.11.0] - 2026-09-20
 
 ### Added

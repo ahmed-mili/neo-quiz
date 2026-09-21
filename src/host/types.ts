@@ -16,6 +16,8 @@
    Tauri doivent tous les deux se réduire à un `HostFile` sans rien inventer.
 ══════════════════════════════════════════════════════════ */
 
+import type { UsageRead } from "../dashboard/usage-format";
+
 /** Un fichier vu par l'hôte. Volontairement plat et sérialisable. */
 export interface HostFile {
 	/** Chemin depuis la racine du dossier, séparateurs `/`, jamais absolu.
@@ -606,6 +608,15 @@ export interface HostProcess {
 	surNavigateurOuvert?(rappel: () => void): () => void;
 	/** Repose la fenêtre du terminal sous ce rectangle. */
 	replacerTerminal?(ancre: AncreTerminal): Promise<void>;
+	/** L'état des comptes IA que seul l'hôte peut lire. Le contrat ne promet
+	    JAMAIS de jeton : un hôte qui en ferait traverser un violerait la seule
+	    règle de cette capacité. */
+	etatComptes(): Promise<EtatCompte[]>;
+	/** Les quotas du forfait, pour les deux fournisseurs qui les publient. */
+	usageCompte(tool: "claude" | "codex"): Promise<UsageRead>;
+	/** Déconnecte le compte d'un CLI. Vaut pour TOUTE la machine : c'est le
+	    compte de l'outil, pas celui de l'application. L'appelant confirme. */
+	deconnecterCli(tool: CliTool): Promise<"ok" | "echec" | "indisponible">;
 }
 
 /**

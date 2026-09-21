@@ -51,7 +51,9 @@ import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, poserFenetre, rectangleTerminal, run, scriptConnexion, scriptInstallation } from "./process";
-import type { AncreTerminal } from "../../../src/host/types";
+import { deconnecterCompte, etatComptes, usageCompte } from "./comptes";
+import type { AncreTerminal, EtatCompte } from "../../../src/host/types";
+import type { UsageRead } from "../../../src/dashboard/usage-format";
 import type { Outil } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
@@ -1038,6 +1040,24 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	});
 
 	ipcMain.handle(CANAUX.processusAttendreFinTerminal, () => finTerminal);
+
+	ipcMain.handle(CANAUX.comptesEtat, (): Promise<EtatCompte[]> => etatComptes());
+
+	ipcMain.handle(CANAUX.comptesUsage, (_e, tool: unknown): Promise<UsageRead> => {
+		if (tool !== "claude" && tool !== "codex") {
+			console.warn(LOG_PREFIX, "lecture de quota refusée, outil hors liste:", tool);
+			throw erreurCli("refuse", "outil hors liste : " + String(tool));
+		}
+		return usageCompte(tool);
+	});
+
+	ipcMain.handle(CANAUX.comptesDeconnecter, (_e, tool: unknown): Promise<"ok" | "echec" | "indisponible"> => {
+		if (!estOutilAutorise(tool)) {
+			console.warn(LOG_PREFIX, "déconnexion refusée, outil hors liste:", tool);
+			throw erreurCli("refuse", "outil hors liste : " + String(tool));
+		}
+		return deconnecterCompte(tool);
+	});
 
 	ipcMain.handle(CANAUX.processusInstaller, async (_e, tool: unknown, ancre: unknown): Promise<"lance" | "annule" | "indisponible"> => {
 		if (!estOutilAutorise(tool)) {

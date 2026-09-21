@@ -129,6 +129,9 @@ const pont: Pont = {
 			ipcRenderer.on(CANAUX.processusTerminalPose, ecouteur);
 			return () => { ipcRenderer.off(CANAUX.processusTerminalPose, ecouteur); };
 		},
+		comptesEtat: () => ipcRenderer.invoke(CANAUX.comptesEtat),
+		comptesUsage: tool => ipcRenderer.invoke(CANAUX.comptesUsage, tool),
+		comptesDeconnecter: tool => ipcRenderer.invoke(CANAUX.comptesDeconnecter, tool),
 		surNavigateurOuvert(rappel) {
 			const ecouteur = (): void => rappel();
 			ipcRenderer.on(CANAUX.processusNavigateurOuvert, ecouteur);

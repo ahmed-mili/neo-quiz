@@ -49,7 +49,11 @@ export type UsageReadError =
 	/** Pas de session CLI exploitable (jeton absent, expiré, refusé). */
 	| { kind: "unauthenticated" }
 	/** Injoignable ou réponse inattendue. */
-	| { kind: "unavailable" };
+	| { kind: "unavailable" }
+	/** Codex n'a jamais tourné sur cette machine : il n'y a pas de fichier de
+	    session à lire. Distinct d'`unavailable` — il n'y a rien à réparer, et
+	    « aucune session » n'est pas une panne. */
+	| { kind: "jamais-lance" };
 
 /** Résultat brut d'une lecture : des lignes, ou la raison de leur absence. */
 export interface UsageRead {

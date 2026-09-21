@@ -46,7 +46,8 @@
    et la clé `folders` des réglages est gardée à l'écriture.
 ══════════════════════════════════════════════════════════ */
 
-import type { AncreTerminal, HostNetRequest, HostNetResponse, HostProcess } from "../../../src/host/types";
+import type { AncreTerminal, EtatCompte, HostNetRequest, HostNetResponse, HostProcess } from "../../../src/host/types";
+import type { UsageRead } from "../../../src/dashboard/usage-format";
 export type { EtatMiseAJour, PhaseMiseAJour } from "./mise-a-jour-etat";
 import type { EtatMiseAJour } from "./mise-a-jour-etat";
 /* Le type des NOMS d'outils que le principal accepte de lancer/installer.
@@ -492,6 +493,17 @@ export interface Pont {
 		surNavigateurOuvert(rappel: () => void): () => void;
 		/** Le nouveau rectangle de la modale, sous lequel reposer le terminal. */
 		replacerTerminal(ancre: AncreTerminal): Promise<void>;
+		/** L'état des trois comptes que le PRINCIPAL seul peut lire. Aucun jeton
+		    ne traverse : seulement une adresse, un nom de forfait et deux
+		    booléens. Ollama n'y est pas, son compte se sonde en HTTP local
+		    depuis le rendu. */
+		comptesEtat(): Promise<EtatCompte[]>;
+		/** Les quotas d'un compte. Le jeton qui les obtient ne quitte jamais le
+		    principal. */
+		comptesUsage(tool: "claude" | "codex"): Promise<UsageRead>;
+		/** Déconnecte un compte, sans terminal. Le NOM est jugé par
+		    `estOutilAutorise` avant tout, comme `run` et `connecter`. */
+		comptesDeconnecter(tool: Outil): Promise<"ok" | "echec" | "indisponible">;
 	};
 
 	fenetre: {
@@ -687,6 +699,9 @@ export const CANAUX = {
 	/** La réponse du rendu : le nouveau rectangle de sa modale, sous lequel
 	    reposer le terminal. */
 	processusReplacerTerminal: "neo:process/replacer-terminal",
+	comptesEtat: "neo:comptes/etat",
+	comptesUsage: "neo:comptes/usage",
+	comptesDeconnecter: "neo:comptes/deconnecter",
 	miseAJourEtatLire: "neo:mise-a-jour/etat-lire",
 	miseAJourEtat: "neo:mise-a-jour/etat",
 	miseAJourVerifier: "neo:mise-a-jour/verifier",

@@ -103,6 +103,13 @@ export const EN_APP = {
 	"app.comptes.notInstalled": "Not installed",
 	"app.comptes.notConnected": "Not signed in",
 	"app.comptes.connectedNoEmail": "Signed in",
+	// L'espace réservé du squelette, posé avant toute lecture — même ligne
+	// pour l'adresse et pour le bouton, remplacée par la vraie valeur dès
+	// qu'elle arrive.
+	"app.comptes.loading": "…",
+	// La lecture des comptes a ÉCHOUÉ (le pont a rejeté) : un état d'erreur
+	// lisible plutôt qu'une liste vide qui resterait vide pour toujours.
+	"app.comptes.loadError": "Could not read your AI accounts.",
 	"app.comptes.install": "Install",
 	"app.comptes.connect": "Sign in",
 	"app.comptes.disconnect": "Sign out",

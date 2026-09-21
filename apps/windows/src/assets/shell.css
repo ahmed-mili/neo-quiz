@@ -408,6 +408,16 @@ body {
 	cursor: default;
 }
 
+/* La lecture des quatre comptes a échoué (le pont a rejeté) : une ligne à la
+   place de la liste, dans le même style que l'aide d'une section — pas une
+   couleur d'alerte à part, la liste vide serait de toute façon suivie d'une
+   notice le cas échéant (installation, connexion). */
+.nq-comptes-erreur {
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--text-muted);
+}
+
 /* ── LA MODALE DE CHOIX D'UN FOND ──
    Une LISTE, pas une grille de vignettes nues : chaque ligne porte le nom de
    la photo et son auteur, que vingt cases de 96 pixels ne pouvaient pas dire.

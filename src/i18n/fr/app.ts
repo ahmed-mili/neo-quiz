@@ -66,6 +66,8 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.comptes.notInstalled": "Non installé",
 	"app.comptes.notConnected": "Non connecté",
 	"app.comptes.connectedNoEmail": "Connecté",
+	"app.comptes.loading": "…",
+	"app.comptes.loadError": "Impossible de lire vos comptes IA.",
 	"app.comptes.install": "Installer",
 	"app.comptes.connect": "Se connecter",
 	"app.comptes.disconnect": "Se déconnecter",

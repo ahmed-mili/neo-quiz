@@ -25,6 +25,7 @@ import { openConfirmModal } from "../../../../src/editor/modals";
 import { checkOllamaCompte, setBrandLogo } from "../../../../src/dashboard/ai-providers";
 import { pont } from "../host/pont";
 import { CLE_REGLAGES_IA } from "../../electron/pont";
+import { LOG_PREFIX } from "../../../../src/branding";
 
 /** L'ordre d'affichage, fixé par le cahier des charges — jamais celui que
     rendrait `etatComptes()` (qui ne connaît pas Ollama). */
@@ -126,18 +127,43 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 
 	const liste = ajouter(section, "div", "nq-comptes-liste");
 
+	/** Le logo et le nom, communs à la ligne SQUELETTE et à la ligne finale :
+	    les deux seules choses connues sans attendre aucune lecture. */
+	function poserEntete(ligne: HTMLElement, outil: CliTool): void {
+		const icone = ajouter(ligne, "span", "qbd-provider-logo qbd-provider-logo--" + LOGOS[outil]);
+		setBrandLogo(icone, LOGOS[outil]);
+		const texte = ajouter(ligne, "div", "nq-comptes-texte");
+		ajouter(texte, "span", "nq-comptes-nom", nomOutil(outil));
+	}
+
+	/** Le SQUELETTE : les quatre lignes, dans l'ordre fixe, avant toute
+	    lecture — logo et nom connus tout de suite, un espace réservé à la
+	    place de l'adresse et un bouton désactivé à la place de l'action. MÊME
+	    STRUCTURE que `poserLigne` (mêmes classes, un bouton de même taille)
+	    pour que la hauteur ne saute pas quand les vraies lignes la remplacent. */
+	function poserSquelette(): void {
+		liste.replaceChildren();
+		for (const outil of ORDRE) {
+			const ligne = ajouter(liste, "div", "nq-comptes-ligne");
+			ligne.dataset.outil = outil;
+			poserEntete(ligne, outil);
+			const texte = ligne.querySelector<HTMLElement>(".nq-comptes-texte")!;
+			ajouter(texte, "span", "nq-comptes-email", t("app.comptes.loading"));
+			const bouton = ajouter(ligne, "button", "nq-comptes-action", t("app.comptes.loading"));
+			bouton.type = "button";
+			bouton.disabled = true;
+		}
+	}
+
 	/** Une ligne, reconstruite en entier à chaque redessin — quatre lignes ne
 	    justifient pas un diff fin, et ça garde ce module au niveau de
 	    `fond.ts`, qui fait le même choix pour sa rangée unique. */
 	function poserLigne(etat: EtatCompte): void {
 		const ligne = ajouter(liste, "div", "nq-comptes-ligne");
 		ligne.dataset.outil = etat.outil;
+		poserEntete(ligne, etat.outil);
+		const texte = ligne.querySelector<HTMLElement>(".nq-comptes-texte")!;
 
-		const icone = ajouter(ligne, "span", "qbd-provider-logo qbd-provider-logo--" + LOGOS[etat.outil]);
-		setBrandLogo(icone, LOGOS[etat.outil]);
-
-		const texte = ajouter(ligne, "div", "nq-comptes-texte");
-		ajouter(texte, "span", "nq-comptes-nom", nomOutil(etat.outil));
 		const etatTexte = !etat.installe
 			? t("app.comptes.notInstalled")
 			: !etat.connecte
@@ -161,18 +187,39 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		});
 	}
 
+	/** Redessine la section entière. NE JETTE JAMAIS : son seul appelant est
+	    `void redessiner()` (montage) ou une action sans `catch` — une
+	    exception non rattrapée ici deviendrait une rejection non gérée, et la
+	    section resterait vide EN PERMANENCE, sans un mot. `etatComptes()` est
+	    un appel IPC ; un pont qui refuse REJETTE, ce n'est pas une hypothèse
+	    d'école. */
 	async function redessiner(): Promise<void> {
-		const { etats, ollamaSigninUrl: signin } = await lireEtats();
+		let resultat: { etats: EtatCompte[]; ollamaSigninUrl: string | null };
+		try {
+			resultat = await lireEtats();
+		} catch (e) {
+			console.warn(LOG_PREFIX, "lecture des comptes IA impossible:", e);
+			if (detruit) return;
+			liste.replaceChildren();
+			ajouter(liste, "p", "nq-comptes-erreur", t("app.comptes.loadError"));
+			return;
+		}
 		if (detruit) return;
-		ollamaSigninUrl = signin;
+		ollamaSigninUrl = resultat.ollamaSigninUrl;
 		liste.replaceChildren();
-		for (const etat of etats) poserLigne(etat);
+		for (const etat of resultat.etats) poserLigne(etat);
 	}
 
 	async function deconnecter(outil: CliTool): Promise<void> {
-		const verdict = await requireHost("process").deconnecterCli(outil);
+		let verdict: "ok" | "echec" | "indisponible";
+		try {
+			verdict = await requireHost("process").deconnecterCli(outil);
+		} catch (e) {
+			console.warn(LOG_PREFIX, "déconnexion impossible:", e);
+			verdict = "echec";
+		}
 		if (detruit) return;
-		if (verdict === "echec" || verdict === "indisponible") {
+		if (verdict !== "ok") {
 			currentHost().ui.notice(t("app.comptes.logoutFailed", { name: nomOutil(outil) }));
 			return;
 		}
@@ -186,6 +233,11 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		bouton: HTMLButtonElement,
 	): Promise<void> {
 		if (action === "deconnecter") {
+			// DÉSACTIVÉ AVANT D'OUVRIR LA CONFIRMATION, comme les deux autres
+			// branches : sans ça, un double-clic rapide empile deux modales de
+			// confirmation. Réactivé si l'utilisateur annule — `redessiner()`
+			// (donc un bouton refait à neuf) ne suit que la confirmation.
+			bouton.disabled = true;
 			const name = nomOutil(outil);
 			openConfirmModal(
 				t("app.comptes.logoutTitle", { name }),
@@ -193,7 +245,10 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 				t("app.comptes.logoutConfirm"),
 				t("app.comptes.cancel"),
 				(confirme) => {
-					if (!confirme) return;
+					if (!confirme) {
+						bouton.disabled = false;
+						return;
+					}
 					void deconnecter(outil);
 				},
 				t("app.comptes.logoutDetail"),
@@ -229,11 +284,21 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 			}
 			// `"lance"` ou `"annule"` : rien à dire de plus ici, le terminal (s'il
 			// est parti) fait le reste — la ligne se redessine, au pire inchangée.
+		} catch (e) {
+			// Un rejet du pont ou du serveur Ollama (panne réseau, IPC refusé) :
+			// même message que le verdict `indisponible`, jamais une exception qui
+			// remonterait jusqu'au clic et laisserait le bouton figé désactivé.
+			console.warn(LOG_PREFIX, "action de compte impossible:", e);
+			currentHost().ui.notice(t(
+				action === "installer" ? "app.comptes.installFailed" : "app.comptes.connectFailed",
+				{ name: nomOutil(outil) },
+			));
 		} finally {
 			if (!detruit) await redessiner();
 		}
 	}
 
+	poserSquelette();
 	void redessiner();
 
 	return () => { detruit = true; };

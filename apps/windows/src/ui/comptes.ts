@@ -277,11 +277,14 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		for (const annuler of Array.from(ouverturesEnAttente)) annuler();
 	}
 
-	/** Popover d'usage au survol ou au focus clavier d'une ligne Claude ou
-	    Codex — jamais Antigravity ni Ollama : seul `outil: OutilAvecUsage`
-	    (paramètre de cette fonction) rend l'appel possible, le compilateur
-	    refuse déjà les deux autres à `usageCompte`. */
-	function attacherPopoverUsage(ligne: HTMLElement, outil: OutilAvecUsage): void {
+	/** Popover d'usage au survol ou au focus du BADGE de forfait d'une ligne
+	    Claude ou Codex — jamais Antigravity ni Ollama : seul
+	    `outil: OutilAvecUsage` (paramètre de cette fonction) rend l'appel
+	    possible, le compilateur refuse déjà les deux autres à `usageCompte`.
+	    L'ancre est le badge, pas la ligne entière (retour d'écran 2026-09-21) :
+	    un survol qui traverse la ligne pour atteindre le bouton d'action
+	    déclenchait des lectures d'usage à chaque passage. */
+	function attacherPopoverUsage(ancre: HTMLElement, outil: OutilAvecUsage): void {
 		let popEl: HTMLElement | null = null;
 		let minuteurOuverture: number | null = null;
 		let minuteurFermeture: number | null = null;
@@ -308,7 +311,7 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 
 		function positionner(): void {
 			if (!popEl) return;
-			const r = ligne.getBoundingClientRect();
+			const r = ancre.getBoundingClientRect();
 			// Mesuré caché : sa taille dépend du contenu qu'on vient de poser
 			// (squelette ou vraies jauges), inconnue avant qu'il soit dans le DOM.
 			popEl.style.visibility = "hidden";
@@ -365,14 +368,13 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 			minuteurFermeture = window.setTimeout(() => { minuteurFermeture = null; fermer(); }, DELAI_FERMETURE_MS);
 		}
 
-		ligne.addEventListener("mouseenter", programmerOuverture);
-		ligne.addEventListener("mouseleave", programmerFermeture);
-		// `focusin`/`focusout` BUBBLENT depuis le bouton d'action (seul enfant
-		// focalisable) : Tab jusqu'à la ligne ouvre le popover sans délai —
-		// contrairement au survol, un geste clavier explicite n'a pas besoin
-		// d'être filtré d'un passage rapide.
-		ligne.addEventListener("focusin", ouvrirMaintenant);
-		ligne.addEventListener("focusout", programmerFermeture);
+		ancre.addEventListener("mouseenter", programmerOuverture);
+		ancre.addEventListener("mouseleave", programmerFermeture);
+		// Le badge est un BOUTON focalisable : Tab jusqu'à lui ouvre le popover
+		// sans délai — contrairement au survol, un geste clavier explicite n'a
+		// pas besoin d'être filtré d'un passage rapide.
+		ancre.addEventListener("focusin", ouvrirMaintenant);
+		ancre.addEventListener("focusout", programmerFermeture);
 	}
 
 	/** Le logo et le nom, communs à la ligne SQUELETTE et à la ligne finale :
@@ -420,9 +422,20 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 				: (etat.email ?? t("app.comptes.connectedNoEmail"));
 		ajouter(texte, "span", "nq-comptes-email", etatTexte);
 
-		// Antigravity ne publie aucun forfait (décision du chantier) : la
-		// colonne reste vide plutôt que d'inventer une valeur.
-		if (etat.plan) ajouter(ligne, "span", "nq-comptes-plan", etat.plan);
+		// Le badge de forfait. Pour Claude Code et Codex, un BOUTON rendu MÊME
+		// sans forfait connu (libellé « Usage ») : c'est lui qui ouvre le
+		// popover d'usage au survol — le rendre conditionnel à `etat.plan`
+		// ferait perdre l'accès à l'usage quand le forfait n'est pas lisible
+		// (Claude Code, 2026-09-21). Antigravity et Ollama n'ont pas d'usage :
+		// simple badge inerte s'ils publient un forfait, rien sinon.
+		if (etat.outil === "claude" || etat.outil === "codex") {
+			const badge = ajouter(ligne, "button", "nq-comptes-plan",
+				etat.plan ?? t("app.comptes.usage"));
+			badge.type = "button";
+			attacherPopoverUsage(badge, etat.outil);
+		} else if (etat.plan) {
+			ajouter(ligne, "span", "nq-comptes-plan", etat.plan);
+		}
 
 		const action = actionDe(etat);
 		const bouton = ajouter(ligne, "button", "nq-comptes-action", t(
@@ -434,12 +447,6 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		bouton.addEventListener("click", () => {
 			void surClicAction(etat.outil, action, bouton);
 		});
-
-		// Antigravity et Ollama n'ont rien à montrer (aucun forfait lisible) :
-		// l'absence de popover EST l'information, pas un oubli.
-		if (etat.outil === "claude" || etat.outil === "codex") {
-			attacherPopoverUsage(ligne, etat.outil);
-		}
 	}
 
 	/** Redessine la section entière. NE JETTE JAMAIS : son seul appelant est

@@ -126,6 +126,7 @@ export const EN_APP = {
 	   Les seuls deux outils dont le forfait est lisible (`usageCompte`, typé
 	   "claude" | "codex"). Quatre messages d'échec, un par `UsageReadError`
 	   (`usage-format.ts`) — aucun ne laisse le popover vide. */
+	"app.comptes.usage": "Usage",
 	"app.comptes.usage.resetsAt": "Resets {moment}",
 	"app.comptes.usage.errorRateLimited": "The provider is rate-limiting usage reads right now.",
 	"app.comptes.usage.errorRateLimitedDelay": "The provider is rate-limiting usage reads. Try again in {delai}.",

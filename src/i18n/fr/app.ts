@@ -80,6 +80,7 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.comptes.cancel": "Annuler",
 	"app.comptes.logoutFailed": "Impossible de se déconnecter de {name}.",
 
+	"app.comptes.usage": "Usage",
 	"app.comptes.usage.resetsAt": "Réinitialisation {moment}",
 	"app.comptes.usage.errorRateLimited": "Le fournisseur limite les lectures d'usage en ce moment.",
 	"app.comptes.usage.errorRateLimitedDelay": "Le fournisseur limite les lectures d'usage. Réessayez dans {delai}.",

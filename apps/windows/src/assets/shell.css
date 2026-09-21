@@ -374,16 +374,30 @@ body {
 	unicode-bidi: isolate;
 }
 
-/* Le forfait : un badge discret, pas un bouton — Antigravity ne le pose
-   jamais (aucun forfait publié), et l'élément n'existe alors simplement pas. */
+/* Le forfait : un badge discret. Sur Claude Code et Codex c'est un BOUTON
+   (type="button") : il ouvre le popover d'usage au survol, d'où le curseur et
+   l'effet de survol, réservés au bouton — sur Antigravity et Ollama l'élément
+   est un span inerte (aucun usage à montrer), ou n'existe pas du tout. */
 .nq-comptes-plan {
 	flex: none;
 	padding: 3px 9px;
 	border-radius: 999px;
+	border: 1px solid transparent;
 	background: var(--background-modifier-border);
 	color: var(--text-muted);
+	font: inherit;
 	font-size: 11px;
 	font-weight: 600;
+}
+
+button.nq-comptes-plan {
+	cursor: pointer;
+}
+
+button.nq-comptes-plan:hover,
+button.nq-comptes-plan:focus-visible {
+	border-color: var(--text-accent);
+	color: var(--text-normal);
 }
 
 .nq-comptes-action {
@@ -418,7 +432,7 @@ body {
 	color: var(--text-muted);
 }
 
-/* ── Le popover d'usage (survol / focus d'une ligne Claude ou Codex) ──
+/* ── Le popover d'usage (survol / focus du badge de forfait, Claude et Codex) ──
    Portalé au <body>, comme `.qbd-select-menu` (ui-select.css) : les réglages
    sont une MODALE (`.modal-container`, z-index 90 dans `modal.css`), et un
    popover NON portalé serait coupé par son défilement. z-index 1000, même

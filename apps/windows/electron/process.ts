@@ -1111,6 +1111,8 @@ export function scriptRestaurerNavigateur(p: PlacementFenetre): string {
 	return [
 		"Add-Type -Name Win -Namespace NQ -MemberDefinition @'",
 		"[DllImport(\"user32.dll\")] public static extern bool IsWindow(IntPtr h);",
+		"[DllImport(\"user32.dll\")] public static extern bool IsIconic(IntPtr h);",
+		"[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h, int cmd);",
 		"[DllImport(\"user32.dll\")] public static extern bool SetWindowPlacement(IntPtr h, ref WP p);",
 		"public struct WP { public int Length, Flags, ShowCmd, MinX, MinY, MaxX, MaxY, L, T, R, B; }",
 		"'@",
@@ -1119,6 +1121,15 @@ export function scriptRestaurerNavigateur(p: PlacementFenetre): string {
 		"  $p = New-Object NQ.Win+WP; $p.Length = 44; $p.ShowCmd = " + String(p.showCmd) + "; $p.MinX = -1; $p.MinY = -1; $p.MaxX = -1; $p.MaxY = -1",
 		"  $p.L = " + String(p.l) + "; $p.T = " + String(p.t) + "; $p.R = " + String(p.r) + "; $p.B = " + String(p.b),
 		"  [NQ.Win]::SetWindowPlacement($h, [ref]$p) | Out-Null",
+		/* JAMAIS RÉDUITE (exigence : ne jamais fermer ni perdre la fenêtre du
+		   navigateur) : l'état réduit n'a été vu qu'après une attente annulée
+		   alors qu'aucune ligne du dépôt ne minimise — posé par Windows
+		   lui-même au terme de la bataille de premier plan qui suit la
+		   restauration (SW_SHOWMAXIMIZED active le navigateur, puis Neo Quiz
+		   reprend le devant). Si la fenêtre finit malgré tout réduite, un
+		   ShowWindow SANS ACTIVATION (4) la rattrape : visible à sa place
+		   d'avant, sans prendre le focus à Neo Quiz qui se remet juste après. */
+		"  if ([NQ.Win]::IsIconic($h)) { [NQ.Win]::ShowWindow($h, 4) | Out-Null }",
 		"}",
 	].join("\n");
 }

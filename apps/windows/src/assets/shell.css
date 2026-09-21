@@ -327,8 +327,10 @@ body {
 /* ── Comptes IA (Réglages) ──
    Une rangée par CLI, structure proche de `.nq-reglages-dossier` mais réécrite
    à part : deux zones supplémentaires (le forfait, le bouton d'action) que la
-   rangée d'un dossier n'a pas, et une icône décorative plutôt qu'un logo de
-   marque — voir `ui/comptes.ts`. */
+   rangée d'un dossier n'a pas. Le logo de MARQUE (`.qbd-provider-logo`,
+   `dashboard-ai.css`) porte déjà sa propre taille et sa propre couleur —
+   aucune classe `.nq-comptes-icone` ici, `ui/comptes.ts` réutilise la classe
+   du sélecteur de fournisseur plutôt que d'en redéfinir une. */
 .nq-comptes-liste {
 	display: flex;
 	flex-direction: column;
@@ -346,18 +348,6 @@ body {
 	border-radius: var(--radius-m);
 	border: 1px solid var(--background-modifier-border);
 	background: var(--background-secondary);
-}
-
-.nq-comptes-icone {
-	display: grid;
-	place-items: center;
-	flex: none;
-	color: var(--text-muted);
-}
-
-.nq-comptes-icone svg {
-	width: 18px;
-	height: 18px;
 }
 
 .nq-comptes-texte {

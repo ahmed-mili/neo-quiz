@@ -22,7 +22,7 @@ import { currentHost, requireHost } from "../../../../src/host/current";
 import { t } from "../../../../src/i18n";
 import { ajouter } from "../../../../src/dom";
 import { openConfirmModal } from "../../../../src/editor/modals";
-import { checkOllamaCompte } from "../../../../src/dashboard/ai-providers";
+import { checkOllamaCompte, setBrandLogo } from "../../../../src/dashboard/ai-providers";
 import { pont } from "../host/pont";
 import { CLE_REGLAGES_IA } from "../../electron/pont";
 
@@ -30,16 +30,27 @@ import { CLE_REGLAGES_IA } from "../../electron/pont";
     rendrait `etatComptes()` (qui ne connaît pas Ollama). */
 const ORDRE: CliTool[] = ["claude", "codex", "agy", "ollama"];
 
-/** Icône Lucide par outil : purement décoratif, aucune de ces marques n'a
-    d'icône dédiée dans le catalogue Lucide — `bot` les distingue toutes de
-    la même façon qu'un pictogramme générique « assistant », `server` pour
-    Ollama qui est un serveur local et non un compte cloud. */
-const ICONES: Record<CliTool, string> = {
-	claude: "bot",
-	codex: "bot",
-	agy: "bot",
-	ollama: "server",
+/** Le logo de MARQUE par outil, posé par `setBrandLogo` (`ai-providers.ts`),
+    même patron que le sélecteur de fournisseur de la page « Générer »
+    (`ai.ts`, `buildProviderControl`) : `qbd-provider-logo qbd-provider-logo--<nom>`
+    puis `setBrandLogo(el, nom)`. Ce ne sont pas des icônes Lucide — le
+    catalogue Lucide n'a aucun logo de marque, et les poser à la main ici
+    aurait divergé du sélecteur qui affiche déjà ces mêmes logos. */
+const LOGOS: Record<CliTool, string> = {
+	claude: "claude",
+	codex: "openai",
+	agy: "antigravity",
+	ollama: "ollama",
 };
+
+/** L'adresse du serveur Ollama telle qu'enregistrée par la page « Générer »
+    (mêmes réglages IA, clé `CLE_REGLAGES_IA`). `undefined` fait retomber
+    `checkOllamaCompte` sur son défaut local. */
+async function lireAiOllamaUrl(): Promise<string | undefined> {
+	const brut = await pont().reglages.lire(CLE_REGLAGES_IA);
+	const url = brut && typeof brut === "object" ? (brut as { aiOllamaUrl?: unknown }).aiOllamaUrl : undefined;
+	return typeof url === "string" ? url : undefined;
+}
 
 /** Le nom affiché, traduit — jamais le nom brut de `PROVIDERS`
     (`ai-providers.ts`), qui dit « Claude » quand cette ligne doit dire
@@ -55,25 +66,26 @@ function nomOutil(outil: CliTool): string {
 
 /** L'état de la ligne Ollama, assemblé depuis deux appels que `EtatCompte`
     ne distingue pas ailleurs : `ollamaInstalle()` (le binaire existe-t-il ?)
-    et `checkOllamaCompte()` (le serveur répond-il, connecté ?). L'adresse du
-    serveur vient des réglages IA de l'application (`CLE_REGLAGES_IA`), la
-    même clé que lit `AiSettingsHost` — ce module n'en a pas d'autre à sa
-    disposition, la page « Générer » n'étant pas montée ici. */
-async function etatOllama(): Promise<EtatCompte> {
+    et `checkOllamaCompte()` (le serveur répond-il, connecté ?). Rend aussi
+    `signinUrl` (quand le démon répond 401 avec une adresse de connexion) :
+    c'est elle que le bouton « Se connecter » ouvrira, Ollama n'ayant pas de
+    CLI de connexion (voir `surClicAction`). */
+async function etatOllama(): Promise<{ etat: EtatCompte; signinUrl: string | null }> {
 	const proc = requireHost("process");
-	const brut = await pont().reglages.lire(CLE_REGLAGES_IA);
-	const url = brut && typeof brut === "object" ? (brut as { aiOllamaUrl?: unknown }).aiOllamaUrl : undefined;
 	const [installe, compte] = await Promise.all([
 		proc.ollamaInstalle(),
-		checkOllamaCompte(typeof url === "string" ? url : undefined),
+		lireAiOllamaUrl().then(checkOllamaCompte),
 	]);
 	return {
-		outil: "ollama",
-		installe,
-		connecte: compte.connecte,
-		// Ollama ne publie pas d'adresse de compte, seulement un forfait.
-		email: null,
-		plan: compte.connecte ? compte.plan : null,
+		etat: {
+			outil: "ollama",
+			installe,
+			connecte: compte.connecte,
+			// Ollama ne publie pas d'adresse de compte, seulement un forfait.
+			email: null,
+			plan: compte.connecte ? compte.plan : null,
+		},
+		signinUrl: compte.connecte ? null : compte.signinUrl,
 	};
 }
 
@@ -82,16 +94,17 @@ async function etatOllama(): Promise<EtatCompte> {
     première (Ollama, sous la seconde) ne doit pas faire sauter la liste
     pendant que la plus lente (`etatComptes()`, ~1 s à cause d'Antigravity)
     arrive encore. */
-async function lireEtats(): Promise<EtatCompte[]> {
+async function lireEtats(): Promise<{ etats: EtatCompte[]; ollamaSigninUrl: string | null }> {
 	const [trois, ollama] = await Promise.all([
 		requireHost("process").etatComptes(),
 		etatOllama(),
 	]);
 	const parOutil = new Map(trois.map(e => [e.outil, e] as const));
-	return ORDRE.map(outil => {
-		if (outil === "ollama") return ollama;
+	const etats = ORDRE.map(outil => {
+		if (outil === "ollama") return ollama.etat;
 		return parOutil.get(outil) ?? { outil, installe: false, connecte: false, email: null, plan: null };
 	});
+	return { etats, ollamaSigninUrl: ollama.signinUrl };
 }
 
 /** L'action que le bouton d'une ligne déclenche : c'est `installe` qui
@@ -105,6 +118,11 @@ function actionDe(etat: EtatCompte): "installer" | "connecter" | "deconnecter" {
 
 export function monterReglagesComptes(section: HTMLElement): () => void {
 	let detruit = false;
+	/** L'adresse de connexion Ollama, retenue depuis le dernier redessin —
+	    même rôle que `ollamaSigninUrl` dans `ai.ts` (`demarrerConnexion`) :
+	    une carte affichée sans sonde préalable n'aurait pas cette adresse, et
+	    le bouton la resonde une fois avant de renoncer (voir `surClicAction`). */
+	let ollamaSigninUrl: string | null = null;
 
 	const liste = ajouter(section, "div", "nq-comptes-liste");
 
@@ -115,8 +133,8 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		const ligne = ajouter(liste, "div", "nq-comptes-ligne");
 		ligne.dataset.outil = etat.outil;
 
-		const icone = ajouter(ligne, "div", "nq-comptes-icone");
-		currentHost().ui.setIcon(icone, ICONES[etat.outil]);
+		const icone = ajouter(ligne, "span", "qbd-provider-logo qbd-provider-logo--" + LOGOS[etat.outil]);
+		setBrandLogo(icone, LOGOS[etat.outil]);
 
 		const texte = ajouter(ligne, "div", "nq-comptes-texte");
 		ajouter(texte, "span", "nq-comptes-nom", nomOutil(etat.outil));
@@ -144,8 +162,9 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 	}
 
 	async function redessiner(): Promise<void> {
-		const etats = await lireEtats();
+		const { etats, ollamaSigninUrl: signin } = await lireEtats();
 		if (detruit) return;
+		ollamaSigninUrl = signin;
 		liste.replaceChildren();
 		for (const etat of etats) poserLigne(etat);
 	}
@@ -184,6 +203,22 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		}
 		bouton.disabled = true;
 		try {
+			// OLLAMA N'A PAS DE CLI DE CONNEXION : `connecterCli("ollama")` rend
+			// `indisponible` par contrat (pas de compte à connecter par terminal).
+			// La vraie connexion ouvre le NAVIGATEUR sur l'adresse que le démon a
+			// rendue à sa dernière sonde 401 — même chemin que `demarrerConnexion`
+			// dans `dashboard/ai.ts`. Même règle de repli qu'elle : une adresse
+			// absente (carte affichée sans sonde préalable) se resonde une fois
+			// avant de renoncer.
+			if (action === "connecter" && outil === "ollama") {
+				if (!ollamaSigninUrl) {
+					const compte = await checkOllamaCompte(await lireAiOllamaUrl());
+					if (!compte.connecte && compte.signinUrl) ollamaSigninUrl = compte.signinUrl;
+				}
+				const ouvert = ollamaSigninUrl !== null && await currentHost().shell.openUrl(ollamaSigninUrl);
+				if (!ouvert) currentHost().ui.notice(t("app.comptes.connectFailed", { name: nomOutil(outil) }));
+				return;
+			}
 			const proc = requireHost("process");
 			const verdict = action === "installer" ? await proc.installerCli(outil) : await proc.connecterCli(outil);
 			if (verdict === "indisponible") {

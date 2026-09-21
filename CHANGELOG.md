@@ -13,6 +13,14 @@ release notes.
 
 ## [Unreleased]
 
+### Changed
+- Claude Code and Codex show their official logos in full color in the assistant menu, instead of the single-color silhouettes.
+
+### Fixed
+- In the waiting dialog, only "Send the prompt" carries the blue accent now — the site name after it reads in the normal ink.
+- Every numbered step of the waiting dialog highlights its own action in blue: "Drag the file below onto the page" no longer reads as plain text next to the copy step that was already blue.
+- Stopping the wait for a website no longer leaves your browser window minimized with its sound still playing: the window is always brought back visible at its place, without stealing focus from Neo Quiz.
+
 ## [1.13.0] - 2026-09-21
 
 ### Added

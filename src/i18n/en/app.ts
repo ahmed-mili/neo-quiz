@@ -133,9 +133,9 @@ export const EN_APP = {
 	// ouvre un terminal interactif. L'invite y est traduite PAR LE PRINCIPAL
 	// (`canaux.ts`) — cette clé n'est lue que pour l'info-bulle du bouton.
 	"app.comptes.usageTerminal": "Open Antigravity CLI to check your quota (/usage)",
-	"app.comptes.usageTerminalHint": "Type /usage to see your plan's usage. Quit Antigravity when you're done.",
+	"app.comptes.usageTerminalHint": "Opening your quota… if it does not appear, type /usage. Quit Antigravity when you're done.",
 	"app.comptes.usageTerminalFailed": "Could not open the Antigravity CLI.",
-	"app.comptes.usageTerminalOpened": "Antigravity CLI is opening in a terminal — type /usage there to see your quota. On its very first launch it asks you to set it up first.",
+	"app.comptes.usageTerminalOpened": "Antigravity CLI is opening in a terminal, and your quota appears there in a few seconds. On its very first launch it asks you to set it up first.",
 	// Antigravity n'attend que 60 secondes, EN INTERNE, sans rien dire : le
 	// script de connexion affiche ces deux textes, traduits par le principal
 	// (`canaux.ts`) — jamais un texte venu du rendu dans un script.

@@ -641,15 +641,87 @@ export function scriptConnexion(tool: Outil, titre: string, messages: MessagesTe
  * `entete` retient la fenêtre sur l'erreur — un CommandNotFoundException est
  * terminant, il y tombe.
  */
+/** Le temps laissé à l'interface d'`agy` avant qu'on y dépose `/usage`.
+
+    Mesuré le 2026-09-21 : le panneau s'ouvre pour de bon à cinq secondes sur un
+    démarrage à chaud. Trop TÔT n'est pas grave — les touches attendent dans la
+    file de la console, et si `agy` la vide au démarrage il ne reste que son
+    invite, c'est-à-dire l'état d'avant cette frappe. */
+const DELAI_FRAPPE_S = "5";
+
+/** Déposer une commande dans la file d'entrée de NOTRE console
+    (`WriteConsoleInput`), pour qu'`agy` la lise comme si elle était tapée.
+
+    PAS `SendKeys` : celui-ci vise la fenêtre AU PREMIER PLAN. Entre le clic et
+    la frappe, cinq secondes passent — l'utilisateur a largement le temps de
+    revenir à Neo Quiz ou d'ouvrir autre chose, et `/usage` suivi d'Entrée
+    serait alors tapé dans SA fenêtre à lui. `WriteConsoleInput` écrit dans la
+    console que ce script possède, quelle que soit la fenêtre active.
+
+    PAS UNE REDIRECTION D'ENTRÉE non plus : elle prendrait la place du clavier,
+    et l'utilisateur ne pourrait plus rien taper ensuite dans le REPL. Ici la
+    console reste la console — on y dépose une ligne, puis elle est à lui. */
+const FRAPPE_CONSOLE = [
+	"Add-Type @'",
+	"using System;",
+	"using System.Runtime.InteropServices;",
+	"public static class NqCons {",
+	"  [StructLayout(LayoutKind.Sequential)]",
+	"  public struct KEY_EVENT_RECORD {",
+	"    [MarshalAs(UnmanagedType.Bool)] public bool bKeyDown;",
+	"    public ushort wRepeatCount; public ushort wVirtualKeyCode; public ushort wVirtualScanCode;",
+	"    public char UnicodeChar; public uint dwControlKeyState;",
+	"  }",
+	"  [StructLayout(LayoutKind.Explicit)]",
+	"  public struct INPUT_RECORD {",
+	"    [FieldOffset(0)] public ushort EventType;",
+	"    [FieldOffset(4)] public KEY_EVENT_RECORD KeyEvent;",
+	"  }",
+	"  [DllImport(\"kernel32.dll\", SetLastError = true)] public static extern IntPtr GetStdHandle(int n);",
+	"  [DllImport(\"kernel32.dll\", SetLastError = true)] public static extern bool WriteConsoleInput(IntPtr h, INPUT_RECORD[] b, uint n, out uint w);",
+	"}",
+	"'@",
+	"function Taper([string]$texte) {",
+	/* Une frappe qui échoue ne doit JAMAIS emporter la fenêtre : sans ce
+	   `try`, le `trap` de l'entête attraperait l'erreur, attendrait une touche
+	   et fermerait — l'utilisateur perdrait le REPL pour un raté de confort. */
+	"  try {",
+	"    $h = [NqCons]::GetStdHandle(-10)",
+	"    $recs = New-Object System.Collections.Generic.List[NqCons+INPUT_RECORD]",
+	"    foreach ($ch in $texte.ToCharArray()) {",
+	"      foreach ($down in @($true, $false)) {",
+	"        $k = New-Object NqCons+KEY_EVENT_RECORD",
+	"        $k.bKeyDown = $down; $k.wRepeatCount = 1",
+	"        $k.wVirtualKeyCode = if ($ch -eq \"`r\") { 13 } else { 0 }",
+	"        $k.wVirtualScanCode = 0; $k.UnicodeChar = $ch; $k.dwControlKeyState = 0",
+	"        $r = New-Object NqCons+INPUT_RECORD; $r.EventType = 1; $r.KeyEvent = $k",
+	"        $recs.Add($r)",
+	"      }",
+	"    }",
+	"    $arr = $recs.ToArray(); $w = 0",
+	"    [NqCons]::WriteConsoleInput($h, $arr, [uint32]$arr.Length, [ref]$w) | Out-Null",
+	"  } catch { }",
+	"}",
+];
+
 export function scriptUsageTerminal(tool: Outil, titre: string, invite: string, env: NodeJS.ProcessEnv = process.env): string | null {
 	if (tool !== "agy") return null;
 	return [
 		...entete(titre),
 		rechargerPath(env),
-		/* L'INVITE AVANT le CLI : un REPL qui démarrait sans rien dire
-		   laisserait l'utilisateur chercher quoi taper. */
+		/* L'INVITE, pour le cas où la frappe n'arrive pas : elle reste la seule
+		   chose à l'écran si `agy` ignore ce qu'on lui dépose. Repeinte par son
+		   interface la plupart du temps — la vraie consigne est la notice de
+		   l'application, qui vit dans une fenêtre qu'`agy` ne peut pas effacer. */
 		"[Console]::Out.WriteLine(" + citerPs(invite) + ")",
-		"agy",
+		...FRAPPE_CONSOLE,
+		/* `-NoNewWindow` : `agy` PARTAGE cette console, donc sa file d'entrée.
+		   PowerShell garde la main pendant qu'il tourne, et peut y déposer la
+		   commande. */
+		"$p = Start-Process agy -NoNewWindow -PassThru",
+		"Start-Sleep -Seconds " + DELAI_FRAPPE_S,
+		"Taper \"/usage`r\"",
+		"$p.WaitForExit()",
 	].join("\n");
 }
 

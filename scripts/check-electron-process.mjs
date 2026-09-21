@@ -395,12 +395,13 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		const s = scriptUsageTerminal("agy", "Neo Quiz - Antigravity CLI", "tapez /usage", envDossiers);
 		const iPath = s.indexOf("GetEnvironmentVariable('Path','User')");
 		const iInvite = s.indexOf("[Console]::Out.WriteLine('tapez /usage')");
-		/* Dernière ligne du script : elle se termine par le REPL. */
-		const iAgy = s.lastIndexOf("\nagy");
+		/* Le REPL est lancé APRÈS l'invite, et le script ne rend la main qu'à
+		   sa sortie — entre les deux, il dépose `/usage` dans la console. */
+		const iAgy = s.indexOf("Start-Process agy -NoNewWindow -PassThru");
 		r.check("usage terminal agy : titre en première ligne, PATH rechargé, invite AVANT le REPL, sans repeindre, trap et transcription",
 			{
 				titre: s.startsWith("$host.UI.RawUI.WindowTitle = 'Neo Quiz - Antigravity CLI'"),
-				ordre: iPath > 0 && iInvite > iPath && iAgy > iInvite && s.endsWith("\nagy"),
+				ordre: iPath > 0 && iInvite > iPath && iAgy > iInvite && s.endsWith("$p.WaitForExit()"),
 				invite: iInvite > 0,
 				trap: /\ntrap \{[\s\S]*Read-Host[\s\S]*\n\}/.test(s),
 				transcription: s.includes("Start-Transcript -Path"),
@@ -408,10 +409,29 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 			{ titre: true, ordre: true, invite: true, trap: true, transcription: true });
 		/* Le REPL est INTERACTIF : ni sortie ni entrée redirigée — c'est ce qui
 		   distingue ce script du `agy -p` headless de la connexion, et ce qui
-		   laisse ce que l'utilisateur tape atteindre le CLI. */
+		   laisse ce que l'utilisateur tape atteindre le CLI APRÈS la frappe
+		   automatique (une redirection lui prendrait le clavier pour de bon). */
 		r.check("usage terminal agy : ni la sortie ni l'entrée du REPL ne sont redirigées",
 			/ForEach-Object|RedirectStandardInput|\| Out-String/.test(s), false);
+		/* La frappe vise NOTRE console, jamais la fenêtre au premier plan : cinq
+		   secondes passent avant elle, et `SendKeys` taperait `/usage` dans la
+		   fenêtre où l'utilisateur est revenu entre-temps. */
+		r.check("usage terminal agy : la frappe passe par la console, jamais par SendKeys",
+			{ console: s.includes("WriteConsoleInput"), sendkeys: /SendKeys|AppActivate/.test(s) },
+			{ console: true, sendkeys: false });
 	}
+
+	/* ── POURQUOI LA FRAPPE N'EST ÉPROUVÉE QUE PAR SA FORME ICI ──
+	   Elle a été vérifiée SUR LE PRODUIT, à l'écran (2026-09-21) : le panneau
+	   « Models & Quota » d'Antigravity s'ouvre seul après le clic. Un cas
+	   automatisé, lui, demanderait une VRAIE console — un `spawn` n'en donne
+	   pas (avec `detached`, Windows lance l'enfant sans console du tout, et
+	   `GetStdHandle` ne rend alors aucune file où déposer la frappe), et la
+	   créer par `cmd /c start` fait dépasser le délai du cas. Ce qui reste
+	   au-dessus a quand même de la valeur : c'est la forme qui a coûté les
+	   deux défauts réels (viser la fenêtre au premier plan, rediriger
+	   l'entrée). Un cas d'exécution reste à écrire le jour où le harnais
+	   saura tenir une console. */
 
 	const ollama = scriptInstallation("ollama", "Neo Quiz - Ollama", msgs);
 			r.check("ollama installation : ni connexion ni REPL, le message puis la fin",

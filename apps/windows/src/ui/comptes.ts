@@ -210,7 +210,17 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		for (const etat of resultat.etats) poserLigne(etat);
 	}
 
-	async function deconnecter(outil: CliTool): Promise<void> {
+	/** `bouton` est le même que `surClicAction` a désactivé avant d'ouvrir la
+	    confirmation : cette fonction en est désormais RESPONSABLE jusqu'au
+	    bout, sur les QUATRE issues possibles (succès, échec, exception,
+	    annulé — l'annulation ne passe pas par ici, elle réactive déjà dans
+	    son propre rappel). Un verrou posé et relâché sur une seule branche
+	    est exactement le défaut déjà corrigé ailleurs dans ce chantier
+	    (`process.ts`, l'arbre de process tué sur TOUTES les issues) : ici,
+	    « échec » et « exception » redessinaient déjà la ligne PARFOIS via
+	    `finally` dans `surClicAction`, mais `deconnecter` a son propre
+	    chemin de retour anticipé qui, lui, ne touchait jamais `bouton`. */
+	async function deconnecter(outil: CliTool, bouton: HTMLButtonElement): Promise<void> {
 		let verdict: "ok" | "echec" | "indisponible";
 		try {
 			verdict = await requireHost("process").deconnecterCli(outil);
@@ -221,9 +231,14 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		if (detruit) return;
 		if (verdict !== "ok") {
 			currentHost().ui.notice(t("app.comptes.logoutFailed", { name: nomOutil(outil) }));
+			// ÉCHEC OU EXCEPTION : la ligne ne se redessine pas (rien n'a changé
+			// côté compte), donc RIEN d'autre ne réactivera ce bouton — sans ce
+			// réveil explicite, il reste mort jusqu'à la fermeture des réglages.
+			bouton.disabled = false;
 			return;
 		}
-		// `"ok"` : la ligne est RE-SONDÉE, jamais supposée déconnectée.
+		// `"ok"` : la ligne est RE-SONDÉE, jamais supposée déconnectée — le
+		// redessin remplace `bouton` par un bouton neuf, actif.
 		await redessiner();
 	}
 
@@ -249,7 +264,7 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 						bouton.disabled = false;
 						return;
 					}
-					void deconnecter(outil);
+					void deconnecter(outil, bouton);
 				},
 				t("app.comptes.logoutDetail"),
 				"log-out",

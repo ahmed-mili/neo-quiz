@@ -208,7 +208,10 @@
 	color: var(--text-muted);
 }
 
-.qbd-provider-logo svg {
+/* img : le logo de Codex est un PNG inline (image passée par Ahmed), les
+   autres marques restent des SVG — les deux sont dimensionnés pareil. */
+.qbd-provider-logo svg,
+.qbd-provider-logo img {
 	width: 15px;
 	height: 15px;
 }
@@ -573,7 +576,8 @@
 
 /* Glyphe du trigger AGRANDI avec la barre (18px) — les logos des menus
    déroulants gardent leur 15px de base. */
-.qbd-provider-trigger-logo .qbd-provider-logo svg {
+.qbd-provider-trigger-logo .qbd-provider-logo svg,
+.qbd-provider-trigger-logo .qbd-provider-logo img {
 	width: 18px;
 	height: 18px;
 }

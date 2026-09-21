@@ -545,6 +545,10 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 			console.warn(LOG_PREFIX, "lecture des comptes IA impossible:", e);
 			if (detruit) return;
 			fermerPopoversUsage();
+			/* Le message d'erreur ne remplace que le SQUELETTE (premier montage
+			   sans cache) : des lignes déjà posées depuis le cache valent mieux
+			   qu'un message d'erreur — on les garde telles quelles. */
+			if (cacheEtats) return;
 			liste.replaceChildren();
 			ajouter(liste, "p", "nq-comptes-erreur", t("app.comptes.loadError"));
 			return;

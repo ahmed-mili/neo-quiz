@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-09-21
+
 ### Added
 - Settings now list your Claude Code, Codex, Antigravity and Ollama CLI accounts with the address each one is signed in with, and let you sign in and out directly without opening a terminal.
 - Every connected account gets a usage icon: hover it for Claude Code and Codex to see the five-hour and weekly windows with their reset times, click it for Ollama to open your usage page on ollama.com, and click it for Antigravity to open its CLI, where `/usage` shows your quota.

@@ -118,6 +118,25 @@ async function lireEtats(): Promise<{ etats: EtatCompte[]; ollamaSigninUrl: stri
 	return { etats, ollamaSigninUrl: ollama.signinUrl };
 }
 
+/* ── LE CACHE MODULE DES DERNIERS ÉTATS LUS ──
+   EN MÉMOIRE, jamais sur disque : un état figé sur disque afficherait au
+   DÉMARRAGE SUIVANT un compte déconnecté depuis comme connecté, sans rien
+   pour le corriger avant la fin de la lecture — en session, au contraire, le
+   `redessiner()` de fond remplace le dessin du cache en quelques secondes,
+   et une lecture en échec ne l'efface pas (les quatre lignes d'avant valent
+   mieux qu'un message d'erreur). Rien de sensible dedans : `EtatCompte` ne
+   porte qu'une adresse, un forfait et des booléens — aucun jeton ne sort
+   jamais du principal (éprouvé par `check:electron-comptes`).
+
+   POURQUOI IL EXISTE (Ahmed, 2026-09-21 : « parfois je vois que c'est vide »)
+   : une lecture coûte environ une seconde (`agy models` est un aller-retour
+   réseau), et rouvrir les réglages dans la même session repartait chaque
+   fois du squelette — un écran vide une seconde de trop, à chaque ouverture.
+   Au montage avec un cache : dessiner DESSUS tout de suite, sans squelette,
+   puis laisser `redessiner()` remplacer en fond. Premier montage de la
+   session (cache null) : squelette, comme avant. */
+let cacheEtats: { etats: EtatCompte[]; ollamaSigninUrl: string | null } | null = null;
+
 /** L'action que le bouton d'une ligne déclenche : c'est `installe` qui
     tranche la première branche, jamais `connecte` seul — un outil absent de
     la machine et un outil présent mais déconnecté ne peuvent pas partager le
@@ -532,6 +551,10 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		}
 		if (detruit) return;
 		ollamaSigninUrl = resultat.ollamaSigninUrl;
+		/* Toute lecture réussie RÉFRAÎCHIT le cache — jamais un échec : le
+		   dessin d'avant (ci-dessous ou posé depuis le cache au montage) reste
+		   ce que la prochaine ouverture montrera. */
+		cacheEtats = { etats: resultat.etats, ollamaSigninUrl: resultat.ollamaSigninUrl };
 		fermerPopoversUsage();
 		liste.replaceChildren();
 		for (const etat of resultat.etats) poserLigne(etat);
@@ -718,7 +741,17 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		}
 	}
 
-	poserSquelette();
+	/* Au montage : un cache de la session existe → dessiner DESSUS tout de
+	   suite, SANS squelette (c'est le point de la TÂCHE B : rouvrir les
+	   réglages ne doit pas repartir d'un écran vide), puis `redessiner()`
+	   remplace en fond quand la lecture fraîche arrive. Premier montage de la
+	   session (cache null) : squelette, comme avant. */
+	if (cacheEtats) {
+		ollamaSigninUrl = cacheEtats.ollamaSigninUrl;
+		for (const etat of cacheEtats.etats) poserLigne(etat);
+	} else {
+		poserSquelette();
+	}
 	void redessiner();
 
 	return () => { detruit = true; annulerOuverturesEnAttente(); fermerPopoversUsage(); };

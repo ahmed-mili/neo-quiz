@@ -317,7 +317,10 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 			// (squelette ou vraies jauges), inconnue avant qu'il soit dans le DOM.
 			popEl.style.visibility = "hidden";
 			const pr = popEl.getBoundingClientRect();
-			const left = Math.min(Math.max(8, r.left), window.innerWidth - pr.width - 8);
+			// Bord DROIT du popover aligné sur celui du badge (retour d'écran
+			// 2026-09-21 : calé sur r.left, il débordait de la modale des
+			// réglages — le popover, portalé au body, n'est pas borné par elle).
+			const left = Math.max(8, Math.min(r.right - pr.width, window.innerWidth - pr.width - 8));
 			let top = r.bottom + 6;
 			if (top + pr.height > window.innerHeight - 8) top = Math.max(8, r.top - pr.height - 6);
 			popEl.style.left = left + "px";

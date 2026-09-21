@@ -427,13 +427,17 @@ export function monterReglagesComptes(section: HTMLElement): () => void {
 		// sans forfait connu (libellé « Usage ») : c'est lui qui ouvre le
 		// popover d'usage au survol — le rendre conditionnel à `etat.plan`
 		// ferait perdre l'accès à l'usage quand le forfait n'est pas lisible
-		// (Claude Code, 2026-09-21). Antigravity et Ollama n'ont pas d'usage :
-		// simple badge inerte s'ils publient un forfait, rien sinon.
+		// (Claude Code, 2026-09-21). Rendu seulement SI CONNECTÉ : sur une
+		// ligne « not installed » ou « not connected », un bouton « Usage »
+		// n'ouvrirait qu'un cas d'échec. Antigravity et Ollama n'ont pas
+		// d'usage : simple badge inerte s'ils publient un forfait, rien sinon.
 		if (etat.outil === "claude" || etat.outil === "codex") {
-			const badge = ajouter(ligne, "button", "nq-comptes-plan",
-				etat.plan ?? t("app.comptes.usage"));
-			badge.type = "button";
-			attacherPopoverUsage(badge, etat.outil);
+			if (etat.connecte) {
+				const badge = ajouter(ligne, "button", "nq-comptes-plan",
+					etat.plan ?? t("app.comptes.usage"));
+				badge.type = "button";
+				attacherPopoverUsage(badge, etat.outil);
+			}
 		} else if (etat.plan) {
 			ajouter(ligne, "span", "nq-comptes-plan", etat.plan);
 		}

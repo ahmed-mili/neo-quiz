@@ -17,6 +17,20 @@ export const ID_VIDEO = /^[A-Za-z0-9_-]{11}$/;
 /** Toute URL http(s) d'un texte, sans les chevrons ni guillemets qui l'entourent. */
 const URL_RE = /https?:\/\/[^\s<>()"'`]+/gi;
 
+/** La ponctuation qui ferme une phrase, collée à la fin d'un lien. */
+const PONCTUATION_FINALE = /[.,;:!?»)\]'"]+$/;
+
+/**
+ * La ponctuation qui SUIT un lien dans une phrase n'est pas l'URL :
+ * « résume https://youtu.be/x. » — sans ce retrait, l'identifiant porterait
+ * un point final, serait rejeté par `ID_VIDEO`, et la vidéo serait ignorée
+ * en silence. La ponctuation sort aussi des liens non lus (la notice du
+ * §5.4 ne va pas répéter le point au lecteur).
+ */
+function nettoyerUrl(brut: string): string {
+	return brut.replace(PONCTUATION_FINALE, "");
+}
+
 /** L'identifiant que porte une URL, YouTube seul : null pour tout autre hôte. */
 function idDepuisUrl(brut: string): string | null {
 	let u: URL;
@@ -38,7 +52,7 @@ function idDepuisUrl(brut: string): string | null {
 export function idYoutube(texte: string): string[] {
 	const vus: string[] = [];
 	for (const m of texte.matchAll(URL_RE)) {
-		const id = idDepuisUrl(m[0]);
+		const id = idDepuisUrl(nettoyerUrl(m[0]));
 		if (id && !vus.includes(id)) vus.push(id);
 	}
 	return vus;
@@ -46,5 +60,5 @@ export function idYoutube(texte: string): string[] {
 
 /** Les URL http(s) du texte qui ne sont pas des vidéos YouTube. */
 export function liensNonLus(texte: string): string[] {
-	return [...texte.matchAll(URL_RE)].map(m => m[0]).filter(u => !idDepuisUrl(u));
+	return [...texte.matchAll(URL_RE)].map(m => nettoyerUrl(m[0])).filter(u => !idDepuisUrl(u));
 }

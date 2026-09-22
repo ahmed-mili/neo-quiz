@@ -24,9 +24,14 @@ export interface LibellesDocument {
 /** Les caractères que Windows refuse dans un nom de fichier. */
 const INTERDITS = /[/\\:*?"<>|]/g;
 
-/** `<titre nettoyé>.md` : interdits Windows retirés, 80 car. avant l'extension. */
+/**
+ * `<titre nettoyé>.md` : interdits Windows retirés, trim, 80 car. avant
+ * l'extension. Un titre entièrement interdit ou vide retombe sur « video » :
+ * un nom « .md » nu serait un fichier caché chez Windows.
+ */
 export function nomDocument(titre: string): string {
-	return titre.replace(INTERDITS, "").trim().slice(0, 80) + ".md";
+	const nettoye = titre.replace(INTERDITS, "").trim().slice(0, 80);
+	return (nettoye || "video") + ".md";
 }
 
 /** La durée que yt-dlp donne en secondes : "6:06", "1:02:03" au-delà d'une heure. */

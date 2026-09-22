@@ -82,6 +82,24 @@ await withSrcModule(
 			yt.liensNonLus("regarde https://vimeo.com/1 et https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
 		], [[], ["https://vimeo.com/1"]]);
 
+		/* LA PONCTUATION QUI FERME UNE PHRASE n'est pas l'URL : « résume
+		   https://youtu.be/x. » est la façon NORMALE d'écrire un lien dans
+		   une phrase. Sans le retrait, l'identifiant porterait le point,
+		   serait rejeté par `ID_VIDEO`, et la vidéo serait ignorée en
+		   silence. La ponctuation sort aussi des liens non lus — la notice
+		   ne va pas répéter le point au lecteur. */
+		r.check("un lien suivi d'une ponctuation est reconnu", [
+			yt.idYoutube("résume https://youtu.be/dQw4w9WgXcQ."),
+			yt.idYoutube("https://www.youtube.com/watch?v=dQw4w9WgXcQ, puis"),
+			yt.idYoutube("« regarde https://youtu.be/nh9e18bXpzc», dit-il."),
+			yt.liensNonLus("voir https://vimeo.com/1."),
+		], [
+			["dQw4w9WgXcQ"],
+			["dQw4w9WgXcQ"],
+			["nh9e18bXpzc"],
+			["https://vimeo.com/1"],
+		]);
+
 		/* ── LA RÈGLE DE LA PISTE ──
 		   Fixture réelle : vidéo anglaise à sous-titres manuels (`en`), vidéo
 		   française sans aucun manuel mais avec `fr-orig`. Les clés de langue
@@ -159,6 +177,12 @@ await withSrcModule(
 		r.check("nom de la fixture française intact",
 			document.nomDocument(fr.title),
 			"Les variables en Python®.md");
+		/* Repli du REVUE (2026-09-22) : un titre entièrement interdit ou vide
+		   ne donne pas « .md » nu — un fichier caché chez Windows. */
+		r.check("titre entièrement interdit ou vide : repli video.md", [
+			document.nomDocument('***'),
+			document.nomDocument(""),
+		], ["video.md", "video.md"]);
 
 		/* ── LE DOCUMENT ──
 		   Les libellés de section arrivent en paramètre : le noyau ne

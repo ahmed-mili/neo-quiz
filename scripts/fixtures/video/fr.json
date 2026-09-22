@@ -1,0 +1,798 @@
+{
+	"id": "nh9e18bXpzc",
+	"title": "Les variables en Python®",
+	"channel": "Informatique Sans Complexe !",
+	"uploader": "Informatique Sans Complexe !",
+	"duration": 366,
+	"language": "fr",
+	"description": "Nouvelle vidéo de la série sur la programmation Python®\nUne variable, c'est quoi ? et comment les utiliser ?\nUne vidéo qui permet aux débutants de commencer avec Python.",
+	"thumbnail": "https://i.ytimg.com/vi/nh9e18bXpzc/maxresdefault.jpg",
+	"subtitles": {},
+	"automatic_captions": {
+		"ab": [
+			{
+				"ext": "json3"
+			}
+		],
+		"aa": [
+			{
+				"ext": "json3"
+			}
+		],
+		"af": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ak": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sq": [
+			{
+				"ext": "json3"
+			}
+		],
+		"am": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ar": [
+			{
+				"ext": "json3"
+			}
+		],
+		"hy": [
+			{
+				"ext": "json3"
+			}
+		],
+		"as": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ay": [
+			{
+				"ext": "json3"
+			}
+		],
+		"az": [
+			{
+				"ext": "json3"
+			}
+		],
+		"bn": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ba": [
+			{
+				"ext": "json3"
+			}
+		],
+		"eu": [
+			{
+				"ext": "json3"
+			}
+		],
+		"be": [
+			{
+				"ext": "json3"
+			}
+		],
+		"bho": [
+			{
+				"ext": "json3"
+			}
+		],
+		"bs": [
+			{
+				"ext": "json3"
+			}
+		],
+		"br": [
+			{
+				"ext": "json3"
+			}
+		],
+		"bg": [
+			{
+				"ext": "json3"
+			}
+		],
+		"my": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ca": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ceb": [
+			{
+				"ext": "json3"
+			}
+		],
+		"zh-Hans": [
+			{
+				"ext": "json3"
+			}
+		],
+		"zh-Hant": [
+			{
+				"ext": "json3"
+			}
+		],
+		"co": [
+			{
+				"ext": "json3"
+			}
+		],
+		"hr": [
+			{
+				"ext": "json3"
+			}
+		],
+		"cs": [
+			{
+				"ext": "json3"
+			}
+		],
+		"da": [
+			{
+				"ext": "json3"
+			}
+		],
+		"dv": [
+			{
+				"ext": "json3"
+			}
+		],
+		"nl": [
+			{
+				"ext": "json3"
+			}
+		],
+		"dz": [
+			{
+				"ext": "json3"
+			}
+		],
+		"en": [
+			{
+				"ext": "json3"
+			}
+		],
+		"eo": [
+			{
+				"ext": "json3"
+			}
+		],
+		"et": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ee": [
+			{
+				"ext": "json3"
+			}
+		],
+		"fo": [
+			{
+				"ext": "json3"
+			}
+		],
+		"fj": [
+			{
+				"ext": "json3"
+			}
+		],
+		"fil": [
+			{
+				"ext": "json3"
+			}
+		],
+		"fi": [
+			{
+				"ext": "json3"
+			}
+		],
+		"fr-orig": [
+			{
+				"ext": "json3"
+			}
+		],
+		"fr": [
+			{
+				"ext": "json3"
+			}
+		],
+		"gaa": [
+			{
+				"ext": "json3"
+			}
+		],
+		"gl": [
+			{
+				"ext": "json3"
+			}
+		],
+		"lg": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ka": [
+			{
+				"ext": "json3"
+			}
+		],
+		"de": [
+			{
+				"ext": "json3"
+			}
+		],
+		"el": [
+			{
+				"ext": "json3"
+			}
+		],
+		"gn": [
+			{
+				"ext": "json3"
+			}
+		],
+		"gu": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ht": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ha": [
+			{
+				"ext": "json3"
+			}
+		],
+		"haw": [
+			{
+				"ext": "json3"
+			}
+		],
+		"iw": [
+			{
+				"ext": "json3"
+			}
+		],
+		"hi": [
+			{
+				"ext": "json3"
+			}
+		],
+		"hmn": [
+			{
+				"ext": "json3"
+			}
+		],
+		"hu": [
+			{
+				"ext": "json3"
+			}
+		],
+		"is": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ig": [
+			{
+				"ext": "json3"
+			}
+		],
+		"id": [
+			{
+				"ext": "json3"
+			}
+		],
+		"iu": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ga": [
+			{
+				"ext": "json3"
+			}
+		],
+		"it": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ja": [
+			{
+				"ext": "json3"
+			}
+		],
+		"jv": [
+			{
+				"ext": "json3"
+			}
+		],
+		"kl": [
+			{
+				"ext": "json3"
+			}
+		],
+		"kn": [
+			{
+				"ext": "json3"
+			}
+		],
+		"kk": [
+			{
+				"ext": "json3"
+			}
+		],
+		"kha": [
+			{
+				"ext": "json3"
+			}
+		],
+		"km": [
+			{
+				"ext": "json3"
+			}
+		],
+		"rw": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ko": [
+			{
+				"ext": "json3"
+			}
+		],
+		"kri": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ku": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ky": [
+			{
+				"ext": "json3"
+			}
+		],
+		"lo": [
+			{
+				"ext": "json3"
+			}
+		],
+		"la": [
+			{
+				"ext": "json3"
+			}
+		],
+		"lv": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ln": [
+			{
+				"ext": "json3"
+			}
+		],
+		"lt": [
+			{
+				"ext": "json3"
+			}
+		],
+		"lua": [
+			{
+				"ext": "json3"
+			}
+		],
+		"luo": [
+			{
+				"ext": "json3"
+			}
+		],
+		"lb": [
+			{
+				"ext": "json3"
+			}
+		],
+		"mk": [
+			{
+				"ext": "json3"
+			}
+		],
+		"mg": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ms": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ml": [
+			{
+				"ext": "json3"
+			}
+		],
+		"mt": [
+			{
+				"ext": "json3"
+			}
+		],
+		"gv": [
+			{
+				"ext": "json3"
+			}
+		],
+		"mi": [
+			{
+				"ext": "json3"
+			}
+		],
+		"mr": [
+			{
+				"ext": "json3"
+			}
+		],
+		"mn": [
+			{
+				"ext": "json3"
+			}
+		],
+		"mfe": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ne": [
+			{
+				"ext": "json3"
+			}
+		],
+		"new": [
+			{
+				"ext": "json3"
+			}
+		],
+		"nso": [
+			{
+				"ext": "json3"
+			}
+		],
+		"no": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ny": [
+			{
+				"ext": "json3"
+			}
+		],
+		"oc": [
+			{
+				"ext": "json3"
+			}
+		],
+		"or": [
+			{
+				"ext": "json3"
+			}
+		],
+		"om": [
+			{
+				"ext": "json3"
+			}
+		],
+		"os": [
+			{
+				"ext": "json3"
+			}
+		],
+		"pam": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ps": [
+			{
+				"ext": "json3"
+			}
+		],
+		"fa": [
+			{
+				"ext": "json3"
+			}
+		],
+		"pl": [
+			{
+				"ext": "json3"
+			}
+		],
+		"pt": [
+			{
+				"ext": "json3"
+			}
+		],
+		"pt-PT": [
+			{
+				"ext": "json3"
+			}
+		],
+		"pa": [
+			{
+				"ext": "json3"
+			}
+		],
+		"qu": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ro": [
+			{
+				"ext": "json3"
+			}
+		],
+		"rn": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ru": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sm": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sg": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sa": [
+			{
+				"ext": "json3"
+			}
+		],
+		"gd": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sr": [
+			{
+				"ext": "json3"
+			}
+		],
+		"crs": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sn": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sd": [
+			{
+				"ext": "json3"
+			}
+		],
+		"si": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sk": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sl": [
+			{
+				"ext": "json3"
+			}
+		],
+		"so": [
+			{
+				"ext": "json3"
+			}
+		],
+		"st": [
+			{
+				"ext": "json3"
+			}
+		],
+		"es": [
+			{
+				"ext": "json3"
+			}
+		],
+		"su": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sw": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ss": [
+			{
+				"ext": "json3"
+			}
+		],
+		"sv": [
+			{
+				"ext": "json3"
+			}
+		],
+		"tg": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ta": [
+			{
+				"ext": "json3"
+			}
+		],
+		"tt": [
+			{
+				"ext": "json3"
+			}
+		],
+		"te": [
+			{
+				"ext": "json3"
+			}
+		],
+		"th": [
+			{
+				"ext": "json3"
+			}
+		],
+		"bo": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ti": [
+			{
+				"ext": "json3"
+			}
+		],
+		"to": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ts": [
+			{
+				"ext": "json3"
+			}
+		],
+		"tn": [
+			{
+				"ext": "json3"
+			}
+		],
+		"tum": [
+			{
+				"ext": "json3"
+			}
+		],
+		"tr": [
+			{
+				"ext": "json3"
+			}
+		],
+		"tk": [
+			{
+				"ext": "json3"
+			}
+		],
+		"uk": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ur": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ug": [
+			{
+				"ext": "json3"
+			}
+		],
+		"uz": [
+			{
+				"ext": "json3"
+			}
+		],
+		"ve": [
+			{
+				"ext": "json3"
+			}
+		],
+		"vi": [
+			{
+				"ext": "json3"
+			}
+		],
+		"war": [
+			{
+				"ext": "json3"
+			}
+		],
+		"cy": [
+			{
+				"ext": "json3"
+			}
+		],
+		"fy": [
+			{
+				"ext": "json3"
+			}
+		],
+		"wo": [
+			{
+				"ext": "json3"
+			}
+		],
+		"xh": [
+			{
+				"ext": "json3"
+			}
+		],
+		"yi": [
+			{
+				"ext": "json3"
+			}
+		],
+		"yo": [
+			{
+				"ext": "json3"
+			}
+		],
+		"zu": [
+			{
+				"ext": "json3"
+			}
+		]
+	}
+}

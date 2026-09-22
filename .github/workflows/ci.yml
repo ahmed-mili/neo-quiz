@@ -34,6 +34,14 @@ jobs:
       - name: Host boundary ratchet
         run: npm run check:host
 
+      # LE NOYAU DES VIDÉOS YouTube : la règle de la piste (manuelle dans la
+      # langue de la vidéo, sinon automatique `-orig`, JAMAIS une piste
+      # traduite) ne se voit dans aucun typecheck — la prendre, c'est joindre
+      # au prompt une transcription qui n'est pas celle de la vidéo. Charge le
+      # code réel et des fixtures yt-dlp réduites ; pur, lecture seule.
+      - name: YouTube videos kernel
+        run: npm run check:video
+
       # Le contenu d'un dossier (documents, notes, `Liens.md`) et ce que
       # « Créer avec l'IA » joint depuis un dossier : pur, lecture seule.
       - name: Folder contents and links grammar

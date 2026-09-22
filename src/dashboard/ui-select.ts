@@ -855,6 +855,11 @@ export interface ProviderChannelOption {
 	/** Le logo propre au CANAL, quand il en a un (Claude Code, Codex,
 	    Antigravity) ; absent, la ligne reprend celui de sa marque. */
 	logo?: string;
+	/** La pastille « Gratuit » (t("ai.badge.free")), posée UNIQUEMENT sur les
+	    canaux gratuits — jamais de pastille « payant » : un canal payant se
+	    reconnaît à l'ABSENCE de cette pastille. `undefined` sur un canal
+	    payant, jamais une chaîne vide. */
+	badge?: string;
 }
 
 /** Une marque dans le menu : un logo, un nom, et un ou plusieurs canaux. */
@@ -955,7 +960,9 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 		const logo = ajouter(btn, "span", "qbd-provider-logo qbd-provider-logo--" + b.logo);
 		opts.renderLogo(logo, b.logo);
 		const body = ajouter(btn, "div", "qbd-provider-option-body");
-		ajouter(body, "span", "qbd-select-option-label", b.label);
+		const top = ajouter(body, "div", "qbd-provider-option-top");
+		ajouter(top, "span", "qbd-select-option-label", b.label);
+		if (c.badge) ajouter(top, "span", "qbd-provider-option-badge", c.badge);
 		ajouter(body, "span", "qbd-provider-option-sub", c.resume || c.sub || c.label);
 		appendStatut(btn, c.dot, c.value);
 		if (c.disabled) return;
@@ -1059,7 +1066,9 @@ export function openProviderMenu(anchorEl: HTMLElement, opts: OpenProviderMenuOp
 			opts.renderLogo(logo, c.logo);
 		}
 		const body = ajouter(btn, "div", "qbd-provider-option-body");
-		ajouter(body, "span", "qbd-select-option-label", c.label);
+		const top = ajouter(body, "div", "qbd-provider-option-top");
+		ajouter(top, "span", "qbd-select-option-label", c.label);
+		if (c.badge) ajouter(top, "span", "qbd-provider-option-badge", c.badge);
 		if (c.sub) ajouter(body, "span", "qbd-provider-option-sub", c.sub);
 		appendStatut(btn, c.dot, c.value);
 		if (c.disabled) return;

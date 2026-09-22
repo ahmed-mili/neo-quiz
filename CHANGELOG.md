@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Added
+- The assistant menu marks every channel a free account can use with a "Free" badge, and a new "Paid assistants" settings section lets you hide the subscription-only assistants (Claude Code, Codex CLI) from that menu. Hiding the one you were using falls back to the first free assistant instead of leaving a dead selection.
+
 ### Fixed
 - The app window now appears much faster on first launch: the file watcher no longer crawls and monitors `.git`, `.obsidian`, `node_modules` and other hidden folders it was going to discard anyway.
 - The app window now appears noticeably faster on cold starts: the file watcher's initial scan used to run before the window was shown and slow that down, it now starts right after instead.

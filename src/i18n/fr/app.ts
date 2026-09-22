@@ -59,6 +59,11 @@ export const FR_APP: Record<keyof typeof EN_APP, string> = {
 	"app.settings.folderContainsOpen": "Ce dossier contient un de vos dossiers ouverts.",
 
 	"app.settings.accounts": "Comptes CLI",
+	/* Réglages « Canaux payants » (application seulement) — voir le
+	   commentaire du dictionnaire anglais. */
+	"app.settings.paidChannels": "Assistants payants",
+	"app.settings.paidChannelsHint": "Ces assistants demandent un abonnement. Décochez-en un pour le retirer du menu de génération ; recochez-le pour le remettre.",
+	"app.settings.paidChannelRow": "Afficher « {name} » dans le menu de génération",
 	"app.comptes.claude": "Claude Code",
 	"app.comptes.codex": "Codex CLI",
 	"app.comptes.agy": "Antigravity CLI",

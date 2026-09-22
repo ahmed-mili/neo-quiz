@@ -57,6 +57,11 @@ export interface AiSettings {
 	aiOllamaPlansAppris?: Record<string, "inclus" | "payant">;
 	/** Le dernier plan vu par `/api/me` (« free », « pro »…) ; "" = inconnu. */
 	aiOllamaPlanCompte?: string;
+	/** Les identifiants des canaux PAYANTS que l'utilisateur a retirés du menu
+	    des fournisseurs (Réglages de l'application ; `ai-providers.ts`,
+	    `canalVisible`). Un canal gratuit ne s'y ajoute JAMAIS. Vide : rien de
+	    masqué. */
+	aiCanauxPayantsMasques?: string[];
 	/** Les canaux web dont l'utilisateur a coché « Ne plus afficher » sur le
 	    modal d'avertissement (« claude-web »). Un tableau : chaque site aura
 	    peut-être le sien. */

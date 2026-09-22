@@ -356,6 +356,19 @@ export interface Canal {
 	    de la marque, à la demande d'Ahmed (2026-09-21) — la ligne web, elle,
 	    garde le logo de marque déjà présent. ABSENT : la marque suffit. */
 	logo?: string;
+	/** Vrai quand un compte GRATUIT suffit pour générer un quiz par CE canal ;
+	    faux quand il exige un abonnement payant (Claude Code → abonnement
+	    Claude, Codex CLI → abonnement ChatGPT). AUCUN montant, AUCUN quota,
+	    AUCUNE mention de tarif étudiant : ces valeurs vieilliraient en
+	    silence dans le code, c'est précisément ce que ce booléen évite.
+	    Établi le 2026-09-22 ; ce qui le rendrait FAUX : une marque qui ouvre
+	    ou ferme l'accès gratuit à l'un de ses canaux.
+	    OBLIGATOIRE, sans défaut implicite : le menu ne montre une pastille
+	    QUE sur les canaux gratuits (§ « une pastille, sur les gratuits »),
+	    donc un statut payant se lit par l'ABSENCE de pastille — un champ
+	    oublié passerait pour payant sans qu'un mot ne le dise si TypeScript
+	    ne forçait pas chaque canal à le déclarer explicitement. */
+	gratuit: boolean;
 }
 
 export interface Marque {
@@ -381,8 +394,8 @@ export const MARQUES: Marque[] = [
 		name: "Claude",
 		logo: "claude",
 		canaux: [
-			{ id: "claude-web", label: "claude.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://claude.ai/new", parametre: "q", urlMax: 63000 }, avertissement: true },
-			{ id: "claude-code", label: "Claude Code", get sub() { return t("ai.channel.cliSub"); }, type: "cli", logo: "claudecode" }
+			{ id: "claude-web", label: "claude.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://claude.ai/new", parametre: "q", urlMax: 63000 }, avertissement: true, gratuit: true },
+			{ id: "claude-code", label: "Claude Code", get sub() { return t("ai.channel.cliSub"); }, type: "cli", logo: "claudecode", gratuit: false }
 		]
 	},
 	{
@@ -390,8 +403,8 @@ export const MARQUES: Marque[] = [
 		name: "ChatGPT",
 		logo: "openai",
 		canaux: [
-			{ id: "chatgpt-web", label: "chatgpt.com", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://chatgpt.com/", parametre: "prompt", urlMax: 59000 } },
-			{ id: "codex", label: "Codex CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli", logo: "codex" }
+			{ id: "chatgpt-web", label: "chatgpt.com", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://chatgpt.com/", parametre: "prompt", urlMax: 59000 }, gratuit: true },
+			{ id: "codex", label: "Codex CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli", logo: "codex", gratuit: false }
 		]
 	},
 	{
@@ -405,8 +418,11 @@ export const MARQUES: Marque[] = [
 			   donnait `qfill`). Le texte part donc toujours par le presse-papier,
 			   et la modale d'attente le dit ; `urlMax` ne sert alors à rien, mais
 			   le contrat le veut. */
-			{ id: "gemini-web", label: "gemini.google.com", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://gemini.google.com/app", urlMax: 0 } },
-			{ id: "antigravity-cli", label: "Antigravity CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli", logo: "antigravity" }
+			{ id: "gemini-web", label: "gemini.google.com", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://gemini.google.com/app", urlMax: 0 }, gratuit: true },
+			/* Antigravity CLI est GRATUIT (un simple compte Google) : établi
+			   2026-09-22, ce qui le rendrait faux est le même que pour tout
+			   autre canal — Google fermant son accès gratuit à Antigravity. */
+			{ id: "antigravity-cli", label: "Antigravity CLI", get sub() { return t("ai.channel.cliSub"); }, type: "cli", logo: "antigravity", gratuit: true }
 		]
 	},
 	{
@@ -415,7 +431,7 @@ export const MARQUES: Marque[] = [
 		logo: "perplexity",
 		secondaire: true,
 		canaux: [
-			{ id: "perplexity-web", label: "perplexity.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://www.perplexity.ai/", parametre: "qfill", urlMax: 63000 } }
+			{ id: "perplexity-web", label: "perplexity.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://www.perplexity.ai/", parametre: "qfill", urlMax: 63000 }, gratuit: true }
 		]
 	},
 	{
@@ -424,7 +440,11 @@ export const MARQUES: Marque[] = [
 		logo: "ollama",
 		secondaire: true,
 		canaux: [
-			{ id: "ollama", label: "Ollama", get sub() { return t("ai.provider.ollamaSub"); }, type: "serveur" }
+			/* Le SERVEUR est gratuit (local) ; le mode CLOUD est un modèle payant
+			   choisi DANS ce même canal (voir `resolveOllamaSelection` /
+			   `aiOllamaCloudKey`), pas une ligne distincte du menu — il n'y a donc
+			   rien d'autre à marquer ici tant que le menu n'a pas de ligne à lui. */
+			{ id: "ollama", label: "Ollama", get sub() { return t("ai.provider.ollamaSub"); }, type: "serveur", gratuit: true }
 		]
 	},
 	/* DEEPSEEK, retenu le 2026-09-20 : parmi les assistants candidats, c'est
@@ -438,7 +458,7 @@ export const MARQUES: Marque[] = [
 		logo: "deepseek",
 		secondaire: true,
 		canaux: [
-			{ id: "deepseek-web", label: "chat.deepseek.com", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://chat.deepseek.com/", urlMax: 0 } }
+			{ id: "deepseek-web", label: "chat.deepseek.com", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://chat.deepseek.com/", urlMax: 0 }, gratuit: true }
 		]
 	},
 	/* MISTRAL, retenu le 2026-09-21. Le motif n'est PAS un usage constaté
@@ -459,7 +479,7 @@ export const MARQUES: Marque[] = [
 		logo: "mistral",
 		secondaire: true,
 		canaux: [
-			{ id: "mistral-web", label: "chat.mistral.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://chat.mistral.ai/chat", urlMax: 0 } }
+			{ id: "mistral-web", label: "chat.mistral.ai", get sub() { return t("ai.channel.webSub"); }, type: "web", web: { nouvelle: "https://chat.mistral.ai/chat", urlMax: 0 }, gratuit: true }
 		]
 	}
 ];
@@ -488,6 +508,60 @@ export function estCanalWeb(canalId: string): boolean {
 /** Vrai quand le site sait s'ouvrir avec la question : `web` est posé. */
 export function estCanalCable(canalId: string): boolean {
 	return !!getCanal(canalId)?.web;
+}
+
+/* ── Masquage des canaux payants (réglage `aiCanauxPayantsMasques`, à la
+   carte : un canal payant à la fois, jamais une case unique) ──
+
+   Le réglage porte les identifiants des canaux PAYANTS que l'utilisateur a
+   choisi de masquer du menu. DÉFAUT : liste vide, rien de masqué — personne
+   ne doit voir un fournisseur disparaître sans l'avoir demandé. Ces trois
+   fonctions sont PURES et prennent le réglage BRUT (`unknown`) : il vient du
+   disque, d'une version future du format, ou d'un fichier trafiqué à la
+   main, et rien ici ne doit lever ni faire échouer le rendu du menu pour
+   une valeur douteuse. ── */
+
+/** Normalise un réglage `aiCanauxPayantsMasques` venu du disque en liste
+    d'identifiants de canaux CONNUS : une valeur qui n'est pas un tableau
+    devient une liste vide, une entrée qui n'est pas une chaîne ou qui ne
+    nomme aucun canal de `MARQUES` est ignorée — jamais une exception. */
+export function canauxMasquesValides(brut: unknown): string[] {
+	if (!Array.isArray(brut)) return [];
+	return brut.filter((v): v is string => typeof v === "string" && !!getCanal(v));
+}
+
+/** Vrai quand CE canal reste utilisable compte tenu du masquage : un canal
+    GRATUIT n'est jamais masqué quoi que porte le réglage (seuls des canaux
+    payants s'y ajoutent, depuis l'interface) ; un canal inconnu n'est pas
+    davantage masqué, il n'y a rien à bloquer sur un identifiant qu'on ne
+    comprend pas. */
+export function canalVisible(canalId: string, masquesBruts: unknown): boolean {
+	const canal = getCanal(canalId);
+	if (!canal || canal.gratuit) return true;
+	return !canauxMasquesValides(masquesBruts).includes(canalId);
+}
+
+/** Le premier canal GRATUIT et visible, dans l'ordre du menu (les marques de
+    `MARQUES`, puis leurs canaux, dans cet ordre). C'est celui sur lequel un
+    fournisseur démasqué retombe. `undefined` seulement si plus aucun canal
+    gratuit n'existe — n'arrive pas avec la table actuelle (chaque marque
+    garde un canal gratuit), mais reste un cas normal, pas une exception. */
+export function premierCanalGratuitVisible(masquesBruts: unknown): string | undefined {
+	for (const m of MARQUES) {
+		for (const c of m.canaux) {
+			if (c.gratuit && canalVisible(c.id, masquesBruts)) return c.id;
+		}
+	}
+	return undefined;
+}
+
+/** Le fournisseur à retenir APRÈS un changement de masquage : inchangé s'il
+    reste visible (ou si rien n'était sélectionné), sinon le premier canal
+    gratuit disponible — jamais laissé sur un canal devenu invisible, ce qui
+    ferait échouer la génération sans qu'aucun message ne l'explique. */
+export function resoudreApresMasquage(providerActuel: string, masquesBruts: unknown): string {
+	if (!providerActuel || canalVisible(providerActuel, masquesBruts)) return providerActuel;
+	return premierCanalGratuitVisible(masquesBruts) ?? providerActuel;
 }
 
 /* ── Modèles par provider ── */

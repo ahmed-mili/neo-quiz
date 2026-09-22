@@ -23,6 +23,9 @@ import { poserLogoObsidian } from "./marques";
 import { chargerLangue, lireLangue, reglerLangue } from "./langue";
 import { pont } from "../host/pont";
 import { createSelect } from "../../../../src/dashboard/ui-select";
+import { getProvider, MARQUES, resoudreApresMasquage } from "../../../../src/dashboard/ai-providers";
+import type { AiSettingsHost } from "../../../../src/dashboard/ai-settings-host";
+import type { AiSettings } from "../../../../src/types/dashboard-ctx";
 import { monterReglagesFond } from "./fond";
 import { monterReglagesComptes } from "./comptes";
 
@@ -30,6 +33,11 @@ export function renderSettings(
 	root: HTMLElement,
 	deps: {
 		onFoldersChanged(): void;
+		/** Les réglages IA : la section « Canaux payants » lit et écrit le
+		    masquage par le MÊME hôte que la page « Générer » — une écriture
+		    directe au principal (comptes.ts) laisserait le cache du client
+		    derrière, et le menu masqué reviendrait au prochain rendu. */
+		aiSettings: AiSettingsHost;
 	},
 ): () => void {
 	/* NI en-tête, NI bouton retour : depuis que les réglages sont une MODALE
@@ -208,6 +216,52 @@ export function renderSettings(
 	const comptes = ajouter(contenu, "section", "nq-reglages-section");
 	ajouter(comptes, "h3", "nq-reglages-titre", t("app.settings.accounts"));
 	const demonterComptes = monterReglagesComptes(comptes);
+
+	/* ── Canaux payants ──
+	   Une case par canal qui exige un abonnement (aujourd'hui Claude Code et
+	   Codex CLI, les seuls de `Canal.gratuit === false`). Décocher masque le
+	   canal du menu « Générer » ; recocher le remet. Si le canal masqué était
+	   le fournisseur retenu, le repli (premier canal gratuit) part DANS LA
+	   MÊME écriture — le laisser retenu ferait échouer la génération sans un
+	   mot à l'écran. */
+	const payants = ajouter(contenu, "section", "nq-reglages-section");
+	ajouter(payants, "h3", "nq-reglages-titre", t("app.settings.paidChannels"));
+	ajouter(payants, "p", "nq-reglages-aide", t("app.settings.paidChannelsHint"));
+	const masques = deps.aiSettings.get().aiCanauxPayantsMasques;
+	let unPayant = false;
+	for (const marque of MARQUES) {
+		for (const canal of marque.canaux) {
+			if (canal.gratuit) continue;
+			unPayant = true;
+			const ligne = ajouter(payants, "label", "nq-reglages-case");
+			const case_ = ajouter(ligne, "input");
+			case_.type = "checkbox";
+			case_.checked = true;
+			ajouter(ligne, "span", "nq-reglages-nom", t("app.settings.paidChannelRow", { name: marque.name + " · " + canal.label }));
+			case_.addEventListener("change", () => {
+				const courant = deps.aiSettings.get().aiCanauxPayantsMasques ?? [];
+				const suivants = case_.checked
+					? courant.filter(id => id !== canal.id)
+					: [...new Set([...courant, canal.id])];
+				const avant = deps.aiSettings.get().aiProvider || "";
+				const resolu = resoudreApresMasquage(avant, suivants);
+				const patch: Partial<AiSettings> = { aiCanauxPayantsMasques: suivants };
+				if (resolu !== avant) {
+					patch.aiProvider = resolu;
+					// Le modèle suit le fournisseur : même règle que le choix
+					// d'un fournisseur dans le menu (défaut du nouveau canal).
+					if (resolu) patch.aiModel = getProvider(resolu).defaultModel;
+				}
+				void deps.aiSettings.save(patch);
+			});
+		}
+	}
+	if (!unPayant) {
+		// Aucun canal payant dans la table : pas de section vide au milieu des
+		// autres — elle se retirerait d'elle-même dès qu'un canal devient
+		// payant, jamais l'inverse.
+		payants.remove();
+	}
 
 	/* ── Fond d'écran ── */
 	const fond = ajouter(contenu, "section", "nq-reglages-section");

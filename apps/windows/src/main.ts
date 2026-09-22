@@ -176,6 +176,9 @@ function ouvrirReglages(): void {
 				   chaud laisserait vivre l'index et le surveillant de l'ancienne
 				   liste. */
 				onFoldersChanged: () => location.reload(),
+				/* Le MÊME hôte que la page « Générer » : la section « Canaux
+				   payants » écrit à travers lui, le cache du client suit. */
+				aiSettings: reglagesIa,
 			});
 		},
 		onClose: () => {

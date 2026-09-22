@@ -195,6 +195,9 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	/* Modèle Ollama cloud hors du plan gratuit (recommandations du démon ou
 	   402 déjà essuyé) : badge dans la liste ET sur le trigger du menu. */
 	"ai.badge.pro": "Pro",
+	/* Pastille d'un canal GRATUIT dans le sous-menu des fournisseurs — voir le
+	   commentaire du dictionnaire anglais (une seule pastille, jamais « payant »). */
+	"ai.badge.free": "Gratuit",
 
 	/* ── Niveaux d'effort (sous-titres seulement) ── */
 	"ai.effort.ultracodeSub": "xhigh + workflows",

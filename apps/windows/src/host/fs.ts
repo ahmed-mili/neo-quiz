@@ -283,15 +283,20 @@ function versContrat(
  * par son crawl initial, et un fichier disparu AVANT ce crawl n'y passe
  * jamais — ni `add`, ni plus tard `unlink`. Le miroir (et le catalogue)
  * garde donc une entrée FANTÔME — un quiz dont la note n'existe plus —
- * jusqu'au prochain lancement, qui repart d'une hydratation fraîche. Cette
- * classe de course existait déjà avant cette tâche (le parcours et le
- * surveillant sont deux lectures distinctes du disque depuis Tauri) ; ce que
- * cette tâche change, c'est sa FENÊTRE : elle ne couvre plus la seule durée
- * du parcours, mais tout l'intervalle entre la fin de l'hydratation et
- * l'appel de `demarrerSurveillance` par `main.ts` — plus large, parce que
- * délibérément posé après que la fenêtre soit visible. Ce n'est pas une
- * régression cachée : c'est une limite assumée, écrite ici plutôt que
- * promise refermée.
+ * jusqu'au prochain lancement, qui repart d'une hydratation fraîche. Un
+ * RENOMMAGE survenu dans la même fenêtre relève du MÊME mécanisme (chokidar
+ * ne réémet jamais l'ancien chemin) mais avec un symptôme DIFFÉRENT : ni
+ * `unlink` de l'ancien ni, forcément, `add` du nouveau (si celui-ci existait
+ * déjà au moment du crawl), donc l'ancienne entrée reste au catalogue EN
+ * PLUS de la nouvelle — un DOUBLON, là où une suppression ne laisse qu'une
+ * entrée fantôme seule. Cette classe de course existait déjà avant cette
+ * tâche (le parcours et le surveillant sont deux lectures distinctes du
+ * disque depuis Tauri) ; ce que cette tâche change, c'est sa FENÊTRE : elle
+ * ne couvre plus la seule durée du parcours, mais tout l'intervalle entre la
+ * fin de l'hydratation et l'appel de `demarrerSurveillance` par `main.ts` —
+ * plus large, parce que délibérément posé après que la fenêtre soit
+ * visible. Ce n'est pas une régression cachée : c'est une limite assumée,
+ * écrite ici plutôt que promise refermée.
  *
  * `mtime` n'est relevé par le principal que sur les `.md` (`parcours.ts`) :
  * seul le catalogue de quiz s'en sert (tri « récents »). Les autres fichiers

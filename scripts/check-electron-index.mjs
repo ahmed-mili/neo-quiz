@@ -206,6 +206,31 @@ await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerInd
 		});
 
 		/*
+		 * CHOIX ASSUMÉ, écrit en commentaire sur `ignorerChemin`
+		 * (`index-fichiers.ts`) : un FICHIER caché directement sous une racine
+		 * (`racine/.gitignore`) reste SURVEILLÉ, pour ne pas diverger de
+		 * `parcours.ts` (le parcours initial qui hydrate le rendu), qui
+		 * n'exclut que les DOSSIERS. Le choix est écrit en commentaire, mais
+		 * rien ne le prouvait : un resserrement futur de `ignorerChemin` sur le
+		 * nom du fichier lui-même ne ferait rougir aucun cas. Celui-ci le fige.
+		 */
+		await cas(r, "un fichier caché directement sous la racine (.gitignore) reste surveillé", async () => {
+			const racine = await racineNeuve();
+			const index = creerIndex([racine]);
+			const evs = [];
+			const arreter = index.surveiller(ev => evs.push(ev), 50);
+			try {
+				await attendre(200);
+				await writeFile(join(racine, ".gitignore"), "node_modules");
+				await attendre(500);
+				r.check("un fichier caché directement sous la racine (.gitignore) reste surveillé",
+					evs.some(e => e.kind === "create"), true);
+			} finally {
+				arreter();
+			}
+		});
+
+		/*
 		 * DEUX cas distincts pour « hors racine », depuis la ronde de correction
 		 * 1 (commit 6581ec5) : le premier, initialement seul, ne discriminait
 		 * PAS — `watch(racinesAbs, …)` ne reçoit que les racines exactes, donc

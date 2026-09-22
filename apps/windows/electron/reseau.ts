@@ -58,9 +58,23 @@ export type Transport = (url: string, init: {
  * `localhost`/`127.0.0.1` : Ollama en local. `ollama.com` : son catalogue de
  * modèles (lu dynamiquement, jamais codé en dur — mémoire projet
  * `ollama-latest-version-only`). `api.anthropic.com` : l'usage de
- * l'abonnement. Une entrée de plus ici est une décision, pas une commodité.
+ * l'abonnement. Les quatre suivants : les vidéos YouTube (spec du
+ * 2026-09-22, §3.2) — `i.ytimg.com` pour la miniature d'une vidéo lue ;
+ * `github.com`, `objects.githubusercontent.com` et
+ * `release-assets.githubusercontent.com` pour le téléchargement de
+ * yt-dlp par la tâche 3 (la release et ses assets). Une entrée de plus
+ * ici est une décision, pas une commodité.
  */
-export const HOTES_AUTORISES = new Set(["localhost", "127.0.0.1", "ollama.com", "api.anthropic.com"]);
+export const HOTES_AUTORISES = new Set([
+	"localhost",
+	"127.0.0.1",
+	"ollama.com",
+	"api.anthropic.com",
+	"github.com",
+	"objects.githubusercontent.com",
+	"release-assets.githubusercontent.com",
+	"i.ytimg.com",
+]);
 
 /** L'hôte d'`aiOllamaUrl` s'ajoute ici par DEUX chemins, et aucun des deux
     n'est un canal du pont : `main.ts` (`admettreHoteOllama`) le relit des

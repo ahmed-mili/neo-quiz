@@ -42,6 +42,14 @@ jobs:
       - name: YouTube videos kernel
         run: npm run check:video
 
+      # TROUVER ET LANCER YT-DLP CÔTÉ PRINCIPAL : la copie gérée avant le
+      # PATH étendu, l'identifiant revalidé avant tout lancement, les
+      # arguments des deux appels figés, l'arbre tué au délai, la
+      # miniature jamais bloquante. Sur un faux yt-dlp de la fixture, dans
+      # un dossier temporaire — de vrais process, rien d'installé.
+      - name: yt-dlp main process
+        run: npm run check:electron-video
+
       # Le contenu d'un dossier (documents, notes, `Liens.md`) et ce que
       # « Créer avec l'IA » joint depuis un dossier : pur, lecture seule.
       - name: Folder contents and links grammar

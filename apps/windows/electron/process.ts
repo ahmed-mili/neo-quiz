@@ -827,11 +827,52 @@ export function scriptDisposerPourSite(hwndNeo: number, coller = false): string 
 		   quand le TITRE de la fenêtre a cessé de changer pendant six dixièmes
 		   de seconde (il suit le `<title>` de la page, qui change au fil du
 		   chargement), quinze secondes au plus ; trois dixièmes de plus pour
-		   le composer, puis la fenêtre est ramenée devant et reçoit Ctrl+V.
-		   Une seconde et demie puis sept dixièmes, au premier essai, se
-		   voyaient attendre (2026-09-20). « colle » est écrit pour le
-		   principal. Meilleur effort, voir le contrat (`HostDepot.disposer`). */
+		   le composer, puis la fenêtre est ramenée devant et reçoit Ctrl+A
+		   puis Ctrl+V. Une seconde et demie puis sept dixièmes, au premier
+		   essai, se voyaient attendre (2026-09-20).
+
+		   UNE REDIRECTION TARDIVE PEUT DÉTRUIRE CE PREMIER COLLAGE : mesuré sur
+		   chat.mistral.ai (2026-09-22, trois ouvertures à froid) — la page
+		   atterrit parfois sur `/chat` puis redirige vers `/work` jusqu'à
+		   t ≈ 4,9 s, APRÈS que ce script a déjà collé, car les deux pages
+		   portent le MÊME titre (« Vibe »), stable dès ~1 s : la boucle de
+		   stabilité ci-dessus ne voit donc rien venir. Le composer de `/work`
+		   n'est refocalisé par le site que vers t ≈ 7,8 s. Le script ne
+		   s'arrête donc plus au premier collage : il guette le titre encore
+		   `$delaiSurveillanceMs` (12 s — une douzaine de secondes, large marge
+		   sur la redirection à 4,9 s). Sa signature est un titre qui repasse
+		   par une valeur VIDE (pendant la navigation) puis se RESTABILISE (la
+		   nouvelle page chargée, même règle de six lectures identiques que
+		   ci-dessus) ; alors seulement, `$delaiComposerApresRedirectionMs`
+		   (3 s — la redirection à 4,9 s et le composer prêt à 7,8 s laissent
+		   ~2,9 s, arrondis avec marge) plus tard, un second collage part.
+
+		   CHAQUE collage — premier ET second — est précédé d'un Ctrl+A :
+		   idempotent, il REMPLACE un prompt déjà présent au lieu de le
+		   dupliquer (un rebond de titre sur `/chat` sans redirection
+		   collerait sinon deux fois bout à bout). Sans danger quand le focus
+		   n'est PAS dans le composer : la sélection porte alors sur un
+		   document non éditable (la page), et coller sur une sélection hors
+		   champ de saisie ne fait rien.
+
+		   SÛRETÉ : ces touches partent vers la fenêtre ACTIVE du système, pas
+		   vers un handle — `SetForegroundWindow` peut échouer sans le dire
+		   (Windows le refuse à un processus qui n'a pas déjà le focus), et
+		   envoyer quand même livrerait Ctrl+A puis Ctrl+V à l'application où
+		   l'utilisateur est en train de taper. `EnvoyerTouches` vérifie donc
+		   `GetForegroundWindow` avant CHAQUE envoi — avant le Ctrl+A comme
+		   avant le Ctrl+V, aux deux tentatives — et renonce sans rien envoyer
+		   dès que la fenêtre au premier plan n'est plus `$hNav`.
+
+		   « colle » / « recolle » sont écrits pour le principal, un par
+		   collage RÉUSSI (jamais à l'aveugle) ; ni l'un ni l'autre n'est
+		   encore lu (voir `disposerPourSite` plus bas) — ce ne sont que des
+		   repères de diagnostic. Meilleur effort, voir le contrat
+		   (`HostDepot.disposer`). */
 		"  if ($coller) {",
+		"    function AuPremierPlan($h) { [NQ.Win]::GetForegroundWindow() -eq $h }",
+		"    function EnvoyerTouches($h, $touches) { if (-not (AuPremierPlan $h)) { return $false }; [System.Windows.Forms.SendKeys]::SendWait($touches); return $true }",
+		"    function TenterCollage($h) { [NQ.Win]::SetForegroundWindow($h) | Out-Null; Start-Sleep -Milliseconds 150; if (-not (EnvoyerTouches $h '^a')) { return $false }; if (-not (EnvoyerTouches $h '^v')) { return $false }; return $true }",
 		"    $sb = New-Object System.Text.StringBuilder 512; $prec = ''; $stable = 0",
 		"    for ($i = 0; $i -lt 150; $i++) {",
 		"      Start-Sleep -Milliseconds 100",
@@ -841,10 +882,25 @@ export function scriptDisposerPourSite(hwndNeo: number, coller = false): string 
 		"      if ($stable -ge 6) { break }",
 		"    }",
 		"    Start-Sleep -Milliseconds 300",
-		"    [NQ.Win]::SetForegroundWindow($hNav) | Out-Null",
-		"    Start-Sleep -Milliseconds 150",
-		"    [System.Windows.Forms.SendKeys]::SendWait('^v')",
-		"    [Console]::Out.WriteLine('colle'); [Console]::Out.Flush()",
+		"    if (TenterCollage $hNav) { [Console]::Out.WriteLine('colle'); [Console]::Out.Flush() }",
+		"    $delaiSurveillanceMs = 12000",
+		"    $delaiComposerApresRedirectionMs = 3000",
+		"    $vu = $false; $restabilise = $false; $stable = 0",
+		"    for ($i = 0; $i -lt ($delaiSurveillanceMs / 100); $i++) {",
+		"      Start-Sleep -Milliseconds 100",
+		"      [NQ.Win]::GetWindowText($hNav, $sb, 512) | Out-Null; $t = $sb.ToString()",
+		"      if (-not $vu) {",
+		"        if (-not $t) { $vu = $true }",
+		"      } else {",
+		"        if ($t -and $t -eq $prec) { $stable++ } else { $stable = 0 }",
+		"        if ($stable -ge 6) { $restabilise = $true; break }",
+		"      }",
+		"      $prec = $t",
+		"    }",
+		"    if ($restabilise) {",
+		"      Start-Sleep -Milliseconds $delaiComposerApresRedirectionMs",
+		"      if (TenterCollage $hNav) { [Console]::Out.WriteLine('recolle'); [Console]::Out.Flush() }",
+		"    }",
 		"  }",
 		"}",
 	].join("\n");

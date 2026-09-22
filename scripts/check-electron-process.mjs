@@ -715,21 +715,49 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		r.check("réduite (2) est rendue normale (1) : on l'avait restaurée pour la poser", lirePlacement("avant 5 2 0 0 10 10\r").showCmd, 1);
 		r.check("toute autre ligne : null", [lirePlacement("pret"), lirePlacement("avant x"), lirePlacement("")], [null, null, null]);
 		/* LE COLLAGE (2026-09-20) : demandé, le script attend que le titre de
-		   la fenêtre du navigateur se stabilise, la ramène devant et envoie
-		   Ctrl+V, APRÈS l'avoir posée ; non demandé, rien de tout cela. */
+		   la fenêtre du navigateur se stabilise, la ramène devant et colle,
+		   APRÈS l'avoir posée ; non demandé, rien de tout cela. */
 		const avecCollage = scriptDisposerPourSite(1234, true);
-		r.check("collage demandé : titre stable, premier plan, Ctrl+V, après la pose du navigateur",
+		r.check("collage demandé : titre stable, premier plan, colle, après la pose du navigateur",
 			{
 				drapeau: avecCollage.includes("$coller = $true"),
 				titre: avecCollage.includes("GetWindowText($hNav"),
-				devant: avecCollage.includes("SetForegroundWindow($hNav)"),
-				colle: avecCollage.includes("SendWait('^v')"),
-				apresPose: avecCollage.indexOf("SendWait('^v')") > avecCollage.lastIndexOf("Poser $hNav"),
+				devant: avecCollage.includes("SetForegroundWindow($h)"),
+				colle: avecCollage.includes("EnvoyerTouches $h '^v'"),
+				apresPose: avecCollage.indexOf("EnvoyerTouches $h '^v'") > avecCollage.lastIndexOf("Poser $hNav"),
 			},
 			{ drapeau: true, titre: true, devant: true, colle: true, apresPose: true });
 		r.check("collage non demandé : le drapeau est faux et rien ne dépend de lui hors de sa garde",
 			{ drapeau: disposition.includes("$coller = $false"), garde: disposition.includes("if ($coller) {") },
 			{ drapeau: true, garde: true });
+		/* ROBUSTESSE À LA REDIRECTION TARDIVE (2026-09-22, chat.mistral.ai qui
+		   colle une fois sur deux : mesuré, la page peut rediriger de `/chat`
+		   vers `/work` jusqu'à t ≈ 4,9 s, APRÈS un premier collage qu'une
+		   fenêtre au même titre rendait invisible à la boucle de stabilité). */
+		r.check("Ctrl+A précède Ctrl+V (idempotence : un second collage remplace plutôt que double)",
+			avecCollage.indexOf("EnvoyerTouches $h '^a'") > 0 && avecCollage.indexOf("EnvoyerTouches $h '^a'") < avecCollage.indexOf("EnvoyerTouches $h '^v'"), true);
+		r.check("le premier plan (GetForegroundWindow == $h) est vérifié avant CHAQUE envoi de touches, jamais un envoi aveugle",
+			{
+				compareAuHwndNavigateur: avecCollage.includes("GetForegroundWindow() -eq $h"),
+				gardeCoLocaliseeAvecLenvoi: /if \(-not \(AuPremierPlan \$h\)\) \{ return \$false \}; \[System\.Windows\.Forms\.SendKeys\]::SendWait/.test(avecCollage),
+				unSeulSendWaitDansLeScript: (avecCollage.match(/SendKeys\]::SendWait/g) || []).length,
+			},
+			{ compareAuHwndNavigateur: true, gardeCoLocaliseeAvecLenvoi: true, unSeulSendWaitDansLeScript: 1 });
+		r.check("« colle »/« recolle » ne sont écrits qu'après un collage RÉUSSI, jamais inconditionnellement",
+			{
+				colleConditionnel: avecCollage.includes("if (TenterCollage $hNav) { [Console]::Out.WriteLine('colle')"),
+				recolleConditionnel: avecCollage.includes("if (TenterCollage $hNav) { [Console]::Out.WriteLine('recolle')"),
+				appeleeDeuxFois: (avecCollage.match(/TenterCollage \$hNav/g) || []).length,
+			},
+			{ colleConditionnel: true, recolleConditionnel: true, appeleeDeuxFois: 2 });
+		r.check("une redirection tardive (titre qui repasse par vide puis se restabilise, même règle de six lectures) déclenche un second collage borné dans le temps",
+			{
+				guetteLeVide: avecCollage.includes("if (-not $t) { $vu = $true }"),
+				restabilisationMemeRegleDeSix: avecCollage.includes("if ($stable -ge 6) { $restabilise = $true; break }"),
+				secondCollageGardeParLaRestabilisation: avecCollage.indexOf("if ($restabilise) {") < avecCollage.indexOf("WriteLine('recolle')"),
+				delaisBornesEtNommes: avecCollage.includes("$delaiSurveillanceMs = 12000") && avecCollage.includes("$delaiComposerApresRedirectionMs = 3000"),
+			},
+			{ guetteLeVide: true, restabilisationMemeRegleDeSix: true, secondCollageGardeParLaRestabilisation: true, delaisBornesEtNommes: true });
 		const restauration = scriptRestaurerNavigateur({ hwnd: 725604, showCmd: 3, l: 100, t: 100, r: 1000, b: 700 });
 		r.check("la restauration passe par SetWindowPlacement, sur la fenêtre si elle existe encore",
 			[restauration.includes("IsWindow($h)"), restauration.includes("SetWindowPlacement"), restauration.includes("$p.ShowCmd = 3"), restauration.includes("$p.R = 1000")], [true, true, true, true]);

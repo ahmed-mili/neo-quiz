@@ -23,6 +23,7 @@
 ══════════════════════════════════════════════════════════ */
 
 import { watch } from "chokidar";
+import type { Stats } from "node:fs";
 import * as path from "node:path";
 import type { HostFile, HostFileEvent } from "../../../src/host/types";
 import { dossierHorsCatalogue, evenementDeRenommageDossier, horsCatalogue } from "./catalogue";
@@ -50,6 +51,24 @@ export interface EvenementRenommageDossier {
 /** Ce que `surveiller` peut pousser : un événement de FICHIER (`HostFileEvent`,
     jamais `rename` — voir sa doc), ou un renommage de DOSSIER apparié. */
 export type EvenementSurveillant = HostFileEvent | EvenementRenommageDossier;
+
+/**
+ * Ce que `surveiller` rend : une fonction D'ARRÊT, comme avant — tout appelant
+ * de production (`canaux.ts`) continue de l'appeler comme une simple
+ * `() => void`, ce qui reste valide (une fonction porteuse d'une propriété
+ * supplémentaire est toujours assignable à `() => void`).
+ *
+ * `getWatched`, ajouté en PLUS pour cette tâche : le SEUL moyen de prouver,
+ * dans `check-electron-index.mjs`, qu'un dossier ignoré n'est jamais ENTRÉ
+ * dans la table interne de chokidar (`watcher.getWatched()`) — pas seulement
+ * filtré après coup à la sortie. `surveiller` ne rendait pas son watcher avant
+ * cette tâche, et il n'y a aucune autre raison de l'exposer : c'est le minimum
+ * qu'un contrôle déterministe demande.
+ */
+export interface ArreterSurveillance {
+	(): void;
+	getWatched(): Record<string, string[]>;
+}
 
 /** La fenêtre d'appariement d'un renommage de dossier : le temps qu'on laisse
     à un `addDir` pour rejoindre l'`unlinkDir` qui vient de le précéder (ou
@@ -92,7 +111,7 @@ export interface Index {
 	 * `EvenementRenommageDossier` : il est PORTÉ, jamais deviné (tâche 5,
 	 * `evenementDeRenommageDossier`).
 	 */
-	surveiller(onEvenement: (ev: EvenementSurveillant) => void, delayMs?: number): () => void;
+	surveiller(onEvenement: (ev: EvenementSurveillant) => void, delayMs?: number): ArreterSurveillance;
 }
 
 /** Le `HostFile` d'un chemin déjà au format contrat (indice de racine en
@@ -244,10 +263,65 @@ export function creerIndex(racines: string[]): Index {
 			await recaler(chemin);
 		},
 		surveiller(onEvenement, delayMs = 300) {
-			if (racinesAbs.length === 0) return () => {};
+			if (racinesAbs.length === 0) {
+				return Object.assign(() => {}, { getWatched: () => ({}) as Record<string, string[]> });
+			}
+
+			/**
+			 * La fonction `ignored` de chokidar : ce chemin doit-il rester HORS du
+			 * crawl ET de la surveillance — pas seulement filtré après coup ? Sans
+			 * elle, chokidar crawle et pose un watcher OS sur `.git/`, `.obsidian/`,
+			 * `node_modules/` et tout leur contenu, alors que `horsCatalogue` les
+			 * écarte de toute façon ensuite : c'est ce crawl, dans le processus
+			 * PRINCIPAL, qui le rend sourd à l'IPC pendant tout son déroulement.
+			 *
+			 * Chokidar 5 a retiré les globs : `ignored` est une fonction qui reçoit
+			 * un chemin ABSOLU natif (`\` sous Windows) et, TANTÔT SEULEMENT, ses
+			 * `stats` — chokidar refait un premier appel sans elles sur un chemin
+			 * déjà tranché ailleurs AVEC elles (son propre crawl les a déjà). Ne
+			 * jamais s'appuyer sur `stats` pour distinguer un fichier d'un dossier
+			 * dans le cas général ; sans elles, ne rien ignorer ici ne laisse rien
+			 * passer qui ne sera pas rejugé juste après, stats en main.
+			 *
+			 * PIÈGE, et c'est le point important : la règle porte sur le chemin
+			 * RELATIF à la racine surveillée (`contratDepuisAbsolu`), JAMAIS sur
+			 * l'absolu entier — un vault peut vivre sous un dossier caché
+			 * (`C:\Users\X\.mes-vaults\Personal`) ; tester tous les segments de
+			 * l'absolu ignorerait alors la racine elle-même et couperait TOUT
+			 * événement, en silence.
+			 *
+			 * RÉUTILISE `dossierHorsCatalogue` (dossiers) / `horsCatalogue`
+			 * (fichiers) de `catalogue.ts` — jamais une recopie de leur règle : deux
+			 * copies divergeraient en silence, comme l'en-tête de ce fichier le
+			 * rappelle déjà pour `normaliser`.
+			 *
+			 * CHOIX — un FICHIER caché directement sous une racine
+			 * (`racine/.gitignore`, `racine/.note.md`) reste SURVEILLÉ :
+			 * `horsCatalogue` ne teste que les segments INTERMÉDIAIRES d'un chemin de
+			 * fichier, jamais son propre nom, et `parcours.ts` (le parcours initial
+			 * qui hydrate le rendu) ne l'exclut pas non plus — il n'écarte que les
+			 * DOSSIERS (`dossierIgnore` n'y est appliqué qu'à `entree.isDirectory()`).
+			 * L'exclure ICI ferait diverger le surveillant du parcours initial : un
+			 * fichier listé au démarrage dont plus aucune modification ne serait
+			 * jamais rapportée, en silence. Un DOSSIER caché/`node_modules` est donc
+			 * écarté sur son propre nom ; un FICHIER ne l'est que par un dossier
+			 * ignoré sur son chemin, jamais par son propre nom.
+			 */
+			function ignorerChemin(absolu: string, stats?: Stats): boolean {
+				const chemin = contratDepuisAbsolu(racinesAbs, absolu);
+				// `null` : hors de toute racine — ne devrait jamais arriver, chokidar ne
+				// présente que ce qu'il trouve SOUS `racinesAbs` (voir le cas « le
+				// surveillant n'est monté que sur les racines qu'on lui donne » du
+				// contrôle) ; chemin réduit à l'indice (ex. « 0 ») : la racine
+				// elle-même, jamais ignorée.
+				if (chemin === null || !chemin.includes("/")) return false;
+				if (!stats) return false;
+				return stats.isDirectory() ? dossierHorsCatalogue(chemin) : horsCatalogue(chemin);
+			}
 
 			const watcher = watch(racinesAbs, {
 				ignoreInitial: false,
+				ignored: ignorerChemin,
 				// `false` et non `{ stabilityThreshold: 0, … }` : chokidar traite un
 				// seuil de zéro comme « toujours instable » sur certains systèmes de
 				// fichiers, alors que `false` désactive proprement l'attente — c'est
@@ -337,12 +411,16 @@ export function creerIndex(racines: string[]): Index {
 			});
 
 			let arretee = false;
-			return () => {
+			function arreter(): void {
 				if (arretee) return;
 				arretee = true;
 				if (minuterieDossier) clearTimeout(minuterieDossier);
 				void watcher.close();
-			};
+			}
+			// `getWatched`, greffé sur la fonction d'arrêt : voir la doc de
+			// `ArreterSurveillance` — `canaux.ts` continue de l'appeler comme une
+			// simple `() => void`, seul `check-electron-index.mjs` s'en sert.
+			return Object.assign(arreter, { getWatched: () => watcher.getWatched() });
 		},
 	};
 }

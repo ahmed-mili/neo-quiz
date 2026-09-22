@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-09-22
+
 ### Added
 - The assistant menu marks every channel a free account can use with a "Free" badge, and a new "Paid assistants" settings section lets you hide the subscription-only assistants (Claude Code, Codex CLI) from that menu. Hiding the one you were using falls back to the first free assistant instead of leaving a dead selection.
 

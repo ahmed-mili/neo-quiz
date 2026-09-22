@@ -273,4 +273,15 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.err.ollama": "Erreur Ollama : {detail}",
 	"ai.err.ollamaEmpty": "Ollama n'a retourné aucune réponse. Vérifiez que le modèle est installé.",
 
+	/* ── La lecture d'une vidéo YouTube (les libellés du document) ──
+	   Composés à CHAQUE transcription par t() — jamais dans une constante :
+	   voir le commentaire du dictionnaire anglais (référence). */
+	"ai.video.doc.chaine": "Chaîne",
+	"ai.video.doc.duree": "Durée",
+	"ai.video.doc.langue": "Langue",
+	"ai.video.doc.manuel": "sous-titres manuels",
+	"ai.video.doc.auto": "sous-titres automatiques",
+	"ai.video.doc.description": "Description",
+	"ai.video.doc.transcription": "Transcription",
+
 };

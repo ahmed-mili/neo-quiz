@@ -54,6 +54,11 @@ import type { EtatMiseAJour } from "./mise-a-jour-etat";
    `import type` seulement : ce module reste sans Node (`check:host`,
    assertion 6), et `Outil` n'est qu'une union de littéraux. */
 import type { Outil } from "./process";
+/* Les types de la lecture d'une vidéo, dérivés des modules du principal —
+   `import type` seulement, comme `Outil` : un champ ajouté là-bas doit
+   faire rougir la compilation ici. */
+import type { CodeErreurVideo, ResultatVideo } from "./video";
+import type { CodeInstallation, InfosInstallation } from "./video-installation";
 
 /** Une requête réseau telle qu'elle TRAVERSE le pont : `HostNetRequest` sans
     son `signal`. Un `AbortSignal` ne se clone pas (l'IPC sérialise par clonage
@@ -83,6 +88,18 @@ export type RequeteCli = Omit<Parameters<HostProcess["run"]>[0], "signal">;
 export type ResultatCli =
 	| { ok: true; stdout: string; stderr: string; code: number | null; sortie?: string }
 	| { ok: false; nom: string; message: string };
+
+/** Ce que les canaux `video.transcrire` et `video.installer` RENDENT —
+    une ENVELOPPE, jamais un rejet, pour la même raison que `ResultatCli` :
+    l'IPC d'Electron sérialise une erreur jetée en message + pile et PERD
+    son `name`. Or tout le jugement de l'appelant tient dans ce code
+    (`absent`, `reseau`, `delai`, `annule`… ; `empreinte`, `reseau`). Le
+    message brut, lui, n'est pas traduit : seuls le code et le `detail` de
+    journal traversent, et l'hôte du rendu reconstruit une erreur typée
+    (`apps/windows/src/host/video.ts`). */
+export type EnveloppeVideo<Valeur, Code extends string> =
+	| { ok: true; valeur: Valeur }
+	| { ok: false; code: Code; detail?: string };
 
 /** L'état de la fenêtre, poussé par le principal — voir `Pont.fenetre.surEtat`. */
 export interface EtatFenetre {
@@ -629,6 +646,37 @@ export interface Pont {
 		glisser(absolus: string[], saisi: number, image?: { png: string; echelle: number }): Promise<"depose" | "revenu" | "impossible">;
 		terminer(): Promise<void>;
 	};
+
+	/**
+	 * LA LECTURE D'UNE VIDÉO YOUTUBE : `HostVideo` (`src/host/types.ts`) vu
+	 * du rendu. Le rendu ne passe qu'un IDENTIFIANT — revalidé par
+	 * `ID_VIDEO` dans `canaux.ts` AVANT tout lancement, puis revalidé par
+	 * `video.ts` une seconde fois ; l'URL est reconstruite par le
+	 * principal, jamais reçue d'ici : un rendu compromis ne peut faire
+	 * lancer yt-dlp que sur youtube.com, et sur une vidéo désignée par
+	 * son seul identifiant.
+	 *
+	 * `installer` PORTE son rappel de progression, mais il ne traverse
+	 * pas : même règle que le `signal` du réseau et des CLI — LE RAPPEL
+	 * NE TRAVERSE PAS L'IPC. Les octets partent par un canal POUSSÉ
+	 * (`neo:video/progression`, comme `collage.texte`), et le
+	 * préchargement s'y abonne AVANT d'invoquer, puis se désabonne dans
+	 * un `finally` (voir `preload.ts`).
+	 *
+	 * `transcrire` et `installer` rendent une ENVELOPPE
+	 * (`EnveloppeVideo`) et non un rejet : même raison que
+	 * `ResultatCli`. `annuler(id)` relaie l'abandon : le principal tient
+	 * un contrôleur PAR transcription vivante de cet identifiant
+	 * (`video.ts`), et l'abandon tue l'ARBRE de yt-dlp. Un identifiant
+	 * sans transcription vivante est ignoré.
+	 */
+	video: {
+		etat(): Promise<{ present: boolean; source: "app" | "systeme" | null }>;
+		infosInstallation(): Promise<InfosInstallation>;
+		installer(surProgression: (recus: number, total: number | null) => void): Promise<EnveloppeVideo<null, CodeInstallation>>;
+		transcrire(id: string): Promise<EnveloppeVideo<ResultatVideo, CodeErreurVideo>>;
+		annuler(id: string): Promise<void>;
+	};
 }
 
 /**
@@ -732,6 +780,15 @@ export const CANAUX = {
 	/** POUSSÉ par le principal (`webContents.send`), comme `evenement` et
 	    `miseAJourEtat`. */
 	collageTexte: "neo:collage/texte",
+	videoEtat: "neo:video/etat",
+	videoInfos: "neo:video/infos",
+	videoInstaller: "neo:video/installer",
+	/** POUSSÉ par le principal (`webContents.send`), comme `evenement` et
+	    `collageTexte` : la progression d'une installation, en OCTETS (reçus
+	    à cet instant, total lu par HEAD, `null` quand il est ignoré). */
+	videoProgression: "neo:video/progression",
+	videoTranscrire: "neo:video/transcrire",
+	videoAnnuler: "neo:video/annuler",
 } as const;
 
 /** La clé des RÉGLAGES IA de l'application (`neo.reglages`) : les MÊMES

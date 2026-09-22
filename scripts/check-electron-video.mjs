@@ -106,7 +106,23 @@ const nomDuRejet = async (promesse) => {
 	}
 };
 
-await withSrcModule("apps/windows/electron/video.ts", async ({ executableYtDlp, transcrire }) => {
+/* Les libellés du document, FIXTURES du contrôle : la production les
+   compose par `t()` dans la langue de l'UI, À CHAQUE transcription
+   (canaux.ts, tâche 4) ; ici ils passent tels quels par `DepsVideo` —
+   avec une MARQUE sur le dernier, pour que ce soit CE QUI PASSE par les
+   deps qui se retrouve dans le document, et pas une constante du
+   module. */
+const LIBELLES = {
+	chaine: "Chaîne",
+	duree: "Durée",
+	langue: "Langue",
+	manuel: "sous-titres manuels",
+	auto: "sous-titres automatiques",
+	description: "Description",
+	transcription: "Transcription-FIXTURE",
+};
+
+await withSrcModule("apps/windows/electron/video.ts", async ({ executableYtDlp, transcrire, annulerVideo }) => {
 	const r = makeReporter("Électron — yt-dlp");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-video-"));
 	const maison = join(racine, "maison");
@@ -150,6 +166,9 @@ await withSrcModule("apps/windows/electron/video.ts", async ({ executableYtDlp, 
 		env: envFaux,
 		delaiMs: 20000,
 		miniature: async (url) => url === "https://i.ytimg.com/vi/" + idBonne + "/maxresdefault.jpg" ? miniatureInjectee : "data:image/jpeg;base64,autre",
+		/* Les libellés du document, FIXTURES (voir LIBELLES ci-dessus) :
+		   la transcription éprouvée porte ceux-ci dans son document. */
+		libelles: LIBELLES,
 	};
 
 	try {
@@ -236,7 +255,7 @@ await withSrcModule("apps/windows/electron/video.ts", async ({ executableYtDlp, 
 			   lancement, il y serait — c'est ce qui rend l'assert
 			   `appels: false` porteur, et non aveugle. */
 			const vide = mkdtempSync(join(racine, "vide-"));
-			const rejet = await nomDuRejet(transcrire(idBonne, { env: envDe(vide, maison, { NQ_VIDEO_JOURNAL: journal }), delaiMs: 20000, miniature: async () => null }));
+			const rejet = await nomDuRejet(transcrire(idBonne, { env: envDe(vide, maison, { NQ_VIDEO_JOURNAL: journal }), delaiMs: 20000, miniature: async () => null, libelles: LIBELLES }));
 			r.check("sans yt-dlp, la transcription rejette « absent » sans lancer",
 				{ rejet, appels: existsSync(journal) }, { rejet: { code: "absent", detail: null }, appels: false });
 		});
@@ -261,7 +280,7 @@ await withSrcModule("apps/windows/electron/video.ts", async ({ executableYtDlp, 
 			/* LE RÉSULTAT, du document au nom de fichier (fixture réelle). */
 			r.check("le résultat porte le document, son nom, titre, durée, langue, type, miniature",
 				{
-					document: res.document.includes("[00:00] bonjour la vidéo") && res.document.includes("## Transcription"),
+					document: res.document.includes("[00:00] bonjour la vidéo") && res.document.includes("## Transcription-FIXTURE"),
 					nom: res.nom, titre: res.titre, dureeS: res.dureeS, langue: res.langue, type: res.type, miniature: res.miniature,
 				},
 				{ document: true, nom: "Les variables en Python®.md", titre: "Les variables en Python®", dureeS: 366, langue: "fr", type: "auto", miniature: miniatureInjectee });
@@ -327,9 +346,9 @@ await withSrcModule("apps/windows/electron/video.ts", async ({ executableYtDlp, 
 				NQ_VIDEO_SOMMEIL_MS: 400,
 			});
 			const trois = [
-				transcrire("lente123456", { env: envLente, delaiMs: 20000, miniature: async () => null }),
-				transcrire("lente123456", { env: envLente, delaiMs: 20000, miniature: async () => null }),
-				transcrire("lente123456", { env: envLente, delaiMs: 20000, miniature: async () => null }),
+				transcrire("lente123456", { env: envLente, delaiMs: 20000, miniature: async () => null, libelles: LIBELLES }),
+				transcrire("lente123456", { env: envLente, delaiMs: 20000, miniature: async () => null, libelles: LIBELLES }),
+				transcrire("lente123456", { env: envLente, delaiMs: 20000, miniature: async () => null, libelles: LIBELLES }),
 			];
 			const resultats = await Promise.all(trois);
 			const lignes = readFileSync(journal, "utf8").split(/\r?\n/).filter(Boolean);
@@ -346,6 +365,46 @@ await withSrcModule("apps/windows/electron/video.ts", async ({ executableYtDlp, 
 					appels: lignes.filter((l) => l.startsWith("DEBUT")).length,
 				},
 				{ trois: true, ordres: true, appels: 6 });
+			rmSync(journal, { force: true });
+		});
+
+		await cas(r, "annuler(id) pendant la transcription rejette « annule » et tue l'ARBRE", async () => {
+			/* Le faux dort 4 s par appel : les métadonnées sont EN VOL
+			   quand l'annulation part (le témoin est son pid, écrit au
+			   début de son travail — le même que le cas « delai »). */
+			const envLente = envDe(faux, maison, {
+				NQ_VIDEO_JOURNAL: journal,
+				NQ_VIDEO_FIXTURE: fixture,
+				NQ_VIDEO_SOMMEIL_MS: 4000,
+			});
+			const promesse = transcrire("lente123456", { env: envLente, delaiMs: 20000, miniature: async () => null, libelles: LIBELLES });
+			/* Le pid du faux, écrit au début de son travail : annuler À CET
+			   instant, et non après la fin — sinon on n'annule rien. */
+			let pid = null;
+			for (let i = 0; i < 100 && pid === null; i++) {
+				await dodo(50);
+				const ligne = existsSync(journal) ? readFileSync(journal, "utf8").split(/\r?\n/).find((l) => l.startsWith("DEBUT ")) : null;
+				if (ligne) pid = Number(ligne.split(" ")[1]);
+			}
+			annulerVideo("lente123456");
+			const rejet = await nomDuRejet(promesse);
+			/* Un process annulé ne répond plus à kill(pid, 0) : l'ARBRE est
+			   mort, pas le seul parent — c'est ce que `lancer` promet à
+			   l'abandon d'un signal. */
+			let mort = false;
+			for (let i = 0; i < 100 && !mort; i++) {
+				await dodo(50);
+				try { if (typeof pid === "number") { process.kill(pid, 0); } else { break; } } catch (e) { mort = true; }
+			}
+			r.check("la transcription annulée rejette { code: \"annule\" }",
+				{ rejet: rejet && rejet.code, pid: typeof pid }, { rejet: "annule", pid: "number" });
+			r.check("l'arbre du faux est mort après le rejet", mort, true);
+			/* Le faux tué n'a jamais fini son sommeil : aucune ligne FIN. */
+			r.check("le faux tué n'a jamais écrit FIN", existsSync(journal) ? readFileSync(journal, "utf8").includes("FIN") : false, false);
+			/* La transcription a QUITTÉ le registre en finally : annuler
+			   encore n'est plus rien — et ne doit pas jeter. */
+			annulerVideo("lente123456");
+			r.check("annuler un identifiant sans transcription vivante est un no-op", true, true);
 			rmSync(journal, { force: true });
 		});
 	} finally {
@@ -716,7 +775,7 @@ await withSrcModule("apps/windows/electron/video.ts", async ({ transcrire, minia
 	};
 	try {
 		await cas(r, "des métadonnées SANS piste admissible rejettent « pasDeSousTitres » et le second appel n'est JAMAIS lancé", async () => {
-			const rejet = await nomDuRejet(transcrire("nh9e18bXpzc", { env: envSansPistes, delaiMs: 20000, miniature: async () => null }));
+			const rejet = await nomDuRejet(transcrire("nh9e18bXpzc", { env: envSansPistes, delaiMs: 20000, miniature: async () => null, libelles: LIBELLES }));
 			const appels = existsSync(journal) ? readFileSync(journal, "utf8").split(/\r?\n/).filter(Boolean) : [];
 			r.check("l'erreur typée, après UN seul appel (les métadonnées)",
 				{ code: rejet && rejet.code, detail: rejet && rejet.detail, appels: appels.length },
@@ -754,6 +813,7 @@ await withSrcModule("apps/windows/electron/video.ts", async ({ transcrire, minia
 					env: { ...envSansPistes, NQ_VIDEO_FIXTURE: join(process.cwd(), "scripts", "fixtures", "video", "fr.json") },
 					delaiMs: 20000,
 					miniature: (url) => miniatureParDefaut(url, async () => { throw new Error("réseau en panne"); }),
+					libelles: LIBELLES,
 				});
 				r.check("la transcription porte son document, une miniature nulle, et l'échec du transport est nommé",
 					{ miniature: res.miniature, document: res.document.length > 0, nommee: warns.length > 0 },

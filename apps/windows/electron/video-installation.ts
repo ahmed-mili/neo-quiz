@@ -228,7 +228,10 @@ function erreurInstallation(code: CodeInstallation, detail?: string): ErreurInst
 	return e;
 }
 
-function estErreurInstallation(e: unknown): e is ErreurInstallation {
+/** Exporté pour le canal du pont (`canaux.ts`, tâche 4) : un rejet qui
+    n'est pas de l'installation (un bug, une panne d'ailleurs) est réduit
+    à `reseau` côté fenêtre, jamais à un message non traduit. */
+export function estErreurInstallation(e: unknown): e is ErreurInstallation {
 	const o = e as { code?: string };
 	return !!o && (o.code === "reseau" || o.code === "empreinte");
 }

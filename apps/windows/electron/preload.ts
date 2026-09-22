@@ -201,6 +201,29 @@ const pont: Pont = {
 			return () => { ipcRenderer.off(CANAUX.collageTexte, ecouteur); };
 		},
 	},
+	/* LA LECTURE D'UNE VIDÉO (tâche 4) : le rendu ne passe qu'un
+	   IDENTIFIANT de vidéo, jamais une URL — et le rappel de progression
+	   d'`installer` ne traverse pas l'IPC (voir `Pont.video`) : les
+	   octets partent par un canal POUSSÉ (`videoProgression`), et
+	   l'abonnement est posé AVANT l'appel — les octets du premier paquet
+	   peuvent arriver pendant que le principal démarre l'installation —
+	   et retiré dans un `finally`. Une SEULE installation à la fois : la
+	   modale de la tâche 5 est modale, et bloquante. */
+	video: {
+		etat: () => ipcRenderer.invoke(CANAUX.videoEtat),
+		infosInstallation: () => ipcRenderer.invoke(CANAUX.videoInfos),
+		async installer(surProgression) {
+			const ecouteur = (_e: unknown, p: { recus: number; total: number | null }): void => surProgression(p.recus, p.total);
+			ipcRenderer.on(CANAUX.videoProgression, ecouteur);
+			try {
+				return await ipcRenderer.invoke(CANAUX.videoInstaller);
+			} finally {
+				ipcRenderer.off(CANAUX.videoProgression, ecouteur);
+			}
+		},
+		transcrire: id => ipcRenderer.invoke(CANAUX.videoTranscrire, id),
+		annuler: id => ipcRenderer.invoke(CANAUX.videoAnnuler, id),
+	},
 };
 
 contextBridge.exposeInMainWorld("neo", pont);

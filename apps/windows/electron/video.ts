@@ -36,8 +36,10 @@ import { delimiter, join } from "node:path";
 
 /** Le code d'une erreur de lecture d'une vidéo, porté vers le rendu : le
     message de chaque code est une décision de l'interface (tâche 5), pas
-    de ce module — ici il n'y a que le CODE et un détail pour le journal. */
-export type CodeErreurVideo = "absent" | "reseau" | "pasDeSousTitres" | "videoIndisponible" | "delai" | "inconnue";
+    de ce module — ici il n'y a que le CODE et un détail pour le journal.
+    `annule` : l'appelant a abandonné (`annulerVideo(id)`, ou un signal
+    de `deps`) — la tuile le traite en silence (tâche 6). */
+export type CodeErreurVideo = "absent" | "reseau" | "pasDeSousTitres" | "videoIndisponible" | "delai" | "annule" | "inconnue";
 
 /** L'erreur de `transcrire` : le `code` est ce que l'appelant juge (comme
     le `name` d'`erreurCli`, qui est ici redoublé en propriété — un
@@ -85,6 +87,15 @@ export interface DepsVideo {
 	delaiMs?: number;
 	/** La miniature, injectée par le contrôle (défaut : `fetchBorne`). */
 	miniature?: (url: string) => Promise<string | null>;
+	/** Les libellés des sections du document, composés par l'APPELANT à
+	    CHAQUE transcription — le canal du pont (`canaux.ts`, tâche 4) les
+	    compose par `t()` dans la langue de l'UI, et le `LIBELLES` fixe de
+	    la tâche 2 est parti avec elle : une constante top-level figerait
+	    la langue du démarrage et ignorerait son changement (`CLAUDE.md`).
+	    REQUIS : le noyau (`documentVideo`) ne sait pas traduire, et des
+	    libellés manquants s'écriraient « undefined » dans le document
+	    joint à la demande — d'où `deps` requis à son tour. */
+	libelles: LibellesDocument;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -197,14 +208,19 @@ const detailJournal = (texte: string): string => texte.trim().slice(-300);
  * Lance yt-dlp UNE fois, avec un délai max : un code de sortie non nul
  * est typé d'après stderr, et un dépassement de délai rejette `delai`
  * APRÈS la mort de l'arbre (`lancer` ne se règle qu'une fois l'enfant
- * fermé — `tuerArbre` sous Windows, le groupe ailleurs).
+ * fermé — `tuerArbre` sous Windows, le groupe ailleurs), et un ABANDON
+ * du signal rejette `annule` de même, arbre tué — comme pour les CLI.
  */
-async function lancerYtDlp(executable: string, args: string[], env: NodeJS.ProcessEnv, delaiMs: number): Promise<string> {
+async function lancerYtDlp(executable: string, args: string[], env: NodeJS.ProcessEnv, delaiMs: number, signal?: AbortSignal): Promise<string> {
 	let res: { stdout: string; stderr: string; code: number | null };
 	try {
-		res = await lancer({ executable, args, stdin: "", timeoutMs: delaiMs, env: environnementEnfant(env) });
+		res = await lancer({ executable, args, stdin: "", timeoutMs: delaiMs, env: environnementEnfant(env), signal });
 	} catch (e) {
 		const nom = (e as { name?: string })?.name;
+		/* « annule » AVANT « timeout » : un appelant qui abandonne gagne
+		   sur un délai qui expirerait en même temps — il dit « j'ai
+		   arrêté », pas « c'était trop long ». */
+		if (nom === "annule") throw erreurVideo("annule");
 		if (nom === "timeout") throw erreurVideo("delai");
 		if (nom === "introuvable") throw erreurVideo("absent");
 		throw erreurVideo("inconnue", String((e as Error)?.message ?? e).slice(-300));
@@ -261,8 +277,23 @@ const MAX_PARALLELE = 2;
 let enCours = 0;
 const attente: Array<() => void> = [];
 
-async function entrer(): Promise<void> {
-	while (enCours >= MAX_PARALLELE) await new Promise<void>(liberer => attente.push(liberer));
+async function entrer(signal?: AbortSignal): Promise<void> {
+	/* Déjà abandonné avant l'attente : le rejet suit sans rien
+	   attendre — l'écouteur posé ci-dessous ne serait jamais
+	   appelé (l'abandon a déjà eu lieu, sans événement à venir). */
+	if (signal?.aborted) throw erreurVideo("annule");
+	while (enCours >= MAX_PARALLELE) {
+		await new Promise<void>(resoudre => {
+			const attendre = (): void => resoudre();
+			attente.push(attendre);
+			signal?.addEventListener("abort", () => {
+				const i = attente.indexOf(attendre);
+				if (i >= 0) attente.splice(i, 1);
+				resoudre();
+			}, { once: true });
+		});
+		if (signal?.aborted) throw erreurVideo("annule");
+	}
 	enCours++;
 }
 
@@ -271,19 +302,55 @@ function relacher(): void {
 	attente.shift()?.();
 }
 
-/** Les libellés des sections du document : le noyau ne connaît pas t()
-    (document.ts), et le principal passe des chaînes fixes — le document
-    est une DONNÉE jointe à la demande, pas une interface (les tâches 5 et
-    6 portent tout texte d'écran). */
-const LIBELLES: LibellesDocument = {
-	chaine: "Chaîne",
-	duree: "Durée",
-	langue: "Langue",
-	manuel: "sous-titres manuels",
-	auto: "sous-titres automatiques",
-	description: "Description",
-	transcription: "Transcription",
-};
+/* LE REGISTRE DES LANCEMENTS VIVANTS, PAR ID : c'est ce que
+    `annulerVideo(id)` guette pour n'abandonner que les transcriptions
+    de CETTE vidéo — l'arbre de yt-dlp est tué là-bas (`lancer` le fait
+    à l'abandon du signal, comme pour les CLI), pas ici par un pid nu.
+    DEUX transcriptions d'un MÊME identifiant peuvent coexister (la
+    file en admet deux), et chacune emporte le sien. Retiré en
+    `finally`, sur TOUTES les issues — un identifiant sans
+    transcription vivante est ignoré par `annulerVideo`, comme un
+    identifiant de requête réseau déjà finie. */
+const lancements = new Map<string, Set<AbortController>>();
+
+/**
+ * Abandonne les transcriptions VIVANTES de cet identifiant : le
+ * signal tue l'ARBRE de yt-dlp, et chaque transcription rejette
+ * `{ code: "annule" }` — la tuile le traite en silence (tâche 6).
+ * Un identifiant sans transcription vivante (jamais lancée, déjà
+ * finie, hors regex) est ignoré : annuler ce qui ne court plus
+ * n'est pas une erreur, comme au réseau (`canaux.ts`).
+ */
+export function annulerVideo(id: string): void {
+	const vivants = lancements.get(id);
+	if (!vivants) return;
+	for (const controleur of vivants) controleur.abort();
+}
+
+/**
+ * Le code d'une erreur qui traverse le pont (`canaux.ts`), réduit à
+ * l'union : une exception SANS code (un bug) vaut `inconnue`, et son
+ * message n'est JAMAIS porté vers le rendu — il n'est pas traduit.
+ * Une seconde copie de l'union, et c'est voulu :
+ * `CodeErreurVideo` reste la déclaration unique du contrat, et un
+ * code manquant ici ne fait qu'élargir au `inconnue` de la tuile,
+ * jamais à une chaîne du principal.
+ */
+export function codeErreurVideo(e: unknown): CodeErreurVideo {
+	const code = (e as { code?: unknown })?.code;
+	switch (code) {
+		case "absent":
+		case "reseau":
+		case "pasDeSousTitres":
+		case "videoIndisponible":
+		case "delai":
+		case "annule":
+		case "inconnue":
+			return code;
+		default:
+			return "inconnue";
+	}
+}
 
 /**
  * Lit une vidéo YouTube : les métadonnées (`-J`), la piste choisie par le
@@ -299,74 +366,100 @@ const LIBELLES: LibellesDocument = {
  * Rejette `{ code: CodeErreurVideo, detail? }` : `absent` (aucun
  * yt-dlp trouvé), `reseau`, `pasDeSousTitres` (la piste choisie est
  * nulle, ou le json3 attendu n'a pas été écrit), `videoIndisponible`
- * (privée, supprimée, restreinte par âge), `delai` (60 s écoulées, arbre
- * tué), `inconnue` (les 300 derniers caractères de stderr en `detail`,
- * pour le journal). Le câblage IPC est la tâche 4.
+ * (privée, supprimée, restreinte par âge), `delai` (60 s écoulées,
+ * arbre tué), `annule` (abandonné par `annulerVideo(id)` — l'arbre
+ * est tué, la tuile le traite en silence), `inconnue` (les 300
+ * derniers caractères de stderr en `detail`, pour le journal).
  */
-export async function transcrire(id: string, deps?: DepsVideo): Promise<ResultatVideo> {
-	await entrer();
+export async function transcrire(id: string, deps: DepsVideo): Promise<ResultatVideo> {
+	/* LE CONTRÔLEUR DE CETTE transcription, retenu PAR IDENTIFIANT dans
+	   le registre (`lancements`) dès l'entrée dans la file — annulable
+	   pendant l'attente d'un créneau aussi, pas seulement une fois
+	   lancé. C'est ce que `annulerVideo(id)` abandonne : l'ARBRE de
+	   yt-dlp est tué par `lancer` à l'abandon du signal, comme pour
+	   les CLI — jamais par un pid nu ici. */
+	const controleur = new AbortController();
+	const vivants = lancements.get(id) ?? new Set<AbortController>();
+	lancements.set(id, vivants);
+	vivants.add(controleur);
 	try {
-		const env = deps?.env ?? process.env;
-		const delaiMs = deps?.delaiMs ?? DELAI_APPEL_MS;
-		/* L'identifiant est revalidé ICI, du côté du principal, AVANT tout
-		   lancement (spec §3.2) : la tuile n'en fait passer que de valides,
-		   et une valeur trafiquée qui atteindrait quand même le principal
-		   ne lance rien du tout. */
-		if (!ID_VIDEO.test(id)) throw erreurVideo("inconnue", "identifiant : " + id);
-		const executable = deps?.chemin ?? (await executableYtDlp(env, deps?.dossierApp))?.chemin ?? null;
-		if (!executable) throw erreurVideo("absent");
-		const url = URL_YOUTUBE + id;
-		const stdout = await lancerYtDlp(executable, ["--no-warnings", "-J", "--skip-download", url], env, delaiMs);
-		let infos: InfosVideo;
+		await entrer(controleur.signal);
 		try {
-			infos = JSON.parse(stdout) as InfosVideo;
-		} catch (e) {
-			throw erreurVideo("inconnue", "métadonnées illisibles : " + detailJournal(stdout));
-		}
-		const piste = choisirPiste(infos);
-		if (!piste) throw erreurVideo("pasDeSousTitres");
-		const temporaire = mkdtempSync(join(tmpdir(), "neo-quiz-video-"));
-		try {
-			await lancerYtDlp(
-				executable,
-				[
-					"--no-warnings", "--skip-download", piste.type === "manuel" ? "--write-subs" : "--write-auto-subs",
-					"--sub-langs", piste.cle, "--sub-format", "json3", "-o", join(temporaire, "s.%(ext)s"), url,
-				],
-				env, delaiMs,
-			);
-			const fichier = readdirSync(temporaire).find(f => f.endsWith(".json3"));
-			if (!fichier) throw erreurVideo("pasDeSousTitres");
-			const texte = json3VersTexte(JSON.parse(readFileSync(join(temporaire, fichier), "utf8")) as Json3);
-			/* Tout échec de la miniature est avalé ici : l'ornement ne doit
-			   jamais emporter le travail, et une injection du contrôle qui
-			   jette passe par la même porte qu'une panne réseau. */
-			let miniature: string | null = null;
+			const env = deps.env ?? process.env;
+			const delaiMs = deps.delaiMs ?? DELAI_APPEL_MS;
+			/* L'identifiant est revalidé ICI, du côté du principal, AVANT tout
+			   lancement (spec §3.2) : la tuile n'en fait passer que de valides,
+			   et une valeur trafiquée qui atteindrait quand même le principal
+			   ne lance rien du tout. */
+			if (!ID_VIDEO.test(id)) throw erreurVideo("inconnue", "identifiant : " + id);
+			const executable = deps.chemin ?? (await executableYtDlp(env, deps.dossierApp))?.chemin ?? null;
+			if (!executable) throw erreurVideo("absent");
+			const url = URL_YOUTUBE + id;
+			const stdout = await lancerYtDlp(executable, ["--no-warnings", "-J", "--skip-download", url], env, delaiMs, controleur.signal);
+			let infos: InfosVideo;
 			try {
-				miniature = infos.thumbnail ? await (deps?.miniature ?? miniatureParDefaut)(infos.thumbnail) : null;
+				infos = JSON.parse(stdout) as InfosVideo;
 			} catch (e) {
-				miniature = null;
+				throw erreurVideo("inconnue", "métadonnées illisibles : " + detailJournal(stdout));
 			}
-			return {
-				document: documentVideo({ infos, piste, texte, libelles: LIBELLES }),
-				nom: nomDocument(infos.title),
-				titre: infos.title,
-				dureeS: typeof infos.duration === "number" ? infos.duration : null,
-				langue: piste.langue,
-				type: piste.type,
-				miniature,
-			};
+			const piste = choisirPiste(infos);
+			if (!piste) throw erreurVideo("pasDeSousTitres");
+			const temporaire = mkdtempSync(join(tmpdir(), "neo-quiz-video-"));
+			try {
+				await lancerYtDlp(
+					executable,
+					[
+						"--no-warnings", "--skip-download", piste.type === "manuel" ? "--write-subs" : "--write-auto-subs",
+						"--sub-langs", piste.cle, "--sub-format", "json3", "-o", join(temporaire, "s.%(ext)s"), url,
+					],
+					env, delaiMs,
+					controleur.signal,
+				);
+				const fichier = readdirSync(temporaire).find(f => f.endsWith(".json3"));
+				if (!fichier) throw erreurVideo("pasDeSousTitres");
+				const texte = json3VersTexte(JSON.parse(readFileSync(join(temporaire, fichier), "utf8")) as Json3);
+				/* Tout échec de la miniature est avalé ici : l'ornement ne doit
+				   jamais emporter le travail, et une injection du contrôle qui
+				   jette passe par la même porte qu'une panne réseau. */
+				let miniature: string | null = null;
+				try {
+					miniature = infos.thumbnail ? await (deps.miniature ?? miniatureParDefaut)(infos.thumbnail) : null;
+				} catch (e) {
+					miniature = null;
+				}
+					/* Abandonné PENDANT la miniature (le `fetch` ne connaît pas le
+					   signal) : le travail est fait mais personne ne l'attend plus
+					   — on rejette `annule` plutôt que de remettre un résultat à
+					   personne. */
+					if (controleur.signal.aborted) throw erreurVideo("annule");
+				return {
+					document: documentVideo({ infos, piste, texte, libelles: deps.libelles }),
+					nom: nomDocument(infos.title),
+					titre: infos.title,
+					dureeS: typeof infos.duration === "number" ? infos.duration : null,
+					langue: piste.langue,
+					type: piste.type,
+					miniature,
+				};
+			} finally {
+				try {
+					/* `maxRetries` n'est pas du confort : un arbre tué au délai
+					   laisse Windows tenir un handle quelques dizaines de ms
+					   (voir `avecFichiers` dans process.ts). Un échec est DIT. */
+					rmSync(temporaire, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+				} catch (e) {
+					console.warn(LOG_PREFIX, "dossier temporaire de vidéo non effacé :", temporaire, e);
+				}
+			}
 		} finally {
-			try {
-				/* `maxRetries` n'est pas du confort : un arbre tué au délai
-				   laisse Windows tenir un handle quelques dizaines de ms
-				   (voir `avecFichiers` dans process.ts). Un échec est DIT. */
-				rmSync(temporaire, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-			} catch (e) {
-				console.warn(LOG_PREFIX, "dossier temporaire de vidéo non effacé :", temporaire, e);
-			}
+			relacher();
 		}
 	} finally {
-		relacher();
+		/* Retiré SEULEMENT si c'est encore le sien : une transcription du
+		   MÊME identifiant relancée à l'arrachée partage le Set, et le
+		   finally d'une ancienne ne doit pas emporter l'entrée de la
+		   nouvelle — qui deviendrait inannulable. */
+		vivants.delete(controleur);
+		if (vivants.size === 0) lancements.delete(id);
 	}
 }

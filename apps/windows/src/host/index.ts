@@ -35,6 +35,7 @@ import { createWindowsPdf } from "./pdf";
 import { createWindowsProcess } from "./process";
 import { createWindowsUi } from "./ui";
 import { createWindowsCollage } from "./collage";
+import { createWindowsVideo } from "./video";
 
 export { createWindowsIndex } from "./fs";
 export type { MiroirDisque, WindowsIndex } from "./fs";
@@ -160,6 +161,10 @@ export function createWindowsHost(carte: CarteRacines, index: MiroirDisque): Hos
 		/* L'attente d'une réponse copiée (spec 2026-09-18, §4) : un passe-plat
 		   vers le pont, comme `process` et `net`. */
 		collage: createWindowsCollage(pont),
+		/* La lecture d'une vidéo YouTube (tâche 4, spec 2026-09-22, § 3.3) :
+		   membre OPTIONNEL du contrat, absent sous le greffon. Un
+		   passe-plat vers le pont, comme `process` et `net`. */
+		video: createWindowsVideo(pont),
 		/* Disposer les fenêtres, glisser un fichier (la même résolution de
 		   chemin qu'`openExternal` : un `HostFile` du contrat → absolu par
 		   l'index ; une chaîne = un absolu déjà admis), et finir. */

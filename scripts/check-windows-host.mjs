@@ -846,6 +846,19 @@ function installerPont(fichiers = {}, perimetre = null) {
 	r.done();
 }
 
+/* LE MEMBRE `video` DE L'HÔTE, statiquement — même raison que le bloc PDF
+   ci-dessus (tâche 4 des vidéos YouTube, spec 2026-09-22, § 3.3) : le
+   contrat gagne un membre OPTIONNEL, et l'hôte Windows L'IMPLORE du pont
+   (`./video.ts`), jamais d'un objet posé à la main dans `index.ts`. */
+{
+	const r = makeReporter("Hôte Windows — la lecture d'une vidéo (statique)");
+	const source = readFileSync("apps/windows/src/host/index.ts", "utf-8");
+	const nu = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+	r.check("l'hôte assemblé déclare le membre video par createWindowsVideo(pont)", /\bvideo\s*:\s*createWindowsVideo\(pont\)/.test(nu), true);
+	r.check("… importé de ./video", /import \{ createWindowsVideo \} from "\.\/video"/.test(nu), true);
+	r.done();
+}
+
 /* `shell.openExternal` D'UNE CHAÎNE, statiquement — même raison que le bloc
    PDF ci-dessus (`index.ts` importe MathLive par `createWindowsModals`/
    `createWindowsUi`, qu'esbuild ne charge pas hors de la fenêtre : ce module
@@ -2089,5 +2102,110 @@ await withSrcModule("apps/windows/src/host/collage.ts", async ({ createWindowsCo
 	r.check("le rappel du rendu n'est appelé qu'une fois, et l'abonnement est retiré", [recus, journal.some(l => l[0] === "off")], [["// neo-quiz k7f2q9abcd"], true]);
 	arreter();
 	r.check("la fonction rendue arrête l'attente côté principal", journal.some(l => l[0] === "arreter"), true);
+	r.done();
+});
+
+/* ── LA LECTURE D'UNE VIDÉO, VUE DU RENDU (tâche 4) ──
+   Un passe-plat vers les canaux `video.*` du pont, et DEUX choses qui
+   sont à nous : l'abonnement à la progression AVANT l'appel
+   d'installation (les octets du premier paquet peuvent arriver pendant
+   que le principal démarre), et le RECONSTRUISEMENT de l'erreur typée
+   depuis l'enveloppe du canal (`ok: false, code`) — l'IPC d'Electron
+   perd le `name` d'une erreur jetée, et tout le jugement de la tuile
+   (tâche 6) tient dans ce code. */
+await withSrcModule("apps/windows/src/host/video.ts", async ({ createWindowsVideo }) => {
+	const r = makeReporter("Hôte Windows — la lecture d'une vidéo (vue du rendu)");
+	const journal = [];
+	let progressionPont = null;
+	/* Ce que le PROCHAIN transcrire rend — l'enveloppe du principal. */
+	let reponseTranscrire = {
+		valeur: { ok: true, valeur: { document: "DOC", nom: "n.md", titre: "T", dureeS: 366, langue: "fr", type: "auto", miniature: null } },
+	};
+	const pont = () => ({
+		video: {
+			etat: async () => { journal.push(["video.etat"]); return { present: true, source: "app" }; },
+			infosInstallation: async () => { journal.push(["video.infosInstallation"]); return { version: "2026.08.19", datePublication: "2026-08-19", taille: 42, url: "https://github.com/yt-dlp/yt-dlp/releases/latest" }; },
+			/* L'installation retient le rappel de progression QUE LE RENDU
+			   lui a passé : c'est ce rappel que le cas ci-dessous joue,
+			   pendant qu'elle court — l'octets du premier paquet ne
+			   doivent pas être perdus. */
+			async installer(surProgressionPont) {
+				journal.push(["video.installer"]);
+				progressionPont = surProgressionPont;
+				return reponseInstaller.valeur;
+			},
+			async transcrire(id) {
+				journal.push(["video.transcrire", id]);
+				return reponseTranscrire.valeur;
+			},
+			async annuler(id) { journal.push(["video.annuler", id]); },
+		},
+	});
+	/* Ce que le prochain video.installer REND : une enveloppe, jamais
+	   un rejet — le canal ne peut pas faire voyager le name d'une
+	   erreur jetée (voir EnveloppeVideo, pont.ts). */
+	const reponseInstaller = { valeur: { ok: true, valeur: null } };
+	const video = createWindowsVideo(pont);
+
+	/* etat et infosInstallation : des passe-plat, rien à traduire. */
+	const etat = await video.etat();
+	const infos = await video.infosInstallation();
+	r.check("les deux appels traversent, sans rien traduire",
+		{ etat, infos, appels: journal.filter(e => e[0].startsWith("video.")).map(e => e[0]) },
+		{
+			etat: { present: true, source: "app" },
+			infos: { version: "2026.08.19", datePublication: "2026-08-19", taille: 42, url: "https://github.com/yt-dlp/yt-dlp/releases/latest" },
+			appels: ["video.etat", "video.infosInstallation"],
+		});
+
+	/* installer : le rappel de progression est posé AVANT l'appel et
+	   sert les octets pendant que l'installation court. */
+	const vues = [];
+	const promesse = video.installer((recus, total) => vues.push([recus, total]));
+	r.check("l'appel est parti, le rappel est déjà au pont", journal.some(e => e[0] === "video.installer"), true);
+	progressionPont?.(100, 200);
+	progressionPont?.(200, 200);
+	await promesse;
+	r.check("les octets portés par le pont arrivent au rappel DU RENDU",
+		vues, [[100, 200], [200, 200]]);
+
+	/* Une enveloppe d'échec redevient une erreur typée : le code
+	   d'installation (empreinte, réseau) est reconstruit, avec son
+	   détail de journal — l'IPC ne le conserve pas, et la tuile
+	   (tâche 6) juge sur lui. */
+	reponseInstaller.valeur = { ok: false, code: "empreinte", detail: "SHA2-256SUMS" };
+	let rejet = "(aucun rejet)";
+	try {
+		await video.installer(() => {});
+	} catch (e) {
+		rejet = { name: e.name, code: e.code, detail: e.detail, message: e.message };
+	}
+	r.check("le code d'installation est reconstruit, avec son détail de journal",
+		rejet,
+		{ name: "empreinte", code: "empreinte", detail: "SHA2-256SUMS", message: "video : empreinte" });
+	reponseInstaller.valeur = { ok: true, valeur: null };
+
+	/* transcrire : l'enveloppe ok est débarrassée de son ok ; un
+	   échec porte le code, re-typé côté rendu. */
+	const res = await video.transcrire("nh9e18bXpzc");
+	r.check("le résultat passe tel quel",
+		res, { document: "DOC", nom: "n.md", titre: "T", dureeS: 366, langue: "fr", type: "auto", miniature: null });
+	reponseTranscrire.valeur = { ok: false, code: "annule", detail: "journal" };
+	rejet = "(aucun rejet)";
+	try {
+		await video.transcrire("nh9e18bXpzc");
+	} catch (e) {
+		rejet = { name: e.name, code: e.code, detail: e.detail };
+	}
+	r.check("l'échec de transcription est re-typé sur le code du principal",
+		rejet, { name: "annule", code: "annule", detail: "journal" });
+
+	/* annuler relaie l'identifiant — le principal abandonne les
+	   transcriptions vivantes de CETTE vidéo, l'arbre est tué
+	   là-bas ; ici il n'y a ni process ni arbre. */
+	video.annuler("nh9e18bXpzc");
+	r.check("le canal annuler est appelé avec CET identifiant",
+		journal.filter(e => e[0] === "video.annuler").at(-1), ["video.annuler", "nh9e18bXpzc"]);
+
 	r.done();
 });

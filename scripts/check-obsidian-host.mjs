@@ -690,6 +690,12 @@ await withSrcModule("apps/obsidian/host.ts", async ({ createObsidianHost }) => {
 		"net" in host && host.net !== undefined, false);
 	r.check("le greffon lecteur ne fournit pas de CLI",
 		"process" in host && host.process !== undefined, false);
+	/* `video` (tâche 4 des vidéos YouTube) : membre OPTIONNEL du contrat que
+	   le greffon lecteur ne fournit PAS — le composer n'affiche alors ni
+	   tuile ni notice (spec 2026-09-22, § 3.3), jamais un faux vide qui
+	   ferait croire à une lecture possible. */
+	r.check("le greffon lecteur ne lit pas les vidéos",
+		"video" in host && host.video !== undefined, false);
 
 	r.done();
 });

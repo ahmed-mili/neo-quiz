@@ -310,4 +310,21 @@ export const EN_AI = {
 	"ai.err.ollama": "Ollama error: {detail}",
 	"ai.err.ollamaEmpty": "Ollama returned no response. Make sure the model is installed.",
 
+	/* ── La lecture d'une vidéo YouTube (les libellés du document) ──
+	   Composés PAR LE PROCESSUS PRINCIPAL (canaux.ts) à CHAQUE
+	   transcription, dans la langue de l'UI de l'application — jamais
+	   dans une constante top-level : `t()` doit être appelé au rendu
+	   (CLAUDE.md), un libellé figé au démarrage ignorerait le changement
+	   de langue. Ils passent par `DepsVideo` (`apps/windows/electron/
+	   video.ts`) et vivent dans le document joint à la DEMANDE — ce sont
+	   des données du document, pas des textes d'écran (la tuile et la
+	   modale portent les leurs, tâches 5 et 6). */
+	"ai.video.doc.chaine": "Channel",
+	"ai.video.doc.duree": "Duration",
+	"ai.video.doc.langue": "Language",
+	"ai.video.doc.manuel": "manual subtitles",
+	"ai.video.doc.auto": "automatic subtitles",
+	"ai.video.doc.description": "Description",
+	"ai.video.doc.transcription": "Transcript",
+
 } as const;

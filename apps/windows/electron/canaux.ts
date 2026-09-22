@@ -57,12 +57,24 @@ import type { UsageRead } from "../../../src/dashboard/usage-format";
 import type { Outil } from "./process";
 import type { MiseAJour } from "./mise-a-jour";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_FOND, CLE_REGLAGES_IA, CLE_REGLAGES_ZOOM } from "./pont";
-import type { EtatFenetre, EvenementDisque, RequeteCli, RequeteReseau, ResultatCli } from "./pont";
+import type { EnveloppeVideo, EtatFenetre, EvenementDisque, RequeteCli, RequeteReseau, ResultatCli } from "./pont";
 import type { Reglages } from "./reglages";
 import { autoriserHote, fetchBorne } from "./reseau";
 import { extensionRefusee } from "./ressources";
 import { vaultsObsidian } from "./vaults";
 import { creerAttente, jetonValide } from "./attente-collage";
+/* LA LECTURE D'UNE VIDÉO (tâche 4) : `ID_VIDEO` vient du noyau pur
+   (`src/video/`, sans Node) et est importé PAR LE PRINCIPAL — c'est
+   l'exception nommée au `CLAUDE.md` du dépôt : `check:host` juge la
+   direction RENDU → Node, pas celle-ci. Le principal juge donc
+   l'identifiant AVANT tout lancement, comme les noms d'outils. */
+import { ID_VIDEO } from "../../../src/video";
+import type { LibellesDocument } from "../../../src/video";
+import { annulerVideo, codeErreurVideo, transcrire } from "./video";
+import type { CodeErreurVideo, ResultatVideo } from "./video";
+import { etat as etatInstallation, infosInstallation, installer as installerYtDlp, mettreAJourSiDu } from "./video-installation";
+import type { CodeInstallation } from "./video-installation";
+import { estErreurInstallation } from "./video-installation";
 
 /** Ce que les canaux demandent à `main.ts`. */
 export interface DependancesCanaux {
@@ -1284,6 +1296,101 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 	ipcMain.handle(CANAUX.miseAJourVerifier, () => deps.miseAJour.verifier());
 	ipcMain.handle(CANAUX.miseAJourInstaller, () => {
 		if (deps.miseAJour.armerInstallation()) deps.fermerPourInstaller();
+	});
+
+	/* ─── LES VIDÉOS YOUTUBE (tâche 4) ───
+	   Le rendu ne passe qu'un IDENTIFIANT de vidéo, et ce qui traverse
+	   est jugé comme tout le reste du fichier :
+
+	   1. L'IDENTIFIANT EST JUGÉ AVANT TOUT, par `ID_VIDEO` (le noyau pur,
+	      `src/video/youtube.ts`) : un identifiant hors regex rejette sans
+	      composer le moindre libellé ni lancer le moindre process — et
+	      `video.ts` le revalide, mais c'est ici que la tuile ne peut
+	      faire passer que de la forme valide.
+	   2. LES LIBELLÉS DU DOCUMENT SONT COMPOSÉS À CET APPEL, par `t()`,
+	      dans la langue posée par `main.ts` — jamais dans une constante
+	      top-level : `t()` doit être appelé au rendu (`CLAUDE.md`), un
+	      libellé figé au démarrage ignorerait le changement de langue.
+	      Ils traversent `DepsVideo`, et le noyau les met dans le
+	      document joint à la demande — des DONNÉES, pas des textes
+	      d'écran (la tuile et la modale portent les leurs, tâches 5
+	      et 6).
+	   3. L'ERREUR TRAVERSE EN ENVELOPPE (`EnveloppeVideo`, pont.ts),
+	      comme `ResultatCli` : l'IPC perd le `name` d'une erreur jetée,
+	      et tout le jugement de la tuile tient dans ce code.
+
+	   ET LA MISE À JOUR EST LANCÉE SANS ÊTRE ATTENDUE (le plan le
+	   demande verbatim), AVANT la transcription : au plus un
+	   `yt-dlp -U` par 24 h (l'horodatage est posé AVANT le
+	   lancement par la tâche 3), avalée et journalisée en cas
+	   d'échec — jamais bloquante pour la transcription qui suit.
+	   ICI, et non dans `video.ts`, pour ne pas refermer le cycle
+	   d'imports que `video-installation.ts` ouvre déjà vers lui. */
+	ipcMain.handle(CANAUX.videoEtat, () => etatInstallation());
+
+	ipcMain.handle(CANAUX.videoInfos, () => infosInstallation());
+
+	ipcMain.handle(CANAUX.videoTranscrire, (_e, id: unknown): Promise<EnveloppeVideo<ResultatVideo, CodeErreurVideo>> => {
+		/* LA REVALIDATION DU SEUL ARGUMENT VENU DU RENDU : une chaîne hors
+		   regex ne lance rien, ne compose rien — le code d'erreur est
+		   celui que `transcrire` aurait produit, pour que la tuile le
+		   juge comme une panne ordinaire (elle n'en envoie jamais de
+		   mauvais : c'est une garde contre un rendu compromis). */
+		if (typeof id !== "string" || !ID_VIDEO.test(id)) {
+			console.warn(LOG_PREFIX, "transcription refusée, identifiant invalide :", id);
+			return Promise.resolve({ ok: false, code: "inconnue", detail: "identifiant : " + String(id) });
+		}
+		/* LA MISE À JOUR, SANS L'ATTENDRE (voir l'en-tête) : les erreurs
+		   de `-U` sont avalées et journalisées par le module
+		   d'installation — un `void` explicite, jamais un `await`. */
+		void mettreAJourSiDu();
+		/* LES SEPT LIBELLÉS du document, composés À CET APPEL — c'est le
+		   PIÈGE du `CLAUDE.md` : une constante top-level figerait la
+		   langue du démarrage et ignorerait son changement. */
+		const libelles: LibellesDocument = {
+			chaine: t("ai.video.doc.chaine"),
+			duree: t("ai.video.doc.duree"),
+			langue: t("ai.video.doc.langue"),
+			manuel: t("ai.video.doc.manuel"),
+			auto: t("ai.video.doc.auto"),
+			description: t("ai.video.doc.description"),
+			transcription: t("ai.video.doc.transcription"),
+		};
+		return transcrire(id, { libelles }).then(
+			resultat => ({ ok: true, valeur: resultat }),
+			(e: unknown) => {
+				/* Un rejet SANS code est un bug, pas une panne attendue :
+				   nommé dans la console du principal, comme partout dans
+				   ce fichier — le rendu n'en verra que le code. */
+				if (!(e as { code?: unknown })?.code) console.warn(LOG_PREFIX, "transcription en exception :", e);
+				return { ok: false, code: codeErreurVideo(e), detail: (e as { detail?: string })?.detail };
+			},
+		);
+	});
+
+	ipcMain.handle(CANAUX.videoAnnuler, (_e, id: unknown) => {
+		/* Un identifiant inconnu (déjà finie, jamais lancée, hors regex)
+		   est ignoré : annuler ce qui ne court plus n'est pas une
+		   erreur — la même réponse « trop tard » qu'au réseau. */
+		if (typeof id === "string") annulerVideo(id);
+	});
+
+	ipcMain.handle(CANAUX.videoInstaller, async (): Promise<EnveloppeVideo<null, CodeInstallation>> => {
+		try {
+			/* La progression POUSÉE vers la fenêtre en OCTETS, comme les
+			   événements du surveillant : la modale anime une jauge, pas
+			   trois états. Le rappel vit dans le rendu, il ne traverse
+			   pas l'IPC (voir `Pont.video`). */
+			await installerYtDlp((recus, total) => deps.envoyer(CANAUX.videoProgression, { recus, total }));
+			return { ok: true, valeur: null };
+		} catch (e) {
+			/* Rejet réduit au CODE : le message n'est pas traduit. Une
+			   exception hors installation (un bug) vaut `reseau`, et est
+			   NOMMÉE dans la console du principal. */
+			if (estErreurInstallation(e)) return { ok: false, code: e.code, detail: e.detail };
+			console.warn(LOG_PREFIX, "installation de yt-dlp en exception :", e);
+			return { ok: false, code: "reseau" };
+		}
 	});
 
 	return { arreterAttente: () => attente.arreter() };

@@ -808,6 +808,52 @@ export interface HostPdf {
 }
 
 /**
+ * LA LECTURE D'UNE VIDÉO YOUTUBE — un membre OPTIONNEL, et c'est une
+ * divergence ÉCRITE (spec docs/superpowers/specs/2026-09-22-videos-youtube
+ * -design.md, § 3.3). Le composer accepte un lien YouTube dans la demande et
+ * joint sa transcription (dans la langue d'origine) comme un document.
+ * L'application Windows l'implémente par le pont (`apps/windows/electron/
+ * video.ts` trouve et lance yt-dlp) ; le greffon Obsidian ne l'a PAS — et le
+ * composer n'affiche alors ni tuile ni notice. Un hôte mobile n'aura rien à
+ * écrire pour le refuser : le membre reste absent.
+ *
+ * CE QUI TRAVERSE : un IDENTIFIANT de vidéo (11 caractères, regex
+ * `ID_VIDEO` du noyau `src/video/youtube.ts`), revalidé PAR L'HÔTE AVANT
+ * tout lancement — jamais une URL, que l'hôte reconstruit lui-même. Les
+ * erreurs portent leur `code` (`absent`, `reseau`, `pasDeSousTitres`,
+ * `videoIndisponible`, `delai`, `annule`, `inconnue`) et le `detail` de
+ * journal (stderr, jamais traduit) ; le message d'interface est une
+ * décision de l'appelant, pas de l'hôte.
+ */
+export interface HostVideo {
+	/** yt-dlp est-il résolu, et d'où : la copie gérée par l'application
+	    (« app »), un yt-dlp du PATH étendu (« systeme »), ou rien (`null` —
+	    l'état NORMAL d'une machine sans yt-dlp, pas une panne). */
+	etat(): Promise<{ present: boolean; source: "app" | "systeme" | null }>;
+	/** Les infos de la release officielle, pour la modale d'installation.
+	    Tout `null` hors ligne (la modale dit « dernière version publiée »),
+	    et `url` reste cliquable quoi qu'il arrive. */
+	infosInstallation(): Promise<{ version: string | null; datePublication: string | null; taille: number | null; url: string }>;
+	/** Installe la copie gérée depuis la release officielle (empreinte
+	    SHA-256 vérifiée, rien sur le disque en cas d'échec). La progression
+	    est portée en OCTETS (`recus` à cet instant, `total` lu par HEAD,
+	    `null` quand il est ignoré). Rejette `{ code: "reseau" | "empreinte" }`. */
+	installer(surProgression: (recus: number, total: number | null) => void): Promise<void>;
+	/** Transcrit la vidéo `id` — revalidé par l'hôte AVANT tout
+	    lancement, et l'URL est reconstruite par lui : le rendu ne peut
+	    faire passer qu'un identifiant. Rend le document markdown joint à
+	    la demande, son nom de fichier, la fiche réduite et la miniature
+	    en `data:` URI (jamais une URL distante). Rejette
+	    `{ code, detail? }` — voir l'en-tête. */
+	transcrire(id: string): Promise<{ document: string; nom: string; titre: string; dureeS: number | null; langue: string | null; type: "manuel" | "auto"; miniature: string | null }>;
+	/** Abandonne les transcriptions vivantes de cet identifiant : l'arbre
+	    de yt-dlp est tué, et chacune rejette `{ code: "annule" }`. Un
+	    identifiant sans transcription vivante (jamais lancée, déjà finie)
+	    est ignoré. */
+	annuler(id: string): void;
+}
+
+/**
  * L'attente d'une réponse COPIÉE, pendant une génération par un site (spec
  * 2026-09-18, §4). Le principal sonde le presse-papier et ne livre que le
  * texte qui porte le jeton ; le rendu ne lit rien lui-même. Membre OPTIONNEL :
@@ -910,6 +956,8 @@ export interface Host {
 	process?: HostProcess;
 	/** Absent quand l'hôte n'a pas de moteur PDF — voir `HostPdf`. */
 	pdf?: HostPdf;
+	/** Absent sous le greffon — voir `HostVideo`. */
+	video?: HostVideo;
 	/** Absent sous le greffon — voir `HostCollage`. */
 	collage?: HostCollage;
 	/** Absent sous le greffon — voir `HostDepot`. */

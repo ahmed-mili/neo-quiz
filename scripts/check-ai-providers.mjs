@@ -529,6 +529,48 @@ await withSrcModule(
 				{ change: await providers.refreshAntigravityModels(true), n: providers.getAntigravityModels().length }, { change: false, n: 4 });
 		}
 
+		/* ── LE MASQUAGE DES CANAUX PAYANTS (2026-09-22) ──
+		   Le réglage `aiCanauxPayantsMasques` vient du disque, d'une version
+		   future ou d'un fichier trafiqué : les quatre fonctions pures ne
+		   doivent NI lever NI masquer un canal qu'elles ne comprennent pas. Un
+		   canal gratuit n'est jamais masqué ; un canal payant se lit à
+		   l'ABSENCE de pastille (décision du 2026-09-22, cf. `Canal.gratuit`). */
+		{
+			installHost(fauxHote().hote);
+			r.check("la table des canaux : chaque canal porte un `gratuit` booléen, et les payants sont exactement Claude Code et Codex",
+				{
+					tous: providers.MARQUES.flatMap(m => m.canaux).every(c => typeof c.gratuit === "boolean"),
+					payants: providers.MARQUES.flatMap(m => m.canaux).filter(c => !c.gratuit).map(c => c.id)
+				},
+				{ tous: true, payants: ["claude-code", "codex"] });
+			r.check("canauxMasquesValides : une valeur non-tableau vaut liste vide, une entrée inconnue ou non-chaîne est ignorée",
+				{
+					non: providers.canauxMasquesValides("codex"),
+					inconnu: providers.canauxMasquesValides(["codex", "canal-futur", 42, null]),
+					ok: providers.canauxMasquesValides(["claude-code", "codex"])
+				},
+				{ non: [], inconnu: ["codex"], ok: ["claude-code", "codex"] });
+			r.check("canalVisible : un canal GRATUIT jamais masqué, un payant selon le réglage, un canal inconnu visible",
+				{
+					gratuit: providers.canalVisible("claude-web", ["claude-web"]),
+					paye: providers.canalVisible("codex", []),
+					payeMasque: providers.canalVisible("codex", ["codex"]),
+					inconnu: providers.canalVisible("canal-futur", ["canal-futur"])
+				},
+				{ gratuit: true, paye: true, payeMasque: false, inconnu: true });
+			r.check("premierCanalGratuitVisible : le PREMIER canal gratuit du menu, quoi que porte le réglage",
+				[providers.premierCanalGratuitVisible([]), providers.premierCanalGratuitVisible(["claude-code", "codex"]), providers.premierCanalGratuitVisible("codex")],
+				["claude-web", "claude-web", "claude-web"]);
+			r.check("resoudreApresMasquage : inchangé si visible ou vide, repli sur le premier canal gratuit sinon",
+				{
+					rien: providers.resoudreApresMasquage("", ["codex"]),
+					visible: providers.resoudreApresMasquage("claude-web", ["codex"]),
+					repli: providers.resoudreApresMasquage("codex", ["codex"]),
+					reste: providers.resoudreApresMasquage("codex", [])
+				},
+				{ rien: "", visible: "claude-web", repli: "claude-web", reste: "codex" });
+		}
+
 		r.done();
 	},
 );

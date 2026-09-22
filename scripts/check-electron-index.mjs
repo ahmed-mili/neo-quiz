@@ -154,6 +154,83 @@ await withSrcModule("apps/windows/electron/index-fichiers.ts", async ({ creerInd
 		});
 
 		/*
+		 * Le cas ci-dessus (« un fichier sous .trash/ n'émet RIEN ») ne
+		 * discrimine PAS l'option `ignored` posée par cette tâche : il reste
+		 * vert avec ou sans elle, puisque `horsCatalogue` (dans `surFichier`)
+		 * filtre déjà l'événement après coup. Ce qui suit prouve que le dossier
+		 * ignoré n'est plus SURVEILLÉ du tout — pas seulement filtré à la
+		 * sortie — via `getWatched()` de chokidar, exposé au minimum par
+		 * `ArreterSurveillance` pour cette seule raison (voir sa doc dans
+		 * `index-fichiers.ts`).
+		 */
+		await cas(r, "un dossier ignoré (node_modules) n'entre jamais dans la table interne de chokidar", async () => {
+			const racine = await racineNeuve();
+			await mkdir(join(racine, "node_modules", "un-paquet"), { recursive: true });
+			await writeFile(join(racine, "node_modules", "un-paquet", "index.js"), "module.exports = {};");
+			const index = creerIndex([racine]);
+			const arreter = index.surveiller(() => {}, 50);
+			try {
+				await attendre(400); // laisse le parcours initial se dérouler en entier
+				const watches = JSON.stringify(arreter.getWatched());
+				r.check("un dossier ignoré (node_modules) n'entre jamais dans la table interne de chokidar",
+					watches.includes("node_modules") || watches.includes("un-paquet"), false);
+			} finally {
+				arreter();
+			}
+		});
+
+		/*
+		 * Le piège que la tâche demande d'éprouver : une racine surveillée dont
+		 * un ANCÊTRE (hors de la racine elle-même) porte un nom qui commence par
+		 * un point. Une règle qui testerait tous les segments du chemin ABSOLU
+		 * (au lieu du chemin RELATIF à la racine, via `contratDepuisAbsolu`)
+		 * ignorerait la racine elle-même à cause de `.racine-cachee` et
+		 * n'émettrait plus AUCUN événement, en silence — ce cas doit rester vert.
+		 */
+		await cas(r, "une racine sous un ancêtre au nom caché reste surveillée (piège absolu vs relatif)", async () => {
+			const parent = await racineNeuve();
+			const racine = join(parent, ".racine-cachee", "vault");
+			await mkdir(racine, { recursive: true });
+			const index = creerIndex([racine]);
+			const evs = [];
+			const arreter = index.surveiller(ev => evs.push(ev), 50);
+			try {
+				await attendre(200);
+				await writeFile(join(racine, "quiz.md"), "un vrai quiz");
+				await attendre(500);
+				r.check("une racine sous un ancêtre au nom caché reste surveillée (piège absolu vs relatif)",
+					evs.some(e => e.kind === "create"), true);
+			} finally {
+				arreter();
+			}
+		});
+
+		/*
+		 * CHOIX ASSUMÉ, écrit en commentaire sur `ignorerChemin`
+		 * (`index-fichiers.ts`) : un FICHIER caché directement sous une racine
+		 * (`racine/.gitignore`) reste SURVEILLÉ, pour ne pas diverger de
+		 * `parcours.ts` (le parcours initial qui hydrate le rendu), qui
+		 * n'exclut que les DOSSIERS. Le choix est écrit en commentaire, mais
+		 * rien ne le prouvait : un resserrement futur de `ignorerChemin` sur le
+		 * nom du fichier lui-même ne ferait rougir aucun cas. Celui-ci le fige.
+		 */
+		await cas(r, "un fichier caché directement sous la racine (.gitignore) reste surveillé", async () => {
+			const racine = await racineNeuve();
+			const index = creerIndex([racine]);
+			const evs = [];
+			const arreter = index.surveiller(ev => evs.push(ev), 50);
+			try {
+				await attendre(200);
+				await writeFile(join(racine, ".gitignore"), "node_modules");
+				await attendre(500);
+				r.check("un fichier caché directement sous la racine (.gitignore) reste surveillé",
+					evs.some(e => e.kind === "create"), true);
+			} finally {
+				arreter();
+			}
+		});
+
+		/*
 		 * DEUX cas distincts pour « hors racine », depuis la ronde de correction
 		 * 1 (commit 6581ec5) : le premier, initialement seul, ne discriminait
 		 * PAS — `watch(racinesAbs, …)` ne reçoit que les racines exactes, donc

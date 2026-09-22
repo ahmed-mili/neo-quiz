@@ -43,7 +43,7 @@ export interface AiSettingsHost {
 export function aiSettingsDefaults(): Required<Pick<AiSettings,
 	"aiProvider" | "aiModel" | "aiEffort" | "aiCodexFast" | "aiAntigravityLevels" | "aiAntigravityModels" | "aiOllamaUrl" | "aiOllamaCloudKey"
 	| "aiOllamaModels" | "aiOllamaCatalog" | "aiOllamaPlansAppris" | "aiOllamaPlanCompte"
-	| "aiWebAvertissementMasque" | "aiUsageLog"
+	| "aiCanauxPayantsMasques" | "aiWebAvertissementMasque" | "aiUsageLog"
 	| "aiMentionExtraFolders" | "aiOutputFolder">> & { hotkeyAddFiles: Hotkey } {
 	return {
 		// Aucun fournisseur par défaut : le choix reste la première étape.
@@ -68,6 +68,10 @@ export function aiSettingsDefaults(): Required<Pick<AiSettings,
 		// Rien d'appris tant qu'aucun 402 n'est arrivé ; plan inconnu.
 		aiOllamaPlansAppris: {},
 		aiOllamaPlanCompte: "",
+		// Aucun canal payant masqué d'office : le menu montre tout ce que la
+		// table des canaux propose (Réglages de l'application, section
+		// « Canaux payants »).
+		aiCanauxPayantsMasques: [],
 		// Le modal d'avertissement d'un site s'affiche tant qu'on ne l'a pas masqué.
 		aiWebAvertissementMasque: [],
 		// Journal d'usage : purement informatif, borné à 300 entrées (ai-usage.ts).

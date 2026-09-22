@@ -13,6 +13,15 @@ release notes.
 
 ## [Unreleased]
 
+### Added
+- The assistant menu marks every channel a free account can use with a "Free" badge, and a new "Paid assistants" settings section lets you hide the subscription-only assistants (Claude Code, Codex CLI) from that menu. Hiding the one you were using falls back to the first free assistant instead of leaving a dead selection.
+
+### Fixed
+- The app window now appears much faster on first launch: the file watcher no longer crawls and monitors `.git`, `.obsidian`, `node_modules` and other hidden folders it was going to discard anyway.
+- The app window now appears noticeably faster on cold starts: the file watcher's initial scan used to run before the window was shown and slow that down, it now starts right after instead.
+- Generating a quiz through a web channel (Mistral) no longer occasionally leaves the prompt box empty: the paste is now retried if the page redirects right after the first attempt, and each attempt replaces any text already there instead of risking a blind keystroke into the wrong window.
+- The retried paste above no longer overwrites text typed in the meantime, and no longer keeps running in the background after the action is cancelled.
+
 ## [1.14.1] - 2026-09-21
 
 ### Fixed

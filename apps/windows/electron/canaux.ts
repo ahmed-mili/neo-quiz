@@ -50,7 +50,7 @@ import { t } from "../../../src/i18n";
 import { validerReglagesIa } from "./garde-ia";
 import { CLE_DOSSIERS, CLE_DOSSIER_LEGACY, cheminsDeDossiers } from "./perimetre";
 import type { Perimetre } from "./perimetre";
-import { demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, verifierNavigateurVisible, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, poserFenetre, rectangleTerminal, run, scriptConnexion, scriptInstallation, scriptUsageTerminal } from "./process";
+import { arreterDisposerPourSite, demarrerOllama, disposerPourSite, disposerPourTerminal, iconeDeType, restaurerNavigateur, verifierNavigateurVisible, erreurCli, estOutilAutorise, lancerTerminal, lireCache, lireAncre, ollamaInstalle, poserFenetre, rectangleTerminal, run, scriptConnexion, scriptInstallation, scriptUsageTerminal } from "./process";
 import { deconnecterCompte, etatComptes, usageCompte } from "./comptes";
 import type { AncreTerminal, EtatCompte } from "../../../src/host/types";
 import type { UsageRead } from "../../../src/dashboard/usage-format";
@@ -653,7 +653,11 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		},
 	});
 	ipcMain.handle(CANAUX.collageAttendre, (_e, jeton: unknown) => jetonValide(jeton) && attente.demarrer(jeton, dernierTexteEcritParLapp));
-	ipcMain.handle(CANAUX.collageArreter, () => { attente.arreter(); });
+	/* Arrêter l'attente d'une réponse copiée arrête aussi, best effort, un
+	   script de collage encore en guet (`disposerPourSite`, process.ts) — sans
+	   ça il continue de guetter la fenêtre du site et peut coller jusqu'à une
+	   quarantaine de secondes après l'annulation. */
+	ipcMain.handle(CANAUX.collageArreter, () => { attente.arreter(); void arreterDisposerPourSite(); });
 
 	/* ─── DISPOSER LES FENÊTRES POUR UN SITE ───
 	   Neo Quiz passe à droite (posé ici, par `setBounds`, sur l'écran où il
@@ -804,6 +808,11 @@ export function enregistrerCanaux(deps: DependancesCanaux): ResultatCanaux {
 		/* Le navigateur d'abord, à sa place d'avant — ATTENDU : rendu agrandi,
 		   il prend le premier plan, et Neo Quiz doit le reprendre après. */
 		console.log(LOG_PREFIX, "[terminer] début");
+		/* Le script de collage encore en guet est tué EN PREMIER (best effort) :
+		   sans ça il peut reprendre le premier plan et coller bien après que
+		   l'utilisateur a fini — voir le commentaire de `enfantDisposerPourSite`
+		   (process.ts). */
+		await arreterDisposerPourSite();
 		const pNav = await restaurerNavigateur();
 		console.log(LOG_PREFIX, "[terminer] restaurerNavigateur terminé, pNav:", pNav ? `hwnd=${pNav.hwnd}` : "null");
 		const fenetre = deps.fenetreCourante();

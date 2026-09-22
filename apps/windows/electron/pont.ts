@@ -304,10 +304,17 @@ export interface Pont {
 	 * S'abonne aux changements de TOUTES les racines déclarées par `demarrer`.
 	 * Rend le désabonnement.
 	 *
-	 * S'ABONNER AVANT D'HYDRATER (`liste`), jamais l'inverse : un événement
-	 * arrivé entre les deux est alors soit déjà reflété par le parcours, soit
-	 * reçu par l'abonné — dans les deux cas le miroir reste juste. L'ordre
-	 * inverse ouvre une fenêtre où un changement est perdu jusqu'au prochain.
+	 * ON HYDRATE (`liste`) D'ABORD, ON S'ABONNE ENSUITE, depuis
+	 * perf-demarrage-surveillant — l'ordre inverse d'avant cette branche. Le
+	 * crawl initial du surveillant part avec `ignoreInitial: false`
+	 * (`index-fichiers.ts`) : il RE-ANNONCE donc chaque fichier déjà trouvé
+	 * par `liste`, une réconciliation complète et non une simple écoute ; un
+	 * fichier modifié entre l'hydratation et cet abonnement revient avec un
+	 * `mtime` différent de celui que `liste` a posé, et ressort en `modify`
+	 * plutôt que d'être perdu. L'explication complète, y compris ce que cet
+	 * ordre perd malgré tout, vit dans `apps/windows/src/host/fs.ts`
+	 * (`createWindowsIndex`, `demarrerSurveillance`), le seul appelant de
+	 * cette méthode.
 	 */
 	surveiller(onEvenement: (ev: EvenementDisque) => void): Promise<() => void>;
 

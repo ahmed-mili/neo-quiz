@@ -715,21 +715,138 @@ await withSrcModule("apps/windows/electron/process.ts", async ({
 		r.check("réduite (2) est rendue normale (1) : on l'avait restaurée pour la poser", lirePlacement("avant 5 2 0 0 10 10\r").showCmd, 1);
 		r.check("toute autre ligne : null", [lirePlacement("pret"), lirePlacement("avant x"), lirePlacement("")], [null, null, null]);
 		/* LE COLLAGE (2026-09-20) : demandé, le script attend que le titre de
-		   la fenêtre du navigateur se stabilise, la ramène devant et envoie
-		   Ctrl+V, APRÈS l'avoir posée ; non demandé, rien de tout cela. */
+		   la fenêtre du navigateur se stabilise, la ramène devant et colle,
+		   APRÈS l'avoir posée ; non demandé, rien de tout cela. */
 		const avecCollage = scriptDisposerPourSite(1234, true);
-		r.check("collage demandé : titre stable, premier plan, Ctrl+V, après la pose du navigateur",
+		r.check("collage demandé : titre stable, premier plan, colle, après la pose du navigateur",
 			{
 				drapeau: avecCollage.includes("$coller = $true"),
 				titre: avecCollage.includes("GetWindowText($hNav"),
-				devant: avecCollage.includes("SetForegroundWindow($hNav)"),
-				colle: avecCollage.includes("SendWait('^v')"),
-				apresPose: avecCollage.indexOf("SendWait('^v')") > avecCollage.lastIndexOf("Poser $hNav"),
+				devant: avecCollage.includes("SetForegroundWindow($h)"),
+				colle: avecCollage.includes("EnvoyerTouches $h '^v'"),
+				apresPose: avecCollage.indexOf("EnvoyerTouches $h '^v'") > avecCollage.lastIndexOf("Poser $hNav"),
 			},
 			{ drapeau: true, titre: true, devant: true, colle: true, apresPose: true });
 		r.check("collage non demandé : le drapeau est faux et rien ne dépend de lui hors de sa garde",
 			{ drapeau: disposition.includes("$coller = $false"), garde: disposition.includes("if ($coller) {") },
 			{ drapeau: true, garde: true });
+		/* ROBUSTESSE À LA REDIRECTION TARDIVE (2026-09-22, chat.mistral.ai qui
+		   colle une fois sur deux : mesuré, la page peut rediriger de `/chat`
+		   vers `/work` jusqu'à t ≈ 4,9 s, APRÈS un premier collage qu'une
+		   fenêtre au même titre rendait invisible à la boucle de stabilité). */
+		r.check("Ctrl+A précède Ctrl+V (idempotence : un second collage remplace plutôt que double)",
+			avecCollage.indexOf("EnvoyerTouches $h '^a'") > 0 && avecCollage.indexOf("EnvoyerTouches $h '^a'") < avecCollage.indexOf("EnvoyerTouches $h '^v'"), true);
+		r.check("le premier plan (GetForegroundWindow == $h) est vérifié avant CHAQUE envoi de touches, jamais un envoi aveugle",
+			{
+				compareAuHwndNavigateur: avecCollage.includes("GetForegroundWindow() -eq $h"),
+				gardeCoLocaliseeAvecLenvoi: /if \(-not \(AuPremierPlan \$h\)\) \{ return \$false \}; \[System\.Windows\.Forms\.SendKeys\]::SendWait/.test(avecCollage),
+				unSeulSendWaitDansLeScript: (avecCollage.match(/SendKeys\]::SendWait/g) || []).length,
+			},
+			{ compareAuHwndNavigateur: true, gardeCoLocaliseeAvecLenvoi: true, unSeulSendWaitDansLeScript: 1 });
+		r.check("« colle »/« recolle » ne sont écrits qu'après un collage RÉUSSI, jamais inconditionnellement",
+			{
+				colleConditionnel: avecCollage.includes("if (TenterCollage $hNav) { [Console]::Out.WriteLine('colle')"),
+				/* Depuis la garde anti-frappe (2026-09-22) : le second collage est
+				   dans le `elseif` d'un `if ($tapee)`, plus dans un `if` isolé — voir
+				   le groupe de cas suivant, qui éprouve cette garde. */
+				recolleConditionnel: avecCollage.includes("} elseif (TenterCollage $hNav) {\n        [Console]::Out.WriteLine('recolle')"),
+				appeleeDeuxFois: (avecCollage.match(/TenterCollage \$hNav/g) || []).length,
+			},
+			{ colleConditionnel: true, recolleConditionnel: true, appeleeDeuxFois: 2 });
+		r.check("une redirection tardive (titre qui repasse par vide puis se restabilise, même règle de six lectures) déclenche un second collage borné dans le temps",
+			{
+				guetteLeVide: avecCollage.includes("if (-not $t) { $vu = $true }"),
+				restabilisationMemeRegleDeSix: avecCollage.includes("if ($stable -ge 6) { $restabilise = $true; break }"),
+				secondCollageGardeParLaRestabilisation: avecCollage.indexOf("if ($restabilise) {") < avecCollage.indexOf("WriteLine('recolle')"),
+				delaisBornesEtNommes: avecCollage.includes("$delaiSurveillanceMs = 12000") && avecCollage.includes("$delaiComposerApresRedirectionMs = 3000"),
+			},
+			{ guetteLeVide: true, restabilisationMemeRegleDeSix: true, secondCollageGardeParLaRestabilisation: true, delaisBornesEtNommes: true });
+		/* LA GARDE ANTI-FRAPPE (2026-09-22) : le second collage remplace (Ctrl+A)
+		   ce qui est dans le composer, donc ne doit JAMAIS partir si l'utilisateur
+		   a tapé depuis le premier collage — `GetAsyncKeyState`, pas
+		   `GetLastInputInfo` (qui compte aussi la souris, bougée en permanence
+		   pendant ces secondes-là, et ferait renoncer presque à chaque fois). */
+		r.check("GetAsyncKeyState est importé, et sur des touches de SAISIE seulement (pas Alt+Tab, pas le volume)",
+			{
+				importe: avecCollage.includes("GetAsyncKeyState(int vKey)"),
+				pasGetLastInputInfo: !avecCollage.includes("GetLastInputInfo"),
+				/* Lettres, chiffres, pavé numérique, espace, retour arrière, entrée :
+				   les bornes de plage attendues, jamais une liste de touches système. */
+				lettres: avecCollage.includes("(0x41..0x5A)"),
+				chiffres: avecCollage.includes("(0x30..0x39)"),
+				paveNumerique: avecCollage.includes("(0x60..0x69)"),
+				espaceRetourArriereEntree: avecCollage.includes("@(0x08,0x0D,0x20)"),
+			},
+			{ importe: true, pasGetLastInputInfo: true, lettres: true, chiffres: true, paveNumerique: true, espaceRetourArriereEntree: true });
+		{
+			const iColle = avecCollage.indexOf("WriteLine('colle')");
+			const iNettoyage = avecCollage.indexOf("foreach ($vk in $touchesSaisie) { [NQ.Win]::GetAsyncKeyState($vk) | Out-Null }");
+			const iBoucleGuet = avecCollage.indexOf("for ($i = 0; $i -lt ($delaiSurveillanceMs / 100); $i++) {");
+			const iRenonce = avecCollage.indexOf("WriteLine('renonce')");
+			const iRecolle = avecCollage.indexOf("} elseif (TenterCollage $hNav) {");
+			r.check("l'état des touches de saisie est vidé APRÈS le premier collage et AVANT le guet — sinon le Ctrl+A/Ctrl+V qu'on vient d'envoyer se compterait comme une frappe de l'utilisateur",
+				iColle > 0 && iNettoyage > iColle && iNettoyage < iBoucleGuet, true);
+			r.check("le guet sonde une frappe à CHAQUE tour (toutes les 100 ms), avant et après la restabilisation",
+				{
+					dansLaBoucle: /for \(\$i = 0; \$i -lt \(\$delaiSurveillanceMs \/ 100\); \$i\+\+\) \{\s*Start-Sleep -Milliseconds 100\s*if \(-not \$tapee -and \(ToucheSaisieFrappee\)\)/.test(avecCollage),
+					apresLeDelaiDuComposer: avecCollage.includes("Start-Sleep -Milliseconds $delaiComposerApresRedirectionMs\n      if (-not $tapee -and (ToucheSaisieFrappee))"),
+				},
+				{ dansLaBoucle: true, apresLeDelaiDuComposer: true });
+			r.check("une frappe détectée écrit « renonce » et saute le second collage — jamais de vol de premier plan quand le garde refuse",
+				{
+					ordre: iRenonce > 0 && iRenonce < iRecolle,
+					renonceDansLeIfTapee: /if \(\$tapee\) \{\s*\[Console\]::Out\.WriteLine\('renonce'\)/.test(avecCollage),
+					recolleDansLeElse: avecCollage.slice(iRecolle).startsWith("} elseif (TenterCollage $hNav) {\n        [Console]::Out.WriteLine('recolle')"),
+					/* La branche « renonce » (entre son écriture et le `elseif` qui
+					   suit) ne contient QUE l'écriture du marqueur : ni
+					   SetForegroundWindow ni SendKeys — refuser, c'est ne rien
+					   envoyer, jamais forcer le focus pour rien. */
+					brancheRenonceSansVolDeFocus: !/SetForegroundWindow|SendKeys/.test(avecCollage.slice(iRenonce, iRecolle)),
+				},
+				{ ordre: true, renonceDansLeIfTapee: true, recolleDansLeElse: true, brancheRenonceSansVolDeFocus: true });
+		}
+		/* L'ANALYSE SYNTAXIQUE ELLE-MÊME (2026-09-22). Tous les cas ci-dessus ne
+		   cherchent que des SOUS-CHAÎNES dans le script produit — aveugles à toute
+		   faute de SYNTAXE PowerShell ou de PORTÉE de variable, exactement
+		   l'avertissement que le CLAUDE.md du projet porte sur ce genre de
+		   contrôle. Le script est donc donné au parseur de PowerShell LUI-MÊME
+		   (`[System.Management.Automation.Language.Parser]::ParseInput`).
+
+		   LE POINT DÉLICAT EST L'ÉCHAPPEMENT : ce script contient des centaines
+		   d'apostrophes, de guillemets, d'accolades et de dollars — l'embarquer
+		   tel quel dans un argument `-Command` en aurait fait une seconde source
+		   de bugs (échapper le texte qu'on cherche justement à faire analyser).
+		   Il est donc transmis par STDIN (`spawnSync(..., { input: script })`) à
+		   un wrapper PowerShell FIXE et minuscule, qui ne contient lui-même
+		   aucune apostrophe ni aucun guillemet : `[Console]::In.ReadToEnd()`.
+		   Aucune trace du texte analysé n'apparaît jamais sur une ligne de
+		   commande. Sauté proprement (jamais un échec) si PowerShell est
+		   introuvable sur la machine qui lance le contrôle. */
+		{
+			const { spawnSync } = await import("node:child_process");
+			const powershellDisponible = (() => {
+				try {
+					const sonde = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "1"], { encoding: "utf8", windowsHide: true, timeout: 10000 });
+					return !sonde.error && sonde.status === 0;
+				} catch { return false; }
+			})();
+			if (!powershellDisponible) {
+				console.log("check-electron-process : PowerShell introuvable — analyse syntaxique du script de collage sautée");
+			} else {
+				const parseurPs = [
+					"$texte = [Console]::In.ReadToEnd()",
+					"$erreurs = $null",
+					"[System.Management.Automation.Language.Parser]::ParseInput($texte, [ref]$null, [ref]$erreurs) | Out-Null",
+					"[Console]::Out.WriteLine($erreurs.Count)",
+				].join("\n");
+				for (const [nom, script] of [["sans collage", disposition], ["avec collage", avecCollage]]) {
+					const resultat = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", parseurPs], { input: script, encoding: "utf8", windowsHide: true, timeout: 20000 });
+					r.check("le script de disposition (" + nom + ") est syntaxiquement valide pour le parseur PowerShell",
+						{ code: resultat.status, erreurs: Number((resultat.stdout || "-1").trim()) },
+						{ code: 0, erreurs: 0 });
+				}
+			}
+		}
 		const restauration = scriptRestaurerNavigateur({ hwnd: 725604, showCmd: 3, l: 100, t: 100, r: 1000, b: 700 });
 		r.check("la restauration passe par SetWindowPlacement, sur la fenêtre si elle existe encore",
 			[restauration.includes("IsWindow($h)"), restauration.includes("SetWindowPlacement"), restauration.includes("$p.ShowCmd = 3"), restauration.includes("$p.R = 1000")], [true, true, true, true]);

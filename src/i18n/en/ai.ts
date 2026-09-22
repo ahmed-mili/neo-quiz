@@ -219,6 +219,13 @@ export const EN_AI = {
 	/* Modèle Ollama cloud hors du plan gratuit (recommandations du démon ou
 	   402 déjà essuyé) : badge dans la liste ET sur le trigger du menu. */
 	"ai.badge.pro": "Pro",
+	/* ── Pastille d'un canal GRATUIT dans le sous-menu des fournisseurs ──
+	   UNE seule pastille existe (décision du 2026-09-22) : elle dit « gratuit »,
+	   jamais « payant ». Un canal payant n'en porte aucune — son statut se lit
+	   par l'ABSENCE de cette pastille, jamais par une seconde qui la
+	   contredirait. Pas de montant, pas de quota : cf. `Canal.gratuit` dans
+	   ai-providers.ts pour ce qui rendrait cette chaîne fausse. */
+	"ai.badge.free": "Free",
 
 	/* ── Niveaux d'effort : seuls les sous-titres sont traduits (low, medium,
 	   high… sont le vocabulaire des CLI, identique dans toutes les langues). ── */

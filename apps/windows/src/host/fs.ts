@@ -22,9 +22,20 @@
         UNE ÉCRITURE » (`src/host/types.ts`) sans attendre le surveillant :
         sans cette voie, `detail-io.ts` relisait un `mtime` d'AVANT sa propre
         sauvegarde et affichait une Notice « modifié dehors » mensongère.
-   L'ordre entre 1 et 2 compte : ON S'ABONNE AVANT D'HYDRATER. Un changement
-   survenu entre les deux est alors soit déjà dans le parcours, soit reçu par
-   l'abonné ; dans l'ordre inverse il serait perdu jusqu'au suivant.
+   L'ORDRE ENTRE 1 ET 2 S'EST INVERSÉ (perf-demarrage-surveillant) : ON
+   HYDRATE D'ABORD, ON NE SURVEILLE QU'ENSUITE. Ceci contredit une
+   affirmation antérieure de cet en-tête (« ON S'ABONNE AVANT D'HYDRATER ») :
+   elle tenait sous Tauri et au début de la migration Electron, mais le
+   surveillant du principal (`index-fichiers.ts`, chokidar) part avec
+   `ignoreInitial: false` — son crawl initial tourne dans le MÊME processus,
+   mono-thread, que les `neo.fichiers.liste` de l'hydratation, et démarré
+   AVANT elle, il la retardait derrière lui : mesuré, plus d'une seconde sur
+   un vault de ~1700 fichiers, donc la fenêtre avec, puisque rien ne
+   s'affiche avant `neo.fenetre.prete()`. `createWindowsIndex` ne fait donc
+   plus que l'hydratation ; la surveillance part par `demarrerSurveillance()`,
+   exposée sur le `MiroirDisque` qu'elle rend, appelée par `main.ts` une fois
+   la fenêtre montrée. Ce que l'inversion coûte, et ne referme pas toute
+   seule, est écrit sur `createWindowsIndex` plus bas.
 
    Ce n'est pas une architecture neuve : `buildIndex` et `apply` vivaient déjà
    ici sous Tauri. Seule la SOURCE des données a changé de côté.
@@ -70,14 +81,25 @@ export interface WindowsIndex {
 
 /**
  * Le MIROIR : l'index, plus les abonnés que le surveillant du principal
- * alimente. `createWindowsIndex` le construit (il s'abonne PUIS hydrate,
- * dans cet ordre — voir l'en-tête) ; `createWindowsWatcher` ne fait que
- * présenter ses abonnements sous la forme du contrat `HostWatcher`. Les deux
- * ne sont pas fusionnés : `createWindowsFs` et les liens ne veulent qu'un
- * `WindowsIndex`, et un faux index à trois méthodes leur suffit dans les
- * contrôles.
+ * alimente, plus `demarrerSurveillance` — de quoi LANCER ce surveillant.
+ * `createWindowsIndex` le construit : il hydrate tout de suite, mais
+ * n'appelle plus `neo.surveiller` lui-même (voir l'en-tête) ; c'est
+ * `demarrerSurveillance()` qui le fait, à l'appel de `main.ts`, une fois la
+ * fenêtre montrée. `createWindowsWatcher` ne fait que présenter les
+ * abonnements du miroir sous la forme du contrat `HostWatcher` — il ne
+ * démarre rien de plus. Les deux ne sont pas fusionnés : `createWindowsFs`
+ * et les liens ne veulent qu'un `WindowsIndex`, et un faux index à trois
+ * méthodes leur suffit dans les contrôles.
  */
 export interface MiroirDisque extends WindowsIndex {
+	/**
+	 * Démarre la surveillance du principal (`neo.surveiller`) — le CRAWL
+	 * initial de chokidar compris. Différée hors de `createWindowsIndex` pour
+	 * ne plus retarder l'hydratation ni, par elle, l'affichage de la fenêtre
+	 * (voir l'en-tête du fichier). IDEMPOTENTE : un second appel ne pose pas
+	 * un second abonné.
+	 */
+	demarrerSurveillance(): Promise<void>;
 	onChange(cb: (ev: HostFileEvent) => void): () => void;
 	onRenameDir(cb: (ev: { from: string; to: string }) => void): () => void;
 }
@@ -167,7 +189,7 @@ export function buildIndex(fichiers: HostFile[]): WindowsIndex {
 	};
 }
 
-/* ─────────── le miroir : abonnement, puis hydratation ─────────── */
+/* ─────────── le miroir : hydratation, puis surveillance différée ─────────── */
 
 /* `horsCatalogue` est RÉEXPORTÉE parce que ce fichier l'emploie et que les cas
    du groupe « index » de `check-windows-host.mjs` l'atteignent par là.
@@ -190,30 +212,33 @@ export { horsCatalogue };
  * La garde sur `delete` évite d'annoncer la disparition d'un fichier que le
  * catalogue n'a jamais connu (un `.tmp` d'éditeur).
  *
- * LA DÉDUPLICATION SUR LE `mtime` (revue finale de la migration, I3). Le
- * surveillant du principal part avec `ignoreInitial: false`
- * (`index-fichiers.ts`, c'est ce qui peuple SON index), donc son parcours
- * initial est POUSSÉ ici comme autant de `create` — un par fichier du vault.
- * La revue y voyait chaque `.md` relu deux fois au démarrage (le `create`
- * devenu `modify`, donc un `scanFile` du scanner, donc un `readCached` par
- * IPC + parse). MESURÉ sur `Personal` (1676 fichiers, 531 `.md`) AVANT de
- * toucher au code, et ce n'est PAS ce qui se passe : la rafale de chokidar
- * arrive de 66 à 532 ms après le montage, `liste` (le parcours) rend à 542 ms
- * — la rafale entière frappe un miroir encore VIDE, sans aucun abonné (le
- * scanner ne s'abonne qu'après), puis l'hydratation saute les 1676 entrées
- * qu'elle trouve déjà posées. `readCached` au démarrage : 531 + 1 (la note du
- * plan des modules), pas 1062. Le coût réel de `ignoreInitial: false` est
- * 1676 messages IPC et autant de `stat` côté principal, en parallèle du
- * parcours : invisible.
- * La comparaison ci-dessous n'attrape donc RIEN aujourd'hui (0 sur 1676,
- * mesuré aussi), et elle reste parce qu'elle protège l'ORDRE INVERSE — un
- * parcours qui rendrait avant la fin de la rafale (disque plus rapide que
- * chokidar, `awaitWriteFinish` qui retarde les `add`) ferait de chaque
- * `create` un `modify` vers un scanner déjà abonné — sans rien coûter à
- * « on s'abonne AVANT d'hydrater » : un vrai changement survenu pendant le
- * parcours porte un `mtime` DIFFÉRENT, il passe. Les fichiers qui ne sont pas
- * des `.md` passent quoi qu'il arrive (le parcours ne les date pas, `mtime` 0,
- * chokidar si) : le scanner les ignore par extension, ce n'est que du fan-out.
+ * LA DÉDUPLICATION SUR LE `mtime` (revue finale de la migration, I3 ; sa
+ * PORTÉE a changé avec l'inversion de l'ordre — voir l'en-tête et
+ * `createWindowsIndex`). Le surveillant du principal part avec
+ * `ignoreInitial: false` (`index-fichiers.ts`, c'est ce qui peuple SON
+ * index), donc son crawl initial est POUSSÉ ici comme autant de `create` —
+ * un par fichier de la racine.
+ *
+ * AVANT L'INVERSION, `demarrerSurveillance` n'existait pas : `surveiller()`
+ * partait avant l'hydratation, et MESURÉ sur `Personal` (1676 fichiers,
+ * 531 `.md`), la rafale de chokidar frappait un miroir encore VIDE — cette
+ * comparaison n'attrapait donc RIEN (0 sur 1676), et ne servait qu'à
+ * protéger un ordre hypothétique où le parcours aurait rendu AVANT la fin de
+ * la rafale.
+ *
+ * DEPUIS L'INVERSION, cet ordre hypothétique EST l'ordre réel :
+ * `demarrerSurveillance()` ne part qu'une fois l'hydratation terminée (et la
+ * fenêtre déjà montrée), donc le miroir est déjà plein quand le crawl de
+ * chokidar arrive. La comparaison fait alors un vrai travail à chaque
+ * démarrage : chaque fichier INCHANGÉ depuis l'hydratation revient avec le
+ * MÊME `mtime`, elle l'avale silencieusement, et seul un fichier vraiment
+ * modifié entre l'hydratation et l'appel de `demarrerSurveillance` (un
+ * `mtime` DIFFÉRENT) devient un `modify` vers un scanner déjà abonné. Sans
+ * elle, le crawl entier redeviendrait autant de `create`, donc de
+ * `scanFile`/`readCached` en double au démarrage. Les fichiers qui ne sont
+ * pas des `.md` passent quoi qu'il arrive (le parcours ne les date pas,
+ * `mtime` 0, chokidar si) : le scanner les ignore par extension, ce n'est
+ * que du fan-out.
  */
 function versContrat(
 	carte: CarteRacines,
@@ -231,26 +256,47 @@ function versContrat(
 
 /**
  * Construit le MIROIR de toutes les racines ouvertes : déclare les racines au
- * principal (`demarrer`), S'ABONNE à son surveillant, PUIS hydrate par un
- * parcours de chaque racine. Dans cet ordre, et c'est écrit dans `pont.ts` :
- * un changement survenu pendant le parcours est reçu par l'abonné, alors que
- * l'ordre inverse le perdrait jusqu'au suivant.
+ * principal (`demarrer`), PUIS hydrate par un parcours de chaque racine — et
+ * s'ARRÊTE là. La surveillance NE PART PLUS d'ici : elle est exposée sur le
+ * `MiroirDisque` rendu (`demarrerSurveillance`), et c'est `main.ts` qui
+ * l'appelle, une fois la fenêtre montrée (voir l'en-tête du fichier pour la
+ * mesure qui a motivé l'inversion). `demarrer` reste ici, avant même
+ * l'hydratation : `neo.fichiers.liste` n'en a pas besoin, mais
+ * `neo.surveiller` — appelé bien plus tard par `demarrerSurveillance` — en a
+ * besoin (`canaux.ts` le rejette sans racines déclarées), et le déclarer
+ * tout de suite ne coûte que quelques millisecondes.
  *
- * L'hydratation n'ÉCRASE PAS une entrée que l'abonné a déjà posée : un
- * événement reçu pendant le parcours porte le `mtime` d'un changement survenu
- * APRÈS l'abonnement, et le parcours a pu dater ce fichier avant.
+ * POURQUOI CETTE INVERSION NE PERD PAS LES CHANGEMENTS ORDINAIRES. Le
+ * surveillant du principal part avec `ignoreInitial: false`
+ * (`index-fichiers.ts`) : son crawl, quand `demarrerSurveillance()` finit
+ * par partir, RE-ANNONCE donc CHAQUE fichier qui existe encore sur le disque
+ * à cet instant — une réconciliation complète, pas une simple écoute. Un
+ * fichier créé ou modifié entre la fin de l'hydratation et l'appel de
+ * `demarrerSurveillance` revient avec un `mtime` DIFFÉRENT de celui que
+ * l'hydratation a posé, et `versContrat` (même fichier, plus haut) le
+ * traduit en `create`/`modify` : rien n'est perdu, juste retardé jusqu'à cet
+ * appel.
  *
- * UNE COURSE CONNUE, ET ELLE NE SE REFERME PAS TOUTE SEULE. Un fichier
- * supprimé PENDANT le parcours peut rester listé : le `readdir` l'a vu, le
- * `unlink` a suivi, et la suppression n'a rien à retirer d'un miroir encore
- * vide. Elle ne repassera pas : le principal ne pousse la disparition que d'un
- * fichier que SON index connaît (`index-fichiers.ts`, `surSuppression`), et il
- * ne l'a jamais indexé non plus. Le fantôme tient donc toute la SESSION — un
- * quiz au catalogue dont la note n'existe plus, jusqu'au prochain
- * rechargement. Même classe de course que sous Tauri (le parcours et le
- * surveillant y étaient déjà deux lectures distinctes du disque) : ce n'est pas
- * une régression, c'est une limite, et elle est écrite ici plutôt que promise
- * refermée.
+ * CE QUE ÇA PERD VRAIMENT, ET QUI NE SE REFERME PAS TOUT SEUL. Une
+ * SUPPRESSION survenue dans cette même fenêtre n'est annoncée par PERSONNE :
+ * chokidar n'émet un `unlink` que pour un fichier qu'il a lui-même vu passer
+ * par son crawl initial, et un fichier disparu AVANT ce crawl n'y passe
+ * jamais — ni `add`, ni plus tard `unlink`. Le miroir (et le catalogue)
+ * garde donc une entrée FANTÔME — un quiz dont la note n'existe plus —
+ * jusqu'au prochain lancement, qui repart d'une hydratation fraîche. Un
+ * RENOMMAGE survenu dans la même fenêtre relève du MÊME mécanisme (chokidar
+ * ne réémet jamais l'ancien chemin) mais avec un symptôme DIFFÉRENT : ni
+ * `unlink` de l'ancien ni, forcément, `add` du nouveau (si celui-ci existait
+ * déjà au moment du crawl), donc l'ancienne entrée reste au catalogue EN
+ * PLUS de la nouvelle — un DOUBLON, là où une suppression ne laisse qu'une
+ * entrée fantôme seule. Cette classe de course existait déjà avant cette
+ * tâche (le parcours et le surveillant sont deux lectures distinctes du
+ * disque depuis Tauri) ; ce que cette tâche change, c'est sa FENÊTRE : elle
+ * ne couvre plus la seule durée du parcours, mais tout l'intervalle entre la
+ * fin de l'hydratation et l'appel de `demarrerSurveillance` par `main.ts` —
+ * plus large, parce que délibérément posé après que la fenêtre soit
+ * visible. Ce n'est pas une régression cachée : c'est une limite assumée,
+ * écrite ici plutôt que promise refermée.
  *
  * `mtime` n'est relevé par le principal que sur les `.md` (`parcours.ts`) :
  * seul le catalogue de quiz s'en sert (tri « récents »). Les autres fichiers
@@ -313,19 +359,39 @@ export async function createWindowsIndex(carte: CarteRacines): Promise<MiroirDis
 	};
 
 	const racines = carte.toutes();
+	/* `demarrer` reste ICI, avant l'hydratation : voir la JSDoc au-dessus pour
+	   pourquoi (`neo.surveiller`, appelé bien plus tard par
+	   `demarrerSurveillance`, en a besoin — pas `neo.fichiers.liste`). */
 	await neo.demarrer(racines.map(r => r.path));
-	/* Jamais désabonné : le miroir doit rester juste tant que la fenêtre vit,
-	   même quand personne n'écoute, sinon la première vue montée après une
-	   modification afficherait un catalogue périmé. Le désabonnement rendu
-	   par `surveiller` ne servirait qu'à un rechargement, qui repart de zéro. */
-	await neo.surveiller(ev => {
-		if (ev.kind === "renameDir") {
-			diffuserRenameDir(ev);
-			return;
-		}
-		const traduit = versContrat(carte, index, ev);
-		if (traduit) diffuser(traduit);
-	});
+
+	/* Jamais désabonnée une fois démarrée : le miroir doit rester juste tant
+	   que la fenêtre vit, même quand personne n'écoute, sinon la première vue
+	   montée après une modification afficherait un catalogue périmé. Le
+	   désabonnement rendu par `surveiller` ne servirait qu'à un rechargement,
+	   qui repart de zéro. */
+	let surveillanceDemarree = false;
+	/**
+	 * DIFFÉRÉE — voir l'en-tête du fichier et la JSDoc de `createWindowsIndex`
+	 * pour le pourquoi. Le rappel posé ici (traduire, puis diffuser) est
+	 * EXACTEMENT celui que l'ancien appel synchrone posait : seul le MOMENT
+	 * où `neo.surveiller` part a changé, pas ce qu'il fait une fois parti.
+	 * IDEMPOTENTE : `main.ts` ne l'appelle qu'une fois, mais un second appel
+	 * ne doit pas pour autant poser un second abonné IPC — `preload.ts`
+	 * ajoute un écouteur à CHAQUE appel de `surveiller`, sans garde de son
+	 * côté.
+	 */
+	async function demarrerSurveillance(): Promise<void> {
+		if (surveillanceDemarree) return;
+		surveillanceDemarree = true;
+		await neo.surveiller(ev => {
+			if (ev.kind === "renameDir") {
+				diffuserRenameDir(ev);
+				return;
+			}
+			const traduit = versContrat(carte, index, ev);
+			if (traduit) diffuser(traduit);
+		});
+	}
 
 	for (const racine of racines) {
 		let entrees;
@@ -346,6 +412,7 @@ export async function createWindowsIndex(carte: CarteRacines): Promise<MiroirDis
 		all: index.all,
 		get: index.get,
 		apply: index.apply,
+		demarrerSurveillance,
 		onChange(cb) {
 			abonnes.add(cb);
 			return () => {
@@ -626,8 +693,9 @@ export function createWindowsFs(carte: CarteRacines, index: WindowsIndex): HostF
 
 /**
  * Le contrat `HostWatcher`, posé sur le miroir. Il ne surveille rien
- * lui-même : l'abonnement au principal est pris par `createWindowsIndex`,
- * AVANT l'hydratation (voir l'en-tête), et le miroir tient les abonnés.
+ * lui-même : l'abonnement au principal est pris par `demarrerSurveillance()`
+ * — pas par `createWindowsIndex`, voir l'en-tête — et le miroir tient les
+ * abonnés.
  */
 export function createWindowsWatcher(miroir: MiroirDisque): HostWatcher {
 	return {

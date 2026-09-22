@@ -794,7 +794,18 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// et sous-titre ; le tooltip au survol porte nom + statut.
 		// Aucun fournisseur par défaut : le choix reste la première étape,
 		// le contrôle Modèle n'apparaît qu'une fois le fournisseur choisi.
-		const provider = settings().aiProvider || "";
+		/* Un fournisseur devenu INVISIBLE (masqué dans les Réglages pendant
+		   qu'il était retenu, ici ou depuis l'autre hôte) ne reste pas retenu :
+		   le menu ne le montrerait plus et l'envoi partirait sur un canal
+		   invisible. Le repli (premier canal gratuit visible) est persisté
+		   tout de suite, sans attendre — sinon le prochain rendu retomberait
+		   sur le même réglage mort. */
+		const providerMasques = settings().aiCanauxPayantsMasques;
+		const providerResolu = aiProviders.resoudreApresMasquage(settings().aiProvider || "", providerMasques);
+		if (providerResolu !== (settings().aiProvider || "")) {
+			void saveSettings({ aiProvider: providerResolu, aiModel: providerResolu ? aiProviders.getProvider(providerResolu).defaultModel : "" });
+		}
+		const provider = providerResolu;
 		const currentModel = provider
 			? (settings().aiModel || aiProviders.getProvider(provider).defaultModel)
 			: "";
@@ -1750,11 +1761,16 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	   que « Sur ta machine ») et son libellé générique sinon — un site n'a
 	   rien à détecter, il n'aura donc jamais de statut. */
 	function optionsMarques(secondaires = false): ProviderBrandOption[] {
+		/* Les canaux PAYANTS masqués (Réglages) sortent du menu : un canal
+		   gratuit n'y entre jamais (canalVisible le garantit), un canal
+		   inconnu non plus. Le réglage brut est relu à CHAQUE ouverture —
+		   c'est lui qui décide, pas une copie figée au rendu du composer. */
+		const masques = settings().aiCanauxPayantsMasques;
 		return aiProviders.MARQUES.filter(m => !!m.secondaire === secondaires).map(m => ({
 			value: m.id,
 			label: m.name,
 			logo: m.logo,
-			channels: m.canaux.map(c => ({
+			channels: m.canaux.filter(c => aiProviders.canalVisible(c.id, masques)).map(c => ({
 				value: c.id,
 				label: c.label,
 				sub: providerStatus[c.id]?.text || c.sub,
@@ -1766,6 +1782,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				// La ligne de marque nomme le SITE en usage (« claude.ai »), pas
 				// « Dans votre navigateur » — ça, c'est le flyout qui le dit.
 				resume: c.type === "web" ? c.label : undefined,
+				// La pastille « Gratuit » uniquement sur les canaux gratuits :
+				// un canal payant se lit à l'ABSENCE de pastille (décision du
+				// 2026-09-22, cf. `Canal.gratuit`).
+				badge: c.gratuit ? t("ai.badge.free") : undefined,
 				disabled: providerStatus[c.id]?.dot === "err",
 				// Pastille SEULEMENT quand quelque chose ne va pas (demande
 				// d'Ahmed, 2026-09-17) : orange « ça marcherait, mais le serveur

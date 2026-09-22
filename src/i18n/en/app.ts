@@ -96,6 +96,13 @@ export const EN_APP = {
 	   ne publie aucun forfait : sa ligne montre l'adresse seule, `plan` y
 	   reste `null` et la colonne ne s'affiche pas. */
 	"app.settings.accounts": "CLI accounts",
+	/* ── Réglages « Canaux payants » (application seulement) ──
+	   Une case par canal qui exige un abonnement : décochée, il sort du menu
+	   des fournisseurs. Les canaux gratuits n'y figurent jamais — ils n'ont
+	   rien à payer, ils restent. */
+	"app.settings.paidChannels": "Paid assistants",
+	"app.settings.paidChannelsHint": "These assistants need a subscription. Untick one to remove it from the generation menu; tick it again to bring it back.",
+	"app.settings.paidChannelRow": "Show “{name}” in the generation menu",
 	"app.comptes.claude": "Claude Code",
 	"app.comptes.codex": "Codex CLI",
 	"app.comptes.agy": "Antigravity CLI",

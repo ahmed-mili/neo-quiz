@@ -451,6 +451,28 @@
 	line-height: 1.3;
 }
 
+/* Ligne libellé + pastille « Gratuit » (`ai-providers.ts`, `Canal.gratuit`) :
+   un rang à part du sous-titre, comme `.qbd-model-option-top` pour un modèle,
+   pour que la pastille suive le libellé plutôt que de tomber sous le
+   sous-titre. */
+.qbd-provider-option-top {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.qbd-provider-option-badge {
+	font-size: 10px;
+	font-weight: 500;
+	line-height: 1.35;
+	padding: 1px 7px;
+	border-radius: 999px;
+	color: var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+	white-space: nowrap;
+}
+
 .qbd-provider-option-sub {
 	font-size: 10.5px;
 	line-height: 1.35;

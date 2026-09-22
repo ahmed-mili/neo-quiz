@@ -11,17 +11,20 @@ export default async function () {
 		appId: "com.ahmed.neoquiz.installer",
 		productName: "Neo Quiz Installer",
 		executableName: "neo-quiz-installer",
-		/* Le portable s'auto-extrait à chaque lancement, et `store` rendait
-		   cette extraction gratuite au prix d'un exe de 371 Mo — presque trois
-		   fois l'installeur de 132 Mo qu'il ne fait que TÉLÉCHARGER. MESURÉ sur
-		   le runner (2026-09-17, deux répétitions `workflow_dispatch`) :
-		   `normal` le ramène à 97 Mo, pour 1 min 45 de packaging au lieu de
-		   14 s ; `maximum` ne gagne que 3 Ko de plus et coûte 23 s — inutile de
-		   le réessayer. Les 273 Mo économisés valent une demi-minute de
-		   téléchargement en moins à CHAQUE installation, contre quelques
-		   secondes d'extraction une seule fois, et autant à la CI, où l'envoi
-		   des paquets domine tout le reste. */
-		compression: "normal",
+		/* `store`, et c'est un choix d'EXPÉRIENCE, pas de poids (2026-09-22).
+		   Le portable s'auto-extrait à CHAQUE lancement avant qu'Electron ne
+		   puisse peindre quoi que ce soit. MESURÉ en local, double-clic →
+		   fenêtre Electron : 3,7 s en `normal`, 0,9 s en `store`. L'exe passe
+		   de ~97 à ~312 Mo ; décision d'Ahmed : « si l'installeur sur GitHub
+		   doit faire 500 Mo ça ne pose aucun problème », pourvu que la fenêtre
+		   soit là dès le clic. (L'ancien arbitrage inverse, pris le 2026-09-17
+		   pour la demi-minute de téléchargement, est révolu : `normal` ramène
+		   97 Mo pour 1 min 45 de packaging, `maximum` 3 Ko de plus.)
+
+		   Les ~0,9 s qui restent ne sont plus vides : le conteneur peint en
+		   ~70 ms `ecran-initial.bmp`, ce même premier écran, là où Electron
+		   s'ouvrira (voir `portable.splashImage` ci-dessous). */
+		compression: "store",
 		/* LE CONTENEUR PORTABLE S'EXTRAIT À CHAQUE LANCEMENT : tout ce qu'il
 		   embarque est réécrit sur le disque de l'utilisateur avant la première
 		   fenêtre, et compté dans le téléchargement. Les `.pak` que Chromium
@@ -82,6 +85,12 @@ export default async function () {
 			requestedExecutionLevel: "asInvoker",
 		},
 		portable: {
+			/* Pas l'image plein écran de BgImage que le template d'origine en
+			   ferait : le template patché (`patches/app-builder-lib+*.patch`)
+			   la peint dans une fenêtre sans bordure aux dimensions et à la
+			   place de la fenêtre Electron, et ne la retire qu'une fois celle-ci
+			   peinte par-dessus. Régénérée par `capturer-ecran-initial.mjs`. */
+			splashImage: "installer/ecran-initial.bmp",
 			/* C'est le manifeste du CONTENEUR portable que Windows exécute en
 			   premier. Le laisser explicitement à `user` garantit l'absence
 			   d'UAC avant que l'utilisateur ait cliqué sur Installer. */

@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Changed
+- The installer window now appears the instant you open `NeoQuiz-X.Y.Z.exe`, in its final dark style, instead of a light progress box followed by several seconds of waiting. The download is larger (about 310 MB instead of 100 MB) because the installer no longer needs to decompress itself before showing anything.
+
 ## [1.15.0] - 2026-09-22
 
 ### Added

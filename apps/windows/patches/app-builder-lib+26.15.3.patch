@@ -1,48 +1,86 @@
 diff --git a/node_modules/app-builder-lib/templates/nsis/portable.nsi b/node_modules/app-builder-lib/templates/nsis/portable.nsi
-index e5436bb..8b0ca28 100644
+index e5436bb..e5ce5f1 100644
 --- a/node_modules/app-builder-lib/templates/nsis/portable.nsi
 +++ b/node_modules/app-builder-lib/templates/nsis/portable.nsi
-@@ -7,17 +7,35 @@ WindowIcon Off
+@@ -7,6 +7,22 @@ WindowIcon Off
  AutoCloseWindow True
  RequestExecutionLevel ${REQUEST_EXECUTION_LEVEL}
  
--Function .onInit
--  !ifndef SPLASH_IMAGE
--    SetSilent silent
--  !endif
-+# Neo Quiz: the stock template runs SILENT, so nothing is on screen while the
-+# whole Electron tree (~300 MB) is decompressed to TEMP. On a slow disk that is
-+# tens of seconds during which the user believes nothing happened. A single
-+# native progress page appears at once instead, and is hidden as soon as the
-+# extracted application takes over.
++# Neo Quiz: with SPLASH_IMAGE, the stock template covers the whole screen with
++# BgImage, then destroys it the instant it launches the application, which
++# leaves nothing on screen while Electron starts (~0.9 s, measured).
++# SPLASH_IMAGE is instead the bootstrapper's own first screen, rendered by
++# Electron (`installer/capturer-ecran-initial.mjs`), painted ~70 ms after the
++# double-click in a borderless window exactly where Electron will open. Electron
++# then opens on top of it, and the splash is hidden only once Electron has
++# painted (NEO_QUIZ_SPLASH_DONE). The NSIS dialog itself is never seen: it only
++# runs the message loop that keeps the splash painted while the section works
++# in its own thread.
++!define NEO_QUIZ_SPLASH_DONE "neo-quiz-splash-done"
 +Caption "${PRODUCT_NAME}"
-+SubCaption 3 " "
-+ChangeUI all "${NSISDIR}\Contrib\UIs\sdbarker_tiny.exe"
-+InstProgressFlags smooth
-+XPStyle on
 +Page instfiles
- 
-+Function .onInit
-   !insertmacro check64BitAndSetRegView
- FunctionEnd
- 
- Function .onGUIInit
++
++Var neoQuizSplash
++
+ Function .onInit
+   !ifndef SPLASH_IMAGE
+     SetSilent silent
+@@ -19,12 +35,91 @@ Function .onGUIInit
    InitPluginsDir
  
-+  # Neo Quiz: the page only reports progress. Its Cancel, Back and Close
-+  # buttons are disabled while the section runs anyway; hidden, they stop
-+  # suggesting a choice that does not exist.
-+  GetDlgItem $0 $HWNDPARENT 1
-+  ShowWindow $0 0 # SW_HIDE
-+  GetDlgItem $0 $HWNDPARENT 2
-+  ShowWindow $0 0 # SW_HIDE
-+  GetDlgItem $0 $HWNDPARENT 3
-+  ShowWindow $0 0 # SW_HIDE
-+
    !ifdef SPLASH_IMAGE
++    # Off screen and out of the taskbar before it is ever shown.
++    System::Call 'user32::GetWindowLong(p $HWNDPARENT, i -20) i .r0'
++    IntOp $0 $0 | 0x80 # WS_EX_TOOLWINDOW
++    IntOp $0 $0 & 0xFFFBFFFF # ~WS_EX_APPWINDOW
++    System::Call 'user32::SetWindowLong(p $HWNDPARENT, i -20, i r0)'
++    System::Call 'user32::SetWindowPos(p $HWNDPARENT, p 0, i -32000, i -32000, i 0, i 0, i 0x15)' # NOSIZE|NOZORDER|NOACTIVATE
++
      File /oname=$PLUGINSDIR\splash.bmp "${SPLASH_IMAGE}"
-     BgImage::SetBg $PLUGINSDIR\splash.bmp
-@@ -25,11 +43,49 @@ Function .onGUIInit
+-    BgImage::SetBg $PLUGINSDIR\splash.bmp
+-    BgImage::Redraw
++    System::Call 'user32::LoadImage(p 0, t "$PLUGINSDIR\splash.bmp", i 0, i 0, i 0, i 0x10) p .r1' # IMAGE_BITMAP, LR_LOADFROMFILE
++    StrCmp $1 0 neoQuizSplashEnd
++
++    # The splash's size is the bitmap's (BITMAP: bmType, bmWidth, bmHeight...).
++    System::Alloc 32
++    Pop $2
++    System::Call 'gdi32::GetObject(p r1, i 32, p r2)'
++    System::Call '*$2(i, i .r3, i .r4)'
++    System::Free $2
++
++    # Centred in the primary work area, as Electron's `center()` does: the
++    # container is not DPI aware, so these are the same 96-dpi units Electron
++    # uses, and Windows scales the splash to the size Electron will have.
++    System::Alloc 16
++    Pop $2
++    System::Call 'user32::SystemParametersInfo(i 0x30, i 0, p r2, i 0)' # SPI_GETWORKAREA
++    System::Call '*$2(i .r5, i .r6, i .r7, i .r8)'
++    System::Free $2
++    IntOp $7 $7 - $5
++    IntOp $7 $7 - $3
++    IntOp $7 $7 / 2
++    IntOp $5 $5 + $7
++    IntOp $8 $8 - $6
++    IntOp $8 $8 - $4
++    IntOp $8 $8 / 2
++    IntOp $6 $6 + $8
++
++    # A top-level STATIC control is a complete bitmap window: no class to
++    # register, no painting code. WS_POPUP|SS_BITMAP, WS_EX_TOOLWINDOW: the
++    # taskbar button belongs to Electron's window.
++    System::Call 'user32::CreateWindowEx(i 0x80, t "STATIC", t "${PRODUCT_NAME}", i 0x8000000E, i r5, i r6, i r3, i r4, p 0, p 0, p 0, p 0) p .r0'
++    StrCmp $0 0 neoQuizSplashEnd
++    SendMessage $0 0x172 0 $1 # STM_SETIMAGE, IMAGE_BITMAP
++    # Windows 11 rounds it like the bootstrapper, without the one-pixel light
++    # border DWM would draw around it (the bootstrapper drops it too). Earlier
++    # versions ignore both attributes.
++    System::Call 'dwmapi::DwmSetWindowAttribute(p r0, i 33, *i 2, i 4)' # DWMWA_WINDOW_CORNER_PREFERENCE = ROUND
++    System::Call 'dwmapi::DwmSetWindowAttribute(p r0, i 34, *i 0xFFFFFFFE, i 4)' # DWMWA_BORDER_COLOR = NONE
++    ShowWindow $0 5 # SW_SHOW
++    System::Call 'user32::UpdateWindow(p r0)'
++    StrCpy $neoQuizSplash $0
++    neoQuizSplashEnd:
    !endif
  FunctionEnd
  
@@ -81,18 +119,7 @@ index e5436bb..8b0ca28 100644
  Section
    !ifdef SPLASH_IMAGE
      HideWindow
-   !endif
- 
-+  # Neo Quiz: one status line in the user's language, instead of NSIS's own
-+  # running commentary naming the temporary folder and the archive.
-+  SetDetailsPrint textonly
-+  DetailPrint "$(installing)"
-+  SetDetailsPrint none
-+
-   StrCpy $INSTDIR "$PLUGINSDIR\app"
-   !ifdef UNPACK_DIR_NAME
-     StrCpy $INSTDIR "$TEMP\${UNPACK_DIR_NAME}"
-@@ -70,7 +126,7 @@ Section
+@@ -70,7 +165,7 @@ Section
      !ifdef APP_DIR_32
        File /r "${APP_DIR_32}\*.*"
      !else
@@ -101,13 +128,50 @@ index e5436bb..8b0ca28 100644
      !endif
    !endif
  
-@@ -83,6 +139,9 @@ Section
-     BgImage::Destroy
-   !endif
+@@ -79,11 +174,41 @@ Section
+   System::Call 'Kernel32::SetEnvironmentVariable(t, t)i ("PORTABLE_EXECUTABLE_APP_FILENAME", "${APP_FILENAME}").r0'
+   ${StdUtils.GetAllParameters} $R0 0
  
-+  # Neo Quiz: the progress page has done its job; the application's own window
-+  # replaces it. Hidden, not closed: closing would end the section before ExecWait.
-+  HideWindow
- 	ExecWait "$INSTDIR\${APP_EXECUTABLE_FILENAME} $R0" $0
+-  !ifdef SPLASH_IMAGE
+-    BgImage::Destroy
+-  !endif
+-
+-	ExecWait "$INSTDIR\${APP_EXECUTABLE_FILENAME} $R0" $0
++  # Neo Quiz: ExecWait, watching meanwhile for the signal the bootstrapper
++  # writes next to its executable once its own window has painted over the
++  # splash. The splash is hidden then, or when the application exits (a second
++  # instance quits at once), never before.
++  System::Alloc 128
++  Pop $1
++  System::Call '*$1(i 68)' # STARTUPINFOW.cb, x86 stub
++  System::Alloc 32
++  Pop $2
++  StrCpy $3 '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" $R0'
++  StrCpy $4 $OUTDIR
++  System::Call 'kernel32::CreateProcess(p 0, t r3, p 0, p 0, i 0, i 0, p 0, t r4, p r1, p r2) i .r0'
++  ${If} $0 = 0
++    ShowWindow $neoQuizSplash 0
++    ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" $R0' $0
++  ${Else}
++    System::Call '*$2(p .r3, p .r4)'
++    System::Call 'kernel32::CloseHandle(p r4)'
++    ${Do}
++      System::Call 'kernel32::WaitForSingleObject(p r3, i 50) i .r0'
++      ${If} $0 = 0 # WAIT_OBJECT_0: the application has exited
++        ${ExitDo}
++      ${EndIf}
++      ${If} ${FileExists} "$INSTDIR\${NEO_QUIZ_SPLASH_DONE}"
++        ShowWindow $neoQuizSplash 0
++        System::Call 'kernel32::WaitForSingleObject(p r3, i -1)'
++        ${ExitDo}
++      ${EndIf}
++    ${Loop}
++    ShowWindow $neoQuizSplash 0
++    System::Call 'kernel32::GetExitCodeProcess(p r3, *i .r0)'
++    System::Call 'kernel32::CloseHandle(p r3)'
++  ${EndIf}
++  System::Free $1
++  System::Free $2
    SetErrorLevel $0
  
+   SetOutPath $EXEDIR

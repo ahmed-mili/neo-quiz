@@ -9,7 +9,7 @@
 ══════════════════════════════════════════════════════════ */
 
 import { randomBytes, randomUUID } from "node:crypto";
-import { access, statfs } from "node:fs/promises";
+import { access, statfs, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -28,6 +28,22 @@ import { executerTravailleur } from "./worker";
 
 const DRAPEAU_TRAVAILLEUR = "--neo-quiz-installer-worker";
 const USER_AGENT = "Neo-Quiz-Installer";
+/** Écrit à côté de l'exécutable extrait quand la fenêtre a peint son premier
+    écran : le conteneur portable, qui affichait jusque-là ce même écran en
+    image (`installer/ecran-initial.bmp`), retire alors la sienne. Même nom que
+    `NEO_QUIZ_SPLASH_DONE` dans le template patché (`patches/app-builder-lib+*`). */
+const SIGNAL_ECRAN_INITIAL = "neo-quiz-splash-done";
+/** Le premier écran COMPLET : polices, icône et décor décodés, puis deux
+    images produites. Montrée plus tôt, la fenêtre recouvrirait l'aperçu du
+    conteneur par un écran sans son décor, qui apparaîtrait ensuite d'un coup. */
+const PREMIER_ECRAN_COMPLET = `(async () => {
+	await document.fonts.ready;
+	const fond = new Image();
+	fond.src = "./fond.png";
+	await Promise.all([fond, ...document.images].map(image => image.decode().catch(() => {})));
+	await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+})()`;
+const DEUX_IMAGES = "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))";
 
 let fenetre: BrowserWindow | null = null;
 let paquetCourant: PaquetInstallable | null = null;
@@ -470,6 +486,29 @@ function installerCanaux(): void {
 	});
 }
 
+/** Montre la fenêtre sur un premier écran complet, puis, une fois qu'elle a
+    peint PAR-DESSUS l'aperçu du conteneur portable, dit à celui-ci de le
+    retirer. Un script refusé ou une page déjà partie ne retiennent jamais la
+    fenêtre : elle se montre quand même. */
+async function montrerFenetre(): Promise<void> {
+	const courante = fenetre;
+	if (!courante || courante.isDestroyed()) return;
+	try { await courante.webContents.executeJavaScript(PREMIER_ECRAN_COMPLET); } catch { /* montrer quand même */ }
+	if (courante.isDestroyed()) return;
+	courante.show();
+	courante.focus();
+	/* Seul le conteneur portable pose cette variable : lancé autrement, aucun
+	   aperçu n'attend le signal. */
+	if (!process.env.PORTABLE_EXECUTABLE_FILE) return;
+	try { await courante.webContents.executeJavaScript(DEUX_IMAGES); } catch { /* signaler quand même */ }
+	try {
+		await writeFile(join(dirname(process.execPath), SIGNAL_ECRAN_INITIAL), "");
+	} catch {
+		/* Sans signal, l'aperçu reste SOUS la fenêtre jusqu'à la fin, à la même
+		   place : il ne se voit que si l'on déplace la fenêtre. */
+	}
+}
+
 function creerFenetre(): void {
 	fenetre = new BrowserWindow({
 		width: 920,
@@ -505,9 +544,7 @@ function creerFenetre(): void {
 	   rendu a sa propre instance d'i18n, `setLanguage` d'ici ne l'atteint pas. */
 	void fenetre.loadFile(join(__dirname, "index.html"), { query: { lang: langue } });
 	fenetre.webContents.once("dom-ready", () => {
-		if (!fenetre || fenetre.isDestroyed()) return;
-		fenetre.show();
-		fenetre.focus();
+		void montrerFenetre();
 	});
 	fenetre.on("close", evenement => {
 		if (installationActive && !fermetureAutorisee) evenement.preventDefault();

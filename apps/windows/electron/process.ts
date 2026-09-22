@@ -769,6 +769,7 @@ export function scriptDisposerPourSite(hwndNeo: number, coller = false): string 
 		"[DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);",
 		"[DllImport(\"user32.dll\", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);",
 		"[DllImport(\"user32.dll\")] public static extern bool IsWindowVisible(IntPtr h);",
+		"[DllImport(\"user32.dll\")] public static extern short GetAsyncKeyState(int vKey);",
 		"public struct RECT { public int L, T, R, B; }",
 		"public struct WP { public int Length, Flags, ShowCmd, MinX, MinY, MaxX, MaxY, L, T, R, B; }",
 		"'@",
@@ -873,6 +874,35 @@ export function scriptDisposerPourSite(hwndNeo: number, coller = false): string 
 		"    function AuPremierPlan($h) { [NQ.Win]::GetForegroundWindow() -eq $h }",
 		"    function EnvoyerTouches($h, $touches) { if (-not (AuPremierPlan $h)) { return $false }; [System.Windows.Forms.SendKeys]::SendWait($touches); return $true }",
 		"    function TenterCollage($h) { [NQ.Win]::SetForegroundWindow($h) | Out-Null; Start-Sleep -Milliseconds 150; if (-not (EnvoyerTouches $h '^a')) { return $false }; if (-not (EnvoyerTouches $h '^v')) { return $false }; return $true }",
+		/* LE SECOND COLLAGE NE DOIT JAMAIS ÉCRASER CE QUE L'UTILISATEUR TAPE :
+		   rien ne garantit que le rebond de titre guetté plus bas vienne
+		   forcément d'une redirection — et le second collage fait un Ctrl+A
+		   dans le composer, qui REMPLACE en silence une saisie commencée
+		   entre-temps.
+
+		   `GetLastInputInfo` était le premier réflexe, et c'est le mauvais :
+		   il compte aussi les mouvements de SOURIS, et pendant ces quelques
+		   secondes l'utilisateur REGARDE son écran — la souris bouge presque
+		   toujours, ce qui ferait renoncer à (quasi) chaque fois et
+		   annulerait la correction. `GetAsyncKeyState` compte les FRAPPES : son
+		   bit de poids faible dit si la touche a été enfoncée depuis le DERNIER
+		   appel, ce qui permet de la sonder à chaque tour de la boucle de guet
+		   (déjà toutes les 100 ms) sans manquer une frappe entre deux tours.
+		   Limité aux touches de SAISIE (lettres, chiffres, pavé numérique,
+		   ponctuation, espace, retour arrière, entrée) : un Alt+Tab ou une
+		   touche de volume ne doit pas faire renoncer.
+
+		   L'ÉTAT INITIAL DE CES TOUCHES EST VIDÉ juste après le PREMIER
+		   collage (ci-dessous) : Ctrl+A et Ctrl+V touchent eux-mêmes les
+		   touches A et V, dans la plage surveillée — sans ce nettoyage, le
+		   collage qu'on vient d'envoyer se compterait comme une frappe de
+		   l'utilisateur et ferait renoncer au second collage à coup sûr.
+
+		   ARBITRAGE ASSUMÉ : si l'utilisateur tape dans le composer pendant la
+		   bascule, il garde sa saisie mais ne reçoit pas le prompt — une
+		   saisie perdue est pire qu'un collage manqué. */
+		"    $touchesSaisie = @(0x08,0x0D,0x20) + (0x30..0x39) + (0x41..0x5A) + (0x60..0x69) + @(0x6E,0xBA,0xBB,0xBC,0xBD,0xBE,0xBF,0xC0,0xDB,0xDC,0xDD,0xDE)",
+		"    function ToucheSaisieFrappee() { foreach ($vk in $touchesSaisie) { if (([NQ.Win]::GetAsyncKeyState($vk) -band 1) -ne 0) { return $true } }; return $false }",
 		"    $sb = New-Object System.Text.StringBuilder 512; $prec = ''; $stable = 0",
 		"    for ($i = 0; $i -lt 150; $i++) {",
 		"      Start-Sleep -Milliseconds 100",
@@ -883,11 +913,14 @@ export function scriptDisposerPourSite(hwndNeo: number, coller = false): string 
 		"    }",
 		"    Start-Sleep -Milliseconds 300",
 		"    if (TenterCollage $hNav) { [Console]::Out.WriteLine('colle'); [Console]::Out.Flush() }",
+		"    foreach ($vk in $touchesSaisie) { [NQ.Win]::GetAsyncKeyState($vk) | Out-Null }",
+		"    $tapee = $false",
 		"    $delaiSurveillanceMs = 12000",
 		"    $delaiComposerApresRedirectionMs = 3000",
 		"    $vu = $false; $restabilise = $false; $stable = 0",
 		"    for ($i = 0; $i -lt ($delaiSurveillanceMs / 100); $i++) {",
 		"      Start-Sleep -Milliseconds 100",
+		"      if (-not $tapee -and (ToucheSaisieFrappee)) { $tapee = $true }",
 		"      [NQ.Win]::GetWindowText($hNav, $sb, 512) | Out-Null; $t = $sb.ToString()",
 		"      if (-not $vu) {",
 		"        if (-not $t) { $vu = $true }",
@@ -899,7 +932,12 @@ export function scriptDisposerPourSite(hwndNeo: number, coller = false): string 
 		"    }",
 		"    if ($restabilise) {",
 		"      Start-Sleep -Milliseconds $delaiComposerApresRedirectionMs",
-		"      if (TenterCollage $hNav) { [Console]::Out.WriteLine('recolle'); [Console]::Out.Flush() }",
+		"      if (-not $tapee -and (ToucheSaisieFrappee)) { $tapee = $true }",
+		"      if ($tapee) {",
+		"        [Console]::Out.WriteLine('renonce'); [Console]::Out.Flush()",
+		"      } elseif (TenterCollage $hNav) {",
+		"        [Console]::Out.WriteLine('recolle'); [Console]::Out.Flush()",
+		"      }",
 		"    }",
 		"  }",
 		"}",
@@ -1245,6 +1283,28 @@ export function scriptVerifierNavigateurVisible(p: PlacementFenetre): string {
    comme elle l'était avant qu'on la déplace »). */
 let placementNavigateur: PlacementFenetre | null = null;
 
+/* LE SCRIPT DE COLLAGE (`disposerPourSite`, plus bas) TOURNE EN TÂCHE DE
+   FOND : lancé avec `enfant.unref()`, rien ne le tuait avant ce correctif —
+   il continue de guetter la fenêtre et peut voler le premier plan pour coller
+   jusqu'à une quarantaine de secondes après avoir rendu la main, y compris
+   après une annulation de la génération (`depotTerminer`) ou l'arrêt de
+   l'attente de collage (`collageArreter`, voir `canaux.ts`). Une SEULE attente
+   à la fois : `arreterDisposerPourSite` est appelée au début de
+   `disposerPourSite` pour tuer un guet précédent encore en cours — sinon deux
+   scripts guetteraient la même fenêtre et colleraient chacun le leur. */
+let enfantDisposerPourSite: ChildProcess | null = null;
+
+/** Tue le script de collage encore en guet, s'il y en a un — voir le
+    commentaire de `enfantDisposerPourSite`. L'ARBRE est tué, comme pour les
+    CLI (`tuerArbre`) : PowerShell ne spawne rien ici, mais un `taskkill`
+    simple sur le seul PID suffit et reste le même geste que partout ailleurs
+    dans ce fichier. Best effort — ne fait jamais échouer l'appelant. */
+export function arreterDisposerPourSite(): Promise<void> {
+	const enfant = enfantDisposerPourSite;
+	enfantDisposerPourSite = null;
+	return tuerArbre(enfant?.pid);
+}
+
 /** NE REND LA MAIN QU'UNE FOIS LE NAVIGATEUR REMIS (trois secondes au plus) :
     une fenêtre rendue agrandie prend le premier plan, et Neo Quiz doit le
     reprendre APRÈS, pas avant (Ahmed, 2026-09-19 : « ensuite, Neo Quiz au
@@ -1297,12 +1357,16 @@ export function verifierNavigateurVisible(p: PlacementFenetre): Promise<void> {
  */
 export function disposerPourSite(hwndNeo: number, coller = false): Promise<void> {
 	if (process.platform !== "win32") return Promise.resolve();
-	return new Promise(resolve => {
+	/* Un guet précédent encore vivant est tué AVANT d'en lancer un nouveau —
+	   voir `enfantDisposerPourSite` : sans ça, deux scripts guetteraient la
+	   même fenêtre et colleraient chacun le leur. */
+	return arreterDisposerPourSite().then(() => new Promise(resolve => {
 		let rendu = false;
 		const fin = (): void => { if (!rendu) { rendu = true; resolve(); } };
 		try {
 			placementNavigateur = null;
 			const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoderCommande(scriptDisposerPourSite(hwndNeo, coller))], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+			enfantDisposerPourSite = enfant;
 			enfant.stdout.on("data", (d: Buffer) => {
 				const texte = d.toString("utf8");
 				if (texte.includes("pret")) fin();
@@ -1317,14 +1381,20 @@ export function disposerPourSite(hwndNeo: number, coller = false): Promise<void>
 				}
 			});
 			enfant.on("error", e => { console.warn(LOG_PREFIX, "disposition des fenêtres impossible:", e); fin(); });
-			enfant.on("exit", fin);
+			/* Le script rendu à sa fin naturelle (guet écoulé, ou terminé plus tôt
+			   par `arreterDisposerPourSite`) n'est plus à tuer : sans ce
+			   nettoyage, un appel ultérieur à `arreterDisposerPourSite` tenterait
+			   un `taskkill` sur un PID déjà mort — inoffensif, mais un second
+			   `disposerPourSite` lancé entre-temps ne doit pas voir SON propre
+			   enfant tué par erreur (d'où la comparaison de référence). */
+			enfant.on("exit", () => { if (enfantDisposerPourSite === enfant) enfantDisposerPourSite = null; fin(); });
 			enfant.unref();
 		} catch (e) {
 			console.warn(LOG_PREFIX, "disposition des fenêtres impossible:", e);
 			fin();
 		}
 		setTimeout(fin, 3000);
-	});
+	}));
 }
 
 /**

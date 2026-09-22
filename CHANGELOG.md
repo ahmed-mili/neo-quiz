@@ -15,6 +15,7 @@ release notes.
 
 ### Fixed
 - The app window now appears much faster on first launch: the file watcher no longer crawls and monitors `.git`, `.obsidian`, `node_modules` and other hidden folders it was going to discard anyway.
+- The app window now appears noticeably faster on cold starts: the file watcher's initial scan used to run before the window was shown and slow that down, it now starts right after instead.
 
 ## [1.14.1] - 2026-09-21
 

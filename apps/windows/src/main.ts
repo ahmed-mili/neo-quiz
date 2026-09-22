@@ -11,7 +11,7 @@ import type { QuizIndexEntry, Scanner } from "../../../src/dashboard/scanner";
 import { currentHost, installHost, requireHost } from "../../../src/host/current";
 import type { HostModalHandle } from "../../../src/host/types";
 import { createWindowsHost, createWindowsIndex, creerCarteRacines } from "./host";
-import type { CarteRacines } from "./host";
+import type { CarteRacines, MiroirDisque } from "./host";
 import type { RacineOuverte } from "./host";
 import { pont } from "./host/pont";
 import { chargerExamDates, estVaultObsidian, ouvrirVaultsDetectes, savedFolders } from "./host/folder";
@@ -66,6 +66,13 @@ let demonterCourant: (() => void | Promise<void>) | null = null;
    implémentation de la règle « la plus longue racine gagne » (`depuisAbsolu`)
    divergerait en silence : on passe la carte, on ne la recopie pas. */
 let carteCourante: CarteRacines | null = null;
+
+/* Le MIROIR de l'index, retenu pour la SEULE chose qu'il reste à faire après
+   `demarrer()` : lancer sa surveillance (voir `demarrer()` et `.finally()`
+   plus bas — `createWindowsIndex`, `host/fs.ts`, n'hydrate plus qu'elle ne
+   surveille). `null` tant que `demarrer()` n'a pas atteint cette ligne, ou
+   si elle a échoué avant ; dans les deux cas, rien à démarrer. */
+let miroirCourant: MiroirDisque | null = null;
 
 /* ═══ LES RÉGLAGES IA — l'`AiSettingsHost` de l'application ═══
 
@@ -270,6 +277,10 @@ async function demarrer(): Promise<void> {
 		const carte = creerCarteRacines(ouvertes);
 		carteCourante = carte;
 		const index = await createWindowsIndex(carte);
+		/* Retenue pour `.finally()` plus bas, qui démarre la surveillance
+		   APRÈS le signal `fenetre.prete()` — voir l'en-tête d'`host/fs.ts`
+		   pour pourquoi ce n'est plus `createWindowsIndex` qui le fait. */
+		miroirCourant = index;
 		installHost(createWindowsHost(carte, index));
 		/* Le scanner PARTAGÉ, sur l'hôte Windows : c'est lui qui décide ce
 		   qu'est un quiz, sous Obsidian comme ici. `init()` branche le
@@ -372,5 +383,21 @@ void demarrer().finally(() => {
 	   apparaître. En installation, le bootstrapper garde sa petite fenêtre
 	   d'attente jusqu'à cet instant. Sur une erreur de démarrage, `demarrer`
 	   a déjà posé le message dans le rendu : on montre donc aussi cette erreur. */
-	void pont().fenetre.prete().catch(e => console.error(LOG_PREFIX, "signal prêt impossible:", e));
+	void pont().fenetre.prete()
+		.catch(e => console.error(LOG_PREFIX, "signal prêt impossible:", e))
+		.finally(() => {
+			/* LA SURVEILLANCE PART ICI, APRÈS LE SIGNAL — jamais avant : c'est
+			   tout l'objet de cette tâche (voir l'en-tête d'`host/fs.ts`). Le
+			   crawl initial de chokidar tourne dans le même processus principal,
+			   mono-thread, que l'hydratation ; le lancer avant qu'elle ne soit
+			   finie, ou avant que la fenêtre ne soit montrée, retardait l'une et
+			   l'autre. `miroirCourant` est `null` si `demarrer()` a échoué avant
+			   d'atteindre `createWindowsIndex` : rien à surveiller alors.
+			   Un ÉCHEC ICI N'EST JAMAIS FATAL : contrairement au reste de
+			   `demarrer()`, cet appel n'est plus dans son `try` — un surveillant
+			   qui ne démarre pas ne doit pas remplacer l'écran, déjà montré, par
+			   le message d'erreur de démarrage. */
+			void miroirCourant?.demarrerSurveillance()
+				.catch(e => console.warn(LOG_PREFIX, "surveillance différée: échec au démarrage:", e));
+		});
 });

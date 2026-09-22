@@ -1279,18 +1279,23 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsFs, bui
 });
 
 /**
- * LE MIROIR — l'abonnement AVANT l'hydratation, et la traduction des
- * événements que le principal POUSSE.
+ * LE MIROIR — l'hydratation d'abord, la surveillance PLUS TARD sur demande
+ * explicite, et la traduction des événements que le principal POUSSE.
  *
- * Groupe NEUF de la tâche 4, et il n'a pas d'équivalent sous Tauri : là-bas
- * l'index se construisait par un parcours que l'hôte faisait LUI-MÊME, et le
- * surveillant lui parlait directement. Ici les deux passent par l'IPC, et deux
- * règles que rien d'autre ne garde en dépendent :
+ * Groupe NEUF de la tâche 4, retouché par perf-demarrage-surveillant : sous
+ * Tauri, l'index se construisait par un parcours que l'hôte faisait
+ * LUI-MÊME, et le surveillant lui parlait directement. Ici les deux passent
+ * par l'IPC, et deux règles que rien d'autre ne garde en dépendent :
  *
- * — l'ORDRE. `pont.ts` l'écrit : on s'abonne AVANT d'hydrater. Un changement
- *   survenu entre les deux est alors soit déjà dans le parcours, soit reçu par
- *   l'abonné. Dans l'ordre inverse il serait PERDU jusqu'au suivant, et la
- *   fenêtre montrerait un quiz qui n'existe plus — pendant toute la session.
+ * — l'ORDRE. `createWindowsIndex` ne fait plus qu'HYDRATER : elle ne
+ *   s'abonne plus elle-même au surveillant du principal — c'est
+ *   `demarrerSurveillance()`, exposée sur le miroir qu'elle rend, qui le
+ *   fait, à l'appel de `main.ts`, une fois la fenêtre montrée (voir l'en-tête
+ *   d'`host/fs.ts` : le crawl initial de chokidar tourne dans le même
+ *   processus, mono-thread, que l'hydratation, et démarré avant elle il la
+ *   retardait). Ce cas prouve les DEUX moitiés : que `createWindowsIndex`,
+ *   seule, ne surveille rien, et que `demarrerSurveillance()` le fait — une
+ *   seule fois, même appelée deux fois.
  * — la TRADUCTION. Le pont ne parle que d'absolu ; le catalogue ne connaît que
  *   les chemins du contrat, et il n'admet pas les dossiers cachés.
  */
@@ -1325,13 +1330,27 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsIndex }
 		r.check("le mtime du parcours est repris tel quel",
 			miroir.get("Quiz/Cours/ch1.md")?.mtime, pont.date("D:/Quiz/Cours/ch1.md"));
 
-		/* L'ABONNEMENT EST PRIS — et ce cas est la seule preuve qu'il l'a été
-		   AVANT le parcours : si `createWindowsIndex` s'abonnait après avoir
-		   hydraté, l'abonné existerait quand même ici et le cas suivant
-		   passerait. C'est pourquoi il porte sur le JOURNAL du principal, où
-		   l'ordre des appels est visible. */
-		r.check("on s'abonne AVANT d'hydrater, jamais l'inverse",
-			pont.journal.map(l => l[0]), ["demarrer", "surveiller", "liste"]);
+		/* CRÉER LE MIROIR N'A PAS SURVEILLÉ. `createWindowsIndex`, seule, ne
+		   fait que déclarer les racines puis hydrater : le journal du
+		   principal ne porte encore aucun `surveiller`, même une fois
+		   l'hydratation terminée et le miroir plein — la preuve que la
+		   surveillance ne part plus d'ici. */
+		r.check("createWindowsIndex hydrate mais ne surveille pas encore",
+			pont.journal.map(l => l[0]), ["demarrer", "liste"]);
+
+		/* `demarrerSurveillance()` EST CE QUI DÉCLENCHE `surveiller` — appelée
+		   ici comme `main.ts` le fait, APRÈS que tout le reste (l'hydratation
+		   y compris) soit terminé. */
+		await miroir.demarrerSurveillance();
+		r.check("demarrerSurveillance() déclenche surveiller(), et seulement après demarrer/liste",
+			pont.journal.map(l => l[0]), ["demarrer", "liste", "surveiller"]);
+
+		/* IDEMPOTENTE : un second appel (un double montage, une relance
+		   malheureuse) ne doit pas poser un second abonné IPC — sans quoi
+		   chaque événement du principal serait diffusé deux fois au miroir. */
+		await miroir.demarrerSurveillance();
+		r.check("un second appel ne surveille pas une seconde fois",
+			pont.journal.filter(l => l[0] === "surveiller").length, 1);
 
 		/* UN ÉVÉNEMENT POUSSÉ met le miroir à jour, et les abonnés avec. */
 		const vus = [];
@@ -1350,20 +1369,22 @@ await withSrcModule("apps/windows/src/host/fs.ts", async ({ createWindowsIndex }
 		r.check("les abonnés reçoivent les trois genres, traduits en chemins du contrat",
 			vus, ["modify Quiz/Cours/ch1.md", "create Quiz/Cours/neuf.md", "delete Quiz/Cours/neuf.md"]);
 
-		/* LE PARCOURS INITIAL DE CHOKIDAR, REJOUÉ SUR LE MIROIR (revue finale,
-		   I3). Le principal pousse un `create` par fichier du vault au démarrage
-		   (1676 sur `Personal`). Mesuré, cette rafale précède la fin de
-		   l'hydratation et frappe un miroir vide — mais dans l'ordre INVERSE
-		   (parcours rendu avant la rafale), chaque `create` trouverait le
-		   miroir déjà garni du MÊME `mtime`, deviendrait un `modify` du
-		   contrat, et le scanner relirait la note (un `readCached` par IPC +
-		   parse) pour rien. C'est cet ordre-là que `versContrat` garde : voir
-		   son commentaire dans `fs.ts`. Le `mtime` courant du miroir est 7777
-		   (posé par le `modify` ci-dessus) : le rejouer ne doit RIEN émettre —
-		   ni aux abonnés, ni au miroir. Puis un `mtime` DIFFÉRENT doit passer,
-		   sinon la déduplication avalerait aussi les vrais changements survenus
-		   pendant le parcours, et « on s'abonne AVANT d'hydrater » ne
-		   protégerait plus rien. */
+		/* LE CRAWL INITIAL DE CHOKIDAR, REJOUÉ SUR UN MIROIR DÉJÀ PLEIN (revue
+		   finale de la migration, I3 ; portée mise à jour par
+		   perf-demarrage-surveillant). Le principal pousse un `create` par
+		   fichier de la racine dès que `demarrerSurveillance()` part
+		   (1676 sur `Personal`) — et depuis cette tâche, ce n'est plus une
+		   hypothèse : le miroir est TOUJOURS déjà hydraté à cet instant (voir
+		   les deux cas ci-dessus). Sans la déduplication sur le `mtime`, chaque
+		   `create` de cette rafale deviendrait un `modify` vers un scanner déjà
+		   abonné, donc une relecture (`readCached` par IPC + parse) de CHAQUE
+		   fichier pour rien. C'est ce que `versContrat` garde : voir son
+		   commentaire dans `fs.ts`. Le `mtime` courant du miroir est 7777 (posé
+		   par le `modify` ci-dessus) : le rejouer ne doit RIEN émettre — ni aux
+		   abonnés, ni au miroir. Puis un `mtime` DIFFÉRENT doit passer, sinon
+		   la déduplication avalerait aussi les vrais changements survenus entre
+		   l'hydratation et l'appel de `demarrerSurveillance`, et l'inversion de
+		   cette tâche ne protégerait plus rien. */
 		pont.emettre({ kind: "create", abs: "D:/Quiz/Cours/ch1.md", mtime: 7777 });
 		pont.emettre({ kind: "modify", abs: "D:/Quiz/Cours/ch1.md", mtime: 7777 });
 		r.check("un événement dont le mtime est déjà celui du miroir n'émet rien",

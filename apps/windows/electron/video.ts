@@ -233,10 +233,16 @@ const transportOctets: Transport = async (url, init) => {
 	return { status: reponse.status, text: async () => Buffer.from(await reponse.arrayBuffer()).toString("latin1") };
 };
 
-async function miniatureParDefaut(url: string): Promise<string | null> {
+/** La miniature, pour le contrôle : le transport est INJECTABLE (le
+    défaut est `transportOctets`, le fetch global borné à la liste
+    d'hôtes par `fetchBorne`) — c'est ainsi que le contrôle éprouve
+    la conversion des octets transportés en `data:` URI sans rien
+    lire du réseau, et son échec qui ne doit jamais emporter la
+    transcription. */
+export async function miniatureParDefaut(url: string, transport: Transport = transportOctets): Promise<string | null> {
 	if (!url) return null;
 	try {
-		const reponse = await fetchBorne({ url, method: "GET" } as HostNetRequest, transportOctets);
+		const reponse = await fetchBorne({ url, method: "GET" } as HostNetRequest, transport);
 		if (!reponse || reponse.status !== 200) return null;
 		return "data:image/jpeg;base64," + Buffer.from(reponse.body, "latin1").toString("base64");
 	} catch (e) {

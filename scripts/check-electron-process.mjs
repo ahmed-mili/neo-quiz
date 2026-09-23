@@ -1620,7 +1620,7 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
    périmé jusqu'au prochain clic, alors que Claude Code vient de le
    retélécharger ; et, à l'inverse, un avis par écriture de `~/.claude.json`
    (réécrit à chaque événement d'une session), ou pour un fichier voisin. */
-await withSrcModule("apps/windows/electron/process.ts", async ({ surveillerCachesCli }) => {
+await withSrcModule("apps/windows/electron/surveillant-cli.ts", async ({ surveillerCachesCli }) => {
 	const r = makeReporter("Électron — les modèles des CLI en direct");
 	const racine = mkdtempSync(join(tmpdir(), "quiz-caches-cli-"));
 	const maison = join(racine, "maison");

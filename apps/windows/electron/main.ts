@@ -44,7 +44,8 @@ import {
 } from "./fenetre-maj";
 import { enregistrerCanaux } from "./canaux";
 import { cheminDossierDefaut } from "./dossier-defaut";
-import { chargerPathRegistre, surveillerCachesCli } from "./process";
+import { chargerPathRegistre } from "./process";
+import { surveillerCachesCli } from "./surveillant-cli";
 import { perimetreInitial } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_IA, CLE_REGLAGES_LANGUE, CLE_REGLAGES_ZOOM } from "./pont";

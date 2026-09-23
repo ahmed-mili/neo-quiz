@@ -90,7 +90,13 @@ export function neContientQueLeFrontmatterNeoQuiz(content: string): boolean {
 	   null — la carcasse passait pour une note de l'utilisateur (vu le
 	   2026-09-19, deux fois). */
 	if (!bloc.includes("neo-quiz:")) return false;
-	const autresCles = bloc.some(l => l.trim() && !/^\s/.test(l) && l !== "neo-quiz:");
+	/* `learn: "[[...]]"` (Practice seulement, voir `ecrireFrontmatterNeoQuiz`)
+	   est écrit par l'APPLICATION, au même titre que `neo-quiz:` — ce n'est
+	   pas une clé de l'utilisateur. Sans cette exception, une note Practice
+	   liée à son Learn ne repassait plus jamais pour « rien que le
+	   frontmatter » une fois son bloc retiré, et restait orpheline au lieu
+	   d'aller à la corbeille avec lui. */
+	const autresCles = bloc.some(l => l.trim() && !/^\s/.test(l) && l !== "neo-quiz:" && !l.startsWith("learn:"));
 	if (autresCles) return false;
 	return lines.slice(fin + 1).join("\n").trim().length === 0;
 }

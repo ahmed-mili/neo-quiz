@@ -3387,9 +3387,17 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			   échec — la note est déjà écrite. Le mode de la note vient du BLOC
 			   produit, pas de l'interrupteur : un modèle qui n'a pas écrit
 			   `{ mode: "learn" }` produit un Practice, et la notice « objectifs »
-			   ne s'affiche pas à tort. */
-			for (const m of messagesDesManques(verifierFormat(mode, generatedQuestions, planTranchesEnvoye?.map(p => p.slice)))) host.ui.notice(m);
-			if (modeGeneration === "learn" && mode === "practice") host.ui.notice(t("ai.format.notLearn"));
+			   ne s'affiche pas à tort.
+			   Try/catch SÉPARÉ de l'écriture : le `catch` de la fonction affiche
+			   « échec de l'enregistrement » et rend `false` — une exception ICI
+			   ne doit jamais faire croire à un échec alors que la note est déjà
+			   sur le disque, ni empêcher le scan et la navigation qui suivent. */
+			try {
+				for (const m of messagesDesManques(verifierFormat(mode, generatedQuestions, planTranchesEnvoye?.map(p => p.slice)))) host.ui.notice(m);
+				if (modeGeneration === "learn" && mode === "practice") host.ui.notice(t("ai.format.notLearn"));
+			} catch (e) {
+				console.warn(LOG_PREFIX, "contrôle à l'arrivée en échec (note déjà enregistrée) :", e);
+			}
 
 			const file = host.fs.getFile(path);
 			if (file) await deps.scanner.scanFile(file);

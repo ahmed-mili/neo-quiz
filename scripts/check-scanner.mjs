@@ -171,6 +171,12 @@ await withSrcModule("src/quiz-frontmatter.ts", async ({ lireFrontmatterNeoQuiz, 
 	r.check("… ni sans frontmatter neo-quiz du tout", neContientQueLeFrontmatterNeoQuiz("---\ntags: [a]\n---\n"), false);
 	r.check("vide aussi quand model est vide (claude.ai) : la clé suffit",
 		neContientQueLeFrontmatterNeoQuiz("---\nneo-quiz:\n  provider: claude-web\n  model: \n  effort: high\n  generatedAt: 2026-09-19T20:50:55.373Z\n---\n\n"), true);
+	/* `learn: "[[...]]"` (Practice lié à son Learn) est écrit par
+	   l'application au même titre que `neo-quiz:` : une note Practice qui n'a
+	   plus que ces deux clés est vide elle aussi, pas orpheline. */
+	const avecLearn = ecrireFrontmatterNeoQuiz({ provider: "claude-web", model: "claude.ai", generatedAt: "2026-09-19T20:51:15Z", learn: "CM1 — Learn" }) + "\n";
+	r.check("… vide aussi avec le lien learn: de l'application", neContientQueLeFrontmatterNeoQuiz(avecLearn), true);
+	r.check("… mais pas si une clé de l'utilisateur s'y ajoute", neContientQueLeFrontmatterNeoQuiz(avecLearn.replace("neo-quiz:", "tags: x\nneo-quiz:")), false);
 
 	r.check("une note sans frontmatter rend null",
 		lireFrontmatterNeoQuiz("```quiz-blocks\n[]\n```"), null);

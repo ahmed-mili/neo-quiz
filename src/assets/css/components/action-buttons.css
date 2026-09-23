@@ -106,112 +106,56 @@
     0 0 0 1px color-mix(in srgb, #ffffff 8%, transparent) inset;
 }
 
-.quiz-action-btn.quiz-prev-btn,
-.quiz-action-btn.quiz-next-btn{
-  position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(99, 102, 241, 0.36) !important;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14) 0%, rgba(139, 92, 246, 0.12) 100%) !important;
-  transition:
-    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.18s ease,
-    border-color 0.18s ease,
-    background 0.18s ease,
-    color 0.14s ease,
-    filter 0.14s ease;
-  transform-origin: center;
+/* Précédente / suivante sous chaque question (2026-09-23) : deux
+   boutons-icônes aux couleurs du bouton « Générer » de l'application
+   (`.qbd-ai-composer-send`) — fond d'accent, icône `--text-on-accent`, 34 px,
+   coins de 9 px. Double classe : sous Obsidian, la règle native
+   `button:not(.clickable-icon)` (0,1,1) repeindrait sinon le fond. */
+.quiz-question-nav{
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding-bottom: 20px;
 }
 
-.quiz-action-btn.quiz-prev-btn::before,
-.quiz-action-btn.quiz-next-btn::before{
-  content: "";
-  position: absolute;
-  inset: -2px;
-  pointer-events: none;
-  opacity: 0;
-  background:
-    radial-gradient(120% 80% at 18% 0%, rgba(255,255,255,0.14) 0%, transparent 55%),
-    radial-gradient(110% 90% at 80% 120%, rgba(99,102,241,0.18) 0%, transparent 60%);
-  transition: opacity 0.18s ease;
+.quiz-question-nav .quiz-nav-btn{
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 0.14s ease, transform 0.08s ease, opacity 0.14s ease;
 }
 
-.quiz-action-btn.quiz-prev-btn:hover,
-.quiz-action-btn.quiz-next-btn:hover,
-.quiz-action-btn.quiz-prev-btn:focus-visible,
-.quiz-action-btn.quiz-next-btn:focus-visible{
-  outline: none;
-  transform: translate3d(0,-3px,0) scale(1.045);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.22) 0%, rgba(139, 92, 246, 0.18) 100%) !important;
-  border-color: rgba(99, 102, 241, 0.68) !important;
-  box-shadow:
-    0 0 0 1.5px rgba(99,102,241,0.24),
-    0 0 24px rgba(99,102,241,0.18),
-    0 8px 18px rgba(0,0,0,0.14) !important;
-  filter: saturate(1.05);
+.quiz-question-nav .quiz-nav-btn svg{
+  width: 18px;
+  height: 18px;
 }
 
-.quiz-action-btn.quiz-prev-btn:hover::before,
-.quiz-action-btn.quiz-next-btn:hover::before,
-.quiz-action-btn.quiz-prev-btn:focus-visible::before,
-.quiz-action-btn.quiz-next-btn:focus-visible::before{
-  opacity: 1;
+.quiz-question-nav .quiz-nav-btn:hover:not(:disabled),
+.quiz-question-nav .quiz-nav-btn:focus-visible{
+  background: var(--interactive-accent-hover);
 }
 
-.quiz-action-btn.quiz-prev-btn:active:not(:disabled),
-.quiz-action-btn.quiz-next-btn:active:not(:disabled){
-  transform: translate3d(0,3px,0) scale(0.955) !important;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.28) 0%, rgba(139, 92, 246, 0.24) 100%) !important;
-  border-color: rgba(99, 102, 241, 0.82) !important;
-  box-shadow:
-    0 0 0 1.5px rgba(99,102,241,0.20),
-    inset 0 4px 14px rgba(0,0,0,0.18),
-    inset 0 1px 0 rgba(255,255,255,0.10),
-    0 2px 6px rgba(0,0,0,0.10) !important;
-  filter: brightness(0.98) saturate(1.08);
+.quiz-question-nav .quiz-nav-btn:focus-visible{
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
 }
 
-.quiz-action-btn.quiz-prev-btn:disabled,
-.quiz-action-btn.quiz-next-btn:disabled{
-  background: var(--background-primary) !important;
-  border-color: var(--background-modifier-border) !important;
-  box-shadow: none !important;
-  transform: none !important;
-  filter: none !important;
+.quiz-question-nav .quiz-nav-btn:active:not(:disabled){
+  transform: scale(0.93);
 }
 
-.quiz-action-btn.quiz-results-btn{
-  position: relative;
-  overflow: hidden;
-  transform-origin: center;
-}
-
-.quiz-action-btn.quiz-results-btn::before{
-  content: "";
-  position: absolute;
-  inset: -2px;
-  pointer-events: none;
-  opacity: 0;
-  background:
-    radial-gradient(120% 80% at 18% 0%, color-mix(in srgb, #ffffff 12%, transparent) 0%, transparent 55%),
-    radial-gradient(110% 90% at 80% 120%, color-mix(in srgb, var(--quiz-success) 20%, transparent) 0%, transparent 60%);
-  transition: opacity 0.22s ease;
-}
-
-.quiz-action-btn.quiz-results-btn:hover,
-.quiz-action-btn.quiz-results-btn:focus-visible{
-  outline: none;
-  transform: translate3d(0,-2px,0) scale(1.05);
-  box-shadow: var(--quiz-results-hover-shadow) !important;
-  filter: saturate(1.06);
-}
-
-.quiz-action-btn.quiz-results-btn:hover::before,
-.quiz-action-btn.quiz-results-btn:focus-visible::before{
-  opacity: 1;
-}
-
-.quiz-action-btn.quiz-results-btn:active:not(:disabled){
-  transform: translate3d(0,-1px,0) scale(1.02);
-  box-shadow: var(--quiz-results-active-shadow) !important;
-  filter: saturate(1.03);
+.quiz-question-nav .quiz-nav-btn:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
 }

@@ -13,6 +13,12 @@ import { mathifyElement } from "./mathjax";
 import { renderLessonHtml } from "./sanitizer";
 import { t, type TransKey } from "../i18n";
 
+/* Lucide `arrow-left` / `arrow-right`, en SVG inline comme ceux de
+   passage.ts : le moteur compose ses cartes en chaînes HTML et n'a pas de
+   canal d'icône à cet endroit. */
+const ICON_ARROW_LEFT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>';
+const ICON_ARROW_RIGHT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
+
 export interface CardHandlers {
 	tabClass(i: number): string;
 	navHtml(): string;
@@ -67,6 +73,26 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 	function navHtml(): string {
 		const resultsActive = (ctx.isSubmitSlideIndex(ctx.quizState.current) || ctx.isResultsSlideIndex(ctx.quizState.current)) ? "active" : "";
 		return `<div class="quiz-nav">${ctx.quiz.map((_, i) => `<a class="quiz-tab ${tabClass(i)}" href="#" data-nav="${i}">Q${i + 1}</a>`).join("")}<a class="quiz-tab is-result ${resultsActive}" href="#" data-nav-results="1">${t("engine.nav.results")}</a></div>`;
+	}
+
+	/* Précédente / suivante sous chaque question (2026-09-23) : des ICÔNES
+	   seules, le libellé passe en infobulle et en `aria-label` — les onglets
+	   Q1…Qn disent déjà où l'on est. Sur la dernière question, la flèche droite
+	   mène où mène la touche → (`goPastLastQuestion`, interactions.ts) ; son
+	   libellé le dit. Les classes `quiz-prev-btn`/`quiz-next-btn` sont lues par
+	   focus.ts pour rendre le focus après un re-rendu. */
+	function questionNavHtml(qi: number): string {
+		const isFirst = qi <= 0;
+		const isLast = qi >= ctx.quiz.length - 1;
+		const nextLabel = t(!isLast
+			? "engine.nav.nextQuestion"
+			: ctx.textOnly.isExamAnswerPhase() ? "engine.exam.finish" : "engine.nav.results");
+		const prevLabel = ctx.escapeHtmlAttr(t("engine.nav.prevQuestion"));
+		const nextAttr = ctx.escapeHtmlAttr(nextLabel);
+		return `<div class="quiz-question-nav">
+			<button class="quiz-nav-btn quiz-prev-btn" type="button" aria-label="${prevLabel}" title="${prevLabel}"${isFirst ? " disabled" : ""}>${ICON_ARROW_LEFT}</button>
+			<button class="quiz-nav-btn quiz-next-btn" type="button" aria-label="${nextAttr}" title="${nextAttr}">${ICON_ARROW_RIGHT}</button>
+		</div>`;
 	}
 
 	/* DEUX modes, et deux seulement (Ahmed, 2026-09-17) : APPRENDRE et se
@@ -539,16 +565,8 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 		const learnSection = lessonContent
 			? `<div class="quiz-learn-section"><div class="quiz-learn-label">${t("engine.lesson.label")}</div><div class="quiz-learn-content">${lessonContent}</div></div>`
 			: "";
-		// "Continuer" : la carte "read" n'a rien à valider, seulement à quitter
-		// vers la suite — même bloc nav prev/next que le rôle recall
-		// (questionActionsHtml), déjà câblé sans condition de rôle
-		// (bindQuestionTrackItem) : aucun nouveau mécanisme de navigation.
-		// Pas de `?.` ici (revue, fix round 1) : `ctx.textOnly` est une des 17
-		// factories toujours assemblées par engine.ts, jamais absente en usage
-		// réel. Un `?.` aurait avalé une vraie régression (ctx.textOnly manquant)
-		// en cul-de-sac muet — body="" sans navigation, plutôt qu'un plantage
-		// bruyant qui pointerait vers l'assemblage cassé.
-		const textOnlyActions = (isTextOnly || isRead) ? ctx.textOnly.questionActionsHtml(qi) : "";
+		// La barre précédente/suivante est posée sous TOUTE carte : la carte
+		// "read" n'a rien à valider et n'a qu'elle pour passer à la suite.
 		const sectionIdAttr = (typeof q?.id === "string" && q.id.trim().length > 0)
 			? ` id="${ctx.escapeHtmlAttr(q.id)}"`
 			: "";
@@ -582,8 +600,8 @@ export function createCardRenderers(ctx: EngineCtx): CardHandlers {
 				${learnSection}
 				${hintBtn}
 				${dontKnowBtn}
-				${textOnlyActions}
 				${!isRead && !isTextOnly && ctx.quizState.locked ? explanationHtml(qi) : ""}
+				${questionNavHtml(qi)}
 			</section>
 		</div>`;
 	}

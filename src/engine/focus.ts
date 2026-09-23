@@ -75,9 +75,6 @@ export function createFocusHandlers(ctx: EngineCtx): FocusHandlers {
 		else if (activeEl.matches?.('.quiz-next-btn')) {
 			descriptor.selector = '.quiz-next-btn';
 		}
-		else if (activeEl.matches?.('.quiz-results-btn')) {
-			descriptor.selector = '.quiz-results-btn';
-		}
 		else if (activeEl.matches?.('.quiz-resource-btn')) {
 			descriptor.selector = '.quiz-resource-btn';
 		}

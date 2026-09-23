@@ -407,10 +407,6 @@
   border-color: var(--quiz-danger);
 }
 
-.quiz-textonly-nav-actions{
-  margin-top: 18px;
-}
-
 .quiz-textonly-result-grid{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));

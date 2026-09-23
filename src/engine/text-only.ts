@@ -43,7 +43,6 @@ export interface TextOnlyHandlers {
 	comparisonOptionsHtml(q: QuizQuestion, qi: number): string;
 	ratingButtonsHtml(qi: number): string;
 	questionCardBodyHtml(q: QuizQuestion, qi: number): string;
-	questionActionsHtml(qi: number): string;
 	bindTextOnlyQuestion(trackItem: HTMLElement, qi: number): void;
 }
 
@@ -323,18 +322,6 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 		</div>`;
 	}
 
-	function questionActionsHtml(qi: number): string {
-		const isFirst = qi <= 0;
-		const isLast = qi >= ctx.quiz.length - 1;
-		const lastLabel = t(isExamAnswerPhase() ? "engine.exam.finish" : "engine.nav.results");
-		return `<div class="quiz-actions quiz-textonly-nav-actions">
-			<button class="quiz-action-btn quiz-prev-btn" type="button"${isFirst ? " disabled" : ""}>${t("engine.nav.prevQuestion")}</button>
-			${isLast
-				? `<button class="quiz-action-btn success quiz-results-btn" type="button">${lastLabel}</button>`
-				: `<button class="quiz-action-btn quiz-next-btn" type="button">${t("engine.nav.nextQuestion")}</button>`}
-		</div>`;
-	}
-
 	function syncTextAreaHeight(textarea: HTMLTextAreaElement): void {
 		if (ctx.terminal?.syncTextAreaHeight) {
 			ctx.terminal.syncTextAreaHeight(textarea);
@@ -438,7 +425,6 @@ export function createTextOnlyHandlers(ctx: EngineCtx): TextOnlyHandlers {
 		comparisonOptionsHtml,
 		ratingButtonsHtml,
 		questionCardBodyHtml,
-		questionActionsHtml,
 		bindTextOnlyQuestion
 	};
 }

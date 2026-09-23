@@ -14,12 +14,6 @@
 .quiz-action-btn:focus-visible:not(:disabled),
 .quiz-action-btn.success:hover:not(:disabled),
 .quiz-action-btn.success:focus-visible:not(:disabled),
-.quiz-action-btn.quiz-prev-btn:hover:not(:disabled),
-.quiz-action-btn.quiz-prev-btn:focus-visible:not(:disabled),
-.quiz-action-btn.quiz-next-btn:hover:not(:disabled),
-.quiz-action-btn.quiz-next-btn:focus-visible:not(:disabled),
-.quiz-action-btn.quiz-results-btn:hover:not(:disabled),
-.quiz-action-btn.quiz-results-btn:focus-visible:not(:disabled),
 .quiz-chip:hover,
 .quiz-chip:focus-visible,
 .quiz-hint-btn:hover,
@@ -32,9 +26,6 @@
 /* Press / active unifié */
 .quiz-action-btn:active:not(:disabled),
 .quiz-action-btn.success:active:not(:disabled),
-.quiz-action-btn.quiz-prev-btn:active:not(:disabled),
-.quiz-action-btn.quiz-next-btn:active:not(:disabled),
-.quiz-action-btn.quiz-results-btn:active:not(:disabled),
 .quiz-chip:active,
 .quiz-hint-btn:active,
 .quiz-hint-modal-close:active{
@@ -49,9 +40,7 @@
 }
 
 /* Disabled intact */
-.quiz-action-btn:disabled,
-.quiz-action-btn.quiz-prev-btn:disabled,
-.quiz-action-btn.quiz-next-btn:disabled{
+.quiz-action-btn:disabled{
   transform: none !important;
   filter: none !important;
 }

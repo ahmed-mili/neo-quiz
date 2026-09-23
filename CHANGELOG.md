@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Added
+- Every question now has previous and next arrow buttons under it, in every question type. On the last question, the next arrow takes you to the submit screen or your results, like the right arrow key.
+
 ### Fixed
 - In the preview of a video tile, the YouTube link is now clickable and opens in your browser.
 

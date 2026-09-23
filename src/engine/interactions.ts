@@ -378,10 +378,10 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 			});
 		}
 
-		// Task 7 (mode Lesson) : « Je ne sais pas » — une carte "pre" ne rend
-		// aucun bouton suivant/précédent (réservés aux cartes "read"/"recall", en
-		// réponse libre), c'est donc le seul contrôle de navigation propre à cette
-		// carte. Logique déportée dans markLessonPreSkipped (testable sans DOM).
+		// Task 7 (mode Lesson) : « Je ne sais pas » — le seul moyen de passer
+		// une carte "pre" sans y répondre : son bouton suivant bute sur la garde
+		// de goToSlide (state.ts) tant qu'il n'y a ni réponse ni ce clic.
+		// Logique déportée dans markLessonPreSkipped (testable sans DOM).
 		const dontKnowBtn = trackItem.querySelector(".quiz-lesson-dontknow-btn");
 		if (dontKnowBtn) {
 			dontKnowBtn.addEventListener("click", e => {
@@ -400,12 +400,9 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		if (prevBtn) prevBtn.addEventListener("click", () => ctx.goToQuestion(qi - 1));
 
 		const nextBtn = trackItem.querySelector(".quiz-next-btn");
-		if (nextBtn) nextBtn.addEventListener("click", () => ctx.goToQuestion(qi + 1));
-
-		const resultsBtn = trackItem.querySelector(".quiz-results-btn");
-		if (resultsBtn) resultsBtn.addEventListener("click", () => {
-			if (ctx.textOnly?.isExamAnswerPhase?.()) ctx.goToSubmit();
-			else ctx.goToResults();
+		if (nextBtn) nextBtn.addEventListener("click", () => {
+			if (qi < ctx.quiz.length - 1) ctx.goToQuestion(qi + 1);
+			else goPastLastQuestion();
 		});
 	}
 
@@ -526,15 +523,7 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 						ctx.goToSlide(cur + 1, { forceRender: false });
 						navigated = true;
 					} else {
-						// isTextOnlyMode() GLOBAL à dessein, malgré le `qi` de la dernière
-						// question sous la main : sauter l'écran de soumission n'a de sens
-						// que si TOUT le quiz est en réponse libre (chemin historique) — une
-						// tranche de Leçon mélangeant "test" et "recall" doit garder l'étape
-						// de soumission, qui vérifie les questions manquantes du quiz entier.
-						if (ctx.textOnly?.isExamAnswerPhase?.()) ctx.goToSubmit();
-						else if (ctx.textOnly?.isTextOnlyMode?.()) ctx.goToResults();
-						else if (ctx.quizState.locked) ctx.goToSlide(ctx.SLIDE_RESULTS_INDEX, { forceRender: false });
-						else ctx.goToSubmit();
+						goPastLastQuestion();
 						navigated = true;
 					}
 				}
@@ -579,15 +568,21 @@ export function createInteractionHandlers(ctx: EngineCtx): InteractionHandlers {
 		};
 		ctx.container.querySelectorAll<HTMLElement>("[data-nav]").forEach(a => bindNavTab(a, () => ctx.goToQuestion(Number(a.dataset.nav))));
 		const resultsTab = ctx.container.querySelector<HTMLElement>("[data-nav-results]");
-		if (resultsTab) bindNavTab(resultsTab, () => {
-			// isTextOnlyMode() GLOBAL, même raison qu'à la flèche droite ci-dessus :
-			// cet onglet n'a pas de question précise en main, et sauter la
-			// soumission reste une décision qui porte sur le quiz entier.
-			if (ctx.textOnly?.isExamAnswerPhase?.()) ctx.goToSubmit();
-			else if (ctx.textOnly?.isTextOnlyMode?.()) ctx.goToResults();
-			else if (ctx.quizState.locked) ctx.goToSlide(ctx.SLIDE_RESULTS_INDEX, { forceRender: false });
-			else ctx.goToSubmit();
-		});
+		if (resultsTab) bindNavTab(resultsTab, goPastLastQuestion);
+	}
+
+	/* Au-delà de la dernière question : UNE règle pour la touche →, l'onglet
+	   « Résultats » et le bouton suivant de la dernière carte — trois copies
+	   divergeraient à la première retouche.
+	   isTextOnlyMode() GLOBAL à dessein : sauter l'écran de soumission n'a de
+	   sens que si TOUT le quiz est en réponse libre (chemin historique) — une
+	   tranche de Leçon mélangeant "test" et "recall" doit garder l'étape de
+	   soumission, qui vérifie les questions manquantes du quiz entier. */
+	function goPastLastQuestion(): void {
+		if (ctx.textOnly?.isExamAnswerPhase?.()) ctx.goToSubmit();
+		else if (ctx.textOnly?.isTextOnlyMode?.()) ctx.goToResults();
+		else if (ctx.quizState.locked) ctx.goToSlide(ctx.SLIDE_RESULTS_INDEX, { forceRender: false });
+		else ctx.goToSubmit();
 	}
 
 	function destroyZoomFixHandlers(): void {

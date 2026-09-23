@@ -48,11 +48,8 @@ export function createNavHandlers(ctx: DashboardShellCtx): NavHandlers {
 	function render(container: HTMLElement): void {
 		container.replaceChildren();
 
-		// Brand : logo NU centré, sans libellé ni séparateur (rail iconique
-		// façon StudySmarter — le nom du plugin est déjà dans l'onglet).
-		const brand = ajouter(container, "div", "qbd-nav-brand");
-		const brandIcon = ajouter(brand, "span", "qbd-nav-brand-icon");
-		currentHost().ui.setIcon(brandIcon, "graduation-cap");
+		/* Plus de logo en tête du rail (retiré le 2026-09-23) : il ne menait
+		   nulle part et ressemblait à un bouton. Le rail commence par Accueil. */
 
 		// Nav items
 		const navList = ajouter(container, "div", "qbd-nav-items");

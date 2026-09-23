@@ -299,7 +299,7 @@ export const EN_DASHBOARD = {
 	"dashboard.select.optionsQuestions": "Questions",
 	"dashboard.select.optionsType": "Type",
 	"dashboard.select.optionsCustom": "Custom",
-	"dashboard.select.optionsDestination": "Destination",
+	"dashboard.select.optionsDestination": "Folder",
 	"dashboard.select.noteSearch": "Search a note…",
 	"dashboard.select.noteOpen": "Open notes",
 	"dashboard.select.noteAll": "All notes",

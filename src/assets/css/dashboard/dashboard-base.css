@@ -120,10 +120,6 @@
 		overflow-y: hidden;
 	}
 
-	.qbd-nav-brand {
-		display: none;
-	}
-
 	.qbd-nav-items {
 		flex-direction: row !important;
 		gap: 0 !important;
@@ -192,7 +188,6 @@
 	overflow-y: hidden;
 }
 
-.is-mobile .qbd-nav-brand,
 .is-mobile .qbd-nav-badge {
 	display: none;
 }

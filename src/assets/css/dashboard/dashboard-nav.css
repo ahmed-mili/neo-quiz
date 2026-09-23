@@ -6,27 +6,11 @@
    ═════════════════════════════════════════════════════════ */
 
 /* ── Brand : logo nu centré ── */
-.qbd-nav-brand {
-	padding: 22px 0 10px;
-	display: flex;
-	justify-content: center;
-}
-
-.qbd-nav-brand-icon {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--interactive-accent);
-}
-
-.qbd-nav-brand-icon svg {
-	width: 30px;
-	height: 30px;
-}
-
 /* ── Nav items ── */
 .qbd-nav-items {
-	padding: 10px 10px;
+	/* Le haut du rail, que le logo occupait : Accueil s'aligne sous la
+	   barre de titre. */
+	padding: 16px 10px 10px;
 	display: flex;
 	flex-direction: column;
 	gap: 10px;

@@ -58,7 +58,7 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.type.comprehension": "Compréhension",
 
 	/* ── Fournisseurs (sous-titres du menu) ── */
-	"ai.provider.choose": "Choisir un fournisseur",
+	"ai.provider.choose": "Choisissez un fournisseur",
 	"ai.provider.claudeSub": "Compte Pro / Max",
 	"ai.provider.codexSub": "Codex CLI · Abonnement ChatGPT",
 	"ai.provider.antigravitySub": "Antigravity CLI · compte Google",

@@ -806,7 +806,7 @@ interface CodexCacheFile {
    rafraîchissement, ou sans fichier, ils rendent le repli embarqué — exactement
    ce que l'ancien `try/catch` rendait sur un `fs` absent. */
 let codexCacheSnapshot: { mtimeMs: number; json: unknown } | null = null;
-let claudeCacheSnapshot: { mtimeMs: number; json: unknown } | null = null;
+let claudeCacheSnapshot: { mtimeMs: number; json: unknown; catalogue?: unknown } | null = null;
 /* Un rafraîchissement EN VOL est partagé : le composer et le menu fournisseur
    se rendent souvent dans le même tick, et deux lectures de `~/.claude.json`
    (plusieurs centaines de Ko) pour un même instantané seraient du gaspillage. */
@@ -834,7 +834,7 @@ export function refreshCliCaches(): Promise<boolean> {
 		   laquelle `getCodexModels` et `readClaudeCliInfo` décident de
 		   re-parser. `null` (pas de fichier) est comparé comme tel. */
 		const cle = (s: { mtimeMs: number } | null): number => (s ? s.mtimeMs : -1);
-		const change = cle(codex) !== cle(codexCacheSnapshot) || cle(claude) !== cle(claudeCacheSnapshot);
+		const change = cle(codex) !== cle(codexCacheSnapshot) || signatureClaude(claude) !== signatureClaude(claudeCacheSnapshot);
 		codexCacheSnapshot = codex;
 		claudeCacheSnapshot = claude;
 		return change;
@@ -1045,7 +1045,17 @@ type ClaudeCliInfo = {
    protégeait de RELIRE le fichier à chaque rendu ; la lecture vit désormais
    dans `refreshCliCaches`, et seul le PARSE reste ici — à ne refaire que quand
    le fichier a changé, ce que le `mtime` dit exactement. */
-let claudeCliCache: { mtimeMs: number; info: ClaudeCliInfo } | null = null;
+let claudeCliCache: { signature: string; info: ClaudeCliInfo } | null = null;
+
+/* Ce qui fait changer l'instantané Claude : le `mtime` de `~/.claude.json`,
+   MAIS AUSSI la date de téléchargement du catalogue de modèles, qui change
+   sans que ce fichier bouge. Une clé sur le seul `mtime` garderait une liste
+   périmée. */
+function signatureClaude(s: { mtimeMs: number; catalogue?: unknown } | null): string {
+	if (!s) return "";
+	const fetchedAt = (s.catalogue as { fetchedAt?: unknown } | null | undefined)?.fetchedAt;
+	return s.mtimeMs + "|" + (typeof fetchedAt === "number" ? fetchedAt : "");
+}
 
 /* Repli neuf à chaque appel : l'objet est stocké dans le cache et rendu aux
    appelants, une constante partagée serait modifiable de l'extérieur. */
@@ -1134,21 +1144,39 @@ function parseClaudeModelId(id: string): { family: string; version: number[] } |
 	return version.length ? { family, version } : null;
 }
 
-/** Libellés par famille, déduits des modèles que le CLI a effectivement servis
-    (« opus » → « Opus 5 »). Table vide si le fichier ne dit rien : on n'invente
-    aucun numéro. */
-function labelsFromModelUsage(projects: unknown): Record<string, string> {
-	if (!projects || typeof projects !== "object") return {};
-	const best = new Map<string, number[]>();
+/** Les identifiants de `projects[*].lastModelUsage` — la DERNIÈRE session de
+    chaque projet seulement, écrite à sa fermeture : une source qui RETARDE. */
+function idsFromModelUsage(projects: unknown): string[] {
+	if (!projects || typeof projects !== "object") return [];
+	const ids: string[] = [];
 	for (const project of Object.values(projects as Record<string, unknown>)) {
 		const usage = (project as { lastModelUsage?: unknown } | null)?.lastModelUsage;
-		if (!usage || typeof usage !== "object") continue;
-		for (const id of Object.keys(usage as Record<string, unknown>)) {
-			const parsed = parseClaudeModelId(id);
-			if (!parsed) continue;
-			const known = best.get(parsed.family);
-			if (!known || isNewerVersion(parsed.version, known)) best.set(parsed.family, parsed.version);
-		}
+		if (usage && typeof usage === "object") ids.push(...Object.keys(usage as Record<string, unknown>));
+	}
+	return ids;
+}
+
+/** Les identifiants que le CLI PROPOSE (`additionalModelOptionsCache`,
+    « claude-fable-5-1[1m] ») : la version de Fable y est à jour avant même
+    qu'on l'ait utilisé. */
+function idsFromOptionsCache(cache: unknown): string[] {
+	const entries = Array.isArray(cache) ? cache : [cache];
+	return entries
+		.map(e => (e && typeof e === "object" ? (e as { value?: unknown }).value : undefined))
+		.filter((v): v is string => typeof v === "string");
+}
+
+/** Libellés par famille, à partir des identifiants de DEUX sources de repli
+    (dernière session par projet, offre du CLI) quand le catalogue manque :
+    la version la plus HAUTE gagne (« opus » → « Opus 5.5 »). Table vide si
+    rien n'est connu : on n'invente aucun numéro. */
+function labelsFromIds(ids: string[]): Record<string, string> {
+	const best = new Map<string, number[]>();
+	for (const id of ids) {
+		const parsed = parseClaudeModelId(id);
+		if (!parsed) continue;
+		const known = best.get(parsed.family);
+		if (!known || isNewerVersion(parsed.version, known)) best.set(parsed.family, parsed.version);
 	}
 	const labels: Record<string, string> = {};
 	for (const [family, version] of best) {
@@ -1165,7 +1193,7 @@ function labelsFromModelUsage(projects: unknown): Record<string, string> {
 function readClaudeCliInfo(): ClaudeCliInfo {
 	const snapshot = claudeCacheSnapshot;
 	if (!snapshot) return emptyCliInfo();
-	if (claudeCliCache && claudeCliCache.mtimeMs === snapshot.mtimeMs) {
+	if (claudeCliCache && claudeCliCache.signature === signatureClaude(snapshot)) {
 		return claudeCliCache.info;
 	}
 	let info = emptyCliInfo();
@@ -1180,13 +1208,16 @@ function readClaudeCliInfo(): ClaudeCliInfo {
 		const cache = cfg.additionalModelOptionsCache;
 		info = {
 			fableOffered: Array.isArray(cache) ? cache.some(cacheEntryIsFable) : cacheEntryIsFable(cache),
-			labels: labelsFromModelUsage(cfg.projects),
+			labels: labelsFromIds([
+				...idsFromModelUsage(cfg.projects),
+				...idsFromOptionsCache(cache),
+			]),
 			promos: promoNoticesFrom(cfg.cachedGrowthBookFeatures?.tengu_rate_limit_promo_notices)
 		};
 	} catch {
 		info = emptyCliInfo(); // forme inattendue → repli
 	}
-	claudeCliCache = { mtimeMs: snapshot.mtimeMs, info };
+	claudeCliCache = { signature: signatureClaude(snapshot), info };
 	return info;
 }
 
@@ -1201,13 +1232,72 @@ export function claudePromoNoticesFor(bar: string): ClaudePromoNotice[] {
 	return readClaudeCliInfo().promos.filter(n => n.bar === bar);
 }
 
-/* Liste des modèles Claude visibles maintenant : libellés à jour de ce que le
-   CLI a servi, et Fable inclus seulement s'il est proposé, avec le badge qui
-   correspond au forfait détecté (« Inclus » sur Max, « Crédits d'usage » sur
-   Pro, aucun quand le forfait ne tranche pas). `plan` : voir `ClaudePlanHint` ;
-   un appelant qui ne connaît pas le forfait (résolution d'un modèle, l'app)
-   l'omet, et Fable s'affiche sans badge. */
+/* ── LE CATALOGUE DE CLAUDE CODE : la source de vérité ──
+   `~/.claude/cache/model-catalog/<organisation>-…-cc.json`, téléchargé par le
+   CLI lui-même depuis Anthropic et relu par l'hôte (`lireCache`). C'est
+   l'équivalent du `models_cache.json` de Codex : nom affiché (« Opus 5.5 »),
+   description, badge, section. Les deux autres sources (`lastModelUsage`,
+   `additionalModelOptionsCache`) ne servent plus qu'en REPLI, quand aucun
+   catalogue n'est lisible (CLI ancien, jamais lancé) — `lastModelUsage` a
+   figé le menu sur « Opus 5 » pendant des heures le 2026-09-23. */
+
+/** Un modèle du catalogue, réduit à ce que le menu affiche. */
+interface CatalogueModele { def: ModelDef; section: "main" | "overflow"; famille: string | null }
+
+/** Les modèles du catalogue, dans son ordre. `null` si le catalogue est
+    absent ou n'a pas la forme attendue — jamais d'exception. L'identifiant
+    part tel quel en `--model` : il est donc filtré (lettres, chiffres, point,
+    tiret, deux-points), la même règle que l'appel du CLI (`ai-client.ts`). */
+function modelesDuCatalogue(catalogue: unknown): CatalogueModele[] | null {
+	const modeles = (catalogue as { catalog?: { config?: { models?: unknown } } } | null | undefined)?.catalog?.config?.models;
+	if (!Array.isArray(modeles)) return null;
+	const out: CatalogueModele[] = [];
+	for (const m of modeles) {
+		if (!m || typeof m !== "object") continue;
+		const e = m as { id?: unknown; name?: unknown; description?: unknown; section?: unknown; badge?: { message?: unknown } };
+		if (typeof e.id !== "string" || !/^[a-zA-Z0-9._:-]+$/.test(e.id)) continue;
+		if (typeof e.name !== "string" || !e.name.trim()) continue;
+		const famille = parseClaudeModelId(e.id)?.family ?? null;
+		/* La description et le badge du serveur sont en anglais : gardés en
+		   anglais, remplacés par la traduction de la FAMILLE (et du badge de
+		   crédits) dans une autre langue. */
+		const descFamille = famille ? CLAUDE_CODE_MODELS.find(x => x.value === famille)?.desc : undefined;
+		const descServeur = typeof e.description === "string" && e.description.trim() ? e.description : undefined;
+		const badgeServeur = typeof e.badge?.message === "string" && e.badge.message.trim() ? e.badge.message : undefined;
+		const anglais = currentLang() === "en";
+		out.push({
+			def: {
+				value: e.id,
+				label: e.name,
+				desc: anglais ? (descServeur ?? descFamille) : (descFamille ?? descServeur),
+				badge: anglais ? badgeServeur : (badgeServeur ? t("ai.badge.usageCredits") : undefined),
+			},
+			section: e.section === "overflow" ? "overflow" : "main",
+			famille,
+		});
+	}
+	return out.length ? out : null;
+}
+
+function catalogueCourant(): CatalogueModele[] | null {
+	return modelesDuCatalogue(claudeCacheSnapshot?.catalogue);
+}
+
+/* Liste des modèles Claude visibles maintenant. Avec un catalogue : sa section
+   `main`, telle quelle, le badge de Fable suivant le forfait quand il est
+   connu. Sans catalogue (repli) : les alias embarqués, libellés à jour de ce
+   que le CLI a servi, et Fable inclus seulement s'il est proposé, avec le
+   badge qui correspond au forfait détecté (« Inclus » sur Max, « Crédits
+   d'usage » sur Pro, aucun quand le forfait ne tranche pas). `plan` : voir
+   `ClaudePlanHint` ; un appelant qui ne connaît pas le forfait (résolution
+   d'un modèle, l'app) l'omet. */
 export function getClaudeModels(plan?: ClaudePlanHint): ModelDef[] {
+	const catalogue = catalogueCourant();
+	if (catalogue) {
+		const badgeForfait = fableAccessBadge(plan);
+		return catalogue.filter(m => m.section === "main").map(m =>
+			m.famille === "fable" && badgeForfait ? { ...m.def, badge: badgeForfait } : m.def);
+	}
 	const { fableOffered, labels } = readClaudeCliInfo();
 	const models = fableOffered
 		? CLAUDE_CODE_MODELS.map(m => m.value === "fable" ? { ...m, badge: fableAccessBadge(plan) } : m)
@@ -1216,9 +1306,30 @@ export function getClaudeModels(plan?: ClaudePlanHint): ModelDef[] {
 	return models.map(m => labels[m.value] ? { ...m, label: labels[m.value] } : m);
 }
 
+/** Les modèles plus anciens que le catalogue range à part (section
+    `overflow`) : le menu les propose sous « Plus de modèles ». Vide sans
+    catalogue. */
+export function getClaudeMoreModels(): ModelDef[] {
+	return (catalogueCourant() ?? []).filter(m => m.section === "overflow").map(m => m.def);
+}
+
 /* Modèle Claude effectif : si le modèle choisi n'est plus visible
    (ex. Fable une fois la promo terminée), retombe sur le modèle par défaut. */
 export function resolveClaudeModel(value?: string): string {
+	const catalogue = catalogueCourant();
+	if (catalogue) {
+		/* Un réglage enregistré avant le catalogue est un ALIAS (« opus ») : il
+		   désigne le modèle principal de sa famille, que le catalogue nomme. Un
+		   identifiant retiré du catalogue retombe sur sa famille, puis sur la
+		   famille par défaut. */
+		if (value && catalogue.some(m => m.def.value === value)) return value;
+		const defaut = getProvider("claude-code").defaultModel;
+		const famille = (value && parseClaudeModelId(value)?.family) || value || defaut;
+		const principal = catalogue.find(m => m.section === "main" && m.famille === famille)
+			?? catalogue.find(m => m.section === "main" && m.famille === defaut)
+			?? catalogue.find(m => m.section === "main");
+		if (principal) return principal.def.value;
+	}
 	const models = getClaudeModels();
 	if (models.some(m => m.value === value)) return value as string;
 	return getProvider("claude-code").defaultModel;

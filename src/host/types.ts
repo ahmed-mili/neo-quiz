@@ -551,8 +551,16 @@ export interface HostProcess {
 	    `~/.claude.json`), HORS de toute racine — c'est pourquoi `HostFs` ne
 	    l'atteint pas. `mtimeMs` sert à l'appelant pour ne pas re-parser ; le
 	    PARSING (quels modèles, quels efforts) reste dans le code partagé, l'hôte
-	    ne fait que lire et décoder le JSON. `null` = absent ou illisible. */
-	lireCache(tool: "claude" | "codex"): Promise<{ mtimeMs: number; json: unknown } | null>;
+	    ne fait que lire et décoder le JSON. `null` = absent ou illisible.
+
+	    `catalogue` (Claude seulement, facultatif) : le catalogue de modèles
+	    que Claude Code télécharge lui-même (`~/.claude/cache/model-catalog/
+	    <organisation>-…-cc.json`), décodé tel quel — l'équivalent du
+	    `models_cache.json` de Codex. `~/.claude.json` seul ne garde que la
+	    dernière session de chaque projet : le menu est resté figé sur
+	    « Opus 5 » (2026-09-23). Un hôte qui ne sait pas le lire l'omet, et le
+	    code partagé retombe sur `~/.claude.json`. */
+	lireCache(tool: "claude" | "codex"): Promise<{ mtimeMs: number; json: unknown; catalogue?: unknown } | null>;
 	/** Ollama est-il INSTALLÉ, même serveur arrêté ? `ollama --version`
 	    répond, ou l'exécutable est à un emplacement d'installation officiel.
 	    Le greffon diagnostique lui-même : jamais un « si Ollama n'est pas

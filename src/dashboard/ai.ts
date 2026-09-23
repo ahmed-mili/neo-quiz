@@ -1112,7 +1112,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				const refreshTriggers = () => {
 					trigLabel.replaceChildren();
 					const models = getModels();
-					const cur = models.find(m => m.value === currentMv()) || models[0];
+					const cur = models.find(m => m.value === currentMv())
+						|| (isClaude ? aiProviders.getClaudeMoreModels().find(m => m.value === currentMv()) : undefined)
+						|| models[0];
 					// Fast actif (codex) → éclair à gauche du nom du modèle,
 					// comme la pill du composer ChatGPT.
 					if (!isClaude && settings().aiCodexFast && cur.fast) {
@@ -1146,6 +1148,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					if (!trigger.isConnected) return;
 					openModelMenu(trigger, {
 						models: getModels(),
+						// Claude : les anciens modèles du catalogue (section
+						// `overflow`), sous « Plus de modèles », comme dans le CLI.
+						moreModels: isClaude ? aiProviders.getClaudeMoreModels() : undefined,
 						currentModel: currentMv(),
 						// L'effort a son propre bouton → pas de ligne Effort ici.
 						efforts: [],

@@ -387,6 +387,56 @@ await withSrcModule(
 				{ max: true, pro: true, inconnu: undefined, equipe: undefined });
 		}
 
+		/* LE CATALOGUE DE CLAUDE CODE est la source des modèles (bug du
+		   2026-09-23 : menu figé sur « Opus 5 » et « Fable 5 » alors que le CLI
+		   servait Opus 5.5 et proposait Fable 5.1). `projects[*].lastModelUsage`
+		   ne garde que la DERNIÈRE session de chaque projet, écrite à sa
+		   fermeture : un modèle servi depuis des heures peut n'y être nulle
+		   part. Le CLI télécharge lui-même son catalogue
+		   (`~/.claude/cache/model-catalog/…-cc.json`), relu par l'hôte : c'est
+		   lui qui fait foi, `~/.claude.json` ne sert plus qu'en repli. */
+		{
+			const catalogue = (fetchedAt, modeles) => ({ version: 2, fetchedAt, catalog: { surface: "cc", config: { id: "cc", models: modeles } } });
+			const modeles = [
+				{ id: "claude-opus-5-5", name: "Opus 5.5", description: "Most capable for ambitious work", section: "main" },
+				{ id: "claude-sonnet-5", name: "Sonnet 5", description: "Most efficient for everyday tasks", section: "main" },
+				{ id: "claude-fable-5-1", name: "Fable 5.1", section: "main", badge: { message: "Requires usage credits" } },
+				{ id: "claude-opus-5", name: "Opus 5", section: "overflow" },
+				{ id: "un id; rm -rf", name: "Refusé", section: "main" },
+			];
+			const json = { projects: { "C:/x": { lastModelUsage: { "claude-opus-5": {}, "claude-fable-5": {} } } } };
+			installHost(fauxHote({ caches: { claude: { mtimeMs: 444, json, catalogue: catalogue(1000, modeles) } } }).hote);
+			await providers.refreshCliCaches();
+			r.check("avec un catalogue, la liste est sa section main, dans son ordre, sans identifiant suspect",
+				providers.getClaudeModels().map(m => `${m.value}=${m.label}`),
+				["claude-opus-5-5=Opus 5.5", "claude-sonnet-5=Sonnet 5", "claude-fable-5-1=Fable 5.1"]);
+			r.check("… et sa section overflow part sous « Plus de modèles »",
+				providers.getClaudeMoreModels().map(m => m.label), ["Opus 5"]);
+			/* Un réglage enregistré avant le catalogue est un ALIAS : il désigne le
+			   modèle principal de sa famille. Un identifiant du catalogue reste
+			   tel quel, même rangé en overflow. */
+			r.check("un alias enregistré se résout sur le modèle principal de sa famille",
+				{ opus: providers.resolveClaudeModel("opus"), fable: providers.resolveClaudeModel("fable"), vide: providers.resolveClaudeModel(""), ancien: providers.resolveClaudeModel("claude-opus-5"), retire: providers.resolveClaudeModel("claude-opus-4-1") },
+				{ opus: "claude-opus-5-5", fable: "claude-fable-5-1", vide: "claude-opus-5-5", ancien: "claude-opus-5", retire: "claude-opus-5-5" });
+			/* Le catalogue se télécharge sans que `~/.claude.json` change : le
+			   même `mtime` avec un catalogue plus récent doit quand même
+			   rafraîchir. */
+			const neuf = [{ id: "claude-opus-5-6", name: "Opus 5.6", section: "main" }];
+			installHost(fauxHote({ caches: { claude: { mtimeMs: 444, json, catalogue: catalogue(2000, neuf) } } }).hote);
+			r.check("un catalogue plus récent, à mtime égal, signale un changement", await providers.refreshCliCaches(), true);
+			r.check("… et la liste suit", providers.getClaudeModels().map(m => m.label), ["Opus 5.6"]);
+			/* SANS catalogue (CLI ancien, jamais lancé), le repli : les alias
+			   embarqués, libellés par la version la plus HAUTE vue dans
+			   `lastModelUsage` et dans l'offre du CLI. */
+			const repli = { mtimeMs: 555, json: { ...json, additionalModelOptionsCache: [{ value: "claude-fable-5-1[1m]" }] } };
+			installHost(fauxHote({ caches: { claude: repli } }).hote);
+			await providers.refreshCliCaches();
+			const libelle = (v) => providers.getClaudeModels().find(m => m.value === v)?.label;
+			r.check("sans catalogue, repli sur les alias, libellés par la version la plus haute connue",
+				{ opus: libelle("opus"), fable: libelle("fable"), plus: providers.getClaudeMoreModels().length },
+				{ opus: "Opus 5", fable: "Fable 5.1", plus: 0 });
+		}
+
 		/* ── LES SONDES DE CONNEXION (tranche « se connecter depuis l'échec ») ──
 
 		   CE QU'ELLES EMPÊCHENT. La page « Générer » ouvre un terminal sur

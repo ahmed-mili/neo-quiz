@@ -486,7 +486,7 @@ export interface Pont {
 	processus: {
 		run(spec: RequeteCli, requeteId: number): Promise<ResultatCli>;
 		annuler(requeteId: number): Promise<void>;
-		lireCache(tool: "claude" | "codex"): Promise<{ mtimeMs: number; json: unknown } | null>;
+		lireCache(tool: "claude" | "codex"): Promise<{ mtimeMs: number; json: unknown; catalogue?: unknown } | null>;
 		ollamaInstalle(): Promise<boolean>;
 		demarrerOllama(): Promise<boolean>;
 		/** Ouvre un terminal VISIBLE qui installe l'outil puis y connecte le

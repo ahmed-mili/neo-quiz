@@ -68,7 +68,7 @@ import { commandeInstallationLancee } from "../../../src/cli-install-cmd";
 
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, dirname, extname, join } from "node:path";
 
@@ -81,6 +81,9 @@ export type OutilCache = "claude" | "codex";
 export interface CacheCli {
 	mtimeMs: number;
 	json: unknown;
+	/** Claude seulement : le catalogue de modèles du CLI (voir
+	    `catalogueClaude`). */
+	catalogue?: unknown;
 }
 
 /** Une erreur dont le `name` est celui que le contrat nomme. L'appelant décide
@@ -125,8 +128,48 @@ export async function lireCache(tool: OutilCache, env: NodeJS.ProcessEnv = proce
 	try {
 		const fichier = cheminCache(tool, env);
 		const mtimeMs = statSync(fichier).mtimeMs;
-		return { mtimeMs, json: JSON.parse(readFileSync(fichier, "utf8")) as unknown };
+		const json = JSON.parse(readFileSync(fichier, "utf8")) as unknown;
+		if (tool !== "claude") return { mtimeMs, json };
+		const catalogue = catalogueClaude(json, env);
+		return catalogue ? { mtimeMs, json, catalogue } : { mtimeMs, json };
 	} catch (e) {
+		return null;
+	}
+}
+
+/**
+ * Le CATALOGUE DE MODÈLES que Claude Code télécharge lui-même depuis Anthropic
+ * (`~/.claude/cache/model-catalog/<organisation>-<compte>-cc.json`, surface
+ * « cc » = Claude Code) : identifiant exact, nom affiché, description, badge,
+ * niveaux d'effort, section `main` / `overflow`. C'est l'équivalent du
+ * `models_cache.json` de Codex, rafraîchi par le CLI à chaque lancement.
+ *
+ * Pourquoi pas `~/.claude.json` seul : son `lastModelUsage` ne garde que la
+ * dernière session de chaque projet, écrite à sa fermeture — le 2026-09-23,
+ * Opus 5.5 était servi depuis des heures et le menu affichait « Opus 5 ».
+ *
+ * Le fichier retenu est celui de l'ORGANISATION du compte connecté
+ * (`oauthAccount.organizationUuid`) : un autre compte déjà utilisé sur la
+ * machine a son propre catalogue, parfois plus ancien. À défaut, le `cc` le
+ * plus récemment téléchargé. Chemin FIXE, jamais venu du rendu ; `null` si
+ * rien n'est lisible — le code partagé retombe alors sur ses autres sources.
+ */
+export function catalogueClaude(configClaude: unknown, env: NodeJS.ProcessEnv = process.env): unknown {
+	try {
+		const dossier = join(dossierPersonnel(env), ".claude", "cache", "model-catalog");
+		const org = (configClaude as { oauthAccount?: { organizationUuid?: unknown } } | null)?.oauthAccount?.organizationUuid;
+		const candidats: { json: { fetchedAt?: unknown }; duCompte: boolean }[] = [];
+		for (const f of readdirSync(dossier)) {
+			if (!f.endsWith("-cc.json")) continue;
+			try {
+				const json = JSON.parse(readFileSync(join(dossier, f), "utf8")) as { fetchedAt?: unknown };
+				candidats.push({ json, duCompte: typeof org === "string" && org !== "" && f.startsWith(org + "-") });
+			} catch { /* un fichier illisible ne masque pas les autres */ }
+		}
+		const date = (c: { json: { fetchedAt?: unknown } }): number => (typeof c.json.fetchedAt === "number" ? c.json.fetchedAt : 0);
+		candidats.sort((x, y) => Number(y.duCompte) - Number(x.duCompte) || date(y) - date(x));
+		return candidats[0]?.json ?? null;
+	} catch {
 		return null;
 	}
 }

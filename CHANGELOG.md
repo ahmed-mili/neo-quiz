@@ -19,7 +19,7 @@ release notes.
 
 ### Fixed
 - A question no longer turns into a blank page after going to the next question and back.
-- Math formulas in the app are laid out properly again: exponents, fractions and roots no longer collapse into plain text, and \dots (…) is displayed instead of an error.
+- Math formulas in the app are now laid out properly: exponents, fractions and roots no longer collapse into plain text, and \dots (…) is displayed instead of an error.
 - Reading cards of a Learn note no longer carry two empty answer options.
 - The Claude Code model list now follows the model catalog that Claude Code downloads itself, like Codex: new models (such as Opus 5.5) appear with their exact names as soon as the command-line tool knows them, and older ones move under "More models".
 

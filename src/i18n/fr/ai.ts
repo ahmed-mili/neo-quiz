@@ -333,4 +333,12 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.video.notJoinedOne": "1 vidéo n'a pas pu être lue et n'est pas jointe.",
 	"ai.video.notJoinedOther": "{count} vidéos n'ont pas pu être lues et ne sont pas jointes.",
 
+	/* ── Vérification à l'arrivée d'une note générée (spec Learn/Practice §2) ── */
+	"ai.format.noExplain": "Aucune explication pour {count} question(s) : {names}.",
+	"ai.format.unknownSlice": "{count} question(s) renvoient à une tranche absente de la note Learn : {names}.",
+	"ai.format.noSlice": "{count} question(s) n'appartiennent à aucune tranche : {names}.",
+	"ai.format.incompleteSlice": "Il manque à la tranche {slice} : {roles}.",
+	"ai.format.noObjectives": "La note Learn n'a pas d'objectifs d'apprentissage.",
+	"ai.format.notLearn": "Le modèle n'a pas produit de parcours : la note est enregistrée comme banque Practice.",
+
 };

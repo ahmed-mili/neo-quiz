@@ -382,4 +382,12 @@ export const EN_AI = {
 	"ai.video.notJoinedOne": "1 video could not be read and was not attached.",
 	"ai.video.notJoinedOther": "{count} videos could not be read and were not attached.",
 
+	/* ── Vérification à l'arrivée d'une note générée (spec Learn/Practice §2) ── */
+	"ai.format.noExplain": "No explanation for {count} question(s): {names}.",
+	"ai.format.unknownSlice": "{count} question(s) point to a slice the Learn note does not have: {names}.",
+	"ai.format.noSlice": "{count} question(s) belong to no slice: {names}.",
+	"ai.format.incompleteSlice": "Slice {slice} is missing: {roles}.",
+	"ai.format.noObjectives": "The Learn note has no learning objectives.",
+	"ai.format.notLearn": "The model did not produce a learning path: the note was saved as a Practice bank.",
+
 } as const;

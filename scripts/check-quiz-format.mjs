@@ -58,3 +58,13 @@ await withSrcModule("src/quiz-format.ts", ({ modeDuBloc, verifierFormat, planDes
 		[lireBlocQuiz("rien"), lireBlocQuiz("```quiz-blocks\n[{ title: \n```")], [null, null]);
 	r.done();
 });
+
+await withSrcModule("src/dashboard/ai-sources.ts", ({ nomDeSource, nomDeNote }) => {
+	const r = makeReporter("Nom d'une note par source");
+	r.check("la première pièce jointe, sans extension", nomDeSource([{ name: "CM1 - Introduction à Python.pdf" }, { name: "TP1.md" }], "Titre IA", "Nouveau quiz"), "CM1 - Introduction à Python");
+	r.check("sans pièce jointe : le titre du modèle", nomDeSource([], "Python : les bases", "Nouveau quiz"), "Python - les bases");
+	r.check("ni pièce ni titre : le repli", nomDeSource([], undefined, "Nouveau quiz"), "Nouveau quiz");
+	r.check("caractères interdits d'un nom de fichier remplacés", nomDeSource([{ name: "CM1: Python/avancé?.pdf" }], undefined, "x"), "CM1- Python-avancé-");
+	r.check("Learn et Practice", [nomDeNote("CM1", "learn"), nomDeNote("CM1", "practice")], ["CM1 — Learn", "CM1 — Practice"]);
+	r.done();
+});

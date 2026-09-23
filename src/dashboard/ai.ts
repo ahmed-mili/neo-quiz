@@ -2,6 +2,8 @@ import JSON5 from "json5";
 import type { EditorExamOptions } from "../types/editor-ctx";
 import type { AiPreset, DashboardViewName, NavigateData } from "../types/dashboard-ctx";
 import type { ModeQuiz } from "../quiz-format";
+import { modeDuBloc, verifierFormat } from "../quiz-format";
+import { nomDeSource, nomDeNote, lirePlanLearn, messagesDesManques } from "./ai-sources";
 import type { HostFile, HostModalHandle, ImageDeGlisser } from "../host/types";
 import { currentHost, requireHost } from "../host/current";
 import { ajouter, CLASSE_MODALE_HAUT } from "../dom";
@@ -501,6 +503,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	/** Le titre que le modèle a donné au quiz (`ReponseQuiz.titre`) ; c'est
 	    le nom du fichier quand il existe, la demande sinon. */
 	let generatedTitre: string | undefined;
+	/* Le plan des tranches ENVOYÉ avec la demande Practice, relu à
+	   l'enregistrement pour vérifier les `slice` produits (spec §2). */
+	let planTranchesEnvoye: { slice: number; titre: string }[] | undefined;
 	/* La réponse copiée VIENT D'ARRIVER : la modale d'attente le dit sur
 	   place (coche, « Réponse reçue », le nom du quiz) pendant que le quiz
 	   s'enregistre, avant de se fermer sur sa page. Sans cet état, la page
@@ -3342,14 +3347,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			   seconde fois de la racine par défaut. */
 			const folder = destination || host.paths.contractPath(root.id, settings().aiOutputFolder || aiSettingsDefaults().aiOutputFolder);
 			await ensureFolder(folder);
-			// Le nom : celui que le MODÈLE a donné au quiz (il a lu les sources
-			// et écrit les questions), sinon la demande — le même titre que la
-			// page affiche, sans les points de suspension qu'il ajoute à une
-			// demande coupée : ils n'ont rien à faire dans un nom de fichier.
-			const title = generatedTitre || generatedTitle().replace(/…$/, "");
-			const name = title !== t("ai.result.untitled")
-				? title
-				: t("dashboard.quizzes.newQuizDefaultName");
+			/* Une source, deux notes : `<source> — Learn.md` / `<source> —
+			   Practice.md` (spec §1.2). La source est la première pièce jointe,
+			   sinon le titre du modèle, sinon la demande. */
+			const repli = generatedTitle().replace(/…$/, "");
+			const source = nomDeSource(sentMessage?.notes ?? [], generatedTitre,
+				repli !== t("ai.result.untitled") ? repli : t("dashboard.quizzes.newQuizDefaultName"));
+			const mode = modeDuBloc(generatedQuestions);
+			const name = nomDeNote(source, mode);
 			const path = await freeNotePath(folder, name);
 			const provider = settings().aiProvider || "";
 			// Le modèle RÉELLEMENT utilisé si le client l'a publié (repli du
@@ -3374,8 +3379,17 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				model,
 				effort,
 				generatedAt: new Date().toISOString(),
+				learn: mode === "practice" && planTranchesEnvoye ? nomDeNote(source, "learn") : undefined,
 			});
 			await host.fs.write(path, frontmatter + exportAllWithFence(draft.questions, draft.examOptions) + "\n");
+
+			/* Contrôle à l'arrivée (spec §2) : un manque est SIGNALÉ, jamais un
+			   échec — la note est déjà écrite. Le mode de la note vient du BLOC
+			   produit, pas de l'interrupteur : un modèle qui n'a pas écrit
+			   `{ mode: "learn" }` produit un Practice, et la notice « objectifs »
+			   ne s'affiche pas à tort. */
+			for (const m of messagesDesManques(verifierFormat(mode, generatedQuestions, planTranchesEnvoye?.map(p => p.slice)))) host.ui.notice(m);
+			if (modeGeneration === "learn" && mode === "practice") host.ui.notice(t("ai.format.notLearn"));
 
 			const file = host.fs.getFile(path);
 			if (file) await deps.scanner.scanFile(file);
@@ -3767,11 +3781,20 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				return;
 			}
 
+			/* Practice : si le Learn de la même source existe dans le dossier
+			   de destination, son plan des tranches part avec la demande pour
+			   que chaque question pointe sa tranche (spec §2). */
+			const dossier = destination || defaultDestination();
+			const nomSource = nomDeSource(msg.notes, undefined, t("dashboard.quizzes.newQuizDefaultName"));
+			const planTranches = modeGeneration === "practice" ? (await lirePlanLearn(dossier, nomSource)) ?? undefined : undefined;
+			planTranchesEnvoye = planTranches;
+
 			const reponse = await client.generate(prompt, {
 				count: questionCount,
 				type: questionType,
 				mode: modeGeneration,
 				source,
+				planTranches,
 				images: imageData
 			});
 			generatedQuestions = reponse.questions;
@@ -3894,7 +3917,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		const deposer = aGlisser.length > 0;
 		const { source, prompt } = deposer ? demandeAvecFichiersDeposes(msg) : composerDemande(msg);
 		const jeton = nouveauJeton();
-		const texte = texteWeb(composerPrompts(prompt, { count: questionCount, type: questionType, mode: modeGeneration, source }), jeton);
+		/* Practice : si le Learn de la même source existe dans le dossier
+		   de destination, son plan des tranches part avec la demande pour
+		   que chaque question pointe sa tranche (spec §2). */
+		const dossier = destination || defaultDestination();
+		const nomSource = nomDeSource(msg.notes, undefined, t("dashboard.quizzes.newQuizDefaultName"));
+		const planTranches = modeGeneration === "practice" ? (await lirePlanLearn(dossier, nomSource)) ?? undefined : undefined;
+		planTranchesEnvoye = planTranches;
+		const texte = texteWeb(composerPrompts(prompt, { count: questionCount, type: questionType, mode: modeGeneration, source, planTranches }), jeton);
 		const ouverture = preparerOuverture(texte, canal.web);
 		if (ouverture.mode === "presse-papier") {
 			const ok = deps.copyText ? await deps.copyText(ouverture.texte) : false;

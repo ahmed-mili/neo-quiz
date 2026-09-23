@@ -15,6 +15,9 @@ export interface NeoQuizFrontmatter {
 	model: string;
 	effort?: string;
 	generatedAt: string;
+	/** Practice seulement : le nom de la note Learn de la même source, écrit
+	 *  en lien `[[…]]` au premier niveau pour qu'Obsidian le suive. */
+	learn?: string;
 }
 
 /** Retire les guillemets (simples ou doubles) qui entourent une valeur YAML,
@@ -98,7 +101,9 @@ export function neContientQueLeFrontmatterNeoQuiz(content: string): boolean {
  * Se termine par une ligne vide : le bloc qui suit ne colle pas au `---`.
  */
 export function ecrireFrontmatterNeoQuiz(meta: NeoQuizFrontmatter): string {
-	const lignes = ["---", "neo-quiz:", `  provider: ${meta.provider}`, `  model: ${meta.model}`];
+	const lignes = ["---"];
+	if (meta.learn) lignes.push(`learn: "[[${meta.learn.replace(/"/g, "")}]]"`);
+	lignes.push("neo-quiz:", `  provider: ${meta.provider}`, `  model: ${meta.model}`);
 	if (meta.effort) lignes.push(`  effort: ${meta.effort}`);
 	lignes.push(`  generatedAt: ${meta.generatedAt}`, "---", "");
 	return lignes.join("\n");

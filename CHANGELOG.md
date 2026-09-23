@@ -15,6 +15,7 @@ release notes.
 
 ### Added
 - The Generate page has a Learn | Practice switch: Learn builds a step-by-step learning path through a course, Practice an exam-style exercise bank. The number of questions and their type can be left on Auto.
+- Generated notes are named after their source: "<course> — Learn" and "<course> — Practice". A Practice bank points each question to the part of the Learn note that teaches it, and anything missing from a generated note (explanations, reading, recall) is reported by name.
 
 ### Fixed
 - A question no longer turns into a blank page after going to the next question and back.

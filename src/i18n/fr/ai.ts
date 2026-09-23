@@ -284,4 +284,26 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.video.doc.description": "Description",
 	"ai.video.doc.transcription": "Transcription",
 
+	/* ── La modale d'installation de yt-dlp (spec « Vidéos YouTube » § 4) ──
+	   Voir le commentaire du dictionnaire anglais (référence) : la date est
+	   formatée dans la langue de l'UI, la taille passe par {taille} (l'unité
+	   MB / Mo vit ICI). */
+	"ai.video.modal.title": "Lire les vidéos YouTube",
+	"ai.video.modal.quoi": "yt-dlp est un outil libre et open source (domaine public, Unlicense), successeur de youtube-dl, maintenu par une communauté sur GitHub. Créé le {date}.",
+	"ai.video.modal.role": "Ici, il ne lit que le titre, la description et les sous-titres d'une vidéo, dans sa langue d'origine. Il ne télécharge jamais la vidéo elle-même.",
+	"ai.video.modal.pourquoi": "Le modèle ne peut pas ouvrir un lien : sans lui, il invente ou refuse. Avec lui, la transcription est jointe à votre demande comme un document.",
+	"ai.video.modal.lien": "Release officielle sur github.com/yt-dlp/yt-dlp",
+	"ai.video.modal.version": "Version {version}, publiée le {date}",
+	"ai.video.modal.taille": "Taille du téléchargement : {taille} Mo",
+	"ai.video.modal.versionInconnue": "Dernière version publiée (illisible — vous êtes peut-être hors ligne). L'installation échouera proprement si elle est injoignable.",
+	"ai.video.modal.installation": "Installé dans le dossier de Neo Quiz, sans droits administrateur. Son empreinte SHA-256 est vérifiée avant usage.",
+	"ai.video.modal.installer": "Installer",
+	"ai.video.modal.annuler": "Annuler",
+	"ai.video.modal.progression": "Téléchargement de yt-dlp…",
+	"ai.video.modal.pourcent": "{percent} %",
+	"ai.video.modal.installe": "yt-dlp est installé.",
+	"ai.video.modal.erreur.reseau": "Le téléchargement a échoué : la release officielle est injoignable. Vérifiez votre connexion, puis réessayez.",
+	"ai.video.modal.erreur.empreinte": "Le fichier téléchargé ne correspond pas à son empreinte officielle (SHA-256). Il a été jeté — rien n'a été laissé sur votre disque. Réessayez.",
+	"ai.video.modal.erreur.inconnue": "L'installation a échoué. Réessayez.",
+
 };

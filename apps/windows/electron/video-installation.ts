@@ -310,11 +310,18 @@ function dossierOutils(env: NodeJS.ProcessEnv, dossierApp?: string): string | nu
 
 /** La taille de l'asset, lue par HEAD (content-length, après les
     redirections qui mènent au vrai asset) — null quand elle est
-    illisible : une progression en octets se suffit, sans total. */
+    illisible : une progression en octets se suffit, sans total.
+
+    L'EN-TÊTE ABSENT N'EST PAS ZÉRO : `Number(null)` vaut 0, et 0 passe
+    le filtre `>= 0` — la modale aurait affiché « 0 o » pour une taille
+    qu'on ignore, et la jauge un 100 % de travers (revue du 2026-09-23,
+    promue bloquante). On lit l'en-tête d'abord : absent → null. */
 async function tailleAsset(tag: string, asset: string, transport: TransportInstallation): Promise<number | null> {
 	const reponse = await demander(urlAsset(tag, asset), "HEAD", transport);
 	if (reponse.status !== 200) return null;
-	const longueur = Number(reponse.entete("content-length"));
+	const brute = reponse.entete("content-length");
+	if (brute === null) return null;
+	const longueur = Number(brute);
 	return Number.isFinite(longueur) && longueur >= 0 ? longueur : null;
 }
 

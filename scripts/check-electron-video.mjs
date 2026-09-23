@@ -511,7 +511,10 @@ const faireTransport = (options = {}) => {
 		if (options.echec && options.echec.nom === nom && options.echec.method === init.method) throw new Error("transport en panne pour " + nom);
 		if (init.method === "HEAD") {
 			const octets = readFileSync(join(racineRelease, nom));
-			return { status: 200, entete: (n) => (n === "content-length" ? String(octets.length) : null), texte: async () => "" };
+			/* L'en-tête content-length EST RETIRABLE (sansTaille) : un serveur
+			   qui ne le porte pas ne doit jamais faire croire à une taille
+			   nulle — la modale afficherait « 0 o » (revue du 2026-09-23). */
+			return { status: 200, entete: (n) => (!options.sansTaille && n === "content-length" ? String(octets.length) : null), texte: async () => "" };
 		}
 		const contenu = nom === "SHA2-256SUMS" && options.sommes ? Buffer.from(options.sommes, "utf8") : readFileSync(join(racineRelease, nom));
 		return {
@@ -575,6 +578,26 @@ await withSrcModule("apps/windows/electron/video-installation.ts", async ({ info
 		await cas(r, "infosInstallation hors ligne : tout null, SANS exception (la modale dit « dernière version publiée »)", async () => {
 			const infos = await infosInstallation({ transport: async () => { throw new Error("réseau en panne"); } });
 			r.check("hors ligne → tout null, l'url reste cliquable", infos, { version: null, datePublication: null, taille: null, url: URL_LATEST });
+		});
+
+		/* L'EN-TÊTE content-length ABSENT : Number(null) vaudrait 0, et la
+		   modale aurait affiché « 0 o » (revue du 2026-09-23, bloquant).
+		   Deux témoins : les infos, puis la progression D'UNE INSTALLATION —
+		   un total inconnu doit y rester null, jamais 0 ni 100 % faux. */
+		await cas(r, "infosInstallation : un HEAD sans content-length rend taille null, JAMAIS 0", async () => {
+			const infos = await infosInstallation({ transport: faireTransport({ sansTaille: true }) });
+			r.check("taille null, la version et la date restent lues",
+				{ version: infos.version, datePublication: infos.datePublication, taille: infos.taille },
+				{ version: TAG, datePublication: "2026-08-19", taille: null });
+		});
+
+		await cas(r, "installer : sans content-length, la progression reste en octets avec un total toujours null", async () => {
+			const app = mkdtempSync(join(racine, "app-sans-taille-"));
+			const vues = [];
+			await installer((recus, total) => vues.push([recus, total]), { transport: faireTransport({ sansTaille: true }), dossierApp: app, env: envInstalle });
+			r.check("la copie est posée et le total est null sur CHAQUE appel de progression",
+				{ exe: existsSync(join(app, "outils", "yt-dlp.exe")), vues: vues.length > 0 && vues.every((v) => v[0] > 0 && v[1] === null) },
+				{ exe: true, vues: true });
 		});
 
 		/* ── L'INSTALLATION ── */

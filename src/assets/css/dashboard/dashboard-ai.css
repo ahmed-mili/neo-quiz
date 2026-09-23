@@ -1800,6 +1800,93 @@
 .qbd-install-learn { display: inline-flex; align-self: flex-start; margin-top: 14px; font-size: 13.5px; color: var(--interactive-accent); text-decoration: none; }
 .qbd-install-learn:hover { text-decoration: underline; }
 
+/* ══════════════════════════════════════════════════════════
+   LA MODALE D'INSTALLATION DE YT-DLP (vidéos YouTube, spec § 4)
+   La structure reprend celle de `.qbd-install-modal` ci-dessus — les
+   quatre paragraphes en tête, la boîte d'état au même fond que la sienne,
+   la pilule primaire — ; les sélecteurs d'état lui sont propres, parce
+   que ses états (jauge, erreur expliquée) ne sont pas les siens.
+═══════════════════════════════════════════════════════════ */
+.qbd-video-install-modal { width: 560px; max-width: calc(100vw - 32px); }
+.qbd-video-install-modal .modal-content { display: flex; flex-direction: column; }
+.qbd-video-install-modal .modal-title { font-size: 1.22em; margin-bottom: 16px; }
+.qbd-video-install-modal .modal-title-icon,
+.qbd-video-install-modal .modal-title-icon svg { width: 22px; height: 22px; }
+.qbd-video-install-quoi,
+.qbd-video-install-role,
+.qbd-video-install-pourquoi { margin: 0 0 12px; color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+/* La boîte « d'où il vient » : le même fond que la zone d'état des CLI,
+   qui en fait un bloc lu comme UNE pièce du propos et non comme une
+   rangée de plus. */
+.qbd-video-install-source {
+	margin: 16px 0 0; padding: 13px 14px; border-radius: 10px;
+	background: var(--background-modifier-hover);
+	display: flex; flex-direction: column; gap: 8px;
+	font-size: 13.5px; line-height: 1.5;
+}
+.qbd-video-install-lien { color: var(--interactive-accent); text-decoration: none; }
+.qbd-video-install-lien:hover { text-decoration: underline; }
+.qbd-video-install-lignes,
+.qbd-video-install-fixe { color: var(--text-muted); }
+.qbd-video-install-lignes:empty { display: none; }
+/* La zone d'état, vide à l'ouverture : le même patron que
+   `.qbd-install-state` (rien tant qu'il n'y a rien à dire). */
+.qbd-video-install-etat { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.qbd-video-install-etat:not(:empty) { margin: 22px 0 0; padding: 13px 14px; border-radius: 10px; background: var(--background-modifier-hover); }
+.qbd-video-install-progression { display: flex; align-items: center; gap: 10px; }
+.qbd-video-install-texte { color: var(--text-muted); }
+.qbd-video-install-pourcent { color: var(--text-muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+/* La jauge. Hauteur de trois pixels : plus, elle rivalise avec le titre
+   d'un bloc de 13 px ; moins, on ne la voit pas. */
+.qbd-video-install-jauge {
+	position: relative; height: 5px; flex: 1;
+	border-radius: 2.5px; background: var(--background-modifier-border);
+	overflow: hidden;
+}
+.qbd-video-install-jauge-plein {
+	height: 100%; width: 0;
+	border-radius: 2.5px;
+	background: var(--interactive-accent);
+	transition: width 0.2s ease;
+}
+/* La jauge INDETERMINÉE : un total inconnu ne fait jamais semblant
+   d'avancer ni d'atteindre 100 % — une barre qui balaie, comme les
+   barres de progression des terminaux. */
+.qbd-video-install-jauge--indeterminee .qbd-video-install-jauge-plein {
+	width: 40%;
+	animation: qbd-video-install-balayage 1.4s ease-in-out infinite;
+}
+@keyframes qbd-video-install-balayage {
+	0% { margin-left: -40%; }
+	100% { margin-left: 100%; }
+}
+/* La coche reprend `.qbd-install-check` telle quelle : la même coche
+   verte que la modale des CLI, la même signification. */
+.qbd-video-install-ligne-coche { display: flex; align-items: center; gap: 10px; }
+/* L'ERREUR EXPLIQUÉE dans la modale, jamais une Notice : le rouge du
+   thème porte l'alerte, l'icône l'annonce avant la lecture. */
+.qbd-video-install-erreur { display: flex; align-items: flex-start; gap: 10px; color: var(--text-error); }
+.qbd-video-install-erreur-icone { color: var(--text-error); display: inline-flex; flex-shrink: 0; }
+.qbd-video-install-erreur-icone svg { width: 16px; height: 16px; }
+/* Les boutons s'effacent quand l'installation est partie (elle n'est pas
+   annulable — le contrat ne propose pas d'abandon) et quand la coche est
+   là ; une erreur les remet. */
+.qbd-video-install-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 22px; }
+.qbd-video-install-modal[data-state="en-cours"] .qbd-video-install-actions,
+.qbd-video-install-modal[data-state="detecte"] .qbd-video-install-actions { display: none; }
+.qbd-video-install-annuler {
+	display: inline-flex; align-items: center; height: 36px; padding: 0 16px;
+	border: 1px solid var(--background-modifier-border); border-radius: 18px;
+	background: transparent; color: var(--text-muted);
+	font-size: 13px; font-weight: 600; cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.qbd-video-install-annuler:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+	border-color: var(--background-modifier-border-hover);
+}
+
 /* La scène. 30 et 5, et NON les 32 et 8 que déclarent les classes de la
    référence : son image est en ligne et déborde de son conteneur de deux
    pixels en haut et de trois en bas, si bien que ses marges se VOIENT comme

@@ -327,4 +327,29 @@ export const EN_AI = {
 	"ai.video.doc.description": "Description",
 	"ai.video.doc.transcription": "Transcript",
 
+	/* ── La modale d'installation de yt-dlp (spec « Vidéos YouTube » § 4,
+	   autorité liante) ── La date de création est formatée par
+	   Intl.DateTimeFormat dans la langue de l'UI ; la taille, en Mo à une
+	   décimale, passe par la variable {taille} (l'unité vit ICI, MB / Mo,
+	   jamais dans le code). */
+	"ai.video.modal.title": "Read YouTube videos",
+	"ai.video.modal.quoi": "yt-dlp is a free, open-source tool (public domain, Unlicense), successor of youtube-dl, maintained by a community on GitHub. Created on {date}.",
+	"ai.video.modal.role": "Here, it only reads a video's title, description and subtitles, in the video's original language. It never downloads the video itself.",
+	"ai.video.modal.pourquoi": "The model cannot open a link: without it, the model invents or refuses. With it, the transcript is attached to your request like a document.",
+	"ai.video.modal.lien": "Official release on github.com/yt-dlp/yt-dlp",
+	"ai.video.modal.version": "Version {version}, published on {date}",
+	"ai.video.modal.taille": "Download size: {taille} MB",
+	/* Version illisible (hors ligne) : la ligne dit « dernière version
+	   publiée » et prévient que l'installation échouera proprement. */
+	"ai.video.modal.versionInconnue": "Latest published version (it could not be read — you may be offline). The install will fail cleanly if it cannot be reached.",
+	"ai.video.modal.installation": "Installed in the Neo Quiz folder, without administrator rights. Its SHA-256 checksum is verified before it is used.",
+	"ai.video.modal.installer": "Install",
+	"ai.video.modal.annuler": "Cancel",
+	"ai.video.modal.progression": "Downloading yt-dlp…",
+	"ai.video.modal.pourcent": "{percent} %",
+	"ai.video.modal.installe": "yt-dlp is installed.",
+	"ai.video.modal.erreur.reseau": "The download failed: the official release could not be reached. Check your connection, then try again.",
+	"ai.video.modal.erreur.empreinte": "The downloaded file did not match its official checksum (SHA-256). It was discarded — nothing was left on your disk. Try again.",
+	"ai.video.modal.erreur.inconnue": "The installation failed. Try again.",
+
 } as const;

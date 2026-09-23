@@ -151,7 +151,12 @@ function exportQuestion(q: DraftQuestion, idx: number, id: string): string {
 		L.push(`\t\tpromptHtml: '${e(q._promptHtml)}',`);
 	}
 	const t = q._type;
-	if (t === "single") {
+	/* Une carte de LECTURE sans option remplie n'a rien à écrire en options
+	   ni en réponse : `options: ['', '']` et `correctIndex: 0` n'y sont que
+	   du bruit, et la page du quiz les affichait en « … ». Une note déjà
+	   écrite ainsi se nettoie à sa prochaine sauvegarde. */
+	const lectureSansOptions = q.role === "read" && !(q.options || []).some(o => String(o ?? "").trim() !== "");
+	if (t === "single" && !lectureSansOptions) {
 		L.push(`\t\toptions: [\n${(q.options || []).map(o => `\t\t\t'${e(o)}',`).join("\n")}\n\t\t],`);
 		L.push(`\t\tcorrectIndex: ${q.correctIndex ?? 0},`);
 	}

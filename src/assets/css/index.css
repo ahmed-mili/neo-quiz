@@ -2,9 +2,13 @@
    STYLES.CSS SPLIT - INDEX FILE
    ========================================================= */
 
-/* Fonts MathLive (éditeur d'équations) — inlinées en data-URI au build
-   (loader esbuild), MathfieldElement.fontsDirectory = null côté JS. */
-@import "mathlive/fonts.css";
+/* MathLive : ses polices ET la mise en page du HTML de
+   `convertLatexToMarkup` (exposants, fractions, racines : 226 règles `ML__`).
+   L'application rend TOUTES les formules avec MathLive (host/math.ts) ;
+   `fonts.css` seul (les mêmes 20 polices, sans la mise en page) affichait
+   $100^2$ en « 100₂ » (2026-09-23). Le greffon rend avec MathJax et garde
+   `fonts.css` (plugin.css). MathfieldElement.fontsDirectory = null côté JS. */
+@import "mathlive/static.css";
 
 @import url('./tokens.css');
 @import url('./base.css');

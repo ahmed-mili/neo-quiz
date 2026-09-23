@@ -15,6 +15,7 @@ import * as mathlive from "mathlive";
 import { convertLatexToMarkup, MathfieldElement } from "mathlive";
 import type { HostMath } from "../../../../src/host/types";
 import { provideMathlive } from "../../../../src/engine/math-input";
+import { latexPourMathLive } from "./latex-mathlive";
 
 /* L'éditeur d'équations partagé (`engine/math-input.ts`) charge MathLive par
    `require` sous le greffon ; ici il n'y a pas de `require`. La bibliothèque
@@ -59,7 +60,7 @@ export function createWindowsMath(): HostMath {
 			   c'est-à-dire à casser le rendu pour rien.
 			   Tout AUTRE HTML de l'application passe par `src/engine/sanitizer.ts`
 			   et ses quatre portes. */
-			span.innerHTML = convertLatexToMarkup(String(latex ?? ""), {
+			span.innerHTML = convertLatexToMarkup(latexPourMathLive(String(latex ?? "")), {
 				defaultMode: display ? "math" : "inline-math",
 			});
 			return span;

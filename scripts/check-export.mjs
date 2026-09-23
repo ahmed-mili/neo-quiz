@@ -305,6 +305,17 @@ await withSrcModule(["src/editor/convert.ts", "src/editor/export.ts"], (convert,
 	const nu = tour({ ...base });
 	r.check("pas de variante inventee", [nu.textVariant, nu.terminalVariant], [undefined, undefined]);
 
+	/* Une carte de LECTURE (`role: 'read'`) n'a ni options ni réponse. La
+	   conversion lui donnait deux options vides par défaut, que l'écriture
+	   recopiait : chaque Learn généré en portait sur toutes ses cartes de
+	   lecture, et la page du quiz les affichait en « … » (2026-09-23). */
+	const lecture = tour({ id: "l", title: "Lecture", prompt: "Passage.", slice: 1, role: "read" });
+	r.check("une carte de lecture s'écrit sans options ni réponse",
+		["options" in lecture, "correctIndex" in lecture, lecture.role, lecture.slice], [false, false, "read", 1]);
+	const choixVide = tour({ id: "q", title: "Q", prompt: "?" });
+	r.check("une question à choix sans options garde ses deux options vides (éditeur)",
+		[choixVide.options, choixVide.correctIndex], [["", ""], 0]);
+
 	r.done();
 });
 

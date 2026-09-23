@@ -216,7 +216,12 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	if (typeof q.role === "string" && (QUESTION_ROLES as readonly string[]).includes(q.role)) question.role = q.role as QuestionRole;
 
 	if (type === "single" || type === "multi") {
-		question.options = q.options || ["", ""];
+		/* Une carte de LECTURE (`role: 'read'`) n'a ni options ni réponse : elle
+		   ne reçoit pas les deux options vides d'une question neuve de
+		   l'éditeur — l'écriture les recopiait, et chaque Learn généré en
+		   portait sur toutes ses cartes de lecture (2026-09-23). */
+		const lectureSansOptions = question.role === "read" && !Array.isArray(q.options);
+		question.options = q.options || (lectureSansOptions ? [] : ["", ""]);
 		if (type === "single") {
 			question.correctIndex = q.correctIndex ?? 0;
 		} else {

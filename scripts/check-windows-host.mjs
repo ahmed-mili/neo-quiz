@@ -34,6 +34,7 @@
  *     npm run check:windows-host
  */
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Event, parseHTML } from "linkedom";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
@@ -2223,5 +2224,26 @@ await withSrcModule("apps/windows/src/host/video.ts", async ({ createWindowsVide
 	r.check("le canal annuler est appelé avec CET identifiant",
 		journal.filter(e => e[0] === "video.annuler").at(-1), ["video.annuler", "nh9e18bXpzc"]);
 
+	r.done();
+});
+
+/* ── LES MATHS RENDUES PAR MATHLIVE (2026-09-23) ──
+   Test d'un quiz de suites dans l'application : les exposants sortaient en
+   indice (« 100₂ » pour $100^2$) et `\dots` en erreur. Deux causes, deux
+   cas : la feuille `mathlive/static.css` — celle qui met en page le HTML de
+   `convertLatexToMarkup` (226 règles `ML__`) — n'était chargée nulle part,
+   seules les polices l'étaient ; et MathLive ne connaît pas `\dots` ni ses
+   variantes amsmath, que MathJax (le greffon) rend sans broncher. */
+await withSrcModule("apps/windows/src/host/latex-mathlive.ts", async ({ latexPourMathLive }) => {
+	const r = makeReporter("Hôte Windows — le LaTeX donné à MathLive");
+	r.check("les points de suspension d'amsmath deviennent des commandes que MathLive connaît",
+		[String.raw`1 + \dots + n`, String.raw`a_1 \dotsc a_n`, String.raw`x_1 + \dotsb`, String.raw`\dotsm`, String.raw`\dotsi`, String.raw`\dotso`].map(latexPourMathLive),
+		[String.raw`1 + \ldots + n`, String.raw`a_1 \ldots a_n`, String.raw`x_1 + \cdots`, String.raw`\cdots`, String.raw`\cdots`, String.raw`\ldots`]);
+	r.check("le reste est intact (ldots, cdots, dot, ddot, indices et exposants)",
+		[String.raw`\ldots`, String.raw`\cdots`, String.raw`\dot{x}`, String.raw`\ddot{x}`, "u_{n+1}^2"].map(latexPourMathLive),
+		[String.raw`\ldots`, String.raw`\cdots`, String.raw`\dot{x}`, String.raw`\ddot{x}`, "u_{n+1}^2"]);
+	const css = readFileSync(join(process.cwd(), "src/assets/css/index.css"), "utf8");
+	r.check("l'entrée CSS de l'application charge la mise en page de MathLive, pas ses seules polices",
+		[/@import\s+["']mathlive\/static\.css["']/.test(css), /@import\s+["']mathlive\/fonts\.css["']/.test(css)], [true, false]);
 	r.done();
 });

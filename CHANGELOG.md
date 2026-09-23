@@ -13,6 +13,8 @@ release notes.
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-09-23
+
 ### Added
 - Every question now has previous and next arrow buttons under it, in every question type. On the last question, the next arrow takes you to the submit screen or your results, like the right arrow key.
 

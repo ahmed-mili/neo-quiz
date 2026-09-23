@@ -66,11 +66,20 @@ export const EN_AI = {
 	/* Libellés des types de questions. La VALEUR envoyée au modèle reste
 	   canonique (cf. TYPE_VALUES dans dashboard/ai.ts) : ces libellés ne
 	   servent qu'à l'affichage. */
-	"ai.type.mixed": "Mixed",
+	"ai.type.mixed": "Auto",
 	"ai.type.single": "Single choice",
 	"ai.type.multiple": "Multiple choice",
 	"ai.type.text": "Free text",
 	"ai.type.comprehension": "Comprehension",
+
+	/* ── Objectif Learn / Practice (composer) ── */
+	"ai.mode.learn": "Learn",
+	"ai.mode.practice": "Practice",
+	"ai.mode.learnTip": "Learn a course step by step: a question before each passage, instant feedback, until it sticks.",
+	"ai.mode.practiceTip": "Train on exercises in your exam's format, with every mistake explained.",
+	"ai.mode.group": "Goal",
+	"ai.options.auto": "Auto",
+	"ai.options.autoHint": "Chosen by the AI",
 
 	/* ── Fournisseurs (sous-titres du menu) ── */
 	"ai.provider.choose": "Select a provider",

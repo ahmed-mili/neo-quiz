@@ -1,6 +1,7 @@
 import JSON5 from "json5";
 import type { EditorExamOptions } from "../types/editor-ctx";
 import type { AiPreset, DashboardViewName, NavigateData } from "../types/dashboard-ctx";
+import type { ModeQuiz } from "../quiz-format";
 import type { HostFile, HostModalHandle, ImageDeGlisser } from "../host/types";
 import { currentHost, requireHost } from "../host/current";
 import { ajouter, CLASSE_MODALE_HAUT } from "../dom";
@@ -288,7 +289,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	// Sources texte attachées (PLUSIEURS — maquette 2026-07-11 231626) :
 	// notes du vault (path) et fichiers texte du disque (.md/.txt).
 	let noteAttachments: NoteAttachment[] = []; // [{ name, content, path? }]
-	let questionCount = 5;
+	/** `null` : « Auto », le nombre suit la source (spec §2). */
+	let questionCount: number | null = null;
+	/** L'OBJECTIF de la génération : on génère toujours un quiz, Learn pour
+	    apprendre, Practice pour s'entraîner. Vaut pour la session de la page,
+	    comme le nombre et le type. */
+	let modeGeneration: ModeQuiz = "learn";
 	let questionType = "Mixte";
 	/* Destination du quiz généré : un chemin du CONTRAT, ou "" pour le dossier
 	   par défaut. Comme le nombre et le type, elle vaut pour la SESSION de la
@@ -891,6 +897,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			const hide = () => { if (tip) { tip.remove(); tip = null; } };
 			btn.addEventListener("mouseenter", () => {
 				if (tip) return;
+				// Sans fournisseur, la bulle permanente dit déjà « Select a provider ».
+				if (!(settings().aiProvider || "")) return;
 				tip = ajouter(document.body, "div", "qbd-hover-tip");
 				const actuel = settings().aiProvider || "";
 				const marque = aiProviders.getMarque(actuel);
@@ -1551,29 +1559,95 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// Bouton Options (questions + type) : JUSTE à droite du « + » (façon
 		// pills gauche de claude.ai, demande 2026-07-16) — popover à la
 		// demande, tooltip d'état.
+		/* Sélecteur segmenté Learn | Practice (chantier « deux modes »,
+		   2026-09-23) — gauche épurée façon « Chat | Cowork » de claude.ai :
+		   « + », le sélecteur Learn | Practice, puis la seule icône Options
+		   (nombre, type, destination). */
+		const seg = ajouter(composerBottom, "div", "qbd-ai-seg");
+		seg.setAttribute("role", "radiogroup");
+		seg.setAttribute("aria-label", t("ai.mode.group"));
+		/* Le bloc qui glisse (relevé sur claude.ai le 2026-09-23) : un seul
+		   indicateur positionné sous les options, déplacé en FLIP au
+		   changement — 200 ms, cubic-bezier(.32, .72, 0, 1), depuis
+		   l'ancienne position avec un scaleX qui rattrape l'ancienne largeur. */
+		const indic = ajouter(seg, "div", "qbd-ai-seg-indic");
+		const segBtns = (["learn", "practice"] as const).map(v => {
+			const b = ajouter(seg, "button", "qbd-ai-seg-btn", v === "learn" ? t("ai.mode.learn") : t("ai.mode.practice"));
+			b.type = "button";
+			b.setAttribute("role", "radio");
+			b.addEventListener("click", () => {
+				if (modeGeneration === v) return;
+				modeGeneration = v;
+				majSeg(true);
+				/* Les options ne sont plus les mêmes d'un mode à l'autre : l'icône
+				   s'allume en accent puis s'éteint, pour qu'un premier utilisateur
+				   voie que quelque chose a changé LÀ. Retirer puis reposer la
+				   classe relance l'animation à chaque bascule. */
+				optsBtn.classList.remove("qbd-ai-opts-pulse");
+				void optsBtn.offsetWidth;
+				optsBtn.classList.add("qbd-ai-opts-pulse");
+			});
+			/* L'objectif de chaque mode, au survol, au-dessus (référence : la
+			   bulle de « Chat | Cowork » de Claude). Les noms restent en anglais,
+			   l'explication suit la langue de l'interface. */
+			attachHoverTip(b, (tip) => {
+				tip.classList.add("qbd-hover-tip--card");
+				ajouter(tip, "div", "qbd-hover-tip-title", v === "learn" ? t("ai.mode.learn") : t("ai.mode.practice"));
+				ajouter(tip, "div", "qbd-hover-tip-body", v === "learn" ? t("ai.mode.learnTip") : t("ai.mode.practiceTip"));
+			});
+			return { v, b };
+		});
+		const majSeg = (anime: boolean) => {
+			const actif = segBtns.find(({ v }) => v === modeGeneration)!.b;
+			segBtns.forEach(({ v, b }) => {
+				b.classList.toggle("is-active", v === modeGeneration);
+				b.setAttribute("aria-checked", String(v === modeGeneration));
+			});
+			const ancienX = indic.dataset.x === undefined ? null : parseFloat(indic.dataset.x);
+			const ancienneL = parseFloat(indic.dataset.w || "0");
+			const x = actif.offsetLeft, w = actif.offsetWidth;
+			indic.dataset.x = String(x);
+			indic.dataset.w = String(w);
+			indic.style.width = `${w}px`;
+			indic.style.transform = `translateX(${x}px)`;
+			const reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+			if (anime && !reduit && ancienX !== null && ancienneL > 0) {
+				indic.animate(
+					{ transform: [`translateX(${ancienX}px) scaleX(${ancienneL / w})`, `translateX(${x}px) scaleX(1)`] },
+					{ duration: 200, easing: "cubic-bezier(.32, .72, 0, 1)" },
+				);
+			}
+		};
+		// Mesure après insertion dans le document (largeurs réelles des options).
+		requestAnimationFrame(() => majSeg(false));
 		const optsBtn = ajouter(composerBottom, "button", "qbd-ai-composer-opts");
 		optsBtn.type = "button";
-		host.ui.setIcon(optsBtn, "sliders-horizontal");
+		host.ui.setIcon(optsBtn, "settings-2");
 		labelIconButton(optsBtn, t("ai.composer.quizOptions"));
 		optsBtn.addEventListener("click", () => {
 			// Le menu ne connaît que des libellés : on traduit à l'aller et on
 			// retraduit la sélection en valeur canonique au retour.
 			const dossiers = destinationOptions();
 			openOptionsMenu(optsBtn, {
-				count: questionCount,
-				type: typeLabel(questionType), types: typeLabels(),
+				count: questionCount ?? 10,
+				countAuto: questionCount === null, onCountAuto: () => { questionCount = null; },
+				typeAuto: questionType === TYPE_VALUES[0], onTypeAuto: () => { questionType = TYPE_VALUES[0]; },
+				type: typeLabel(questionType), types: typeLabels().slice(1),
 				// Une SEULE entrée (le défaut) n'est pas un choix : pas de section.
 				folders: dossiers.length > 1 ? dossiers : undefined,
 				folder: destination,
 				onCount: (n) => { questionCount = n; },
 				onType: (label) => { questionType = typeValue(label); },
-				onFolder: (value) => { destination = value; }
+				onFolder: (value) => { destination = value; },
+				// Barème et durée : avec le Mock exam, sous-projet à part.
 			});
 		});
 		// Tooltip au survol : l'état courant (« 5 questions · Mixte »),
 		// relu à chaque hover — pattern attachHoverTip.
 		attachHoverTip(optsBtn, (tip) => {
-			ajouter(tip, "div", "qbd-hover-tip-title", t("ai.options.tooltip", { count: questionCount, type: typeLabel(questionType) }));
+			const nb = questionCount === null ? t("ai.options.auto") : t("dashboard.common.questionsOther", { count: questionCount });
+			const ty = questionType === TYPE_VALUES[0] ? t("ai.options.auto") : typeLabel(questionType);
+			ajouter(tip, "div", "qbd-hover-tip-title", `${nb} · ${ty}`);
 			/* Le dossier en seconde ligne, et SEULEMENT quand il n'est pas le
 			   défaut : l'infobulle sert à voir d'un coup d'œil ce qui sort de
 			   l'ordinaire, pas à répéter l'état normal. */
@@ -1610,6 +1684,8 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		const composerTools = ajouter(composerBottom, "div", "qbd-ai-composer-tools");
 		buildProviderControl(composerTools);
 		if (buildModelControl) buildModelControl(composerTools);
+		// L'icône Options est à droite du modèle (2026-09-23).
+		composerTools.appendChild(optsBtn);
 
 		// Bouton générer dans le composer (façon bouton d'envoi claude.ai) :
 		// caché tant que le champ est vide, flèche ↑ blanche sur fond accent.
@@ -1686,14 +1762,42 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// Glisser-déposer de fichiers (images, .md, .txt) sur tout le composer
 		composer.addEventListener("dragover", (e) => {
 			e.preventDefault();
+			if (!provider) return;
 			composer.classList.add("qbd-ai-composer--dragover");
 		});
 		composer.addEventListener("dragleave", () => composer.classList.remove("qbd-ai-composer--dragover"));
 		composer.addEventListener("drop", (e) => {
 			e.preventDefault();
 			composer.classList.remove("qbd-ai-composer--dragover");
+			if (!provider) return;
 			if (e.dataTransfer?.files?.length) addComposerFiles(Array.from(e.dataTransfer.files));
 		});
+
+		/* SANS FOURNISSEUR, le composer est INERTE (demande du 2026-09-23) :
+		   rien ne se tape, ne se joint, ne se règle tant qu'aucun canal n'est
+		   choisi — sans quoi on rédige une demande qui ne peut partir nulle
+		   part. Seul le bouton du fournisseur reste actif, et une bulle posée
+		   juste au-dessus de lui le désigne. Choisir un fournisseur redessine
+		   tout le composer (`render`) : l'état se pose donc une seule fois. */
+		if (!provider) {
+			composer.classList.add("qbd-ai-composer--sans-fournisseur");
+			composerInput.disabled = true;
+			addBtn.disabled = true;
+			segBtns.forEach(({ b }) => { b.disabled = true; });
+			optsBtn.hidden = true;
+			// Posé par buildProviderControl, dans une fermeture : TS ne le voit pas.
+			const bouton = (providerSelect as ProviderControl | null)?.el;
+			if (bouton) {
+				const bulle = ajouter(composerTools, "button", "qbd-ai-provider-nudge", t("ai.provider.choose"));
+				bulle.type = "button";
+				bulle.addEventListener("click", () => ouvrirMenuFournisseur?.());
+				// Centrée sur le bouton, mesurée une fois le composer dans le document.
+				requestAnimationFrame(() => {
+					bulle.style.left = `${bouton.offsetLeft + bouton.offsetWidth / 2 - bulle.offsetWidth / 2}px`;
+					bulle.classList.add("is-placed");
+				});
+			}
+		}
 
 		// Le raccourci « Ajouter des fichiers » : dans l'application, rien ne
 		// le liait depuis la tâche 1 du greffon lecteur — le menu affichait un
@@ -1708,6 +1812,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			   `fileInputRef.isConnected` de `fileInput.click()`), Ctrl+E depuis
 			   une autre page ouvrirait quand même un dialogue de fichiers. */
 			if (!fileInputRef || !fileInputRef.isConnected) return;
+			if (!(settings().aiProvider || "")) return;
 			const hk = eventToHotkey(e);
 			const voulu = settings().hotkeyAddFiles;
 			if (!hk || !voulu || hk.key !== voulu.key) return;
@@ -3665,6 +3770,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			const reponse = await client.generate(prompt, {
 				count: questionCount,
 				type: questionType,
+				mode: modeGeneration,
 				source,
 				images: imageData
 			});
@@ -3788,7 +3894,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		const deposer = aGlisser.length > 0;
 		const { source, prompt } = deposer ? demandeAvecFichiersDeposes(msg) : composerDemande(msg);
 		const jeton = nouveauJeton();
-		const texte = texteWeb(composerPrompts(prompt, { count: questionCount, type: questionType, source }), jeton);
+		const texte = texteWeb(composerPrompts(prompt, { count: questionCount, type: questionType, mode: modeGeneration, source }), jeton);
 		const ouverture = preparerOuverture(texte, canal.web);
 		if (ouverture.mode === "presse-papier") {
 			const ok = deps.copyText ? await deps.copyText(ouverture.texte) : false;

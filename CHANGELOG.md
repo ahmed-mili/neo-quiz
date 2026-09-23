@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Added
+- The Generate page has a Learn | Practice switch: Learn builds a step-by-step learning path through a course, Practice an exam-style exercise bank. The number of questions and their type can be left on Auto.
+
 ### Fixed
 - A question no longer turns into a blank page after going to the next question and back.
 - The Claude Code model list now follows the model catalog that Claude Code downloads itself, like Codex: new models (such as Opus 5.5) appear with their exact names as soon as the command-line tool knows them, and older ones move under "More models".

@@ -1666,13 +1666,16 @@ export interface OpenOptionsMenuOptions {
 	types: string[];
 	onCount?: (n: number) => void;
 	onType?: (t: string) => void;
+	/** « Auto » en tête du nombre et du type : l'IA choisit d'après la
+	    source. `countAuto` / `typeAuto` disent si Auto est l'état courant ;
+	    les rappels `onCountAuto` / `onTypeAuto` le posent. */
+	countAuto?: boolean;
+	onCountAuto?: () => void;
+	typeAuto?: boolean;
+	onTypeAuto?: () => void;
 	/**
 	 * DESTINATION du quiz généré : les dossiers proposés, le premier étant le
-	 * défaut. Absente ou vide = pas de section Destination, et c'est le cas du
-	 * GREFFON — il écrit dans le vault ouvert, il n'y a pas de choix à faire.
-	 *
-	 * Un DROPDOWN local et non une liste à coche comme le Type : les types
-	 * sont cinq pour toujours, les dossiers peuvent être trente.
+	 * défaut. Absente ou vide = pas de ligne Destination.
 	 */
 	folders?: { value: string; label: string; icon?: string; color?: string; sub?: string }[];
 	/** Dossier courant (une `value` de `folders`). */
@@ -1681,222 +1684,214 @@ export interface OpenOptionsMenuOptions {
 }
 
 /*
- * openOptionsMenu(anchorEl, {
- *   count, minCount, maxCount,   // slider Questions
- *   type, types: string[],       // choix du Type
- *   onCount(n), onType(t)
- * })
- * Popover des options de génération (remplace la carte « Options » du
- * formulaire). Reste ouvert pendant les réglages — fermeture clic-dehors,
- * Esc, scroll. Le Type est une liste à coche directe, PAS un dropdown
- * imbriqué : l'ouverture d'un createSelect appelle closeAllSelects(),
- * qui fermerait ce popover.
+ * openOptionsMenu(anchorEl, opts) — les options de génération, en TROIS
+ * lignes (référence : menus de claude.ai) : icône, nom, valeur courante en
+ * gris, chevron. Chaque ligne ouvre son choix dans un flyout à côté du menu,
+ * au survol comme au clic ou à la flèche droite — la même mécanique que le
+ * flyout de niveaux du menu des modèles. Rien n'est imbriqué dans le menu :
+ * un `createSelect` appellerait `closeAllSelects()` et fermerait le parent.
  */
 export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOptions): MenuHandle {
 	if (toggleCloseForAnchor(anchorEl)) return { close() {} };
 	closeAllSelects();
+	const host = currentHost();
 
-	const menuEl = ajouter(document.body, "div", "qbd-select-menu qbd-options-pop");
+	const menuEl = ajouter(document.body, "div", "qbd-select-menu qbd-action-menu qbd-opts-menu");
 	menuEl.setAttribute("role", "menu");
 
-	// ── Questions : DROPDOWN à presets + « Personnalisé » (référence
-	// sélecteur de durée d'Ahmed, 2026-07-11) — Personnalisé révèle un
-	// champ nombre à côté (« Custom | 5 m : 00 s »). Dropdown LOCAL au
-	// popover : createSelect appellerait closeAllSelects() et fermerait
-	// le popover parent. ──
+	/* ── Le flyout d'UNE ligne à la fois ── */
+	let fly: HTMLDivElement | null = null;
+	let flyRow: HTMLElement | null = null;
+	let timer = 0;
+	const fermerFly = (): void => {
+		window.clearTimeout(timer);
+		if (fly) { fly.remove(); fly = null; }
+		if (flyRow) { flyRow.classList.remove("is-open"); flyRow.setAttribute("aria-expanded", "false"); flyRow = null; }
+	};
+	const fermerBientot = (): void => {
+		window.clearTimeout(timer);
+		timer = window.setTimeout(() => {
+			if (fly?.matches(":hover") || flyRow?.matches(":hover")) return;
+			fermerFly();
+		}, 160);
+	};
+
+	interface Choix { label: string; hint?: string; icon?: string; color?: string; sub?: string; actif: boolean; choisir(): void }
+
+	const ligne = (icon: string, titre: string, valeur: () => string, choix: () => Choix[], extra?: (f: HTMLDivElement, maj: () => void) => void): void => {
+		const row = ajouter(menuEl, "button", "qbd-select-option qbd-opts-row");
+		row.type = "button";
+		row.setAttribute("aria-haspopup", "menu");
+		row.setAttribute("aria-expanded", "false");
+		const ic = ajouter(row, "span", "qbd-select-check qbd-action-menu-icon");
+		host.ui.setIcon(ic, icon);
+		ajouter(row, "span", "qbd-select-option-label", titre);
+		const val = ajouter(row, "span", "qbd-opts-row-value");
+		const chev = ajouter(row, "span", "qbd-opts-row-chevron");
+		host.ui.setIcon(chev, "chevron-right");
+		const majValeur = (): void => { val.textContent = valeur(); };
+		majValeur();
+
+		const ouvrir = (): void => {
+			if (flyRow === row && fly) return;
+			fermerFly();
+			flyRow = row;
+			row.classList.add("is-open");
+			row.setAttribute("aria-expanded", "true");
+			const f = ajouter(document.body, "div", "qbd-select-menu qbd-action-menu qbd-opts-flyout");
+			fly = f;
+			f.setAttribute("role", "menu");
+			f.addEventListener("mouseenter", () => window.clearTimeout(timer));
+			f.addEventListener("mouseleave", fermerBientot);
+			const remplir = (): void => {
+				f.replaceChildren();
+				for (const c of choix()) {
+					const b = ajouter(f, "button", "qbd-select-option");
+					b.type = "button";
+					b.setAttribute("role", "menuitemradio");
+					b.setAttribute("aria-checked", String(c.actif));
+					if (c.icon) {
+						const i = ajouter(b, "span", "qbd-opts-dd-icon");
+						if (c.color) i.style.setProperty("--accent", c.color);
+						host.ui.setIcon(i, c.icon);
+					}
+					const body = ajouter(b, "span", "qbd-opts-dd-body");
+					// `textContent` (via `ajouter`) : les noms de dossier viennent du disque.
+					ajouter(body, "span", "qbd-opts-dd-name", c.label);
+					if (c.sub) ajouter(body, "span", "qbd-opts-dd-sub", c.sub);
+					if (c.hint) ajouter(b, "span", "qbd-action-menu-hint", c.hint);
+					const chk = ajouter(b, "span", "qbd-select-check");
+					if (c.actif) host.ui.setIcon(chk, "check");
+					b.addEventListener("click", () => { c.choisir(); majValeur(); remplir(); });
+				}
+				if (extra) extra(f, () => { majValeur(); remplir(); });
+			};
+			remplir();
+
+			/* À droite du menu, alignée sur la ligne ; à gauche si l'écran
+			   manque de place (le bouton Options est à droite du composer). */
+			const mr = menuEl.getBoundingClientRect();
+			const rr = row.getBoundingClientRect();
+			f.style.visibility = "hidden";
+			f.style.left = "0px";
+			f.style.top = "0px";
+			const fr = f.getBoundingClientRect();
+			const aDroite = mr.right + 4 + fr.width <= window.innerWidth - 8;
+			f.style.left = (aDroite ? mr.right + 4 : Math.max(8, mr.left - 4 - fr.width)) + "px";
+			f.style.top = Math.min(Math.max(8, rr.top - 4), window.innerHeight - fr.height - 8) + "px";
+			f.style.visibility = "";
+		};
+
+		row.addEventListener("mouseenter", () => { window.clearTimeout(timer); ouvrir(); });
+		row.addEventListener("mouseleave", fermerBientot);
+		row.addEventListener("click", ouvrir);
+		row.addEventListener("keydown", (e) => {
+			if (e.key !== "ArrowRight") return;
+			e.preventDefault();
+			ouvrir();
+			fly?.querySelector<HTMLElement>("button, input")?.focus();
+		});
+	};
+
+	/* ── Le champ PERSONNALISÉ, commun aux trois flyouts (nombre, barème,
+	   durée) : une LIGNE comme les autres — libellé à gauche, le nombre saisi
+	   DANS la ligne suivi de son unité, la même coche à droite quand il est
+	   la valeur courante. Le cadre du nombre n'apparaît qu'au survol et à la
+	   saisie : au repos, la ligne se lit comme ses voisines. Entrée ou la
+	   perte du focus valident, Échap annule la saisie. ── */
+	const champPerso = (f: HTMLDivElement, c: {
+		unite: (n: number) => string; avant?: string; min: number; max: number;
+		valeur: number; actif: boolean; valider: (n: number) => void; maj: () => void;
+	}): void => {
+		const row = ajouter(f, "label", "qbd-select-option qbd-opts-custom" + (c.actif ? " is-active" : ""));
+		ajouter(row, "span", "qbd-opts-custom-label", t("dashboard.select.optionsCustom"));
+		const saisie = ajouter(row, "span", "qbd-opts-custom-input");
+		if (c.avant) ajouter(saisie, "span", "qbd-opts-custom-unit", c.avant);
+		const field = ajouter(saisie, "input", "qbd-opts-custom-field");
+		field.type = "number";
+		field.min = String(c.min);
+		field.max = String(c.max);
+		field.inputMode = "numeric";
+		field.value = c.actif ? String(c.valeur) : "";
+		field.placeholder = c.actif ? "" : "—";
+		const unite = ajouter(saisie, "span", "qbd-opts-custom-unit", c.unite(c.actif ? c.valeur : 2));
+		const chk = ajouter(row, "span", "qbd-select-check");
+		if (c.actif) currentHost().ui.setIcon(chk, "check");
+		// La largeur suit le nombre tapé : « 5 » ne flotte pas dans une boîte de trois chiffres.
+		const ajuster = (): void => {
+			// + padding et bordure : la boîte est en border-box.
+			field.style.width = `calc(${Math.max(2, (field.value || field.placeholder).length) + 0.5}ch + 12px)`;
+			const n = Number(field.value);
+			unite.textContent = c.unite(Number.isFinite(n) && n > 0 ? n : 2);
+		};
+		ajuster();
+		field.addEventListener("input", ajuster);
+		const valider = (): void => {
+			if (!field.value.trim()) return;
+			const n = Math.min(c.max, Math.max(c.min, Math.round(Number(field.value))));
+			if (!Number.isFinite(n)) return;
+			c.valider(n);
+			c.maj();
+		};
+		field.addEventListener("change", valider);
+		field.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") { e.preventDefault(); valider(); }
+			else if (e.key === "Escape") { e.stopPropagation(); field.value = c.actif ? String(c.valeur) : ""; ajuster(); field.blur(); }
+		});
+	};
+
+	/* ── Questions ── */
 	const PRESETS = [5, 10, 15, 20, 30];
 	let count = Math.min(100, Math.max(1, Math.round(Number(opts.count) || 5)));
-	let isCustom = !PRESETS.includes(count);
-
-	ajouter(menuEl, "div", "qbd-options-pop-title", t("dashboard.select.optionsQuestions"));
-	const countRow = ajouter(menuEl, "div", "qbd-options-pop-row");
-	const ddWrap = ajouter(countRow, "div", "qbd-opts-dd-wrap");
-	const trigger = ajouter(ddWrap, "button", "qbd-opts-dd");
-	trigger.type = "button";
-	const trigLabel = ajouter(trigger, "span", "qbd-opts-dd-label");
-	const trigChev = ajouter(trigger, "span", "qbd-select-chevron");
-	currentHost().ui.setIcon(trigChev, "chevron-down");
-	const ddMenu = ajouter(ddWrap, "div", "qbd-opts-dd-menu is-hidden");
-	const field = ajouter(countRow, "input", "qbd-opts-count");
-	field.type = "number";
-	field.min = "1";
-	field.max = "100";
-	field.inputMode = "numeric";
-
-	const commitCount = (n: unknown) => {
-		count = Math.min(100, Math.max(1, Math.round(Number(n) || count)));
-		field.value = String(count);
-		if (opts.onCount) opts.onCount(count);
-	};
-
-	// « N questions » : accord porté par le dictionnaire (les presets sont tous
-	// > 1, mais la règle vaut aussi pour un preset futur à 1).
+	let countAuto = !!opts.countAuto;
 	const countLabel = (n: number): string =>
 		t(n === 1 ? "dashboard.common.questionsOne" : "dashboard.common.questionsOther", { count: n });
-
-	const refreshCountUI = () => {
-		trigLabel.textContent = isCustom ? t("dashboard.select.optionsCustom") : countLabel(count);
-		field.classList.toggle("is-hidden", !isCustom);
-		trigger.setAttribute("aria-expanded", ddMenu.classList.contains("is-hidden") ? "false" : "true");
-		for (const b of Array.from(ddMenu.querySelectorAll<HTMLButtonElement>(".qbd-opts-dd-item"))) {
-			const active = b.dataset.preset === "custom"
-				? isCustom
-				: (!isCustom && Number(b.dataset.preset) === count);
-			b.classList.toggle("is-active", active);
-			const check = b.querySelector(".qbd-select-check");
-			if (!check) continue;
-			check.replaceChildren();
-			if (active) currentHost().ui.setIcon(check as HTMLElement, "check");
-		}
+	const choisirCount = (n: number): void => {
+		count = Math.min(100, Math.max(1, Math.round(n)));
+		countAuto = false;
+		if (opts.onCount) opts.onCount(count);
 	};
+	ligne("list-ordered", t("dashboard.select.optionsQuestions"),
+		() => countAuto ? t("ai.options.auto") : countLabel(count),
+		() => [
+			{ label: t("ai.options.auto"), hint: t("ai.options.autoHint"), actif: countAuto, choisir: () => { countAuto = true; if (opts.onCountAuto) opts.onCountAuto(); } },
+			...PRESETS.map(n => ({ label: countLabel(n), actif: !countAuto && count === n, choisir: () => choisirCount(n) })),
+		],
+		(f, maj) => champPerso(f, {
+			unite: (n) => n === 1 ? "question" : "questions", min: 1, max: 100,
+			valeur: count, actif: !countAuto && !PRESETS.includes(count),
+			valider: (n) => choisirCount(n), maj,
+		}));
 
-	const closeDd = () => { ddMenu.classList.add("is-hidden"); refreshCountUI(); };
+	/* ── Type ── */
+	let type = opts.type;
+	let typeAuto = !!opts.typeAuto;
+	ligne("shapes", t("dashboard.select.optionsType"),
+		() => typeAuto ? t("ai.options.auto") : type,
+		() => [
+			{ label: t("ai.options.auto"), hint: t("ai.options.autoHint"), actif: typeAuto, choisir: () => { typeAuto = true; if (opts.onTypeAuto) opts.onTypeAuto(); } },
+			...opts.types.map(x => ({ label: x, actif: !typeAuto && type === x, choisir: () => { type = x; typeAuto = false; if (opts.onType) opts.onType(x); } })),
+		]);
 
-	for (const p of [...PRESETS.map(String), "custom"]) {
-		const item = ajouter(ddMenu, "button", "qbd-opts-dd-item");
-		item.type = "button";
-		item.dataset.preset = p;
-		ajouter(item, "span", "qbd-select-check");
-		ajouter(item, "span", undefined, p === "custom" ? t("dashboard.select.optionsCustom") : countLabel(Number(p)));
-		item.addEventListener("click", () => {
-			if (p === "custom") {
-				isCustom = true;
-				closeDd();
-				field.focus();
-			} else {
-				isCustom = false;
-				commitCount(Number(p));
-				closeDd();
-			}
-		});
-	}
-
-	trigger.addEventListener("click", () => {
-		ddMenu.classList.toggle("is-hidden");
-		refreshCountUI();
-	});
-
-	// Champ nombre : sélection au focus, commit Enter/blur, Échap annule.
-	field.addEventListener("focus", () => field.select());
-	field.addEventListener("change", () => commitCount(field.value));
-	field.addEventListener("keydown", (e) => {
-		if (e.key === "Enter") {
-			e.preventDefault();
-			commitCount(field.value);
-			field.blur();
-		} else if (e.key === "Escape") {
-			e.stopPropagation();
-			field.value = String(count);
-			field.blur();
-		}
-	});
-
-	commitCount(count);
-	refreshCountUI();
-
-	// ── Type : items à coche (même anatomie que les options de select) ──
-	ajouter(menuEl, "div", "qbd-options-pop-title", t("dashboard.select.optionsType"));
-	const items: Array<{ t: string; btn: HTMLButtonElement; check: HTMLElement }> = [];
-	let current = opts.type;
-	function refreshItems(): void {
-		for (const it of items) {
-			const active = it.t === current;
-			it.btn.classList.toggle("is-active", active);
-			it.btn.setAttribute("aria-checked", active ? "true" : "false");
-			it.check.replaceChildren();
-			if (active) currentHost().ui.setIcon(it.check, "check");
-		}
-	}
-	for (const t of opts.types) {
-		const btn = ajouter(menuEl, "button", "qbd-select-option");
-		btn.type = "button";
-		btn.setAttribute("role", "menuitemradio");
-		const check = ajouter(btn, "span", "qbd-select-check");
-		ajouter(btn, "span", "qbd-select-option-label", t);
-		btn.addEventListener("click", () => {
-			current = t;
-			refreshItems();
-			if (opts.onType) opts.onType(t);
-		});
-		items.push({ t, btn, check });
-	}
-	refreshItems();
-
-	/* ── Destination : le dossier qui recevra le quiz généré ──
-	   Même anatomie que le dropdown des questions (trigger + menu local), et
-	   pour la même raison : un `createSelect` appellerait `closeAllSelects()`,
-	   qui fermerait le popover qui le contient. */
+	/* ── Destination ── */
 	const folders = opts.folders ?? [];
 	if (folders.length > 0) {
 		let folder = folders.some(f => f.value === opts.folder) ? String(opts.folder) : folders[0].value;
-		ajouter(menuEl, "div", "qbd-options-pop-title", t("dashboard.select.optionsDestination"));
-		const destRow = ajouter(menuEl, "div", "qbd-options-pop-row");
-		const destWrap = ajouter(destRow, "div", "qbd-opts-dd-wrap");
-		const destTrigger = ajouter(destWrap, "button", "qbd-opts-dd");
-		destTrigger.type = "button";
-		const destLabel = ajouter(destTrigger, "span", "qbd-opts-dd-label");
-		const destChev = ajouter(destTrigger, "span", "qbd-select-chevron");
-		currentHost().ui.setIcon(destChev, "chevron-down");
-		const destMenu = ajouter(destWrap, "div", "qbd-opts-dd-menu is-hidden");
-
-		const refreshDest = () => {
-			const choisi = folders.find(f => f.value === folder) ?? folders[0];
-			// `textContent` (via `ajouter`) : ces libellés viennent du disque.
-			destLabel.replaceChildren();
-			if (choisi.icon) {
-				const ic = ajouter(destLabel, "span", "qbd-opts-dd-icon");
-				if (choisi.color) ic.style.setProperty("--accent", choisi.color);
-				currentHost().ui.setIcon(ic, choisi.icon);
-			}
-			ajouter(destLabel, "span", undefined, choisi.label);
-			destTrigger.setAttribute("aria-expanded", destMenu.classList.contains("is-hidden") ? "false" : "true");
-			for (const b of Array.from(destMenu.querySelectorAll<HTMLButtonElement>(".qbd-opts-dd-item"))) {
-				const active = b.dataset.folder === folder;
-				b.classList.toggle("is-active", active);
-				const check = b.querySelector(".qbd-select-check");
-				if (!check) continue;
-				check.replaceChildren();
-				if (active) currentHost().ui.setIcon(check as HTMLElement, "check");
-			}
-		};
-
-		for (const f of folders) {
-			const item = ajouter(destMenu, "button", "qbd-opts-dd-item");
-			item.type = "button";
-			item.dataset.folder = f.value;
-			ajouter(item, "span", "qbd-select-check");
-			if (f.icon) {
-				const ic = ajouter(item, "span", "qbd-opts-dd-icon");
-				if (f.color) ic.style.setProperty("--accent", f.color);
-				currentHost().ui.setIcon(ic, f.icon);
-			}
-			const body = ajouter(item, "span", "qbd-opts-dd-body");
-			ajouter(body, "span", "qbd-opts-dd-name", f.label);
-			// La RACINE en sous-titre : c'est elle qui distingue deux dossiers
-			// homonymes (« Generated » de Neo Quiz et de Personal).
-			if (f.sub) ajouter(body, "span", "qbd-opts-dd-sub", f.sub);
-			item.addEventListener("click", () => {
-				folder = f.value;
-				destMenu.classList.add("is-hidden");
-				refreshDest();
-				if (opts.onFolder) opts.onFolder(folder);
-			});
-		}
-
-		destTrigger.addEventListener("click", () => {
-			destMenu.classList.toggle("is-hidden");
-			refreshDest();
-		});
-		refreshDest();
+		ligne("folder", t("dashboard.select.optionsDestination"),
+			() => (folders.find(f => f.value === folder) ?? folders[0]).label,
+			() => folders.map(f => ({
+				label: f.label, icon: f.icon, color: f.color, sub: f.sub, actif: f.value === folder,
+				choisir: () => { folder = f.value; if (opts.onFolder) opts.onFolder(folder); },
+			})));
 	}
 
-	// ── Position (pattern openEffortSlider : sous l'ancre, sinon dessus) ──
+	// ── Position : sous l'ancre, sinon dessus ; calé sur son bord DROIT ──
 	const rect = anchorEl.getBoundingClientRect();
 	menuEl.style.visibility = "hidden";
 	menuEl.style.top = "0px";
 	menuEl.style.left = "0px";
 	const mr = menuEl.getBoundingClientRect();
-	const left = Math.min(Math.max(8, rect.left), window.innerWidth - mr.width - 8);
+	const left = Math.min(Math.max(8, rect.right - mr.width), window.innerWidth - mr.width - 8);
 	const below = rect.bottom + 4;
 	const top = (below + mr.height <= window.innerHeight - 8 || rect.top - 4 - mr.height < 8)
 		? below : rect.top - 4 - mr.height;
@@ -1905,6 +1900,7 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 	menuEl.style.visibility = "";
 
 	function closeMenu(): void {
+		fermerFly();
 		menuEl.remove();
 		openMenus.delete(closeMenu);
 		document.removeEventListener("mousedown", onDocDown, true);
@@ -1914,18 +1910,20 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 	}
 
 	function onDocDown(e: MouseEvent): void {
-		const t = e.target as Node | null;
-		if ((t && anchorEl.contains(t)) || (t && menuEl.contains(t))) return;
+		const cible = e.target as Node | null;
+		if (cible && (anchorEl.contains(cible) || menuEl.contains(cible) || fly?.contains(cible))) return;
 		closeMenu();
 	}
 
 	function onKeyDown(e: KeyboardEvent): void {
-		if (e.key === "Escape") closeMenu();
+		if (e.key !== "Escape") return;
+		// Échap ferme d'abord le flyout, puis le menu.
+		if (fly) { const row = flyRow; fermerFly(); row?.focus(); } else closeMenu();
 	}
 
 	function onScroll(e: Event): void {
-		const t = e.target as Node | null;
-		if (t && menuEl.contains(t)) return;
+		const cible = e.target as Node | null;
+		if (cible && (menuEl.contains(cible) || fly?.contains(cible))) return;
 		closeMenu();
 	}
 

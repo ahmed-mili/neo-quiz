@@ -847,7 +847,90 @@
 }
 
 /* Groupe droite du pied : modèle + effort puis bouton d'envoi. */
+/* ── Sans fournisseur : composer inerte, une bulle désigne le bouton ── */
+.qbd-ai-composer--sans-fournisseur .qbd-ai-composer-input,
+.qbd-ai-composer--sans-fournisseur .qbd-ai-composer-add,
+.qbd-ai-composer--sans-fournisseur .qbd-ai-seg {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.qbd-ai-composer--sans-fournisseur .qbd-ai-seg-btn {
+	pointer-events: none;
+}
+
+/* `hidden` perd contre le `display: inline-flex` du bouton : masqué ici. */
+.qbd-ai-composer--sans-fournisseur .qbd-ai-composer-opts {
+	display: none;
+}
+
+.qbd-ai-provider-nudge {
+	position: absolute;
+	/* L'apparition grandit depuis la pointe, pas depuis le centre. */
+	transform-origin: 50% calc(100% + 6px);
+	bottom: calc(100% + 10px);
+	left: 0;
+	z-index: 5;
+	height: auto;
+	padding: 6px 11px;
+	border-radius: 8px;
+	border: none;
+	background: var(--interactive-accent) !important;
+	color: var(--text-on-accent, #fff);
+	font-size: 12.5px;
+	font-weight: 600;
+	white-space: nowrap;
+	cursor: pointer;
+	box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.45) !important;
+	visibility: hidden;
+}
+
+/* Le flottement (relevé le 2026-09-23 sur les pratiques courantes) :
+   - UNIQUEMENT la propriété `translate`, sur un calque à part
+     (`will-change`) — le navigateur déplace l'image déjà peinte, sans
+     relayout ni repeinte ;
+   - courbe SINUSOÏDALE (easeInOutSine, easings.net) : ralentit en douceur
+     aux deux extrémités, comme un objet qui flotte ;
+   - `alternate` : une seule montée, rejouée à l'envers — aucune couture à
+     la reprise du cycle, là où des images-clés 0 % / 50 % / 100 % marquent
+     un léger temps d'arrêt en bas ;
+   - l'apparition anime `opacity` et `scale`, le flottement `translate` :
+     deux propriétés distinctes, aucune animation n'écrase l'autre. */
+.qbd-ai-provider-nudge.is-placed {
+	visibility: visible;
+	will-change: translate;
+	animation:
+		qbd-ai-nudge-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both,
+		qbd-ai-nudge-float 1.5s cubic-bezier(0.37, 0, 0.63, 1) 0.3s infinite alternate;
+}
+
+/* La pointe, centrée, vers le bouton du fournisseur. */
+.qbd-ai-provider-nudge::after {
+	content: "";
+	position: absolute;
+	top: 100%;
+	left: 50%;
+	transform: translateX(-50%);
+	border: 6px solid transparent;
+	border-top-color: var(--interactive-accent);
+}
+
+@keyframes qbd-ai-nudge-in {
+	from { opacity: 0; scale: 0.92; }
+	to   { opacity: 1; scale: 1; }
+}
+
+@keyframes qbd-ai-nudge-float {
+	from { translate: 0 0; }
+	to   { translate: 0 -4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.qbd-ai-provider-nudge.is-placed { animation: none; }
+}
+
 .qbd-ai-composer-tools {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -2411,6 +2494,202 @@
 .qbd-ai-composer-usage svg {
 	width: 18px;
 	height: 18px;
+}
+
+/* Sélecteur Learn | Practice — valeurs relevées sur le « Chat | Cowork » de
+   claude.ai (2026-09-23) : piste 28 px, padding 1 px, rayon 7 px, voile
+   5 % de la couleur du texte ; bloc 26 px, rayon 6 px, voile 10 % + filet
+   intérieur 10 % ; options 0 10 px, 14 px. Les voiles sont en RELATIF au
+   texte (color-mix) pour tenir sur les deux thèmes. */
+.qbd-ai-seg {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	height: 28px;
+	padding: 1px;
+	border-radius: 7px;
+	background: color-mix(in srgb, var(--text-normal) 5%, transparent);
+	flex-shrink: 0;
+}
+
+.qbd-ai-seg-indic {
+	position: absolute;
+	top: 1px;
+	left: 0;
+	height: 26px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--text-normal) 10%, transparent);
+	box-shadow:
+		inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 10%, transparent),
+		0 1px 2px rgba(0, 0, 0, 0.05);
+	transform-origin: 0 50%;
+	will-change: transform;
+	pointer-events: none;
+}
+
+.qbd-ai-seg-btn {
+	position: relative;
+	z-index: 1;
+	height: 26px;
+	padding: 0 10px;
+	border-radius: 5px;
+	background: transparent !important;
+	border: none;
+	box-shadow: none !important;
+	color: var(--text-muted);
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 20px;
+	cursor: pointer;
+}
+
+.qbd-ai-seg-btn:hover,
+.qbd-ai-seg-btn.is-active {
+	color: var(--text-normal);
+}
+
+.qbd-ai-seg-btn:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 1px;
+}
+
+/* ── Menu Options en trois lignes + flyouts (2026-09-23) ──
+   Même surface que le menu « + » (.qbd-action-menu) : icône mutée, nom,
+   valeur courante en gris à droite, chevron. La ligne dont le flyout est
+   ouvert garde le fond de survol, comme une rangée à sous-menu de
+   claude.ai. */
+.qbd-opts-menu {
+	min-width: 236px;
+}
+
+.qbd-opts-row-value {
+	margin-left: auto;
+	padding-left: 18px;
+	font-size: 12px;
+	color: var(--text-faint);
+	white-space: nowrap;
+	max-width: 130px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.qbd-opts-row-chevron {
+	display: inline-flex;
+	margin-right: -2px;
+	color: var(--text-faint);
+}
+
+.qbd-opts-row-chevron svg {
+	width: 14px;
+	height: 14px;
+}
+
+.qbd-opts-row.is-open {
+	background: var(--background-modifier-hover) !important;
+}
+
+.qbd-opts-row.is-open .qbd-action-menu-icon {
+	color: var(--interactive-accent);
+}
+
+.qbd-opts-flyout {
+	min-width: 212px;
+}
+
+.qbd-opts-flyout .qbd-select-option {
+	gap: 10px;
+}
+
+/* Le nombre personnalisé : une LIGNE du flyout comme les autres (même
+   hauteur, même coche à droite), séparée des préréglages par un filet. Le
+   nombre se saisit dans la ligne, suivi de son unité ; son cadre n'apparaît
+   qu'au survol et à la saisie. */
+.qbd-opts-custom {
+	margin-top: 4px;
+	border-top: 1px solid var(--background-modifier-border);
+	border-radius: 0 0 6px 6px;
+	cursor: text;
+}
+
+.qbd-opts-custom-label {
+	color: var(--text-muted);
+}
+
+.qbd-opts-custom.is-active .qbd-opts-custom-label {
+	color: var(--text-normal);
+}
+
+.qbd-opts-custom-input {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 0 2px 0 16px;
+	font-size: 12.5px;
+	color: var(--text-normal);
+}
+
+.qbd-opts-custom-unit {
+	color: var(--text-faint);
+	font-size: 12px;
+}
+
+.qbd-opts-custom-field {
+	appearance: none;
+	-webkit-appearance: textfield;
+	-moz-appearance: textfield;
+	min-width: 2.6ch;
+	height: 24px;
+	padding: 0 5px;
+	text-align: right;
+	font: inherit;
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	color: var(--text-normal);
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	box-shadow: none !important;
+	outline: none;
+	transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.qbd-opts-custom-field::-webkit-inner-spin-button,
+.qbd-opts-custom-field::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.qbd-opts-custom-field::placeholder {
+	color: var(--text-faint);
+	font-weight: 400;
+}
+
+.qbd-opts-custom:hover .qbd-opts-custom-field {
+	border-color: var(--background-modifier-border);
+	background-color: var(--background-modifier-form-field);
+}
+
+.qbd-opts-custom-field:focus {
+	border-color: var(--interactive-accent);
+	background-color: var(--background-modifier-form-field);
+}
+
+/* L'icône Options s'allume en accent quand le mode change (Learn ↔
+   Practice) : allumée d'un coup avec un léger rebond, éteinte en 0,5 s. Ni
+   halo ni longue traîne (Ahmed, 2026-09-23 : 1,6 s « dure trop longtemps »). */
+.qbd-ai-opts-pulse {
+	animation: qbd-ai-opts-pulse 0.5s ease-out;
+}
+
+@keyframes qbd-ai-opts-pulse {
+	0%   { color: var(--interactive-accent); transform: scale(1.18); }
+	35%  { color: var(--interactive-accent); transform: scale(1); }
+	100% { color: var(--text-muted); transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.qbd-ai-opts-pulse { animation-duration: 0.01s; }
 }
 
 .qbd-options-pop {

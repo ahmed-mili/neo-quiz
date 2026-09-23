@@ -51,11 +51,20 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 
 	/* ── Options de génération ── */
 	"ai.options.tooltip": "{count} questions · {type}",
-	"ai.type.mixed": "Mixte",
+	"ai.type.mixed": "Auto",
 	"ai.type.single": "Choix unique",
 	"ai.type.multiple": "Choix multiple",
 	"ai.type.text": "Texte libre",
 	"ai.type.comprehension": "Compréhension",
+
+	/* ── Objectif Learn / Practice (composer) ── */
+	"ai.mode.learn": "Learn",
+	"ai.mode.practice": "Practice",
+	"ai.mode.learnTip": "Apprendre un cours pas à pas : une question avant chaque passage, la correction aussitôt, jusqu'à ce que ça tienne.",
+	"ai.mode.practiceTip": "S'entraîner sur des exercices au format de votre examen, chaque erreur expliquée.",
+	"ai.mode.group": "Objectif",
+	"ai.options.auto": "Auto",
+	"ai.options.autoHint": "Choisi par l'IA",
 
 	/* ── Fournisseurs (sous-titres du menu) ── */
 	"ai.provider.choose": "Choisissez un fournisseur",

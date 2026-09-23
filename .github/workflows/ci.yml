@@ -26,6 +26,11 @@ jobs:
       - name: Type check
         run: npm run check
 
+      # LE FORMAT LEARN / PRACTICE : un Practice sans explication, une
+      # tranche Learn incomplète, un slice qui ne pointe nulle part — signalés.
+      - name: Learn and Practice format
+        run: npm run check:quiz-format
+
       # LE CLIQUET DE LA FRONTIÈRE D'HÔTE. Le contrat `src/host/types.ts` dit
       # que c'est ce contrôle, et non la discipline, qui tient la frontière :
       # tant qu'il n'était lancé qu'à la main, c'était encore la discipline.

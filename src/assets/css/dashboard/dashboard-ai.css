@@ -1926,14 +1926,16 @@
 .qbd-ai-video-row::-webkit-scrollbar-track { background: transparent; }
 
 /* La carte : la miniature en bandeau haut, la légende dessous ; la croix
-   en haut à droite au survol. Hauteur FIXE, comme une chip. */
+   en haut à droite au survol. Hauteur FIXE, comme une chip : 60 px de
+   miniature + la légende sur deux lignes (nom, méta) et ses marges + la
+   bordure. À 104 px, la ligne de méta était coupée à l'écran (2026-09-23). */
 .qbd-ai-video-tile {
 	position: relative;
 	display: flex;
 	flex-direction: column;
 	flex: 0 0 auto;
 	width: 192px;
-	height: 104px;
+	height: 118px;
 	box-sizing: border-box;
 	background: color-mix(in srgb, var(--background-primary) 70%, transparent);
 	border: 1px solid var(--background-modifier-border);

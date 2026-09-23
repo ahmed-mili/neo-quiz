@@ -19,6 +19,7 @@
     "check:scanner": "node scripts/check-scanner.mjs",
     "check:scheduler": "node scripts/check-scheduler.mjs",
     "check:video": "node scripts/check-video.mjs",
+    "check:video-tile": "node scripts/check-video-tile.mjs",
     "check:host": "node scripts/check-host.mjs",
     "check:text-search": "node scripts/check-text-search.mjs",
     "check:ai-providers": "node scripts/check-ai-providers.mjs",

@@ -62,9 +62,11 @@ export interface TuilesVideo {
 	rendre(parent: HTMLElement): void;
 	/** La ligne discrète des autres liens (spec § 5.4), sous le composer. */
 	rendreNotice(parent: HTMLElement): void;
-	/** Ce que l'envoi attend de nous (spec § 5.2) : la résolution attend
-	    les transcriptions EN VOL, puis rend les documents prêts à joindre
-	    et le compte de ce qui ne part pas (erreur, yt-dlp absent). */
+	/** Ce que l'envoi attend de nous (spec § 5.2) : la résolution FAIT
+	    d'abord trancher le débounce (coller puis Envoyer aussitôt doit
+	    joindre ou avertir, jamais se taire), attend ensuite les lectures
+	    et transcriptions en vol, puis rend ce qui peut être joint et le
+	    compte de ce qui ne part pas (erreur, yt-dlp absent). */
 	prets(): Promise<{ jointes: NoteAttachment[]; ecartees: number }>;
 	/** Annule les transcriptions en vol et oublie tout : la remise à neuf
 	    du composer (quiz enregistré, préréglage, fermeture de la vue). */
@@ -87,6 +89,10 @@ interface Tuile {
 	codeErreur: string | null;
 	/** La transcription en vol ; nulle dès qu'elle a tranché. */
 	promesse: Promise<void> | null;
+	/** La lecture de l'état du lecteur, EN VOL le temps de sa naissance :
+	    `prets` doit pouvoir l'attendre aussi — sans elle, une tuile née
+	    pendant l'attente de l'envoi tombait du compte sans un mot. */
+	naissance: Promise<void> | null;
 }
 
 /** Le pas du débounce : assez court pour suivre la frappe, assez long
@@ -199,9 +205,9 @@ export function creerTuilesVideo(deps: {
 	    transcription part d'elle-même ; absent → l'état `installer`, le
 	    geste de l'utilisateur (spec § 2) ouvrira la modale. */
 	function naitre(id: string): void {
-		const tuile: Tuile = { id, etat: "lecture", resultat: null, codeErreur: null, promesse: null };
+		const tuile: Tuile = { id, etat: "lecture", resultat: null, codeErreur: null, promesse: null, naissance: null };
 		tuiles.set(id, tuile);
-		void video.etat().then((e) => {
+		tuile.naissance = video.etat().then((e) => {
 			if (tuiles.get(id) !== tuile) return;
 			if (e.present) demarrer(tuile);
 			else { tuile.etat = "installer"; avertir(); }
@@ -367,20 +373,39 @@ export function creerTuilesVideo(deps: {
 			ajouter(ligne, "span", undefined, t("ai.video.otherLinks"));
 		},
 		async prets(): Promise<{ jointes: NoteAttachment[]; ecartees: number }> {
-			/* L'envoi ATTEND les transcriptions en vol (spec § 5.2) ; elles
-			   ne lèvent jamais — l'échec est un état de la tuile. Un
-			   instantané : une tuile installée pendant l'attente ne la
-			   repousse pas, elle compte déjà comme écartée. */
-			await Promise.all(
-				[...tuiles.values()]
-					.filter(x => x.etat === "lecture")
-					.map(x => x.promesse ?? Promise.resolve()),
-			);
+			/* LA PURGE D'ABORD : le débounce peut ne pas avoir tranché quand
+			   l'envoi part (le lien vient d'être collé, Entrée aussitôt — LE
+			   parcours principal). `dernierTexte` est déjà à jour : trancher
+			   ICI fait naître les tuiles manquantes, et l'attente
+			   ci-dessous les couvre toutes. Sans cette purge, la demande
+			   partait SANS le document ET sans notice — or la notice est le
+			   SEUL canal de vérité de la spec § 5.2 : un silence n'y est pas
+			   admis. */
+			for (;;) {
+				if (minuteur !== null) { window.clearTimeout(minuteur); minuteur = null; recompter(); }
+				/* Puis chaque tuile a le droit de parler : la naissance (la
+				   lecture de l'état du lecteur) d'abord, la transcription
+				   ensuite. Une tuile peut naître PENDANT l'attente
+				   (l'utilisateur tape) : la boucle repart de zéro tant qu'une
+				   promesse vole encore — et l'attente est FINIE : la lecture
+				   de l'état est locale, la transcription bornée par le délai
+				   du processus principal. */
+				const attentes = [...tuiles.values()]
+					.map(x => x.etat === "lecture" ? (x.promesse ?? x.naissance ?? null) : null)
+					.filter(Boolean);
+				if (attentes.length === 0) break;
+				await Promise.all(attentes);
+			}
+			/* Toute tuile qui a parlé sans être prête compte comme écartée :
+			   `erreur` (son message est à l'écran), `installer` (la notice
+			   dit qu'elle ne part pas) — et toute autre, défensivement. Une
+			   tuile RETIRÉE n'est plus là : le geste exprès de l'utilisateur,
+			   jamais un silence de la page. */
 			const jointes: NoteAttachment[] = [];
 			let ecartees = 0;
 			for (const tuile of tuiles.values()) {
 				if (tuile.etat === "prete" && tuile.resultat) jointes.push(pieceDe(tuile));
-				else if (tuile.etat === "erreur" || tuile.etat === "installer") ecartees++;
+				else ecartees++;
 			}
 			return { jointes, ecartees };
 		},

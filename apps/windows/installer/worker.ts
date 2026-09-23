@@ -1,11 +1,12 @@
 /* ══════════════════════════════════════════════════════════
-   TRAVAILLEUR ÉLEVÉ DU BOOTSTRAPPER
+   TRAVAILLEUR DU BOOTSTRAPPER
 
-   L'interface reste au niveau de l'utilisateur. Seul ce processus, lancé par
-   Windows après l'UAC, télécharge puis exécute le NSIS machine. Il ne rend
-   aucune fenêtre : son unique sortie est le tube nommé créé par le processus
-   non élevé, ce qui permet à celui-ci de garder l'interface et de relancer
-   Neo Quiz SANS lui transmettre les droits administrateur.
+   L'interface reste au niveau de l'utilisateur. Seul ce processus télécharge
+   puis exécute NSIS : lancé directement quand l'utilisateur peut écrire dans
+   le dossier d'installation, par Windows après l'UAC sinon (`main.ts`,
+   `elevationRequise`). Il ne rend aucune fenêtre : son unique sortie est le
+   tube nommé créé par le processus de l'interface, ce qui permet à celui-ci
+   de relancer Neo Quiz SANS lui transmettre des droits administrateur.
 ══════════════════════════════════════════════════════════ */
 
 import { createHash } from "node:crypto";

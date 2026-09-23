@@ -127,10 +127,13 @@ function rendreProgression(parent: HTMLElement, pourcent: number | null, classe 
 function rendreBoutonInstallation(parent: HTMLElement): void {
 	const bouton = ajouter(parent, "button", "nqi-primary");
 	bouton.type = "button";
-	const bouclier = ajouter(bouton, "img", "nqi-primary-shield");
-	bouclier.src = "./uac-shield.png";
-	bouclier.alt = "";
-	bouclier.setAttribute("aria-hidden", "true");
+	/* Le bouclier annonce l'UAC : seulement quand le dossier l'exige. */
+	if (infos?.elevationRequise) {
+		const bouclier = ajouter(bouton, "img", "nqi-primary-shield");
+		bouclier.src = "./uac-shield.png";
+		bouclier.alt = "";
+		bouclier.setAttribute("aria-hidden", "true");
+	}
 	ajouter(bouton, "span", undefined, t("installer.install"));
 	bouton.addEventListener("click", lancerInstallation);
 }
@@ -537,7 +540,9 @@ function lancerInstallation(): void {
 		clearTimeout(minuterieDemarrage);
 		minuterieDemarrage = null;
 	}
-	etat = { phase: "elevation" };
+	etat = infos.elevationRequise
+		? { phase: "elevation" }
+		: { phase: "telechargement", recus: 0, total: infos.tailleTelechargement };
 	rendre();
 	void window.neoInstaller.installer(infos.dossier).catch(() => {
 		etat = { phase: "erreur", code: "generic" };

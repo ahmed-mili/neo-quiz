@@ -5,7 +5,7 @@ import type { PageLegale, PaquetInstallable } from "./noyau";
 
    Même raison que `electron/pont.ts` : la fenêtre ne reçoit jamais
    `ipcRenderer` brut. Elle ne connaît que ces opérations, et le travailleur
-   élevé n'échange que ces messages JSON sérialisables. Aucun type ici ne
+   (élevé ou non) n'échange que ces messages JSON sérialisables. Aucun type ici ne
    dépend de Node ni d'Electron pour que le rendu puisse l'importer sans ouvrir
    une porte vers le système.
 ══════════════════════════════════════════════════════════ */
@@ -42,11 +42,16 @@ export interface InfosInitialesInstallateur {
 	    qu'à la PREMIÈRE installation : les mises à jour arrivent par
 	    electron-updater, depuis l'application elle-même. */
 	dejaInstalle: boolean;
+	/** L'utilisateur ne peut-il PAS écrire dans ce dossier ? Seul ce cas passe
+	    par l'UAC (bouclier sur le bouton) ; le dossier par défaut, dans
+	    `%LOCALAPPDATA%`, s'installe sans elle. */
+	elevationRequise: boolean;
 }
 
 export interface ChoixDossierInstallateur {
 	dossier: string;
 	espaceDisponible: number;
+	elevationRequise: boolean;
 }
 
 export interface InfosDisqueInstallateur {

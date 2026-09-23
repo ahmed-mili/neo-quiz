@@ -1,15 +1,17 @@
 /* ══════════════════════════════════════════════════════════
    PROCESSUS PRINCIPAL DU BOOTSTRAPPER
 
-   La fenêtre est volontairement NON élevée : l'UAC n'apparaît qu'après le
-   clic sur Installer. Le même portable est alors relancé avec `runas` dans un
-   mode travailleur sans fenêtre. Le processus initial garde l'UI et lance
+   La fenêtre est volontairement NON élevée. Au clic sur Installer, le même
+   portable est relancé dans un mode travailleur sans fenêtre : directement
+   quand l'utilisateur peut écrire dans le dossier (le défaut, une
+   installation par utilisateur sous `%LOCALAPPDATA%`), avec `runas` donc
+   l'UAC seulement sinon. Le processus initial garde l'UI et lance
    l'application finale, afin que Neo Quiz démarre avec les droits ordinaires
-   de l'utilisateur et non ceux du travailleur administrateur.
+   de l'utilisateur, jamais ceux d'un travailleur administrateur.
 ══════════════════════════════════════════════════════════ */
 
 import { randomBytes, randomUUID } from "node:crypto";
-import { access, statfs, writeFile } from "node:fs/promises";
+import { access, rm, statfs, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -49,7 +51,9 @@ let fenetre: BrowserWindow | null = null;
 let paquetCourant: PaquetInstallable | null = null;
 let socketTravailleur: Socket | null = null;
 let serveurTube: Server | null = null;
-let processusElevation: ReturnType<typeof spawn> | null = null;
+/** Le processus lancé au clic, avant que le travailleur ne s'authentifie :
+    PowerShell/RunAs quand l'élévation est requise, le travailleur sinon. */
+let processusLancement: ReturnType<typeof spawn> | null = null;
 let installationActive = false;
 let fermetureAutorisee = false;
 /** La langue de l'installeur : celle de Windows (`detecterLangue`). Lue par
@@ -165,6 +169,25 @@ async function installationPresente(dossier: string): Promise<boolean> {
 	}
 }
 
+/** L'utilisateur peut-il écrire dans ce dossier sans élévation ?
+
+    L'installation est PAR UTILISATEUR depuis le 2026-09-18 (`/currentuser`,
+    `noyau.ts`) : NSIS n'a besoin des droits administrateur que pour écrire
+    là où l'utilisateur ne le peut pas. On l'éprouve pour de vrai, un fichier
+    créé puis effacé dans le dossier ou son premier ancêtre existant, plutôt
+    que de deviner d'après le chemin. Un refus, quel qu'il soit, garde l'UAC :
+    se tromper dans ce sens ne coûte qu'une invite, jamais une installation. */
+async function elevationRequise(dossier: string): Promise<boolean> {
+	try {
+		const sonde = join(await ancetreExistant(dossier), `.neo-quiz-sonde-${randomUUID()}`);
+		await writeFile(sonde, "", { flag: "wx" });
+		await rm(sonde, { force: true });
+		return false;
+	} catch {
+		return true;
+	}
+}
+
 function dossierValide(dossier: string): boolean {
 	if (!isAbsolute(dossier)) return false;
 	const normalise = resolve(dossier);
@@ -188,10 +211,10 @@ async function chargerPaquet(): Promise<PaquetInstallable> {
 }
 
 function nettoyerSession(): void {
-	const elevation = processusElevation;
-	processusElevation = null;
-	if (elevation && !elevation.killed) {
-		try { elevation.kill(); } catch { /* déjà terminé */ }
+	const lancement = processusLancement;
+	processusLancement = null;
+	if (lancement && !lancement.killed) {
+		try { lancement.kill(); } catch { /* déjà terminé */ }
 	}
 	socketTravailleur?.destroy();
 	socketTravailleur = null;
@@ -355,10 +378,10 @@ async function lancerApplicationEtAttendre(executable: string): Promise<boolean>
 	});
 }
 
-async function lancerTravailleurEleve(nomTube: string, charge: string): Promise<number> {
+async function lancerTravailleur(nomTube: string, charge: string, eleve: boolean): Promise<number> {
 	/* Le conteneur portable a déjà extrait Electron pour afficher l'UI.
-	   Relancer PORTABLE_EXECUTABLE_FILE après l'UAC referait cette extraction
-	   (~100 Mo dans les versions actuelles) avant le premier octet téléchargé.
+	   Relancer PORTABLE_EXECUTABLE_FILE referait cette extraction (~100 Mo
+	   dans les versions actuelles) avant le premier octet téléchargé.
 	   Le binaire déjà extrait contient exactement la même app packagée et reste
 	   vivant tant que cette fenêtre l'est : il peut donc servir de travailleur. */
 	const executable = process.execPath;
@@ -369,19 +392,24 @@ async function lancerTravailleurEleve(nomTube: string, charge: string): Promise<
 		"try { $p=Start-Process -FilePath $env:NQ_INSTALLER_EXE -ArgumentList $a -Verb RunAs -PassThru -Wait; exit $p.ExitCode } catch { exit 1223 }",
 	].join("; ");
 	return await new Promise<number>(resolvePromise => {
-		const enfant = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script], {
-			windowsHide: true,
-			stdio: "ignore",
-			env: {
-				...process.env,
-				NQ_INSTALLER_EXE: executable,
-				NQ_INSTALLER_PIPE: nomTube,
-				NQ_INSTALLER_PAYLOAD: charge,
-			},
-		});
-		processusElevation = enfant;
+		const enfant = eleve
+			? spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script], {
+				windowsHide: true,
+				stdio: "ignore",
+				env: {
+					...process.env,
+					NQ_INSTALLER_EXE: executable,
+					NQ_INSTALLER_PIPE: nomTube,
+					NQ_INSTALLER_PAYLOAD: charge,
+				},
+			})
+			: spawn(executable, [DRAPEAU_TRAVAILLEUR, nomTube, charge], {
+				windowsHide: true,
+				stdio: "ignore",
+			});
+		processusLancement = enfant;
 		const terminer = (code: number): void => {
-			if (processusElevation === enfant) processusElevation = null;
+			if (processusLancement === enfant) processusLancement = null;
 			resolvePromise(code);
 		};
 		enfant.once("error", () => terminer(-1));
@@ -395,7 +423,8 @@ async function demarrerInstallation(dossier: string): Promise<void> {
 		return;
 	}
 	installationActive = true;
-	envoyerEtat({ phase: "elevation" });
+	const eleve = await elevationRequise(dossier);
+	envoyerEtat(eleve ? { phase: "elevation" } : { phase: "telechargement", recus: 0, total: paquetCourant.taille });
 
 	const nomTube = `\\\\.\\pipe\\neo-quiz-installer-${randomUUID()}`;
 	const secret = randomBytes(32).toString("hex");
@@ -410,13 +439,14 @@ async function demarrerInstallation(dossier: string): Promise<void> {
 		return;
 	}
 
-	const code = await lancerTravailleurEleve(nomTube, encodee);
+	const code = await lancerTravailleur(nomTube, encodee, eleve);
 	/* Le travailleur envoie lui-même tout échec APRÈS authentification. Si
 	   aucun socket n'a jamais été authentifié, le seul événement visible est
-	   le refus ou l'échec de l'élévation Windows. */
+	   le refus ou l'échec de l'élévation Windows — ou, sans élévation, un
+	   travailleur qui n'a pas démarré. */
 	if (installationActive && !socketTravailleur && code !== 0) {
 		nettoyerSession();
-		envoyerEtat({ phase: "erreur", code: "elevation" });
+		envoyerEtat({ phase: "erreur", code: eleve ? "elevation" : "generic" });
 	}
 }
 
@@ -431,6 +461,7 @@ function installerCanaux(): void {
 			dossier,
 			espaceDisponible: await espaceDisponible(dossier),
 			dejaInstalle: await installationPresente(dossier),
+			elevationRequise: await elevationRequise(dossier),
 		};
 	});
 	ipcMain.handle(CANAUX_INSTALLATEUR.choisirDossier, async (_event, courant: unknown) => {
@@ -443,7 +474,7 @@ function installerCanaux(): void {
 		const dossier = choix.canceled ? null : choix.filePaths[0];
 		if (!dossier || !dossierValide(dossier)) return null;
 		dossierCourant = dossier;
-		return { dossier, espaceDisponible: await espaceDisponible(dossier) };
+		return { dossier, espaceDisponible: await espaceDisponible(dossier), elevationRequise: await elevationRequise(dossier) };
 	});
 	ipcMain.handle(CANAUX_INSTALLATEUR.installer, async (_event, dossier: unknown) => {
 		if (typeof dossier !== "string") {
@@ -459,8 +490,9 @@ function installerCanaux(): void {
 			return;
 		}
 		/* Avant l'authentification du travailleur, l'unique processus en attente
-		   est PowerShell/RunAs. Le terminer ferme cette tentative UAC sans
-		   laisser l'interface coincée sur un faux état d'attente. */
+		   est PowerShell/RunAs (ou le travailleur non élevé qui démarre). Le
+		   terminer ferme cette tentative sans laisser l'interface coincée sur un
+		   faux état d'attente. */
 		nettoyerSession();
 		envoyerEtat({ phase: "annule" });
 	});

@@ -103,10 +103,24 @@ await withSrcModule("apps/windows/electron/reseau.ts", async ({ HOTES_AUTORISES,
 	try {
 		/* La liste de la conception, ENTIÈRE : une entrée ajoutée « pour aller
 		   vite » ou retirée « par simplification » rougirait ici, nommée. Lue
-		   AVANT `autoriserHote` plus bas, qui l'étend exprès. */
+		   AVANT `autoriserHote` plus bas, qui l'étend exprès. Les quatre
+		   originaux (IA : Ollama en local, son catalogue, l'usage) plus les
+		   quatre des vidéos YouTube (spec
+		   docs/superpowers/specs/2026-09-22-videos-youtube-design.md, §3.2) :
+		   `i.ytimg.com` pour la miniature, les trois sous GitHub pour le
+		   téléchargement de yt-dlp. */
 		r.check("la liste d'hôtes est exactement celle de la conception",
 			[...HOTES_AUTORISES].sort(),
-			["127.0.0.1", "api.anthropic.com", "localhost", "ollama.com"]);
+			[
+				"127.0.0.1",
+				"api.anthropic.com",
+				"github.com",
+				"i.ytimg.com",
+				"localhost",
+				"objects.githubusercontent.com",
+				"ollama.com",
+				"release-assets.githubusercontent.com",
+			]);
 
 		await cas(r, "un hôte hors liste rend null ET un console.warn, sans toucher le réseau", async () => {
 			/* `.invalid` ne résout jamais (RFC 2606) : si la garde tombait, la

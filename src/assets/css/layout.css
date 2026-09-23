@@ -32,12 +32,12 @@
   box-sizing: border-box;
   isolation: isolate;
 
-  /* Important :
-     on garde le masquage horizontal, mais on retire
-     les règles de clipping trop agressives */
-  overflow-x: hidden !important;
-  overflow-y: hidden !important;
-  -webkit-overflow-scrolling: touch;
+  /* COUPÉ, JAMAIS DÉFILABLE : `overflow: clip` et non `hidden`. Un élément
+     `hidden` reste défilable par programme, et un `focus()` dans la
+     question qui entre le décalait verticalement — page blanche après
+     Suivant puis Précédent (2026-09-23). `npm run check:viewport-clip`. */
+  overflow-x: clip !important;
+  overflow-y: clip !important;
 
   scrollbar-width: none;
   -ms-overflow-style: none;

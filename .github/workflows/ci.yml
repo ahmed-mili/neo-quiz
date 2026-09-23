@@ -75,6 +75,11 @@ jobs:
       - name: View enter terminates
         run: npm run check:view-enter
 
+      # LE VIEWPORT D'UN QUIZ N'EST JAMAIS DÉFILABLE : un `overflow: hidden`
+      # s'y faisait défiler par un focus et laissait une page blanche.
+      - name: Quiz viewport is clipped
+        run: npm run check:viewport-clip
+
       # Le bootstrapper lance l'installeur NSIS en silence : l'ordre des
       # arguments et la sélection du paquet ne peuvent donc pas être relus à
       # l'écran. Ce contrôle charge le noyau réellement appelé par l'installeur.

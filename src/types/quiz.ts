@@ -28,7 +28,7 @@ export interface ResourceButton {
 }
 
 /** Rôles de la boucle d'apprentissage. Valeurs PERSISTÉES : jamais traduites. */
-export type QuestionRole = "pre" | "read" | "recall" | "test";
+export type QuestionRole = "pre" | "read" | "explain" | "recall" | "test";
 
 /**
  * Liste canonique des rôles, dans l'ordre de la boucle en 5 temps. Source
@@ -44,8 +44,13 @@ export type QuestionRole = "pre" | "read" | "recall" | "test";
  * support avant que "recall" en exige la restitution de mémoire. Une carte
  * `read` n'a pas de réponse : voir `passageVisibility` (engine/passage.ts)
  * et les branches dédiées d'`engine/state.ts`.
+ *
+ * `explain` (Learn, 2026-09-23) : « à toi d'expliquer », réponse libre puis
+ * réponse modèle — à ne pas confondre avec le CHAMP `explain`, l'explication
+ * d'une correction. convert.ts et export.ts lisent désormais cette
+ * constante : une valeur ajoutée ici est acceptée des deux côtés.
  */
-export const QUESTION_ROLES: readonly QuestionRole[] = ["pre", "read", "recall", "test"];
+export const QUESTION_ROLES: readonly QuestionRole[] = ["pre", "read", "explain", "recall", "test"];
 
 /**
  * Champs communs à toutes les variantes de question. La plupart sont
@@ -114,6 +119,13 @@ export interface QuestionBase {
 	 * Absent ⇒ traitée comme "test".
 	 */
 	role?: QuestionRole;
+	/** Famille de notions CONFUSABLES (Learn et Practice) : les questions qui
+	    la partagent s'entremêlent en révision (`ScheduledItem.topic`). */
+	topic?: string;
+	/** Compte à rebours en SECONDES, posé par l'IA sur les seuls automatismes.
+	    À l'échéance : réponse + explication, et la question revient comme une
+	    erreur (plan 2). */
+	timeLimit?: number;
 }
 
 /** Question à choix unique (engine.js: multiSelect absent/false ⇒ q.correctIndex). */

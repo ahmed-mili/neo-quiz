@@ -3,6 +3,7 @@ import type { DraftQuestion } from "./utils";
 import type { EditorExamOptions } from "../types/editor-ctx";
 import { pickLessonFields } from "../quiz-utils";
 import { assignQuestionIds } from "../quiz-ids";
+import { QUESTION_ROLES } from "../types/quiz";
 
 /**
  * Une valeur quelconque, écrite en JSON5.
@@ -287,11 +288,13 @@ function exportQuestion(q: DraftQuestion, idx: number, id: string): string {
 	   fine a lieu ICI, seul endroit qui écrit le bloc.
 	   `read` (task 6b) : quatrième valeur acceptée, jumelle de la liste de
 	   convert.ts et de `QUESTION_ROLES` (types/quiz.ts) — sans elle, un
-	   `role: 'read'` lu depuis la note disparaîtrait dès la sauvegarde suivante. */
+	   `role: 'read'` lu depuis la note disparaîtrait dès la sauvegarde suivante.
+	   La liste n'est plus recopiée en dur ici : `QUESTION_ROLES` est la source
+	   unique du vocabulaire, lue des deux côtés (lecture et écriture). */
 	if (typeof q.slice === "number" && Number.isInteger(q.slice) && q.slice >= 1) {
 		L.push(`\t\tslice: ${q.slice},`);
 	}
-	if (q.role === "pre" || q.role === "read" || q.role === "recall" || q.role === "test") {
+	if (typeof q.role === "string" && (QUESTION_ROLES as readonly string[]).includes(q.role)) {
 		L.push(`\t\trole: '${e(q.role)}',`);
 	}
 
@@ -343,8 +346,10 @@ function exportAll(questions: DraftQuestion[], examOptions: EditorExamOptions | 
 	/* L'objet de mode est réémis SOUS SA FORME D'ORIGINE. Un quiz importé en
 	   mode leçon ressortait en mode examen (ou perdait son mode), parce que
 	   l'export ne savait écrire que `examMode: true`. `examOptions.mode` est
-	   déjà NORMALISÉ (readModeConfig) : il ne vaut donc jamais "learn", même
-	   si le bloc lu portait l'ancien nom. */
+	   déjà NORMALISÉ (readModeConfig) : il vaut toujours le nom interne
+	   canonique "lesson", jamais l'alias hérité "learn" — mais depuis le
+	   format Learn (2026-09-23) l'export RÉÉCRIT ce mode sous le nom du
+	   format, `mode: 'learn'` (voir plus bas). */
 	const mode = examOptions?.mode;
 	const timing = examOptions
 		? `\t\texamDurationMinutes: ${examOptions.durationMinutes},\n\t\texamAutoSubmit: ${examOptions.autoSubmit},\n\t\texamShowTimer: ${examOptions.showTimer},\n`
@@ -355,8 +360,11 @@ function exportAll(questions: DraftQuestion[], examOptions: EditorExamOptions | 
 	const extra = Object.entries(examOptions?._extra || {})
 		.map(([k, v]) => `\t\t${json5Key(k)}: ${json5Value(v)},\n`).join("");
 	if (mode === "lesson") {
-		// Mode leçon AVEC examen (« Passer l'examen ») ou sans, selon le chrono.
-		parts.push(`\t// Mode leçon\n\t{\n\t\tmode: 'lesson',\n${examOptions?.enabled ? timing : ""}${extra}\t}`);
+		/* Learn (2026-09-23) : le nom interne canonique reste "lesson" tant que
+		   le moteur de leçon joue ces blocs (plan 2 le remplace), mais la note
+		   porte le nom du format, `mode: 'learn'` — que `normalizeQuizMode`
+		   relit en "lesson". */
+		parts.push(`\t// Learn\n\t{\n\t\tmode: 'learn',\n${examOptions?.enabled ? timing : ""}${extra}\t}`);
 	} else if (examOptions && examOptions.enabled) {
 		parts.push(`\t// Options mode examen\n\t{\n\t\texamMode: true,\n${timing}${extra}\t}`);
 	} else if (mode === "quiz") {

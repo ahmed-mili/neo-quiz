@@ -5,6 +5,7 @@ import type { ParsedQuizItem } from "./modals";
 import type { EditorExamOptions } from "../types/editor-ctx";
 import { normalizeQuizMode, pickLessonFields } from "../quiz-utils";
 import { normalizeTerminalVariantName } from "../engine/terminal";
+import { QUESTION_ROLES, type QuestionRole } from "../types/quiz";
 
 /* ══════════════════════════════════════════════════════════
    CONVERT — item JSON5 brut → DraftQuestion (forme d'édition)
@@ -208,9 +209,11 @@ export function convertParsedToInternal(q: ParsedQuizItem): DraftQuestion {
 	   `read` (task 6b) : ajouté ici EN MÊME TEMPS qu'à `QUESTION_ROLES`
 	   (types/quiz.ts) et à la liste jumelle d'export.ts — un rôle absent
 	   d'un des deux endroits est accepté à la lecture puis silencieusement
-	   effacé à la première sauvegarde (piège déjà coûté 23 champs ailleurs). */
+	   effacé à la première sauvegarde (piège déjà coûté 23 champs ailleurs).
+	   La liste n'est plus recopiée en dur ici : `QUESTION_ROLES` est la
+	   source unique du vocabulaire, lue des deux côtés (lecture et écriture). */
 	if (typeof q.slice === "number") question.slice = q.slice;
-	if (q.role === "pre" || q.role === "read" || q.role === "recall" || q.role === "test") question.role = q.role;
+	if (typeof q.role === "string" && (QUESTION_ROLES as readonly string[]).includes(q.role)) question.role = q.role as QuestionRole;
 
 	if (type === "single" || type === "multi") {
 		question.options = q.options || ["", ""];

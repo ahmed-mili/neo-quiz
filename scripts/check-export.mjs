@@ -151,7 +151,7 @@ await withSrcModule("src/editor/export.ts", ({ exportAll }) => {
 	   reçoit donc plus jamais l'ancien nom, seulement le nouveau. */
 	r.check("mode lesson conservé",
 		mode({ mode: "lesson", enabled: false, durationMinutes: 10, autoSubmit: true, showTimer: true }),
-		{ mode: "lesson" });
+		{ mode: "learn" });
 	r.check("mode examen avec chrono",
 		mode({ mode: "exam", enabled: true, durationMinutes: 20, autoSubmit: true, showTimer: false }),
 		{ examMode: true, examDurationMinutes: 20, examAutoSubmit: true, examShowTimer: false });
@@ -171,7 +171,8 @@ await withSrcModule("src/editor/export.ts", ({ exportAll }) => {
 	);
 	r.check("ancien nom de question converti a l'ecriture", lessonWritten.includes("lessonHtml"), true);
 	r.check("ancien nom de question plus jamais ecrit", lessonWritten.includes("learnHtml"), false);
-	r.check("mode normalise a l'ecriture", lessonWritten.includes("mode: 'lesson'"), true);
+	r.check("mode Learn écrit sous son nom", lessonWritten.includes("mode: 'learn'"), true);
+	r.check("l'ancien nom lesson n'est plus écrit", lessonWritten.includes("mode: 'lesson'"), false);
 
 	/* Task 2 du lot mode lecon : `slice`/`role` d'une question survivent a
 	   l'ecriture — c'est exactement le genre de champ qui a deja disparu en
@@ -198,6 +199,17 @@ await withSrcModule("src/editor/export.ts", ({ exportAll }) => {
 		p => ({ slice: p[0].slice, role: p[0].role }));
 	r.check("slice invalide (< 1) tu a l'ecriture", sliceRoleInvalides.slice, undefined);
 	r.check("role inconnu tu a l'ecriture", sliceRoleInvalides.role, undefined);
+
+	/* Plan 1 Learn/Practice : le rôle `explain` (« à toi d'expliquer ») et
+	   les champs `topic` / `timeLimit` survivent à une réécriture. */
+	r.check("rôle explain conservé",
+		relire([{ id: "e", slice: 1, role: "explain", prompt: "Explique", type: "text", answer: "m" }], p => p[0].role), "explain");
+	r.check("topic et timeLimit conservés",
+		relire([question({ _extraFields: { topic: "listes vs tuples", timeLimit: 20 } })], p => [p[0].topic, p[0].timeLimit]),
+		["listes vs tuples", 20]);
+	r.check("objectives de l'objet Learn conservés",
+		(() => { const s = exportAll([question()], { mode: "lesson", enabled: false, durationMinutes: 10, autoSubmit: true, showTimer: true, _extra: { objectives: ["Définir une liste"] } }); return JSON5.parse(s).at(-1).objectives; })(),
+		["Définir une liste"]);
 	r.check("slice non entier tu a l'ecriture",
 		relire([{ id: "d", slice: 1.5, prompt: "P" }], p => p[0].slice), undefined);
 

@@ -33,6 +33,11 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
 
+/** Le nom sous lequel la résolution cherche yt-dlp sur CETTE plateforme
+    (`extensionsExecutables`) : `yt-dlp.exe` sous Windows, `yt-dlp` sur le
+    runner Linux de la CI, où un `yt-dlp.exe` n'était jamais vu. */
+const NOM_EXE_SYSTEME = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
+
 /** Le délai de garde d'UN cas : de vrais process tournent, un cas figé
     masquerait tous les suivants (voir check-electron-process.mjs). */
 const DELAI_CAS_MS = 60000;
@@ -180,11 +185,11 @@ await withSrcModule("apps/windows/electron/video.ts", async ({ executableYtDlp, 
 			   peuvent coexister, et seul le premier est retenu. */
 			const app = mkdtempSync(join(racine, "app-"));
 			mkdirSync(join(app, "outils"), { recursive: true });
-			writeFileSync(join(app, "outils", "yt-dlp.exe"), "un faux exécutable (jamais lancé ici)");
+			writeFileSync(join(app, "outils", NOM_EXE_SYSTEME), "un faux exécutable (jamais lancé ici)");
 			const trouve = await executableYtDlp(envFaux, app);
 			r.check("executableYtDlp : la copie gérée du dossier d'app est prioritaire",
 				{ chemin: bas(trouve && trouve.chemin), source: trouve && trouve.source },
-				{ chemin: bas(join(app, "outils", "yt-dlp.exe")), source: "app" });
+				{ chemin: bas(join(app, "outils", NOM_EXE_SYSTEME)), source: "app" });
 			/* L'ordre réel : la copie gérée est cherchée AVANT le PATH —
 			   c'est ce que ce cas et le suivant, inversés, montrent. */
 			const sansCopie = await executableYtDlp(envFaux, join(racine, "vide"));
@@ -744,10 +749,10 @@ await withSrcModule("apps/windows/electron/video-installation.ts", async ({ info
 		await cas(r, "etat() : la copie gérée vaut { present: true, source: \"app\" }, le PATH vaut \"systeme\", rien vaut null", async () => {
 			const app = mkdtempSync(join(racine, "etat-"));
 			mkdirSync(join(app, "outils"), { recursive: true });
-			writeFileSync(join(app, "outils", "yt-dlp.exe"), "un exécutable (jamais lancé ici)");
+			writeFileSync(join(app, "outils", NOM_EXE_SYSTEME), "un exécutable (jamais lancé ici)");
 			const vide = mkdtempSync(join(racine, "vide-"));
 			const dossierPath = mkdtempSync(join(racine, "path-"));
-			writeFileSync(join(dossierPath, "yt-dlp.exe"), "un exécutable du PATH");
+			writeFileSync(join(dossierPath, NOM_EXE_SYSTEME), "un exécutable du PATH");
 			const avecCopie = await etat({ env: envDe(vide, maison), dossierApp: app });
 			const sansRien = await etat({ env: envDe(vide, vide), dossierApp: join(racine, "vide") });
 			const duPath = await etat({ env: envDe(dossierPath, maison), dossierApp: join(racine, "vide") });

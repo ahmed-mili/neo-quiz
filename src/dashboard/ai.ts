@@ -1083,7 +1083,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			// ~/.codex/models_cache.json (nouveau modèle du compte → présent au
 			// prochain clic, sans mise à jour manuelle du plugin).
 			const getModels = (): aiProviders.ModelDef[] => isClaude ? aiProviders.getClaudeModels(deps.usage?.claudePlan()) : aiProviders.getDefaultModels("codex");
-			const resolveMv = (v?: string): string => isClaude ? aiProviders.resolveClaudeModel(v) : aiProviders.resolveCodexModel(v);
+			const resolveMv = (v?: string): string => isClaude ? aiProviders.resolveClaudeModel(v, deps.usage?.claudePlan()) : aiProviders.resolveCodexModel(v);
 			// Modèle et effort = DEUX boutons séparés (référence claude.ai /
 			// ChatGPT). Le modèle ouvre le menu de modèles (sans ligne Effort) ;
 			// l'effort ouvre le popover slider (openEffortSlider), variante
@@ -1113,7 +1113,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 					trigLabel.replaceChildren();
 					const models = getModels();
 					const cur = models.find(m => m.value === currentMv())
-						|| (isClaude ? aiProviders.getClaudeMoreModels().find(m => m.value === currentMv()) : undefined)
+						|| (isClaude ? aiProviders.getClaudeMoreModels(deps.usage?.claudePlan()).find(m => m.value === currentMv()) : undefined)
 						|| models[0];
 					// Fast actif (codex) → éclair à gauche du nom du modèle,
 					// comme la pill du composer ChatGPT.
@@ -1137,6 +1137,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				void aiProviders.refreshCliCaches().then(change => {
 					if (change && trigger.isConnected) refreshTriggers();
 				});
+				/* Et EN DIRECT ensuite : Claude Code retélécharge son catalogue
+				   à chaque session, Codex son cache — le bouton suit sans clic. */
+				aiProviders.suivreModelesCli(() => { if (trigger.isConnected) refreshTriggers(); });
 
 				/* RELU À L'OUVERTURE, comme avant : la liste suivait
 				   `~/.codex/models_cache.json` à chaque clic (un modèle neuf du
@@ -1150,7 +1153,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 						models: getModels(),
 						// Claude : les anciens modèles du catalogue (section
 						// `overflow`), sous « Plus de modèles », comme dans le CLI.
-						moreModels: isClaude ? aiProviders.getClaudeMoreModels() : undefined,
+						moreModels: isClaude ? aiProviders.getClaudeMoreModels(deps.usage?.claudePlan()) : undefined,
 						currentModel: currentMv(),
 						// L'effort a son propre bouton → pas de ligne Effort ici.
 						efforts: [],

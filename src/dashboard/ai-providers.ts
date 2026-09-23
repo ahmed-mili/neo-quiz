@@ -77,6 +77,10 @@ export interface ModelDef {
 	    (`{ high: "gemini-3.8-flash-high", … }`), la famille seule étant
 	    `value`. Absent quand le modèle n'a qu'un niveau. */
 	variantes?: Record<string, string>;
+	/** Visible mais pas sélectionnable (un modèle à crédits d'utilisation). */
+	disabled?: boolean;
+	/** Infobulle de l'icône d'info du badge. */
+	tooltip?: string;
 }
 
 /** Entrée de catalogue Ollama (tag + libellé). */
@@ -842,6 +846,27 @@ export function refreshCliCaches(): Promise<boolean> {
 	return refreshEnCours;
 }
 
+/* LA LISTE EN DIRECT (2026-09-23) : quand l'hôte surveille les fichiers de
+   modèles des CLI (`HostProcess.surCachesCli`), chaque réécriture relit
+   l'instantané, et `rappel` part s'il a changé — le bouton du modèle se
+   redessine sans attendre un clic. UN SEUL abonné à la fois : le contrôle de
+   modèle affiché ; le suivant remplace le précédent, sans quoi chaque
+   rendu du composer empilerait un écouteur. Un rafraîchissement EN VOL a pu
+   lire l'ancien fichier : on l'attend, puis on relit. */
+let desabonnerCaches: (() => void) | null = null;
+export function suivreModelesCli(rappel: () => void): void {
+	desabonnerCaches?.();
+	desabonnerCaches = null;
+	const sur = requireHost("process").surCachesCli;
+	if (!sur) return;
+	desabonnerCaches = sur(() => {
+		void (async () => {
+			if (refreshEnCours) await refreshEnCours;
+			if (await refreshCliCaches()) rappel();
+		})();
+	});
+}
+
 /* Modèles Codex réels : ~/.codex/models_cache.json (ou $CODEX_HOME), reparsé
    uniquement quand le fichier change (mtime) — donc toujours à jour après un
    « codex update » ou l'arrivée d'un nouveau modèle, sans re-parse inutile.
@@ -1241,8 +1266,16 @@ export function claudePromoNoticesFor(bar: string): ClaudePromoNotice[] {
    catalogue n'est lisible (CLI ancien, jamais lancé) — `lastModelUsage` a
    figé le menu sur « Opus 5 » pendant des heures le 2026-09-23. */
 
-/** Un modèle du catalogue, réduit à ce que le menu affiche. */
-interface CatalogueModele { def: ModelDef; section: "main" | "overflow"; famille: string | null }
+/** Un modèle du catalogue, réduit à ce que le menu affiche. `credits` : le
+    catalogue le marque « Requires usage credits » (badge serveur, en anglais,
+    lu avant toute traduction). */
+interface CatalogueModele {
+	def: ModelDef;
+	section: "main" | "overflow";
+	famille: string | null;
+	version: number[] | null;
+	credits: boolean;
+}
 
 /** Les modèles du catalogue, dans son ordre. `null` si le catalogue est
     absent ou n'a pas la forme attendue — jamais d'exception. L'identifiant
@@ -1254,16 +1287,18 @@ function modelesDuCatalogue(catalogue: unknown): CatalogueModele[] | null {
 	const out: CatalogueModele[] = [];
 	for (const m of modeles) {
 		if (!m || typeof m !== "object") continue;
-		const e = m as { id?: unknown; name?: unknown; description?: unknown; section?: unknown; badge?: { message?: unknown } };
+		const e = m as { id?: unknown; name?: unknown; description?: unknown; section?: unknown; badge?: { message?: unknown }; tooltip?: { content?: unknown } };
 		if (typeof e.id !== "string" || !/^[a-zA-Z0-9._:-]+$/.test(e.id)) continue;
 		if (typeof e.name !== "string" || !e.name.trim()) continue;
-		const famille = parseClaudeModelId(e.id)?.family ?? null;
+		const parse = parseClaudeModelId(e.id);
+		const famille = parse?.family ?? null;
 		/* La description et le badge du serveur sont en anglais : gardés en
 		   anglais, remplacés par la traduction de la FAMILLE (et du badge de
 		   crédits) dans une autre langue. */
 		const descFamille = famille ? CLAUDE_CODE_MODELS.find(x => x.value === famille)?.desc : undefined;
 		const descServeur = typeof e.description === "string" && e.description.trim() ? e.description : undefined;
 		const badgeServeur = typeof e.badge?.message === "string" && e.badge.message.trim() ? e.badge.message : undefined;
+		const bulleServeur = typeof e.tooltip?.content === "string" && e.tooltip.content.trim() ? e.tooltip.content : undefined;
 		const anglais = currentLang() === "en";
 		out.push({
 			def: {
@@ -1271,9 +1306,12 @@ function modelesDuCatalogue(catalogue: unknown): CatalogueModele[] | null {
 				label: e.name,
 				desc: anglais ? (descServeur ?? descFamille) : (descFamille ?? descServeur),
 				badge: anglais ? badgeServeur : (badgeServeur ? t("ai.badge.usageCredits") : undefined),
+				tooltip: anglais ? bulleServeur : (bulleServeur ? t("ai.badge.usageCreditsTip", { model: e.name }) : undefined),
 			},
 			section: e.section === "overflow" ? "overflow" : "main",
 			famille,
+			version: parse?.version ?? null,
+			credits: !!badgeServeur && /credit/i.test(badgeServeur),
 		});
 	}
 	return out.length ? out : null;
@@ -1284,8 +1322,8 @@ function catalogueCourant(): CatalogueModele[] | null {
 }
 
 /* Liste des modèles Claude visibles maintenant. Avec un catalogue : sa section
-   `main`, telle quelle, le badge de Fable suivant le forfait quand il est
-   connu. Sans catalogue (repli) : les alias embarqués, libellés à jour de ce
+   `main`, rangée par `menuDuCatalogue` (un modèle par famille, les modèles à
+   crédits grisés en tête). Sans catalogue (repli) : les alias embarqués, libellés à jour de ce
    que le CLI a servi, et Fable inclus seulement s'il est proposé, avec le
    badge qui correspond au forfait détecté (« Inclus » sur Max, « Crédits
    d'usage » sur Pro, aucun quand le forfait ne tranche pas). `plan` : voir
@@ -1293,45 +1331,89 @@ function catalogueCourant(): CatalogueModele[] | null {
    d'un modèle, l'app) l'omet. */
 export function getClaudeModels(plan?: ClaudePlanHint): ModelDef[] {
 	const catalogue = catalogueCourant();
-	if (catalogue) {
-		const badgeForfait = fableAccessBadge(plan);
-		return catalogue.filter(m => m.section === "main").map(m =>
-			m.famille === "fable" && badgeForfait ? { ...m.def, badge: badgeForfait } : m.def);
-	}
+	if (catalogue) return menuDuCatalogue(catalogue, plan).main;
 	const { fableOffered, labels } = readClaudeCliInfo();
+	/* Sur Pro, Fable passe par des crédits d'utilisation : visible, pas
+	   sélectionnable (personne ne paie des crédits pour générer un quiz). */
+	const surCredits = plan?.name.toLowerCase() === "pro";
 	const models = fableOffered
-		? CLAUDE_CODE_MODELS.map(m => m.value === "fable" ? { ...m, badge: fableAccessBadge(plan) } : m)
+		? CLAUDE_CODE_MODELS.map(m => m.value === "fable" ? { ...m, badge: fableAccessBadge(plan), disabled: surCredits || undefined } : m)
 		: CLAUDE_CODE_MODELS.filter(m => m.value !== "fable");
 	// L'alias EST le nom de famille (« opus ») : un libellé appris le remplace.
-	return models.map(m => labels[m.value] ? { ...m, label: labels[m.value] } : m);
+	return rangerCreditsEnTete(models.map(m => labels[m.value] ? { ...m, label: labels[m.value] } : m));
 }
 
-/** Les modèles plus anciens que le catalogue range à part (section
-    `overflow`) : le menu les propose sous « Plus de modèles ». Vide sans
+/** Les modèles plus anciens : la section `overflow` du catalogue, précédée
+    des modèles de `main` qu'une version plus récente de leur famille
+    remplace. Le menu les propose sous « Plus de modèles ». Vide sans
     catalogue. */
-export function getClaudeMoreModels(): ModelDef[] {
-	return (catalogueCourant() ?? []).filter(m => m.section === "overflow").map(m => m.def);
+export function getClaudeMoreModels(plan?: ClaudePlanHint): ModelDef[] {
+	const catalogue = catalogueCourant();
+	return catalogue ? menuDuCatalogue(catalogue, plan).more : [];
 }
 
-/* Modèle Claude effectif : si le modèle choisi n'est plus visible
-   (ex. Fable une fois la promo terminée), retombe sur le modèle par défaut. */
-export function resolveClaudeModel(value?: string): string {
+/* LE MENU RANGÉ COMME CELUI DE CLAUDE.AI (2026-09-23).
+   — Un seul modèle par famille dans la liste principale, le plus récent : le
+     catalogue d'un compte peut RETARDER (celui du 2026-09-22 rangeait encore
+     « Opus 5 » dans `main`, à côté d'« Opus 5.5 », alors qu'un catalogue
+     téléchargé le lendemain l'avait déjà passé en `overflow`). Le plus ancien
+     descend sous « Plus de modèles », jamais supprimé.
+   — Un modèle à crédits d'utilisation est VISIBLE, GRISÉ, NON SÉLECTIONNABLE,
+     et en tête de liste comme sur claude.ai. Sur un forfait Max, qui l'inclut,
+     il redevient un modèle comme les autres, badge « Inclus ». */
+function menuDuCatalogue(catalogue: CatalogueModele[], plan: ClaudePlanHint): { main: ModelDef[]; more: ModelDef[] } {
+	const inclus = plan?.name.toLowerCase() === "max";
+	const habiller = (m: CatalogueModele): ModelDef =>
+		!m.credits ? m.def
+			: inclus ? { ...m.def, badge: t("ai.badge.included"), tooltip: undefined }
+			: { ...m.def, disabled: true };
+
+	const plusRecent = new Map<string, number[]>();
+	for (const m of catalogue) {
+		if (m.section !== "main" || !m.famille || !m.version) continue;
+		const connu = plusRecent.get(m.famille);
+		if (!connu || isNewerVersion(m.version, connu)) plusRecent.set(m.famille, m.version);
+	}
+	const main: ModelDef[] = [];
+	const relegues: ModelDef[] = [];
+	for (const m of catalogue) {
+		if (m.section !== "main") continue;
+		const tete = m.famille ? plusRecent.get(m.famille) : undefined;
+		(tete && m.version && isNewerVersion(tete, m.version) ? relegues : main).push(habiller(m));
+	}
+	return {
+		main: rangerCreditsEnTete(main),
+		more: [...relegues, ...catalogue.filter(m => m.section === "overflow").map(habiller)],
+	};
+}
+
+/** Les modèles non sélectionnables d'abord, l'ordre du catalogue gardé à
+    l'intérieur de chaque groupe (`sort` est stable). */
+function rangerCreditsEnTete(models: ModelDef[]): ModelDef[] {
+	return [...models].sort((a, b) => Number(!!b.disabled) - Number(!!a.disabled));
+}
+
+/* Modèle Claude effectif : si le modèle choisi n'est plus visible (ex. Fable
+   une fois la promo terminée) ou plus sélectionnable (crédits d'utilisation),
+   retombe sur sa famille, puis sur le modèle par défaut. */
+export function resolveClaudeModel(value?: string, plan?: ClaudePlanHint): string {
 	const catalogue = catalogueCourant();
 	if (catalogue) {
 		/* Un réglage enregistré avant le catalogue est un ALIAS (« opus ») : il
 		   désigne le modèle principal de sa famille, que le catalogue nomme. Un
 		   identifiant retiré du catalogue retombe sur sa famille, puis sur la
 		   famille par défaut. */
-		if (value && catalogue.some(m => m.def.value === value)) return value;
+		const { main, more } = menuDuCatalogue(catalogue, plan);
+		if (value && [...main, ...more].some(m => m.value === value && !m.disabled)) return value;
+		const principaux = main.filter(m => !m.disabled);
+		const deFamille = (f: string) => principaux.find(m => parseClaudeModelId(m.value)?.family === f);
 		const defaut = getProvider("claude-code").defaultModel;
 		const famille = (value && parseClaudeModelId(value)?.family) || value || defaut;
-		const principal = catalogue.find(m => m.section === "main" && m.famille === famille)
-			?? catalogue.find(m => m.section === "main" && m.famille === defaut)
-			?? catalogue.find(m => m.section === "main");
-		if (principal) return principal.def.value;
+		const principal = deFamille(famille) ?? deFamille(defaut) ?? principaux[0];
+		if (principal) return principal.value;
 	}
-	const models = getClaudeModels();
-	if (models.some(m => m.value === value)) return value as string;
+	const models = getClaudeModels(plan);
+	if (models.some(m => m.value === value && !m.disabled)) return value as string;
 	return getProvider("claude-code").defaultModel;
 }
 

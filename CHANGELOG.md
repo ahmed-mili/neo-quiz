@@ -16,6 +16,10 @@ release notes.
 ### Fixed
 - The Claude Code model list now follows the model catalog that Claude Code downloads itself, like Codex: new models (such as Opus 5.5) appear with their exact names as soon as the command-line tool knows them, and older ones move under "More models".
 
+### Changed
+- In the Claude model menu, a model that requires usage credits (such as Fable 5.1 on a Pro plan) is shown greyed out at the top of the list and can no longer be picked; a saved choice falls back to the default model. Only the newest model of each family stays in the main list, older ones move under "More models".
+- The model list updates on its own as soon as Claude Code or Codex refreshes its model files, without reopening the menu. It never runs the command-line tool to do so.
+
 ## [1.18.0] - 2026-09-23
 
 ### Added

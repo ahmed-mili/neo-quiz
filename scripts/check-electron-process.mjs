@@ -1613,3 +1613,63 @@ await withSrcModule("apps/windows/electron/process.ts", async ({ ollamaInstalle,
 		{ pasDeCheminRecu: true, pasDOptionChemin: true, plusDeLectureDeReglage: true });
 	r.done();
 }
+
+/* ── LA LISTE DES MODÈLES EN DIRECT (2026-09-23) ──
+   `surveillerCachesCli` sur de VRAIS fichiers, dans un faux dossier
+   personnel. Ce qu'il empêche : un menu de modèles qui garde un catalogue
+   périmé jusqu'au prochain clic, alors que Claude Code vient de le
+   retélécharger ; et, à l'inverse, un avis par écriture de `~/.claude.json`
+   (réécrit à chaque événement d'une session), ou pour un fichier voisin. */
+await withSrcModule("apps/windows/electron/process.ts", async ({ surveillerCachesCli }) => {
+	const r = makeReporter("Électron — les modèles des CLI en direct");
+	const racine = mkdtempSync(join(tmpdir(), "quiz-caches-cli-"));
+	const maison = join(racine, "maison");
+	const catalogues = join(maison, ".claude", "cache", "model-catalog");
+	mkdirSync(catalogues, { recursive: true });
+	mkdirSync(join(maison, ".codex"), { recursive: true });
+	writeFileSync(join(maison, ".claude.json"), "{}");
+	writeFileSync(join(maison, ".codex", "models_cache.json"), "{}");
+	const env = { USERPROFILE: maison, HOME: maison };
+	const vus = [];
+	const pause = (ms) => new Promise(res => setTimeout(res, ms));
+	/** Attend qu'au moins `n` avis soient arrivés, puis laisse passer une
+	    fenêtre de débounce entière pour voir s'il en vient un de trop. */
+	const attendre = async (n) => {
+		for (let i = 0; i < 60 && vus.length < n; i++) await pause(50);
+		await pause(400);
+	};
+	let arreter = null;
+	try {
+		await cas(r, "surveillerCachesCli", async () => {
+			arreter = surveillerCachesCli(tool => vus.push(tool), env, 150);
+			await pause(700); // le temps que chokidar soit prêt
+
+			writeFileSync(join(catalogues, "org-compte-cc.json"), '{"fetchedAt":1}');
+			await attendre(1);
+			r.check("un catalogue de Claude Code réécrit prévient « claude »", vus.splice(0), ["claude"]);
+
+			writeFileSync(join(maison, ".codex", "models_cache.json"), '{"models":[]}');
+			await attendre(1);
+			r.check("le cache de Codex réécrit prévient « codex »", vus.splice(0), ["codex"]);
+
+			for (let i = 0; i < 4; i++) { writeFileSync(join(maison, ".claude.json"), `{"n":${i}}`); await pause(20); }
+			await attendre(1);
+			r.check("quatre écritures rapprochées de ~/.claude.json : UN seul avis", vus.splice(0), ["claude"]);
+
+			writeFileSync(join(maison, "notes.txt"), "rien");
+			writeFileSync(join(catalogues, "autre.json"), "{}");
+			await attendre(1);
+			r.check("un fichier voisin, ou hors motif « -cc.json », ne prévient personne", vus.splice(0), []);
+
+			await arreter();
+			arreter = null;
+			writeFileSync(join(maison, ".claude.json"), '{"apres":true}');
+			await attendre(1);
+			r.check("une fois arrêté, plus aucun avis", vus.splice(0), []);
+		});
+	} finally {
+		if (arreter) await arreter();
+		rmSync(racine, { recursive: true, force: true });
+	}
+	r.done();
+});

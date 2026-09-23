@@ -97,6 +97,9 @@ export function createWindowsProcess(): HostProcess {
 		attendreFinTerminal() {
 			return pont().processus.attendreFinTerminal();
 		},
+		surCachesCli(rappel) {
+			return pont().processus.surCachesCli(rappel);
+		},
 		surTerminalPose(rappel) {
 			return pont().processus.surTerminalPose(rappel);
 		},

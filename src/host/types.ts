@@ -608,6 +608,12 @@ export interface HostProcess {
 	    2026-09-20). Rend de quoi se désabonner. OPTIONNEL, comme
 	    `attendreFinTerminal` : seul un hôte qui place des fenêtres l'offre. */
 	surTerminalPose?(rappel: () => void): () => void;
+	/** S'abonne à la réécriture des fichiers de modèles d'un CLI
+	    (`~/.claude.json`, le catalogue de Claude Code, `models_cache.json` de
+	    Codex) : le menu des modèles se redessine en direct au lieu d'attendre
+	    le prochain clic. Rend de quoi se désabonner. OPTIONNEL : un hôte sans
+	    surveillant (le greffon) garde la relecture à l'ouverture du menu. */
+	surCachesCli?(rappel: (tool: "claude" | "codex") => void): () => void;
 	/** S'abonne à l'ouverture du NAVIGATEUR de la connexion : il prend la
 	    moitié gauche de l'écran, Neo Quiz la moitié droite (Ahmed,
 	    2026-09-20), et la modale a donc bougé — à elle de se remesurer et de

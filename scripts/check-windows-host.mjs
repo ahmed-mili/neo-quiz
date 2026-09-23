@@ -579,6 +579,9 @@ function installerPont(fichiers = {}, perimetre = null) {
 	/* Le rappel qu'un `surTerminalPose` a déposé : le test le déclenche pour
 	   jouer « la fenêtre du terminal est posée ». */
 	let poseDuTerminal = null;
+	/* Le rappel qu'un `surCachesCli` a déposé : joue « Claude Code vient de
+	   réécrire son catalogue ». */
+	let cachesCli = null;
 	const dates = new Map([...disque.keys()].map(p => [p, 1000]));
 	const toucher = (p) => {
 		dates.set(p, (dates.get(p) ?? 1000) + 5000);
@@ -765,6 +768,7 @@ function installerPont(fichiers = {}, perimetre = null) {
 			async demarrerOllama() { journal.push(["processus.demarrerOllama"]); return true; },
 			async installer(tool, ancre) { journal.push(["processus.installer", tool, ancre]); return "lance"; },
 			surTerminalPose(rappel) { journal.push(["processus.surTerminalPose"]); poseDuTerminal = rappel; return () => journal.push(["processus.surTerminalPose:off"]); },
+			surCachesCli(rappel) { journal.push(["processus.surCachesCli"]); cachesCli = rappel; return () => journal.push(["processus.surCachesCli:off"]); },
 		},
 		fenetre: {
 			async surFermeture() {},
@@ -810,6 +814,7 @@ function installerPont(fichiers = {}, perimetre = null) {
 		/** Joue « la fenêtre du terminal vient d'être posée » : le rappel que
 		    le rendu a déposé par `surTerminalPose`. */
 		poserTerminal: () => { poseDuTerminal?.(); },
+		reecrireCache: (tool) => { cachesCli?.(tool); },
 		/** Ce que le prochain `reseau.fetch` rend, et ce qu'il attend avant. */
 		reseau: reponseReseau,
 		/** Idem pour le prochain `processus.run`. */
@@ -1981,6 +1986,17 @@ await withSrcModule("apps/windows/src/host/process.ts", async ({ createWindowsPr
 			r.check("surTerminalPose : l'abonnement passe par le pont, le rappel remonte, le désabonnement redescend",
 				{ vu, abonne: pont.journal.includes("processus.surTerminalPose") || !!pont.journal.find(l => l[0] === "processus.surTerminalPose"), desabonne: !!pont.journal.find(l => l[0] === "processus.surTerminalPose:off") },
 				{ vu: 1, abonne: true, desabonne: true });
+		}
+		/* `surCachesCli` : même chemin, et le NOM de l'outil remonte tel quel —
+		   c'est lui qui fait redessiner le bouton du modèle. */
+		{
+			const vus = [];
+			const off = processus.surCachesCli(tool => { vus.push(tool); });
+			pont.reecrireCache("claude");
+			off();
+			r.check("surCachesCli : l'abonnement passe par le pont, le nom de l'outil remonte, le désabonnement redescend",
+				{ vus, abonne: !!pont.journal.find(l => l[0] === "processus.surCachesCli"), desabonne: !!pont.journal.find(l => l[0] === "processus.surCachesCli:off") },
+				{ vus: ["claude"], abonne: true, desabonne: true });
 		}
 
 		/* ── `run` ── */

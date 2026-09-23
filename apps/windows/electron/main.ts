@@ -44,7 +44,7 @@ import {
 } from "./fenetre-maj";
 import { enregistrerCanaux } from "./canaux";
 import { cheminDossierDefaut } from "./dossier-defaut";
-import { chargerPathRegistre } from "./process";
+import { chargerPathRegistre, surveillerCachesCli } from "./process";
 import { perimetreInitial } from "./perimetre";
 import type { Perimetre } from "./perimetre";
 import { CANAUX, CLE_DOSSIER_DEFAUT, CLE_REGLAGES_IA, CLE_REGLAGES_LANGUE, CLE_REGLAGES_ZOOM } from "./pont";
@@ -747,6 +747,13 @@ if (process.argv.includes(DRAPEAU_FENETRE_MAJ)) {
 		});
 		arreterAttente = canaux.arreterAttente;
 		creerFenetre();
+		/* APRÈS la fenêtre, comme le surveillant des notes : le menu des
+		   modèles se redessine dès que Claude Code ou Codex réécrit ses
+		   fichiers de modèles (voir `surveillerCachesCli`). Vit autant que
+		   l'application ; la fenêtre absente, l'avis se perd sans dommage. */
+		surveillerCachesCli(tool => {
+			if (fenetre && !fenetre.isDestroyed()) fenetre.webContents.send(CANAUX.processusCachesCli, tool);
+		});
 		/* Le témoin que la fenêtre de mise à jour attend pour s'effacer, puis
 		   les reflets qu'une mise à jour passée a laissés : après elle, ces
 		   liens sont la seule référence aux fichiers de l'ANCIENNE version et

@@ -35,7 +35,7 @@ import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
     rend ce que le cas lui a préparé. Tout le reste du contrat est là sous sa
     forme minimale — un faux hôte PARTIEL meurt sur un TypeError le jour où un
     appelant y touche, et une mort en route masque les groupes suivants. */
-function fauxHote({ reponses = {}, caches = {}, runs = {}, comptes = [], comptesErreur = false } = {}) {
+function fauxHote({ reponses = {}, caches = {}, runs = {}, comptes = [], comptesErreur = false, surveillant = null } = {}) {
 	const journal = [];
 	// `corps` : le CORPS de chaque requête `fetchJson`, dans l'ordre — `journal`
 	// reste un tuple à 3 (type, url, méthode) pour ne rien casser des cas
@@ -88,6 +88,10 @@ function fauxHote({ reponses = {}, caches = {}, runs = {}, comptes = [], comptes
 					journal.push(["lireCache", outil]);
 					return caches[outil] ?? null;
 				},
+				/* `surveillant` : un objet où le faux dépose le rappel de
+				   `surCachesCli`, pour que le cas joue la réécriture d'un
+				   fichier. Absent : l'hôte n'a pas de surveillant (le greffon). */
+				...(surveillant ? { surCachesCli(rappel) { surveillant.abonnes++; surveillant.rappel = rappel; return () => { surveillant.abonnes--; }; } } : {}),
 				ollamaInstalle: async () => false,
 				demarrerOllama: async () => false,
 				/* `etatComptes()` : la lecture SANS VERROU dont Claude et Codex se
@@ -385,6 +389,12 @@ await withSrcModule(
 			r.check("le badge de Fable suit le forfait PASSÉ, et reste absent quand l'appelant ne le connaît pas",
 				{ max: !!fableDe({ name: "Max" })?.badge, pro: !!fableDe({ name: "Pro" })?.badge, inconnu: fableDe(undefined)?.badge, equipe: fableDe({ name: "Team" })?.badge },
 				{ max: true, pro: true, inconnu: undefined, equipe: undefined });
+			/* Sur Pro, Fable passe par des crédits d'utilisation : visible mais
+			   pas sélectionnable, et un réglage qui le désigne retombe ailleurs. */
+			r.check("sur Pro, Fable est visible mais pas sélectionnable ; sur Max, il se choisit",
+				{ pro: !!fableDe({ name: "Pro" })?.disabled, max: !!fableDe({ name: "Max" })?.disabled,
+				  resoluPro: providers.resolveClaudeModel("fable", { name: "Pro" }), resoluMax: providers.resolveClaudeModel("fable", { name: "Max" }) },
+				{ pro: true, max: false, resoluPro: "opus", resoluMax: "fable" });
 		}
 
 		/* LE CATALOGUE DE CLAUDE CODE est la source des modèles (bug du
@@ -407,17 +417,37 @@ await withSrcModule(
 			const json = { projects: { "C:/x": { lastModelUsage: { "claude-opus-5": {}, "claude-fable-5": {} } } } };
 			installHost(fauxHote({ caches: { claude: { mtimeMs: 444, json, catalogue: catalogue(1000, modeles) } } }).hote);
 			await providers.refreshCliCaches();
-			r.check("avec un catalogue, la liste est sa section main, dans son ordre, sans identifiant suspect",
-				providers.getClaudeModels().map(m => `${m.value}=${m.label}`),
-				["claude-opus-5-5=Opus 5.5", "claude-sonnet-5=Sonnet 5", "claude-fable-5-1=Fable 5.1"]);
+			r.check("avec un catalogue, la liste est sa section main, le modèle à crédits en tête, sans identifiant suspect",
+				providers.getClaudeModels().map(m => `${m.value}=${m.label}${m.disabled ? " (grisé)" : ""}`),
+				["claude-fable-5-1=Fable 5.1 (grisé)", "claude-opus-5-5=Opus 5.5", "claude-sonnet-5=Sonnet 5"]);
 			r.check("… et sa section overflow part sous « Plus de modèles »",
 				providers.getClaudeMoreModels().map(m => m.label), ["Opus 5"]);
+			r.check("sur Max, le modèle à crédits est inclus : sélectionnable, à sa place du catalogue",
+				providers.getClaudeModels({ name: "Max" }).map(m => `${m.label}${m.disabled ? " (grisé)" : ""}`),
+				["Opus 5.5", "Sonnet 5", "Fable 5.1"]);
 			/* Un réglage enregistré avant le catalogue est un ALIAS : il désigne le
 			   modèle principal de sa famille. Un identifiant du catalogue reste
 			   tel quel, même rangé en overflow. */
 			r.check("un alias enregistré se résout sur le modèle principal de sa famille",
 				{ opus: providers.resolveClaudeModel("opus"), fable: providers.resolveClaudeModel("fable"), vide: providers.resolveClaudeModel(""), ancien: providers.resolveClaudeModel("claude-opus-5"), retire: providers.resolveClaudeModel("claude-opus-4-1") },
-				{ opus: "claude-opus-5-5", fable: "claude-fable-5-1", vide: "claude-opus-5-5", ancien: "claude-opus-5", retire: "claude-opus-5-5" });
+				{ opus: "claude-opus-5-5", fable: "claude-opus-5-5", vide: "claude-opus-5-5", ancien: "claude-opus-5", retire: "claude-opus-5-5" });
+			r.check("un modèle à crédits enregistré retombe sur le défaut, sauf sur Max",
+				{ inconnu: providers.resolveClaudeModel("claude-fable-5-1"), max: providers.resolveClaudeModel("claude-fable-5-1", { name: "Max" }) },
+				{ inconnu: "claude-opus-5-5", max: "claude-fable-5-1" });
+			/* Le catalogue d'un compte peut RETARDER (2026-09-22 : « Opus 5 »
+			   encore en `main` à côté d'« Opus 5.5 ») : un seul modèle par
+			   famille en tête, le plus ancien descend sous « Plus de modèles ». */
+			const enRetard = [
+				{ id: "claude-opus-5-5", name: "Opus 5.5", section: "main" },
+				{ id: "claude-sonnet-5", name: "Sonnet 5", section: "main" },
+				{ id: "claude-opus-5", name: "Opus 5", section: "main" },
+				{ id: "claude-opus-4-8", name: "Opus 4.8", section: "overflow" },
+			];
+			installHost(fauxHote({ caches: { claude: { mtimeMs: 446, json, catalogue: catalogue(1500, enRetard) } } }).hote);
+			await providers.refreshCliCaches();
+			r.check("un catalogue en retard : un seul modèle par famille en tête, l'ancien sous « Plus de modèles »",
+				{ main: providers.getClaudeModels().map(m => m.label), plus: providers.getClaudeMoreModels().map(m => m.label), ancien: providers.resolveClaudeModel("claude-opus-5") },
+				{ main: ["Opus 5.5", "Sonnet 5"], plus: ["Opus 5", "Opus 4.8"], ancien: "claude-opus-5" });
 			/* Le catalogue se télécharge sans que `~/.claude.json` change : le
 			   même `mtime` avec un catalogue plus récent doit quand même
 			   rafraîchir. */
@@ -435,6 +465,28 @@ await withSrcModule(
 			r.check("sans catalogue, repli sur les alias, libellés par la version la plus haute connue",
 				{ opus: libelle("opus"), fable: libelle("fable"), plus: providers.getClaudeMoreModels().length },
 				{ opus: "Opus 5", fable: "Fable 5.1", plus: 0 });
+
+			/* LA LISTE EN DIRECT : l'hôte prévient qu'un fichier a été réécrit,
+			   `suivreModelesCli` relit l'instantané et rappelle SEULEMENT s'il a
+			   changé ; un second abonné remplace le premier (sinon chaque rendu
+			   du composer empilerait un écouteur). */
+			const surveillant = { abonnes: 0, rappel: null };
+			const caches = { claude: { mtimeMs: 777, json, catalogue: catalogue(3000, modeles) } };
+			installHost(fauxHote({ caches, surveillant }).hote);
+			await providers.refreshCliCaches();
+			let redessins = 0;
+			providers.suivreModelesCli(() => { redessins++; });
+			providers.suivreModelesCli(() => { redessins++; });
+			const attendreRelecture = () => new Promise(res => setTimeout(res, 20));
+			surveillant.rappel("claude");
+			await attendreRelecture();
+			const sansChangement = redessins;
+			caches.claude = { mtimeMs: 777, json, catalogue: catalogue(4000, enRetard) };
+			surveillant.rappel("claude");
+			await attendreRelecture();
+			r.check("en direct : un fichier réécrit relit la liste, un seul abonné, aucun redessin sans changement",
+				{ abonnes: surveillant.abonnes, sansChangement, apres: redessins, liste: providers.getClaudeModels().map(m => m.label) },
+				{ abonnes: 1, sansChangement: 0, apres: 1, liste: ["Opus 5.5", "Sonnet 5"] });
 		}
 
 		/* ── LES SONDES DE CONNEXION (tranche « se connecter depuis l'échec ») ──

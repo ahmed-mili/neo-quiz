@@ -512,6 +512,10 @@ export interface Pont {
 		/** S'abonne au moment où la fenêtre d'un terminal est posée. Rien ne
 		    traverse : l'appel ne porte aucune donnée, juste l'instant. */
 		surTerminalPose(rappel: () => void): () => void;
+		/** S'abonne à la réécriture des fichiers de modèles d'un CLI (voir
+		    `surveillerCachesCli`). Seul le NOM de l'outil traverse, jamais un
+		    chemin ni un contenu : le rendu relit ensuite par `lireCache`. */
+		surCachesCli(rappel: (tool: "claude" | "codex") => void): () => void;
 		/** S'abonne au moment où le navigateur de la connexion s'ouvre (les
 		    deux colonnes) : la modale doit alors se remesurer. */
 		surNavigateurOuvert(rappel: () => void): () => void;
@@ -755,6 +759,9 @@ export const CANAUX = {
 	    `fenetreEtat` : la fenêtre du terminal vient d'être POSÉE sous la
 	    modale. C'est à cet instant, et pas avant, que la modale remonte. */
 	processusTerminalPose: "neo:process/terminal-pose",
+	/** POUSSÉ par le principal : un fichier de modèles d'un CLI vient d'être
+	    réécrit (`surveillerCachesCli`). La charge est le nom de l'outil. */
+	processusCachesCli: "neo:process/caches-cli",
 	/** POUSSÉ par le principal : le navigateur de la connexion vient d'être
 	    posé à gauche et Neo Quiz à droite — la modale a bougé, qu'elle se
 	    remesure. */

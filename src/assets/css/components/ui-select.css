@@ -390,6 +390,40 @@
 	white-space: normal;
 }
 
+/* Un modèle à crédits d'utilisation (référence claude.ai) : nom et
+   description éteints, badge neutre et lisible avec son icône d'info. Pas
+   d'opacité sur toute la ligne : elle effacerait aussi le badge, qui dit
+   POURQUOI la ligne ne se choisit pas. */
+.qbd-model-option--disabled.qbd-select-option--disabled {
+	opacity: 1;
+	cursor: default;
+}
+
+.qbd-model-option--disabled .qbd-select-option-label,
+.qbd-model-option--disabled .qbd-model-option-desc {
+	color: var(--text-faint);
+}
+
+.qbd-model-option--disabled .qbd-model-option-badge {
+	color: var(--text-muted);
+	background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+}
+
+.qbd-model-option-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.qbd-model-option-badge-icon {
+	display: inline-flex;
+}
+
+.qbd-model-option-badge-icon svg {
+	width: 11px;
+	height: 11px;
+}
+
 /* ── Menu modèle avec recherche + liste scrollable (façon app Ollama) ──
    La barre de recherche reste fixe en haut, la liste défile (hauteur ~7 lignes),
    l'effort reste fixe en dessous. */

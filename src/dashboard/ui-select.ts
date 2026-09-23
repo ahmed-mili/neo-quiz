@@ -374,6 +374,10 @@ export interface ModelOption {
 	level?: string;
 	levels?: EffortOption[];
 	currentLevel?: string;
+	/** Visible, grisé, pas sélectionnable (un modèle à crédits d'utilisation). */
+	disabled?: boolean;
+	/** Infobulle du badge, précédé d'une icône d'info. */
+	tooltip?: string;
 }
 
 export interface OpenModelMenuOptions {
@@ -469,16 +473,24 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 	// Construit un bouton d'option modèle (liste principale ET flyout « Plus de
 	// modèles »). Ferme le menu et notifie onPickModel au clic.
 	function appendModelOption(parent: HTMLElement, m: ModelOption): HTMLButtonElement {
-		const active = m.value === opts.currentModel;
-		const btn = ajouter(parent, "button", "qbd-select-option" + (active ? " is-active" : ""));
+		const active = m.value === opts.currentModel && !m.disabled;
+		const btn = ajouter(parent, "button", "qbd-select-option" + (active ? " is-active" : "") + (m.disabled ? " qbd-select-option--disabled qbd-model-option--disabled" : ""));
 		btn.type = "button";
 		btn.setAttribute("role", "menuitemradio");
 		btn.setAttribute("aria-checked", active ? "true" : "false");
+		if (m.disabled) btn.setAttribute("aria-disabled", "true");
+		if (m.tooltip) btn.title = m.tooltip;
 		const body = ajouter(btn, "div", "qbd-model-option-body");
 		const top = ajouter(body, "div", "qbd-model-option-top");
 		ajouter(top, "span", "qbd-select-option-label", m.label);
 		if (m.level) ajouter(top, "span", "qbd-model-option-level", m.level);
-		if (m.badge) ajouter(top, "span", "qbd-model-option-badge", m.badge);
+		if (m.badge) {
+			const badge = ajouter(top, "span", "qbd-model-option-badge");
+			/* Référence claude.ai : l'icône d'info DANS le badge, avant le texte,
+			   quand le catalogue fournit une explication. */
+			if (m.tooltip) currentHost().ui.setIcon(ajouter(badge, "span", "qbd-model-option-badge-icon"), "info");
+			ajouter(badge, "span", "", m.badge);
+		}
 		if (m.desc) ajouter(body, "span", "qbd-model-option-desc", m.desc);
 		if (m.upgrade) {
 			/* Un modèle HORS PLAN ne se choisit pas (Ahmed, 2026-09-19) : toute la
@@ -519,6 +531,7 @@ export function openModelMenu(anchorEl: HTMLElement, opts: OpenModelMenuOptions)
 			btn.addEventListener("mouseenter", closeLevelFlyout);
 		}
 		btn.addEventListener("click", () => {
+			if (m.disabled) return;
 			closeMenu();
 			if (m.upgrade) { m.upgrade.onClick(); return; }
 			const changed = m.value !== opts.currentModel;

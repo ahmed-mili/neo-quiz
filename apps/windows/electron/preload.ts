@@ -129,6 +129,12 @@ const pont: Pont = {
 			ipcRenderer.on(CANAUX.processusTerminalPose, ecouteur);
 			return () => { ipcRenderer.off(CANAUX.processusTerminalPose, ecouteur); };
 		},
+		surCachesCli(rappel) {
+			// Seul un nom connu est relayé : la charge vient du principal, mais le rendu ne relaie rien d'autre.
+			const ecouteur = (_e: unknown, tool: unknown): void => { if (tool === "claude" || tool === "codex") rappel(tool); };
+			ipcRenderer.on(CANAUX.processusCachesCli, ecouteur);
+			return () => { ipcRenderer.off(CANAUX.processusCachesCli, ecouteur); };
+		},
 		comptesEtat: outils => ipcRenderer.invoke(CANAUX.comptesEtat, outils),
 		comptesUsage: tool => ipcRenderer.invoke(CANAUX.comptesUsage, tool),
 		comptesDeconnecter: tool => ipcRenderer.invoke(CANAUX.comptesDeconnecter, tool),

@@ -498,8 +498,9 @@ async function montrerFenetre(): Promise<void> {
 	courante.show();
 	courante.focus();
 	/* Seul le conteneur portable pose cette variable : lancé autrement, aucun
-	   aperçu n'attend le signal. */
-	if (!process.env.PORTABLE_EXECUTABLE_FILE) return;
+	   aperçu n'attend le signal. (`_DIR` et non `_FILE` : `check:installer`
+	   garde que le principal ne relance jamais le conteneur.) */
+	if (!process.env.PORTABLE_EXECUTABLE_DIR) return;
 	try { await courante.webContents.executeJavaScript(DEUX_IMAGES); } catch { /* signaler quand même */ }
 	try {
 		await writeFile(join(dirname(process.execPath), SIGNAL_ECRAN_INITIAL), "");

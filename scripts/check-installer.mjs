@@ -466,66 +466,62 @@ await withSrcModule("apps/windows/installer/noyau.ts", ({ resoudrePaquet, paquet
 		],
 		[false, true, true, true, true, true, true, true, true]);
 
-	/* LE BOOTSTRAPPER EST COMPRESSÉ depuis le 2026-09-17 (`82c0c42`), et ce cas
-	   disait encore le contraire — la CI en rougissait sans que personne ne le
-	   lise. `compression: "store"` évitait l'auto-extraction du portable, au
-	   prix d'un exe de 371 Mo pour un programme qui ne fait que TÉLÉCHARGER
-	   l'installeur de 132 Mo. Mesuré sur le runner : `normal` donne 97 Mo, et
-	   ce qui se paie une fois en extraction s'économise à chaque installation
-	   et à chaque envoi de release.
-	   Ce qui reste vrai, et que ce cas garde : la SECONDE extraction, elle, est
-	   toujours évitée — le principal lit `process.execPath` et ne repasse pas
-	   par `PORTABLE_EXECUTABLE_FILE`. */
-	r.check("démarrage : le bootstrapper est compressé et évite la seconde extraction",
+	/* LE BOOTSTRAPPER N'EST PLUS COMPRESSÉ depuis le 2026-09-22 (`fd8b23a`),
+	   retour sur la décision du 2026-09-17 (`82c0c42`, `normal`, 97 Mo).
+	   MESURÉ en local, double-clic → fenêtre Electron : 3,7 s en `normal`,
+	   0,9 s en `store` ; l'exe passe à ~314 Mo, accepté pour que la fenêtre
+	   soit là dès le clic.
+	   Ce qui reste vrai, et que ce cas garde : la SECONDE extraction est
+	   toujours évitée — le principal relance `process.execPath` et ne repasse
+	   jamais par `PORTABLE_EXECUTABLE_FILE` (il ne lit que
+	   `PORTABLE_EXECUTABLE_DIR`, pour savoir qu'un aperçu attend son signal). */
+	r.check("démarrage : le bootstrapper n'est pas compressé et évite la seconde extraction",
 		[
-			configBootstrapper.includes('compression: "normal"'),
 			configBootstrapper.includes('compression: "store"'),
+			configBootstrapper.includes('compression: "normal"'),
 			principalInstallateur.includes('const executable = process.execPath;'),
 			// Le code, pas le commentaire qui explique pourquoi on ne le relit plus.
 			principalInstallateur.includes("process.env.PORTABLE_EXECUTABLE_FILE"),
 		],
 		[true, false, true, false]);
 
-	/* LE CONTENEUR PORTABLE NE DÉMARRE PLUS EN SILENCE.
+	/* LE CONTENEUR PORTABLE NE DÉMARRE PLUS EN SILENCE, NI SUR UNE PAGE CLAIRE.
 
-	   `portable.nsi` d'electron-builder pose `SetSilent silent` : le stub NSIS
-	   décompresse ~300 Mo d'Electron dans le temporaire SANS RIEN À L'ÉCRAN, et
-	   rien de ce que fait ensuite le principal (fenêtre `show` au `dom-ready`)
-	   ne peut apparaître avant, puisque Electron n'est pas encore sur le disque.
-	   MESURÉ sur un NVMe : 5,05 s avant le premier pixel, dont 4,8 s de silence
-	   complet — sur un disque presque plein, avec l'antivirus qui lit chaque
-	   fichier extrait, l'utilisateur relance l'exe en croyant qu'il ne fait rien
-	   (signalé le 2026-09-20 sur un poste à 30 Go libres).
+	   `portable.nsi` d'electron-builder pose `SetSilent silent` : rien à
+	   l'écran tant qu'Electron n'est pas extrait puis démarré. De `e46e0b7` à
+	   `fd8b23a`, une page de progression NSIS claire comblait ce vide ; depuis
+	   `fd8b23a` (2026-09-22), le conteneur peint `installer/ecran-initial.bmp`
+	   — le premier écran de l'installeur, rendu par Electron — dans une
+	   fenêtre sans bordure à la place exacte de la fenêtre Electron (mesuré :
+	   ~60 ms, même rectangle 720×640), et ne la retire qu'au SIGNAL écrit par
+	   le principal une fois sa propre fenêtre peinte par-dessus.
 
-	   Le correctif vit dans un patch du dépôt, pas dans une option : le gabarit
-	   du portable n'accepte NI script personnalisé (`nsis.script` ne sert qu'à
-	   l'installeur) NI include. La seule option native, `portable.splashImage`,
-	   peint un fond PLEIN ÉCRAN — pire que le silence.
-
-	   Trois propriétés, chacune un défaut distinct :
-	   - une page de progression native S'AFFICHE (mesuré à 282 ms) ;
+	   Le correctif vit dans un patch du dépôt : l'option native
+	   `portable.splashImage` peindrait un fond PLEIN ÉCRAN (BgImage), détruit
+	   dès le lancement d'Electron — pire que le silence. Ce qui est gardé :
+	   - l'image est déclarée, et le gabarit patché la peint dans une fenêtre
+	     STATIC (et non BgImage) ;
+	   - elle n'est retirée qu'au signal `neo-quiz-splash-done`, écrit par le
+	     principal sous le même nom ;
 	   - l'archive est extraite DIRECTEMENT dans le dossier temporaire, au lieu
-	     d'être extraite puis RECOPIÉE (la copie du gabarit existe pour remplacer
-	     une application installée dont les fichiers peuvent être ouverts ; ici la
-	     cible est un dossier neuf, et la copie ne faisait que doubler les octets
-	     écrits — 312 Mo de plus, sur le disque qui en manque) ;
-	   - la page est CACHÉE avant `ExecWait`, pour que la fenêtre de l'installeur
-	     la remplace au lieu de s'ajouter à elle.
+	     d'être extraite puis RECOPIÉE (312 Mo d'écriture en moins).
 
 	   Le nom du fichier porte la version d'`app-builder-lib` : un `npm update`
 	   qui la change fait tomber `correctifPortable` à vide et rougir ce cas —
 	   c'est le seul rappel qu'un gabarit neuf doit être re-patché. */
-	r.check("démarrage : le conteneur portable montre une progression au lieu de se taire",
+	r.check("démarrage : le conteneur portable montre le premier écran au lieu de se taire",
 		[
 			manifesteApp.scripts?.postinstall === "patch-package",
 			manifesteApp.devDependencies?.["patch-package"] !== undefined,
-			correctifPortable.includes("-    SetSilent silent"),
-			correctifPortable.includes("+Page instfiles"),
+			configBootstrapper.includes('splashImage: "installer/ecran-initial.bmp"'),
+			correctifPortable.includes("-    BgImage::SetBg $PLUGINSDIR\\splash.bmp"),
+			correctifPortable.includes('t "STATIC"'),
+			correctifPortable.includes('+!define NEO_QUIZ_SPLASH_DONE "neo-quiz-splash-done"'),
+			principalInstallateur.includes('const SIGNAL_ECRAN_INITIAL = "neo-quiz-splash-done";'),
 			correctifPortable.includes("-      !insertmacro extractEmbeddedAppPackage"),
 			correctifPortable.includes("+      !insertmacro extractEmbeddedAppPackageDirectly"),
-			correctifPortable.includes("+  HideWindow"),
 		],
-		[true, true, true, true, true, true, true]);
+		[true, true, true, true, true, true, true, true, true]);
 
 	/* CE QUE LE CONTENEUR N'EMBARQUE PAS — et ce qu'il garde.
 

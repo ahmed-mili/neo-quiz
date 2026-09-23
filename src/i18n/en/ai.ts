@@ -352,4 +352,25 @@ export const EN_AI = {
 	"ai.video.modal.erreur.empreinte": "The downloaded file did not match its official checksum (SHA-256). It was discarded — nothing was left on your disk. Try again.",
 	"ai.video.modal.erreur.inconnue": "The installation failed. Try again.",
 
+	/* ── La tuile vidéo du composer (spec « Vidéos YouTube » § 5) ── Un lien
+	   YouTube écrit dans la demande devient une carte ; la transcription
+	   prête part comme une pièce jointe. Le badge porte le CODE brut de la
+	   piste (« fr », « pt-BR ») et son TYPE traduit ci-dessous. */
+	"ai.video.reading": "Reading the video…",
+	"ai.video.installer": "Reading videos requires yt-dlp",
+	"ai.video.installButton": "Install",
+	"ai.video.retry": "Try again",
+	"ai.video.remove": "Remove video",
+	"ai.video.badge.auto": "auto subtitles",
+	"ai.video.badge.manuel": "subtitles",
+	"ai.video.erreur.absent": "yt-dlp is no longer available. Install it again from the video tile.",
+	"ai.video.erreur.reseau": "The video could not be reached. Check your connection, then try again.",
+	"ai.video.erreur.pasDeSousTitres": "This video has no transcript in its original language, so it cannot be attached.",
+	"ai.video.erreur.videoIndisponible": "This video is unavailable (private, removed, or age-restricted).",
+	"ai.video.erreur.delai": "Reading this video took too long. Try again.",
+	"ai.video.erreur.inconnue": "Reading this video failed. Try again.",
+	"ai.video.otherLinks": "This link will not be read by the model: only YouTube videos are.",
+	"ai.video.notJoinedOne": "1 video could not be read and was not attached.",
+	"ai.video.notJoinedOther": "{count} videos could not be read and were not attached.",
+
 } as const;

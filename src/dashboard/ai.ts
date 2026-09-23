@@ -45,6 +45,8 @@ import { currentLang, t } from "../i18n";
 import type { TransKey } from "../i18n";
 import { openInstallModal } from "./ai-install-modal";
 import type { InstallProvider } from "./ai-install-modal";
+import { creerTuilesVideo, type TuilesVideo } from "./video-tile";
+import { liensNonLus } from "../video/youtube";
 
 /* ══════════════════════════════════════════════════════════
    AI VIEW — Dashboard
@@ -75,13 +77,15 @@ const SONDE_CONNEXION_MS = 3000;
 
 /** Origine d'une pièce jointe texte : note/fichier du VAULT (chemin relatif
     connu), fichier hors vault résolu via le picker « @ » (chemin absolu
-    connu), ou fichier choisi/déposé SANS origine connue (menu « + »,
-    glisser-déposer — on ne sait dire que son nom). Sert de dédoublonnage
+    connu), fichier choisi/déposé SANS origine connue (menu « + »,
+    glisser-déposer — on ne sait dire que son nom), ou TRANSCRIPTION D'UNE
+    VIDÉO YOUTUBE (la tuile du composer — `path` y est un identifiant
+    `youtube:<id>`, jamais un fichier). Sert de dédoublonnage
     (cf. attachmentKey) : deux fichiers de même NOM mais d'origine ou de
     chemin différents (« AGENTS.md » du vault vs déposé, deux
     « Styling Coiffure.pdf » de deux dossiers) restent deux pièces jointes
     distinctes. */
-type AttachmentSource = "vault" | "external" | "file";
+export type AttachmentSource = "vault" | "external" | "file" | "video";
 
 /** Clé d'identité d'une pièce jointe : origine + chemin quand il existe, nom
     sinon. Calculée en UN SEUL endroit et réutilisée à tous les points
@@ -92,8 +96,9 @@ function attachmentKey(a: { source: AttachmentSource; path?: string; name: strin
 	return a.source + ":" + (a.path || a.name);
 }
 
-/** Source texte attachée (note du vault ou fichier .md/.txt/PDF). */
-interface NoteAttachment {
+/** Source texte attachée (note du vault, fichier .md/.txt/PDF, ou
+    transcription d'une vidéo YouTube — la tuile, cf. video-tile.ts). */
+export interface NoteAttachment {
 	name: string;
 	content: string;
 	/** Vault → chemin relatif au vault. Externe → chemin ABSOLU (résolu par
@@ -308,6 +313,19 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		aJoindre = [...p.attach];
 	}
 	let images: ComposerImage[] = [];
+	/* ── Les vidéos YouTube (spec « Vidéos YouTube » § 3.4 et § 5) ──
+	   Une tuile par lien YouTube du composer ; le module tient son état à
+	   travers les rendus (il ne naît qu'une fois par page), est INERTE sans
+	   `host.video` (le greffon), et son `rerendre` ne redessine que SES
+	   zones : une tuile qui arrive ou se règle ne doit ni détruire le champ
+	   (le caret y vit) ni fermer un menu ouvert. */
+	let zoneVideo: HTMLElement | null = null;
+	let zoneNoticeVideo: HTMLElement | null = null;
+	const retuiler = (): void => {
+		if (zoneVideo?.isConnected) tuilesVideo?.rendre(zoneVideo);
+		if (zoneNoticeVideo?.isConnected) tuilesVideo?.rendreNotice(zoneNoticeVideo);
+	};
+	const tuilesVideo: TuilesVideo = creerTuilesVideo({ host, rerendre: retuiler, ouvrirApercu });
 	// Ref du dernier render : cible du raccourci Ctrl+E (openAddFiles).
 	let fileInputRef: HTMLInputElement | null = null;
 	// Écouteur du raccourci « Ajouter des fichiers », posé sur le conteneur
@@ -1356,6 +1374,14 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			}
 		}
 
+		/* LES TUILES VIDÉO (spec « Vidéos YouTube » § 3.4) : leur rangée est
+		   TOUJOURS là, dans la même bande que les chips, pour qu'une tuile
+		   née du débounce (le lien vient d'être collé) puisse se dessiner
+		   sans repasser par un rendu complet. Inerte sans `host.video`, la
+		   rangée reste vide — et sans trace (CSS :empty). */
+		zoneVideo = ajouter(textZone, "div", "qbd-ai-video-row");
+		tuilesVideo.rendre(zoneVideo);
+
 		const composerInput = ajouter(textZone, "textarea", "qbd-ai-composer-input");
 		let mentions: MentionPickerHandle | null = null;
 		// UN SEUL placeholder, quoi qu'il y ait de joint (demande Ahmed,
@@ -1366,6 +1392,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// seulement le texte qui ne bouge plus.
 		composerInput.placeholder = t("ai.composer.placeholder");
 		composerInput.value = composerText;
+		/* Les tuiles suivent le texte VIVANT à chaque rendu (retour d'une
+		   demande annulée, préréglage, collage par le picker « @ ») : le
+		   débounce relit le même texte et ne fait rien quand il n'a pas
+		   changé. */
+		tuilesVideo.suivreTexte(composerText);
 		composerInput.rows = 2;
 		const autoGrow = () => {
 			composerInput.style.height = "auto";
@@ -1441,6 +1472,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			composerCaret = ta.selectionStart;
 			autoGrow();
 			updateGenerateBtn(generateBtnRef);
+			tuilesVideo.suivreTexte(composerText);
 		});
 		// Un simple déplacement du caret (clic souris, flèches) ne déclenche
 		// PAS d'événement "input" (la valeur ne change pas) : sans ce filet,
@@ -1492,6 +1524,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				composerCaret = composerInput.selectionStart;
 				autoGrow();
 				updateGenerateBtn(generateBtnRef);
+				// Un remplacement programmatique ne déclenche PAS d'« input » :
+				// les tuiles vidéo ne liraient jamais le texte écrit ici.
+				tuilesVideo.suivreTexte(composerText);
 			},
 			// Lu au rendu (le réglage peut changer sans rouvrir la vue).
 			getExtraRoots: () => settings().aiMentionExtraFolders || [],
@@ -1676,6 +1711,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		};
 		container.addEventListener("keydown", surTouche);
 		raccourciComposer = { retirer: () => container.removeEventListener("keydown", surTouche) };
+
+		// La notice des autres liens (spec « Vidéos YouTube » § 5.4) : SOUS
+		// le composer, une ligne discrète qui dit qu'un lien http(s) non
+		// YouTube ne sera pas lu — sans jamais bloquer l'envoi. Vide (CSS
+		// :empty) tant qu'aucun tel lien n'est écrit.
+		zoneNoticeVideo = ajouter(formCol, "div", "qbd-ai-video-notice");
+		tuilesVideo.rendreNotice(zoneNoticeVideo);
 
 		// Hint contextuel du fournisseur (CLI absent, serveur offline…) :
 		// sous le composer depuis la suppression de la carte « Modèle IA ».
@@ -2527,9 +2569,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 	    le dit, et un champ vide derrière elle laissait croire la demande
 	    effacée (Ahmed, 2026-09-19). Les tableaux sont COPIÉS : la génération
 	    lit cette copie, jamais l'état du composer. */
-	function takeComposerMessage(): SentMessage {
+	function takeComposerMessage(jointesVideo: NoteAttachment[] = []): SentMessage {
 		dropSentMessage();
-		const msg: SentMessage = { text: composerText, notes: [...noteAttachments], images: [...images] };
+		/* Les documents des vidéos YouTube prêtes (la tuile, `prets`) partent
+		   comme des notes jointes : mêmes canaux, même bulle — cf. § 5.2. */
+		const msg: SentMessage = { text: composerText, notes: [...noteAttachments, ...jointesVideo], images: [...images] };
 		sentMessage = msg;
 		return msg;
 	}
@@ -2547,7 +2591,10 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (!sentMessage) return;
 		if (!composerIsEmpty()) { dropSentMessage(); return; }
 		composerText = sentMessage.text;
-		noteAttachments = sentMessage.notes;
+		/* Les pièces des vidéos ne deviennent PAS des chips : elles vivent
+		   dans leur tuile (toujours là, le texte les recontient) et seraient
+		   DOUBLÉES au prochain envoi — une note jointe ET une tuile prête. */
+		noteAttachments = sentMessage.notes.filter(n => n.source !== "video");
 		images = sentMessage.images;
 		sentMessage = null;
 	}
@@ -3320,6 +3367,9 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		generatedTitre = undefined;
 		generatedDraft = null;
 		dropSentMessage();
+		/* Les tuiles vidéo suivent le composer : le texte est vidé, leurs
+		   transcriptions en vol sont abandonnées (l'arbre yt-dlp est tué). */
+		tuilesVideo.vider();
 		composerText = "";
 		noteAttachments = [];
 		// Les vignettes préparées dans le composer pendant la génération
@@ -3432,12 +3482,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		if (unresolved.length) {
 			host.ui.notice(t("ai.notice.pathsUnresolved", { files: unresolved.join(", ") }));
 		}
-		/* UNE ADRESSE WEB N'EST PAS LUE : le CLI part sans aucun outil et un
-		   site reçoit le texte tel quel — le modèle ne peut pas ouvrir la page,
-		   et un lien YouTube collé donnait un quiz inventé sans un mot
-		   (2026-09-20). Dit une fois par envoi ; le lien part quand même, en
-		   texte, jusqu'au chantier qui en extraira le contenu. */
-		if (/https?:\/\/\S+/i.test(text)) {
+		/* UNE ADRESSE WEB N'EST PAS LUE, SAUF UNE VIDÉO YOUTUBE — que la tuile
+		   joint désormais à la demande (2026-09-22). La notice ne parle donc
+		   plus que des AUTRES liens : `liensNonLus` fait la MÊME distinction
+		   que la ligne discrète sous le composer (spec « Vidéos YouTube »
+		   § 5.4), en un seul endroit du noyau. */
+		if (liensNonLus(text).length > 0) {
 			host.ui.notice(t("ai.notice.linksNotRead"));
 		}
 	}
@@ -3495,7 +3545,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		}
 		for (const note of msg.notes) {
 			let cible: HostFile | string | null = null;
-			if (note.path) cible = note.source === "vault" ? host.fs.getFile(note.path) : note.path;
+			/* La pièce d'une VIDÉO a un IDENTIFIANT (`youtube:<id>`), pas un
+			   fichier : elle part comme les pièces sans chemin, écrite par
+			   l'hôte (contenu markdown) pour être glissée sur le site. */
+			if (note.path && note.source !== "video") {
+				cible = note.source === "vault" ? host.fs.getFile(note.path) : note.path;
+			}
 			if (!cible) cible = await depot.ecrire(note.name, note.bytes ?? new TextEncoder().encode(note.content));
 			if (!cible) return null;
 			tuiles.push({ name: note.name, thumb: note.thumb, cible });
@@ -3512,6 +3567,12 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		   contraire de « le message est parti ». */
 		if (demarrage || phase === "loading") return;
 		demarrage = true;
+		/* Les documents des vidéos YouTube prêtes partent avec la demande
+		   (spec « Vidéos YouTube » § 5.2). L'attente vit DANS le verrou :
+		   une transcription peut durer le temps qu'elle dure, et un second
+		   Entrée pendant ce temps ne repart pas. Les tuiles en `erreur` ou
+		   en `installer` ne sont pas jointes — une notice le dit. */
+		let jointesVideo: NoteAttachment[] = [];
 		try {
 			/* Les chemins écrits dans le prompt deviennent des pièces jointes
 			   AVANT la capture : elles doivent partir avec la demande, et
@@ -3519,6 +3580,11 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 			   voit désormais ce qui est parti, le composer étant vidé juste
 			   après. */
 			await attachPromptPaths();
+			const attente = await tuilesVideo.prets();
+			if (attente.ecartees > 0) {
+				host.ui.notice(t(attente.ecartees === 1 ? "ai.video.notJoinedOne" : "ai.video.notJoinedOther", { count: attente.ecartees }));
+			}
+			jointesVideo = attente.jointes;
 		} finally {
 			/* Rendu dès que la phase prend le relais : le verrou ne couvre que
 			   la fenêtre entre le clic et `phase = "loading"`. */
@@ -3529,7 +3595,7 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		// « loading » : la demande passe en bulle et le champ redevient neuf.
 		// Tout ce qui suit lit `msg`, jamais l'état du composer — qui n'est
 		// plus la demande en vol dès cette ligne.
-		const msg = takeComposerMessage();
+		const msg = takeComposerMessage(jointesVideo);
 		/* Une génération qui part reprend la main sur l'attente de connexion.
 		   Sans ça, l'utilisateur qui se lasse et renvoie une demande pendant que
 		   la sonde tourne voyait, à la détection, son composer RÉÉCRIT par la
@@ -3954,8 +4020,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 		resultPage = null;
 		generatedDraft = null;
 		dropSentMessage();
+		/* Une transcription en vol survit au DOM mais pas à la vue : l'arbre
+		   de yt-dlp est tué avec elle. */
+		tuilesVideo.vider();
 		for (const img of images) URL.revokeObjectURL(img.url);
 		images = [];
+		zoneVideo = null;
+		zoneNoticeVideo = null;
 		containerRef = null;
 	}
 

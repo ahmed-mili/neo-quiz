@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Added
+- A YouTube link pasted into the prompt now becomes a video tile in the composer: the video's transcript and description are read in their original language and attached to your request like a document, for command-line and web channels alike. Reading videos requires yt-dlp, which the app offers to install from its official release the first time. A link from another site still tells you, under the prompt, that it will not be read.
+
 ## [1.16.0] - 2026-09-22
 
 ### Changed

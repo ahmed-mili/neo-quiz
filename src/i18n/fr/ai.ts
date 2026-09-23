@@ -306,4 +306,22 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.video.modal.erreur.empreinte": "Le fichier téléchargé ne correspond pas à son empreinte officielle (SHA-256). Il a été jeté — rien n'a été laissé sur votre disque. Réessayez.",
 	"ai.video.modal.erreur.inconnue": "L'installation a échoué. Réessayez.",
 
+	/* ── La tuile vidéo du composer (spec « Vidéos YouTube » § 5) ── */
+	"ai.video.reading": "Lecture de la vidéo…",
+	"ai.video.installer": "La lecture des vidéos demande yt-dlp",
+	"ai.video.installButton": "Installer",
+	"ai.video.retry": "Réessayer",
+	"ai.video.remove": "Retirer la vidéo",
+	"ai.video.badge.auto": "sous-titres auto",
+	"ai.video.badge.manuel": "sous-titres",
+	"ai.video.erreur.absent": "yt-dlp n'est plus disponible. Réinstallez-le depuis la tuile vidéo.",
+	"ai.video.erreur.reseau": "La vidéo n'a pas pu être jointe : le réseau est injoignable. Vérifiez votre connexion, puis réessayez.",
+	"ai.video.erreur.pasDeSousTitres": "Cette vidéo n'a pas de transcription dans sa langue d'origine : elle ne peut pas être jointe.",
+	"ai.video.erreur.videoIndisponible": "Cette vidéo n'est pas disponible (privée, supprimée ou soumise à une restriction d'âge).",
+	"ai.video.erreur.delai": "La lecture de cette vidéo a pris trop de temps. Réessayez.",
+	"ai.video.erreur.inconnue": "La lecture de cette vidéo a échoué. Réessayez.",
+	"ai.video.otherLinks": "Ce lien ne sera pas lu par le modèle : seules les vidéos YouTube le sont.",
+	"ai.video.notJoinedOne": "1 vidéo n'a pas pu être lue et n'est pas jointe.",
+	"ai.video.notJoinedOther": "{count} vidéos n'ont pas pu être lues et ne sont pas jointes.",
+
 };

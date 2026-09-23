@@ -1170,7 +1170,8 @@
 	line-height: 1.5;
 }
 
-.qbd-ai-note-chip-remove {
+.qbd-ai-note-chip-remove,
+.qbd-ai-video-tile-remove {
 	position: absolute;
 	top: 6px;
 	right: 6px;
@@ -1191,15 +1192,19 @@
 }
 
 .qbd-ai-note-chip:hover .qbd-ai-note-chip-remove,
-.qbd-ai-note-chip-remove:focus-visible {
+.qbd-ai-note-chip-remove:focus-visible,
+.qbd-ai-video-tile:hover .qbd-ai-video-tile-remove,
+.qbd-ai-video-tile-remove:focus-visible {
 	opacity: 1;
 }
 
-.qbd-ai-note-chip-remove:hover {
+.qbd-ai-note-chip-remove:hover,
+.qbd-ai-video-tile-remove:hover {
 	color: var(--color-red, #f87171);
 }
 
-.qbd-ai-note-chip-remove svg {
+.qbd-ai-note-chip-remove svg,
+.qbd-ai-video-tile-remove svg {
 	width: 12px;
 	height: 12px;
 }
@@ -1886,6 +1891,221 @@
 	color: var(--text-normal);
 	border-color: var(--background-modifier-border-hover);
 }
+
+/* ══════════════════════════════════════════════════════════
+   LA TUILE VIDÉO (vidéos YouTube, spec § 5) — un lien YouTube du
+   composer devient une carte dans la bande des pièces jointes,
+   de la même famille que les chips : même fond, même bord, la croix
+   de retrait PARTAGÉE avec elles (les règles communes vivent sur
+   les sélecteurs des chips, plus haut).
+═══════════════════════════════════════════════════════════ */
+/* La rangée des tuiles : TOUJOURS présente (le module est inerte sans
+   `host.video` et la laisse vide), pour qu'une tuile née du débounce —
+   le lien vient d'être collé — se dessine sans repasser par un rendu
+   complet du composer. Vide, elle ne laisse aucune trace. */
+.qbd-ai-video-row {
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: stretch;
+	gap: 10px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	margin-bottom: 8px;
+	padding-bottom: 8px;
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in srgb, var(--text-normal) 22%, transparent) transparent;
+}
+
+.qbd-ai-video-row:empty { display: none; }
+
+.qbd-ai-video-row::-webkit-scrollbar { height: 6px; }
+.qbd-ai-video-row::-webkit-scrollbar-thumb {
+	background: color-mix(in srgb, var(--text-normal) 22%, transparent);
+	border-radius: 999px;
+}
+.qbd-ai-video-row::-webkit-scrollbar-track { background: transparent; }
+
+/* La carte : la miniature en bandeau haut, la légende dessous ; la croix
+   en haut à droite au survol. Hauteur FIXE, comme une chip. */
+.qbd-ai-video-tile {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	flex: 0 0 auto;
+	width: 192px;
+	height: 104px;
+	box-sizing: border-box;
+	background: color-mix(in srgb, var(--background-primary) 70%, transparent);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 12px;
+	overflow: hidden;
+	font-size: 12.5px;
+	color: var(--text-normal);
+	cursor: default;
+	transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.qbd-ai-video-tile[data-etat="prete"] { cursor: pointer; }
+
+.qbd-ai-video-tile[data-etat="prete"]:hover {
+	border-color: color-mix(in srgb, var(--interactive-accent) 35%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--text-normal) 5%, var(--background-primary));
+}
+
+/* La bande de miniature : 16:9 approximatif d'une vignette YouTube, la
+   même trame sombre que le fond d'une page de PDF posée en chip. */
+.qbd-ai-video-tile-thumb {
+	position: relative;
+	flex-shrink: 0;
+	height: 60px;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--background-primary) 88%, #000);
+}
+
+.qbd-ai-video-tile-thumb-img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	pointer-events: none;
+}
+
+/* LECTURE : la miniature est GRISE, le spinner seul au centre (spec § 5.1). */
+.qbd-ai-video-tile-thumb.is-vide {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: color-mix(in srgb, var(--background-modifier-hover) 70%, var(--background-primary));
+}
+
+/* La bande d'information d'une carte prête : le nom coupé au milieu, la
+   ligne de méta (durée · badge de langue) dessous. */
+.qbd-ai-video-tile-info {
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 3px;
+	padding: 6px 10px 8px;
+}
+
+.qbd-ai-video-tile-nom {
+	display: flex;
+	min-width: 0;
+	padding-right: 10px;
+	font-weight: 500;
+	line-height: 1.35;
+}
+
+/* COUPE AU MILIEU (poserCarte, ai.ts) : la tête se tronque avec ses points
+   de suspension, la queue — trois caractères et l'extension — ne se tronque
+   jamais : le type du fichier reste visible. */
+.qbd-ai-video-tile-nom-tete {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.qbd-ai-video-tile-nom-queue {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+.qbd-ai-video-tile-meta {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	color: var(--text-muted);
+	font-size: 11px;
+}
+
+/* La bande pleine des autres états : la légende de lecture, le message
+   d'installation, le message d'erreur. */
+.qbd-ai-video-tile-msg {
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	gap: 8px;
+	padding: 8px 12px;
+	color: var(--text-muted);
+	line-height: 1.4;
+}
+
+.qbd-ai-video-tile[data-etat="erreur"] .qbd-ai-video-tile-msg { color: var(--text-error); }
+
+.qbd-ai-video-tile-texte {
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	text-align: left;
+}
+
+/* La pilule « Installer » : primaire, petite (une carte de 104 px n'accueille
+   pas le bouton de 36 px de la modale). */
+.qbd-ai-video-tile-pilule {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+	padding: 0 12px;
+	border: none;
+	border-radius: 999px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.qbd-ai-video-tile-pilule:hover { opacity: 0.9; }
+.qbd-ai-video-tile-pilule svg { width: 13px; height: 13px; }
+
+/* « Réessayer » : secondaire — l'échec n'est pas une action proposée, c'est
+   un recours expliqué par le message au-dessus. */
+.qbd-ai-video-tile-reessayer {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 24px;
+	padding: 0 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--text-normal);
+	font-size: 12px;
+	cursor: pointer;
+	transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.qbd-ai-video-tile-reessayer:hover {
+	border-color: var(--interactive-accent);
+	color: var(--interactive-accent);
+}
+
+/* La notice des autres liens (spec § 5.4) : une ligne discrète sous le
+   composer, jamais bloquante. Vide → aucune trace. */
+.qbd-ai-video-notice {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 8px 2px 0;
+	color: var(--text-muted);
+	font-size: 12.5px;
+}
+
+.qbd-ai-video-notice:empty { display: none; }
+
+.qbd-ai-video-notice-ligne { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.qbd-ai-video-notice-icone { display: inline-flex; flex-shrink: 0; color: var(--text-faint); }
+.qbd-ai-video-notice-icone svg { width: 14px; height: 14px; }
 
 /* La scène. 30 et 5, et NON les 32 et 8 que déclarent les classes de la
    référence : son image est en ligne et déborde de son conteneur de deux

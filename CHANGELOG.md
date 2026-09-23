@@ -13,6 +13,9 @@ release notes.
 
 ## [Unreleased]
 
+### Fixed
+- In the preview of a video tile, the YouTube link is now clickable and opens in your browser.
+
 ## [1.17.0] - 2026-09-23
 
 ### Added

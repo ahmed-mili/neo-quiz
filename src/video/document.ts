@@ -47,7 +47,8 @@ function formaterDuree(secondes: number): string {
 /**
  * Le document : titre, chaîne, durée, langue et type de piste, le lien
  * court `youtu.be` (que tout lecteur ouvre, contrairement aux paramètres
- * de `watch`), puis les deux sections. La transcription est reprise telle
+ * de `watch`) écrit en LIEN markdown, pour que l'aperçu le rende
+ * cliquable (il s'ouvre alors dans le navigateur), puis les deux sections. La transcription est reprise telle
  * quelle : le texte propre est déjà le travail de json3VersTexte.
  */
 export function documentVideo(a: {
@@ -63,7 +64,7 @@ export function documentVideo(a: {
 	if (chaine) lignes.push(`${libelles.chaine} : ${chaine}`);
 	if (typeof infos.duration === "number") lignes.push(`${libelles.duree} : ${formaterDuree(infos.duration)}`);
 	lignes.push(infos.language ? `${libelles.langue} : ${infos.language} (${type})` : `${libelles.langue} : ${type}`);
-	lignes.push("", `https://youtu.be/${infos.id}`, "", `## ${libelles.description}`, "", (infos.description ?? "").trim());
+	lignes.push("", `[https://youtu.be/${infos.id}](https://youtu.be/${infos.id})`, "", `## ${libelles.description}`, "", (infos.description ?? "").trim());
 	lignes.push("", `## ${libelles.transcription}`, "", texte);
 	return lignes.join("\n");
 }

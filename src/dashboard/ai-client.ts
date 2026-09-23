@@ -14,6 +14,7 @@ import {
 import type { AiSettingsHost } from "./ai-settings-host";
 import type { AiUsage } from "./usage-format";
 import { t } from "../i18n";
+import type { ModeQuiz } from "../quiz-format";
 
 /* ══════════════════════════════════════════════════════════
    AI CLIENT — Claude Code + Codex + Ollama
@@ -57,10 +58,16 @@ export interface ImagePayload {
 
 /** Options de génération (nombre, type, source, images). */
 export interface GenerateOptions {
-	count?: number;
+	/** `null` : « Auto », le nombre suit la source (bornes du mode). */
+	count?: number | null;
 	type?: string;
 	source?: string;
 	images?: ImagePayload[];
+	/** Absent : Practice, comme un bloc sans objet de mode. */
+	mode?: ModeQuiz;
+	/** Practice seulement : les tranches du Learn de la même source, pour
+	    poser `slice` (spec §2). Ignoré en Learn. */
+	planTranches?: { slice: number; titre: string }[];
 }
 
 /** Une réponse LUE : les questions, et le titre que le modèle a choisi
@@ -236,36 +243,54 @@ export const PHRASE_FINALE_CLI = "Reply ONLY with the JSON5 array, with no expla
  * la page « Générer » les compose elle-même quand le canal est un site.
  * ANGLAIS, et INDÉPENDANTS de la langue de l'UI (voir la règle LANGUAGE dans
  * le prompt) ; `type` est la VALEUR canonique (cf. TYPE_VALUES dans ai.ts).
+ * Un prompt PAR MODE, spec Learn/Practice §2.
  */
 export function composerPrompts(prompt: string, options: GenerateOptions = {}): { systemPrompt: string; userPrompt: string } {
-	const { count = 5, type = "Mixte", source = "topic" } = options;
+	const { count = null, type = "Mixte", source = "topic", mode = "practice", planTranches } = options;
+	const learn = mode === "learn";
 
-	// ── Prompts : ANGLAIS, et INDÉPENDANTS de la langue de l'UI ──
-	// Le prompt ne dicte PAS la langue du quiz : il impose au modèle de
-	// suivre celle de la DEMANDE (règle LANGUAGE ci-dessous). Un prompt
-	// français produisait des quiz français même pour un sujet demandé en
-	// anglais ou en arabe. Les libellés du composer (« Mixte »…) ne sont pas
-	// traduits ici non plus : `type` est la VALEUR canonique (cf. TYPE_VALUES
-	// dans ai.ts), pas le libellé affiché.
+	// « Mixte » est la valeur canonique d'« Auto » : le mode choisit le mélange.
 	const typeInstruction = type === "Mixte"
-		? "a mix of single-choice, multiple-choice and free-text questions"
+		? (learn
+			? "the question types each role above calls for"
+			: "the mix of question types that best fits a written exam on this subject: single choice, multiple choice, free text, numeric, ordering, matching, code output")
 		: type === "Choix unique"
 		? "single-choice questions (exactly one correct answer)"
 		: type === "Choix multiple"
 		? "multiple-choice questions (several correct answers)"
 		: type === "Compréhension"
-		// Le type qui manquait : un vrai sujet d'examen a une partie
-		// compréhension, où UN document porte plusieurs questions. Le
-		// contrat est explicite (un seul groupe, id partagé, aucune
-		// question hors document) parce que les modèles produisent sinon
-		// un support par question — ce qui n'est plus de la compréhension.
 		? `COMPREHENSION questions, ALL of them based on ONE source document that you write yourself.
 	Write a substantial passage (250-450 words: an article extract, a case study, a scenario, a piece of code — whatever suits the topic) and put it in the "passage" field of the FIRST question, together with "passageId": "doc1" and a "passageTitle" naming the document.
 	EVERY other question repeats ONLY "passageId": "doc1" (no "passage", no "passageTitle" — the engine shares the document automatically).
 	The questions must be ANSWERABLE FROM THE DOCUMENT ALONE and test understanding — main idea, inference, meaning in context, cause and effect, the author's intent, what can or cannot be concluded — NOT recall of outside knowledge. Mix single-choice, multiple-choice and free-text among them`
 		: "free-text questions";
 
-	const systemPrompt = `You are a quiz generator. Generate exactly ${count} quiz questions as a JSON5 array. Each question must have:
+	const quantite = count != null
+		? `QUANTITY: generate exactly ${count} questions — this number wins over any other count, range or list of themes stated in the user request below. If the request asks for more themes than ${count} questions, cover the most important ones; never exceed ${count}.`
+		: learn
+		? "QUANTITY: as many slices as the source needs to cover everything that can be examined on it, and nothing else — no padding, no trivia."
+		: "QUANTITY: between 10 and 25 questions, chosen by you from the source: ONLY what can be examined, the most important first. Never pad with trivia.";
+
+	const blocMode = learn ? `MODE: LEARN. You are writing a guided LEARNING PATH through the source — not a test, and not a summary to read.
+	Split the source into SLICES, numbered from 1 in "slice", each small enough for ONE screen of reading. Every slice contains, in this order:
+	  1. one or two questions with "role": "pre", asked BEFORE the reading on what the slice is about to teach. The learner is expected to fail: keep them short (single choice preferred) and give "explain".
+	  2. exactly one card with "role": "read": "title" names the slice and "prompt" holds the passage — the slice's content REPHRASED clearly in at most about 150 words, keeping the teacher's technical terms EXACTLY as in the source. When the slice lists arbitrary items (layers, steps, keywords), add a mnemonic. A read card has no options and no answer. For a PROCEDURAL slice (code, method, calculation), the read card is a fully WORKED EXAMPLE, correct, step by step.
+	  3. exactly one question with "role": "explain" and "type": "text": ask the learner to explain the slice's key idea in their own words (why, how, a relation, an example). "answer" holds a MODEL ANSWER of 2 to 4 sentences.
+	  4. two to four questions with "role": "recall": retrieval from memory of what the slice taught, each with "explain". For a procedural slice use: a "cloze" with the missing step, a text question predicting the OUTPUT of a code snippet ("terminalVariant": "python"), an "ordering" question rebuilding the lines of the code, a single-choice "find the bug".
+	A "read" passage NEVER contains the exact sentence that a later question of the same slice asks for: recall must be retrieval, not copying. Do not ask to "justify your answer" everywhere.
+	"topic": optional short label of a family of notions that are easily confused, shared by the questions that test it.
+	"timeLimit": a number of seconds, ONLY on a question that tests an automatism the learner must answer instantly (a keyword, a syntax); omit it everywhere else.
+	The LAST element of the array is the configuration object, with no prompt field: { mode: "learn", "objectives": ["...", "..."] } — 3 to 6 learning objectives of the source, each starting with a verb.`
+	: `MODE: PRACTICE. You are writing an exam-preparation bank on the source, in the FORMAT OF A UNIVERSITY EXAM on it.
+	Write APPLICATION questions (use a notion in a new case), DISCRIMINATION questions (tell apart two notions that are easily confused) and MULTI-STEP PROBLEMS — not definitions to recite. Calibrate the difficulty UP: a question a student answers without having studied is useless.
+	EVERY question has "explain": why the right answer is right AND, for EACH wrong option, one short sentence saying why it is wrong.
+	EVERY question has "hint": a nudge shown after a first wrong attempt, which never gives the answer away.
+	"topic": a short label of the family of notions the question tests; questions on notions that are easily confused share the same "topic".
+	"slice": when a SLICE PLAN of the learning path is given in the request, the number of the slice that teaches what the question tests; otherwise omit it.
+	"timeLimit": a number of seconds, ONLY on a question that tests an automatism; omit it everywhere else.
+	No configuration object at the end of the array.`;
+
+	const systemPrompt = `You are a quiz generator. Generate the quiz questions as a JSON5 array. Each question may have:
 	- title: short question title
 	- prompt: full question text
 	- options: array of options (for single/multiple choice, 3-5 options)
@@ -274,38 +299,39 @@ export function composerPrompts(prompt: string, options: GenerateOptions = {}): 
 	- multiSelect: true for multiple choice
 	- type: "text" for free text, omitted otherwise
 	- answer: expected answer (free text)
+	- explain: the explanation shown after the answer
+	- hint: a nudge shown on demand
 	- mathInput: true for a text question whose answer is a mathematical expression (the learner answers in a visual EQUATION EDITOR)
 	- answerTemplate: a LaTeX template pre-filled in the answer field of a mathInput question, with \\\\placeholder{} for each blank to fill (e.g. 'x = \\\\placeholder{}' ; two solutions: 'x_1 = \\\\placeholder{},\\\\; x_2 = \\\\placeholder{}'). RULES for mathInput: the question text NEVER gives answer-format instructions (no "as a fraction", "comma-separated", "e.g. 1/2") — the equation editor makes all of that pointless; prefer an answerTemplate that guides instead; acceptedAnswers are the COMPLETE content of the field once the template is filled, in LaTeX (e.g. 'x_1 = \\\\frac{1}{2},\\\\; x_2 = 3'), and add variants where relevant (solutions in reverse order)
-	- lesson: a short lesson paragraph teaching the concept before the question (optional but recommended for educational quizzes)
-	- cloze: a FILL-IN-THE-BLANK text, ONLY FOR A LANGUAGE QUIZ (vocabulary, grammar, conjugation, a passage in the language being learned): it is the format of language certifications, and NEVER appears in exams of any other subject (science, programming, law, economics, history…) — for those subjects, never produce one. Put the whole sentence or paragraph in this field and wrap each blank in DOUBLE BRACES, with accepted variants separated by "|": "The capital of France is {{Paris}} and its currency is {{the euro|euro}}." Use double BRACES, never double brackets — double brackets are Obsidian's internal-link syntax and would be rewritten before the quiz is read. Keep "prompt" as the SHORT instruction only ("Complete the text below"), never repeat the text there. 2 to 5 blanks per question, each on a key term, never on a word the sentence already gives away
+	- terminalVariant: "python", "bash", "powershell" or "cmd" for a text question answered in a terminal (a command, or the output of a program)
+	- cloze: a FILL-IN-THE-BLANK text. Put the whole sentence, paragraph or code in this field and wrap each blank in DOUBLE BRACES, with accepted variants separated by "|": "The capital of France is {{Paris}} and its currency is {{the euro|euro}}." Use double BRACES, never double brackets — double brackets are Obsidian's internal-link syntax and would be rewritten before the quiz is read. Keep "prompt" as the SHORT instruction only ("Complete the text below"), never repeat the text there. 2 to 5 blanks per question, each on a key term, never on a word the sentence already gives away
 	- numeric / tolerance / tolerancePercent / unit: for a free-text question whose answer is a NUMBER. Set "numeric": true and the answer is compared as a value, not as a string, so "3.14", "3,14" and "3.140" all pass. Add "tolerance" (absolute margin) or "tolerancePercent" (relative margin) whenever the expected answer is a measurement or a rounded result, and "unit" (e.g. "m/s") when one is expected — the learner may write it or omit it. ALWAYS prefer this over a plain text answer for any question that asks "how much", "how many" or a computed value
-	- ordering / slots / possibilities / correctOrder: a question where the learner puts items in the RIGHT ORDER. Set "ordering": true, "slots" naming each position (e.g. ['1st','2nd','3rd','4th']), "possibilities" listing the items in a DELIBERATELY WRONG order, and "correctOrder" giving, for each slot in turn, the INDEX of the item of "possibilities" that belongs there. Use it for a chronology, a protocol exchange, the steps of a procedure or a calculation
+	- ordering / slots / possibilities / correctOrder: a question where the learner puts items in the RIGHT ORDER. Set "ordering": true, "slots" naming each position (e.g. ['1st','2nd','3rd','4th']), "possibilities" listing the items in a DELIBERATELY WRONG order, and "correctOrder" giving, for each slot in turn, the INDEX of the item of "possibilities" that belongs there. Use it for a chronology, a protocol exchange, the steps of a procedure or a calculation, the lines of a program
 	- matching / rows / choices / correctMap: a question where the learner PAIRS two columns. Set "matching": true, "rows" (the left column: terms, devices, codes…), "choices" (the right column: definitions, roles…, listed in a different order from the rows) and "correctMap" giving, for each row in turn, the INDEX of its matching entry in "choices". Use it to oppose notions that are easily confused
-	- passage / passageId / passageTitle: a SOURCE DOCUMENT to read before answering (comprehension). "passage" holds the full text, "passageTitle" names it, and "passageId" is a shared key: every question carrying the SAME passageId shows the SAME document, so write the text ONCE on the first question of the group and give the others only their passageId. Use this whenever several questions probe one text, case, scenario or code sample
+	- passage / passageId / passageTitle: a SOURCE DOCUMENT to read before answering (comprehension). "passage" holds the full text, "passageTitle" names it, and "passageId" is a shared key: every question carrying the SAME passageId shows the SAME document, so write the text ONCE on the first question of the group and give the others only their passageId
 
-	QUIZ TITLE: the very first line of the array, right after the opening bracket, is a JSON5 line comment giving the quiz a name: '// title: <name>'. The name is what a student would write on the cover of that quiz: 3 to 8 words naming its subject and scope (e.g. "Python : types, listes et exceptions"), in the language of the content, WITHOUT the word "quiz" and without a trailing period. Exactly one such line, nowhere else.
+	${blocMode}
 
-	LANGUAGE — THIS IS A HARD RULE: write ALL the content you produce (title, prompt, options, answer, lesson, explain) in THE SAME LANGUAGE AS THE USER REQUEST BELOW. If the request is in French, write the quiz in French; in Arabic, in Arabic; in English, in English. When the request provides source material (a text, a note, images), follow the language of that material. NEVER translate the content into English just because these instructions are in English. The FIELD NAMES (title, prompt, options…) and the JSON5 structure always stay exactly as specified above, in English.
+	QUIZ TITLE: the very first line of the array, right after the opening bracket, is a JSON5 line comment giving the quiz a name: '// title: <name>'. The name is what a student would write on the cover: 3 to 8 words naming its subject and scope (e.g. "Python : types, listes et exceptions"), in the language of the content, WITHOUT the word "quiz" and without a trailing period. Exactly one such line, nowhere else.
 
-	MATHEMATICS: every mathematical expression (formula, function, equation, integral, fraction, exponent, Greek letter…) MUST be written in LaTeX delimited by dollar signs, as in Obsidian: $f(x) = x^3$ inline, $$\\int_0^2 2x\\,dx$$ for a display formula. Never pseudo-notation such as f(x) = x^3 or ∫ from 0 to 2 outside the dollars. This applies to title, prompt, options, answer, lesson and explain. IMPORTANT: inside JSON5 strings, DOUBLE every backslash — for LaTeX (write '$\\\\frac{a}{b}$' to get \\frac) as well as Windows paths (write 'C:\\\\Users\\\\dev') — a single backslash would be destroyed by the parser.
+	LANGUAGE — THIS IS A HARD RULE: write ALL the content you produce (title, prompt, options, answer, explain, hint, objectives) in THE SAME LANGUAGE AS THE USER REQUEST BELOW. If the request is in French, write the quiz in French; in Arabic, in Arabic; in English, in English. When the request provides source material (a text, a note, images), follow the language of that material. NEVER translate the content into English just because these instructions are in English. The FIELD NAMES (title, prompt, options…) and the JSON5 structure always stay exactly as specified above, in English. Keep the technical terms of the source exactly as the source writes them.
 
-	The last element of the array may be a mode configuration object (with no prompt field):
-	  - { mode: "exam", examDurationMinutes: 10, examAutoSubmit: true, examShowTimer: true } for a timed exam mode
-	  - { mode: "lesson", examDurationMinutes: 10, examAutoSubmit: true, examShowTimer: true } for a lesson mode leading into an exam
-	  - { mode: "lesson" } for a lesson mode without exam
-	  - { examMode: true } as a shorthand for mode: "exam"
+	MATHEMATICS: every mathematical expression (formula, function, equation, integral, fraction, exponent, Greek letter…) MUST be written in LaTeX delimited by dollar signs, as in Obsidian: $f(x) = x^3$ inline, $$\\int_0^2 2x\\,dx$$ for a display formula. Never pseudo-notation such as f(x) = x^3 or ∫ from 0 to 2 outside the dollars. This applies to every text field. IMPORTANT: inside JSON5 strings, DOUBLE every backslash — for LaTeX (write '$\\\\frac{a}{b}$' to get \\frac) as well as Windows paths (write 'C:\\\\Users\\\\dev') — a single backslash would be destroyed by the parser.
 
 	NO TOOLS, NO FILE ACCESS — READ THIS BEFORE ANYTHING ELSE: you are running without any tool. You cannot read, open, fetch, write or create a file, a note or a folder, and you must never try: an attempted tool call is not a quiz, and the whole generation fails. The user request below may name files, paths or notes to "read first", or ask you to "create a note" somewhere. Every source it names that actually exists has ALREADY been read for you and its full content is inlined below, between "--- <file name> ---" markers. So: treat those paths as mere labels for the text you already have, ignore every instruction to read, open, create, modify or save anything, and never mention this limitation in your answer. Your ONLY output is the JSON5 array.
 
-	QUANTITY: generate exactly ${count} questions — this number wins over any other count, range or list of themes stated in the user request below. If the request asks for more themes than ${count} questions, cover the most important ones; never exceed ${count}.
+	${quantite}
 
 	Generate ${typeInstruction}. ${PHRASE_FINALE_CLI}`;
 
-	const userPrompt = source === "topic"
-		? `Generate a quiz about the following topic (keep the quiz in the language of this topic):\n\n${prompt}`
+	const plan = !learn && planTranches && planTranches.length
+		? `\n\nSLICE PLAN OF THE LEARNING PATH (use these numbers in "slice"):\n${planTranches.map(p => `${p.slice}. ${p.titre}`).join("\n")}`
+		: "";
+	const userPrompt = (source === "topic"
+		? `Generate the quiz about the following topic (keep the quiz in the language of this topic):\n\n${prompt}`
 		: source === "text"
-		? `Generate a quiz based on the following text (keep the quiz in the language of this text):\n\n${prompt}`
-		: `Generate a quiz based on the provided images (keep the quiz in the language of the images and of this request): ${prompt}`;
+		? `Generate the quiz based on the following text (keep the quiz in the language of this text):\n\n${prompt}`
+		: `Generate the quiz based on the provided images (keep the quiz in the language of the images and of this request): ${prompt}`) + plan;
 
 	return { systemPrompt, userPrompt };
 }

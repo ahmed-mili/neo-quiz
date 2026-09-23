@@ -1,0 +1,32 @@
+/**
+ * Le prompt de chaque mode décrit TOUT ce que le contrôle à l'arrivée exige.
+ *
+ * Test du 2026-09-23 : le prompt ne listait pas `explain`, et aucune
+ * explication n'était produite — la correction ne disait jamais pourquoi.
+ * Les deux listes vivent dans `src/quiz-format.ts` (CHAMPS_DECRITS,
+ * MOTS_INTERDITS) : le prompt et la vérification lisent la même.
+ *
+ *     npm run check:prompt
+ */
+import { withSrcModule, makeReporter } from "./lib/load-src.mjs";
+
+await withSrcModule(["src/dashboard/ai-client.ts", "src/quiz-format.ts"], ({ composerPrompts }, { CHAMPS_DECRITS, MOTS_INTERDITS }) => {
+	const r = makeReporter("Prompts Learn / Practice");
+	for (const mode of ["learn", "practice"]) {
+		const { systemPrompt } = composerPrompts("Python", { mode, count: null, type: "Mixte" });
+		r.check(`${mode} : chaque champ exigé est décrit`, CHAMPS_DECRITS[mode].filter(c => !systemPrompt.includes(c)), []);
+		r.check(`${mode} : aucun mode ni champ retiré n'est mentionné`, MOTS_INTERDITS.filter(re => re.test(systemPrompt)).map(String), []);
+		r.check(`${mode} : la règle LANGUAGE est gardée`, systemPrompt.includes("THE SAME LANGUAGE AS THE USER REQUEST"), true);
+	}
+	const auto = composerPrompts("x", { mode: "practice", count: null, type: "Compréhension" }).systemPrompt;
+	r.check("Auto + Compréhension : aucun nombre inventé", [/exactly (null|undefined|NaN)/.test(auto), auto.includes("between 10 and 25")], [false, true]);
+	r.check("nombre fixé : exactement N", composerPrompts("x", { mode: "practice", count: 12 }).systemPrompt.includes("exactly 12 questions"), true);
+	r.check("Learn en Auto : le nombre suit les tranches", composerPrompts("x", { mode: "learn", count: null }).systemPrompt.includes("as many slices as the source needs"), true);
+	r.check("mode absent = Practice", composerPrompts("x", {}).systemPrompt.includes("MODE: PRACTICE"), true);
+	const plan = [{ slice: 1, titre: "Types" }, { slice: 2, titre: "Listes" }];
+	r.check("Practice : le plan des tranches part dans la demande",
+		composerPrompts("x", { mode: "practice", planTranches: plan }).userPrompt.includes("1. Types\n2. Listes"), true);
+	r.check("Learn : le plan des tranches est ignoré",
+		composerPrompts("x", { mode: "learn", planTranches: plan }).userPrompt.includes("Listes"), false);
+	r.done();
+});

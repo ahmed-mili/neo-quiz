@@ -22,7 +22,7 @@ await withSrcModule(
 	/* ── composerPrompts : les mêmes chaînes que le CLI ── */
 	{
 		const p = client.composerPrompts("Le droit constitutionnel", { count: 7, type: "Choix unique", source: "text" });
-		r.check("le prompt système porte le nombre demandé", p.systemPrompt.includes("Generate exactly 7 quiz questions"), true);
+		r.check("le prompt système porte le nombre demandé", p.systemPrompt.includes("generate exactly 7 questions"), true);
 		r.check("le prompt système porte le type demandé", p.systemPrompt.includes("single-choice questions (exactly one correct answer)"), true);
 		/* LITTÉRAL, pas `client.PHRASE_FINALE_CLI` : une constante comparée à
 		   elle-même ne rougit jamais. Le jour où la phrase finale du CLI change
@@ -31,14 +31,15 @@ await withSrcModule(
 		r.check("le prompt système se termine par la phrase finale du CLI", p.systemPrompt.trimEnd().endsWith(PHRASE_FINALE_CLI_ATTENDUE), true);
 		r.check("PHRASE_FINALE_CLI vaut la phrase finale du CLI", client.PHRASE_FINALE_CLI, PHRASE_FINALE_CLI_ATTENDUE);
 		r.check("une source « text » ouvre le prompt utilisateur sur le texte fourni",
-			p.userPrompt.startsWith("Generate a quiz based on the following text"), true);
+			p.userPrompt.startsWith("Generate the quiz based on the following text"), true);
 		r.check("la demande est dans le prompt utilisateur", p.userPrompt.includes("Le droit constitutionnel"), true);
 		const d = client.composerPrompts("x", {});
-		r.check("sans options : 5 questions, mixte, sujet", [
-			d.systemPrompt.includes("Generate exactly 5 quiz questions"),
-			d.systemPrompt.includes("a mix of single-choice, multiple-choice and free-text questions"),
-			d.userPrompt.startsWith("Generate a quiz about the following topic"),
-		], [true, true, true]);
+		r.check("sans options : mode Practice par défaut, Auto, mixte, sujet", [
+			d.systemPrompt.includes("MODE: PRACTICE"),
+			d.systemPrompt.includes("between 10 and 25 questions"),
+			d.systemPrompt.includes("the mix of question types that best fits a written exam"),
+			d.userPrompt.startsWith("Generate the quiz about the following topic"),
+		], [true, true, true, true]);
 	}
 
 	/* ── parseReponseQuiz : une réponse copiée, dans tous ses états ── */
@@ -93,7 +94,7 @@ await withSrcModule(
 		r2.check("le texte porte le jeton en commentaire de première ligne du bloc", texte.includes("// neo-quiz k7f2q9abcd"), true);
 		r2.check("il demande un bloc de code json5", texte.includes("```json5"), true);
 		r2.check("la phrase finale du CLI n'y est plus", texte.includes(client.PHRASE_FINALE_CLI), false);
-		r2.check("les deux prompts y sont, dans l'ordre", texte.indexOf("You are a quiz generator") < texte.indexOf("Generate a quiz about the following topic"), true);
+		r2.check("les deux prompts y sont, dans l'ordre", texte.indexOf("You are a quiz generator") < texte.indexOf("Generate the quiz about the following topic"), true);
 		/* La phrase « Your ONLY output is the JSON5 array. » du paragraphe NO
 		   TOOLS contredirait la consigne de forme (un bloc de code) — elle ne
 		   doit plus être dans le texte WEB, jamais dans le texte CLI. */

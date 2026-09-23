@@ -47,6 +47,7 @@ import { ajouter } from "../dom";
 import { t, type TransKey } from "../i18n";
 import { idYoutube, liensNonLus } from "../video/youtube";
 import { ouvrirInstallationVideo } from "./video-install-modal";
+import { couperNomAuMilieu } from "./file-icons";
 import type { NoteAttachment } from "./ai";
 
 /** Les tuiles vidéo du composer : l'interface que `ai.ts` branche, et
@@ -281,15 +282,12 @@ export function creerTuilesVideo(deps: {
 			}
 			const info = ajouter(carte, "div", "qbd-ai-video-tile-info");
 			/* LE TYPE DU FICHIER RESTE TOUJOURS VISIBLE (règle du dépôt) :
-			   coupe AU MILIEU — la tête se tronque avec ses points de
-			   suspension, la queue (trois caractères et l'extension) ne se
-			   tronque jamais. La même coupe que la pile du canal web
-			   (`ai.ts`, la légende des tuiles à glisser). */
+			   coupe AU MILIEU, partagée avec la pile du canal web
+			   (`couperNomAuMilieu`, file-icons.ts) — la règle vit là-bas. */
 			const nom = ajouter(info, "span", "qbd-ai-video-tile-nom");
-			const point = r.nom.lastIndexOf(".");
-			const coupe = point > 0 ? Math.max(0, point - 3) : r.nom.length;
-			ajouter(nom, "span", "qbd-ai-video-tile-nom-tete", r.nom.slice(0, coupe));
-			if (coupe < r.nom.length) ajouter(nom, "span", "qbd-ai-video-tile-nom-queue", r.nom.slice(coupe));
+			const { tete, queue } = couperNomAuMilieu(r.nom);
+			ajouter(nom, "span", "qbd-ai-video-tile-nom-tete", tete);
+			if (queue) ajouter(nom, "span", "qbd-ai-video-tile-nom-queue", queue);
 			const duree = r.dureeS !== null ? formaterDuree(r.dureeS) : null;
 			const meta = [duree, badgeDe(tuile)].filter(Boolean).join(" · ");
 			ajouter(info, "div", "qbd-ai-video-tile-meta", meta);
@@ -387,6 +385,14 @@ export function creerTuilesVideo(deps: {
 			return { jointes, ecartees };
 		},
 		vider(): void {
+			/* Le débounce aussi, en même temps que les transcriptions en vol
+			   qu'il annule déjà : sans ça, le minuteur en vol relisait le
+			   texte PÉRIMÉ après la remise à neuf, recréait des tuiles sans
+			   aucune UI à venir (plus de rendu, plus de croix) — jusqu'à
+			   lancer un vrai yt-dlp que plus personne ne voit ni n'annule. */
+			if (minuteur !== null) { window.clearTimeout(minuteur); minuteur = null; }
+			dernierTexte = "";
+			noticeAffichee = false;
 			for (const tuile of tuiles.values()) {
 				if (tuile.etat === "lecture") video.annuler(tuile.id);
 			}

@@ -19,7 +19,7 @@ import { GENERATED_MODULE_ICON } from "./module-icons";
 import { GENERATED_MODULE_ACCENT } from "./module-color";
 import { createAiClient } from "./ai-client";
 import { closeAllSelects, openModelMenu, openProviderMenu, openEffortSlider, openOptionsMenu, openNotePicker } from "./ui-select";
-import { badgeDeFichier } from "./file-icons";
+import { badgeDeFichier, couperNomAuMilieu } from "./file-icons";
 import { composerImageDeGlisser } from "./image-de-glisser";
 import { renderMarkdownPreview } from "../markdown-preview";
 import { mathifyElement } from "../engine/mathjax";
@@ -3062,15 +3062,13 @@ export function createAiHandlers(deps: AiPageDeps): AiHandlers {
 				}
 				const legende = ajouter(pile, "div", "qbd-ai-preview-caption");
 				/* LE TYPE DU FICHIER RESTE TOUJOURS VISIBLE (règle d'Ahmed,
-				   2026-09-19) : coupe AU MILIEU. La tête se tronque avec ses points
-				   de suspension, la queue — trois caractères et l'extension — ne
-				   se tronque jamais : « GNU ddres…cue.md ». Un nom qui tient
-				   s'affiche entier, les deux morceaux se touchant. */
+				   2026-09-19) : la coupe AU MILIEU est PARTAGÉE avec la tuile
+				   vidéo (`couperNomAuMilieu`, file-icons.ts) — la règle vit
+				   là-bas, plus une seule fois en ligne ici. */
 				const nom = ajouter(legende, "span", "qbd-ai-preview-caption-pages qbd-ai-web-pile-nom");
-				const point = note.name.lastIndexOf(".");
-				const coupe = point > 0 ? Math.max(0, point - 3) : note.name.length;
-				ajouter(nom, "span", "qbd-ai-web-pile-nom-tete", note.name.slice(0, coupe));
-				if (coupe < note.name.length) ajouter(nom, "span", "qbd-ai-web-pile-nom-queue", note.name.slice(coupe));
+				const { tete, queue } = couperNomAuMilieu(note.name);
+				ajouter(nom, "span", "qbd-ai-web-pile-nom-tete", tete);
+				if (queue) ajouter(nom, "span", "qbd-ai-web-pile-nom-queue", queue);
 				const indice = ajouter(legende, "span", "qbd-ai-preview-open");
 				host.ui.setIcon(ajouter(indice, "span", "qbd-ai-preview-open-icon"), "hand");
 				ajouter(indice, "span", undefined, t(plusieurs ? "ai.web.dragAll" : "ai.web.dragOne"));

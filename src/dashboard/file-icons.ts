@@ -51,6 +51,19 @@ export function fileIcon(name: string): string {
 	return PAR_EXTENSION[ext] ?? "file";
 }
 
+/** La coupe AU MILIEU d'un nom de fichier pour l'afficher en petit : la
+    TÊTE se tronque avec ses points de suspension, la QUEUE — trois
+    caractères et l'extension — ne se tronque jamais. LA RÈGLE N°1 du
+    dépôt (le type du fichier reste visible) ; posée ici parce que deux
+    surfaces l'écrivaient déjà à l'identique (la pile « à glisser » du
+    canal web, la tuile vidéo) et qu'une TROISIÈME divergence se serait
+    faite en silence. */
+export function couperNomAuMilieu(nom: string): { tete: string; queue: string } {
+	const point = nom.lastIndexOf(".");
+	const coupe = point > 0 ? Math.max(0, point - 3) : nom.length;
+	return { tete: nom.slice(0, coupe), queue: nom.slice(coupe) };
+}
+
 
 /** Ce fichier est-il une image que le rendu sait AFFICHER ? Lu dans la
     même table que l'icône : une seconde liste divergerait au premier

@@ -1858,7 +1858,7 @@ export function openOptionsMenu(anchorEl: HTMLElement, opts: OpenOptionsMenuOpti
 			...PRESETS.map(n => ({ label: countLabel(n), actif: !countAuto && count === n, choisir: () => choisirCount(n) })),
 		],
 		(f, maj) => champPerso(f, {
-			unite: (n) => n === 1 ? "question" : "questions", min: 1, max: 100,
+			unite: (n) => t(n === 1 ? "dashboard.common.questionUnitOne" : "dashboard.common.questionUnitOther"), min: 1, max: 100,
 			valeur: count, actif: !countAuto && !PRESETS.includes(count),
 			valider: (n) => choisirCount(n), maj,
 		}));

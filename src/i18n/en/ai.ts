@@ -62,7 +62,6 @@ export const EN_AI = {
 	"ai.usage.windowPlan": "Plan",
 
 	/* ── Options de génération ── */
-	"ai.options.tooltip": "{count} questions · {type}",
 	/* Libellés des types de questions. La VALEUR envoyée au modèle reste
 	   canonique (cf. TYPE_VALUES dans dashboard/ai.ts) : ces libellés ne
 	   servent qu'à l'affichage. */

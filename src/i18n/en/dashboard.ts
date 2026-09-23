@@ -10,6 +10,10 @@ export const EN_DASHBOARD = {
 	"dashboard.common.questionsOther": "{count} questions",
 	"dashboard.common.questionsOfOne": "{done}/{total} question",
 	"dashboard.common.questionsOfOther": "{done}/{total} questions",
+	/** Le mot seul, sans le nombre : pour un champ où le nombre est déjà
+	    affiché à côté (le champ personnalisé du nombre de questions). */
+	"dashboard.common.questionUnitOne": "question",
+	"dashboard.common.questionUnitOther": "questions",
 
 	/* ── Sidebar ── */
 	"dashboard.nav.home": "Home",

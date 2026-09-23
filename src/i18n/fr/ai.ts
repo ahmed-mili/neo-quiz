@@ -50,7 +50,6 @@ export const FR_AI: Record<keyof typeof EN_AI, string> = {
 	"ai.usage.windowPlan": "Forfait",
 
 	/* ── Options de génération ── */
-	"ai.options.tooltip": "{count} questions · {type}",
 	"ai.type.mixed": "Auto",
 	"ai.type.single": "Choix unique",
 	"ai.type.multiple": "Choix multiple",
